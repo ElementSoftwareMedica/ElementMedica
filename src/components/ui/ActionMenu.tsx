@@ -215,10 +215,10 @@ const ActionMenu: React.FC<ActionMenuProps> = ({
                     >
                         {Icon && (
                             <Icon className={`${iconSizeClasses[size]} ${isDisabled
-                                    ? 'text-gray-400'
-                                    : isDanger
-                                        ? 'text-red-500'
-                                        : `text-gray-500 ${themeConfig.iconHover}`
+                                ? 'text-gray-400'
+                                : isDanger
+                                    ? 'text-red-500'
+                                    : `text-gray-500 ${themeConfig.iconHover}`
                                 }`} />
                         )}
                         <span>{action.label}</span>
@@ -259,15 +259,29 @@ export { ActionMenu };
 export default ActionMenu;
 
 // Helper function to create standard CRUD actions
+// Supports both object and positional parameters for backward compatibility
 export const createCrudActions = (
-    onView: () => void,
-    onEdit: () => void,
-    onDelete: () => void
-): ActionMenuItem[] => [
-        { label: 'Visualizza', icon: Eye, onClick: onView },
-        { label: 'Modifica', icon: Edit, onClick: onEdit },
-        { label: 'Elimina', icon: Trash2, onClick: onDelete, variant: 'danger' }
-    ];
+    onViewOrOptions: (() => void) | { onView?: () => void; onEdit?: () => void; onDelete?: () => void },
+    onEdit?: () => void,
+    onDelete?: () => void
+): ActionMenuItem[] => {
+    // Handle object parameter
+    if (typeof onViewOrOptions === 'object') {
+        const { onView, onEdit: editFn, onDelete: deleteFn } = onViewOrOptions;
+        const actions: ActionMenuItem[] = [];
+        if (onView) actions.push({ label: 'Visualizza', icon: Eye, onClick: onView });
+        if (editFn) actions.push({ label: 'Modifica', icon: Edit, onClick: editFn });
+        if (deleteFn) actions.push({ label: 'Elimina', icon: Trash2, onClick: deleteFn, variant: 'danger' });
+        return actions;
+    }
+
+    // Handle positional parameters
+    const actions: ActionMenuItem[] = [];
+    if (onViewOrOptions) actions.push({ label: 'Visualizza', icon: Eye, onClick: onViewOrOptions });
+    if (onEdit) actions.push({ label: 'Modifica', icon: Edit, onClick: onEdit });
+    if (onDelete) actions.push({ label: 'Elimina', icon: Trash2, onClick: onDelete, variant: 'danger' });
+    return actions;
+};
 
 // Re-export types for convenience
 export type { ActionMenuProps };

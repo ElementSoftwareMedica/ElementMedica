@@ -1,7 +1,6 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '../../../config/prisma-optimization.js';
 import { logger } from '../../../utils/logger.js';
 
-const prisma = new PrismaClient();
 
 /**
  * Utility per la gestione dei ruoli
@@ -66,9 +65,17 @@ export function validateRoleAssignment(personId, roleType, tenantId, companyId =
 
 /**
  * Normalizza i dati di un ruolo per la risposta
+ * P48: Extract email from tenantProfiles if available
  */
 export function normalizeRoleData(role) {
   if (!role) return null;
+
+  // P48: Extract email from tenantProfiles if person has them
+  let personEmail = null;
+  if (role.person) {
+    const primaryProfile = role.person.tenantProfiles?.find(p => p.isPrimary) || role.person.tenantProfiles?.[0];
+    personEmail = primaryProfile?.email || null;
+  }
 
   return {
     id: role.id,
@@ -88,7 +95,7 @@ export function normalizeRoleData(role) {
       id: role.person.id,
       firstName: role.person.firstName,
       lastName: role.person.lastName,
-      email: role.person.email
+      email: personEmail
     } : undefined,
     company: role.company ? {
       id: role.company.id,
@@ -129,7 +136,7 @@ export function filterRoles(roles, criteria = {}) {
 
   if (criteria.validOnly) {
     const now = new Date();
-    filteredRoles = filteredRoles.filter(role => 
+    filteredRoles = filteredRoles.filter(role =>
       !role.validUntil || role.validUntil > now
     );
   }
@@ -157,7 +164,7 @@ export function sortRolesByPriority(roles) {
   return roles.sort((a, b) => {
     const priorityA = rolePriority[a.roleType] || 999;
     const priorityB = rolePriority[b.roleType] || 999;
-    
+
     if (priorityA !== priorityB) {
       return priorityA - priorityB;
     }
@@ -192,7 +199,7 @@ export function isRoleValid(role) {
  */
 export function getHighestPriorityRole(roles) {
   if (!roles || roles.length === 0) return null;
-  
+
   const validRoles = roles.filter(isRoleValid);
   if (validRoles.length === 0) return null;
 
@@ -232,9 +239,9 @@ export function areRolesConflicting(role1, role2) {
   // 2. Sono entrambi primari
   // 3. Hanno scope incompatibili
 
-  if (role1.roleType === role2.roleType && 
-      role1.scope === role2.scope && 
-      role1.companyId === role2.companyId) {
+  if (role1.roleType === role2.roleType &&
+    role1.scope === role2.scope &&
+    role1.companyId === role2.companyId) {
     return true;
   }
 
@@ -272,12 +279,12 @@ export function calculateRoleExpiration(roleType, options = {}) {
   };
 
   const duration = options.customDuration || defaultDurations[roleType];
-  
+
   if (!duration) return null;
 
   const expirationDate = new Date();
   expirationDate.setDate(expirationDate.getDate() + duration);
-  
+
   return expirationDate;
 }
 
@@ -296,9 +303,12 @@ export function formatRoleForDisplay(role, options = {}) {
   };
 
   if (options.includePersonInfo && role.person) {
+    // P48: Extract email from tenantProfiles if available
+    const primaryProfile = role.person.tenantProfiles?.find(p => p.isPrimary) || role.person.tenantProfiles?.[0];
+    const personEmail = primaryProfile?.email || null;
     formatted.person = {
       name: `${role.person.firstName} ${role.person.lastName}`,
-      email: role.person.email
+      email: personEmail
     };
   }
 

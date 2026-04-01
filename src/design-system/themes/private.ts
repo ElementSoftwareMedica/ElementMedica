@@ -1,6 +1,25 @@
 /**
  * Design System - Private Theme
- * Tema per il frontend privato (tonalità di blu più scura)
+ * Tema per il frontend privato (area admin/clinica)
+ * 
+ * ARCHITETTURA COLORI:
+ * Al momento i componenti privati usano classi Tailwind hardcoded (teal-600, blue-600, etc.)
+ * L'infrastruttura CSS variable è già pronta per un futuro cambio colori:
+ * 
+ * 1. Modifica i colori qui sotto (primary, secondary, accent)
+ * 2. privateThemeCSSVars li mappa automaticamente a --color-primary-*, --color-secondary-*, etc.
+ * 3. AreaThemeProvider li applica al DOM su route private
+ * 4. Tailwind mappa primary-*, secondary-*, accent-* ai CSS vars
+ * 
+ * MIGRAZIONE FUTURA:
+ * Per completare il cambio colori del privato, sarà necessario:
+ * - Sostituire classi hardcoded (bg-teal-600 → bg-primary-600) nei componenti
+ * - I file più impattati: TemplateCampi, Scadenze, Modulistica, Firma, Bridge, Coda
+ * - Usare `grep -rn 'teal-\|blue-[4-8]' src/pages/clinica/ src/pages/management/`
+ *   per trovare tutti i riferimenti da aggiornare
+ * 
+ * COLORI CORRENTI: Blu (#2563eb primary) + Indaco (#6366f1 secondary) + Viola (#a855f7 accent)
+ * COLORI SEMANTICI: medical-* (cyan), health-* (green) → definiti in design-system.css
  */
 
 export const privateTheme = {
@@ -20,7 +39,7 @@ export const privateTheme = {
       900: '#1e3a8a',
       950: '#172554',
     },
-    
+
     // Secondary colors - Indaco per accenti
     secondary: {
       50: '#eef2ff',
@@ -33,8 +52,9 @@ export const privateTheme = {
       700: '#4338ca',
       800: '#3730a3',
       900: '#312e81',
+      950: '#1e1b4b',
     },
-    
+
     // Accent colors - Viola per accenti
     accent: {
       50: '#faf5ff',
@@ -48,7 +68,7 @@ export const privateTheme = {
       800: '#6b21a8',
       900: '#581c87',
     },
-    
+
     // Semantic colors (comuni)
     semantic: {
       success: {
@@ -88,7 +108,7 @@ export const privateTheme = {
         900: '#7f1d1d',
       },
     },
-    
+
     // Neutral colors
     neutral: {
       50: '#fafafa',
@@ -103,7 +123,7 @@ export const privateTheme = {
       900: '#171717',
       950: '#0a0a0a',
     },
-    
+
     // Background colors
     background: {
       primary: '#ffffff',
@@ -111,7 +131,7 @@ export const privateTheme = {
       tertiary: '#f1f5f9',
       inverse: '#1e3a8a',
     },
-    
+
     // Text colors
     text: {
       primary: '#0f172a',
@@ -120,7 +140,7 @@ export const privateTheme = {
       inverse: '#ffffff',
       disabled: '#94a3b8',
     },
-    
+
     // Border colors
     border: {
       primary: '#e2e8f0',
@@ -146,7 +166,7 @@ export const privateThemeCSSVars = {
   '--color-primary-800': privateTheme.colors.primary[800],
   '--color-primary-900': privateTheme.colors.primary[900],
   '--color-primary-950': privateTheme.colors.primary[950],
-  
+
   // Secondary colors
   '--color-secondary-50': privateTheme.colors.secondary[50],
   '--color-secondary-100': privateTheme.colors.secondary[100],
@@ -158,7 +178,8 @@ export const privateThemeCSSVars = {
   '--color-secondary-700': privateTheme.colors.secondary[700],
   '--color-secondary-800': privateTheme.colors.secondary[800],
   '--color-secondary-900': privateTheme.colors.secondary[900],
-  
+  '--color-secondary-950': privateTheme.colors.secondary[950],
+
   // Accent colors
   '--color-accent-50': privateTheme.colors.accent[50],
   '--color-accent-100': privateTheme.colors.accent[100],
@@ -170,25 +191,25 @@ export const privateThemeCSSVars = {
   '--color-accent-700': privateTheme.colors.accent[700],
   '--color-accent-800': privateTheme.colors.accent[800],
   '--color-accent-900': privateTheme.colors.accent[900],
-  
+
   // Semantic colors
   '--color-success': privateTheme.colors.semantic.success[500],
   '--color-warning': privateTheme.colors.semantic.warning[500],
   '--color-error': privateTheme.colors.semantic.error[500],
-  
+
   // Background colors
   '--color-bg-primary': privateTheme.colors.background.primary,
   '--color-bg-secondary': privateTheme.colors.background.secondary,
   '--color-bg-tertiary': privateTheme.colors.background.tertiary,
   '--color-bg-inverse': privateTheme.colors.background.inverse,
-  
+
   // Text colors
   '--color-text-primary': privateTheme.colors.text.primary,
   '--color-text-secondary': privateTheme.colors.text.secondary,
   '--color-text-tertiary': privateTheme.colors.text.tertiary,
   '--color-text-inverse': privateTheme.colors.text.inverse,
   '--color-text-disabled': privateTheme.colors.text.disabled,
-  
+
   // Border colors
   '--color-border-primary': privateTheme.colors.border.primary,
   '--color-border-secondary': privateTheme.colors.border.secondary,

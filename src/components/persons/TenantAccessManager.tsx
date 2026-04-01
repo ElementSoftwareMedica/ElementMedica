@@ -25,6 +25,8 @@ import {
     ChevronUp
 } from 'lucide-react';
 import { apiGet, apiPost, apiDelete, apiPut } from '../../services/api';
+import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
+import { useToast } from '@/hooks/useToast';
 
 // Types
 interface Tenant {
@@ -92,6 +94,8 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({
     className = ''
 }) => {
     // State
+    const { confirmWarning } = useConfirmDialog();
+    const { showToast } = useToast();
     const [tenantAccesses, setTenantAccesses] = useState<TenantAccess[]>([]);
     const [allTenants, setAllTenants] = useState<Tenant[]>([]);
     const [loading, setLoading] = useState(true);
@@ -125,7 +129,6 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({
                 setTenantAccesses(response.data || []);
             }
         } catch (err) {
-            console.error('Error fetching tenant accesses:', err);
             setError('Errore nel caricamento degli accessi tenant');
         } finally {
             setLoading(false);
@@ -144,7 +147,6 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({
                 setAllTenants(response.data || []);
             }
         } catch (err) {
-            console.error('Error fetching tenants:', err);
             // Non-critical error, don't show to user
         }
     }, []);
@@ -187,8 +189,8 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({
             await fetchTenantAccesses();
             onUpdate?.();
         } catch (err) {
-            console.error('Error granting tenant access:', err);
             setError('Errore nell\'assegnazione del tenant');
+            showToast({ message: 'Errore nell\'assegnazione del tenant', type: 'error' });
         } finally {
             setSaving(false);
         }
@@ -196,7 +198,11 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({
 
     // Revoke tenant access
     const handleRevokeAccess = async (tenantId: string) => {
-        if (!confirm('Sei sicuro di voler revocare l\'accesso a questo tenant?')) return;
+        const confirmed = await confirmWarning(
+            'Revoca accesso',
+            'Sei sicuro di voler revocare l\'accesso a questo tenant?'
+        );
+        if (!confirmed) return;
 
         try {
             setSaving(true);
@@ -208,8 +214,8 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({
             await fetchTenantAccesses();
             onUpdate?.();
         } catch (err) {
-            console.error('Error revoking tenant access:', err);
             setError('Errore nella revoca dell\'accesso');
+            showToast({ message: 'Errore nella revoca dell\'accesso', type: 'error' });
         } finally {
             setSaving(false);
         }
@@ -231,8 +237,8 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({
             setEditingAccessId(null);
             onUpdate?.();
         } catch (err) {
-            console.error('Error updating tenant access:', err);
             setError('Errore nell\'aggiornamento dell\'accesso');
+            showToast({ message: 'Errore nell\'aggiornamento dell\'accesso', type: 'error' });
         } finally {
             setSaving(false);
         }
@@ -252,8 +258,8 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({
             await fetchTenantAccesses();
             onUpdate?.();
         } catch (err) {
-            console.error('Error setting primary tenant:', err);
             setError('Errore nell\'impostazione del tenant primario');
+            showToast({ message: 'Errore nell\'impostazione del tenant primario', type: 'error' });
         } finally {
             setSaving(false);
         }
@@ -590,8 +596,8 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({
                                         <label
                                             key={feature.id}
                                             className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${newFeatures.includes(feature.id)
-                                                    ? 'border-purple-300 bg-purple-50'
-                                                    : 'border-gray-200 hover:border-gray-300'
+                                                ? 'border-purple-300 bg-purple-50'
+                                                : 'border-gray-200 hover:border-gray-300'
                                                 }`}
                                         >
                                             <input
@@ -737,8 +743,8 @@ const EditAccessForm: React.FC<EditAccessFormProps> = ({
                                 type="button"
                                 onClick={() => toggleFeature(feature.id)}
                                 className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm transition-colors ${features.includes(feature.id)
-                                        ? 'bg-purple-100 text-purple-700 border border-purple-300'
-                                        : 'bg-gray-100 text-gray-600 border border-gray-200 hover:border-gray-300'
+                                    ? 'bg-purple-100 text-purple-700 border border-purple-300'
+                                    : 'bg-gray-100 text-gray-600 border border-gray-200 hover:border-gray-300'
                                     }`}
                             >
                                 {feature.icon} {feature.label}

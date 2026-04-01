@@ -6,7 +6,7 @@
  * @module components/cms/renderer/custom-content-renderer/SpecialtySections
  */
 
-import React from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { iconMap, ArrowRight, CheckCircle, Stethoscope, Heart, Activity, Clock, Calendar, Award, Shield } from '../iconMap';
 import { PublicButton } from '../../../public/PublicButton';
@@ -17,20 +17,20 @@ import { specialtyColors, checkupColors, examCategoryColors, categoryColors, pac
  */
 export const SpecialtiesSection: React.FC<{ content: any }> = ({ content }) => {
   const navigate = useNavigate();
-  
+
   if (!content.specialties) return null;
 
   return (
-    <section className="py-20 bg-gradient-to-br from-white via-teal-50/30 to-cyan-50/40 relative overflow-hidden">
+    <section className="py-20 bg-gradient-to-br from-white via-primary-50/30 to-accent-50/40 relative overflow-hidden">
       {/* Decorative bubbles */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-20 right-10 w-64 h-64 bg-teal-200/30 rounded-full blur-3xl" />
-        <div className="absolute bottom-20 left-10 w-56 h-56 bg-cyan-200/30 rounded-full blur-3xl" />
-        <div className="absolute top-1/2 left-1/3 w-72 h-72 bg-emerald-200/20 rounded-full blur-3xl" />
+        <div className="absolute top-20 right-10 w-64 h-64 bg-primary-200/30 rounded-full blur-3xl" />
+        <div className="absolute bottom-20 left-10 w-56 h-56 bg-accent-200/30 rounded-full blur-3xl" />
+        <div className="absolute top-1/2 left-1/3 w-72 h-72 bg-secondary-200/20 rounded-full blur-3xl" />
       </div>
       <div className="container mx-auto px-4 relative z-10">
         <div className="text-center mb-16">
-          <span className="inline-block px-4 py-2 bg-teal-100 text-teal-700 rounded-full text-sm font-semibold mb-4">
+          <span className="inline-block px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-4">
             {content.specialties.badge || 'Le Nostre Specialità'}
           </span>
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
@@ -59,13 +59,13 @@ export const SpecialtiesSection: React.FC<{ content: any }> = ({ content }) => {
                     <div className={`w-16 h-16 ${colors.bg} rounded-2xl flex items-center justify-center shadow-lg mb-4 group-hover:scale-110 transition-transform relative z-10`}>
                       <IconComponent className="w-8 h-8 text-white" />
                     </div>
-                    <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-teal-700 transition-colors">{specialty.name}</h3>
+                    <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-primary-700 transition-colors">{specialty.name}</h3>
                     <p className="text-gray-600 text-sm leading-relaxed">{specialty.description}</p>
                   </div>
                   <div className="p-6 bg-white">
                     {specialty.doctors && (
                       <div className="flex items-center text-sm text-gray-500 mb-3">
-                        <Stethoscope className="w-4 h-4 mr-2 text-teal-500" />
+                        <Stethoscope className="w-4 h-4 mr-2 text-primary-500" />
                         {specialty.doctors.length} specialisti
                       </div>
                     )}
@@ -77,14 +77,14 @@ export const SpecialtiesSection: React.FC<{ content: any }> = ({ content }) => {
                           </span>
                         ))}
                         {specialty.exams.length > 3 && (
-                          <span className="px-3 py-1 bg-teal-100 text-teal-700 text-xs rounded-full font-medium">
+                          <span className="px-3 py-1 bg-primary-100 text-primary-700 text-xs rounded-full font-medium">
                             +{specialty.exams.length - 3} altri
                           </span>
                         )}
                       </div>
                     )}
                     {specialty.href && (
-                      <div className="flex items-center text-teal-600 font-semibold text-sm group-hover:text-teal-700 transition-colors">
+                      <div className="flex items-center text-primary-600 font-semibold text-sm group-hover:text-primary-700 transition-colors">
                         Scopri di più
                         <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
                       </div>
@@ -97,7 +97,7 @@ export const SpecialtiesSection: React.FC<{ content: any }> = ({ content }) => {
         )}
         {content.specialties.cta && (
           <div className="text-center mt-12">
-            <PublicButton variant="primary" size="lg" to={content.specialties.cta.href || '/prenota-visita'}>
+            <PublicButton variant="primary" size="lg" to={content.specialties.cta.href || '/prenota#booking'}>
               {content.specialties.cta.text || 'Prenota una Visita'}
             </PublicButton>
           </div>
@@ -116,15 +116,15 @@ export const CheckupPackagesSection: React.FC<{ content: any }> = ({ content }) 
   if (!content.checkupPackages) return null;
 
   return (
-    <section className="py-20 bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/30 relative overflow-hidden">
+    <section className="py-20 bg-gradient-to-br from-slate-50 via-primary-50/30 to-accent-50/30 relative overflow-hidden">
       {/* Decorative elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-10 left-20 w-48 h-48 bg-blue-200/30 rounded-full blur-3xl" />
-        <div className="absolute bottom-10 right-20 w-64 h-64 bg-indigo-200/30 rounded-full blur-3xl" />
+        <div className="absolute top-10 left-20 w-48 h-48 bg-primary-200/30 rounded-full blur-3xl" />
+        <div className="absolute bottom-10 right-20 w-64 h-64 bg-primary-200/30 rounded-full blur-3xl" />
       </div>
       <div className="container mx-auto px-4 relative z-10">
         <div className="text-center mb-16">
-          <span className="inline-block px-4 py-2 bg-indigo-100 text-indigo-700 rounded-full text-sm font-semibold mb-4">
+          <span className="inline-block px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-4">
             {content.checkupPackages.badge || 'Check-up Completi'}
           </span>
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
@@ -145,11 +145,11 @@ export const CheckupPackagesSection: React.FC<{ content: any }> = ({ content }) 
               return (
                 <div
                   key={index}
-                  className={`group bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 border-2 ${isHighlighted ? 'border-indigo-500 ring-4 ring-indigo-100' : colors.border} relative`}
+                  className={`group bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 border-2 ${isHighlighted ? 'border-primary-500 ring-4 ring-primary-100' : colors.border} relative`}
                 >
                   {isHighlighted && (
                     <div className="absolute -top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
-                      <span className="px-4 py-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-xs font-bold rounded-full shadow-lg">
+                      <span className="px-4 py-1 text-white text-xs font-bold rounded-full shadow-lg" style={{ backgroundImage: 'linear-gradient(to right, var(--color-primary-600), var(--color-primary-700))' }}>
                         {pkg.highlightLabel || 'PIÙ POPOLARE'}
                       </span>
                     </div>
@@ -196,11 +196,12 @@ export const CheckupPackagesSection: React.FC<{ content: any }> = ({ content }) 
                       </div>
                     )}
                     <button
-                      onClick={() => navigate(pkg.href || '/prenota-visita')}
+                      onClick={() => navigate(pkg.href || '/prenota#booking')}
                       className={`w-full py-3 rounded-xl font-semibold transition-all ${isHighlighted
-                        ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:from-indigo-700 hover:to-purple-700 shadow-lg'
+                        ? 'text-white hover:opacity-90 shadow-lg'
                         : `${colors.bg} text-white hover:opacity-90`
                         }`}
+                      style={isHighlighted ? { backgroundImage: 'linear-gradient(to right, var(--color-primary-600), var(--color-primary-700))' } : {}}
                     >
                       Prenota Ora
                     </button>
@@ -229,15 +230,15 @@ export const ExamCategoriesSection: React.FC<{ content: any }> = ({ content }) =
   if (!content.examCategories) return null;
 
   return (
-    <section className="py-20 bg-gradient-to-br from-white via-emerald-50/30 to-teal-50/40 relative overflow-hidden">
+    <section className="py-20 bg-gradient-to-br from-white via-secondary-50/30 to-primary-50/40 relative overflow-hidden">
       {/* Decorative bubbles */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-20 left-10 w-64 h-64 bg-emerald-200/30 rounded-full blur-3xl" />
-        <div className="absolute bottom-10 right-20 w-56 h-56 bg-teal-200/30 rounded-full blur-3xl" />
+        <div className="absolute top-20 left-10 w-64 h-64 bg-secondary-200/30 rounded-full blur-3xl" />
+        <div className="absolute bottom-10 right-20 w-56 h-56 bg-primary-200/30 rounded-full blur-3xl" />
       </div>
       <div className="container mx-auto px-4 relative z-10">
         <div className="text-center mb-16">
-          <span className="inline-block px-4 py-2 bg-emerald-100 text-emerald-700 rounded-full text-sm font-semibold mb-4">
+          <span className="inline-block px-4 py-2 bg-secondary-100 text-secondary-700 rounded-full text-sm font-semibold mb-4">
             {content.examCategories.badge || 'Esami e Analisi'}
           </span>
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
@@ -263,7 +264,7 @@ export const ExamCategoriesSection: React.FC<{ content: any }> = ({ content }) =
                   <div className={`w-14 h-14 ${colors.bg} rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-lg`}>
                     <IconComponent className="w-7 h-7 text-white" />
                   </div>
-                  <h3 className="text-lg font-bold text-gray-900 mb-2 group-hover:text-emerald-700 transition-colors">{category.name}</h3>
+                  <h3 className="text-lg font-bold text-gray-900 mb-2 group-hover:text-secondary-700 transition-colors">{category.name}</h3>
                   <p className="text-sm text-gray-600 mb-3">{category.description}</p>
                   {category.count && (
                     <div className={`text-sm font-semibold ${colors.text}`}>
@@ -304,17 +305,17 @@ export const TechnologySection: React.FC<{ content: any }> = ({ content }) => {
     <section className="py-20 bg-gradient-to-br from-slate-900 via-gray-900 to-zinc-900 text-white relative overflow-hidden">
       {/* Decorative elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 left-0 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl" />
+        <div className="absolute top-0 right-0 w-96 h-96 bg-primary-500/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-primary-500/10 rounded-full blur-3xl" />
         {/* Grid pattern */}
         <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '40px 40px' }} />
       </div>
       <div className="container mx-auto px-4 relative z-10">
         <div className="text-center mb-16">
-          <span className="inline-block px-4 py-2 bg-blue-500/20 backdrop-blur border border-blue-400/30 rounded-full text-sm font-semibold mb-4">
+          <span className="inline-block px-4 py-2 bg-primary-500/20 backdrop-blur border border-primary-400/30 rounded-full text-sm font-semibold mb-4">
             {content.technology.badge || 'Tecnologia Avanzata'}
           </span>
-          <h2 className="text-3xl lg:text-4xl font-bold mb-4 bg-gradient-to-r from-white via-blue-100 to-cyan-100 bg-clip-text text-transparent">
+          <h2 className="text-3xl lg:text-4xl font-bold mb-4 text-white">
             {content.technology.sectionTitle || content.technology.title || 'Apparecchiature all\'Avanguardia'}
           </h2>
           {(content.technology.sectionSubtitle || content.technology.description) && (
@@ -329,7 +330,7 @@ export const TechnologySection: React.FC<{ content: any }> = ({ content }) => {
               const IconComponent = iconMap[tech.icon] || Award;
               return (
                 <div key={index} className="group bg-white/5 backdrop-blur border border-white/10 rounded-2xl p-8 hover:bg-white/10 transition-all">
-                  <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-lg shadow-blue-500/25">
+                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-lg shadow-primary-500/25" style={{ backgroundImage: 'linear-gradient(to bottom right, var(--color-primary-500), var(--color-accent-500))' }}>
                     <IconComponent className="w-8 h-8 text-white" />
                   </div>
                   <h3 className="text-xl font-bold text-white mb-3">{tech.name}</h3>
@@ -373,15 +374,15 @@ export const DiagnosticsCategoriesSection: React.FC<{ content: any }> = ({ conte
   if (!content.categories) return null;
 
   return (
-    <section className="py-20 bg-gradient-to-br from-white via-teal-50/30 to-cyan-50/40 relative overflow-hidden">
+    <section className="py-20 bg-gradient-to-br from-white via-primary-50/30 to-accent-50/40 relative overflow-hidden">
       {/* Decorative bubbles */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-20 right-10 w-64 h-64 bg-teal-200/30 rounded-full blur-3xl" />
-        <div className="absolute bottom-20 left-10 w-56 h-56 bg-cyan-200/30 rounded-full blur-3xl" />
+        <div className="absolute top-20 right-10 w-64 h-64 bg-primary-200/30 rounded-full blur-3xl" />
+        <div className="absolute bottom-20 left-10 w-56 h-56 bg-accent-200/30 rounded-full blur-3xl" />
       </div>
       <div className="container mx-auto px-4 relative z-10">
         <div className="text-center mb-16">
-          <span className="inline-block px-4 py-2 bg-teal-100 text-teal-700 rounded-full text-sm font-semibold mb-4">
+          <span className="inline-block px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-4">
             {content.categories.badge || 'I Nostri Servizi'}
           </span>
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
@@ -407,18 +408,18 @@ export const DiagnosticsCategoriesSection: React.FC<{ content: any }> = ({ conte
                   <div className={`w-14 h-14 ${colors.bg} rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-lg`}>
                     <IconComponent className="w-7 h-7 text-white" />
                   </div>
-                  <h3 className="text-lg font-bold text-gray-900 mb-2 group-hover:text-teal-700 transition-colors">{category.name}</h3>
+                  <h3 className="text-lg font-bold text-gray-900 mb-2 group-hover:text-primary-700 transition-colors">{category.name}</h3>
                   <p className="text-sm text-gray-600">{category.description}</p>
                   {category.items && (
                     <div className="mt-4 pt-4 border-t border-gray-100 space-y-1">
                       {category.items.slice(0, 3).map((item: string, i: number) => (
                         <div key={i} className="flex items-center text-sm text-gray-500">
-                          <CheckCircle className="w-3 h-3 text-teal-500 mr-2" />
+                          <CheckCircle className="w-3 h-3 text-primary-500 mr-2" />
                           {item}
                         </div>
                       ))}
                       {category.items.length > 3 && (
-                        <div className="text-sm font-medium text-teal-600">
+                        <div className="text-sm font-medium text-primary-600">
                           +{category.items.length - 3} altri servizi
                         </div>
                       )}
@@ -443,10 +444,10 @@ export const PackagesSection: React.FC<{ content: any }> = ({ content }) => {
   if (!content.packages) return null;
 
   return (
-    <section className="py-20 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30">
+    <section className="py-20 bg-gradient-to-br from-gray-50 via-primary-50/30 to-accent-50/30">
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
-          <span className="inline-block px-4 py-2 bg-blue-100 text-blue-700 rounded-full text-sm font-semibold mb-4">
+          <span className="inline-block px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-4">
             {content.packages.badge || 'I Nostri Pacchetti'}
           </span>
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
@@ -466,7 +467,7 @@ export const PackagesSection: React.FC<{ content: any }> = ({ content }) => {
               return (
                 <div
                   key={index}
-                  className={`bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all ${pkg.featured ? 'ring-2 ring-blue-500' : ''}`}
+                  className={`bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all ${pkg.featured ? 'ring-2 ring-primary-500' : ''}`}
                 >
                   <div className={`${colors.light} p-8`}>
                     <div className={`w-16 h-16 ${colors.bg} rounded-2xl flex items-center justify-center mb-4 shadow-lg`}>
@@ -505,6 +506,189 @@ export const PackagesSection: React.FC<{ content: any }> = ({ content }) => {
             })}
           </div>
         )}
+      </div>
+    </section>
+  );
+};
+
+/**
+ * Live Specialties Section
+ * 
+ * Fetches real prestazioni from /api/public/booking/prestazioni,
+ * groups by brancheSpecialistiche, and displays dynamic cards
+ * with real doctors, prices, and "Prenota" buttons.
+ * Activated by content.liveSpecialties key.
+ */
+
+interface LivePrestazione {
+  id: string;
+  nome: string;
+  descrizione?: string;
+  prezzo: number;
+  durataPrevista: number;
+  brancheSpecialistiche: string[];
+  mediciDisponibili: { id: string; nome: string; prezzo: number }[];
+}
+
+interface BrancaGroup {
+  nome: string;
+  prestazioni: LivePrestazione[];
+  mediciCount: number;
+  minPrezzo: number;
+}
+
+const BRANCA_ICONS: Record<string, string> = {
+  'Cardiologia': 'Heart',
+  'Ortopedia': 'Bone',
+  'Dermatologia': 'Shield',
+  'Oculistica': 'Eye',
+  'Otorinolaringoiatria': 'Ear',
+  'Neurologia': 'Brain',
+  'Ginecologia': 'Users',
+  'Urologia': 'Activity',
+  'Pneumologia': 'Wind',
+  'Gastroenterologia': 'Beaker',
+  'Endocrinologia': 'Thermometer',
+};
+
+export const LiveSpecialtiesSection: React.FC<{ content: any }> = ({ content }) => {
+  const navigate = useNavigate();
+  const [prestazioni, setPrestazioni] = useState<LivePrestazione[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const hasLiveSpecialties = !!content.liveSpecialties;
+
+  useEffect(() => {
+    if (!hasLiveSpecialties) return;
+    let cancelled = false;
+    const brandId = import.meta.env.VITE_BRAND_ID || 'element-sicurezza';
+    fetch('/api/public/booking/prestazioni', { headers: { 'X-Frontend-Id': brandId } })
+      .then(res => res.ok ? res.json() : Promise.reject())
+      .then(data => { if (!cancelled) setPrestazioni(data.data || data); })
+      .catch(() => { })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [hasLiveSpecialties]);
+
+  const brancheGroups = useMemo((): BrancaGroup[] => {
+    const map = new Map<string, { prestazioni: LivePrestazione[]; medici: Set<string> }>();
+    for (const p of prestazioni) {
+      const branches = p.brancheSpecialistiche.length > 0 ? p.brancheSpecialistiche : ['Altro'];
+      for (const b of branches) {
+        if (!map.has(b)) map.set(b, { prestazioni: [], medici: new Set() });
+        const entry = map.get(b)!;
+        entry.prestazioni.push(p);
+        for (const m of p.mediciDisponibili) entry.medici.add(m.id);
+      }
+    }
+    return Array.from(map.entries())
+      .map(([nome, { prestazioni: prst, medici }]) => ({
+        nome,
+        prestazioni: prst,
+        mediciCount: medici.size,
+        minPrezzo: Math.min(...prst.map(p => p.prezzo)),
+      }))
+      .sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [prestazioni]);
+
+  if (!hasLiveSpecialties) return null;
+
+  return (
+    <section className="py-20 bg-gradient-to-br from-white via-primary-50/30 to-accent-50/40 relative overflow-hidden">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-20 right-10 w-64 h-64 bg-primary-200/30 rounded-full blur-3xl" />
+        <div className="absolute bottom-20 left-10 w-56 h-56 bg-accent-200/30 rounded-full blur-3xl" />
+      </div>
+      <div className="container mx-auto px-4 relative z-10">
+        <div className="text-center mb-16">
+          <span className="inline-block px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-4">
+            {content.liveSpecialties.badge || 'Disponibilità in Tempo Reale'}
+          </span>
+          <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
+            {content.liveSpecialties.title || 'Specialità Disponibili'}
+          </h2>
+          <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+            {content.liveSpecialties.subtitle || 'Scegli la specialità e prenota direttamente online'}
+          </p>
+        </div>
+        {loading ? (
+          <div className="flex justify-center py-12">
+            <div className="animate-spin w-8 h-8 border-4 border-primary-200 border-t-primary-600 rounded-full" />
+          </div>
+        ) : brancheGroups.length === 0 ? (
+          <div className="text-center py-12 text-gray-500">
+            Nessuna specialità disponibile al momento per la prenotazione online.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
+            {brancheGroups.map((branca, index) => {
+              const iconKey = BRANCA_ICONS[branca.nome];
+              const IconComponent = iconKey ? (iconMap[iconKey] || Stethoscope) : Stethoscope;
+              const colors = specialtyColors[index % specialtyColors.length];
+              return (
+                <div
+                  key={branca.nome}
+                  className={`group bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 border ${colors.border} hover:border-transparent cursor-pointer`}
+                  onClick={() => navigate(`/prenota?branca=${encodeURIComponent(branca.nome)}#booking`)}
+                >
+                  <div className={`${colors.light} p-8 relative overflow-hidden`}>
+                    <div className={`absolute -top-10 -right-10 w-32 h-32 ${colors.bg} opacity-20 rounded-full`} />
+                    <div className={`w-16 h-16 ${colors.bg} rounded-2xl flex items-center justify-center shadow-lg mb-4 group-hover:scale-110 transition-transform relative z-10`}>
+                      <IconComponent className="w-8 h-8 text-white" />
+                    </div>
+                    <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-primary-700 transition-colors">
+                      {branca.nome}
+                    </h3>
+                    <div className="flex items-center gap-4 text-sm text-gray-600">
+                      <span className="flex items-center gap-1">
+                        <Stethoscope className="w-4 h-4 text-primary-500" />
+                        {branca.mediciCount} {branca.mediciCount === 1 ? 'medico' : 'medici'}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Activity className="w-4 h-4 text-primary-500" />
+                        {branca.prestazioni.length} {branca.prestazioni.length === 1 ? 'prestazione' : 'prestazioni'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="p-6 bg-white">
+                    <div className="space-y-2 mb-4">
+                      {branca.prestazioni.slice(0, 3).map((p, i) => (
+                        <div key={i} className="flex items-center justify-between text-sm">
+                          <span className="text-gray-600 flex items-center gap-1.5">
+                            <CheckCircle className="w-3.5 h-3.5 text-primary-500 flex-shrink-0" />
+                            <span className="truncate">{p.nome}</span>
+                          </span>
+                          <span className="text-primary-700 font-semibold ml-2 flex-shrink-0">
+                            {'€'}{p.prezzo.toFixed(0)}
+                          </span>
+                        </div>
+                      ))}
+                      {branca.prestazioni.length > 3 && (
+                        <div className="text-sm font-medium text-primary-600">
+                          +{branca.prestazioni.length - 3} altre prestazioni
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                      <span className="text-sm text-gray-500">
+                        da <span className="font-bold text-primary-700">{'€'}{branca.minPrezzo.toFixed(0)}</span>
+                      </span>
+                      <span className="flex items-center text-primary-600 font-semibold text-sm group-hover:text-primary-700 transition-colors">
+                        Prenota
+                        <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <div className="text-center mt-12">
+          <PublicButton variant="primary" size="lg" to="/prenota#booking">
+            Prenota una Visita Specialistica
+          </PublicButton>
+        </div>
       </div>
     </section>
   );

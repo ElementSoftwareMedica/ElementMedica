@@ -9,6 +9,9 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiPost, apiPut } from '../../services/api';
+import { useTenantMode } from '../../contexts/TenantModeContext';
+import { useToast } from '../../hooks/useToast';
+import { DatePickerElegante } from '../../components/ui/DatePickerElegante';
 import {
     ArrowLeft,
     Save,
@@ -91,6 +94,9 @@ const DiscountCodeForm: React.FC = () => {
     const navigate = useNavigate();
     const { id: paramId } = useParams<{ id: string }>();
     const queryClient = useQueryClient();
+    const { showToast } = useToast();
+    const { getOperateHeaders } = useTenantMode();
+    const operateHeaders = getOperateHeaders();
 
     // Extract ID from path when useParams doesn't work (nested management routing)
     const id = React.useMemo(() => {
@@ -155,8 +161,8 @@ const DiscountCodeForm: React.FC = () => {
                 descrizione: codiceSconto.descrizione || '',
                 tipoSconto: codiceSconto.tipoSconto,
                 valore: codiceSconto.valore.toString(),
-                dataInizio: codiceSconto.dataInizio.split('T')[0],
-                dataFine: codiceSconto.dataFine.split('T')[0],
+                dataInizio: codiceSconto.dataInizio ? codiceSconto.dataInizio.split('T')[0] : new Date().toISOString().split('T')[0],
+                dataFine: codiceSconto.dataFine ? codiceSconto.dataFine.split('T')[0] : '',
                 attivo: codiceSconto.attivo,
                 utilizzoMassimo: codiceSconto.utilizzoMassimo?.toString() || '',
                 utilizzoPerUtente: codiceSconto.utilizzoPerUtente?.toString() || '',
@@ -180,21 +186,29 @@ const DiscountCodeForm: React.FC = () => {
     // Mutations
     const createMutation = useMutation({
         mutationFn: async (data: any) => {
-            return apiPost('/api/v1/codici-sconto', data);
+            return apiPost('/api/v1/codici-sconto', data, { headers: operateHeaders });
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['codici-sconto'] });
+            showToast({ message: 'Codice sconto creato con successo', type: 'success' });
             navigate('/management/codici-sconto');
+        },
+        onError: () => {
+            showToast({ message: 'Errore nella creazione del codice sconto', type: 'error' });
         },
     });
 
     const updateMutation = useMutation({
         mutationFn: async (data: any) => {
-            return apiPut(`/api/v1/codici-sconto/${id}`, data);
+            return apiPut(`/api/v1/codici-sconto/${id}`, data, { headers: operateHeaders });
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['codici-sconto'] });
+            showToast({ message: 'Codice sconto aggiornato con successo', type: 'success' });
             navigate('/management/codici-sconto');
+        },
+        onError: () => {
+            showToast({ message: 'Errore nell\'aggiornamento del codice sconto', type: 'error' });
         },
     });
 
@@ -224,9 +238,7 @@ const DiscountCodeForm: React.FC = () => {
             newErrors.dataInizio = 'La data inizio è obbligatoria';
         }
 
-        if (!formData.dataFine) {
-            newErrors.dataFine = 'La data fine è obbligatoria';
-        }
+        // dataFine è opzionale (codice senza scadenza)
 
         if (formData.dataInizio && formData.dataFine && new Date(formData.dataFine) < new Date(formData.dataInizio)) {
             newErrors.dataFine = 'La data fine deve essere successiva alla data inizio';
@@ -243,7 +255,7 @@ const DiscountCodeForm: React.FC = () => {
         if (!validate()) return;
 
         const dataInizioISO = new Date(formData.dataInizio + 'T00:00:00.000Z').toISOString();
-        const dataFineISO = new Date(formData.dataFine + 'T23:59:59.999Z').toISOString();
+        const dataFineISO = formData.dataFine ? new Date(formData.dataFine + 'T23:59:59.999Z').toISOString() : null;
 
         const payload = {
             codice: formData.codice.toUpperCase(),
@@ -322,7 +334,7 @@ const DiscountCodeForm: React.FC = () => {
                     <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
                     <div>
                         <p className="font-medium text-red-800">Errore</p>
-                        <p className="text-red-600 text-sm">{(error as any)?.message || 'Si è verificato un errore'}</p>
+                        <p className="text-red-600 text-sm">Si è verificato un errore nel salvataggio del codice sconto.</p>
                     </div>
                 </div>
             )}
@@ -407,8 +419,8 @@ const DiscountCodeForm: React.FC = () => {
                                             type="button"
                                             onClick={() => setFormData({ ...formData, tipoSconto: option.value as any })}
                                             className={`flex-1 px-4 py-3 rounded-lg border-2 transition-all flex items-center justify-center gap-2 ${formData.tipoSconto === option.value
-                                                    ? `border-${option.color}-500 bg-${option.color}-50 text-${option.color}-700`
-                                                    : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                                                ? `border-${option.color}-500 bg-${option.color}-50 text-${option.color}-700`
+                                                : 'border-gray-200 hover:border-gray-300 text-gray-600'
                                                 }`}
                                         >
                                             <Icon className="w-5 h-5" />
@@ -492,12 +504,11 @@ const DiscountCodeForm: React.FC = () => {
                             <label className="block text-sm font-medium text-gray-700 mb-2">
                                 Data Inizio <span className="text-red-500">*</span>
                             </label>
-                            <input
-                                type="date"
+                            <DatePickerElegante
                                 value={formData.dataInizio}
-                                onChange={(e) => setFormData({ ...formData, dataInizio: e.target.value })}
-                                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.dataInizio ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                                    }`}
+                                onChange={(date) => setFormData({ ...formData, dataInizio: date ? date.toISOString().split('T')[0] : '' })}
+                                theme="blue"
+                                placeholder="Seleziona data inizio"
                             />
                             {errors.dataInizio && <p className="text-red-500 text-sm mt-1">{errors.dataInizio}</p>}
                         </div>
@@ -505,15 +516,33 @@ const DiscountCodeForm: React.FC = () => {
                         {/* Data Fine */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Data Fine <span className="text-red-500">*</span>
+                                Data Fine <span className="text-gray-400 text-xs font-normal">(opzionale)</span>
                             </label>
-                            <input
-                                type="date"
-                                value={formData.dataFine}
-                                onChange={(e) => setFormData({ ...formData, dataFine: e.target.value })}
-                                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.dataFine ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                                    }`}
-                            />
+                            <div className="space-y-2">
+                                <DatePickerElegante
+                                    value={formData.dataFine || null}
+                                    onChange={(date) => setFormData({ ...formData, dataFine: date ? date.toISOString().split('T')[0] : '' })}
+                                    theme="blue"
+                                    placeholder="Nessuna scadenza"
+                                    clearable
+                                    disabled={!formData.dataFine}
+                                />
+                                <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={!formData.dataFine}
+                                        onChange={(e) => {
+                                            if (e.target.checked) {
+                                                setFormData({ ...formData, dataFine: '' });
+                                            } else {
+                                                setFormData({ ...formData, dataFine: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] });
+                                            }
+                                        }}
+                                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    />
+                                    Nessuna scadenza
+                                </label>
+                            </div>
                             {errors.dataFine && <p className="text-red-500 text-sm mt-1">{errors.dataFine}</p>}
                         </div>
 
@@ -570,8 +599,8 @@ const DiscountCodeForm: React.FC = () => {
                                         type="button"
                                         onClick={() => setFormData({ ...formData, applicabileA: option.value as any })}
                                         className={`p-4 rounded-lg border-2 transition-all text-left ${formData.applicabileA === option.value
-                                                ? 'border-purple-500 bg-purple-50'
-                                                : 'border-gray-200 hover:border-purple-200'
+                                            ? 'border-purple-500 bg-purple-50'
+                                            : 'border-gray-200 hover:border-purple-200'
                                             }`}
                                     >
                                         <Icon className={`w-6 h-6 mb-2 ${formData.applicabileA === option.value ? 'text-purple-600' : 'text-gray-400'}`} />
@@ -602,8 +631,8 @@ const DiscountCodeForm: React.FC = () => {
                                         setFormData({ ...formData, applicabileServizi: newServizi });
                                     }}
                                     className={`px-4 py-2 rounded-lg border-2 transition-all flex items-center gap-2 ${formData.applicabileServizi.includes(servizio.value)
-                                            ? 'border-blue-500 bg-blue-50 text-blue-700'
-                                            : 'border-gray-200 hover:border-blue-200 text-gray-600'
+                                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                                        : 'border-gray-200 hover:border-blue-200 text-gray-600'
                                         }`}
                                 >
                                     <span>{servizio.icon}</span>
@@ -685,8 +714,8 @@ const DiscountCodeForm: React.FC = () => {
                                             type="button"
                                             onClick={() => setFormData({ ...formData, genereApplicabile: option.value })}
                                             className={`flex-1 px-4 py-3 rounded-lg border-2 transition-all flex flex-col items-center ${formData.genereApplicabile === option.value
-                                                    ? 'border-purple-500 bg-purple-50 text-purple-700'
-                                                    : 'border-gray-200 hover:border-purple-200 text-gray-600'
+                                                ? 'border-purple-500 bg-purple-50 text-purple-700'
+                                                : 'border-gray-200 hover:border-purple-200 text-gray-600'
                                                 }`}
                                         >
                                             <span className="text-2xl mb-1">{option.icon}</span>

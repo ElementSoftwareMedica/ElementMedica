@@ -7,6 +7,9 @@
 
 import prisma from '../../config/prisma-optimization.js';
 import logger from '../../utils/logger.js';
+import { EventBus, AppointmentEvents } from '../events/index.js';
+import { parseToStartOfDay, parseToEndOfDay } from '../../utils/dateUtils.js';
+import MovimentoContabileGenerator from '../management/MovimentoContabileGenerator.js';
 
 export class AppuntamentoService {
     /**
@@ -16,10 +19,14 @@ export class AppuntamentoService {
         try {
             // Generate progressive number for the day
             const dataOra = new Date(data.dataOra);
-            const startOfDay = new Date(dataOra);
-            startOfDay.setHours(0, 0, 0, 0);
-            const endOfDay = new Date(dataOra);
-            endOfDay.setHours(23, 59, 59, 999);
+
+            // CRITICAL FIX: Use UTC methods to avoid timezone shift bug
+            // Previous bug: setHours(0,0,0,0) on UTC date shifts to previous day in UTC+1
+            const year = dataOra.getUTCFullYear();
+            const month = dataOra.getUTCMonth();
+            const day = dataOra.getUTCDate();
+            const startOfDay = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
+            const endOfDay = new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
 
             const countToday = await prisma.appuntamento.count({
                 where: {
@@ -30,13 +37,37 @@ export class AppuntamentoService {
 
             const numeroPrenotazione = `${startOfDay.toISOString().split('T')[0]}-${String(countToday + 1).padStart(4, '0')}`;
 
-            // Verify all references exist
+            // P48: Verify all references exist - Person non ha tenantId, usa tenantProfiles
             const [paziente, medico, ambulatorio] = await Promise.all([
                 prisma.person.findFirst({
-                    where: { id: data.pazienteId, tenantId, deletedAt: null }
+                    where: {
+                        id: data.pazienteId,
+                        deletedAt: null,
+                        tenantProfiles: {
+                            some: { tenantId, deletedAt: null }
+                        }
+                    },
+                    include: {
+                        tenantProfiles: {
+                            where: { tenantId, deletedAt: null },
+                            take: 1
+                        }
+                    }
                 }),
                 prisma.person.findFirst({
-                    where: { id: data.medicoId, tenantId, deletedAt: null }
+                    where: {
+                        id: data.medicoId,
+                        deletedAt: null,
+                        tenantProfiles: {
+                            some: { tenantId, deletedAt: null }
+                        }
+                    },
+                    include: {
+                        tenantProfiles: {
+                            where: { tenantId, deletedAt: null },
+                            take: 1
+                        }
+                    }
                 }),
                 prisma.ambulatorio.findFirst({
                     where: { id: data.ambulatorioId, tenantId, deletedAt: null }
@@ -47,34 +78,93 @@ export class AppuntamentoService {
             if (!medico) throw new Error('Medico not found');
             if (!ambulatorio) throw new Error('Ambulatorio not found');
 
-            // Check for conflicts
-            const conflicts = await this.checkConflicts(
-                data.medicoId,
-                data.ambulatorioId,
-                dataOra,
-                data.durataMinuti || 30,
-                tenantId
-            );
+            // Project 51: Validate tenant isolation for all tenant-specific entities
+            // This prevents mixing entities from different tenants in an appointment
+            const tenantValidationPromises = [];
 
-            if (conflicts.length > 0) {
-                throw new Error(`Appointment conflicts with existing appointments: ${conflicts.map(c => c.numeroPrenotazione).join(', ')}`);
+            // Validate prestazione belongs to same tenant
+            if (data.prestazioneId) {
+                tenantValidationPromises.push(
+                    prisma.prestazione.findFirst({
+                        where: { id: data.prestazioneId, tenantId, deletedAt: null },
+                        select: { id: true, tenantId: true }
+                    }).then(p => {
+                        if (!p) {
+                            throw new Error('TENANT_MISMATCH: La prestazione selezionata appartiene a un altro tenant');
+                        }
+                        return p;
+                    })
+                );
+            }
+
+            // Validate convenzione belongs to same tenant
+            if (data.convenzioneId) {
+                tenantValidationPromises.push(
+                    prisma.convenzione.findFirst({
+                        where: { id: data.convenzioneId, tenantId, deletedAt: null },
+                        select: { id: true, tenantId: true }
+                    }).then(c => {
+                        if (!c) {
+                            throw new Error('TENANT_MISMATCH: La convenzione selezionata appartiene a un altro tenant');
+                        }
+                        return c;
+                    })
+                );
+            }
+
+            // Wait for all validations
+            if (tenantValidationPromises.length > 0) {
+                await Promise.all(tenantValidationPromises);
+            }
+
+            logger.info('Tenant isolation validated for appointment', {
+                component: 'appuntamento-service',
+                action: 'create',
+                tenantId,
+                prestazioneId: data.prestazioneId,
+                convenzioneId: data.convenzioneId,
+                ambulatorioId: data.ambulatorioId
+            });
+
+            // Check for conflicts (skip if overbooking is explicitly allowed)
+            if (!data.isOverbooking) {
+                const conflicts = await this.checkConflicts(
+                    data.medicoId,
+                    data.ambulatorioId,
+                    dataOra,
+                    data.durataMinuti || 30,
+                    tenantId
+                );
+
+                if (conflicts.length > 0) {
+                    throw new Error(`Appointment conflicts with existing appointments: ${conflicts.map(c => c.numeroPrenotazione).join(', ')}`);
+                }
             }
 
             // Prepara i dati per la creazione
+            // NOTA: ambulatorio.id è già trovato sopra come fallback se data.ambulatorioId non è fornito
+            const resolvedAmbulatorioId = data.ambulatorioId || ambulatorio?.id;
+            const resolvedPrestazioneId = data.prestazioneId || null;
+
             const createData = {
                 numeroPrenotazione,
-                ambulatorioId: data.ambulatorioId,
-                prestazioneId: data.prestazioneId,
+                ambulatorioId: resolvedAmbulatorioId,
+                ...(resolvedPrestazioneId !== null && { prestazioneId: resolvedPrestazioneId }),
                 pazienteId: data.pazienteId,
                 medicoId: data.medicoId,
-                dataOra: data.dataOra,
+                // Ensure proper Date object — Prisma requires ISO 8601 DateTime (rejects bare "T09:00:00" strings)
+                dataOra: data.dataOra instanceof Date ? data.dataOra : new Date(data.dataOra),
                 durataMinuti: data.durataMinuti || 30,
                 stato: data.stato || 'PRENOTATO',
-                note: data.note,
-                noteInterne: data.noteInterne,
-                convenzioneId: data.convenzioneId,
+                isOverbooking: data.isOverbooking || false,
+                ...(data.note !== undefined && { note: data.note }),
+                ...(data.noteInterne !== undefined && { noteInterne: data.noteInterne }),
+                ...(data.convenzioneId !== undefined && { convenzioneId: data.convenzioneId }),
                 promemoriaSms: data.promemoriaSms || false,
-                promemoriaEmail: data.promemoriaEmail || true,
+                promemoriaEmail: data.promemoriaEmail !== undefined ? data.promemoriaEmail : true,
+                // === PROGETTO 56: MEDICINA DEL LAVORO ===
+                ...(data.companyTenantProfileId && { companyTenantProfileId: data.companyTenantProfileId }),
+                ...(data.tipoVisitaMDL && { tipoVisitaMDL: data.tipoVisitaMDL }),
                 tenantId,
                 createdBy
             };
@@ -101,21 +191,32 @@ export class AppuntamentoService {
                 }
             });
 
-            // Aggiungi dati paziente e medico manualmente
+            // P48: Aggiungi dati paziente e medico - email/phone sono in tenantProfiles
+            const pazienteProfile = paziente.tenantProfiles?.[0] || {};
+            const medicoProfile = medico.tenantProfiles?.[0] || {};
+
             appuntamento.paziente = {
                 id: paziente.id,
                 firstName: paziente.firstName,
                 lastName: paziente.lastName,
-                email: paziente.email,
-                phone: paziente.phone,
-                taxCode: paziente.taxCode
+                email: pazienteProfile.email || null,
+                phone: pazienteProfile.phone || null,
+                taxCode: paziente.taxCode || null,
+                birthDate: paziente.birthDate || null,
+                birthPlace: paziente.birthPlace || null,
+                birthProvince: paziente.birthProvince || null,
+                gender: paziente.gender || null,
+                residenceAddress: pazienteProfile.residenceAddress || null,
+                residenceCity: pazienteProfile.residenceCity || null,
+                postalCode: pazienteProfile.postalCode || null,
+                province: pazienteProfile.province || null
             };
             appuntamento.medico = {
                 id: medico.id,
                 firstName: medico.firstName,
                 lastName: medico.lastName,
-                specialties: medico.specialties,
-                registerCode: medico.registerCode
+                specialties: medicoProfile.specialties || [],
+                registerCode: medicoProfile.registerCode || null
             };
 
             logger.info('Appuntamento created', {
@@ -127,6 +228,133 @@ export class AppuntamentoService {
                 medicoId: data.medicoId,
                 tenantId
             });
+
+            // Project 47 - Emit domain event for notification system
+            await EventBus.publish(AppointmentEvents.CREATED, {
+                appuntamentoId: appuntamento.id,
+                numeroPrenotazione: appuntamento.numeroPrenotazione,
+                pazienteId: data.pazienteId,
+                pazienteNome: `${paziente.firstName} ${paziente.lastName}`,
+                pazienteEmail: paziente.email,
+                medicoId: data.medicoId,
+                medicoNome: `${medico.firstName} ${medico.lastName}`,
+                dataOra: appuntamento.dataOra,
+                ambulatorioNome: appuntamento.ambulatorio?.nome,
+                prestazioneNome: appuntamento.prestazione?.nome,
+                tenantId
+            });
+
+            // P56: MDL Reconciliation — quando si prenota una VML di tipo PREVENTIVA o PERIODICA,
+            // collega le ScadenzaPrestazioneProtocollo aperte del lavoratore a questo appuntamento,
+            // così spariscono dalla lista scadenze pending finché l'appuntamento è attivo.
+            const TIPI_VISITA_RECONCILE = ['PREVENTIVA', 'PERIODICA'];
+            if (TIPI_VISITA_RECONCILE.includes(data.tipoVisitaMDL) && data.pazienteId) {
+                try {
+                    // P70: limita alle scadenze nei ±60 giorni dalla data appuntamento
+                    const dataApp = new Date(appuntamento.dataOra);
+                    const minus60 = new Date(dataApp);
+                    minus60.setDate(minus60.getDate() - 60);
+                    const plus60 = new Date(dataApp);
+                    plus60.setDate(plus60.getDate() + 60);
+
+                    const whereScadenze = {
+                        personId: data.pazienteId,
+                        tenantId,
+                        eseguita: false,
+                        deletedAt: null,
+                        appuntamentoId: null, // ancora non coperte
+                        dataScadenza: { gte: minus60, lte: plus60 }, // P70: ±60 giorni
+                    };
+
+                    // Se c'è un'azienda specifica, filtra per mansione attiva di quell'azienda
+                    if (data.companyTenantProfileId) {
+                        const mansioneAttiva = await prisma.lavoratoreMansione.findFirst({
+                            where: {
+                                personId: data.pazienteId,
+                                tenantId,
+                                isAttiva: true,
+                                deletedAt: null,
+                                mansione: {
+                                    deletedAt: null,
+                                    // tenta prima con site collegato all'azienda
+                                }
+                            },
+                            select: { mansioneId: true }
+                        });
+
+                        if (mansioneAttiva?.mansioneId) {
+                            whereScadenze.mansioneId = mansioneAttiva.mansioneId;
+                        }
+                    }
+
+                    const updateResult = await prisma.scadenzaPrestazioneProtocollo.updateMany({
+                        where: whereScadenze,
+                        data: {
+                            appuntamentoId: appuntamento.id,
+                            // Pre-compila la data esecuzione prevista con la data dell'appuntamento
+                            // Viene sovrascritta con la data effettiva al completamento della visita
+                            // Viene azzerata se l'appuntamento viene annullato
+                            dataEsecuzione: appuntamento.dataOra
+                        }
+                    });
+
+                    if (updateResult.count > 0) {
+                        logger.info('MDL reconciliation: scadenze collegate all\'appuntamento', {
+                            component: 'appuntamento-service',
+                            action: 'mdl-reconcile',
+                            appuntamentoId: appuntamento.id,
+                            scadenzeCollegate: updateResult.count,
+                            pazienteId: data.pazienteId,
+                            tipoVisitaMDL: data.tipoVisitaMDL
+                        });
+                    }
+                } catch (reconcileError) {
+                    // Non fatale: logga ma non blocca la creazione dell'appuntamento
+                    logger.error('MDL reconciliation failed (non-fatal)', {
+                        component: 'appuntamento-service',
+                        action: 'mdl-reconcile',
+                        appuntamentoId: appuntamento.id,
+                        pazienteId: data.pazienteId,
+                        error: reconcileError.message
+                    });
+                }
+            }
+
+            // P70: genera BOZZA MovimentoContabile per appuntamento MDL (non-blocking)
+            if (data.tipoVisitaMDL && data.companyTenantProfileId) {
+                setImmediate(async () => {
+                    try {
+                        const mResult = await MovimentoContabileGenerator.generaPerAppuntamentoMDL(
+                            {
+                                id: appuntamento.id,
+                                pazienteId: data.pazienteId,
+                                medicoId: data.medicoId,
+                                prestazioneId: data.prestazioneId || null,
+                                tipoVisitaMDL: data.tipoVisitaMDL,
+                                dataOra: appuntamento.dataOra,
+                                companyTenantProfileId: data.companyTenantProfileId,
+                            },
+                            tenantId,
+                            createdBy
+                        );
+                        if (mResult.warnings.length > 0) {
+                            logger.warn('MDL BOZZA movimento warnings', {
+                                component: 'appuntamento-service',
+                                action: 'genera-bozza-mdl',
+                                appuntamentoId: appuntamento.id,
+                                warnings: mResult.warnings,
+                            });
+                        }
+                    } catch (billingErr) {
+                        logger.error('MDL BOZZA movimento generation failed (non-blocking)', {
+                            component: 'appuntamento-service',
+                            action: 'genera-bozza-mdl',
+                            appuntamentoId: appuntamento.id,
+                            error: billingErr.message,
+                        });
+                    }
+                });
+            }
 
             return appuntamento;
         } catch (error) {
@@ -165,7 +393,51 @@ export class AppuntamentoService {
                             nome: true,
                             codice: true,
                             tipo: true,
-                            durataPrevista: true
+                            durataPrevista: true,
+                            prezzoBase: true
+                        }
+                    },
+                    // P59: Prestazioni aggiuntive collegate (da sorveglianza sanitaria o aggiunte manualmente)
+                    prestazioni: {
+                        where: { deletedAt: null },
+                        orderBy: { ordine: 'asc' },
+                        include: {
+                            prestazione: {
+                                select: {
+                                    id: true,
+                                    nome: true,
+                                    codice: true,
+                                    prezzoBase: true,
+                                    durataPrevista: true,
+                                }
+                            },
+                            // Include MovimentoContabile collegato per recuperare il prezzo da tariffario aziendale
+                            // Escludi ANNULLATO/STORNATO per mostrare solo importi validi (attivi o in bozza)
+                            // P72_10: filtra solo ENTRATA (costo azienda), non USCITA (compenso medico)
+                            movimentiContabili: {
+                                where: {
+                                    deletedAt: null,
+                                    direzione: 'ENTRATA',
+                                    stato: { notIn: ['ANNULLATO', 'STORNATO'] },
+                                },
+                                select: {
+                                    id: true,
+                                    importoNetto: true,
+                                    importoLordo: true,
+                                    stato: true,
+                                    voceTariffarioId: true,
+                                },
+                                orderBy: { createdAt: 'desc' },
+                                take: 1,
+                            }
+                        }
+                    },
+                    convenzione: {
+                        select: {
+                            id: true,
+                            nome: true,
+                            codice: true,
+                            condizioni: true
                         }
                     },
                     visita: {
@@ -176,34 +448,226 @@ export class AppuntamentoService {
 
             if (!appuntamento) return null;
 
-            // Carica paziente e medico manualmente
+            // P48: Carica paziente e medico - email/phone sono in tenantProfiles
             const [paziente, medico] = await Promise.all([
                 prisma.person.findFirst({
-                    where: { id: appuntamento.pazienteId, tenantId, deletedAt: null },
+                    where: {
+                        id: appuntamento.pazienteId,
+                        deletedAt: null,
+                        tenantProfiles: {
+                            some: { tenantId, deletedAt: null }
+                        }
+                    },
                     select: {
                         id: true,
                         firstName: true,
                         lastName: true,
-                        email: true,
-                        phone: true,
                         taxCode: true,
-                        birthDate: true
+                        birthDate: true,
+                        tenantProfiles: {
+                            where: { tenantId, deletedAt: null },
+                            select: { email: true, phone: true },
+                            take: 1
+                        }
                     }
                 }),
                 prisma.person.findFirst({
-                    where: { id: appuntamento.medicoId, tenantId, deletedAt: null },
+                    where: {
+                        id: appuntamento.medicoId,
+                        deletedAt: null,
+                        tenantProfiles: {
+                            some: { tenantId, deletedAt: null }
+                        }
+                    },
                     select: {
                         id: true,
                         firstName: true,
                         lastName: true,
-                        specialties: true,
-                        registerCode: true
+                        tenantProfiles: {
+                            where: { tenantId, deletedAt: null },
+                            select: { specialties: true, registerCode: true },
+                            take: 1
+                        }
                     }
                 })
             ]);
 
-            appuntamento.paziente = paziente;
-            appuntamento.medico = medico;
+            // P48: Flatten tenantProfiles
+            if (paziente) {
+                const profile = paziente.tenantProfiles?.[0] || {};
+                appuntamento.paziente = {
+                    ...paziente,
+                    email: profile.email || null,
+                    phone: profile.phone || null,
+                    tenantProfiles: undefined
+                };
+            }
+            if (medico) {
+                const profile = medico.tenantProfiles?.[0] || {};
+                appuntamento.medico = {
+                    ...medico,
+                    specialties: profile.specialties || [],
+                    registerCode: profile.registerCode || null,
+                    tenantProfiles: undefined
+                };
+            }
+
+            // P61: Carica informazioni coda per questo appuntamento
+            const queueEntry = await prisma.numeroChiamata.findFirst({
+                where: {
+                    appuntamentoId: id,
+                    deletedAt: null
+                },
+                select: {
+                    id: true,
+                    numero: true,
+                    displayNumber: true,
+                    stato: true,
+                    sessionId: true
+                },
+                orderBy: { createdAt: 'desc' }
+            });
+            if (queueEntry) {
+                appuntamento.numeroCoda = queueEntry.numero;
+                appuntamento.displayNumberCoda = queueEntry.displayNumber;
+                appuntamento.queueEntryId = queueEntry.id;
+                appuntamento.queueEntryStato = queueEntry.stato;
+                appuntamento.queueSessionId = queueEntry.sessionId;
+            }
+
+            // P59: Lookup tariffario aziendale per la prestazione principale e tutte le voci
+            // → arricchisce prestazione._prezzoTariffario e appuntamento._vociTariffario per PrestazioniCard
+            if (appuntamento.companyTenantProfileId) {
+                // Run tariffario + company profile lookup in parallel
+                const [tariffarioAssoc, companyProfile] = await Promise.all([
+                    prisma.tariffarioCompanyAssociation.findFirst({
+                        where: {
+                            companyTenantProfileId: appuntamento.companyTenantProfileId,
+                            tenantId,
+                            attivo: true,
+                            deletedAt: null,
+                            OR: [{ validoA: null }, { validoA: { gte: new Date() } }],
+                        },
+                        include: {
+                            tariffario: {
+                                include: {
+                                    voci: {
+                                        where: { attivo: true, deletedAt: null },
+                                        select: {
+                                            prestazioneId: true,
+                                            prezzoBase: true,
+                                            categoriaVisita: true,
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    }),
+                    prisma.companyTenantProfile.findFirst({
+                        where: {
+                            id: appuntamento.companyTenantProfileId,
+                            tenantId,
+                            deletedAt: null,
+                        },
+                        select: {
+                            id: true,
+                            emailGenerale: true,
+                            telefonoGenerale: true,
+                            company: {
+                                select: {
+                                    id: true,
+                                    ragioneSociale: true,
+                                    piva: true,
+                                    codiceFiscale: true,
+                                    sedeLegaleCitta: true,
+                                    sedeLegaleProvincia: true,
+                                    sedeLegaleIndirizzo: true,
+                                }
+                            }
+                        }
+                    })
+                ]);
+
+                // Inject company info into appuntamento
+                if (companyProfile) {
+                    appuntamento._companyProfile = {
+                        id: companyProfile.id,
+                        ragioneSociale: companyProfile.company?.ragioneSociale || '',
+                        piva: companyProfile.company?.piva || '',
+                        citta: companyProfile.company?.sedeLegaleCitta || '',
+                        provincia: companyProfile.company?.sedeLegaleProvincia || '',
+                        indirizzo: companyProfile.company?.sedeLegaleIndirizzo || '',
+                        email: companyProfile.emailGenerale || '',
+                        telefono: companyProfile.telefonoGenerale || '',
+                        companyId: companyProfile.company?.id,
+                    };
+                }
+
+                const allVoci = tariffarioAssoc?.tariffario?.voci ?? [];
+                // Espone tutte le voci al frontend per il selettore tipo visita
+                appuntamento._vociTariffario = allVoci;
+                // Arricchisce il prezzo della prestazione principale con quello del tariffario
+                if (appuntamento.prestazioneId && appuntamento.prestazione && allVoci.length > 0) {
+                    const tipoVisita = appuntamento.tipoVisitaMDL;
+                    const voceMain =
+                        allVoci.find(v => v.prestazioneId === appuntamento.prestazioneId && v.categoriaVisita === tipoVisita)
+                        ?? allVoci.find(v => v.prestazioneId === appuntamento.prestazioneId);
+                    if (voceMain) {
+                        appuntamento.prestazione._prezzoTariffario = Number(voceMain.prezzoBase);
+                    }
+                }
+            }
+
+            // Load worker mansione + rischi for MDL patients
+            if (appuntamento.pazienteId && appuntamento.companyTenantProfileId) {
+                const workerMansioni = await prisma.lavoratoreMansione.findMany({
+                    where: {
+                        personId: appuntamento.pazienteId,
+                        tenantId,
+                        isAttiva: true,
+                        deletedAt: null,
+                        OR: [{ dataFine: null }, { dataFine: { gte: new Date() } }],
+                    },
+                    include: {
+                        mansione: {
+                            select: {
+                                id: true,
+                                denominazione: true,
+                                codice: true,
+                                areaLavoro: true,
+                                rischiAssociati: {
+                                    where: { deletedAt: null },
+                                    select: {
+                                        id: true,
+                                        codiceRischio: true,
+                                        livello: true,
+                                        categoria: true,
+                                        periodicitaMesi: true,
+                                        descrizioneEsposizione: true,
+                                    },
+                                },
+                            },
+                        },
+                    },
+                    orderBy: [{ isPrimaria: 'desc' }, { dataInizio: 'desc' }],
+                });
+
+                if (workerMansioni.length > 0) {
+                    appuntamento._workerMansioni = workerMansioni.map(wm => ({
+                        id: wm.id,
+                        isPrimaria: wm.isPrimaria,
+                        dataInizio: wm.dataInizio,
+                        dataFine: wm.dataFine,
+                        mansione: {
+                            id: wm.mansione.id,
+                            denominazione: wm.mansione.denominazione,
+                            codice: wm.mansione.codice,
+                            areaLavoro: wm.mansione.areaLavoro,
+                            rischi: wm.mansione.rischiAssociati,
+                        },
+                    }));
+                }
+            }
 
             return appuntamento;
         } catch (error) {
@@ -219,7 +683,12 @@ export class AppuntamentoService {
     }
 
     /**
-     * Get all appointments with filters
+     * Get all appointments with filters (supports multi-tenant)
+     * @param {string} tenantId - Primary tenant ID (fallback)
+     * @param {Object} options - Query options
+     * @param {string} options.tenantIds - Comma-separated list of tenant IDs (multi-tenant support)
+     * @param {boolean} options.allTenants - If true and accessibleTenantIds provided, show all
+     * @param {string[]} options.accessibleTenantIds - Array of tenant IDs the user can access
      */
     static async getAll(tenantId, options = {}) {
         try {
@@ -228,87 +697,501 @@ export class AppuntamentoService {
                 limit = 20,
                 dateFrom = null,
                 dateTo = null,
+                oraInizio = null,
+                oraFine = null,
                 medicoId = null,
                 pazienteId = null,
                 ambulatorioId = null,
+                sedeId = null,
+                poliambulatorioId = null,
                 stato = null,
                 search = '',
                 orderBy = 'dataOra',
-                orderDir = 'asc'
+                orderDir = 'asc',
+                tenantIds = null,
+                allTenants = false,
+                accessibleTenantIds = []
             } = options;
 
             const skip = (page - 1) * limit;
 
-            // Costruisci where senza relazioni inesistenti
+            // Determine tenant filter based on user's access (multi-tenant support)
+            let tenantFilter = {};
+            let effectiveTenantIds = [tenantId]; // Default to single tenant
+
+            if (tenantIds) {
+                // tenantIds can be string (comma-separated) or array
+                const requestedIds = typeof tenantIds === 'string'
+                    ? tenantIds.split(',').map(id => id.trim())
+                    : tenantIds;
+                const allowedIds = accessibleTenantIds.length > 0
+                    ? requestedIds.filter(id => accessibleTenantIds.includes(id))
+                    : requestedIds;
+
+                if (allowedIds.length > 0) {
+                    effectiveTenantIds = allowedIds;
+                    tenantFilter = allowedIds.length === 1
+                        ? { tenantId: allowedIds[0] }
+                        : { tenantId: { in: allowedIds } };
+                } else {
+                    tenantFilter = tenantId ? { tenantId } : {};
+                }
+            } else if (allTenants && accessibleTenantIds.length > 0) {
+                effectiveTenantIds = accessibleTenantIds;
+                tenantFilter = { tenantId: { in: accessibleTenantIds } };
+            } else if (tenantId) {
+                tenantFilter = { tenantId };
+            }
+
+            // Costruisci where con supporto multi-tenant
             const where = {
-                tenantId,
-                deletedAt: null
+                deletedAt: null,
+                ...tenantFilter
             };
 
+            // Date filtering with proper timezone handling
+            // parseToStartOfDay and parseToEndOfDay correctly handle YYYY-MM-DD format
+            // interpreting them as local dates, avoiding timezone shift bugs
             if (dateFrom) {
-                where.dataOra = { gte: new Date(dateFrom) };
+                const startDate = parseToStartOfDay(dateFrom);
+                if (startDate) {
+                    where.dataOra = { gte: startDate };
+                }
             }
             if (dateTo) {
-                where.dataOra = { ...where.dataOra, lte: new Date(dateTo) };
+                const endDate = parseToEndOfDay(dateTo);
+                if (endDate) {
+                    where.dataOra = { ...where.dataOra, lte: endDate };
+                }
             }
             if (medicoId) where.medicoId = medicoId;
             if (pazienteId) where.pazienteId = pazienteId;
             if (ambulatorioId) where.ambulatorioId = ambulatorioId;
-            if (stato) where.stato = stato;
+            // Cascading filters: sede → ambulatorio.sedeId, poliambulatorio → ambulatorio.sede.poliambulatorioId
+            if (sedeId) {
+                where.ambulatorio = { ...where.ambulatorio, sedeId };
+            }
+            if (poliambulatorioId) {
+                where.ambulatorio = {
+                    ...where.ambulatorio,
+                    sede: { poliambulatorioId }
+                };
+            }
+            if (stato) {
+                if (stato.includes(',')) {
+                    where.stato = { in: stato.split(',').map(s => s.trim()) };
+                } else {
+                    where.stato = stato;
+                }
+            }
             if (search) {
                 where.OR = [
                     { numeroPrenotazione: { contains: search, mode: 'insensitive' } }
                 ];
             }
 
-            const [appuntamenti, total] = await Promise.all([
-                prisma.appuntamento.findMany({
-                    where,
-                    include: {
-                        ambulatorio: {
-                            select: {
-                                id: true,
-                                nome: true,
-                                codice: true
-                            }
-                        },
-                        prestazione: {
-                            select: {
-                                id: true,
-                                nome: true,
-                                codice: true
-                            }
-                        }
-                    },
-                    orderBy: { [orderBy]: orderDir },
-                    skip,
-                    take: limit
-                }),
-                prisma.appuntamento.count({ where })
-            ]);
+            // When time-of-day filter is active, fetch all results (no pagination)
+            // and apply time filtering + pagination in memory.
+            // This is efficient because time filters are always used with a date range.
+            const hasTimeFilter = oraInizio || oraFine;
 
-            // Carica paziente e medico per ogni appuntamento
+            const includeBlock = {
+                ambulatorio: {
+                    select: {
+                        id: true,
+                        nome: true,
+                        codice: true
+                    }
+                },
+                prestazione: {
+                    select: {
+                        id: true,
+                        nome: true,
+                        codice: true,
+                        prezzoBase: true,
+                        durataPrevista: true
+                    }
+                },
+                convenzione: {
+                    select: {
+                        id: true,
+                        nome: true,
+                        codice: true,
+                        condizioni: true
+                    }
+                }
+            };
+
+            let appuntamenti, total;
+
+            if (hasTimeFilter) {
+                // Fetch all matching records, then filter by time in JS
+                const allAppuntamenti = await prisma.appuntamento.findMany({
+                    where,
+                    include: includeBlock,
+                    orderBy: { [orderBy]: orderDir }
+                });
+
+                const filtered = allAppuntamenti.filter(a => {
+                    if (!a.dataOra) return false;
+                    const d = new Date(a.dataOra);
+                    const hhmm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+                    if (oraInizio && hhmm < oraInizio) return false;
+                    if (oraFine && hhmm > oraFine) return false;
+                    return true;
+                });
+
+                total = filtered.length;
+                appuntamenti = filtered.slice(skip, skip + limit);
+            } else {
+                [appuntamenti, total] = await Promise.all([
+                    prisma.appuntamento.findMany({
+                        where,
+                        include: includeBlock,
+                        orderBy: { [orderBy]: orderDir },
+                        skip,
+                        take: limit
+                    }),
+                    prisma.appuntamento.count({ where })
+                ]);
+            }
+
+            // P48 FIX: Carica paziente e medico per ogni appuntamento
+            // Person non ha più tenantId, usa tenantProfiles per filtrare
             const pazienteIds = [...new Set(appuntamenti.map(a => a.pazienteId).filter(Boolean))];
             const medicoIds = [...new Set(appuntamenti.map(a => a.medicoId).filter(Boolean))];
 
             const [pazienti, medici] = await Promise.all([
                 pazienteIds.length > 0 ? prisma.person.findMany({
-                    where: { id: { in: pazienteIds }, tenantId },
-                    select: { id: true, firstName: true, lastName: true, phone: true }
+                    where: {
+                        id: { in: pazienteIds },
+                        deletedAt: null,
+                        tenantProfiles: {
+                            some: {
+                                tenantId: effectiveTenantIds.length === 1
+                                    ? effectiveTenantIds[0]
+                                    : { in: effectiveTenantIds },
+                                deletedAt: null
+                            }
+                        }
+                    },
+                    select: {
+                        id: true,
+                        firstName: true,
+                        lastName: true,
+                        taxCode: true,
+                        birthDate: true,
+                        birthPlace: true,
+                        birthProvince: true,
+                        gender: true,
+                        tenantProfiles: {
+                            where: {
+                                tenantId: effectiveTenantIds.length === 1
+                                    ? effectiveTenantIds[0]
+                                    : { in: effectiveTenantIds },
+                                deletedAt: null
+                            },
+                            select: {
+                                phone: true,
+                                email: true,
+                                residenceAddress: true,
+                                residenceCity: true,
+                                postalCode: true,
+                                province: true
+                            },
+                            take: 1
+                        }
+                    }
                 }) : [],
                 medicoIds.length > 0 ? prisma.person.findMany({
-                    where: { id: { in: medicoIds }, tenantId },
-                    select: { id: true, firstName: true, lastName: true }
+                    where: {
+                        id: { in: medicoIds },
+                        deletedAt: null,
+                        tenantProfiles: {
+                            some: {
+                                tenantId: effectiveTenantIds.length === 1
+                                    ? effectiveTenantIds[0]
+                                    : { in: effectiveTenantIds },
+                                deletedAt: null
+                            }
+                        }
+                    },
+                    select: {
+                        id: true,
+                        firstName: true,
+                        lastName: true
+                    }
                 }) : []
             ]);
 
-            const pazientiMap = new Map((pazienti || []).map(p => [p.id, p]));
+            // P48: Flatten tenantProfiles per i pazienti
+            const pazientiMap = new Map((pazienti || []).map(p => {
+                const profile = p.tenantProfiles?.[0] || {};
+                return [p.id, {
+                    id: p.id,
+                    firstName: p.firstName,
+                    lastName: p.lastName,
+                    taxCode: p.taxCode || null,
+                    birthDate: p.birthDate || null,
+                    birthPlace: p.birthPlace || null,
+                    birthProvince: p.birthProvince || null,
+                    gender: p.gender || null,
+                    phone: profile.phone || null,
+                    email: profile.email || null,
+                    residenceAddress: profile.residenceAddress || null,
+                    residenceCity: profile.residenceCity || null,
+                    postalCode: profile.postalCode || null,
+                    province: profile.province || null
+                }];
+            }));
             const mediciMap = new Map((medici || []).map(m => [m.id, m]));
+
+            // Raccogli tutti i codici sconto referenziati dalle convenzioni
+            const codiciScontoRefs = appuntamenti
+                .filter(a => a.convenzione?.condizioni?.codiceSconto)
+                .map(a => a.convenzione.condizioni.codiceSconto);
+
+            // Carica i codici sconto se ce ne sono (multi-tenant)
+            let codiciScontoMap = new Map();
+            if (codiciScontoRefs.length > 0) {
+                const uniqueCodici = [...new Set(codiciScontoRefs)];
+                const codiciSconto = await prisma.codiceSconto.findMany({
+                    where: {
+                        codice: { in: uniqueCodici },
+                        tenantId: effectiveTenantIds.length === 1
+                            ? effectiveTenantIds[0]
+                            : { in: effectiveTenantIds },
+                        attivo: true,
+                        deletedAt: null
+                    },
+                    select: {
+                        codice: true,
+                        tipoSconto: true,
+                        valore: true
+                    }
+                });
+                codiciScontoMap = new Map(codiciSconto.map(cs => [cs.codice, cs]));
+            }
+
+            // P61: Carica numeri coda (queue entries) per gli appuntamenti
+            const appuntamentoIds = appuntamenti.map(a => a.id);
+            let queueEntriesMap = new Map();
+            if (appuntamentoIds.length > 0) {
+                const queueEntries = await prisma.numeroChiamata.findMany({
+                    where: {
+                        appuntamentoId: { in: appuntamentoIds },
+                        deletedAt: null
+                    },
+                    select: {
+                        id: true, // P61: Serve per chiamare il paziente (queueApi.callSpecific)
+                        appuntamentoId: true,
+                        sessionId: true, // P61: Per identificare la sessione coda attiva
+                        numero: true,
+                        displayNumber: true,
+                        stato: true
+                    },
+                    orderBy: { createdAt: 'desc' } // Prendi il più recente se ce ne sono più di uno
+                });
+                // Mappa per appuntamentoId -> entry più recente
+                for (const entry of queueEntries) {
+                    if (entry.appuntamentoId && !queueEntriesMap.has(entry.appuntamentoId)) {
+                        queueEntriesMap.set(entry.appuntamentoId, entry);
+                    }
+                }
+            }
+
+            // Carica visita (id + stato) per ogni appuntamento
+            let visitaMap = new Map();
+            if (appuntamentoIds.length > 0) {
+                const visite = await prisma.visita.findMany({
+                    where: {
+                        appuntamentoId: { in: appuntamentoIds },
+                        deletedAt: null
+                    },
+                    select: {
+                        id: true,
+                        stato: true,
+                        appuntamentoId: true
+                    }
+                });
+                for (const v of visite) {
+                    if (v.appuntamentoId) visitaMap.set(v.appuntamentoId, v);
+                }
+            }
+
+            // Fallback: per appuntamenti COMPLETATO/FATTURATO senza visita linkata,
+            // cerca visite orfane (appuntamentoId null) per stesso paziente nello stesso giorno.
+            // Necessario per dati storici creati prima del collegamento appuntamento↔visita.
+            const unmatchedCompletato = appuntamenti.filter(a =>
+                ['COMPLETATO', 'FATTURATO'].includes(a.stato) && !visitaMap.has(a.id) && a.pazienteId
+            );
+            if (unmatchedCompletato.length > 0) {
+                const orphanPazienteIds = [...new Set(unmatchedCompletato.map(a => a.pazienteId))];
+                const orphanVisite = await prisma.visita.findMany({
+                    where: {
+                        tenantId,
+                        deletedAt: null,
+                        appuntamentoId: null,
+                        pazienteId: { in: orphanPazienteIds },
+                    },
+                    select: { id: true, stato: true, pazienteId: true, dataOra: true }
+                });
+                for (const app of unmatchedCompletato) {
+                    const appDate = app.dataOra ? new Date(app.dataOra).toDateString() : null;
+                    if (!appDate) continue;
+                    const matched = orphanVisite.find(v => {
+                        if (v.pazienteId !== app.pazienteId) return false;
+                        const vDate = v.dataOra ? new Date(v.dataOra).toDateString() : null;
+                        return vDate === appDate;
+                    });
+                    if (matched) visitaMap.set(app.id, matched);
+                }
+            }
+
+            // P59: Aggiungi totale movimentiContabili per ciascun appuntamento
+            // Usa importoNetto (IVA esclusa) — coerente con i prezzi tariffario visualizzati nel calendario.
+            // Prestazioni mediche hanno IVA 0% per legge (Art.10 DPR 633/72) quindi netto = lordo per la maggioranza,
+            // ma usiamo netto per robustezza in presenza di dati storici con IVA 22%.
+            let movimentiTotali = new Map();
+            if (appuntamentoIds.length > 0) {
+                const movimentiSums = await prisma.movimentoContabile.groupBy({
+                    by: ['appuntamentoId'],
+                    where: {
+                        appuntamentoId: { in: appuntamentoIds },
+                        stato: { notIn: ['ANNULLATO', 'STORNATO'] },
+                        direzione: 'ENTRATA',
+                        deletedAt: null,
+                    },
+                    _sum: { importoNetto: true },
+                });
+                movimentiSums.forEach(m => {
+                    if (m.appuntamentoId && m._sum.importoNetto != null) {
+                        movimentiTotali.set(m.appuntamentoId, Number(m._sum.importoNetto));
+                    }
+                });
+            }
+
+            // P59: Il prezzo tariffario aziendale è sempre calcolato per tutti gli appuntamenti
+            // con un'azienda associata — è la fonte di verità contrattuale per la visualizzazione nel calendario.
+            // _prezzoTotaleMovimenti (movimenti effettivi) viene usato come riferimento billing,
+            // ma _prezzoTariffarioPrestazione (calcolato da contratto) ha priorità nella UI.
+            let tariffarioFallbackMap = new Map(); // appuntamentoId -> prezzo totale da tariffario
+            const appsNeedingTariffario = appuntamenti.filter(a => a.companyTenantProfileId);
+            if (appsNeedingTariffario.length > 0) {
+                const companyIds = [...new Set(appsNeedingTariffario.map(a => a.companyTenantProfileId).filter(Boolean))];
+                const tariffTenantIds = effectiveTenantIds.length > 0 ? effectiveTenantIds : [tenantId];
+                // Batch lookup tariffari aziendali
+                const tariffAssocs = await prisma.tariffarioCompanyAssociation.findMany({
+                    where: {
+                        companyTenantProfileId: { in: companyIds },
+                        tenantId: { in: tariffTenantIds },
+                        attivo: true,
+                        deletedAt: null,
+                        OR: [{ validoA: null }, { validoA: { gte: new Date() } }],
+                    },
+                    include: {
+                        tariffario: {
+                            include: {
+                                voci: {
+                                    where: { attivo: true, deletedAt: null },
+                                    // categoriaVisita necessario per match tipoVisitaMDL (es. PERIODICA)
+                                    select: { prestazioneId: true, prezzoBase: true, categoriaVisita: true },
+                                },
+                            },
+                        },
+                    },
+                });
+                // Map: companyTenantProfileId -> voci tariffario (primo tariffario attivo trovato)
+                const companyVociMap = new Map();
+                for (const assoc of tariffAssocs) {
+                    if (!companyVociMap.has(assoc.companyTenantProfileId)) {
+                        companyVociMap.set(assoc.companyTenantProfileId, assoc.tariffario?.voci ?? []);
+                    }
+                }
+                // Batch fetch AppuntamentoPrestazione per calcolare anche i prezzi accertamenti
+                const appsNeedingIds = appsNeedingTariffario.map(a => a.id);
+                const appPrestazioniAll = await prisma.appuntamentoPrestazione.findMany({
+                    where: { appuntamentoId: { in: appsNeedingIds }, deletedAt: null },
+                    select: { appuntamentoId: true, prestazioneId: true },
+                });
+                const appPrestazioniMap = new Map();
+                for (const ap of appPrestazioniAll) {
+                    if (!appPrestazioniMap.has(ap.appuntamentoId)) appPrestazioniMap.set(ap.appuntamentoId, []);
+                    appPrestazioniMap.get(ap.appuntamentoId).push(ap.prestazioneId);
+                }
+                // Calcola prezzo tariffario per ogni appuntamento che ne ha bisogno
+                for (const app of appsNeedingTariffario) {
+                    const voci = companyVociMap.get(app.companyTenantProfileId);
+                    if (!voci || voci.length === 0) continue;
+                    let total = 0;
+                    // Prestazione principale: matcha per tipoVisitaMDL (es. PREVENTIVA, PERIODICA) per prezzi differenziati
+                    if (app.prestazioneId) {
+                        const voce = voci.find(v => v.prestazioneId === app.prestazioneId && v.categoriaVisita === app.tipoVisitaMDL)
+                            ?? voci.find(v => v.prestazioneId === app.prestazioneId && !v.categoriaVisita)
+                            ?? voci.find(v => v.prestazioneId === app.prestazioneId);
+                        if (voce) total += Number(voce.prezzoBase);
+                    }
+                    // Accertamenti (AppuntamentoPrestazione) — nessun tipoVisitaMDL per accertamenti.
+                    // Filtra la prestazione principale (app.prestazioneId) per evitare doppio conteggio:
+                    // quella viene già sommata nel blocco precedente come prestazione principale.
+                    const accertamentiIds = (appPrestazioniMap.get(app.id) ?? [])
+                        .filter(pId => pId !== app.prestazioneId);
+                    for (const pId of accertamentiIds) {
+                        const voce = voci.find(v => v.prestazioneId === pId && !v.categoriaVisita)
+                            ?? voci.find(v => v.prestazioneId === pId);
+                        if (voce) total += Number(voce.prezzoBase);
+                    }
+                    if (total > 0) tariffarioFallbackMap.set(app.id, total);
+                }
+            }
 
             // Aggiungi dati a ciascun appuntamento
             for (const app of appuntamenti) {
                 app.paziente = pazientiMap.get(app.pazienteId) || null;
                 app.medico = mediciMap.get(app.medicoId) || null;
+
+                // P59: Prezzo tariffario contrattuale (fonte di verità per la visualizzazione nel calendario)
+                // Ha priorità su _prezzoTotaleMovimenti perché riflette l'accordo tariffario corretto
+                const tariffFallback = tariffarioFallbackMap.get(app.id);
+                if (tariffFallback != null && tariffFallback > 0) {
+                    app._prezzoTariffarioPrestazione = tariffFallback;
+                }
+                // Prezzo totale movimenti contabili (riferimento billing/fatturazione)
+                const totMovimenti = movimentiTotali.get(app.id);
+                if (totMovimenti != null && totMovimenti > 0) {
+                    app._prezzoTotaleMovimenti = totMovimenti;
+                }
+
+                // P61: Aggiungi numero coda se presente
+                const queueEntry = queueEntriesMap.get(app.id);
+                if (queueEntry) {
+                    app.numeroCoda = queueEntry.numero;
+                    app.displayNumberCoda = queueEntry.displayNumber;
+                    app.queueEntryId = queueEntry.id; // Per chiamare il paziente (queueApi.callSpecific)
+                    app.queueEntryStato = queueEntry.stato;
+                    app.queueSessionId = queueEntry.sessionId; // Per mostrare pulsanti coda nel tooltip
+                }
+
+                // Aggiungi visita (id + stato) se presente
+                const visita = visitaMap.get(app.id);
+                if (visita) {
+                    app.visita = { id: visita.id, stato: visita.stato };
+                }
+
+                // Arricchisci le condizioni della convenzione con i dati del codice sconto
+                if (app.convenzione?.condizioni?.codiceSconto) {
+                    const codiceSconto = codiciScontoMap.get(app.convenzione.condizioni.codiceSconto);
+                    if (codiceSconto) {
+                        // Aggiungi i dati dello sconto alle condizioni
+                        app.convenzione.condizioni = {
+                            ...app.convenzione.condizioni,
+                            scontoInfo: {
+                                tipo: codiceSconto.tipoSconto,
+                                valore: Number(codiceSconto.valore)
+                            }
+                        };
+                    }
+                }
             }
 
             return {
@@ -338,10 +1221,13 @@ export class AppuntamentoService {
         try {
             const { medicoId, ambulatorioId } = options;
 
-            const startOfDay = new Date(date);
-            startOfDay.setHours(0, 0, 0, 0);
-            const endOfDay = new Date(date);
-            endOfDay.setHours(23, 59, 59, 999);
+            // CRITICAL FIX: Use UTC methods to avoid timezone shift bug
+            const inputDate = new Date(date);
+            const year = inputDate.getUTCFullYear();
+            const month = inputDate.getUTCMonth();
+            const day = inputDate.getUTCDate();
+            const startOfDay = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
+            const endOfDay = new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
 
             const where = {
                 tenantId,
@@ -365,7 +1251,17 @@ export class AppuntamentoService {
                         select: {
                             id: true,
                             nome: true,
+                            codice: true,
+                            prezzoBase: true,
                             durataPrevista: true
+                        }
+                    },
+                    convenzione: {
+                        select: {
+                            id: true,
+                            nome: true,
+                            codice: true,
+                            condizioni: true
                         }
                     }
                 },
@@ -376,18 +1272,25 @@ export class AppuntamentoService {
             const pazienteIds = [...new Set(appuntamenti.map(a => a.pazienteId))];
             const medicoIds = [...new Set(appuntamenti.map(a => a.medicoId))];
 
+            // P63: Person non ha tenantId — filtra via tenantProfiles.some
+            // P48: phone/email sono in PersonTenantProfile, non su Person
             const [pazienti, medici] = await Promise.all([
                 prisma.person.findMany({
-                    where: { id: { in: pazienteIds }, tenantId },
-                    select: { id: true, firstName: true, lastName: true, phone: true, email: true }
+                    where: { id: { in: pazienteIds }, deletedAt: null, tenantProfiles: { some: { tenantId, deletedAt: null } } },
+                    select: {
+                        id: true, firstName: true, lastName: true,
+                        tenantProfiles: { where: { tenantId }, select: { phone: true, email: true }, take: 1 }
+                    }
                 }),
                 prisma.person.findMany({
-                    where: { id: { in: medicoIds }, tenantId },
+                    where: { id: { in: medicoIds }, deletedAt: null, tenantProfiles: { some: { tenantId, deletedAt: null } } },
                     select: { id: true, firstName: true, lastName: true }
                 })
             ]);
-
-            const pazientiMap = new Map(pazienti.map(p => [p.id, p]));
+            const pazientiMap = new Map(pazienti.map(p => {
+                const profile = p.tenantProfiles?.[0] || {};
+                return [p.id, { id: p.id, firstName: p.firstName, lastName: p.lastName, phone: profile.phone || null, email: profile.email || null }];
+            }));
             const mediciMap = new Map(medici.map(m => [m.id, m]));
 
             for (const app of appuntamenti) {
@@ -454,6 +1357,17 @@ export class AppuntamentoService {
                     break;
                 case 'COMPLETATO':
                     updateData.oraFine = new Date();
+                    // Se c'era pagamento anticipato, passa direttamente a FATTURATO
+                    if (existing.pagamentoAnticipato) {
+                        updateData.stato = 'FATTURATO';
+                        stato = 'FATTURATO'; // Aggiorna la variabile per il log
+                    }
+                    break;
+                case 'FATTURATO':
+                    // Stato finale: appuntamento pagato
+                    if (!updateData.oraFine) {
+                        updateData.oraFine = new Date();
+                    }
                     break;
                 case 'ANNULLATO':
                     // Note interne per il motivo annullamento
@@ -472,24 +1386,122 @@ export class AppuntamentoService {
                     },
                     prestazione: {
                         select: { id: true, nome: true }
+                    },
+                    // P54: Include slots per trovare disponibilitaMedicoId
+                    slots: {
+                        where: { deletedAt: null },
+                        select: { id: true },
+                        take: 1
                     }
                 }
             });
 
-            // Carica paziente e medico
+            // P48: Carica paziente e medico - Person non ha tenantId diretto
             const [paziente, medico] = await Promise.all([
                 prisma.person.findFirst({
-                    where: { id: updated.pazienteId, tenantId },
+                    where: {
+                        id: updated.pazienteId,
+                        deletedAt: null,
+                        tenantProfiles: { some: { tenantId, deletedAt: null } }
+                    },
                     select: { id: true, firstName: true, lastName: true }
                 }),
                 prisma.person.findFirst({
-                    where: { id: updated.medicoId, tenantId },
+                    where: {
+                        id: updated.medicoId,
+                        deletedAt: null,
+                        tenantProfiles: { some: { tenantId, deletedAt: null } }
+                    },
                     select: { id: true, firstName: true, lastName: true }
                 })
             ]);
 
             updated.paziente = paziente;
             updated.medico = medico;
+
+            // P59: quando l'appuntamento viene annullato, annulla anche tutti i MovimentoContabile
+            // in stato BOZZA o DA_FATTURARE collegati (importo non ancora fatturato)
+            if (stato === 'ANNULLATO') {
+                await prisma.movimentoContabile.updateMany({
+                    where: {
+                        appuntamentoId: id,
+                        tenantId,
+                        stato: { in: ['BOZZA', 'PREVENTIVO', 'DA_FATTURARE'] },
+                        deletedAt: null,
+                    },
+                    data: {
+                        stato: 'ANNULLATO',
+                        deletedAt: new Date(),
+                        note: 'Annullato automaticamente per annullamento appuntamento',
+                    },
+                });
+
+                // P56: MDL - libera le ScadenzaPrestazioneProtocollo collegate all'appuntamento
+                // così tornano visibili come scadenze aperte da riprogrammare
+                await prisma.scadenzaPrestazioneProtocollo.updateMany({
+                    where: { appuntamentoId: id, tenantId, deletedAt: null },
+                    data: { appuntamentoId: null, dataEsecuzione: null },
+                });
+            }
+
+            // P70: NO_SHOW / RINVIATO — cancella BOZZA movimenti contabili e libera scadenze MDL
+            // (il paziente non si è presentato o la visita è rinviata — le BOZZA non devono rimanere)
+            if (stato === 'NO_SHOW' || stato === 'RINVIATO') {
+                await prisma.movimentoContabile.updateMany({
+                    where: {
+                        appuntamentoId: id,
+                        tenantId,
+                        stato: { in: ['BOZZA', 'PREVENTIVO', 'DA_FATTURARE'] },
+                        deletedAt: null,
+                    },
+                    data: {
+                        stato: 'ANNULLATO',
+                        deletedAt: new Date(),
+                        note: `Annullato automaticamente per stato ${stato}`,
+                    },
+                });
+
+                // MDL: libera le ScadenzaPrestazioneProtocollo collegate così tornano come aperte
+                await prisma.scadenzaPrestazioneProtocollo.updateMany({
+                    where: { appuntamentoId: id, tenantId, deletedAt: null },
+                    data: { appuntamentoId: null, dataEsecuzione: null },
+                });
+
+                logger.info('P70: movimenti BOZZA annullati e scadenze liberate per stato ' + stato, {
+                    component: 'appuntamento-service',
+                    action: 'no-show-rinviato-billing',
+                    appuntamentoId: id,
+                    stato,
+                    tenantId,
+                });
+            }
+
+            // P70: accettazione paziente NON-MDL → BOZZA movimenti contabili
+            if ((stato === 'IN_ATTESA' || stato === 'ARRIVATO') && !existing.tipoVisitaMDL) {
+                setImmediate(async () => {
+                    try {
+                        await MovimentoContabileGenerator.generaPerAccettazionePaziente(
+                            {
+                                id: existing.id,
+                                pazienteId: existing.pazienteId,
+                                medicoId: existing.medicoId,
+                                prestazioneId: existing.prestazioneId || null,
+                                dataOra: existing.dataOra,
+                                companyTenantProfileId: existing.companyTenantProfileId || null,
+                            },
+                            tenantId,
+                            id
+                        );
+                    } catch (billingErr) {
+                        logger.error('generaPerAccettazionePaziente failed (non-blocking)', {
+                            component: 'appuntamento-service',
+                            action: 'accettazione-bozza',
+                            appuntamentoId: id,
+                            error: billingErr.message,
+                        });
+                    }
+                });
+            }
 
             logger.info('Appuntamento stato updated', {
                 component: 'appuntamento-service',
@@ -500,6 +1512,30 @@ export class AppuntamentoService {
                 tenantId
             });
 
+            // Project 47 - Emit domain event for notification system
+            const eventType = stato === 'ANNULLATO'
+                ? AppointmentEvents.CANCELLED
+                : AppointmentEvents.STATUS_CHANGED;
+
+            await EventBus.publish({
+                type: eventType,
+                payload: {
+                    appuntamentoId: id,
+                    numeroPrenotazione: updated.numeroPrenotazione,
+                    pazienteId: updated.pazienteId,
+                    pazienteNome: paziente ? `${paziente.firstName} ${paziente.lastName}` : null,
+                    medicoId: updated.medicoId,
+                    medicoNome: medico ? `${medico.firstName} ${medico.lastName}` : null,
+                    oldStato: existing.stato,
+                    newStato: stato,
+                    dataOra: updated.dataOra,
+                    tenantId
+                },
+                aggregateType: 'Appuntamento',
+                aggregateId: id,
+                metadata: { tenantId }
+            });
+
             return updated;
         } catch (error) {
             logger.error('Failed to update appuntamento stato', {
@@ -508,6 +1544,82 @@ export class AppuntamentoService {
                 error: error.message,
                 id,
                 stato,
+                tenantId
+            });
+            throw error;
+        }
+    }
+
+    /**
+     * Registra il pagamento per un appuntamento
+     * Gestisce sia il pagamento anticipato che quello post-visita
+     * 
+     * @param {string} id - ID dell'appuntamento
+     * @param {string} tenantId - ID del tenant
+     * @returns {Promise<Object>} Appuntamento aggiornato
+     */
+    static async registraPagamento(id, tenantId) {
+        try {
+            const existing = await prisma.appuntamento.findFirst({
+                where: { id, tenantId, deletedAt: null }
+            });
+
+            if (!existing) {
+                throw new Error('Appuntamento not found');
+            }
+
+            const updateData = {
+                pagamentoDataOra: new Date(),
+                updatedAt: new Date()
+            };
+
+            // Logica del pagamento in base allo stato corrente
+            switch (existing.stato) {
+                case 'PRENOTATO':
+                case 'CONFERMATO':
+                case 'IN_ATTESA':
+                case 'IN_CORSO':
+                    // Pagamento anticipato - non cambia lo stato, solo flag
+                    updateData.pagamentoAnticipato = true;
+                    break;
+                case 'COMPLETATO':
+                    // Pagamento post-visita - cambia in FATTURATO
+                    updateData.stato = 'FATTURATO';
+                    break;
+                case 'FATTURATO':
+                    // Già fatturato, niente da fare
+                    throw new Error('Appuntamento già fatturato');
+                default:
+                    throw new Error(`Impossibile registrare pagamento in stato ${existing.stato}`);
+            }
+
+            const updated = await prisma.appuntamento.update({
+                where: { id },
+                data: updateData,
+                include: {
+                    ambulatorio: { select: { id: true, nome: true } },
+                    prestazione: { select: { id: true, nome: true } }
+                }
+            });
+
+            // Log del pagamento
+            logger.info('Pagamento registrato', {
+                component: 'appuntamento-service',
+                action: 'registraPagamento',
+                appuntamentoId: id,
+                statoOriginale: existing.stato,
+                nuovoStato: updated.stato,
+                pagamentoAnticipato: updateData.pagamentoAnticipato || false,
+                tenantId
+            });
+
+            return updated;
+        } catch (error) {
+            logger.error('Failed to register payment', {
+                component: 'appuntamento-service',
+                action: 'registraPagamento',
+                error: error.message,
+                id,
                 tenantId
             });
             throw error;
@@ -543,10 +1655,25 @@ export class AppuntamentoService {
                 }
             }
 
+            // Filter only valid database fields to avoid Prisma errors
+            const validFields = [
+                'ambulatorioId', 'prestazioneId', 'pazienteId', 'medicoId',
+                'dataOra', 'durataMinuti', 'stato', 'isOverbooking',
+                'note', 'noteInterne', 'convenzioneId',
+                'promemoriaSms', 'promemoriaEmail', 'promemoriaInviato',
+                'oraArrivo', 'oraChiamata', 'oraInizio', 'oraFine'
+            ];
+            const filteredData = {};
+            for (const key of validFields) {
+                if (data[key] !== undefined) {
+                    filteredData[key] = data[key];
+                }
+            }
+
             const updated = await prisma.appuntamento.update({
                 where: { id },
                 data: {
-                    ...data,
+                    ...filteredData,
                     updatedAt: new Date()
                 },
                 include: {
@@ -559,14 +1686,22 @@ export class AppuntamentoService {
                 }
             });
 
-            // Carica paziente e medico
+            // P48: Carica paziente e medico - Person non ha tenantId diretto
             const [paziente, medico] = await Promise.all([
                 prisma.person.findFirst({
-                    where: { id: updated.pazienteId, tenantId },
+                    where: {
+                        id: updated.pazienteId,
+                        deletedAt: null,
+                        tenantProfiles: { some: { tenantId, deletedAt: null } }
+                    },
                     select: { id: true, firstName: true, lastName: true }
                 }),
                 prisma.person.findFirst({
-                    where: { id: updated.medicoId, tenantId },
+                    where: {
+                        id: updated.medicoId,
+                        deletedAt: null,
+                        tenantProfiles: { some: { tenantId, deletedAt: null } }
+                    },
                     select: { id: true, firstName: true, lastName: true }
                 })
             ]);
@@ -578,6 +1713,134 @@ export class AppuntamentoService {
                 component: 'appuntamento-service',
                 action: 'update',
                 appuntamentoId: id,
+                tenantId
+            });
+
+            // Project 47 - Emit domain event for notification system
+            // Check if it's a reschedule (date changed)
+            const isRescheduled = data.dataOra && new Date(data.dataOra).getTime() !== new Date(existing.dataOra).getTime();
+            const eventType = isRescheduled ? AppointmentEvents.RESCHEDULED : AppointmentEvents.UPDATED;
+
+            // P70: Trigger modifiche per appuntamenti MDL (reschedule, cambio prestazione, cambio medico)
+            if (existing.tipoVisitaMDL && existing.companyTenantProfileId) {
+                const isPrestazioneChanged = data.prestazioneId && data.prestazioneId !== existing.prestazioneId;
+                const isMedicoChanged = data.medicoId && data.medicoId !== existing.medicoId;
+                const needsBillingUpdate = isRescheduled || isPrestazioneChanged || isMedicoChanged;
+
+                if (isRescheduled) {
+                    // Re-linka le ScadenzaPrestazioneProtocollo alla nuova data ±60 giorni
+                    setImmediate(async () => {
+                        try {
+                            const TIPI_RECONCILE = ['PREVENTIVA', 'PERIODICA'];
+                            if (TIPI_RECONCILE.includes(existing.tipoVisitaMDL)) {
+                                // 1. Rilascia il vecchio collegamento
+                                await prisma.scadenzaPrestazioneProtocollo.updateMany({
+                                    where: { appuntamentoId: id, tenantId, deletedAt: null },
+                                    data: { appuntamentoId: null, dataEsecuzione: null },
+                                });
+
+                                // 2. Cerca e collega scadenze nel nuovo range ±60 giorni
+                                const newDataOra = new Date(data.dataOra);
+                                const minus60 = new Date(newDataOra);
+                                minus60.setDate(minus60.getDate() - 60);
+                                const plus60 = new Date(newDataOra);
+                                plus60.setDate(plus60.getDate() + 60);
+
+                                await prisma.scadenzaPrestazioneProtocollo.updateMany({
+                                    where: {
+                                        personId: existing.pazienteId,
+                                        tenantId,
+                                        eseguita: false,
+                                        deletedAt: null,
+                                        appuntamentoId: null,
+                                        dataScadenza: { gte: minus60, lte: plus60 },
+                                    },
+                                    data: { appuntamentoId: id, dataEsecuzione: newDataOra },
+                                });
+
+                                logger.info('P70: ScadenzaPrestazioneProtocollo re-linked after reschedule', {
+                                    component: 'appuntamento-service',
+                                    action: 'reschedule-scadenze',
+                                    appuntamentoId: id,
+                                    tenantId,
+                                });
+                            }
+                        } catch (err) {
+                            logger.error('P70 reschedule scadenze re-link failed (non-blocking)', {
+                                component: 'appuntamento-service',
+                                action: 'reschedule-scadenze',
+                                error: err.message,
+                                appuntamentoId: id,
+                            });
+                        }
+                    });
+                }
+
+                if (needsBillingUpdate) {
+                    // Invalida BOZZA correnti e rigenera movimenti contabili MDL
+                    setImmediate(async () => {
+                        try {
+                            // Invalida BOZZA esistenti collegati all'appuntamento (soft-delete)
+                            await prisma.movimentoContabile.updateMany({
+                                where: {
+                                    appuntamentoId: id,
+                                    tenantId,
+                                    stato: 'BOZZA',
+                                    deletedAt: null,
+                                },
+                                data: {
+                                    stato: 'ANNULLATO',
+                                    deletedAt: new Date(),
+                                    note: 'Annullato automaticamente per modifica appuntamento MDL',
+                                },
+                            });
+
+                            // Rigenera con i dati aggiornati
+                            await MovimentoContabileGenerator.generaPerAppuntamentoMDL(
+                                {
+                                    id,
+                                    pazienteId: existing.pazienteId,
+                                    medicoId: data.medicoId || existing.medicoId,
+                                    prestazioneId: data.prestazioneId || existing.prestazioneId,
+                                    tipoVisitaMDL: existing.tipoVisitaMDL,
+                                    dataOra: data.dataOra || existing.dataOra,
+                                    companyTenantProfileId: existing.companyTenantProfileId,
+                                },
+                                tenantId,
+                                id
+                            );
+
+                            logger.info('P70: BOZZA movimenti MDL rigenerati dopo modifica appuntamento', {
+                                component: 'appuntamento-service',
+                                action: 'update-bozza-mdl',
+                                appuntamentoId: id,
+                                isRescheduled,
+                                isPrestazioneChanged,
+                                isMedicoChanged,
+                                tenantId,
+                            });
+                        } catch (err) {
+                            logger.error('P70 update MDL movimenti failed (non-blocking)', {
+                                component: 'appuntamento-service',
+                                action: 'update-bozza-mdl',
+                                error: err.message,
+                                appuntamentoId: id,
+                            });
+                        }
+                    });
+                }
+            }
+
+            await EventBus.publish(eventType, {
+                appuntamentoId: id,
+                numeroPrenotazione: updated.numeroPrenotazione,
+                pazienteId: updated.pazienteId,
+                pazienteNome: paziente ? `${paziente.firstName} ${paziente.lastName}` : null,
+                medicoId: updated.medicoId,
+                medicoNome: medico ? `${medico.firstName} ${medico.lastName}` : null,
+                oldDataOra: existing.dataOra,
+                newDataOra: updated.dataOra,
+                isRescheduled,
                 tenantId
             });
 
@@ -607,15 +1870,89 @@ export class AppuntamentoService {
                 throw new Error('Appuntamento not found');
             }
 
+            // P48: Carica paziente per notifica - email in tenantProfiles
+            const paziente = await prisma.person.findFirst({
+                where: {
+                    id: existing.pazienteId,
+                    deletedAt: null,
+                    tenantProfiles: { some: { tenantId, deletedAt: null } }
+                },
+                select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                    tenantProfiles: {
+                        where: { tenantId, deletedAt: null },
+                        select: { email: true },
+                        take: 1
+                    }
+                }
+            });
+
+            // P48: Flatten email
+            const pazienteFlattened = paziente ? {
+                ...paziente,
+                email: paziente.tenantProfiles?.[0]?.email || null,
+                tenantProfiles: undefined
+            } : null;
+
             await prisma.appuntamento.update({
                 where: { id },
                 data: { deletedAt: new Date() }
+            });
+
+            // Annulla tutti i movimenti contabili associati (BOZZA/PREVENTIVO/DA_FATTURARE → ANNULLATO + soft-delete)
+            await prisma.movimentoContabile.updateMany({
+                where: {
+                    appuntamentoId: id,
+                    tenantId,
+                    stato: { in: ['BOZZA', 'PREVENTIVO', 'DA_FATTURARE'] },
+                    deletedAt: null,
+                },
+                data: {
+                    stato: 'ANNULLATO',
+                    deletedAt: new Date(),
+                    note: 'Annullato automaticamente per eliminazione appuntamento',
+                },
+            });
+
+            // P56: MDL - libera le ScadenzaPrestazioneProtocollo collegate (appuntamento eliminato)
+            await prisma.scadenzaPrestazioneProtocollo.updateMany({
+                where: { appuntamentoId: id, tenantId, deletedAt: null },
+                data: { appuntamentoId: null, dataEsecuzione: null },
+            });
+
+            // P70: Coda Pazienti — segna NumeroChiamata come NON_PRESENTATO (numero rimane occupato)
+            await prisma.numeroChiamata.updateMany({
+                where: {
+                    appuntamentoId: id,
+                    tenantId,
+                    deletedAt: null,
+                    stato: { notIn: ['COMPLETATO'] },
+                },
+                data: {
+                    stato: 'NON_PRESENTATO',
+                    note: 'Appuntamento eliminato',
+                },
             });
 
             logger.info('Appuntamento deleted', {
                 component: 'appuntamento-service',
                 action: 'delete',
                 appuntamentoId: id,
+                tenantId
+            });
+
+            // Project 47 - Emit domain event for notification system (cancelled)
+            await EventBus.publish(AppointmentEvents.CANCELLED, {
+                appuntamentoId: id,
+                numeroPrenotazione: existing.numeroPrenotazione,
+                pazienteId: existing.pazienteId,
+                pazienteNome: pazienteFlattened ? `${pazienteFlattened.firstName} ${pazienteFlattened.lastName}` : null,
+                pazienteEmail: pazienteFlattened?.email,
+                medicoId: existing.medicoId,
+                dataOra: existing.dataOra,
+                reason: 'deleted',
                 tenantId
             });
 
@@ -634,22 +1971,54 @@ export class AppuntamentoService {
 
     /**
      * Check for scheduling conflicts
+     * Conflicts are only detected for the same ambulatorio (physical space)
+     * A doctor can have appointments in different ambulatori at the same time
      */
     static async checkConflicts(medicoId, ambulatorioId, dataOra, durata, tenantId, excludeId = null) {
         try {
             const startTime = new Date(dataOra);
             const endTime = new Date(startTime.getTime() + durata * 60000);
 
-            // Find overlapping appointments for same doctor or same ambulatorio
+            // CRITICAL FIX: Use UTC methods to avoid timezone shift bug
+            // Previous bug: setHours(0,0,0,0) on UTC date shifts to previous day in UTC+1
+            const year = startTime.getUTCFullYear();
+            const month = startTime.getUTCMonth();
+            const day = startTime.getUTCDate();
+            const dayStart = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
+            const dayEnd = new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
+
+            // Log input parameters for debugging
+            logger.debug('checkConflicts called', {
+                component: 'appuntamento-service',
+                action: 'checkConflicts',
+                input: {
+                    medicoId,
+                    ambulatorioId,
+                    dataOra: startTime.toISOString(),
+                    durata,
+                    tenantId,
+                    excludeId
+                },
+                range: {
+                    newStart: startTime.toISOString(),
+                    newEnd: endTime.toISOString(),
+                    dayStart: dayStart.toISOString(),
+                    dayEnd: dayEnd.toISOString()
+                }
+            });
+
+            // Find overlapping appointments for same medico AND same ambulatorio on same day
+            // Overbooking is defined as same doctor in same room at same time
             const whereClause = {
                 tenantId,
                 deletedAt: null,
-                stato: { notIn: ['ANNULLATO', 'COMPLETATO'] },
-                OR: [
-                    { medicoId },
-                    { ambulatorioId }
-                ],
-                dataOra: { lt: endTime }
+                stato: { notIn: ['ANNULLATO', 'COMPLETATO', 'NO_SHOW', 'FATTURATO'] },
+                medicoId, // Same medico
+                ambulatorioId, // AND same ambulatorio
+                dataOra: {
+                    gte: dayStart, // Same day lower bound
+                    lte: dayEnd    // Same day upper bound
+                }
             };
 
             if (excludeId) {
@@ -664,16 +2033,66 @@ export class AppuntamentoService {
                     dataOra: true,
                     durataMinuti: true,
                     medicoId: true,
-                    ambulatorioId: true
+                    ambulatorioId: true,
+                    stato: true,
+                    oraInizio: true,
+                    oraFine: true
                 }
             });
 
-            // Filter actual conflicts (overlapping time ranges)
-            return conflicts.filter(app => {
-                const appStart = new Date(app.dataOra);
-                const appEnd = new Date(appStart.getTime() + app.durataMinuti * 60000);
-                return (startTime < appEnd && endTime > appStart);
+            // Log ALL appointments found in the day for this medico+ambulatorio
+            logger.debug('checkConflicts - appointments found on same day', {
+                component: 'appuntamento-service',
+                action: 'checkConflicts',
+                totalFound: conflicts.length,
+                appointments: conflicts.map(app => ({
+                    id: app.id,
+                    numeroPrenotazione: app.numeroPrenotazione,
+                    dataOra: app.dataOra,
+                    durataMinuti: app.durataMinuti,
+                    stato: app.stato
+                }))
             });
+
+            // Filter actual conflicts (overlapping time ranges)
+            // If the appointment has already started (oraInizio set), use actual visit times
+            // instead of booking time to avoid false overbooking on rescheduled visits
+            const actualConflicts = conflicts.filter(app => {
+                const appStart = app.oraInizio ? new Date(app.oraInizio) : new Date(app.dataOra);
+                const appEnd = app.oraFine
+                    ? new Date(app.oraFine)
+                    : new Date(appStart.getTime() + (app.durataMinuti || 30) * 60000);
+                const isOverlapping = (startTime < appEnd && endTime > appStart);
+
+                logger.debug('checkConflicts - checking appointment overlap', {
+                    component: 'appuntamento-service',
+                    action: 'checkConflicts',
+                    existing: {
+                        id: app.id,
+                        numeroPrenotazione: app.numeroPrenotazione,
+                        usingActualTime: !!app.oraInizio,
+                        start: appStart.toISOString(),
+                        end: appEnd.toISOString(),
+                        durataMinuti: app.durataMinuti
+                    },
+                    new: {
+                        start: startTime.toISOString(),
+                        end: endTime.toISOString()
+                    },
+                    isOverlapping
+                });
+
+                return isOverlapping;
+            });
+
+            logger.debug('checkConflicts - result', {
+                component: 'appuntamento-service',
+                action: 'checkConflicts',
+                totalConflicts: actualConflicts.length,
+                conflictIds: actualConflicts.map(c => c.id)
+            });
+
+            return actualConflicts;
         } catch (error) {
             logger.error('Failed to check conflicts', {
                 component: 'appuntamento-service',
@@ -692,8 +2111,12 @@ export class AppuntamentoService {
      */
     static async getWaitingQueue(tenantId, ambulatorioId = null) {
         try {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
+            // CRITICAL FIX: Use UTC methods for date boundaries
+            const now = new Date();
+            const year = now.getUTCFullYear();
+            const month = now.getUTCMonth();
+            const day = now.getUTCDate();
+            const today = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
 
             // Lo schema non ha numeroCoda, usiamo stato e oraArrivo per ordinare
             const where = {
@@ -732,13 +2155,14 @@ export class AppuntamentoService {
             const pazienteIds = [...new Set(queue.map(a => a.pazienteId))];
             const medicoIds = [...new Set(queue.map(a => a.medicoId))];
 
+            // P63: Person non ha tenantId — filtra via tenantProfiles.some
             const [pazienti, medici] = await Promise.all([
                 prisma.person.findMany({
-                    where: { id: { in: pazienteIds }, tenantId },
+                    where: { id: { in: pazienteIds }, deletedAt: null, tenantProfiles: { some: { tenantId, deletedAt: null } } },
                     select: { id: true, firstName: true, lastName: true }
                 }),
                 prisma.person.findMany({
-                    where: { id: { in: medicoIds }, tenantId },
+                    where: { id: { in: medicoIds }, deletedAt: null, tenantProfiles: { some: { tenantId, deletedAt: null } } },
                     select: { id: true, firstName: true, lastName: true }
                 })
             ]);
@@ -771,8 +2195,12 @@ export class AppuntamentoService {
      */
     static async callNextPatient(tenantId, ambulatorioId = null) {
         try {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
+            // CRITICAL FIX: Use UTC methods for date boundaries
+            const now = new Date();
+            const year = now.getUTCFullYear();
+            const month = now.getUTCMonth();
+            const day = now.getUTCDate();
+            const today = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
 
             const where = {
                 tenantId,
@@ -801,6 +2229,91 @@ export class AppuntamentoService {
                 component: 'appuntamento-service',
                 action: 'callNextPatient',
                 error: error.message,
+                tenantId
+            });
+            throw error;
+        }
+    }
+
+    /**
+     * Check if patient already has an appointment with the same doctor on the same day
+     * Used to warn users before creating potential duplicate bookings
+     * @param {string} pazienteId - Patient ID
+     * @param {string} medicoId - Doctor ID
+     * @param {Date|string} dataOra - Appointment date/time
+     * @param {string} tenantId - Tenant ID
+     * @param {string} excludeAppuntamentoId - Optional: exclude this appointment ID (for updates)
+     * @returns {Promise<{hasDuplicate: boolean, existingAppointments: Array}>}
+     */
+    static async checkDuplicateBooking(pazienteId, medicoId, dataOra, tenantId, excludeAppuntamentoId = null) {
+        try {
+            const appointmentDate = new Date(dataOra);
+
+            // CRITICAL FIX: Use UTC methods to avoid timezone shift
+            const year = appointmentDate.getUTCFullYear();
+            const month = appointmentDate.getUTCMonth();
+            const day = appointmentDate.getUTCDate();
+            const startOfDay = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
+            const endOfDay = new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
+
+            const where = {
+                tenantId,
+                pazienteId,
+                medicoId,
+                deletedAt: null,
+                stato: { notIn: ['ANNULLATO', 'NO_SHOW'] },
+                dataOra: {
+                    gte: startOfDay,
+                    lte: endOfDay
+                }
+            };
+
+            // Exclude current appointment when checking for updates
+            if (excludeAppuntamentoId) {
+                where.id = { not: excludeAppuntamentoId };
+            }
+
+            const existingAppointments = await prisma.appuntamento.findMany({
+                where,
+                select: {
+                    id: true,
+                    numeroPrenotazione: true,
+                    dataOra: true,
+                    stato: true,
+                    durataMinuti: true,
+                    ambulatorio: {
+                        select: { nome: true }
+                    },
+                    prestazione: {
+                        select: { nome: true }
+                    }
+                },
+                orderBy: { dataOra: 'asc' }
+            });
+
+            const hasDuplicate = existingAppointments.length > 0;
+
+            logger.debug('Duplicate booking check', {
+                component: 'appuntamento-service',
+                action: 'checkDuplicateBooking',
+                pazienteId,
+                medicoId,
+                date: startOfDay.toISOString().split('T')[0],
+                hasDuplicate,
+                existingCount: existingAppointments.length
+            });
+
+            return {
+                hasDuplicate,
+                existingAppointments
+            };
+        } catch (error) {
+            logger.error('Failed to check duplicate booking', {
+                component: 'appuntamento-service',
+                action: 'checkDuplicateBooking',
+                error: error.message,
+                pazienteId,
+                medicoId,
                 tenantId
             });
             throw error;

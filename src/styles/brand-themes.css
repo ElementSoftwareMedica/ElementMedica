@@ -1,16 +1,16 @@
 /**
- * Brand Themes - Element Formazione & Element Medica
+ * Brand Themes - Element Sicurezza & Element Medica
  * 
  * Sistema di colori professionale con rimando grafico tra i due brand.
  * 
  * PALETTE PHILOSOPHY:
- * - Element Formazione: Blu professionale → Verde sicurezza (formazione, competenza, crescita)
- * - Element Medica: Teal medico → Smeraldo salute (cura, professionalità, benessere)
+ * - Element Sicurezza: Verde Salvia condiviso → Oro/Ambra come accento (formazione, competenza, professionalità)
+ * - Element Medica: Verde Salvia condiviso → Grigio Salvia come accento (cura, pulizia, benessere)
  * 
  * Entrambi condividono:
- * - Tonalità fredde (blu/teal) come base = professionalità
- * - Verde come accento = salute, crescita, sicurezza
- * - Grigi neutri per equilibrio
+ * - Verde Salvia (#A1C8C1) come primario = brand unity
+ * - Dark Navy (#233747) come secondario = professionalità
+ * - Accenti pastello per leggerezza
  */
 
 /* ============================================
@@ -58,13 +58,30 @@
     --brand-error-700: #b91c1c;
 
     /* === PREMIUM GRADIENTS === */
-    --gradient-formazione-hero: linear-gradient(135deg, #1e3a8a 0%, #1e40af 25%, #2563eb 50%, #3b82f6 75%, #60a5fa 100%);
-    --gradient-formazione-cta: linear-gradient(135deg, #1e40af 0%, #1d4ed8 50%, #2563eb 100%);
-    --gradient-formazione-accent: linear-gradient(135deg, #059669 0%, #10b981 100%);
+    /* Sicurezza: Amber primary (#E9BA49) | Medica: Verde Salvia primary (#A1C8C1) */
+    /* Sicurezza: Amber gradient (primary = #E9BA49) */
+    --gradient-sicurezza-hero: linear-gradient(135deg, #876919 0%, #B08A22 30%, #D4A530 60%, #E9BA49 100%);
+    --gradient-sicurezza-cta: linear-gradient(135deg, #634D13 0%, #876919 50%, #B08A22 100%);
+    --gradient-sicurezza-accent: linear-gradient(135deg, #5F9B92 0%, #7FB3AB 50%, #A1C8C1 100%);
 
-    --gradient-medica-hero: linear-gradient(135deg, #134e4a 0%, #115e59 25%, #0f766e 50%, #0d9488 75%, #14b8a6 100%);
-    --gradient-medica-cta: linear-gradient(135deg, #115e59 0%, #0f766e 50%, #0d9488 100%);
-    --gradient-medica-accent: linear-gradient(135deg, #047857 0%, #059669 100%);
+    /* Medica: same primary teal gradient */
+    --gradient-medica-hero: linear-gradient(135deg, #5F9B92 0%, #7FB3AB 30%, #A1C8C1 60%, #B3D3CD 100%);
+    --gradient-medica-cta: linear-gradient(135deg, #437D74 0%, #5F9B92 50%, #7FB3AB 100%);
+    --gradient-medica-accent: linear-gradient(135deg, #7FB3AB 0%, #A1C8C1 50%, #B3D3CD 100%);
+
+    /* === PASTEL ACCENT PALETTE (Decorative) === */
+    --pastel-rose: #F9E4E4;
+    --pastel-rose-dark: #E8B4B4;
+    --pastel-lavender: #E8E0F0;
+    --pastel-lavender-dark: #C4B3D9;
+    --pastel-peach: #FDE8D8;
+    --pastel-peach-dark: #F5C5A3;
+    --pastel-sky: #DAE8F5;
+    --pastel-sky-dark: #A8C8E8;
+    --pastel-mint: #D8F0E8;
+    --pastel-mint-dark: #A0D8C0;
+    --pastel-amber: #FEF0D1;
+    --pastel-amber-dark: #F3CE73;
 
     /* === PREMIUM BACKGROUND PATTERNS === */
     --pattern-diagonal: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M0 40L40 0H20L0 20M40 40V20L20 40'/%3E%3C/g%3E%3C/svg%3E");
@@ -77,8 +94,8 @@
     --shadow-soft: 0 2px 15px -3px rgba(0, 0, 0, 0.07), 0 10px 20px -2px rgba(0, 0, 0, 0.04);
     --shadow-medium: 0 4px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 30px -5px rgba(0, 0, 0, 0.04);
     --shadow-strong: 0 10px 40px -10px rgba(0, 0, 0, 0.15), 0 20px 50px -15px rgba(0, 0, 0, 0.1);
-    --shadow-glow-blue: 0 0 40px rgba(59, 130, 246, 0.15);
-    --shadow-glow-teal: 0 0 40px rgba(20, 184, 166, 0.15);
+    --shadow-glow-blue: 0 0 40px rgba(160, 200, 193, 0.15);
+    --shadow-glow-teal: 0 0 40px rgba(160, 200, 193, 0.15);
     --shadow-glow-success: 0 0 40px rgba(16, 185, 129, 0.15);
 
     /* === GLASS EFFECTS === */
@@ -88,59 +105,96 @@
 }
 
 /* ============================================
-   ELEMENT FORMAZIONE THEME
+   ELEMENT SICUREZZA THEME
    ============================================ */
-[data-brand="element-formazione"],
-.theme-formazione {
-    /* Primary: Professional Blue */
-    --brand-primary-50: #eff6ff;
-    --brand-primary-100: #dbeafe;
-    --brand-primary-200: #bfdbfe;
-    --brand-primary-300: #93c5fd;
-    --brand-primary-400: #60a5fa;
-    --brand-primary-500: #3b82f6;
-    --brand-primary-600: #2563eb;
-    --brand-primary-700: #1d4ed8;
-    --brand-primary-800: #1e40af;
-    --brand-primary-900: #1e3a8a;
-    --brand-primary-950: #172554;
+[data-brand="element-sicurezza"],
+.theme-sicurezza {
+    /* Primary: Gold/Amber #E9BA49 at 500 (brand differentiator — formazione, competenza) */
+    --brand-primary-50: #FFFBF0;
+    --brand-primary-100: #FEF3D7;
+    --brand-primary-200: #FDE6AF;
+    --brand-primary-300: #F9D584;
+    --brand-primary-400: #F2C968;
+    --brand-primary-500: #E9BA49;
+    --brand-primary-600: #D4A530;
+    --brand-primary-700: #B08A22;
+    --brand-primary-800: #876919;
+    --brand-primary-900: #634D13;
+    --brand-primary-950: #47360D;
 
-    /* Secondary: Slate Professional */
-    --brand-secondary-50: #f8fafc;
-    --brand-secondary-100: #f1f5f9;
-    --brand-secondary-200: #e2e8f0;
-    --brand-secondary-300: #cbd5e1;
-    --brand-secondary-400: #94a3b8;
-    --brand-secondary-500: #64748b;
-    --brand-secondary-600: #475569;
-    --brand-secondary-700: #334155;
-    --brand-secondary-800: #1e293b;
-    --brand-secondary-900: #0f172a;
+    /* Secondary: Dark Navy */
+    --brand-secondary-50: #F0F2F4;
+    --brand-secondary-100: #D9DEE3;
+    --brand-secondary-200: #B3BCC5;
+    --brand-secondary-300: #8C9AA8;
+    --brand-secondary-400: #66778A;
+    --brand-secondary-500: #4D5E6F;
+    --brand-secondary-600: #3B4A59;
+    --brand-secondary-700: #313F4E;
+    --brand-secondary-800: #233747;
+    --brand-secondary-900: #1E2832;
+    --brand-secondary-950: #19232D;
 
-    /* Accent: Safety Green */
-    --brand-accent-50: #f0fdf4;
-    --brand-accent-100: #dcfce7;
-    --brand-accent-200: #bbf7d0;
-    --brand-accent-300: #86efac;
-    --brand-accent-400: #4ade80;
-    --brand-accent-500: #22c55e;
-    --brand-accent-600: #16a34a;
-    --brand-accent-700: #15803d;
-    --brand-accent-800: #166534;
-    --brand-accent-900: #14532d;
+    /* Accent: Verde Salvia (shared brand unity element) */
+    --brand-accent-50: #F5F9F9;
+    --brand-accent-100: #ECF4F3;
+    --brand-accent-200: #D9E9E6;
+    --brand-accent-300: #C6DEDA;
+    --brand-accent-400: #B3D3CD;
+    --brand-accent-500: #A1C8C1;
+    --brand-accent-600: #7FB3AB;
+    --brand-accent-700: #5F9B92;
+    --brand-accent-800: #437D74;
+    --brand-accent-900: #2D5E56;
+
+    /* === BRIDGE: Tailwind primary/secondary/accent → Brand tokens === */
+    --color-primary-50: #FFFBF0;
+    --color-primary-100: #FEF3D7;
+    --color-primary-200: #FDE6AF;
+    --color-primary-300: #F9D584;
+    --color-primary-400: #F2C968;
+    --color-primary-500: #E9BA49;
+    --color-primary-600: #D4A530;
+    --color-primary-700: #B08A22;
+    --color-primary-800: #876919;
+    --color-primary-900: #634D13;
+    --color-primary-950: #47360D;
+
+    --color-secondary-50: #F0F2F4;
+    --color-secondary-100: #D9DEE3;
+    --color-secondary-200: #B3BCC5;
+    --color-secondary-300: #8C9AA8;
+    --color-secondary-400: #66778A;
+    --color-secondary-500: #4D5E6F;
+    --color-secondary-600: #3B4A59;
+    --color-secondary-700: #313F4E;
+    --color-secondary-800: #233747;
+    --color-secondary-900: #1E2832;
+    --color-secondary-950: #19232D;
+
+    --color-accent-50: #F5F9F9;
+    --color-accent-100: #ECF4F3;
+    --color-accent-200: #D9E9E6;
+    --color-accent-300: #C6DEDA;
+    --color-accent-400: #B3D3CD;
+    --color-accent-500: #A1C8C1;
+    --color-accent-600: #7FB3AB;
+    --color-accent-700: #5F9B92;
+    --color-accent-800: #437D74;
+    --color-accent-900: #2D5E56;
 
     /* Theme Variables */
-    --brand-gradient-hero: var(--gradient-formazione-hero);
-    --brand-gradient-cta: var(--gradient-formazione-cta);
-    --brand-gradient-accent: var(--gradient-formazione-accent);
-    --brand-shadow-glow: var(--shadow-glow-blue);
+    --brand-gradient-hero: var(--gradient-sicurezza-hero);
+    --brand-gradient-cta: var(--gradient-sicurezza-cta);
+    --brand-gradient-accent: var(--gradient-sicurezza-accent);
+    --brand-shadow-glow: var(--shadow-glow-teal);
 
     /* Background Surfaces */
     --brand-surface-primary: #ffffff;
-    --brand-surface-secondary: #f8fafc;
-    --brand-surface-tertiary: #f1f5f9;
-    --brand-surface-elevated: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-    --brand-surface-hero: linear-gradient(180deg, #eff6ff 0%, #dbeafe 50%, #ffffff 100%);
+    --brand-surface-secondary: #FFFDF7;
+    --brand-surface-tertiary: #FFFBF0;
+    --brand-surface-elevated: linear-gradient(180deg, #ffffff 0%, #FFFBF0 100%);
+    --brand-surface-hero: linear-gradient(180deg, #FFFBF0 0%, #FEF3D7 50%, #ffffff 100%);
 }
 
 /* ============================================
@@ -148,42 +202,79 @@
    ============================================ */
 [data-brand="element-medica"],
 .theme-medica {
-    /* Primary: Medical Teal */
-    --brand-primary-50: #f0fdfa;
-    --brand-primary-100: #ccfbf1;
-    --brand-primary-200: #99f6e4;
-    --brand-primary-300: #5eead4;
-    --brand-primary-400: #2dd4bf;
-    --brand-primary-500: #14b8a6;
-    --brand-primary-600: #0d9488;
-    --brand-primary-700: #0f766e;
-    --brand-primary-800: #115e59;
-    --brand-primary-900: #134e4a;
-    --brand-primary-950: #042f2e;
+    /* Primary: Verde Salvia #A1C8C1 at 500 */
+    --brand-primary-50: #F5F9F9;
+    --brand-primary-100: #ECF4F3;
+    --brand-primary-200: #D9E9E6;
+    --brand-primary-300: #C6DEDA;
+    --brand-primary-400: #B3D3CD;
+    --brand-primary-500: #A1C8C1;
+    --brand-primary-600: #7FB3AB;
+    --brand-primary-700: #5F9B92;
+    --brand-primary-800: #437D74;
+    --brand-primary-900: #2D5E56;
+    --brand-primary-950: #1E433D;
 
-    /* Secondary: Cool Gray */
-    --brand-secondary-50: #f9fafb;
-    --brand-secondary-100: #f3f4f6;
-    --brand-secondary-200: #e5e7eb;
-    --brand-secondary-300: #d1d5db;
-    --brand-secondary-400: #9ca3af;
-    --brand-secondary-500: #6b7280;
-    --brand-secondary-600: #4b5563;
-    --brand-secondary-700: #374151;
-    --brand-secondary-800: #1f2937;
-    --brand-secondary-900: #111827;
+    /* Secondary: Dark Navy */
+    --brand-secondary-50: #F0F2F4;
+    --brand-secondary-100: #D9DEE3;
+    --brand-secondary-200: #B3BCC5;
+    --brand-secondary-300: #8C9AA8;
+    --brand-secondary-400: #66778A;
+    --brand-secondary-500: #4D5E6F;
+    --brand-secondary-600: #3B4A59;
+    --brand-secondary-700: #313F4E;
+    --brand-secondary-800: #233747;
+    --brand-secondary-900: #1E2832;
+    --brand-secondary-950: #19232D;
 
-    /* Accent: Emerald Health */
-    --brand-accent-50: #ecfdf5;
-    --brand-accent-100: #d1fae5;
-    --brand-accent-200: #a7f3d0;
-    --brand-accent-300: #6ee7b7;
-    --brand-accent-400: #34d399;
-    --brand-accent-500: #10b981;
-    --brand-accent-600: #059669;
-    --brand-accent-700: #047857;
-    --brand-accent-800: #065f46;
-    --brand-accent-900: #064e3b;
+    /* Accent: Light Sage Gray */
+    --brand-accent-50: #FAFBFA;
+    --brand-accent-100: #EDF1EE;
+    --brand-accent-200: #DDE3DE;
+    --brand-accent-300: #C5CFC7;
+    --brand-accent-400: #A8B5AB;
+    --brand-accent-500: #8A9A8E;
+    --brand-accent-600: #6E7F72;
+    --brand-accent-700: #556259;
+    --brand-accent-800: #3D4840;
+    --brand-accent-900: #282F2A;
+
+    /* === BRIDGE: Tailwind primary/secondary/accent → Brand tokens === */
+    --color-primary-50: #F5F9F9;
+    --color-primary-100: #ECF4F3;
+    --color-primary-200: #D9E9E6;
+    --color-primary-300: #C6DEDA;
+    --color-primary-400: #B3D3CD;
+    --color-primary-500: #A1C8C1;
+    --color-primary-600: #7FB3AB;
+    --color-primary-700: #5F9B92;
+    --color-primary-800: #437D74;
+    --color-primary-900: #2D5E56;
+    --color-primary-950: #1E433D;
+
+    --color-secondary-50: #F0F2F4;
+    --color-secondary-100: #D9DEE3;
+    --color-secondary-200: #B3BCC5;
+    --color-secondary-300: #8C9AA8;
+    --color-secondary-400: #66778A;
+    --color-secondary-500: #4D5E6F;
+    --color-secondary-600: #3B4A59;
+    --color-secondary-700: #313F4E;
+    --color-secondary-800: #233747;
+    --color-secondary-900: #1E2832;
+    --color-secondary-950: #19232D;
+
+    --color-accent-50: #FAFBFA;
+    --color-accent-100: #EDF1EE;
+    --color-accent-200: #DDE3DE;
+    --color-accent-300: #C5CFC7;
+    --color-accent-400: #A8B5AB;
+    --color-accent-500: #8A9A8E;
+    --color-accent-600: #6E7F72;
+    --color-accent-700: #556259;
+    --color-accent-800: #3D4840;
+    --color-accent-900: #282F2A;
 
     /* Theme Variables */
     --brand-gradient-hero: var(--gradient-medica-hero);
@@ -193,10 +284,79 @@
 
     /* Background Surfaces */
     --brand-surface-primary: #ffffff;
-    --brand-surface-secondary: #f9fafb;
-    --brand-surface-tertiary: #f0fdfa;
-    --brand-surface-elevated: linear-gradient(180deg, #ffffff 0%, #f0fdfa 100%);
-    --brand-surface-hero: linear-gradient(180deg, #f0fdfa 0%, #ccfbf1 50%, #ffffff 100%);
+    --brand-surface-secondary: #FAFBFA;
+    --brand-surface-tertiary: #EDF1EE;
+    --brand-surface-elevated: linear-gradient(180deg, #ffffff 0%, #FAFBFA 100%);
+    --brand-surface-hero: linear-gradient(180deg, #F5F9F9 0%, #ECF4F3 50%, #ffffff 100%);
+}
+
+/* ============================================
+   PUBLIC FRONTEND TYPOGRAPHY
+   Scoped to .public-layout — does NOT affect
+   the private dashboard (which keeps Inter)
+   ============================================ */
+
+/* Body text: Montserrat */
+.public-layout {
+    font-family: var(--font-body);
+}
+
+/* Headings: Space Grotesk (alternative to Roc Grotesk) */
+.public-layout h1,
+.public-layout h2,
+.public-layout h3,
+.public-layout h4,
+.public-layout h5,
+.public-layout h6,
+.public-layout .font-heading {
+    font-family: var(--font-heading);
+}
+
+/* Utility classes for public sections */
+.public-layout .font-body {
+    font-family: var(--font-body);
+}
+
+/* Ensure buttons and interactive elements use heading font for emphasis */
+.public-layout button,
+.public-layout .btn-premium-primary,
+.public-layout .btn-premium-secondary,
+.public-layout .badge-premium,
+.public-layout [role="button"] {
+    font-family: var(--font-heading);
+}
+
+/* Navigation links: heading font for clean geometric look */
+.public-layout nav a,
+.public-layout nav button {
+    font-family: var(--font-heading);
+}
+
+/* Form elements: body font for readability */
+.public-layout input,
+.public-layout select,
+.public-layout textarea,
+.public-layout label {
+    font-family: var(--font-body);
+}
+
+/* CMS content: ensure rendered sections inherit properly */
+.public-layout blockquote,
+.public-layout figcaption,
+.public-layout .text-sm,
+.public-layout .text-xs,
+.public-layout .text-lg,
+.public-layout .text-xl {
+    font-family: inherit;
+}
+
+/* Bold CTA / feature labels in CMS — heading font for impact */
+.public-layout .font-bold.text-2xl,
+.public-layout .font-bold.text-3xl,
+.public-layout .font-bold.text-4xl,
+.public-layout .font-semibold.text-2xl,
+.public-layout .font-semibold.text-3xl {
+    font-family: var(--font-heading);
 }
 
 /* ============================================
@@ -287,7 +447,7 @@
 /* Glass Card Background */
 .section-glass {
     position: relative;
-    background: linear-gradient(135deg, var(--brand-primary-600) 0%, var(--brand-primary-800) 100%);
+    background: linear-gradient(135deg, var(--brand-primary-500) 0%, var(--brand-primary-700) 100%);
     overflow: hidden;
 }
 
@@ -564,6 +724,29 @@
 
 .animate-float {
     animation: float 6s ease-in-out infinite;
+}
+
+/* Scroll-reveal entrance animations */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(24px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
 }
 
 .animate-pulse-soft {

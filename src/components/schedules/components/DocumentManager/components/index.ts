@@ -13,6 +13,9 @@ export type { DocumentSummaryCardsProps } from './DocumentSummaryCards';
 export { DocumentSection } from './DocumentSection';
 export type { DocumentSectionProps } from './DocumentSection';
 
+export { SigningWorkflowModal } from './SigningWorkflowModal';
+export type { SigningWorkflowModalProps, SignaturePlacement } from './SigningWorkflowModal';
+
 export { DocumentList } from './DocumentList';
 export type { DocumentListProps } from './DocumentList';
 

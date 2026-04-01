@@ -20,7 +20,7 @@ const sizeClasses = {
 
 export const LoadingFallback: React.FC<LoadingFallbackProps> = ({
   className,
-  message = 'Loading...',
+  message = 'Caricamento...',
   size = 'md'
 }) => {
   return (

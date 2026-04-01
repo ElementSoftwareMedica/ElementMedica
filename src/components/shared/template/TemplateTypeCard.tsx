@@ -1,11 +1,11 @@
 import React from 'react';
-import { 
+import {
   ChevronDown,
   FileOutput,
   Plus,
   Star
 } from 'lucide-react';
-import { Template } from '../../../types/template';
+import { Template } from '../../../types/templates';
 import { TemplateCard } from './TemplateCard';
 import { NewTemplateDropdown } from './NewTemplateDropdown';
 
@@ -16,7 +16,7 @@ interface TemplateTypeCardProps {
   };
   templates: Template[];
   openDropdownId: string | null;
-  dropdownRefs: React.MutableRefObject<{[key: string]: React.RefObject<HTMLButtonElement>}>;
+  dropdownRefs: React.MutableRefObject<{ [key: string]: React.RefObject<HTMLButtonElement> }>;
   onToggleDropdown: (id: string) => void;
   onCreateNew: (templateType: string) => void;
   onDocxImport: (templateType: string) => void;
@@ -68,8 +68,8 @@ export const TemplateTypeCard: React.FC<TemplateTypeCardProps> = ({
             <span>Nuovo</span>
             <ChevronDown className="w-3 h-3 ml-1" />
           </button>
-          
-          <NewTemplateDropdown 
+
+          <NewTemplateDropdown
             isOpen={openDropdownId === dropdownId}
             toggleDropdown={() => onToggleDropdown(dropdownId)}
             onCreateNew={() => onCreateNew(templateType.value)}
@@ -91,7 +91,7 @@ export const TemplateTypeCard: React.FC<TemplateTypeCardProps> = ({
             <Star className="h-4 w-4 mr-1 text-yellow-500" />
             Template Predefinito
           </h4>
-          
+
           {defaultTemplate ? (
             <TemplateCard
               template={defaultTemplate}
@@ -111,11 +111,11 @@ export const TemplateTypeCard: React.FC<TemplateTypeCardProps> = ({
             </div>
           )}
         </div>
-        
+
         {/* Other Templates */}
         <div>
           <h4 className="text-sm font-medium text-gray-600 mb-2">Altri Template</h4>
-          
+
           {otherTemplates.length === 0 ? (
             <div className="border rounded-xl p-3 bg-gray-50 border-gray-200 text-center">
               <p className="text-xs text-gray-500">Nessun altro template disponibile</p>

@@ -174,7 +174,7 @@ export function auditRoleChanges(req, res, next) {
 export function logRoleError(error, req, res, next) {
   logger.error('Role API Error', {
     requestId: req.requestId,
-    error: error.message,
+    error: 'Operazione non riuscita',
     stack: error.stack,
     method: req.method,
     url: req.originalUrl,
@@ -190,7 +190,7 @@ export function logRoleError(error, req, res, next) {
   if (!res.headersSent) {
     res.status(500).json({
       success: false,
-      error: 'Internal server error',
+      error: 'Errore interno del server',
       requestId: req.requestId
     });
   }
@@ -286,7 +286,7 @@ async function createAuditLog(req, responseData) {
     
   } catch (error) {
     logger.error('Failed to create audit log', {
-      error: error.message,
+      error: 'Operazione non riuscita',
       requestId: req.requestId
     });
   }

@@ -37,16 +37,14 @@ export const TreeViewWrapper: React.FC<TreeViewWrapperProps> = ({
         description: roleData.description,
         permissions: roleData.permissions || []
       };
-      
-      console.log('Creating custom role with data:', roleDataForBackend);
+
       await createRole(roleDataForBackend);
-      
+
       showToast({ message: "Il nuovo ruolo è stato creato con successo.", type: 'success' });
-      
+
       await onDataChange();
     } catch (error: unknown) {
-      console.error('Error creating role:', error);
-      showToast({ message: (error as Error).message || "Si è verificato un errore durante la creazione del ruolo.", type: 'error' });
+      showToast({ message: "Si è verificato un errore durante la creazione del ruolo.", type: 'error' });
     }
   };
 

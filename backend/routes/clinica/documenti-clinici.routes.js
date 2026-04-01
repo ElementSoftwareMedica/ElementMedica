@@ -20,8 +20,9 @@
 import express from 'express';
 import fs from 'fs/promises';
 import logger from '../../utils/logger.js';
+import prisma from '../../config/prisma-optimization.js';
 import DocumentoClinicoService from '../../services/clinical/DocumentoClinicoService.js';
-import middleware from '../../auth/middleware.js';
+import middleware from '../../middleware/auth.js';
 import { createUploadConfig, multerErrorHandler } from '../../config/multer.js';
 import { auditClinico, getEffectiveTenantId } from './utils/clinica-utils.js';
 
@@ -38,7 +39,7 @@ const { authenticate: authenticateToken } = middleware;
  * @access Authenticated
  */
 router.get('/storage-stats',
-    authenticateToken(),
+    authenticateToken,
     auditClinico('get_storage_stats'),
     async (req, res) => {
         try {
@@ -53,14 +54,13 @@ router.get('/storage-stats',
         } catch (error) {
             logger.error('Failed to get storage stats', {
                 component: 'documenti-clinici-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero delle statistiche storage',
-                message: error.message
             });
         }
     }
@@ -76,7 +76,7 @@ router.get('/storage-stats',
  * @access Authenticated
  */
 router.get('/visita/:visitaId',
-    authenticateToken(),
+    authenticateToken,
     auditClinico('list_allegati_visita'),
     async (req, res) => {
         try {
@@ -92,7 +92,7 @@ router.get('/visita/:visitaId',
         } catch (error) {
             logger.error('Failed to list allegati visita', {
                 component: 'documenti-clinici-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 visitaId: req.params.visitaId,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -102,7 +102,6 @@ router.get('/visita/:visitaId',
             res.status(statusCode).json({
                 success: false,
                 error: 'Errore nel recupero degli allegati',
-                message: error.message
             });
         }
     }
@@ -118,7 +117,7 @@ router.get('/visita/:visitaId',
  * @body descrizione - Descrizione opzionale
  */
 router.post('/visita/upload',
-    authenticateToken(),
+    authenticateToken,
     createUploadConfig('clinical').single('file'),
     multerErrorHandler,
     auditClinico('upload_allegato_visita'),
@@ -186,7 +185,7 @@ router.post('/visita/upload',
 
             logger.error('Failed to upload allegato visita', {
                 component: 'documenti-clinici-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
@@ -195,7 +194,6 @@ router.post('/visita/upload',
             res.status(statusCode).json({
                 success: false,
                 error: 'Errore nell\'upload del file',
-                message: error.message
             });
         }
     }
@@ -207,7 +205,7 @@ router.post('/visita/upload',
  * @access Authenticated
  */
 router.get('/visita/download/:allegatoId',
-    authenticateToken(),
+    authenticateToken,
     auditClinico('download_allegato_visita'),
     async (req, res) => {
         try {
@@ -225,7 +223,7 @@ router.get('/visita/download/:allegatoId',
         } catch (error) {
             logger.error('Failed to download allegato visita', {
                 component: 'documenti-clinici-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 allegatoId: req.params.allegatoId,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -235,7 +233,6 @@ router.get('/visita/download/:allegatoId',
             res.status(statusCode).json({
                 success: false,
                 error: 'Errore nel download del file',
-                message: error.message
             });
         }
     }
@@ -247,7 +244,7 @@ router.get('/visita/download/:allegatoId',
  * @access Authenticated + Permission
  */
 router.delete('/visita/:allegatoId',
-    authenticateToken(),
+    authenticateToken,
     auditClinico('delete_allegato_visita'),
     async (req, res) => {
         try {
@@ -264,7 +261,7 @@ router.delete('/visita/:allegatoId',
         } catch (error) {
             logger.error('Failed to delete allegato visita', {
                 component: 'documenti-clinici-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 allegatoId: req.params.allegatoId,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -274,7 +271,6 @@ router.delete('/visita/:allegatoId',
             res.status(statusCode).json({
                 success: false,
                 error: 'Errore nell\'eliminazione dell\'allegato',
-                message: error.message
             });
         }
     }
@@ -290,7 +286,7 @@ router.delete('/visita/:allegatoId',
  * @access Authenticated
  */
 router.get('/referto/:refertoId',
-    authenticateToken(),
+    authenticateToken,
     auditClinico('list_allegati_referto'),
     async (req, res) => {
         try {
@@ -306,7 +302,7 @@ router.get('/referto/:refertoId',
         } catch (error) {
             logger.error('Failed to list allegati referto', {
                 component: 'documenti-clinici-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 refertoId: req.params.refertoId,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -316,7 +312,6 @@ router.get('/referto/:refertoId',
             res.status(statusCode).json({
                 success: false,
                 error: 'Errore nel recupero degli allegati',
-                message: error.message
             });
         }
     }
@@ -332,7 +327,7 @@ router.get('/referto/:refertoId',
  * @body descrizione - Descrizione opzionale
  */
 router.post('/referto/upload',
-    authenticateToken(),
+    authenticateToken,
     createUploadConfig('clinical').single('file'),
     multerErrorHandler,
     auditClinico('upload_allegato_referto'),
@@ -399,7 +394,7 @@ router.post('/referto/upload',
 
             logger.error('Failed to upload allegato referto', {
                 component: 'documenti-clinici-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
@@ -409,7 +404,6 @@ router.post('/referto/upload',
             res.status(statusCode).json({
                 success: false,
                 error: 'Errore nell\'upload del file',
-                message: error.message
             });
         }
     }
@@ -421,7 +415,7 @@ router.post('/referto/upload',
  * @access Authenticated
  */
 router.get('/referto/download/:allegatoId',
-    authenticateToken(),
+    authenticateToken,
     auditClinico('download_allegato_referto'),
     async (req, res) => {
         try {
@@ -439,7 +433,7 @@ router.get('/referto/download/:allegatoId',
         } catch (error) {
             logger.error('Failed to download allegato referto', {
                 component: 'documenti-clinici-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 allegatoId: req.params.allegatoId,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -449,7 +443,6 @@ router.get('/referto/download/:allegatoId',
             res.status(statusCode).json({
                 success: false,
                 error: 'Errore nel download del file',
-                message: error.message
             });
         }
     }
@@ -461,7 +454,7 @@ router.get('/referto/download/:allegatoId',
  * @access Authenticated + Permission
  */
 router.delete('/referto/:allegatoId',
-    authenticateToken(),
+    authenticateToken,
     auditClinico('delete_allegato_referto'),
     async (req, res) => {
         try {
@@ -478,7 +471,7 @@ router.delete('/referto/:allegatoId',
         } catch (error) {
             logger.error('Failed to delete allegato referto', {
                 component: 'documenti-clinici-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 allegatoId: req.params.allegatoId,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -489,7 +482,74 @@ router.delete('/referto/:allegatoId',
             res.status(statusCode).json({
                 success: false,
                 error: 'Errore nell\'eliminazione dell\'allegato',
-                message: error.message
+            });
+        }
+    }
+);
+
+// ============================================
+// PAZIENTE ROUTES
+// ============================================
+
+/**
+ * @route GET /api/v1/clinica/documenti/paziente/:personId
+ * @desc Lista tutti gli allegati di un paziente (attraverso le visite)
+ * @access Authenticated
+ */
+router.get('/paziente/:personId',
+    authenticateToken,
+    auditClinico('list_allegati_paziente'),
+    async (req, res) => {
+        try {
+            const tenantId = getEffectiveTenantId(req);
+            const { personId } = req.params;
+            const { tipologiaClinica } = req.query;
+
+            const where = {
+                tenantId,
+                deletedAt: null,
+                visita: {
+                    pazienteId: personId,
+                    tenantId,
+                    deletedAt: null
+                }
+            };
+
+            if (tipologiaClinica) {
+                const tipologie = tipologiaClinica.split(',').map(t => t.trim());
+                where.tipologiaClinica = { in: tipologie };
+            }
+
+            const allegati = await prisma.allegatoVisita.findMany({
+                where,
+                include: {
+                    visita: {
+                        select: {
+                            id: true,
+                            dataOra: true,
+                            prestazione: { select: { nome: true } },
+                            medico: { select: { firstName: true, lastName: true } }
+                        }
+                    }
+                },
+                orderBy: { dataCaricamento: 'desc' }
+            });
+
+            res.json({
+                success: true,
+                data: allegati
+            });
+        } catch (error) {
+            logger.error('Failed to list allegati paziente', {
+                component: 'documenti-clinici-routes',
+                error: 'Operazione non riuscita',
+                personId: req.params.personId,
+                tenantId: getEffectiveTenantId(req)
+            });
+
+            res.status(500).json({
+                success: false,
+                error: 'Errore nel recupero degli allegati del paziente',
             });
         }
     }

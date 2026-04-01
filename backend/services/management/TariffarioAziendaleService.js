@@ -2,27 +2,191 @@
  * TariffarioAziendaleService
  * 
  * Service per la gestione dei Tariffari Aziende - Medicina del Lavoro
- * Gestisce sia tariffari BASE (template) che AZIENDALI (specifici per company)
+ * P59 Sprint 11: Nuovo design M2M - tariffari unici associati a più aziende
  * 
  * @module services/management/TariffarioAziendaleService
  */
 
-import { PrismaClient } from '@prisma/client';
+import prisma from '../../config/prisma-optimization.js';
 import logger from '../../utils/logger.js';
+import pdfService from '../pdfService.js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import Handlebars from 'handlebars';
 
-const prisma = new PrismaClient();
+// P59: Usa __dirname equivalente per moduli ES (più affidabile di process.cwd())
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Root public del progetto (per accesso loghi in PDF Puppeteer)
+const PUBLIC_DIR = path.join(__dirname, '..', '..', '..', 'public');
 
 /**
- * Include standard per le query dei tariffari
+ * Converte un path relativo /uploads/... in data-URL base64
+ * Necessario per Puppeteer (accesso locale) e per URL assolute (fetch)
+ */
+function logoToDataUrl(rawPath) {
+    if (!rawPath) return '';
+    if (rawPath.startsWith('data:')) return rawPath;
+
+    let effectivePath = rawPath;
+    if (rawPath.startsWith('http://') || rawPath.startsWith('https://')) {
+        try {
+            const url = new URL(rawPath);
+            const isLocal = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '0.0.0.0';
+            if (isLocal) { effectivePath = url.pathname; } else { return rawPath; }
+        } catch { return rawPath; }
+    }
+
+    const relativePath = effectivePath.startsWith('/') ? effectivePath : '/' + effectivePath;
+    const cleanPath = effectivePath.startsWith('/') ? effectivePath.slice(1) : effectivePath;
+    const BACKEND_DIR = path.join(__dirname, '..', '..');
+    const PROJECT_ROOT = path.join(BACKEND_DIR, '..');
+    const candidates = [
+        path.join(PUBLIC_DIR, relativePath),
+        path.join(BACKEND_DIR, cleanPath),
+        path.join(BACKEND_DIR, 'public', cleanPath),
+        path.join(PROJECT_ROOT, 'public', cleanPath),
+        path.join(PROJECT_ROOT, cleanPath),
+        path.join(__dirname, '..', '..', '..', 'uploads', path.basename(rawPath))
+    ];
+    // Security: resolve candidates and verify they stay within allowed directories
+    const allowedRoots = [BACKEND_DIR, PROJECT_ROOT].map(d => path.resolve(d));
+    for (const filePath of candidates) {
+        const resolved = path.resolve(filePath);
+        if (!allowedRoots.some(root => resolved.startsWith(root + path.sep) || resolved === root)) continue;
+        if (fs.existsSync(resolved)) {
+            try {
+                const data = fs.readFileSync(resolved);
+                const ext = resolved.split('.').pop().toLowerCase();
+                const mime = ext === 'png' ? 'image/png'
+                    : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg'
+                        : ext === 'svg' ? 'image/svg+xml'
+                            : ext === 'webp' ? 'image/webp'
+                                : 'image/png';
+                return `data:${mime};base64,${data.toString('base64')}`;
+            } catch { continue; }
+        }
+    }
+    return '';
+}
+
+function resolveFirstValidLogo(...paths) {
+    for (const p of paths) {
+        if (!p) continue;
+        const result = logoToDataUrl(p);
+        if (result.startsWith('data:')) return result;
+    }
+    return '';
+}
+
+
+// Labels per i tipi di voce
+const TIPO_VOCE_LABELS = {
+    PRESTAZIONE: 'Prestazione MDL',
+    QUESTIONARIO: 'Questionario / Modulo MDL',
+    CONSULENZA: 'Consulenza',
+    SPESA_FISSA: 'Spesa Una Tantum',
+    SPESA_RICORRENTE: 'Spesa Ricorrente',
+    SOPRALLUOGO_MC: 'Sopralluogo MC',
+    SOPRALLUOGO_RSPP: 'Sopralluogo RSPP',
+    DVR_NUOVO: 'Nuovo DVR',
+    DVR_AGGIORNAMENTO_CON_MODIFICHE: 'Agg. DVR (con modifiche)',
+    DVR_AGGIORNAMENTO_SENZA_MODIFICHE: 'Agg. DVR (senza modifiche)',
+    NOMINA_MC: 'Nomina MC',
+    NOMINA_RSPP: 'Nomina RSPP',
+};
+
+// Abbreviazioni per i tipi di voce (per PDF compatto)
+const TIPO_VOCE_ABBR = {
+    PRESTAZIONE: 'PREST',
+    QUESTIONARIO: 'QUEST',
+    CONSULENZA: 'CONS',
+    SPESA_FISSA: 'FISSA',
+    SPESA_RICORRENTE: 'RIC.',
+    SOPRALLUOGO_MC: 'SOPR.MC',
+    SOPRALLUOGO_RSPP: 'SOPR.R',
+    DVR_NUOVO: 'DVR-N',
+    DVR_AGGIORNAMENTO_CON_MODIFICHE: 'DVR-CM',
+    DVR_AGGIORNAMENTO_SENZA_MODIFICHE: 'DVR-SM',
+    NOMINA_MC: 'NOM.MC',
+    NOMINA_RSPP: 'NOM.R',
+};
+
+// Labels per frequenza
+const FREQUENZA_LABELS = {
+    UNA_TANTUM: 'Una tantum',
+    PER_VISITA: 'Per visita',
+    PER_DIPENDENTE: 'Per dipendente',
+    MENSILE: 'Mensile',
+    TRIMESTRALE: 'Trimestrale',
+    SEMESTRALE: 'Semestrale',
+    ANNUALE: 'Annuale',
+    SECONDO_SORVEGLIANZA: 'Da protocollo'
+};
+
+// Abbreviazioni per frequenza (per PDF compatto)
+const FREQUENZA_ABBR = {
+    UNA_TANTUM: '1x',
+    PER_VISITA: '/vis',
+    PER_DIPENDENTE: '/dip',
+    MENSILE: 'Mens.',
+    TRIMESTRALE: 'Trim.',
+    SEMESTRALE: 'Sem.',
+    ANNUALE: 'Ann.',
+    SECONDO_SORVEGLIANZA: 'Prot.'
+};
+
+// Labels per unità di calcolo
+const UNITA_CALCOLO_LABELS = {
+    FLAT: 'Fisso',
+    PER_DIPENDENTE: 'Per dip.',
+    PER_SEDE: 'Per sede',
+    PER_VISITA: 'Per visita'
+};
+
+// Abbreviazioni per unità di calcolo (per PDF compatto)
+const UNITA_ABBR = {
+    FLAT: 'Fisso',
+    PER_DIPENDENTE: '/dip',
+    PER_SEDE: '/sede',
+    PER_VISITA: '/vis'
+};
+
+// CSS class per badge tipo
+const TIPO_BADGE_CLASSES = {
+    PRESTAZIONE: 'tipo-prestazione',
+    QUESTIONARIO: 'tipo-questionario',
+    CONSULENZA: 'tipo-consulenza',
+    SPESA_FISSA: 'tipo-spesa-fissa',
+    SPESA_RICORRENTE: 'tipo-spesa-ricorrente',
+    SOPRALLUOGO_MC: 'tipo-sopralluogo',
+    SOPRALLUOGO_RSPP: 'tipo-sopralluogo',
+    DVR_NUOVO: 'tipo-dvr',
+    DVR_AGGIORNAMENTO_CON_MODIFICHE: 'tipo-dvr',
+    DVR_AGGIORNAMENTO_SENZA_MODIFICHE: 'tipo-dvr',
+    NOMINA_MC: 'tipo-nomina',
+    NOMINA_RSPP: 'tipo-nomina',
+};
+
+// Labels per categorie visita MDL (P58/P59 - CategoriaVisitaMDL enum)
+const CATEGORIA_VISITA_LABELS = {
+    PREVENTIVA: 'Preventiva',
+    PERIODICA: 'Periodica',
+    DOPO_ASSENZA: 'Dopo Assenza',
+    STRAORDINARIA: 'Straordinaria',
+};
+
+// Ordine canonico delle categorie visita MDL
+const VISITA_MDL_CATEGORIES_ORDER = ['PREVENTIVA', 'PERIODICA', 'DOPO_ASSENZA', 'STRAORDINARIA'];
+
+/**
+ * P59 Sprint 11: Include standard per le query dei tariffari
+ * Rimosso pattern clone, usa relazione M2M con companyAssociations
+ * NOTA: Lo schema usa snake_case per i nomi delle relazioni (db pull)
  */
 const tariffarioInclude = {
-    company: {
-        select: {
-            id: true,
-            ragioneSociale: true,
-            piva: true
-        }
-    },
     convenzione: {
         select: {
             id: true,
@@ -30,27 +194,55 @@ const tariffarioInclude = {
             nome: true
         }
     },
-    tariffarioOrigine: {
+    // P59 Sprint 11.1: Include associazioni M2M con successore specifico per azienda
+    companyAssociations: {
+        where: { deletedAt: null },
         select: {
             id: true,
-            codice: true,
-            nome: true
-        }
-    },
-    successore: {
-        select: {
-            id: true,
-            codice: true,
-            nome: true,
-            validoDa: true
-        }
-    },
-    predecessore: {
-        select: {
-            id: true,
-            codice: true,
-            nome: true,
-            validoA: true
+            validoDa: true,
+            validoA: true,
+            attivo: true,
+            note: true,
+            // P59 Sprint 11.1: Successore specifico per questa associazione azienda
+            successoreAssociationId: true,
+            successoreAssociation: {
+                select: {
+                    id: true,
+                    tariffario: {
+                        select: {
+                            id: true,
+                            codice: true,
+                            nome: true,
+                            validoDa: true
+                        }
+                    }
+                }
+            },
+            predecessoreAssociation: {
+                select: {
+                    id: true,
+                    tariffario: {
+                        select: {
+                            id: true,
+                            codice: true,
+                            nome: true,
+                            validoA: true
+                        }
+                    }
+                }
+            },
+            companyTenantProfile: {
+                select: {
+                    id: true,
+                    company: {
+                        select: {
+                            id: true,
+                            ragioneSociale: true,
+                            piva: true
+                        }
+                    }
+                }
+            }
         }
     },
     voci: {
@@ -66,6 +258,14 @@ const tariffarioInclude = {
                     durataPrevista: true
                 }
             },
+            documentoTemplate: {
+                select: {
+                    id: true,
+                    codice: true,
+                    nome: true,
+                    tipo: true
+                }
+            },
             fasceDipendenti: {
                 where: { deletedAt: null },
                 orderBy: { minDipendenti: 'asc' }
@@ -76,7 +276,7 @@ const tariffarioInclude = {
     _count: {
         select: {
             voci: { where: { deletedAt: null } },
-            tariffariDerivati: { where: { deletedAt: null } }
+            companyAssociations: { where: { deletedAt: null } }  // P59 Sprint 11.2: M2M count
         }
     }
 };
@@ -87,15 +287,26 @@ const tariffarioInclude = {
 const TariffarioAziendaleService = {
     /**
      * Lista tutti i tariffari con filtri
+     * @param {string[]|null} tenantIds - Array of tenant IDs to filter by, or null for all tenants
+     * @param {object} filters - Additional filters
      */
-    async getAll(tenantId, filters = {}) {
+    async getAll(tenantIds, filters = {}) {
+        // P49: Frontend sends companyId which is actually companyTenantProfileId
         const { tipo, companyId, convenzioneId, attivo, search, page = 1, limit = 20 } = filters;
 
+        // Build tenant filter
+        let tenantFilter = {};
+        if (Array.isArray(tenantIds)) {
+            tenantFilter = { tenantId: { in: tenantIds } };
+        } else if (typeof tenantIds === 'string') {
+            tenantFilter = { tenantId: tenantIds };
+        }
+        // null = no tenant filter (admin mode)
+
+        // P59 Sprint 11: Rimosso tipo e companyId - tutti i tariffari sono template
         const where = {
-            tenantId,
+            ...tenantFilter,
             deletedAt: null,
-            ...(tipo && { tipo }),
-            ...(companyId && { companyId }),
             ...(convenzioneId && { convenzioneId }),
             ...(attivo !== undefined && { attivo }),
             ...(search && {
@@ -111,16 +322,16 @@ const TariffarioAziendaleService = {
             prisma.tariffarioAziendale.findMany({
                 where,
                 include: {
-                    company: { select: { id: true, ragioneSociale: true } },
                     convenzione: { select: { id: true, codice: true, nome: true } },
+                    // P59 Sprint 11: Conta aziende associate tramite relazione M2M
                     _count: {
                         select: {
                             voci: { where: { deletedAt: null } },
-                            tariffariDerivati: { where: { deletedAt: null } }
+                            companyAssociations: { where: { deletedAt: null, attivo: true } }
                         }
                     }
                 },
-                orderBy: [{ tipo: 'asc' }, { nome: 'asc' }],
+                orderBy: [{ nome: 'asc' }],
                 skip: (page - 1) * limit,
                 take: limit
             }),
@@ -141,9 +352,23 @@ const TariffarioAziendaleService = {
     /**
      * Ottiene un tariffario per ID con tutte le voci
      */
-    async getById(id, tenantId) {
+    /**
+     * Ottiene un tariffario per ID
+     * @param {string} id - ID del tariffario
+     * @param {string[]|string|null} tenantIds - Array di tenant IDs, singolo tenantId, o null per tutti
+     */
+    async getById(id, tenantIds) {
+        // Build tenant filter
+        let tenantFilter = {};
+        if (Array.isArray(tenantIds)) {
+            tenantFilter = { tenantId: { in: tenantIds } };
+        } else if (typeof tenantIds === 'string') {
+            tenantFilter = { tenantId: tenantIds };
+        }
+        // null = no tenant filter (admin viewing all)
+
         const tariffario = await prisma.tariffarioAziendale.findFirst({
-            where: { id, tenantId, deletedAt: null },
+            where: { id, ...tenantFilter, deletedAt: null },
             include: tariffarioInclude
         });
 
@@ -155,15 +380,13 @@ const TariffarioAziendaleService = {
     },
 
     /**
-     * Crea un nuovo tariffario
+     * P59 Sprint 11: Crea un nuovo tariffario (template)
      */
     async create(data, tenantId, createdBy) {
         const {
             codice,
             nome,
             descrizione,
-            tipo = 'BASE',
-            companyId,
             convenzioneId,
             validoDa,
             validoA,
@@ -171,11 +394,6 @@ const TariffarioAziendaleService = {
             note,
             voci = []
         } = data;
-
-        // Validazione: se tipo AZIENDALE, companyId è obbligatorio
-        if (tipo === 'AZIENDALE' && !companyId) {
-            throw new Error('Per un tariffario aziendale è obbligatorio specificare l\'azienda');
-        }
 
         // Verifica codice univoco
         const existing = await prisma.tariffarioAziendale.findFirst({
@@ -185,14 +403,12 @@ const TariffarioAziendaleService = {
             throw new Error(`Esiste già un tariffario con codice "${codice}"`);
         }
 
-        // Crea tariffario con voci
+        // P59 Sprint 11: Crea tariffario (template unico, senza tipo o companyId)
         const tariffario = await prisma.tariffarioAziendale.create({
             data: {
                 codice,
                 nome,
                 descrizione,
-                tipo,
-                companyId: tipo === 'AZIENDALE' ? companyId : null,
                 convenzioneId,
                 validoDa: validoDa ? new Date(validoDa) : new Date(),
                 validoA: validoA ? new Date(validoA) : null,
@@ -229,7 +445,7 @@ const TariffarioAziendaleService = {
             include: tariffarioInclude
         });
 
-        logger.info({ tariffarioId: tariffario.id, codice, tipo, tenantId }, 'Tariffario aziendale creato');
+        logger.info({ tariffarioId: tariffario.id, codice, tenantId }, 'Tariffario aziendale creato');
         return tariffario;
     },
 
@@ -245,17 +461,16 @@ const TariffarioAziendaleService = {
             throw new Error('Tariffario non trovato');
         }
 
+        // P59 Sprint 11.1: Rimosso successoreId (ora è su TariffarioCompanyAssociation)
         const {
             codice,
             nome,
             descrizione,
-            companyId,
             convenzioneId,
             validoDa,
             validoA,
             attivo,
-            note,
-            successoreId
+            note
         } = data;
 
         // Se cambia codice, verifica unicità
@@ -268,24 +483,19 @@ const TariffarioAziendaleService = {
             }
         }
 
-        // Non permettere cambio tipo
-        if (data.tipo && data.tipo !== tariffario.tipo) {
-            throw new Error('Non è possibile cambiare il tipo di tariffario. Usa la clonazione.');
-        }
-
+        // P59 Sprint 11: Aggiorna tariffario (rimosso cambio tipo)
         const updated = await prisma.tariffarioAziendale.update({
             where: { id },
             data: {
                 ...(codice && { codice }),
                 ...(nome && { nome }),
                 ...(descrizione !== undefined && { descrizione }),
-                ...(tariffario.tipo === 'AZIENDALE' && companyId && { companyId }),
                 ...(convenzioneId !== undefined && { convenzioneId }),
                 ...(validoDa && { validoDa: new Date(validoDa) }),
                 ...(validoA !== undefined && { validoA: validoA ? new Date(validoA) : null }),
                 ...(attivo !== undefined && { attivo }),
-                ...(note !== undefined && { note }),
-                ...(successoreId !== undefined && { successoreId })
+                ...(note !== undefined && { note })
+                // P59 Sprint 11.1: successoreId è ora gestito su TariffarioCompanyAssociation
             },
             include: tariffarioInclude
         });
@@ -301,7 +511,8 @@ const TariffarioAziendaleService = {
         const tariffario = await prisma.tariffarioAziendale.findFirst({
             where: { id, tenantId, deletedAt: null },
             include: {
-                tariffariDerivati: { where: { deletedAt: null }, select: { id: true } }
+                // P59 Sprint 11: Verifica associazioni M2M invece di cloni
+                companyAssociations: { where: { deletedAt: null }, select: { id: true } }
             }
         });
 
@@ -309,9 +520,9 @@ const TariffarioAziendaleService = {
             throw new Error('Tariffario non trovato');
         }
 
-        // Non eliminare se ha tariffari derivati attivi
-        if (tariffario.tariffariDerivati.length > 0) {
-            throw new Error('Non è possibile eliminare un tariffario base con tariffari derivati attivi');
+        // Non eliminare se ha associazioni attive
+        if (tariffario.companyAssociations.length > 0) {
+            throw new Error('Non è possibile eliminare un tariffario con aziende associate. Rimuovi prima le associazioni.');
         }
 
         await prisma.$transaction([
@@ -340,78 +551,77 @@ const TariffarioAziendaleService = {
     },
 
     /**
-     * Clona un tariffario base in uno aziendale per una company
+     * Clona un tariffario esistente (con tutte le voci e fasce dipendenti).
+     * Il clone parte come non-attivo con codice suffisso "_COPIA".
      */
-    async clone(id, data, tenantId, createdBy) {
-        const { companyId, codice, nome, validoDa, validoA, convenzioneId } = data;
-
-        const origine = await prisma.tariffarioAziendale.findFirst({
-            where: { id, tenantId, deletedAt: null },
+    async clone(sourceId, tenantId, createdBy) {
+        // Carica sorgente con voci e fasce
+        const source = await prisma.tariffarioAziendale.findFirst({
+            where: { id: sourceId, tenantId, deletedAt: null },
             include: {
                 voci: {
                     where: { deletedAt: null },
-                    include: {
-                        fasceDipendenti: { where: { deletedAt: null } }
-                    }
+                    include: { fasceDipendenti: { where: { deletedAt: null } } },
+                    orderBy: { ordine: 'asc' }
                 }
             }
         });
+        if (!source) throw new Error('Tariffario sorgente non trovato');
 
-        if (!origine) {
-            throw new Error('Tariffario origine non trovato');
+        // Genera codice univoco (aggiunge _COPIA, poi _COPIA_2 ecc.)
+        const baseCode = `${source.codice}_COPIA`;
+        let finalCodice = baseCode;
+        let counter = 1;
+        while (true) {
+            const exists = await prisma.tariffarioAziendale.findFirst({
+                where: { tenantId, codice: finalCodice, deletedAt: null }
+            });
+            if (!exists) break;
+            finalCodice = `${baseCode}_${counter}`;
+            counter++;
         }
 
-        if (!companyId) {
-            throw new Error('È necessario specificare l\'azienda per la clonazione');
-        }
-
-        // Genera codice se non fornito
-        const finalCodice = codice || `${origine.codice}-${Date.now().toString(36).toUpperCase()}`;
-
-        // Verifica codice univoco
-        const existing = await prisma.tariffarioAziendale.findFirst({
-            where: { tenantId, codice: finalCodice, deletedAt: null }
-        });
-        if (existing) {
-            throw new Error(`Esiste già un tariffario con codice "${finalCodice}"`);
-        }
-
-        // Crea clone con voci
-        const clone = await prisma.tariffarioAziendale.create({
+        const nuovo = await prisma.tariffarioAziendale.create({
             data: {
                 codice: finalCodice,
-                nome: nome || `${origine.nome} - Copia`,
-                descrizione: origine.descrizione,
-                tipo: 'AZIENDALE',
-                companyId,
-                tariffarioOrigineId: origine.tipo === 'BASE' ? origine.id : origine.tariffarioOrigineId,
-                convenzioneId: convenzioneId || origine.convenzioneId,
-                validoDa: validoDa ? new Date(validoDa) : new Date(),
-                validoA: validoA ? new Date(validoA) : null,
-                attivo: true,
-                note: origine.note,
+                nome: `${source.nome} (Copia)`,
+                descrizione: source.descrizione,
+                convenzioneId: source.convenzioneId,
+                validoDa: source.validoDa,
+                validoA: source.validoA,
+                attivo: false, // partenza non-attivo
+                note: source.note,
                 tenantId,
                 createdBy,
                 voci: {
-                    create: origine.voci.map(voce => ({
+                    create: source.voci.map((voce, index) => ({
                         tipo: voce.tipo,
                         prestazioneId: voce.prestazioneId,
+                        documentoTemplateId: voce.documentoTemplateId,
                         nome: voce.nome,
                         descrizione: voce.descrizione,
                         prezzoBase: voce.prezzoBase,
                         ivaAliquota: voce.ivaAliquota,
                         frequenza: voce.frequenza,
+                        unitaCalcolo: voce.unitaCalcolo,
+                        modalitaAttivazione: voce.modalitaAttivazione,
                         usaFasceDipendenti: voce.usaFasceDipendenti,
-                        ordine: voce.ordine,
+                        ordine: voce.ordine ?? index,
                         attivo: voce.attivo,
                         note: voce.note,
+                        categoriaVisita: voce.categoriaVisita,
+                        durataMinimaMinuti: voce.durataMinimaMinuti,
+                        compensoProfessionistaTipo: voce.compensoProfessionistaTipo,
+                        compensoProfessionistaValore: voce.compensoProfessionistaValore,
+                        compensoProfessionistaMinimo: voce.compensoProfessionistaMinimo,
+                        compensoProfessionistaMassimo: voce.compensoProfessionistaMassimo,
                         tenantId,
-                        fasceDipendenti: voce.usaFasceDipendenti && voce.fasceDipendenti.length > 0 ? {
-                            create: voce.fasceDipendenti.map(fascia => ({
-                                minDipendenti: fascia.minDipendenti,
-                                maxDipendenti: fascia.maxDipendenti,
-                                prezzo: fascia.prezzo,
-                                descrizione: fascia.descrizione,
+                        fasceDipendenti: voce.usaFasceDipendenti && voce.fasceDipendenti?.length > 0 ? {
+                            create: voce.fasceDipendenti.map(f => ({
+                                minDipendenti: f.minDipendenti,
+                                maxDipendenti: f.maxDipendenti,
+                                prezzo: f.prezzo,
+                                descrizione: f.descrizione,
                                 tenantId
                             }))
                         } : undefined
@@ -421,14 +631,436 @@ const TariffarioAziendaleService = {
             include: tariffarioInclude
         });
 
-        logger.info({
-            cloneId: clone.id,
-            origineId: id,
-            companyId,
-            tenantId
-        }, 'Tariffario clonato per azienda');
+        logger.info({ sourceId, nuovoId: nuovo.id, codice: finalCodice, tenantId }, 'Tariffario clonato');
+        return nuovo;
+    },
 
-        return clone;
+    // =============================================
+    // P59 Sprint 11: ASSOCIAZIONE TARIFFARIO-AZIENDA (M2M)
+    // =============================================
+
+    /**
+     * Associa un tariffario a un'azienda (crea record nella tabella pivot)
+     * Un tariffario può essere associato a multiple aziende senza creare copie
+     * 
+     * P59 Sprint 11.2: Se l'azienda ha già un tariffario attivo diverso,
+     * lo chiude automaticamente impostando validoA e attivo=false
+     * 
+     * @param {string} tariffarioId - ID del tariffario da associare
+     * @param {string} companyTenantProfileId - ID del CompanyTenantProfile
+     * @param {string} tenantId - Tenant corrente
+     * @param {object} data - Dati opzionali (validoDa, validoA, note)
+     */
+    async associate(tariffarioId, companyTenantProfileId, tenantId, data = {}) {
+        const { validoDa, validoA, note } = data;
+        const now = new Date();
+        const effectiveValidoDa = validoDa ? new Date(validoDa) : now;
+
+        // Verifica che il tariffario esista e appartenga al tenant
+        const tariffario = await prisma.tariffarioAziendale.findFirst({
+            where: { id: tariffarioId, tenantId, deletedAt: null }
+        });
+        if (!tariffario) {
+            throw new Error('Tariffario non trovato');
+        }
+
+        // Verifica che l'azienda esista e appartenga al tenant
+        const company = await prisma.companyTenantProfile.findFirst({
+            where: { id: companyTenantProfileId, tenantId, deletedAt: null },
+            include: { company: true }
+        });
+        if (!company) {
+            throw new Error('Azienda non trovata');
+        }
+
+        // P59 Sprint 11.2: Gestisci ri-associazione e aggiornamento
+        // Se esiste già un'associazione per lo STESSO tariffario, aggiornala invece di crearne una nuova
+        const existingAssociation = await prisma.tariffarioCompanyAssociation.findFirst({
+            where: {
+                tariffarioId,
+                companyTenantProfileId,
+                deletedAt: null
+            }
+        });
+
+        // Se esiste un'associazione esistente (attiva o meno), aggiornala
+        if (existingAssociation) {
+            // Prima chiudi eventuali altre associazioni attive
+            // Se il successore parte nel futuro, tieni attivo il predecessore fino a validoA
+            const closingDate = new Date(effectiveValidoDa.getTime() - 1000);
+            const predecessorStillActive = effectiveValidoDa > now;
+            await prisma.tariffarioCompanyAssociation.updateMany({
+                where: {
+                    companyTenantProfileId,
+                    attivo: true,
+                    deletedAt: null,
+                    tariffarioId: { not: tariffarioId }
+                },
+                data: {
+                    attivo: predecessorStillActive ? true : false,
+                    validoA: closingDate,
+                    updatedAt: now
+                }
+            });
+
+            // Aggiorna l'associazione esistente
+            const updated = await prisma.tariffarioCompanyAssociation.update({
+                where: { id: existingAssociation.id, deletedAt: null },
+                data: {
+                    validoDa: effectiveValidoDa,
+                    validoA: validoA ? new Date(validoA) : null,
+                    attivo: true,
+                    note: note || existingAssociation.note,
+                    updatedAt: now
+                },
+                include: {
+                    tariffario: {
+                        include: {
+                            convenzione: true,
+                            voci: {
+                                where: { deletedAt: null },
+                                orderBy: { ordine: 'asc' }
+                            },
+                            _count: { select: { companyAssociations: { where: { deletedAt: null } } } }
+                        }
+                    },
+                    companyTenantProfile: {
+                        include: { company: true }
+                    }
+                }
+            });
+
+            logger.info({
+                associationId: updated.id,
+                tariffarioId,
+                companyTenantProfileId,
+                action: 'updated',
+                tenantId
+            }, 'Associazione tariffario aggiornata (M2M)');
+
+            return updated;
+        }
+
+        // P59 Sprint 11.2: Chiudi automaticamente le associazioni attive con ALTRI tariffari
+        // Questo garantisce un solo tariffario attivo per azienda alla volta
+        const activeOtherAssociations = await prisma.tariffarioCompanyAssociation.findMany({
+            where: {
+                companyTenantProfileId,
+                attivo: true,
+                deletedAt: null,
+                tariffarioId: { not: tariffarioId }  // Solo altri tariffari
+            },
+            include: {
+                tariffario: { select: { nome: true, codice: true } }
+            }
+        });
+
+        // Chiudi tutte le associazioni attive con altri tariffari
+        // Se il successore parte nel futuro, tieni attivo il predecessore fino a validoA
+        if (activeOtherAssociations.length > 0) {
+            const closingDate = new Date(effectiveValidoDa.getTime() - 1000); // 1 secondo prima del nuovo
+            const predecessorStillActive = effectiveValidoDa > now;
+            await prisma.tariffarioCompanyAssociation.updateMany({
+                where: {
+                    id: { in: activeOtherAssociations.map(a => a.id) }
+                },
+                data: {
+                    attivo: predecessorStillActive ? true : false,
+                    validoA: closingDate,
+                    updatedAt: now
+                }
+            });
+
+            logger.info({
+                companyTenantProfileId,
+                closedAssociations: activeOtherAssociations.map(a => ({
+                    id: a.id,
+                    tariffarioNome: a.tariffario?.nome
+                })),
+                newTariffarioId: tariffarioId
+            }, 'Chiuse associazioni tariffario precedenti per nuova associazione');
+        }
+
+        // Crea l'associazione nella tabella pivot
+        const association = await prisma.tariffarioCompanyAssociation.create({
+            data: {
+                tariffarioId,
+                companyTenantProfileId,
+                tenantId,
+                validoDa: effectiveValidoDa,
+                validoA: validoA ? new Date(validoA) : null,
+                attivo: true,
+                note: note || null
+            },
+            include: {
+                tariffario: {
+                    include: {
+                        convenzione: true,
+                        voci: {
+                            where: { deletedAt: null },
+                            orderBy: { ordine: 'asc' }
+                        },
+                        _count: { select: { companyAssociations: { where: { deletedAt: null } } } }
+                    }
+                },
+                companyTenantProfile: {
+                    include: { company: true }
+                }
+            }
+        });
+
+        logger.info({
+            associationId: association.id,
+            tariffarioId,
+            companyTenantProfileId,
+            companyName: company.company.ragioneSociale,
+            tenantId
+        }, 'Tariffario associato ad azienda (M2M)');
+
+        return association;
+    },
+
+    /**
+     * Rimuove l'associazione tra un tariffario e un'azienda (soft delete)
+     * 
+     * @param {string} tariffarioId - ID del tariffario
+     * @param {string} companyTenantProfileId - ID del CompanyTenantProfile
+     * @param {string} tenantId - Tenant corrente
+     */
+    async dissociate(tariffarioId, companyTenantProfileId, tenantId) {
+        // Verifica che l'associazione esista
+        const association = await prisma.tariffarioCompanyAssociation.findFirst({
+            where: {
+                tariffarioId,
+                companyTenantProfileId,
+                tenantId,
+                deletedAt: null
+            },
+            include: {
+                tariffario: true,
+                companyTenantProfile: { include: { company: true } }
+            }
+        });
+
+        if (!association) {
+            throw new Error('Associazione non trovata');
+        }
+
+        // Soft delete dell'associazione
+        await prisma.tariffarioCompanyAssociation.update({
+            where: { id: association.id, deletedAt: null },
+            data: { deletedAt: new Date() }
+        });
+
+        logger.info({
+            associationId: association.id,
+            tariffarioId,
+            companyTenantProfileId,
+            companyName: association.companyTenantProfile.company.ragioneSociale,
+            tenantId
+        }, 'Associazione tariffario-azienda rimossa');
+
+        return { success: true };
+    },
+
+    /**
+     * Ottiene tutti i tariffari associati a un'azienda (via M2M)
+     * P59 Sprint 11.1: Include successore specifico per questa azienda
+     * 
+     * @param {string} companyTenantProfileId - ID del CompanyTenantProfile
+     * @param {string} tenantId - Tenant corrente
+     */
+    async getByCompanyProfile(companyTenantProfileId, tenantId) {
+        const associations = await prisma.tariffarioCompanyAssociation.findMany({
+            where: {
+                companyTenantProfileId,
+                tenantId,
+                deletedAt: null
+            },
+            include: {
+                tariffario: {
+                    include: {
+                        convenzione: true,
+                        // P59 Sprint 11.2: Include voci complete con prestazione e fasce
+                        voci: {
+                            where: { deletedAt: null },
+                            orderBy: { ordine: 'asc' },
+                            include: {
+                                prestazione: { select: { id: true, codice: true, nome: true } },
+                                documentoTemplate: { select: { id: true, codice: true, nome: true, tipo: true } },
+                                fasceDipendenti: {
+                                    where: { deletedAt: null },
+                                    orderBy: { minDipendenti: 'asc' }
+                                }
+                            }
+                        },
+                        _count: { select: { companyAssociations: { where: { deletedAt: null } } } }
+                    }
+                },
+                // P59 Sprint 11.1: Include successore specifico per questa associazione
+                successoreAssociation: {
+                    include: {
+                        tariffario: { select: { id: true, codice: true, nome: true, validoDa: true } }
+                    }
+                },
+                predecessoreAssociation: {
+                    include: {
+                        tariffario: { select: { id: true, codice: true, nome: true, validoA: true } }
+                    }
+                }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        // Ritorna i tariffari con info sull'associazione e successore
+        return associations.map(assoc => ({
+            ...assoc.tariffario,
+            association: {
+                id: assoc.id,
+                validoDa: assoc.validoDa,
+                validoA: assoc.validoA,
+                attivo: assoc.attivo,
+                note: assoc.note,
+                createdAt: assoc.createdAt,
+                // P59 Sprint 11.1: Successore specifico per questa azienda
+                successoreAssociationId: assoc.successoreAssociationId,
+                successoreAssociation: assoc.successoreAssociation,
+                predecessoreAssociation: assoc.predecessoreAssociation
+            },
+            numeroAziendeAssociate: assoc.tariffario._count?.companyAssociations || 0
+        }));
+    },
+
+    /**
+     * Ottiene tutte le aziende associate a un tariffario (via M2M)
+     * 
+     * @param {string} tariffarioId - ID del tariffario
+     * @param {string} tenantId - Tenant corrente
+     */
+    async getAssociatedCompanies(tariffarioId, tenantId) {
+        const associations = await prisma.tariffarioCompanyAssociation.findMany({
+            where: {
+                tariffarioId,
+                tenantId,
+                deletedAt: null
+            },
+            include: {
+                companyTenantProfile: {
+                    include: {
+                        company: true,
+                        sites: { where: { deletedAt: null } }
+                    }
+                }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        return associations.map(assoc => ({
+            associationId: assoc.id,
+            validoDa: assoc.validoDa,
+            validoA: assoc.validoA,
+            attivo: assoc.attivo,
+            note: assoc.note,
+            createdAt: assoc.createdAt,
+            company: {
+                id: assoc.companyTenantProfile.id,
+                companyId: assoc.companyTenantProfile.companyId,
+                ragioneSociale: assoc.companyTenantProfile.company.ragioneSociale,
+                partitaIva: assoc.companyTenantProfile.company.partitaIva,
+                codiceFiscale: assoc.companyTenantProfile.company.codiceFiscale,
+                status: assoc.companyTenantProfile.status,
+                numeroSedi: assoc.companyTenantProfile.sites?.length || 0
+            }
+        }));
+    },
+
+    /**
+     * P59 Sprint 11.1: Aggiorna un'associazione tariffario-azienda
+     * Permette di modificare validità, note, stato attivo e successore
+     * 
+     * @param {string} associationId - ID dell'associazione
+     * @param {string} tenantId - Tenant corrente
+     * @param {object} data - Dati da aggiornare
+     */
+    async updateAssociation(associationId, tenantId, data = {}) {
+        const { validoDa, validoA, attivo, note, successoreAssociationId } = data;
+
+        // Verifica che l'associazione esista
+        const association = await prisma.tariffarioCompanyAssociation.findFirst({
+            where: { id: associationId, tenantId, deletedAt: null },
+            include: {
+                tariffario: true,
+                companyTenantProfile: { include: { company: true } }
+            }
+        });
+
+        if (!association) {
+            throw new Error('Associazione non trovata');
+        }
+
+        // Se viene specificato un successore, verifica che esista
+        if (successoreAssociationId) {
+            const successoreAssociation = await prisma.tariffarioCompanyAssociation.findFirst({
+                where: {
+                    id: successoreAssociationId,
+                    tenantId,
+                    deletedAt: null,
+                    // Il successore deve essere per la stessa azienda
+                    companyTenantProfileId: association.companyTenantProfileId
+                }
+            });
+
+            if (!successoreAssociation) {
+                throw new Error('Associazione successore non trovata o non appartiene alla stessa azienda');
+            }
+
+            // Evita riferimento circolare
+            if (successoreAssociationId === associationId) {
+                throw new Error('Un\'associazione non può essere successore di se stessa');
+            }
+        }
+
+        // Aggiorna l'associazione
+        const updated = await prisma.tariffarioCompanyAssociation.update({
+            where: { id: associationId, deletedAt: null },
+            data: {
+                ...(validoDa !== undefined && { validoDa: validoDa ? new Date(validoDa) : null }),
+                ...(validoA !== undefined && { validoA: validoA ? new Date(validoA) : null }),
+                ...(attivo !== undefined && { attivo }),
+                ...(note !== undefined && { note }),
+                ...(successoreAssociationId !== undefined && { successoreAssociationId })
+            },
+            include: {
+                tariffario: {
+                    include: {
+                        convenzione: true,
+                        _count: { select: { companyAssociations: { where: { deletedAt: null } } } }
+                    }
+                },
+                companyTenantProfile: { include: { company: true } },
+                successoreAssociation: {
+                    include: {
+                        tariffario: { select: { id: true, codice: true, nome: true, validoDa: true } }
+                    }
+                },
+                predecessoreAssociation: {
+                    include: {
+                        tariffario: { select: { id: true, codice: true, nome: true, validoA: true } }
+                    }
+                }
+            }
+        });
+
+        logger.info({
+            associationId,
+            tariffarioId: association.tariffarioId,
+            companyTenantProfileId: association.companyTenantProfileId,
+            companyName: association.companyTenantProfile.company.ragioneSociale,
+            changes: Object.keys(data).filter(k => data[k] !== undefined),
+            tenantId
+        }, 'Associazione tariffario-azienda aggiornata');
+
+        return updated;
     },
 
     // =============================================
@@ -450,22 +1082,37 @@ const TariffarioAziendaleService = {
         const {
             tipo,
             prestazioneId,
+            documentoTemplateId,
             nome,
             descrizione,
             prezzoBase,
             ivaAliquota = 22,
             frequenza = 'UNA_TANTUM',
+            unitaCalcolo = 'FLAT',                    // P44 Enhancement
+            modalitaAttivazione = 'AUTOMATICA',       // P44 Enhancement
             usaFasceDipendenti = false,
             ordine,
             note,
-            fasceDipendenti = []
+            fasceDipendenti = [],
+            // Categoria visita MDL (prima visita vs periodica) - solo PRESTAZIONE
+            categoriaVisita,
+            // Durata minima in minuti (usata per CONSULENZA, es. 30 = 0.5h)
+            durataMinimaMinuti,
+            // P59: Compenso professionista per voci SOPRALLUOGO_*, DVR_*, NOMINA_*, CONSULENZA
+            compensoProfessionistaTipo,
+            compensoProfessionistaValore,
+            compensoProfessionistaMinimo,
+            compensoProfessionistaMassimo
         } = data;
 
         // Validazione
         if (tipo === 'PRESTAZIONE' && !prestazioneId) {
             throw new Error('Per una voce di tipo PRESTAZIONE è obbligatorio specificare la prestazione');
         }
-        if (tipo !== 'PRESTAZIONE' && !nome) {
+        if (tipo === 'QUESTIONARIO' && !documentoTemplateId) {
+            throw new Error('Per una voce di tipo QUESTIONARIO è obbligatorio specificare il documento template');
+        }
+        if (tipo !== 'PRESTAZIONE' && tipo !== 'QUESTIONARIO' && !nome) {
             throw new Error('Per una voce spesa è obbligatorio specificare il nome');
         }
 
@@ -475,20 +1122,36 @@ const TariffarioAziendaleService = {
             _max: { ordine: true }
         });
 
+        // P59: Determina se è un tipo che supporta compenso professionista
+        const tipiConCompenso = ['SOPRALLUOGO_MC', 'SOPRALLUOGO_RSPP', 'DVR_NUOVO', 'DVR_AGGIORNAMENTO_CON_MODIFICHE', 'DVR_AGGIORNAMENTO_SENZA_MODIFICHE', 'NOMINA_MC', 'NOMINA_RSPP', 'CONSULENZA'];
+        const supportsCompenso = tipiConCompenso.includes(tipo);
+
         const voce = await prisma.voceTariffario.create({
             data: {
                 tariffarioAziendaleId: tariffarioId,
                 tipo,
                 prestazioneId: tipo === 'PRESTAZIONE' ? prestazioneId : null,
-                nome: tipo !== 'PRESTAZIONE' ? nome : null,
+                documentoTemplateId: tipo === 'QUESTIONARIO' ? documentoTemplateId : null,
+                nome: (tipo !== 'PRESTAZIONE' && tipo !== 'QUESTIONARIO') ? nome : null,
                 descrizione,
                 prezzoBase,
                 ivaAliquota,
                 frequenza,
+                unitaCalcolo,                          // P44 Enhancement
+                modalitaAttivazione,                   // P44 Enhancement
                 usaFasceDipendenti,
                 ordine: ordine ?? (maxOrdine._max.ordine || 0) + 1,
                 note,
                 tenantId,
+                // Categoria visita MDL (solo per PRESTAZIONE)
+                ...(tipo === 'PRESTAZIONE' && categoriaVisita ? { categoriaVisita } : {}),
+                // Durata minima minuti (solo per CONSULENZA)
+                ...(tipo === 'CONSULENZA' && durataMinimaMinuti !== undefined ? { durataMinimaMinuti } : {}),
+                // P59: Compenso professionista (solo per tipi SOPRALLUOGO_*, DVR_*, NOMINA_*, CONSULENZA)
+                ...(supportsCompenso && compensoProfessionistaTipo && { compensoProfessionistaTipo }),
+                ...(supportsCompenso && compensoProfessionistaValore !== undefined && { compensoProfessionistaValore }),
+                ...(supportsCompenso && compensoProfessionistaMinimo !== undefined && { compensoProfessionistaMinimo }),
+                ...(supportsCompenso && compensoProfessionistaMassimo !== undefined && { compensoProfessionistaMassimo }),
                 fasceDipendenti: usaFasceDipendenti && fasceDipendenti.length > 0 ? {
                     create: fasceDipendenti.map(fascia => ({
                         minDipendenti: fascia.minDipendenti,
@@ -503,12 +1166,77 @@ const TariffarioAziendaleService = {
                 prestazione: {
                     select: { id: true, codice: true, nome: true }
                 },
+                documentoTemplate: {
+                    select: { id: true, codice: true, nome: true, tipo: true }
+                },
                 fasceDipendenti: { where: { deletedAt: null } }
             }
         });
 
         logger.info({ voceId: voce.id, tariffarioId, tipo, tenantId }, 'Voce tariffario aggiunta');
         return voce;
+    },
+
+    /**
+     * Aggiunge più voci al tariffario in un'unica transazione.
+     * Usato per VISITA_MEDICINA_LAVORO (una voce per ogni categoria).
+     */
+    async addVociBatch(tariffarioId, vociData, tenantId) {
+        const tariffario = await prisma.tariffarioAziendale.findFirst({
+            where: { id: tariffarioId, tenantId, deletedAt: null }
+        });
+        if (!tariffario) throw new Error('Tariffario non trovato');
+        if (!Array.isArray(vociData) || vociData.length === 0) throw new Error('Nessuna voce da aggiungere');
+
+        // Ordine di partenza
+        const maxOrdine = await prisma.voceTariffario.aggregate({
+            where: { tariffarioAziendaleId: tariffarioId, deletedAt: null },
+            _max: { ordine: true }
+        });
+        let ordineStart = (maxOrdine._max.ordine || 0) + 1;
+
+        const tipiConCompenso = ['SOPRALLUOGO_MC', 'SOPRALLUOGO_RSPP', 'DVR_NUOVO', 'DVR_AGGIORNAMENTO_CON_MODIFICHE', 'DVR_AGGIORNAMENTO_SENZA_MODIFICHE', 'NOMINA_MC', 'NOMINA_RSPP', 'CONSULENZA'];
+
+        const createPromises = vociData.map((data, idx) => {
+            const {
+                tipo = 'PRESTAZIONE', prestazioneId, documentoTemplateId, nome, descrizione, prezzoBase,
+                ivaAliquota = 22, frequenza = 'UNA_TANTUM', unitaCalcolo = 'FLAT',
+                modalitaAttivazione = 'AUTOMATICA', usaFasceDipendenti = false, note,
+                categoriaVisita, durataMinimaMinuti,
+                compensoProfessionistaTipo, compensoProfessionistaValore,
+                compensoProfessionistaMinimo, compensoProfessionistaMassimo
+            } = data;
+
+            const supportsCompenso = tipiConCompenso.includes(tipo);
+
+            return prisma.voceTariffario.create({
+                data: {
+                    tariffarioAziendaleId: tariffarioId,
+                    tipo,
+                    prestazioneId: tipo === 'PRESTAZIONE' ? prestazioneId : null,
+                    documentoTemplateId: tipo === 'QUESTIONARIO' ? documentoTemplateId : null,
+                    nome: (tipo !== 'PRESTAZIONE' && tipo !== 'QUESTIONARIO') ? nome : null,
+                    descrizione, prezzoBase, ivaAliquota, frequenza, unitaCalcolo,
+                    modalitaAttivazione, usaFasceDipendenti,
+                    ordine: ordineStart + idx, note, tenantId,
+                    ...(tipo === 'PRESTAZIONE' && categoriaVisita ? { categoriaVisita } : {}),
+                    ...(tipo === 'CONSULENZA' && durataMinimaMinuti !== undefined ? { durataMinimaMinuti } : {}),
+                    ...(supportsCompenso && compensoProfessionistaTipo && { compensoProfessionistaTipo }),
+                    ...(supportsCompenso && compensoProfessionistaValore !== undefined && { compensoProfessionistaValore }),
+                    ...(supportsCompenso && compensoProfessionistaMinimo !== undefined && { compensoProfessionistaMinimo }),
+                    ...(supportsCompenso && compensoProfessionistaMassimo !== undefined && { compensoProfessionistaMassimo }),
+                },
+                include: {
+                    prestazione: { select: { id: true, codice: true, nome: true } },
+                    documentoTemplate: { select: { id: true, codice: true, nome: true, tipo: true } },
+                    fasceDipendenti: { where: { deletedAt: null } }
+                }
+            });
+        });
+
+        const voci = await prisma.$transaction(createPromises);
+        logger.info({ count: voci.length, tariffarioId, tenantId }, 'Batch voci tariffario aggiunte');
+        return voci;
     },
 
     /**
@@ -530,10 +1258,21 @@ const TariffarioAziendaleService = {
             prezzoBase,
             ivaAliquota,
             frequenza,
+            unitaCalcolo,                              // P44 Enhancement
+            modalitaAttivazione,                       // P44 Enhancement
             usaFasceDipendenti,
             ordine,
             attivo,
-            note
+            note,
+            // Categoria visita MDL (prima visita vs periodica) - solo PRESTAZIONE
+            categoriaVisita,
+            // Durata minima in minuti (usata per CONSULENZA)
+            durataMinimaMinuti,
+            // P59: Compenso professionista
+            compensoProfessionistaTipo,
+            compensoProfessionistaValore,
+            compensoProfessionistaMinimo,
+            compensoProfessionistaMassimo
         } = data;
 
         // Non permettere cambio tipo
@@ -541,8 +1280,12 @@ const TariffarioAziendaleService = {
             throw new Error('Non è possibile cambiare il tipo di voce');
         }
 
+        // P59: Determina se è un tipo che supporta compenso professionista
+        const tipiConCompenso = ['SOPRALLUOGO_MC', 'SOPRALLUOGO_RSPP', 'DVR_NUOVO', 'DVR_AGGIORNAMENTO_CON_MODIFICHE', 'DVR_AGGIORNAMENTO_SENZA_MODIFICHE', 'NOMINA_MC', 'NOMINA_RSPP', 'CONSULENZA'];
+        const supportsCompenso = tipiConCompenso.includes(voce.tipo);
+
         const updated = await prisma.voceTariffario.update({
-            where: { id: voceId },
+            where: { id: voceId, deletedAt: null },
             data: {
                 ...(voce.tipo === 'PRESTAZIONE' && prestazioneId && { prestazioneId }),
                 ...(voce.tipo !== 'PRESTAZIONE' && nome && { nome }),
@@ -550,13 +1293,25 @@ const TariffarioAziendaleService = {
                 ...(prezzoBase !== undefined && { prezzoBase }),
                 ...(ivaAliquota !== undefined && { ivaAliquota }),
                 ...(frequenza && { frequenza }),
+                ...(unitaCalcolo && { unitaCalcolo }),                   // P44 Enhancement
+                ...(modalitaAttivazione && { modalitaAttivazione }),     // P44 Enhancement
                 ...(usaFasceDipendenti !== undefined && { usaFasceDipendenti }),
                 ...(ordine !== undefined && { ordine }),
                 ...(attivo !== undefined && { attivo }),
-                ...(note !== undefined && { note })
+                ...(note !== undefined && { note }),
+                // Categoria visita MDL (solo PRESTAZIONE)
+                ...(voce.tipo === 'PRESTAZIONE' && categoriaVisita !== undefined && { categoriaVisita: categoriaVisita || null }),
+                // Durata minima minuti (solo CONSULENZA)
+                ...(voce.tipo === 'CONSULENZA' && durataMinimaMinuti !== undefined && { durataMinimaMinuti }),
+                // P59: Compenso professionista (solo per tipi SOPRALLUOGO_*, DVR_*, NOMINA_*, CONSULENZA)
+                ...(supportsCompenso && compensoProfessionistaTipo !== undefined && { compensoProfessionistaTipo }),
+                ...(supportsCompenso && compensoProfessionistaValore !== undefined && { compensoProfessionistaValore }),
+                ...(supportsCompenso && compensoProfessionistaMinimo !== undefined && { compensoProfessionistaMinimo }),
+                ...(supportsCompenso && compensoProfessionistaMassimo !== undefined && { compensoProfessionistaMassimo })
             },
             include: {
                 prestazione: { select: { id: true, codice: true, nome: true } },
+                documentoTemplate: { select: { id: true, codice: true, nome: true, tipo: true } },
                 fasceDipendenti: { where: { deletedAt: null } }
             }
         });
@@ -583,12 +1338,47 @@ const TariffarioAziendaleService = {
                 data: { deletedAt: new Date() }
             }),
             prisma.voceTariffario.update({
-                where: { id: voceId },
+                where: { id: voceId, deletedAt: null },
                 data: { deletedAt: new Date() }
             })
         ]);
 
         logger.info({ voceId, tenantId }, 'Voce tariffario eliminata');
+        return { success: true };
+    },
+
+    /**
+     * P59 Sprint 11.2: Riordina le voci del tariffario
+     * @param {string} tariffarioId - ID del tariffario
+     * @param {Array<{id: string, ordine: number}>} updates - Array di voci da riordinare
+     * @param {string} tenantId - ID del tenant
+     */
+    async reorderVoci(tariffarioId, updates, tenantId) {
+        // Verifica che il tariffario esista
+        const tariffario = await prisma.tariffarioAziendale.findFirst({
+            where: { id: tariffarioId, tenantId, deletedAt: null }
+        });
+
+        if (!tariffario) {
+            throw new Error('Tariffario non trovato');
+        }
+
+        // Aggiorna l'ordine di ogni voce in una transazione
+        await prisma.$transaction(
+            updates.map(({ id, ordine }) =>
+                prisma.voceTariffario.updateMany({
+                    where: {
+                        id,
+                        tariffarioAziendaleId: tariffarioId,
+                        tenantId,
+                        deletedAt: null
+                    },
+                    data: { ordine }
+                })
+            )
+        );
+
+        logger.info({ tariffarioId, tenantId, vociCount: updates.length }, 'Voci tariffario riordinate');
         return { success: true };
     },
 
@@ -638,7 +1428,7 @@ const TariffarioAziendaleService = {
 
         // Aggiorna flag usaFasceDipendenti
         await prisma.voceTariffario.update({
-            where: { id: voceId },
+            where: { id: voceId, deletedAt: null },
             data: { usaFasceDipendenti: true }
         });
 
@@ -682,7 +1472,7 @@ const TariffarioAziendaleService = {
         }
 
         const updated = await prisma.fasciaDipendentiPrezzo.update({
-            where: { id: fasciaId },
+            where: { id: fasciaId, deletedAt: null },
             data: {
                 ...(minDipendenti !== undefined && { minDipendenti }),
                 ...(maxDipendenti !== undefined && { maxDipendenti }),
@@ -708,7 +1498,7 @@ const TariffarioAziendaleService = {
         }
 
         await prisma.fasciaDipendentiPrezzo.update({
-            where: { id: fasciaId },
+            where: { id: fasciaId, deletedAt: null },
             data: { deletedAt: new Date() }
         });
 
@@ -720,7 +1510,7 @@ const TariffarioAziendaleService = {
         // Se non ci sono più fasce, disabilita usaFasceDipendenti
         if (remaining === 0) {
             await prisma.voceTariffario.update({
-                where: { id: fascia.voceTariffarioId },
+                where: { id: fascia.voceTariffarioId, deletedAt: null },
                 data: { usaFasceDipendenti: false }
             });
         }
@@ -733,26 +1523,8 @@ const TariffarioAziendaleService = {
     // UTILITY
     // =============================================
 
-    /**
-     * Ottiene i tariffari di un'azienda
-     */
-    async getByCompany(companyId, tenantId) {
-        return prisma.tariffarioAziendale.findMany({
-            where: {
-                companyId,
-                tenantId,
-                deletedAt: null
-            },
-            include: {
-                convenzione: { select: { id: true, codice: true, nome: true } },
-                tariffarioOrigine: { select: { id: true, codice: true, nome: true } },
-                _count: {
-                    select: { voci: { where: { deletedAt: null } } }
-                }
-            },
-            orderBy: [{ attivo: 'desc' }, { validoDa: 'desc' }]
-        });
-    },
+    // P59 Sprint 11.2: Rimossi metodi legacy getByCompany e getByCompanyProfile (clone-based)
+    // Il metodo getByCompanyProfile corretto è alla linea ~588, usa il pattern M2M
 
     /**
      * Calcola il prezzo per una voce in base al numero di dipendenti
@@ -810,25 +1582,85 @@ const TariffarioAziendaleService = {
     },
 
     /**
-     * Ottiene le prestazioni MDL disponibili per le voci
+     * Ottiene le prestazioni MDL disponibili per le voci tariffario.
+     * 
+     * Filtra con logica OR:
+     * P44 Phase 3: Filtra SOLO per brancheSpecialistiche contenente "Medicina del Lavoro"
+     * Le prestazioni devono avere esplicitamente questa branca assegnata per apparire.
+     * 
+     * Include: prestazioni, certificati, esami strumentali, esami lab, bundle, ecc.
+     * che hanno "Medicina del Lavoro" nelle brancheSpecialistiche.
      */
     async getPrestazioniMDL(tenantId) {
-        return prisma.prestazione.findMany({
-            where: {
-                tenantId,
-                deletedAt: null,
-                tipo: 'VISITA_MEDICINA_LAVORO',
-                attivo: true
-            },
-            select: {
-                id: true,
-                codice: true,
-                nome: true,
-                prezzoBase: true,
-                durataPrevista: true
-            },
-            orderBy: { nome: 'asc' }
-        });
+        const TIPI_QUESTIONARIO_MDL = [
+            'QUESTIONARIO_ANAMNESI_MDL',
+            'QUESTIONARIO_RISCHIO',
+            'QUESTIONARIO_SINTOMI',
+            'SCHEDA_SORVEGLIANZA',
+            'ALCOL_SCREENING',
+            'ANAMNESI'
+        ];
+
+        const [prestazioni, questionari] = await Promise.all([
+            prisma.prestazione.findMany({
+                where: {
+                    tenantId,
+                    deletedAt: null,
+                    attivo: true,
+                    // Filtra per branca MDL o tipo VISITA_MEDICINA_LAVORO
+                    OR: [
+                        {
+                            brancheSpecialistiche: {
+                                hasSome: [
+                                    'Medicina del Lavoro',
+                                    'MDL',
+                                    'Medicina Del Lavoro',
+                                    'medicina del lavoro',
+                                    'MEDICINA DEL LAVORO'
+                                ]
+                            }
+                        },
+                        { tipo: 'VISITA_MEDICINA_LAVORO' }
+                    ]
+                },
+                select: {
+                    id: true,
+                    codice: true,
+                    nome: true,
+                    tipo: true,
+                    prezzoBase: true,
+                    durataPrevista: true,
+                    ivaAliquota: true,
+                    brancheSpecialistiche: true,
+                    branchType: true
+                },
+                orderBy: [
+                    { tipo: 'asc' },
+                    { nome: 'asc' }
+                ]
+            }),
+            prisma.documentoTemplate.findMany({
+                where: {
+                    tenantId,
+                    deletedAt: null,
+                    isActive: true,
+                    tipo: { in: TIPI_QUESTIONARIO_MDL }
+                },
+                select: {
+                    id: true,
+                    codice: true,
+                    nome: true,
+                    tipo: true,
+                    descrizione: true
+                },
+                orderBy: [
+                    { tipo: 'asc' },
+                    { nome: 'asc' }
+                ]
+            })
+        ]);
+
+        return { prestazioni, questionari };
     },
 
     /**
@@ -854,6 +1686,372 @@ const TariffarioAziendaleService = {
                 }
             },
             orderBy: { nome: 'asc' }
+        });
+    },
+
+    /**
+     * Genera PDF del tariffario
+     * @param {string} id - ID del tariffario
+     * @param {string|string[]|null} tenantIds - Tenant IDs per accesso
+     * @returns {Promise<{buffer: Buffer, filename: string}>}
+     */
+    async generatePDF(id, tenantIds) {
+        // Recupera il tariffario completo
+        const tariffario = await this.getById(id, tenantIds);
+        if (!tariffario) {
+            throw new Error('Tariffario non trovato');
+        }
+
+        // Recupera info tenant
+        const tenant = await prisma.tenant.findFirst({
+            where: { id: tariffario.tenantId, deletedAt: null },
+            select: { name: true, settings: true }
+        });
+
+        // Il logo può essere nelle settings del tenant (JSON)
+        const tenantSettings = tenant?.settings && typeof tenant.settings === 'object' ? tenant.settings : {};
+        const logoUrl = resolveFirstValidLogo(tenantSettings.branches?.MEDICA?.logo, tenantSettings.branches?.FORMAZIONE?.logo, tenantSettings.logoUrl, tenantSettings.logo);
+
+        // Prepara i dati per il template
+        const vociRaw = tariffario.voci || [];
+
+        // P65: Raggruppa le voci VISITA_MDL (tipo=PRESTAZIONE + categoriaVisita) per prestazione
+        const mdlGroupsMap = new Map();
+        vociRaw.forEach(voce => {
+            if (voce.tipo === 'PRESTAZIONE' && voce.categoriaVisita && voce.prestazioneId) {
+                if (!mdlGroupsMap.has(voce.prestazioneId)) {
+                    mdlGroupsMap.set(voce.prestazioneId, {
+                        prestazioneId: voce.prestazioneId,
+                        prestazioneName: voce.prestazione?.nome || voce.nome || 'Visita MDL',
+                        categorie: []
+                    });
+                }
+                mdlGroupsMap.get(voce.prestazioneId).categorie.push({
+                    categoriaVisita: voce.categoriaVisita,
+                    categoriaLabel: CATEGORIA_VISITA_LABELS[voce.categoriaVisita] || voce.categoriaVisita,
+                    prezzoBase: Number(voce.prezzoBase).toFixed(2),
+                    ivaAliquota: Number(voce.ivaAliquota).toFixed(0),
+                    frequenzaLabel: FREQUENZA_LABELS[voce.frequenza] || voce.frequenza || '-'
+                });
+            }
+        });
+        const VISITA_MDL_GROUPS = Array.from(mdlGroupsMap.values()).map(group => {
+            // Sort by canonical order
+            const orderedCategorie = VISITA_MDL_CATEGORIES_ORDER
+                .filter(cat => group.categorie.some(c => c.categoriaVisita === cat))
+                .map(cat => group.categorie.find(c => c.categoriaVisita === cat));
+
+            // Raggruppa categorie con lo stesso prezzo/iva/frequenza usando " / " come separatore
+            const merged = [];
+            const priceMap = new Map(); // key: "prezzo|iva|freq" → indice in merged
+            for (const c of orderedCategorie) {
+                const key = `${c.prezzoBase}|${c.ivaAliquota}|${c.frequenzaLabel}`;
+                if (priceMap.has(key)) {
+                    merged[priceMap.get(key)].categoriaLabel += ' / ' + c.categoriaLabel;
+                } else {
+                    priceMap.set(key, merged.length);
+                    merged.push({ ...c });
+                }
+            }
+            return { ...group, categorie: merged };
+        });
+        const hasVisitaMDL = VISITA_MDL_GROUPS.length > 0;
+
+        const templateData = {
+            TARIFFARIO_CODICE: tariffario.codice,
+            TARIFFARIO_NOME: tariffario.nome,
+            TARIFFARIO_TIPO: tariffario.tipo === 'BASE' ? 'Tariffario Base' : 'Tariffario Aziendale',
+            DESCRIZIONE: tariffario.descrizione,
+            ATTIVO: tariffario.attivo,
+            VALIDO_DA: tariffario.validoDa ? new Date(tariffario.validoDa).toLocaleDateString('it-IT') : '',
+            VALIDO_A: tariffario.validoA ? new Date(tariffario.validoA).toLocaleDateString('it-IT') : null,
+            CONVENZIONE_NOME: tariffario.convenzione?.nome,
+            AZIENDA_NOME: tariffario.companyTenantProfile?.company?.ragioneSociale,
+            AZIENDA_PIVA: tariffario.companyTenantProfile?.company?.piva,
+            NOTE: tariffario.note,
+            LOGO_URL: logoUrl,
+            TENANT_NOME: tenant?.name || '',
+            DATA_GENERAZIONE: new Date().toLocaleDateString('it-IT', {
+                year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+            }),
+            HAS_VISITA_MDL: hasVisitaMDL,
+            VISITA_MDL_GROUPS: VISITA_MDL_GROUPS,
+            // Questionari MDL: mostrati dopo le visite MDL nel PDF
+            QUESTIONARI_MDL_ROWS: (() => {
+                return vociRaw
+                    .filter(v => v.tipo === 'QUESTIONARIO')
+                    .map((voce, index) => ({
+                        ordine: voce.ordine || index + 1,
+                        nome: voce.documentoTemplate?.nome || voce.nome || 'Questionario',
+                        descrizione: voce.descrizione,
+                        frequenzaAbbr: FREQUENZA_ABBR[voce.frequenza] || voce.frequenza || '-',
+                        unitaAbbr: UNITA_ABBR[voce.unitaCalcolo] || voce.unitaCalcolo || '-',
+                        prezzoBase: Number(voce.prezzoBase).toFixed(2),
+                        ivaAliquota: Number(voce.ivaAliquota).toFixed(0),
+                    }));
+            })(),
+            HAS_QUESTIONARI_MDL: vociRaw.some(v => v.tipo === 'QUESTIONARIO'),
+            // Consulenza e Sicurezza: consulenza + sopralluogo + nomina + DVR in un'unica tabella
+            CONSULENZA_SICUREZZA_ROWS: (() => {
+                const CONSULENZA_TYPES = [
+                    'CONSULENZA', 'NOMINA_MC', 'NOMINA_RSPP',
+                    'SOPRALLUOGO_MC', 'SOPRALLUOGO_RSPP',
+                    'DVR_NUOVO', 'DVR_AGGIORNAMENTO_CON_MODIFICHE', 'DVR_AGGIORNAMENTO_SENZA_MODIFICHE'
+                ];
+                const ORDER = [
+                    'CONSULENZA', 'NOMINA_MC', 'NOMINA_RSPP', 'SOPRALLUOGO_MC', 'SOPRALLUOGO_RSPP',
+                    'DVR_NUOVO', 'DVR_AGGIORNAMENTO_CON_MODIFICHE', 'DVR_AGGIORNAMENTO_SENZA_MODIFICHE'
+                ];
+                return vociRaw
+                    .filter(v => CONSULENZA_TYPES.includes(v.tipo))
+                    .sort((a, b) => (ORDER.indexOf(a.tipo) - ORDER.indexOf(b.tipo)) || (a.ordine || 0) - (b.ordine || 0))
+                    .map((voce, index) => ({
+                        ordine: voce.ordine || index + 1,
+                        nome: voce.nome || 'Servizio',
+                        tipoLabel: TIPO_VOCE_LABELS[voce.tipo] || voce.tipo,
+                        tipoBadgeClass: TIPO_BADGE_CLASSES[voce.tipo] || 'tipo-prestazione',
+                        descrizione: voce.descrizione,
+                        frequenzaAbbr: FREQUENZA_ABBR[voce.frequenza] || voce.frequenza || '-',
+                        unitaAbbr: UNITA_ABBR[voce.unitaCalcolo] || voce.unitaCalcolo || '-',
+                        prezzoBase: Number(voce.prezzoBase).toFixed(2),
+                        ivaAliquota: Number(voce.ivaAliquota).toFixed(0),
+                    }));
+            })(),
+            HAS_CONSULENZA_SICUREZZA: vociRaw.some(v =>
+                ['CONSULENZA', 'SOPRALLUOGO_MC', 'SOPRALLUOGO_RSPP', 'NOMINA_MC', 'NOMINA_RSPP',
+                    'DVR_NUOVO', 'DVR_AGGIORNAMENTO_CON_MODIFICHE', 'DVR_AGGIORNAMENTO_SENZA_MODIFICHE'].includes(v.tipo)
+            ),
+            // Voci NON-MDL rimanenti raggruppate per tipo (spese)
+            ALTRE_VOCI_GROUPS: (() => {
+                const EXCLUDED = ['PRESTAZIONE', 'QUESTIONARIO', 'CONSULENZA',
+                    'SOPRALLUOGO_MC', 'SOPRALLUOGO_RSPP', 'NOMINA_MC', 'NOMINA_RSPP',
+                    'DVR_NUOVO', 'DVR_AGGIORNAMENTO_CON_MODIFICHE', 'DVR_AGGIORNAMENTO_SENZA_MODIFICHE'];
+                const nonMDL = vociRaw.filter(voce =>
+                    !(voce.tipo === 'PRESTAZIONE' && voce.categoriaVisita && voce.prestazioneId) &&
+                    !EXCLUDED.includes(voce.tipo)
+                );
+                // Includi anche PRESTAZIONE senza categoriaVisita
+                const nonMDLwithPrestazione = vociRaw.filter(voce =>
+                    voce.tipo === 'PRESTAZIONE' && !(voce.categoriaVisita && voce.prestazioneId)
+                );
+                const all = [...nonMDLwithPrestazione, ...nonMDL];
+                if (all.length === 0) return [];
+                const tipoOrder = ['PRESTAZIONE', 'SPESA_FISSA', 'SPESA_RICORRENTE'];
+                const grouped = new Map();
+                all.forEach((voce, index) => {
+                    const tipo = voce.tipo;
+                    if (!grouped.has(tipo)) grouped.set(tipo, []);
+                    grouped.get(tipo).push({
+                        ordine: voce.ordine || index + 1,
+                        nome: voce.nome || voce.prestazione?.nome || voce.documentoTemplate?.nome || 'Voce senza nome',
+                        descrizione: voce.descrizione,
+                        tipoAbbr: TIPO_VOCE_ABBR[tipo] || tipo,
+                        tipoBadgeClass: TIPO_BADGE_CLASSES[tipo] || 'tipo-prestazione',
+                        frequenzaAbbr: FREQUENZA_ABBR[voce.frequenza] || voce.frequenza || '-',
+                        unitaAbbr: UNITA_ABBR[voce.unitaCalcolo] || voce.unitaCalcolo || '-',
+                        prezzoBase: Number(voce.prezzoBase).toFixed(2),
+                        ivaAliquota: Number(voce.ivaAliquota).toFixed(0),
+                        usaFasceDipendenti: voce.usaFasceDipendenti,
+                        fasceDipendenti: (voce.fasceDipendenti || []).map(f => ({
+                            range: f.maxDipendenti ? `${f.minDipendenti}-${f.maxDipendenti}` : `${f.minDipendenti}+`,
+                            prezzo: Number(f.prezzo).toFixed(2),
+                            descrizione: f.descrizione
+                        }))
+                    });
+                });
+                return tipoOrder
+                    .filter(tipo => grouped.has(tipo))
+                    .map(tipo => ({
+                        groupTitle: TIPO_VOCE_LABELS[tipo] || tipo,
+                        groupCount: grouped.get(tipo).length,
+                        rows: grouped.get(tipo)
+                    }));
+            })(),
+            HAS_ALTRE_VOCI: vociRaw.some(v => {
+                const EXCLUDED = ['QUESTIONARIO', 'CONSULENZA', 'SOPRALLUOGO_MC', 'SOPRALLUOGO_RSPP', 'NOMINA_MC', 'NOMINA_RSPP',
+                    'DVR_NUOVO', 'DVR_AGGIORNAMENTO_CON_MODIFICHE', 'DVR_AGGIORNAMENTO_SENZA_MODIFICHE'];
+                return !(v.tipo === 'PRESTAZIONE' && v.categoriaVisita && v.prestazioneId) && !EXCLUDED.includes(v.tipo);
+            }),
+            TOTALE_VOCI: vociRaw.length,
+            TOTALE_PRESTAZIONI: vociRaw.filter(v => v.tipo === 'PRESTAZIONE').length,
+            TOTALE_SPESE: vociRaw.filter(v =>
+                ['SPESA_FISSA', 'SPESA_RICORRENTE', 'SOPRALLUOGO_MC', 'SOPRALLUOGO_RSPP',
+                    'DVR_NUOVO', 'DVR_AGGIORNAMENTO_CON_MODIFICHE', 'DVR_AGGIORNAMENTO_SENZA_MODIFICHE', 'NOMINA_MC', 'NOMINA_RSPP'].includes(v.tipo)
+            ).length
+        };
+
+        // P59: Carica e compila il template usando __dirname per percorso affidabile
+        // Il file è in backend/public/templates/ relativo alla root del backend
+        const templatePath = path.join(__dirname, '..', '..', 'public', 'templates', 'tariffario-aziendale.html');
+
+        let templateHtml;
+        try {
+            templateHtml = fs.readFileSync(templatePath, 'utf-8');
+        } catch (error) {
+            logger.error({ error: error.message, templatePath }, 'Errore lettura template tariffario');
+            throw new Error('Template tariffario non trovato');
+        }
+
+        // Compila con Handlebars
+        const template = Handlebars.compile(templateHtml);
+        const html = template(templateData);
+
+        // Genera PDF
+        const pdfBuffer = await pdfService.generatePDF(html, {
+            format: 'A4',
+            landscape: false,
+            margin: { top: '10mm', right: '10mm', bottom: '10mm', left: '10mm' }
+        });
+
+        const filename = `tariffario_${tariffario.codice}_${new Date().toISOString().split('T')[0]}.pdf`;
+
+        logger.info({
+            tariffarioId: id,
+            filename,
+            vociCount: tariffario.voci?.length
+        }, 'PDF tariffario generato');
+
+        return { buffer: pdfBuffer, filename };
+    },
+
+    /**
+     * P65: Ottiene le voci tariffario aziendali che includono una specifica prestazione
+     * @param {string} prestazioneId - ID della prestazione
+     * @param {string} tenantId - Tenant ID
+     * @returns {Promise<Array>} Voci con tariffario parent e aziende associate
+     */
+    async getVociByPrestazione(prestazioneId, tenantId) {
+        const voci = await prisma.voceTariffario.findMany({
+            where: {
+                prestazioneId,
+                deletedAt: null,
+                tariffarioAziendale: {
+                    tenantId,
+                    deletedAt: null
+                }
+            },
+            include: {
+                tariffarioAziendale: {
+                    select: {
+                        id: true,
+                        codice: true,
+                        nome: true,
+                        attivo: true,
+                        validoDa: true,
+                        validoA: true,
+                        convenzioneId: true,
+                        convenzione: {
+                            select: { id: true, codice: true, nome: true }
+                        },
+                        companyAssociations: {
+                            where: {
+                                attivo: true,
+                                deletedAt: null
+                            },
+                            include: {
+                                companyTenantProfile: {
+                                    select: {
+                                        id: true,
+                                        company: {
+                                            select: {
+                                                id: true,
+                                                ragioneSociale: true,
+                                                piva: true
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                fasceDipendenti: {
+                    where: { deletedAt: null },
+                    orderBy: { minDipendenti: 'asc' }
+                }
+            },
+            orderBy: [
+                { tariffarioAziendale: { nome: 'asc' } },
+                { ordine: 'asc' }
+            ]
+        });
+
+        return voci;
+    },
+
+    /**
+     * P65: Ottiene le voci tariffario che prezzano uno specifico DocumentoTemplate (questionario)
+     * @param {string} documentoTemplateId - ID del DocumentoTemplate
+     * @param {string} tenantId - Tenant ID
+     * @returns {Promise<Array>} Voci con tariffario parent e aziende associate
+     */
+    async getVociByDocumentoTemplate(documentoTemplateId, tenantId) {
+        const voci = await prisma.voceTariffario.findMany({
+            where: {
+                documentoTemplateId,
+                tipo: 'QUESTIONARIO',
+                deletedAt: null,
+                tariffarioAziendale: {
+                    tenantId,
+                    deletedAt: null
+                }
+            },
+            include: {
+                tariffarioAziendale: {
+                    select: {
+                        id: true,
+                        codice: true,
+                        nome: true,
+                        attivo: true,
+                        validoDa: true,
+                        validoA: true,
+                        companyAssociations: {
+                            where: {
+                                attivo: true,
+                                deletedAt: null
+                            },
+                            include: {
+                                companyTenantProfile: {
+                                    select: {
+                                        id: true,
+                                        company: {
+                                            select: {
+                                                id: true,
+                                                ragioneSociale: true,
+                                                piva: true
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            orderBy: [
+                { tariffarioAziendale: { nome: 'asc' } },
+                { ordine: 'asc' }
+            ]
+        });
+
+        return voci;
+    },
+
+    /**
+     * Risolvi un Company.id o CompanyTenantProfile.id al profilo corretto
+     * @param {string} idOrCompanyId - CTP.id o Company.id globale
+     * @param {string} tenantId - Tenant ID
+     * @returns {Promise<{id: string}|null>}
+     */
+    async resolveCompanyProfile(idOrCompanyId, tenantId) {
+        return prisma.companyTenantProfile.findFirst({
+            where: {
+                OR: [
+                    { id: idOrCompanyId, tenantId, deletedAt: null },
+                    { companyId: idOrCompanyId, tenantId, deletedAt: null }
+                ]
+            },
+            select: { id: true }
         });
     }
 };

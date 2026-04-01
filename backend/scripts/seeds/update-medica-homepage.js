@@ -106,8 +106,8 @@ const additionalContent = {
     emergency: {
         title: "Contatto Rapido",
         subtitle: "Siamo qui per aiutarti",
-        phone: "02 1234567",
-        email: "info@elementmedica.it",
+        phone: "+39 351 318 1574",
+        email: "info@elementmedica.com",
         hours: "Lun-Ven 8:00-20:00 | Sab 8:00-13:00",
         ctaText: "Prenota Ora",
         ctaHref: "/prenota"

@@ -13,13 +13,12 @@
 import express from 'express';
 import multer from 'multer';
 import path from 'path';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/prisma-optimization.js';
 import { requirePermissions } from '../middleware/RBACMiddleware.js';
 import { authenticate } from '../middleware/auth.js';
 import mediaService from '../services/mediaService.js';
 import logger from '../utils/logger.js';
 
-const prisma = new PrismaClient();
 
 const router = express.Router();
 
@@ -30,7 +29,7 @@ const router = express.Router();
 const storage = multer.memoryStorage(); // Buffer in memoria per Sharp
 
 const fileFilter = (req, file, cb) => {
-  const allowedTypes = /jpeg|jpg|png|gif|webp|svg|pdf/;
+  const allowedTypes = /jpeg|jpg|png|gif|webp|pdf/;
   const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
   const mimetype = file.mimetype.startsWith('image/') || file.mimetype === 'application/pdf';
 
@@ -48,6 +47,25 @@ const upload = multer({
   fileFilter
 });
 
+const uploadFiles = (req, res, next) => {
+  upload.array('files', 10)(req, res, (error) => {
+    if (!error) {
+      return next();
+    }
+
+    logger.warn({
+      message: error.message,
+      tenantId: req.person?.tenantId,
+      userId: req.person?.id
+    }, 'Media upload rejected');
+
+    return res.status(400).json({
+      success: false,
+      error: error.message || 'File non valido'
+    });
+  });
+};
+
 // ============================================
 // ENDPOINTS
 // ============================================
@@ -61,7 +79,7 @@ router.post(
   '/upload',
   authenticate,
   requirePermissions('cms.media:manage'),
-  upload.array('files', 10), // Max 10 files contemporaneamente
+  uploadFiles,
   async (req, res) => {
     try {
       const { tenantId, id: userId } = req.person;
@@ -70,7 +88,7 @@ router.post(
       if (!req.files || req.files.length === 0) {
         return res.status(400).json({
           success: false,
-          error: 'No files provided'
+          error: 'Nessun file fornito'
         });
       }
 
@@ -111,13 +129,17 @@ router.post(
       res.json({
         success: true,
         data: uploadedMedia,
-        message: `${uploadedMedia.length} file(s) uploaded successfully`
+        message: `${uploadedMedia.length} file caricato/i con successo`
       });
 
     } catch (error) {
+      const isValidationError = error.message?.includes('File type not allowed') ||
+        error.message?.includes('Invalid file type') ||
+        error.message?.includes('File too large');
+
       logger.error(
         {
-          error: error.message,
+          error: 'Operazione non riuscita',
           stack: error.stack,
           tenantId: req.person?.tenantId,
           userId: req.person?.id
@@ -125,9 +147,9 @@ router.post(
         'Media upload failed'
       );
 
-      res.status(500).json({
+      res.status(isValidationError ? 400 : 500).json({
         success: false,
-        error: error.message || 'Failed to upload media'
+        error: isValidationError ? error.message : 'Errore nel caricamento dei media'
       });
     }
   }
@@ -172,7 +194,7 @@ router.get(
     } catch (error) {
       logger.error(
         {
-          error: error.message,
+          error: 'Operazione non riuscita',
           tenantId: req.person?.tenantId
         },
         'Failed to list media'
@@ -180,7 +202,7 @@ router.get(
 
       res.status(500).json({
         success: false,
-        error: error.message || 'Failed to list media'
+        error: 'Errore nel recupero dei media'
       });
     }
   }
@@ -210,8 +232,7 @@ router.get(
           creator: {
             select: {
               firstName: true,
-              lastName: true,
-              email: true
+              lastName: true
             }
           },
           folder: {
@@ -226,7 +247,7 @@ router.get(
       if (!media) {
         return res.status(404).json({
           success: false,
-          error: 'Media not found'
+          error: 'Media non trovato'
         });
       }
 
@@ -238,7 +259,7 @@ router.get(
     } catch (error) {
       logger.error(
         {
-          error: error.message,
+          error: 'Operazione non riuscita',
           mediaId: req.params.id,
           tenantId: req.person?.tenantId
         },
@@ -247,7 +268,7 @@ router.get(
 
       res.status(500).json({
         success: false,
-        error: error.message || 'Failed to get media'
+        error: 'Errore nel recupero dei media'
       });
     }
   }
@@ -300,7 +321,7 @@ router.patch(
     } catch (error) {
       logger.error(
         {
-          error: error.message,
+          error: 'Operazione non riuscita',
           mediaId: req.params.id,
           tenantId: req.person?.tenantId
         },
@@ -309,7 +330,7 @@ router.patch(
 
       res.status(500).json({
         success: false,
-        error: error.message || 'Failed to update media'
+        error: 'Errore nell\'aggiornamento dei media'
       });
     }
   }
@@ -333,14 +354,14 @@ router.delete(
 
       res.json({
         success: true,
-        message: 'Media deleted successfully',
+        message: 'Media eliminato con successo',
         data: media
       });
 
     } catch (error) {
       logger.error(
         {
-          error: error.message,
+          error: 'Operazione non riuscita',
           mediaId: req.params.id,
           tenantId: req.person?.tenantId
         },
@@ -349,7 +370,7 @@ router.delete(
 
       res.status(500).json({
         success: false,
-        error: error.message || 'Failed to delete media'
+        error: 'Errore nell\'eliminazione dei media'
       });
     }
   }
@@ -386,7 +407,7 @@ router.get(
     } catch (error) {
       logger.error(
         {
-          error: error.message,
+          error: 'Operazione non riuscita',
           tenantId: req.person?.tenantId
         },
         'Failed to list folders'
@@ -394,7 +415,7 @@ router.get(
 
       res.status(500).json({
         success: false,
-        error: error.message || 'Failed to list folders'
+        error: 'Errore nel recupero delle cartelle'
       });
     }
   }
@@ -417,7 +438,7 @@ router.post(
       if (!name || name.trim() === '') {
         return res.status(400).json({
           success: false,
-          error: 'Folder name is required'
+          error: 'Nome cartella obbligatorio'
         });
       }
 
@@ -430,13 +451,13 @@ router.post(
       res.json({
         success: true,
         data: folder,
-        message: 'Folder created successfully'
+        message: 'Cartella creata con successo'
       });
 
     } catch (error) {
       logger.error(
         {
-          error: error.message,
+          error: 'Operazione non riuscita',
           tenantId: req.person?.tenantId
         },
         'Failed to create folder'
@@ -444,7 +465,7 @@ router.post(
 
       res.status(500).json({
         success: false,
-        error: error.message || 'Failed to create folder'
+        error: 'Errore nella creazione della cartella'
       });
     }
   }
@@ -476,7 +497,7 @@ router.delete(
       if (mediaCount > 0) {
         return res.status(400).json({
           success: false,
-          error: 'Cannot delete folder with media inside. Move or delete media first.'
+          error: 'Impossibile eliminare la cartella con media all\'interno. Spostare o eliminare prima i media.'
         });
       }
 
@@ -497,14 +518,14 @@ router.delete(
 
       res.json({
         success: true,
-        message: 'Folder deleted successfully',
+        message: 'Cartella eliminata con successo',
         data: folder
       });
 
     } catch (error) {
       logger.error(
         {
-          error: error.message,
+          error: 'Operazione non riuscita',
           folderId: req.params.id,
           tenantId: req.person?.tenantId
         },
@@ -513,7 +534,7 @@ router.delete(
 
       res.status(500).json({
         success: false,
-        error: error.message || 'Failed to delete folder'
+        error: 'Errore nell\'eliminazione della cartella'
       });
     }
   }

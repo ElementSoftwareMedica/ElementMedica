@@ -1,22 +1,22 @@
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
-import middleware from '../auth/middleware.js';
+import prisma from '../config/prisma-optimization.js';
+import middleware from '../middleware/auth.js';
 import logger from '../utils/logger.js';
 import { getDocumentService } from '../services/documentService.js';
 import storageService from '../services/storageService.js';
 
 const documentService = getDocumentService();
 import path from 'path';
+import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
-const { authenticate: authenticateToken, authorize: requirePermission } = middleware;
+const { authenticate: authenticateToken, requirePermission } = middleware;
 
 // GET /api/documents/statistics - Aggregate statistics (BEFORE /:id route)
-router.get('/statistics', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
+router.get('/statistics', authenticateToken, requirePermission('documents:read'), async (req, res) => {
   try {
-    const tenantId = req.person.tenantId;
+    const tenantId = getEffectiveTenantId(req);
 
     // Use DocumentService statistics method
     const stats = await documentService.getStatistics(tenantId);
@@ -26,19 +26,19 @@ router.get('/statistics', authenticateToken(), requirePermission('documents:read
     logger.error('Failed to fetch document statistics', {
       component: 'document-routes',
       action: 'getStatistics',
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       personId: req.person?.id
     });
     res.status(500).json({
-      error: 'Internal server error',
-      message: 'Failed to fetch statistics'
+      error: 'Errore interno del server',
+      message: 'Errore nel recupero delle statistiche'
     });
   }
 });
 
 // GET /api/documents - List generated documents
-router.get('/', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
+router.get('/', authenticateToken, requirePermission('documents:read'), async (req, res) => {
   try {
     const {
       templateId,
@@ -52,7 +52,7 @@ router.get('/', authenticateToken(), requirePermission('documents:read'), async 
       page = '1',
       limit = '50',
     } = req.query;
-    const tenantId = req.person.tenantId;
+    const tenantId = getEffectiveTenantId(req);
 
     // Build where clause
     const where = {
@@ -107,22 +107,22 @@ router.get('/', authenticateToken(), requirePermission('documents:read'), async 
     logger.error('Failed to fetch documents', {
       component: 'document-routes',
       action: 'getDocuments',
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       personId: req.person?.id
     });
     res.status(500).json({
-      error: 'Internal server error',
-      message: 'Failed to fetch documents'
+      error: 'Errore interno del server',
+      message: 'Errore nel recupero dei documenti'
     });
   }
 });
 
 // GET /api/documents/:id - Get single document metadata
-router.get('/:id', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
+router.get('/:id', authenticateToken, requirePermission('documents:read'), async (req, res) => {
   try {
     const { id } = req.params;
-    const tenantId = req.person.tenantId;
+    const tenantId = getEffectiveTenantId(req);
 
     const document = await prisma.generatedDocument.findFirst({
       where: { id, tenantId, deletedAt: null },
@@ -131,15 +131,15 @@ router.get('/:id', authenticateToken(), requirePermission('documents:read'), asy
           select: { id: true, name: true, type: true, version: true },
         },
         generator: {
-          select: { id: true, firstName: true, lastName: true, email: true },
+          select: { id: true, firstName: true, lastName: true },
         },
       },
     });
 
     if (!document) {
       return res.status(404).json({
-        error: 'Document not found',
-        message: `Document with ID ${id} does not exist or has been deleted`
+        error: 'Documento non trovato',
+        message: 'Il documento non esiste o è stato eliminato'
       });
     }
 
@@ -148,23 +148,23 @@ router.get('/:id', authenticateToken(), requirePermission('documents:read'), asy
     logger.error('Failed to fetch document', {
       component: 'document-routes',
       action: 'getDocument',
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       personId: req.person?.id,
       documentId: req.params?.id
     });
     res.status(500).json({
-      error: 'Internal server error',
-      message: 'Failed to fetch document'
+      error: 'Errore interno del server',
+      message: 'Errore nel recupero del documento'
     });
   }
 });
 
 // GET /api/documents/:id/download - Download document file
-router.get('/:id/download', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
+router.get('/:id/download', authenticateToken, requirePermission('documents:read'), async (req, res) => {
   try {
     const { id } = req.params;
-    const tenantId = req.person.tenantId;
+    const tenantId = getEffectiveTenantId(req);
 
     // Get document metadata
     const document = await prisma.generatedDocument.findFirst({
@@ -173,8 +173,8 @@ router.get('/:id/download', authenticateToken(), requirePermission('documents:re
 
     if (!document) {
       return res.status(404).json({
-        error: 'Document not found',
-        message: `Document with ID ${id} does not exist`
+        error: 'Documento non trovato',
+        message: 'Il documento non esiste'
       });
     }
 
@@ -197,46 +197,117 @@ router.get('/:id/download', authenticateToken(), requirePermission('documents:re
 
     // For local storage, send file
     if (document.filepath) {
-      const filePath = path.join(process.cwd(), 'uploads', document.filepath);
-      res.download(filePath, document.filename);
+      const uploadsRoot = path.resolve(process.cwd(), 'uploads');
+      const resolvedFilePath = path.resolve(uploadsRoot, document.filepath);
+
+      // Security hardening: prevent path traversal outside uploads directory.
+      if (!resolvedFilePath.startsWith(`${uploadsRoot}${path.sep}`) && resolvedFilePath !== uploadsRoot) {
+        logger.warn('Invalid document file path blocked', {
+          component: 'document-routes',
+          action: 'downloadDocument',
+          documentId: id,
+          personId: req.person?.id
+        });
+
+        return res.status(400).json({
+          error: 'Percorso file non valido',
+          message: 'Impossibile scaricare il documento richiesto'
+        });
+      }
+
+      res.download(resolvedFilePath, document.filename);
     } else if (document.fileUrl) {
       // For S3, redirect to signed URL
       res.redirect(document.fileUrl);
     } else {
       res.status(404).json({
-        error: 'File not found',
-        message: 'Document file is not available'
+        error: 'File non trovato',
+        message: 'Il file del documento non è disponibile'
       });
     }
   } catch (error) {
     logger.error('Failed to download document', {
       component: 'document-routes',
       action: 'downloadDocument',
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       personId: req.person?.id,
       documentId: req.params?.id
     });
     res.status(500).json({
-      error: 'Internal server error',
-      message: 'Failed to download document'
+      error: 'Errore interno del server',
+      message: 'Errore nel download del documento'
+    });
+  }
+});
+
+// GET /api/documents/:id/preview - Preview document inline (for pdf.js)
+router.get('/:id/preview', authenticateToken, requirePermission('documents:read'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const tenantId = getEffectiveTenantId(req);
+
+    const document = await prisma.generatedDocument.findFirst({
+      where: { id, tenantId, deletedAt: null },
+    });
+
+    if (!document) {
+      return res.status(404).json({
+        error: 'Documento non trovato',
+        message: 'Il documento non esiste'
+      });
+    }
+
+    if (document.filepath) {
+      const uploadsRoot = path.resolve(process.cwd(), 'uploads');
+      const resolvedFilePath = path.resolve(uploadsRoot, document.filepath);
+
+      if (!resolvedFilePath.startsWith(`${uploadsRoot}${path.sep}`) && resolvedFilePath !== uploadsRoot) {
+        return res.status(400).json({
+          error: 'Percorso file non valido',
+          message: 'Impossibile visualizzare il documento richiesto'
+        });
+      }
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${document.filename}"`);
+      res.sendFile(resolvedFilePath);
+    } else if (document.fileUrl) {
+      res.redirect(document.fileUrl);
+    } else {
+      res.status(404).json({
+        error: 'File non trovato',
+        message: 'Il file del documento non è disponibile'
+      });
+    }
+  } catch (error) {
+    logger.error('Errore preview documento', {
+      component: 'document-routes',
+      action: 'previewDocument',
+      error: 'Operazione non riuscita',
+      personId: req.person?.id,
+      documentId: req.params?.id
+    });
+    res.status(500).json({
+      error: 'Errore interno del server',
+      message: 'Errore nel caricamento del documento'
     });
   }
 });
 
 // GET /api/documents/batch/:batchId/status - Get batch generation status
-router.get('/batch/:batchId/status', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
+router.get('/batch/:batchId/status', authenticateToken, requirePermission('documents:read'), async (req, res) => {
   try {
     const { batchId } = req.params;
-    const tenantId = req.person.tenantId;
+    const tenantId = getEffectiveTenantId(req);
 
     // Get batch status from DocumentService
     const status = await documentService.getBatchStatus(batchId, tenantId);
 
     if (!status) {
       return res.status(404).json({
-        error: 'Batch not found',
-        message: `Batch with ID ${batchId} does not exist`
+        error: 'Batch non trovato',
+        message: 'Il batch non esiste'
       });
     }
 
@@ -245,23 +316,31 @@ router.get('/batch/:batchId/status', authenticateToken(), requirePermission('doc
     logger.error('Failed to fetch batch status', {
       component: 'document-routes',
       action: 'getBatchStatus',
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       personId: req.person?.id,
       batchId: req.params?.batchId
     });
     res.status(500).json({
-      error: 'Internal server error',
-      message: 'Failed to fetch batch status'
+      error: 'Errore interno del server',
+      message: 'Errore nel recupero dello stato batch'
     });
   }
 });
 
 // DELETE /api/documents/:id - Soft delete document
-router.delete('/:id', authenticateToken(), requirePermission('documents:delete'), async (req, res) => {
+router.delete('/:id', authenticateToken, requirePermission('documents:delete'), async (req, res) => {
   try {
     const { id } = req.params;
-    const tenantId = req.person.tenantId;
+    const tenantId = getEffectiveTenantId(req);
+    const { deletionReason } = req.body || {};
+
+    if (!deletionReason || deletionReason.trim().length < 10) {
+      return res.status(400).json({
+        error: 'Errore di validazione',
+        message: 'Motivo eliminazione obbligatorio (minimo 10 caratteri)'
+      });
+    }
 
     // Check document exists
     const document = await prisma.generatedDocument.findFirst({
@@ -270,13 +349,29 @@ router.delete('/:id', authenticateToken(), requirePermission('documents:delete')
 
     if (!document) {
       return res.status(404).json({
-        error: 'Document not found',
-        message: `Document with ID ${id} does not exist or has been deleted`
+        error: 'Documento non trovato',
+        message: 'Il documento non esiste o è stato eliminato'
       });
     }
 
     // Soft delete via DocumentService (handles file cleanup)
     await documentService.deleteDocument(id, tenantId);
+
+    await prisma.gdprAuditLog.create({
+      data: {
+        tenantId,
+        resourceType: 'GeneratedDocument',
+        resourceId: id,
+        action: 'DELETE',
+        personId: req.person.id,
+        dataAccessed: {
+          filename: document.filename,
+          type: document.type,
+          generatedAt: document.generatedAt,
+          deletionReason: deletionReason.trim()
+        }
+      }
+    });
 
     logger.info('Document deleted successfully', {
       component: 'document-routes',
@@ -286,37 +381,37 @@ router.delete('/:id', authenticateToken(), requirePermission('documents:delete')
     });
 
     res.json({
-      message: 'Document deleted successfully',
+      message: 'Documento eliminato con successo',
       id
     });
   } catch (error) {
     logger.error('Failed to delete document', {
       component: 'document-routes',
       action: 'deleteDocument',
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       personId: req.person?.id,
       documentId: req.params?.id
     });
     res.status(500).json({
-      error: 'Internal server error',
-      message: 'Failed to delete document'
+      error: 'Errore interno del server',
+      message: 'Errore nell\'eliminazione del documento'
     });
   }
 });
 
 // POST /api/documents/:id/resend - Resend document via email
-router.post('/:id/resend', authenticateToken(), requirePermission('documents:send'), async (req, res) => {
+router.post('/:id/resend', authenticateToken, requirePermission('documents:send'), async (req, res) => {
   try {
     const { id } = req.params;
     const { email, subject, message } = req.body;
-    const tenantId = req.person.tenantId;
+    const tenantId = getEffectiveTenantId(req);
 
     // Validate email
     if (!email) {
       return res.status(400).json({
-        error: 'Validation error',
-        message: 'Email address is required'
+        error: 'Errore di validazione',
+        message: 'L\'indirizzo email è obbligatorio'
       });
     }
 
@@ -332,14 +427,14 @@ router.post('/:id/resend', authenticateToken(), requirePermission('documents:sen
 
     if (!document) {
       return res.status(404).json({
-        error: 'Document not found',
-        message: `Document with ID ${id} does not exist`
+        error: 'Documento non trovato',
+        message: 'Il documento non esiste'
       });
     }
 
     // Queue email sending (assuming emailQueue from queueService)
     const { emailQueue } = await import('../services/queueService.js');
-    
+
     await emailQueue.add('send-document', {
       documentId: id,
       email,
@@ -367,7 +462,7 @@ router.post('/:id/resend', authenticateToken(), requirePermission('documents:sen
     });
 
     res.json({
-      message: 'Document will be sent via email',
+      message: 'Il documento verrà inviato via email',
       documentId: id,
       sentTo: email,
     });
@@ -375,14 +470,14 @@ router.post('/:id/resend', authenticateToken(), requirePermission('documents:sen
     logger.error('Failed to resend document', {
       component: 'document-routes',
       action: 'resendDocument',
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       personId: req.person?.id,
       documentId: req.params?.id
     });
     res.status(500).json({
-      error: 'Internal server error',
-      message: 'Failed to resend document'
+      error: 'Errore interno del server',
+      message: 'Errore nel reinvio del documento'
     });
   }
 });

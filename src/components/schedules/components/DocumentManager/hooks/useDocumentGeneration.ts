@@ -69,11 +69,8 @@ export const useDocumentGeneration = ({
       // Invalidate cache before refresh
       invalidateCache('/api/v1/lettere-incarico');
       onRefresh();
-    } catch (error: any) {
-      console.error('Errore generazione lettere:', error);
-      showToast({ message: `Errore: ${error.response?.data?.message || error.message || 'Generazione fallita'}`, type: 'error' });
-    } finally {
-      setLoading(prev => ({ ...prev, lettere: false }));
+    } catch (error: unknown) {
+      showToast({ message: 'Errore nella generazione delle lettere di incarico', type: 'error' });
     }
   };
 
@@ -109,7 +106,6 @@ export const useDocumentGeneration = ({
           });
           successCount++;
         } catch (err) {
-          console.error(`Errore sessione ${index + 1}:`, err);
           errorCount++;
         }
       }
@@ -126,9 +122,8 @@ export const useDocumentGeneration = ({
       } else {
         showToast({ message: 'Nessun registro generato con successo', type: 'error' });
       }
-    } catch (error: any) {
-      console.error('Errore generazione registri:', error);
-      showToast({ message: `Errore: ${error.response?.data?.message || error.message || 'Generazione fallita'}`, type: 'error' });
+    } catch (error: unknown) {
+      showToast({ message: 'Errore nella generazione dei registri presenze', type: 'error' });
     } finally {
       setLoading(prev => ({ ...prev, registri: false }));
     }
@@ -209,8 +204,7 @@ export const useDocumentGeneration = ({
           showToast({ message: `Nessun attestato generato: ${errorDetails}`, type: 'error' });
         }
       }
-    } catch (error: any) {
-      console.error('Errore generazione attestati:', error);
+    } catch (error: unknown) {
 
       // Handle 409 Conflict error (existing attestati)
       if (error.response?.status === 409) {
@@ -220,7 +214,7 @@ export const useDocumentGeneration = ({
           duration: 8000
         });
       } else {
-        showToast({ message: `Errore: ${error.response?.data?.message || error.message || 'Generazione fallita'}`, type: 'error' });
+        showToast({ message: 'Errore nella generazione degli attestati', type: 'error' });
       }
     } finally {
       setLoading(prev => ({ ...prev, attestati: false }));

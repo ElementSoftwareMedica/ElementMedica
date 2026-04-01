@@ -58,12 +58,9 @@ const GoogleOAuthCallback: React.FC = () => {
           }, 2000);
         }
       } catch (err) {
-        console.error('OAuth callback error:', err);
         setStatus('error');
         setMessage(
-          err instanceof Error
-            ? err.message
-            : 'Errore durante la connessione a Google.'
+          'Errore durante la connessione a Google.'
         );
 
         // Close popup after 3 seconds even on error

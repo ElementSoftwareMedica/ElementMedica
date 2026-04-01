@@ -7,6 +7,7 @@
  */
 
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
     Settings,
     Building2,
@@ -19,28 +20,84 @@ import {
     Users,
     ChevronRight,
     Save,
-    Loader2
+    Loader2,
+    Stethoscope,
+    Palette,
+    PenTool,
+    Cable
 } from 'lucide-react';
+import { ThemeSelector } from '../../../components/settings/ThemeSelector';
 
 interface SettingsSection {
     id: string;
     title: string;
     description: string;
     icon: React.ElementType;
+    link?: string; // Optional link for navigation
 }
 
 const settingsSections: SettingsSection[] = [
     {
+        id: 'aspetto',
+        title: 'Aspetto',
+        description: 'Tema chiaro, scuro o automatico',
+        icon: Palette
+    },
+    {
         id: 'generale',
         title: 'Impostazioni Generali',
-        description: 'Configurazione base del poliambulatorio',
-        icon: Building2
+        description: 'Configurazione base del poliambulatorio (sedi, ambulatori)',
+        icon: Building2,
+        link: '/poliambulatorio/struttura'
+    },
+    {
+        id: 'visit-templates',
+        title: 'Template Visita',
+        description: 'Configura i campi e il layout della pagina visita',
+        icon: Stethoscope,
+        link: '/poliambulatorio/impostazioni/visit-templates'
+    },
+    {
+        id: 'modulistica',
+        title: 'Modulistica',
+        description: 'Gestione documenti e moduli da compilare durante le visite',
+        icon: FileText,
+        link: '/poliambulatorio/impostazioni/modulistica'
+    },
+    {
+        id: 'firma',
+        title: 'Firma Digitale',
+        description: 'Acquisisci e gestisci la firma digitale per i referti',
+        icon: PenTool,
+        link: '/poliambulatorio/impostazioni/firma'
+    },
+    {
+        id: 'email-template',
+        title: 'Template Email Referto',
+        description: 'Configura il testo delle email di invio referto per branca, medico o prestazione',
+        icon: Mail,
+        link: '/poliambulatorio/impostazioni/email-template'
+    },
+    {
+        id: 'consensi-firma',
+        title: 'Consensi Firma Tablet',
+        description: 'Personalizza i moduli di consenso informato presentati al paziente sul tablet',
+        icon: Shield,
+        link: '/poliambulatorio/impostazioni/consensi-firma'
+    },
+    {
+        id: 'bridge',
+        title: 'Medical Device Bridge',
+        description: 'Collegamento dispositivi medici (ECG, Spirometro, Audiometro)',
+        icon: Cable,
+        link: '/poliambulatorio/impostazioni/bridge'
     },
     {
         id: 'orari',
-        title: 'Orari di Apertura',
-        description: 'Gestione degli orari di apertura e chiusura',
-        icon: Clock
+        title: 'Orari & Disponibilità',
+        description: 'Gestione degli orari dei medici e disponibilità ambulatori',
+        icon: Clock,
+        link: '/poliambulatorio/disponibilita'
     },
     {
         id: 'notifiche',
@@ -55,28 +112,11 @@ const settingsSections: SettingsSection[] = [
         icon: Shield
     },
     {
-        id: 'documenti',
-        title: 'Documenti',
-        description: 'Template documenti e referti',
-        icon: FileText
-    },
-    {
-        id: 'email',
-        title: 'Email',
-        description: 'Configurazione server email',
-        icon: Mail
-    },
-    {
-        id: 'appuntamenti',
-        title: 'Appuntamenti',
-        description: 'Impostazioni prenotazioni online',
-        icon: Calendar
-    },
-    {
         id: 'utenti',
         title: 'Utenti e Ruoli',
-        description: 'Gestione personale e permessi',
-        icon: Users
+        description: 'Gestione personale, medici e permessi',
+        icon: Users,
+        link: '/poliambulatorio/personale/medici'
     }
 ];
 
@@ -116,12 +156,40 @@ const ClinicaSettingsPage: React.FC = () => {
                     const Icon = section.icon;
                     const isActive = activeSection === section.id;
 
+                    // Se ha un link, usa Link invece di button
+                    if (section.link) {
+                        return (
+                            <Link
+                                key={section.id}
+                                to={section.link}
+                                className="block bg-white rounded-lg border border-gray-200 hover:border-teal-300 hover:shadow-md transition-all"
+                            >
+                                <div className="p-4 flex items-center justify-between">
+                                    <div className="flex items-center gap-4">
+                                        <div className="p-2 rounded-lg bg-teal-100 text-teal-600">
+                                            <Icon className="h-5 w-5" />
+                                        </div>
+                                        <div>
+                                            <h3 className="font-medium text-gray-900">
+                                                {section.title}
+                                            </h3>
+                                            <p className="text-sm text-gray-500">
+                                                {section.description}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <ChevronRight className="h-5 w-5 text-gray-400" />
+                                </div>
+                            </Link>
+                        );
+                    }
+
                     return (
                         <div
                             key={section.id}
                             className={`bg-white rounded-lg border transition-all ${isActive
-                                    ? 'border-teal-500 shadow-md'
-                                    : 'border-gray-200 hover:border-gray-300'
+                                ? 'border-teal-500 shadow-md'
+                                : 'border-gray-200 hover:border-gray-300'
                                 }`}
                         >
                             <button
@@ -130,8 +198,8 @@ const ClinicaSettingsPage: React.FC = () => {
                             >
                                 <div className="flex items-center gap-4">
                                     <div className={`p-2 rounded-lg ${isActive
-                                            ? 'bg-teal-100 text-teal-600'
-                                            : 'bg-gray-100 text-gray-600'
+                                        ? 'bg-teal-100 text-teal-600'
+                                        : 'bg-gray-100 text-gray-600'
                                         }`}>
                                         <Icon className="h-5 w-5" />
                                     </div>
@@ -153,10 +221,14 @@ const ClinicaSettingsPage: React.FC = () => {
                             {isActive && (
                                 <div className="px-4 pb-4 border-t border-gray-100">
                                     <div className="pt-4">
-                                        <p className="text-sm text-gray-500 italic">
-                                            Questa sezione è in fase di sviluppo.
-                                            Le impostazioni saranno disponibili a breve.
-                                        </p>
+                                        {section.id === 'aspetto' ? (
+                                            <ThemeSelector />
+                                        ) : (
+                                            <p className="text-sm text-gray-500 italic">
+                                                Questa sezione è in fase di sviluppo.
+                                                Le impostazioni saranno disponibili a breve.
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
                             )}

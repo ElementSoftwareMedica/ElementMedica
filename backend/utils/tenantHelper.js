@@ -1,10 +1,13 @@
 /**
  * Tenant Helper Utilities
- * Handles tenant resolution for cross-tenant admin access
+ * Handles tenant resolution for requests
  * 
  * @module utils/tenantHelper
  * @updated Project 43 - Added multi-tenant support
  * @updated Project 45 - Added branch-based access control
+ * @updated Project 57 - SIMPLIFIED: Brand no longer determines tenant
+ *                       Tenant is ALWAYS from JWT (req.person.tenantId)
+ *                       Brand determines only UI branch visualization
  */
 
 import logger from './logger.js';
@@ -29,39 +32,50 @@ const CROSS_TENANT_ROLES = ['SUPER_ADMIN', 'ADMIN'];
 /**
  * Determines the effective tenantId for a request
  * 
- * Logic:
- * 1. If user has ADMIN/SUPER_ADMIN globalRole AND brandTenantId is set (from X-Frontend-Id header),
- *    use brandTenantId (allows admin cross-tenant access)
- * 2. Otherwise use the user's tenantId from JWT
+ * P57 SIMPLIFIED LOGIC:
+ * 1. For operations with X-Operate-Tenant-Id header and cross-tenant access: use operateTenantId
+ * 2. Otherwise: ALWAYS use req.person.tenantId from JWT
+ * 
+ * P59 UPDATE: Now allows GET operations with X-Operate-Tenant-Id for admin users
+ * This enables loading data for cross-tenant edit operations (e.g., editing nomina from another tenant)
+ * 
+ * NOTE: Brand/X-Frontend-Id NO LONGER affects tenant. It only determines UI branch.
  * 
  * @param {Object} req - Express request object
  * @param {Object} req.person - Authenticated person from middleware
- * @param {string} req.person.tenantId - User's tenant from JWT
- * @param {string} req.person.globalRole - User's global role
- * @param {string} req.brandTenantId - Tenant from X-Frontend-Id header (set by brandDetection middleware)
+ * @param {string} req.person.tenantId - User's tenant from JWT (ALWAYS used)
+ * @param {string} req.operateTenantId - Tenant for admin CRUD operations (from X-Operate-Tenant-Id header)
  * @returns {string} The effective tenantId to use for operations
  */
 export function getEffectiveTenantId(req) {
-    // Default to person's tenantId
     const personTenantId = req.person?.tenantId;
-    const brandTenantId = req.brandTenantId;
+    // P57 FIX: Read operateTenantId from middleware OR directly from header
+    // This handles cases where validateOperateTenant runs before authenticateToken
+    const operateTenantId = req.operateTenantId || req.headers?.['x-operate-tenant-id'];
     const globalRole = req.person?.globalRole;
+    const roles = req.person?.roles || [];
 
-    // If admin and brand tenant is set, allow cross-tenant access
-    if (CROSS_TENANT_ROLES.includes(globalRole) && brandTenantId) {
+    // Check if user has cross-tenant access (globalRole or roles array)
+    const hasCrossTenantAccess = CROSS_TENANT_ROLES.includes(globalRole) ||
+        CROSS_TENANT_ROLES.some(role => roles.includes(role));
+
+    // P59 FIX: Allow cross-tenant access for ALL operations (including GET) when header is present
+    // This enables loading data for edit forms on entities from other tenants
+    if (operateTenantId && hasCrossTenantAccess) {
         logger.debug({
             component: 'tenantHelper',
-            action: 'cross_tenant_access',
-            globalRole,
+            action: 'operate_tenant_access',
+            method: req.method,
+            operateTenantId,
             personTenantId,
-            brandTenantId,
-            usingTenantId: brandTenantId
-        }, 'Admin cross-tenant access: using brandTenantId');
+            usingTenantId: operateTenantId
+        }, 'Admin using X-Operate-Tenant-Id for cross-tenant operation');
 
-        return brandTenantId;
+        return operateTenantId;
     }
 
-    // Default: use person's tenantId
+    // P57: Tenant is ALWAYS from JWT - brand does NOT affect tenant
+    // Brand only determines UI branch visualization
     return personTenantId;
 }
 
@@ -74,10 +88,15 @@ export function getEffectiveTenantId(req) {
  */
 export function canAccessTenant(req, targetTenantId) {
     const globalRole = req.person?.globalRole;
+    const roles = req.person?.roles || [];
     const personTenantId = req.person?.tenantId;
 
+    // Check if user has cross-tenant access (globalRole or roles array)
+    const hasCrossTenantAccess = CROSS_TENANT_ROLES.includes(globalRole) ||
+        CROSS_TENANT_ROLES.some(role => roles.includes(role));
+
     // Super admins and admins can access any tenant
-    if (CROSS_TENANT_ROLES.includes(globalRole)) {
+    if (hasCrossTenantAccess) {
         return true;
     }
 
@@ -102,8 +121,8 @@ export function resolveTenantMiddleware(req, res, next) {
 
         return res.status(400).json({
             success: false,
-            error: 'Tenant not resolved',
-            message: 'Unable to determine tenant for this request'
+            error: 'Tenant non determinato',
+            message: 'Impossibile determinare il tenant per questa richiesta'
         });
     }
 
@@ -173,15 +192,16 @@ export async function hasFeatureAccess(req, feature) {
 /**
  * Middleware per validare accesso al tenant richiesto
  * Usa PersonTenantAccess per utenti non-admin
+ * P57: brandTenantId removed - tenant must be explicitly provided
  */
 export async function validateTenantAccessMiddleware(req, res, next) {
     try {
-        const tenantId = req.params.tenantId || req.body.tenantId || req.brandTenantId;
+        const tenantId = req.params.tenantId || req.body.tenantId;
 
         if (!tenantId) {
             return res.status(400).json({
                 success: false,
-                error: 'Missing tenant ID'
+                error: 'ID tenant mancante'
             });
         }
 
@@ -198,8 +218,8 @@ export async function validateTenantAccessMiddleware(req, res, next) {
 
             return res.status(403).json({
                 success: false,
-                error: 'Access denied',
-                message: 'You do not have access to this tenant'
+                error: 'Accesso negato',
+                message: 'Non hai accesso a questo tenant'
             });
         }
 
@@ -217,7 +237,7 @@ export async function validateTenantAccessMiddleware(req, res, next) {
 
         return res.status(500).json({
             success: false,
-            error: 'Internal error validating tenant access'
+            error: 'Errore interno validazione accesso tenant'
         });
     }
 }
@@ -244,8 +264,8 @@ export function requireFeatureAccess(requiredFeature) {
 
                 return res.status(403).json({
                     success: false,
-                    error: 'Feature not enabled',
-                    message: `You do not have access to the "${requiredFeature}" feature`
+                    error: 'Feature non abilitata',
+                    message: `Non hai accesso alla feature "${requiredFeature}"`
                 });
             }
 
@@ -260,14 +280,66 @@ export function requireFeatureAccess(requiredFeature) {
 
             return res.status(500).json({
                 success: false,
-                error: 'Internal error checking feature access'
+                error: 'Errore interno verifica accesso feature'
             });
         }
     };
 }
 
+// ================================================
+// PROJECT 57 - Public Content Tenant Resolution
+// ================================================
+
+/**
+ * Gets the tenantId for PUBLIC content filtering (CMS pages, public courses)
+ * 
+ * This is DIFFERENT from getEffectiveTenantId:
+ * - For authenticated routes: use getEffectiveTenantId() which always returns person.tenantId
+ * - For PUBLIC routes (no auth): use getPublicContentTenantId() which uses brand mapping
+ * 
+ * Public content needs to be filtered by brand because:
+ * - A visitor on elementmedica.com should see Element Medica CMS pages
+ * - A visitor on elementsicurezza.com should see Element Sicurezza CMS pages
+ * - This does NOT affect CRUD permissions (those always use JWT tenant)
+ * 
+ * @param {Object} req - Express request object
+ * @returns {string|null} The tenantId to filter public content, or null if not determinable
+ */
+export function getPublicContentTenantId(req) {
+    // If authenticated, use person's tenantId
+    if (req.person?.tenantId) {
+        return req.person.tenantId;
+    }
+
+    // For public routes, we need a way to determine tenant from brand
+    // This requires looking up tenant by slug (brand = slug for now)
+    const frontendId = req.frontendId || req.headers?.['x-frontend-id'];
+
+    if (!frontendId) {
+        logger.debug({
+            component: 'tenantHelper',
+            action: 'public_content_no_brand',
+            path: req.path
+        }, 'No frontendId for public content filtering');
+        return null;
+    }
+
+    // The frontend ID should match a tenant slug
+    // This is resolved in brandDetection middleware for public routes
+    // For now, return null and let the route handle it
+    logger.debug({
+        component: 'tenantHelper',
+        action: 'public_content_brand',
+        frontendId,
+        path: req.path
+    }, 'Public content needs tenant lookup by brand');
+
+    return null; // Route must handle tenant lookup
+}
+
 export default {
     getEffectiveTenantId,
+    getPublicContentTenantId,
     canAccessTenant,
     resolveTenantMiddleware,
     CROSS_TENANT_ROLES,

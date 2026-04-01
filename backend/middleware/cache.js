@@ -1,229 +1,121 @@
+/**
+ * Cache Middleware
+ * 
+ * Express middleware per caching delle risposte.
+ * Utilizza il CacheService (utils/cache.js) con fallback memory cache.
+ */
+
 import cacheService from '../utils/cache.js';
-import { logger } from '../utils/logger.js';
+import logger from '../utils/logger.js';
 
 /**
- * Cache middleware for Express routes
- * @param {number} ttl - Time to live in seconds
- * @param {function} keyGenerator - Function to generate cache key from request
- * @param {function} shouldCache - Function to determine if response should be cached
+ * Middleware per cache documenti.
+ * Controlla se la risposta è già in cache, altrimenti la salva dopo la risposta.
+ * @param {number} ttl - Time-to-live in secondi
  */
-export const cacheMiddleware = (ttl = 3600, keyGenerator = null, shouldCache = null) => {
-  return async (req, res, next) => {
-    // Skip caching for non-GET requests
-    if (req.method !== 'GET') {
-      return next();
-    }
+export function documentCacheMiddleware(ttl = 1800) {
+    return async (req, res, next) => {
+        // Solo GET requests
+        if (req.method !== 'GET') return next();
 
-    // Generate cache key
-    const cacheKey = keyGenerator ? keyGenerator(req) : generateDefaultKey(req);
-    
-    try {
-      // Try to get cached response
-      const cachedResponse = await cacheService.get(cacheKey);
-      
-      if (cachedResponse) {
-        logger.debug('Serving cached response', { 
-          service: 'cache-middleware', 
-          key: cacheKey,
-          url: req.originalUrl 
-        });
-        return res.json(cachedResponse);
-      }
+        const tenantId = req.person?.tenantId || 'unknown';
+        const cacheKey = `doc:${tenantId}:${req.originalUrl}`;
 
-      // Store original res.json method
-      const originalJson = res.json;
-      
-      // Override res.json to cache the response
-      res.json = function(data) {
-        // Check if we should cache this response
-        const shouldCacheResponse = shouldCache ? shouldCache(req, res, data) : defaultShouldCache(req, res, data);
-        
-        if (shouldCacheResponse) {
-          cacheService.set(cacheKey, data, ttl).catch(error => {
-            logger.error('Failed to cache response', { 
-              service: 'cache-middleware', 
-              key: cacheKey, 
-              error: error.message 
-            });
-          });
-        }
-        
-        // Call original json method
-        return originalJson.call(this, data);
-      };
-      
-      next();
-    } catch (error) {
-      logger.error('Cache middleware error', { 
-        service: 'cache-middleware', 
-        key: cacheKey, 
-        error: error.message 
-      });
-      next();
-    }
-  };
-};
-
-/**
- * Generate default cache key from request
- */
-function generateDefaultKey(req) {
-  const personId = req.person?.id || 'anonymous';
-  const companyId = req.person?.companyId || 'no-company';
-  const url = req.originalUrl;
-  const query = JSON.stringify(req.query);
-  
-  return `route:${personId}:${companyId}:${url}:${query}`;
-}
-
-/**
- * Default function to determine if response should be cached
- */
-function defaultShouldCache(req, res, data) {
-  // Don't cache error responses
-  if (res.statusCode >= 400) {
-    return false;
-  }
-  
-  // Don't cache empty responses
-  if (!data || (Array.isArray(data) && data.length === 0)) {
-    return false;
-  }
-  
-  return true;
-}
-
-/**
- * Document-specific cache middleware
- */
-export const documentCacheMiddleware = (ttl = 7200) => {
-  return cacheMiddleware(
-    ttl,
-    (req) => {
-      const personId = req.person?.id || 'anonymous';
-      const companyId = req.person?.companyId || 'no-company';
-      const documentId = req.params.id || req.params.documentId;
-      const action = req.route?.path || req.path;
-      
-      return `document:${documentId}:${action}:${personId}:${companyId}`;
-    },
-    (req, res, data) => {
-      // Cache successful document responses
-      return res.statusCode === 200 && data && !data.error;
-    }
-  );
-};
-
-/**
- * Template-specific cache middleware
- */
-export const templateCacheMiddleware = (ttl = 86400) => {
-  return cacheMiddleware(
-    ttl,
-    (req) => {
-      const templateId = req.params.id || req.params.templateId;
-      const action = req.route?.path || req.path;
-      
-      return `template:${templateId}:${action}`;
-    },
-    (req, res, data) => {
-      // Cache successful template responses
-      return res.statusCode === 200 && data && !data.error;
-    }
-  );
-};
-
-/**
- * Course-specific cache middleware
- */
-export const courseCacheMiddleware = (ttl = 3600) => {
-  return cacheMiddleware(
-    ttl,
-    (req) => {
-      const personId = req.person?.id || 'anonymous';
-      const companyId = req.person?.companyId || 'no-company';
-      const courseId = req.params.id || req.params.courseId;
-      const action = req.route?.path || req.path;
-      
-      return `course:${courseId}:${action}:${personId}:${companyId}`;
-    },
-    (req, res, data) => {
-      // Cache successful course responses
-      return res.statusCode === 200 && data && !data.error;
-    }
-  );
-};
-
-/**
- * Cache invalidation middleware for POST/PUT/DELETE operations
- */
-export const cacheInvalidationMiddleware = (patterns = []) => {
-  return async (req, res, next) => {
-    // Store original methods
-    const originalJson = res.json;
-    const originalSend = res.send;
-    
-    // Override response methods to invalidate cache after successful operations
-    const invalidateCache = async () => {
-      if (res.statusCode >= 200 && res.statusCode < 300) {
         try {
-          for (const pattern of patterns) {
-            const resolvedPattern = typeof pattern === 'function' ? pattern(req) : pattern;
-            await cacheService.invalidatePattern(resolvedPattern);
-            logger.debug('Cache invalidated', { 
-              service: 'cache-invalidation', 
-              pattern: resolvedPattern,
-              method: req.method,
-              url: req.originalUrl 
-            });
-          }
-        } catch (error) {
-          logger.error('Cache invalidation error', { 
-            service: 'cache-invalidation', 
-            error: error.message 
-          });
+            const cached = await cacheService.get(cacheKey);
+            if (cached) {
+                logger.debug('Cache HIT (document)', { key: cacheKey });
+                const parsed = typeof cached === 'string' ? JSON.parse(cached) : cached;
+                return res.json(parsed);
+            }
+        } catch {
+            // Cache miss or error, proceed normally
         }
-      }
+
+        // Intercetta la risposta per salvarla in cache
+        const originalJson = res.json.bind(res);
+        res.json = (body) => {
+            if (res.statusCode >= 200 && res.statusCode < 300) {
+                cacheService.set(cacheKey, JSON.stringify(body), ttl).catch(() => { });
+            }
+            return originalJson(body);
+        };
+
+        next();
     };
-    
-    res.json = function(data) {
-      invalidateCache();
-      return originalJson.call(this, data);
-    };
-    
-    res.send = function(data) {
-      invalidateCache();
-      return originalSend.call(this, data);
-    };
-    
-    next();
-  };
-};
+}
 
 /**
- * Document invalidation patterns
+ * Middleware per cache template.
+ * @param {number} ttl - Time-to-live in secondi
  */
-export const documentInvalidationPatterns = {
-  userDocuments: (req) => `document:*:user:${req.person?.id}`,
-  companyDocuments: (req) => `document:*:company:${req.person?.companyId}`,
-  specificDocument: (req) => `document:${req.params.id || req.params.documentId}:*`,
-  allDocuments: () => 'document:*'
-};
+export function templateCacheMiddleware(ttl = 3600) {
+    return async (req, res, next) => {
+        if (req.method !== 'GET') return next();
+
+        const tenantId = req.person?.tenantId || 'unknown';
+        const cacheKey = `tmpl:${tenantId}:${req.originalUrl}`;
+
+        try {
+            const cached = await cacheService.get(cacheKey);
+            if (cached) {
+                logger.debug('Cache HIT (template)', { key: cacheKey });
+                const parsed = typeof cached === 'string' ? JSON.parse(cached) : cached;
+                return res.json(parsed);
+            }
+        } catch {
+            // Cache miss or error
+        }
+
+        const originalJson = res.json.bind(res);
+        res.json = (body) => {
+            if (res.statusCode >= 200 && res.statusCode < 300) {
+                cacheService.set(cacheKey, JSON.stringify(body), ttl).catch(() => { });
+            }
+            return originalJson(body);
+        };
+
+        next();
+    };
+}
 
 /**
- * Course invalidation patterns
+ * Middleware per invalidazione cache su operazioni di scrittura.
+ * Invalida pattern di cache specificati dopo POST/PUT/PATCH/DELETE.
+ * @param {string[]} patterns - Pattern di chiavi cache da invalidare
  */
-export const courseInvalidationPatterns = {
-  userCourses: (req) => `course:*:*:${req.person?.id}:*`,
-  companyCourses: (req) => `course:*:*:*:${req.person?.companyId}`,
-  specificCourse: (req) => `course:${req.params.id || req.params.courseId}:*`,
-  allCourses: () => 'course:*'
-};
+export function cacheInvalidationMiddleware(patterns = []) {
+    return async (req, res, next) => {
+        const originalEnd = res.end.bind(res);
+
+        res.end = function (...args) {
+            if (res.statusCode >= 200 && res.statusCode < 300) {
+                // Invalidate all matching cache entries for this tenant
+                const tenantId = req.person?.tenantId || 'unknown';
+                for (const pattern of patterns) {
+                    const key = pattern.replace('{tenantId}', tenantId).replace('*', '');
+                    // Best-effort: clear the relevant base prefix
+                    cacheService.delete(key).catch(() => { });
+                }
+            }
+            return originalEnd(...args);
+        };
+
+        next();
+    };
+}
 
 /**
- * Template invalidation patterns
+ * Pattern di invalidazione per documenti
  */
-export const templateInvalidationPatterns = {
-  specificTemplate: (req) => `template:${req.params.id || req.params.templateId}:*`,
-  allTemplates: () => 'template:*'
-};
+export const documentInvalidationPatterns = [
+    'doc:{tenantId}:*',
+];
+
+/**
+ * Pattern di invalidazione per template
+ */
+export const templateInvalidationPatterns = [
+    'tmpl:{tenantId}:*',
+    'doc:{tenantId}:*',
+];

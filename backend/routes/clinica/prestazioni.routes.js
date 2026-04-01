@@ -10,7 +10,7 @@
 
 import express from 'express';
 import logger from '../../utils/logger.js';
-import middleware from '../../auth/middleware.js';
+import middleware from '../../middleware/auth.js';
 import { checkAdvancedPermission } from '../../middleware/advanced-permissions.js';
 import { CLINICAL_ENUMS, clinicalValidators } from '../../config/validation-clinical.js';
 import { PrestazioneService } from '../../services/clinical/PrestazioneService.js';
@@ -30,7 +30,7 @@ const { authenticate: authenticateToken } = middleware;
  * @access Authenticated + VIEW_PRESTAZIONI
  */
 router.get('/stats',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('prestazioni', 'read'),
     auditClinico('stats_prestazioni'),
     async (req, res) => {
@@ -67,14 +67,13 @@ router.get('/stats',
         } catch (error) {
             logger.error('Failed to get prestazioni stats', {
                 component: 'prestazioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero delle statistiche prestazioni',
-                message: error.message
             });
         }
     }
@@ -90,7 +89,7 @@ router.get('/stats',
  * @access Authenticated
  */
 router.get('/tipi',
-    authenticateToken(),
+    authenticateToken,
     async (req, res) => {
         try {
             const tipi = await PrestazioneService.getTipi();
@@ -102,13 +101,12 @@ router.get('/tipi',
         } catch (error) {
             logger.error('Failed to get prestazioni tipi', {
                 component: 'prestazioni-routes',
-                error: error.message
+                error: 'Operazione non riuscita'
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero dei tipi prestazione',
-                message: error.message
             });
         }
     }
@@ -124,7 +122,7 @@ router.get('/tipi',
  * @access Authenticated + VIEW_PRESTAZIONI
  */
 router.get('/',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('prestazioni', 'read'),
     clinicalValidators.prestazione.query,
     auditClinico('list_prestazioni'),
@@ -153,14 +151,13 @@ router.get('/',
         } catch (error) {
             logger.error('Failed to list prestazioni', {
                 component: 'prestazioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero delle prestazioni',
-                message: error.message
             });
         }
     }
@@ -172,7 +169,7 @@ router.get('/',
  * @access Authenticated + CREATE_PRESTAZIONI
  */
 router.post('/',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('prestazioni', 'create'),
     clinicalValidators.prestazione.create,
     auditClinico('create_prestazione'),
@@ -194,7 +191,7 @@ router.post('/',
         } catch (error) {
             logger.error('Failed to create prestazione', {
                 component: 'prestazioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
@@ -202,14 +199,12 @@ router.post('/',
                 return res.status(409).json({
                     success: false,
                     error: 'Prestazione già esistente',
-                    message: error.message
                 });
             }
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nella creazione della prestazione',
-                message: error.message
             });
         }
     }
@@ -221,7 +216,7 @@ router.post('/',
  * @access Authenticated + VIEW_PRESTAZIONI
  */
 router.get('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('prestazioni', 'read'),
     clinicalValidators.prestazione.id,
     auditClinico('view_prestazione'),
@@ -239,7 +234,7 @@ router.get('/:id',
         } catch (error) {
             logger.error('Failed to get prestazione', {
                 component: 'prestazioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 prestazioneId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -254,7 +249,6 @@ router.get('/:id',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero della prestazione',
-                message: error.message
             });
         }
     }
@@ -266,7 +260,7 @@ router.get('/:id',
  * @access Authenticated + UPDATE_PRESTAZIONI
  */
 router.put('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('prestazioni', 'update'),
     clinicalValidators.prestazione.id,
     clinicalValidators.prestazione.update,
@@ -286,7 +280,7 @@ router.put('/:id',
         } catch (error) {
             logger.error('Failed to update prestazione', {
                 component: 'prestazioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 prestazioneId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -301,7 +295,6 @@ router.put('/:id',
             res.status(500).json({
                 success: false,
                 error: 'Errore nell\'aggiornamento della prestazione',
-                message: error.message
             });
         }
     }
@@ -313,7 +306,7 @@ router.put('/:id',
  * @access Authenticated + DELETE_PRESTAZIONI
  */
 router.delete('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('prestazioni', 'delete'),
     clinicalValidators.prestazione.id,
     auditClinico('delete_prestazione'),
@@ -331,7 +324,7 @@ router.delete('/:id',
         } catch (error) {
             logger.error('Failed to delete prestazione', {
                 component: 'prestazioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 prestazioneId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -347,14 +340,12 @@ router.delete('/:id',
                 return res.status(409).json({
                     success: false,
                     error: 'Impossibile eliminare la prestazione',
-                    message: error.message
                 });
             }
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nell\'eliminazione della prestazione',
-                message: error.message
             });
         }
     }
@@ -370,7 +361,7 @@ router.delete('/:id',
  * @access Authenticated + VIEW_PRESTAZIONI
  */
 router.get('/tipo/:tipo',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('prestazioni', 'read'),
     auditClinico('list_prestazioni_by_tipo'),
     async (req, res) => {
@@ -396,7 +387,7 @@ router.get('/tipo/:tipo',
         } catch (error) {
             logger.error('Failed to list prestazioni by tipo', {
                 component: 'prestazioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tipo: req.params.tipo,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -404,7 +395,6 @@ router.get('/tipo/:tipo',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero delle prestazioni',
-                message: error.message
             });
         }
     }
@@ -420,7 +410,7 @@ router.get('/tipo/:tipo',
  * @access Authenticated + VIEW_PRESTAZIONI
  */
 router.get('/:id/medici',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('prestazioni', 'read'),
     clinicalValidators.params.id,
     auditClinico('get_medici_prestazione'),
@@ -440,7 +430,7 @@ router.get('/:id/medici',
         } catch (error) {
             logger.error('Failed to get medici for prestazione', {
                 component: 'prestazioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 prestazioneId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -448,7 +438,6 @@ router.get('/:id/medici',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero dei medici',
-                message: error.message
             });
         }
     }

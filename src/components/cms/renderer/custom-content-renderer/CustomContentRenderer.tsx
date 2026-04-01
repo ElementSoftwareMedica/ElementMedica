@@ -65,7 +65,8 @@ import {
   ExamCategoriesSection,
   TechnologySection,
   DiagnosticsCategoriesSection,
-  PackagesSection
+  PackagesSection,
+  LiveSpecialtiesSection
 } from './SpecialtySections';
 
 import {
@@ -84,7 +85,8 @@ import {
   QualityAssuranceSection,
   ResultDeliverySection,
   ImportantInfoSection,
-  EmergencySection
+  EmergencySection,
+  LiveBookingSection
 } from './BookingSections';
 
 import {
@@ -142,7 +144,12 @@ export const CustomContentRenderer: React.FC<CMSContentProps> = ({ content }) =>
       <NumbersSection content={content} />
 
       {/* Specialty/Diagnostics Sections */}
-      <SpecialtiesSection content={content} />
+      {/* Se liveSpecialties è presente, mostra solo la versione live (real-time da API) */}
+      {content.liveSpecialties ? (
+        <LiveSpecialtiesSection content={content} />
+      ) : (
+        <SpecialtiesSection content={content} />
+      )}
       <DiagnosticsCategoriesSection content={content} />
       <CheckupPackagesSection content={content} />
       <ExamCategoriesSection content={content} />
@@ -165,6 +172,7 @@ export const CustomContentRenderer: React.FC<CMSContentProps> = ({ content }) =>
       <ResultDeliverySection content={content} />
       <ImportantInfoSection content={content} />
       <EmergencySection content={content} />
+      <LiveBookingSection content={content} />
 
       {/* Careers Sections */}
       <WhyWorkWithUsSection content={content} />

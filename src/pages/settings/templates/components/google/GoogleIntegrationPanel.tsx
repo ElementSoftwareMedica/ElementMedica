@@ -8,7 +8,7 @@ import { useGoogleIntegration } from '../../hooks/useGoogleIntegration';
 import { GoogleConnectionButton } from './GoogleConnectionButton';
 import { GoogleImportDialog } from './GoogleImportDialog';
 import { AlertCircle, Download } from 'lucide-react';
-import { useConfirmDialog } from '../../../../../contexts/ConfirmDialogContext';
+import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 import { useToast } from '../../../../../hooks/useToast';
 
 interface GoogleIntegrationPanelProps {
@@ -60,8 +60,6 @@ export const GoogleIntegrationPanel: React.FC<GoogleIntegrationPanelProps> = ({
   };
 
   const handleImport = (result: any) => {
-    console.log('Template imported:', result);
-
     // Notify parent component
     if (onTemplateImported) {
       onTemplateImported(result);

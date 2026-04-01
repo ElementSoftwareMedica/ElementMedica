@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AlertCircle,
@@ -35,15 +35,24 @@ import {
 import { cn } from '../../design-system/utils';
 import { formTemplatesService, FormTemplate } from '../../services/formTemplates';
 import { useAuth } from '../../context/AuthContext';
+import { useTenantFilter } from '../../context/TenantFilterContext';
 import { ShareFormModal } from '../../components/forms/ShareFormModal';
 import { ActionButton } from '../../components/ui';
+import { CRUDButton } from '../../components/shared/CRUDButton';
 
 interface FormTemplatesPageProps {
   hideHeader?: boolean;
+  /** Filtra per tipo di form (es. 'COURSE_TEST') */
+  formType?: string;
+  /** Mostra solo i form pubblici (isPublic=true) - usato in CMS */
+  isPublicOnly?: boolean;
+  /** Base path per la navigazione interna (default: '/forms') */
+  basePath?: string;
 }
 
-export default function FormTemplatesPage({ hideHeader = false }: FormTemplatesPageProps) {
+export default function FormTemplatesPage({ hideHeader = false, formType, isPublicOnly, basePath = '/test' }: FormTemplatesPageProps) {
   const navigate = useNavigate();
+  const { getTenantFilterParams, tenantFilterKey, isReady } = useTenantFilter();
   const [formTemplates, setFormTemplates] = useState<FormTemplate[]>([]);
   const [filteredTemplates, setFilteredTemplates] = useState<FormTemplate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,32 +80,46 @@ export default function FormTemplatesPage({ hideHeader = false }: FormTemplatesP
   const canDeleteTemplates = hasPermission('form_templates', 'delete');
   const canCreateTemplates = hasPermission('form_templates', 'create');
 
-  useEffect(() => {
-    loadFormTemplates();
-  }, []);
-
-  useEffect(() => {
-    filterTemplates();
-  }, [searchQuery, filterType, filterStatus, formTemplates]);
-
-  const loadFormTemplates = async () => {
+  const loadFormTemplates = useCallback(async () => {
     try {
-      console.log('📥 Loading form templates...');
       setLoading(true);
-      const templates = await formTemplatesService.getFormTemplates();
-      console.log('✅ Loaded templates:', templates.length);
+      const tenantParams = getTenantFilterParams();
+      const templates = await formTemplatesService.getFormTemplates({
+        ...(tenantParams.tenantIds && { tenantIds: tenantParams.tenantIds.join(',') }),
+        ...(tenantParams.allTenants && { allTenants: 'true' })
+      });
       setFormTemplates(templates);
       setFilteredTemplates(templates);
     } catch (err) {
       setError('Errore nel caricamento dei form templates');
-      console.error('❌ Error loading form templates:', err);
+      if (import.meta.env.DEV) console.error('❌ Error loading form templates:', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [getTenantFilterParams, tenantFilterKey]);
+
+  useEffect(() => {
+    if (isReady) {
+      loadFormTemplates();
+    }
+  }, [loadFormTemplates, isReady]);
+
+  useEffect(() => {
+    filterTemplates();
+  }, [searchQuery, filterType, filterStatus, formTemplates, isPublicOnly, formType]);
 
   const filterTemplates = () => {
     let filtered = [...formTemplates];
+
+    // FormType filter (prop-level, e.g. COURSE_TEST)
+    if (formType) {
+      filtered = filtered.filter(t => (t as FormTemplate & { type?: string }).type === formType);
+    }
+
+    // isPublicOnly filter (CMS public forms)
+    if (isPublicOnly) {
+      filtered = filtered.filter(t => t.isPublic === true);
+    }
 
     // Search filter
     if (searchQuery) {
@@ -107,7 +130,7 @@ export default function FormTemplatesPage({ hideHeader = false }: FormTemplatesP
       );
     }
 
-    // Type filter
+    // Type filter (isPublic)
     if (filterType) {
       filtered = filtered.filter(t => t.isPublic === (filterType === 'public'));
     }
@@ -130,7 +153,7 @@ export default function FormTemplatesPage({ hideHeader = false }: FormTemplatesP
       setSelectedTemplate(null);
     } catch (err) {
       setError('Errore nell\'eliminazione del form template');
-      console.error('Error deleting form template:', err);
+      if (import.meta.env.DEV) console.error('Error deleting form template:', err);
     }
   };
 
@@ -145,7 +168,7 @@ export default function FormTemplatesPage({ hideHeader = false }: FormTemplatesP
       setBulkDeleteDialogOpen(false);
     } catch (err) {
       setError('Errore nell\'eliminazione multipla dei form templates');
-      console.error('Error bulk deleting form templates:', err);
+      if (import.meta.env.DEV) console.error('Error bulk deleting form templates:', err);
     }
   };
 
@@ -163,7 +186,7 @@ export default function FormTemplatesPage({ hideHeader = false }: FormTemplatesP
       setDuplicateName('');
     } catch (err) {
       setError('Errore nella duplicazione del form template');
-      console.error('Error duplicating form template:', err);
+      if (import.meta.env.DEV) console.error('Error duplicating form template:', err);
     }
   };
 
@@ -175,7 +198,7 @@ export default function FormTemplatesPage({ hideHeader = false }: FormTemplatesP
       setFormTemplates(prev => prev.map(t => t.id === template.id ? updated : t));
     } catch (err) {
       setError('Errore nell\'aggiornamento dello stato del template');
-      console.error('Error toggling template status:', err);
+      if (import.meta.env.DEV) console.error('Error toggling template status:', err);
     }
   };
 
@@ -211,7 +234,6 @@ export default function FormTemplatesPage({ hideHeader = false }: FormTemplatesP
   };
 
   const openShareDialog = (template: FormTemplate) => {
-    console.log('🔓 Opening share dialog for template:', template.id, template.name);
     setSelectedTemplate(template);
     setShareDialogOpen(true);
   };
@@ -260,9 +282,15 @@ export default function FormTemplatesPage({ hideHeader = false }: FormTemplatesP
       {!hideHeader && (
         <div className="flex justify-between items-start">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Form Templates</h1>
+            <h1 className="text-3xl font-bold text-gray-900">
+              {formType === 'COURSE_TEST' ? 'Test' : isPublicOnly ? 'Form Pubblici' : 'Form Templates'}
+            </h1>
             <p className="mt-2 text-sm text-gray-600">
-              Gestisci i moduli e i form dell'applicazione
+              {formType === 'COURSE_TEST'
+                ? 'Gestisci i test per i corsi di formazione e sicurezza'
+                : isPublicOnly
+                  ? 'Gestisci i form pubblici visibili sul sito'
+                  : 'Gestisci i moduli e i form dell\'applicazione'}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -282,13 +310,14 @@ export default function FormTemplatesPage({ hideHeader = false }: FormTemplatesP
               </Button>
             )}
             {canCreateTemplates && (
-              <Button
-                variant="primary"
-                leftIcon={<Plus className="h-4 w-4" />}
-                onClick={() => navigate('/forms/templates/create')}
+              <CRUDButton
+                operation="create"
+                onClick={() => navigate(`${basePath}/templates/create`)}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
-                Nuovo Form
-              </Button>
+                <Plus className="h-4 w-4" />
+                {formType === 'COURSE_TEST' ? 'Nuovo Test' : isPublicOnly ? 'Nuovo Form Pubblico' : 'Nuovo Form'}
+              </CRUDButton>
             )}
           </div>
         </div>
@@ -313,13 +342,14 @@ export default function FormTemplatesPage({ hideHeader = false }: FormTemplatesP
             </Button>
           )}
           {canCreateTemplates && (
-            <Button
-              variant="primary"
-              leftIcon={<Plus className="h-4 w-4" />}
-              onClick={() => navigate('/forms/templates/create')}
+            <CRUDButton
+              operation="create"
+              onClick={() => navigate(`${basePath}/templates/create`)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
-              Nuovo Form
-            </Button>
+              <Plus className="h-4 w-4" />
+              {formType === 'COURSE_TEST' ? 'Nuovo Test' : isPublicOnly ? 'Nuovo Form Pubblico' : 'Nuovo Form'}
+            </CRUDButton>
           )}
         </div>
       )}
@@ -494,9 +524,13 @@ export default function FormTemplatesPage({ hideHeader = false }: FormTemplatesP
             </TableHeader>
             <TableBody>
               {filteredTemplates.map((template) => (
-                <TableRow key={template.id}>
+                <TableRow
+                  key={template.id}
+                  className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                  onClick={() => navigate(`${basePath}/templates/${template.id}`)}
+                >
                   {isEditMode && (
-                    <TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         checked={selectedTemplates.includes(template.id)}
@@ -507,18 +541,18 @@ export default function FormTemplatesPage({ hideHeader = false }: FormTemplatesP
                   )}
 
                   {/* AZIONI COLUMN - con ActionButton pillola */}
-                  <TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
                     <ActionButton
                       actions={[
                         {
                           label: 'Visualizza Risposte',
                           icon: <Eye className="w-4 h-4" />,
-                          onClick: () => navigate(`/forms/templates/${template.id}/submissions`)
+                          onClick: () => navigate(`${basePath}/templates/${template.id}/submissions`)
                         },
                         ...(canEdit ? [{
                           label: 'Modifica',
                           icon: <Edit className="w-4 h-4" />,
-                          onClick: () => navigate(`/forms/templates/${template.id}/edit`)
+                          onClick: () => navigate(`${basePath}/templates/${template.id}/edit`)
                         }] : []),
                         {
                           label: 'Condividi & QR Code',
@@ -615,10 +649,10 @@ export default function FormTemplatesPage({ hideHeader = false }: FormTemplatesP
                           variant="primary"
                           size="sm"
                           leftIcon={<Plus className="h-4 w-4" />}
-                          onClick={() => navigate('/forms/templates/create')}
+                          onClick={() => navigate(`${basePath}/templates/create`)}
                           className="mt-2"
                         >
-                          Nuovo Form
+                          {formType === 'COURSE_TEST' ? 'Nuovo Test' : isPublicOnly ? 'Nuovo Form Pubblico' : 'Nuovo Form'}
                         </Button>
                       )}
                     </div>

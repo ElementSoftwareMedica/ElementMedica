@@ -215,7 +215,6 @@ export function GDPRConsentModal({
       
       onClose();
     } catch (error) {
-      console.error('Errore nel salvataggio consensi:', error);
     } finally {
       setLoading(false);
     }

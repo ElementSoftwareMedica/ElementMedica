@@ -3,6 +3,33 @@
  * 
  * @module utils/codiceFiscale
  */
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname_cf = path.dirname(fileURLToPath(import.meta.url));
+
+/** Cache lazily caricata dei comuni italiani */
+let _comuniCache = null;
+
+/**
+ * Recupera un comune dalla cache per codice catastale
+ * @param {string} code - Codice catastale (es. "H501")
+ * @returns {{ code: string, nome: string, provincia: string, regione: string } | undefined}
+ */
+function getComuneByCode(code) {
+    if (!_comuniCache) {
+        try {
+            const filePath = path.resolve(__dirname_cf, '../../public/data/comuni.json');
+            const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+            _comuniCache = new Map(data.map(c => [c.code.toUpperCase(), c]));
+        } catch {
+            _comuniCache = new Map();
+        }
+    }
+    return _comuniCache.get(code?.toUpperCase());
+}
+
 
 /**
  * Estrae il genere dal codice fiscale italiano
@@ -172,9 +199,43 @@ export function formatDoctorName(person, includeTitle = true) {
     return `${title} ${firstName} ${lastName}`.trim();
 }
 
+/**
+ * Estrae il codice catastale del comune di nascita dal codice fiscale
+ * 
+ * @param {string} taxCode - Codice fiscale italiano (16 caratteri)
+ * @returns {string | null} - Codice catastale (es. "H501") o null se non valido
+ */
+export function extractBirthPlaceCodeFromTaxCode(taxCode) {
+    if (!taxCode || taxCode.length !== 16) return null;
+    const code = taxCode.substring(11, 15).toUpperCase();
+    return /^[A-Z][0-9]{3}$/.test(code) ? code : null;
+}
+
+/**
+ * Estrae il comune di nascita dal codice fiscale italiano
+ * 
+ * @param {string} taxCode - Codice fiscale italiano (16 caratteri)
+ * @returns {{ code: string, comune: string, provincia: string, regione: string, isEstero: boolean } | null}
+ */
+export function extractBirthPlaceFromTaxCode(taxCode) {
+    const code = extractBirthPlaceCodeFromTaxCode(taxCode);
+    if (!code) return null;
+    const found = getComuneByCode(code);
+    if (!found) return null;
+    return {
+        code,
+        comune: found.nome,
+        provincia: found.provincia,
+        regione: found.regione,
+        isEstero: code.startsWith('Z')
+    };
+}
+
 export default {
     extractGenderFromTaxCode,
     extractBirthDateFromTaxCode,
+    extractBirthPlaceCodeFromTaxCode,
+    extractBirthPlaceFromTaxCode,
     isValidTaxCode,
     getDoctorTitle,
     formatDoctorName

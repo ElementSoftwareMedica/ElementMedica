@@ -18,13 +18,7 @@ import { Button } from '../../design-system/atoms/Button/Button';
 import { Input } from '../../design-system/atoms/Input/Input';
 import { useAuth } from '../../context/AuthContext';
 import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
-
-// Toast notification function (simplified)
-const toast = {
-  success: (message: string) => console.log('SUCCESS:', message),
-  error: (message: string) => console.error('ERROR:', message),
-  warning: (message: string) => console.warn('WARNING:', message)
-};
+import { useToast } from '../../hooks/useToast';
 
 interface AdminSettingsProps {
   className?: string;
@@ -39,6 +33,7 @@ interface AdminSettingsProps {
 const AdminSettings: React.FC<AdminSettingsProps> = ({ className = '' }) => {
   const { hasPermission } = useAuth();
   const { confirm } = useConfirmDialog();
+  const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('system');
   const [hasChanges, setHasChanges] = useState(false);
@@ -123,9 +118,9 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ className = '' }) => {
       // await apiClient.put('/api/admin/settings', settings);
 
       setHasChanges(false);
-      toast.success('Impostazioni salvate con successo');
+      showToast({ message: 'Impostazioni salvate con successo', type: 'success' });
     } catch {
-      toast.error('Errore nel salvataggio delle impostazioni');
+      showToast({ message: 'Errore nel salvataggio delle impostazioni', type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -145,10 +140,10 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ className = '' }) => {
     try {
       // Reset to default values
       // In a real app, this would call an API endpoint
-      toast.success('Impostazioni ripristinate ai valori predefiniti');
+      showToast({ message: 'Impostazioni ripristinate ai valori predefiniti', type: 'success' });
       setHasChanges(false);
     } catch {
-      toast.error('Errore nel ripristino delle impostazioni');
+      showToast({ message: 'Errore nel ripristino delle impostazioni', type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -165,7 +160,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ className = '' }) => {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    toast.success('Impostazioni esportate con successo');
+    showToast({ message: 'Impostazioni esportate con successo', type: 'success' });
   };
 
   const handleImportSettings = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -178,9 +173,9 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ className = '' }) => {
         const importedSettings = JSON.parse(e.target?.result as string);
         setSettings(importedSettings);
         setHasChanges(true);
-        toast.success('Impostazioni importate con successo');
+        showToast({ message: 'Impostazioni importate con successo', type: 'success' });
       } catch {
-        toast.error('Errore nell\'importazione delle impostazioni');
+        showToast({ message: 'Errore nell\'importazione delle impostazioni', type: 'error' });
       }
     };
     reader.readAsText(file);
@@ -279,8 +274,8 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ className = '' }) => {
           <button
             onClick={() => setActiveTab('system')}
             className={`flex items-center gap-2 px-4 py-2 border-b-2 transition-colors ${activeTab === 'system'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+              ? 'border-blue-500 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
           >
             <Server className="w-4 h-4" />
@@ -289,8 +284,8 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ className = '' }) => {
           <button
             onClick={() => setActiveTab('permissions')}
             className={`flex items-center gap-2 px-4 py-2 border-b-2 transition-colors ${activeTab === 'permissions'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+              ? 'border-blue-500 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
           >
             <Shield className="w-4 h-4" />
@@ -344,6 +339,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ className = '' }) => {
 
 // Permissions Management Component
 const PermissionsManagement: React.FC = () => {
+  const { showToast } = useToast();
   const [users] = useState([
     { id: '1', name: 'Admin User', email: 'admin@example.com', role: 'Admin' },
     { id: '2', name: 'Manager User', email: 'manager@example.com', role: 'Manager' },
@@ -412,9 +408,9 @@ const PermissionsManagement: React.FC = () => {
       //   action,
       //   granted: !hasPermission
       // });
-      toast.success(`Permesso ${hasPermission ? 'rimosso' : 'assegnato'} con successo`);
+      showToast({ message: `Permesso ${hasPermission ? 'rimosso' : 'assegnato'} con successo`, type: 'success' });
     } catch {
-      toast.error('Errore nell\'aggiornamento dei permessi');
+      showToast({ message: 'Errore nell\'aggiornamento dei permessi', type: 'error' });
       // Revert the change
       setUserPermissions(prev => ({
         ...prev,
@@ -445,9 +441,9 @@ const PermissionsManagement: React.FC = () => {
       //   actions: ['read', 'create', 'update', 'delete']
       // });
 
-      toast.success('Tutti i permessi Companies assegnati all\'Admin');
+      showToast({ message: 'Tutti i permessi Companies assegnati all\'Admin', type: 'success' });
     } catch {
-      toast.error('Errore nell\'assegnazione dei permessi Companies');
+      showToast({ message: 'Errore nell\'assegnazione dei permessi Companies', type: 'error' });
     }
   };
 
@@ -475,8 +471,8 @@ const PermissionsManagement: React.FC = () => {
                     <p className="text-sm text-gray-600">{user.email} - {user.role}</p>
                   </div>
                   <span className={`px-2 py-1 rounded text-xs font-medium ${user.role === 'Admin' ? 'bg-red-100 text-red-800' :
-                      user.role === 'Manager' ? 'bg-blue-100 text-blue-800' :
-                        'bg-gray-100 text-gray-800'
+                    user.role === 'Manager' ? 'bg-blue-100 text-blue-800' :
+                      'bg-gray-100 text-gray-800'
                     }`}>
                     {user.role}
                   </span>

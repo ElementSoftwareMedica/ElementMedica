@@ -134,11 +134,15 @@ const PLACEHOLDER_GROUPS: PlaceholderGroup[] = [
       { marker: 'current.time', googleMarker: 'ORA_CORRENTE', description: 'Ora corrente' },
       { marker: 'tenant.id', description: 'ID tenant' },
       { marker: 'tenant.name', googleMarker: 'ENTE_NOME', description: 'Nome ente' },
-      { marker: 'tenant.logo', googleMarker: 'ENTE_LOGO', description: 'Logo ente' },
+      { marker: 'tenant.logo', googleMarker: 'ENTE_LOGO', description: 'Logo ente (tenant)' },
+      { marker: 'tenant.branchLogo', googleMarker: 'ENTE_LOGO_SEDE', description: 'Logo sede (branch)' },
       { marker: 'tenant.address', googleMarker: 'ENTE_INDIRIZZO', description: 'Indirizzo ente' },
       { marker: 'tenant.phone', googleMarker: 'ENTE_TELEFONO', description: 'Telefono ente' },
       { marker: 'tenant.email', googleMarker: 'ENTE_EMAIL', description: 'Email ente' },
-      { marker: 'tenant.website', googleMarker: 'ENTE_SITO', description: 'Sito web ente' }
+      { marker: 'tenant.website', googleMarker: 'ENTE_SITO', description: 'Sito web ente' },
+      { marker: 'tenant.vatNumber', googleMarker: 'COMPANY_PIVA', description: 'Partita IVA ente' },
+      { marker: 'tenant.pec', googleMarker: 'COMPANY_PEC', description: 'PEC ente' },
+      { marker: 'tenant.fiscalCode', googleMarker: 'COMPANY_CF', description: 'Codice fiscale ente' }
     ]
   },
   {
@@ -155,8 +159,7 @@ const PLACEHOLDER_GROUPS: PlaceholderGroup[] = [
       { marker: 'letteraIncarico.number', googleMarker: 'NUMERO_LETTERA_INCARICO', description: 'Numero lettera di incarico' },
       { marker: 'document.qrCode', googleMarker: 'QR_CODE_VERIFICA', description: 'QR code verifica autenticità' },
       { marker: 'document.pageNumber', googleMarker: 'PAGINA_CORRENTE', description: 'Numero pagina corrente (es. 1/3)' },
-      { marker: 'document.totalPages', googleMarker: 'PAGINE_TOTALI', description: 'Numero totale pagine' },
-      { marker: 'document.currentPage', googleMarker: 'NUMERO_PAGINA', description: 'Numero pagina corrente' }
+      { marker: 'document.totalPages', googleMarker: 'PAGINE_TOTALI', description: 'Numero totale pagine' }
     ]
   },
   {
@@ -189,6 +192,117 @@ const PLACEHOLDER_GROUPS: PlaceholderGroup[] = [
       { marker: 'session.participantCompanies', googleMarker: 'AZIENDE_PARTECIPANTI', description: 'Elenco ragioni sociali aziende partecipanti' },
       { marker: 'table.sessionAttendance', googleMarker: 'TABELLA_PRESENZE_SESSIONE', description: 'Tabella presenze sessione (Cognome, Nome, Firma In, Firma Out)' },
       { marker: 'session.participantsCount', googleMarker: 'SESSIONE_NUM_PARTECIPANTI', description: 'Numero partecipanti sessione' }
+    ]
+  },
+  // ============================================
+  // P52: CLINICA / REFERTI MEDICI
+  // ============================================
+  {
+    category: 'Clinica - Visita',
+    icon: <FileText className="w-5 h-5" />,
+    color: 'teal',
+    placeholders: [
+      { marker: 'visita.id', googleMarker: 'VISITA_ID', description: 'ID della visita' },
+      { marker: 'visita.dataOra', googleMarker: 'DATA_VISITA', description: 'Data della visita' },
+      { marker: 'visita.oraInizio', googleMarker: 'ORA_INIZIO_VISITA', description: 'Ora inizio visita' },
+      { marker: 'visita.oraFine', googleMarker: 'ORA_FINE_VISITA', description: 'Ora fine visita' },
+      { marker: 'visita.prestazione', googleMarker: 'PRESTAZIONE', description: 'Nome della prestazione' },
+      { marker: 'visita.diagnosi', googleMarker: 'DIAGNOSI', description: 'Diagnosi' },
+      { marker: 'visita.anamnesi', googleMarker: 'ANAMNESI', description: 'Anamnesi' },
+      { marker: 'visita.esameObiettivo', googleMarker: 'ESAME_OBIETTIVO', description: 'Esame obiettivo' },
+      { marker: 'visita.terapia', googleMarker: 'TERAPIA', description: 'Terapia prescritta' },
+      { marker: 'visita.note', googleMarker: 'NOTE_VISITA', description: 'Note della visita' },
+      { marker: 'visita.parametriVitali', googleMarker: 'PARAMETRI_VITALI', description: 'Parametri vitali (PA, FC, T°, SpO2)' },
+      { marker: 'visita.stato', googleMarker: 'STATO_VISITA', description: 'Stato della visita' }
+    ]
+  },
+  {
+    category: 'Clinica - Medico',
+    icon: <User className="w-5 h-5" />,
+    color: 'teal',
+    placeholders: [
+      { marker: 'medico.id', googleMarker: 'MEDICO_ID', description: 'ID del medico' },
+      { marker: 'medico.titolo', googleMarker: 'MEDICO_TITOLO', description: 'Titolo (Dott./Dott.ssa)' },
+      { marker: 'medico.firstName', googleMarker: 'MEDICO_NOME', description: 'Nome del medico' },
+      { marker: 'medico.lastName', googleMarker: 'MEDICO_COGNOME', description: 'Cognome del medico' },
+      { marker: 'medico.nomeCompleto', googleMarker: 'MEDICO', description: 'Nome completo del medico (Dott./Dott.ssa Nome Cognome)' },
+      { marker: 'medico.specializzazione', googleMarker: 'MEDICO_SPECIALIZZAZIONE', description: 'Specializzazione' },
+      { marker: 'medico.ordine', googleMarker: 'MEDICO_ORDINE', description: 'Ordine professionale e numero iscrizione' },
+      { marker: 'medico.email', googleMarker: 'MEDICO_EMAIL', description: 'Email del medico' },
+      { marker: 'medico.telefono', googleMarker: 'MEDICO_TELEFONO', description: 'Telefono del medico' },
+      { marker: 'medico.firma', googleMarker: 'FIRMA_MEDICO', description: 'Firma del medico (immagine)' }
+    ]
+  },
+  {
+    category: 'Clinica - Paziente',
+    icon: <User className="w-5 h-5" />,
+    color: 'teal',
+    placeholders: [
+      { marker: 'paziente.id', googleMarker: 'PAZIENTE_ID', description: 'ID del paziente' },
+      { marker: 'paziente.firstName', googleMarker: 'PAZIENTE_NOME', description: 'Nome del paziente' },
+      { marker: 'paziente.lastName', googleMarker: 'PAZIENTE_COGNOME', description: 'Cognome del paziente' },
+      { marker: 'paziente.nomeCompleto', googleMarker: 'PAZIENTE_NOME_COMPLETO', description: 'Nome completo del paziente' },
+      { marker: 'paziente.codiceFiscale', googleMarker: 'PAZIENTE_CF', description: 'Codice fiscale del paziente' },
+      { marker: 'paziente.dataNascita', googleMarker: 'PAZIENTE_DATA_NASCITA', description: 'Data di nascita' },
+      { marker: 'paziente.luogoNascita', googleMarker: 'PAZIENTE_LUOGO_NASCITA', description: 'Luogo di nascita' },
+      { marker: 'paziente.sesso', googleMarker: 'PAZIENTE_SESSO', description: 'Sesso (M/F)' },
+      { marker: 'paziente.eta', googleMarker: 'PAZIENTE_ETA', description: 'Età del paziente' },
+      { marker: 'paziente.indirizzo', googleMarker: 'PAZIENTE_INDIRIZZO', description: 'Indirizzo completo' },
+      { marker: 'paziente.citta', googleMarker: 'PAZIENTE_CITTA', description: 'Città' },
+      { marker: 'paziente.cap', googleMarker: 'PAZIENTE_CAP', description: 'CAP' },
+      { marker: 'paziente.provincia', googleMarker: 'PAZIENTE_PROVINCIA', description: 'Provincia' },
+      { marker: 'paziente.email', googleMarker: 'PAZIENTE_EMAIL', description: 'Email del paziente' },
+      { marker: 'paziente.telefono', googleMarker: 'PAZIENTE_TELEFONO', description: 'Telefono del paziente' },
+      { marker: 'paziente.cartaIdentita', googleMarker: 'PAZIENTE_CARTA_IDENTITA', description: 'Numero carta d\'identità' },
+      { marker: 'paziente.firma', googleMarker: 'FIRMA_PAZIENTE', description: 'Firma del paziente (immagine)' }
+    ]
+  },
+  {
+    category: 'Clinica - Referto',
+    icon: <FileText className="w-5 h-5" />,
+    color: 'teal',
+    placeholders: [
+      { marker: 'visita.datiStrutturatiHtml', googleMarker: 'REFERTO_CAMPI_VISITA', description: '⭐ HTML automatico con tutti i campi della visita compilati' },
+      { marker: 'referto.id', googleMarker: 'REFERTO_ID', description: 'ID del referto' },
+      { marker: 'referto.numero', googleMarker: 'REFERTO_NUMERO', description: 'Numero del referto' },
+      { marker: 'referto.titolo', googleMarker: 'REFERTO_TITOLO', description: 'Titolo del referto' },
+      { marker: 'referto.contenuto', googleMarker: 'REFERTO', description: 'Contenuto completo del referto' },
+      { marker: 'referto.dataEmissione', googleMarker: 'REFERTO_DATA', description: 'Data di emissione' },
+      { marker: 'referto.dataFirma', googleMarker: 'REFERTO_DATA_FIRMA', description: 'Data firma del medico' },
+      { marker: 'referto.stato', googleMarker: 'REFERTO_STATO', description: 'Stato del referto' },
+      { marker: 'referto.conclusioni', googleMarker: 'REFERTO_CONCLUSIONI', description: 'Conclusioni del referto' },
+      { marker: 'referto.allegati', googleMarker: 'REFERTO_ALLEGATI', description: 'Elenco allegati' }
+    ]
+  },
+  // ============================================
+  // P65: RUOLI AGGIUNTIVI (Sicurezza sul lavoro)
+  // ============================================
+  {
+    category: 'Ruoli - Sicurezza',
+    icon: <User className="w-5 h-5" />,
+    color: 'amber',
+    placeholders: [
+      { marker: 'dipendente.nomeCompleto', googleMarker: 'DIPENDENTE_NOME_COMPLETO', description: 'Nome completo dipendente' },
+      { marker: 'dipendente.firstName', googleMarker: 'DIPENDENTE_NOME', description: 'Nome dipendente' },
+      { marker: 'dipendente.lastName', googleMarker: 'DIPENDENTE_COGNOME', description: 'Cognome dipendente' },
+      { marker: 'dipendente.codiceFiscale', googleMarker: 'DIPENDENTE_CF', description: 'Codice fiscale dipendente' },
+      { marker: 'dipendente.mansione', googleMarker: 'DIPENDENTE_MANSIONE', description: 'Mansione dipendente' },
+      { marker: 'dipendente.firma', googleMarker: 'FIRMA_DIPENDENTE', description: 'Firma dipendente' },
+      { marker: 'datore.nomeCompleto', googleMarker: 'DATORE_NOME_COMPLETO', description: 'Nome completo datore di lavoro' },
+      { marker: 'datore.ruolo', googleMarker: 'DATORE_RUOLO', description: 'Ruolo datore di lavoro' },
+      { marker: 'datore.firma', googleMarker: 'FIRMA_DATORE', description: 'Firma datore di lavoro' },
+      { marker: 'rspp.nomeCompleto', googleMarker: 'RSPP_NOME_COMPLETO', description: 'Nome completo RSPP' },
+      { marker: 'rspp.codiceFiscale', googleMarker: 'RSPP_CF', description: 'Codice fiscale RSPP' },
+      { marker: 'rspp.qualifica', googleMarker: 'RSPP_QUALIFICA', description: 'Qualifica RSPP' },
+      { marker: 'rspp.firma', googleMarker: 'FIRMA_RSPP', description: 'Firma RSPP' },
+      { marker: 'rls.nomeCompleto', googleMarker: 'RLS_NOME_COMPLETO', description: 'Nome completo RLS' },
+      { marker: 'rls.firma', googleMarker: 'FIRMA_RLS', description: 'Firma RLS' },
+      { marker: 'formatore.nomeCompleto', googleMarker: 'FORMATORE_NOME_COMPLETO', description: 'Nome completo formatore (P65)' },
+      { marker: 'formatore.qualifica', googleMarker: 'FORMATORE_QUALIFICA', description: 'Qualifica formatore (P65)' },
+      { marker: 'formatore.firma', googleMarker: 'FIRMA_FORMATORE', description: 'Firma formatore (P65)' },
+      { marker: 'partecipante.nomeCompleto', googleMarker: 'PARTECIPANTE_NOME_COMPLETO', description: 'Nome completo partecipante' },
+      { marker: 'partecipante.codiceFiscale', googleMarker: 'PARTECIPANTE_CF', description: 'Codice fiscale partecipante' },
+      { marker: 'partecipante.firma', googleMarker: 'FIRMA_PARTECIPANTE', description: 'Firma partecipante' }
     ]
   }
 ];
@@ -271,6 +385,9 @@ export const PlaceholderPanel: React.FC<PlaceholderPanelProps> = ({ onInsert, te
     setExpandedGroups(newExpanded);
   };
 
+  // Marker che rappresentano immagini — devono essere inseriti come <img> tag
+  const IMAGE_MARKERS = new Set(['tenant.logo', 'tenant.branchLogo']);
+
   const copyToClipboard = async (marker: string, googleMarker?: string) => {
     // Use the appropriate marker based on format
     const markerToUse = format === 'google' && googleMarker ? googleMarker : marker;
@@ -282,10 +399,15 @@ export const PlaceholderPanel: React.FC<PlaceholderPanelProps> = ({ onInsert, te
 
       // Notify parent if onInsert callback exists
       if (onInsert) {
-        onInsert(formatted);
+        // Per logo markers, inserisci come <img> tag per evitare che il base64 appaia come testo
+        if (IMAGE_MARKERS.has(marker)) {
+          const alt = marker === 'tenant.branchLogo' ? 'Logo Sede' : 'Logo Ente';
+          onInsert(`<img src="${formatted}" alt="${alt}" style="max-width:220px;max-height:80px;object-fit:contain;">`);
+        } else {
+          onInsert(formatted);
+        }
       }
     } catch (err) {
-      console.error('Failed to copy:', err);
     }
   };
 

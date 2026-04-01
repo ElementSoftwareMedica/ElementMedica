@@ -1,7 +1,6 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '../../../config/prisma-optimization.js';
 import { logger } from '../../../utils/logger.js';
 
-const prisma = new PrismaClient();
 
 /**
  * Gestione delle statistiche sui ruoli
@@ -187,6 +186,7 @@ export async function getExpirationStats(tenantId, daysAhead = 30) {
       where: {
         tenantId,
         isActive: true,
+        deletedAt: null, // F227: exclude soft-deleted roles
         validUntil: { lt: now }
       },
       include: {
@@ -195,7 +195,11 @@ export async function getExpirationStats(tenantId, daysAhead = 30) {
             id: true,
             firstName: true,
             lastName: true,
-            email: true
+            tenantProfiles: { // F227: P48 — email is in PersonTenantProfile
+              where: { tenantId, deletedAt: null, isActive: true },
+              select: { email: true },
+              take: 1
+            }
           }
         }
       }
@@ -206,6 +210,7 @@ export async function getExpirationStats(tenantId, daysAhead = 30) {
       where: {
         tenantId,
         isActive: true,
+        deletedAt: null, // F227: exclude soft-deleted roles
         validUntil: {
           gte: now,
           lte: futureDate
@@ -217,7 +222,11 @@ export async function getExpirationStats(tenantId, daysAhead = 30) {
             id: true,
             firstName: true,
             lastName: true,
-            email: true
+            tenantProfiles: { // F227: P48 — email is in PersonTenantProfile
+              where: { tenantId, deletedAt: null, isActive: true },
+              select: { email: true },
+              take: 1
+            }
           }
         }
       },

@@ -7,17 +7,19 @@
  * Utilizzato dalle pagine pubbliche per mostrare contenuti gestiti dal CMS.
  */
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
+import { sanitizeHtml } from '../../utils/sanitize';
 import { PublicLayout } from '../public/PublicLayout';
 import { HeroSection } from '../public/HeroSection';
 import { LoadingFallback } from '../ui/LoadingFallback';
 import { useCMSPageBySlug } from '../../hooks/cms/useCMSPages';
 import { CMSPageContent, CMSSection, validateAndSanitizeCMSContent } from '../../types/cms';
-import { SEOHead } from '../seo';
+import { SEOHead, generateMedicalClinicSchema, generateEducationalOrganizationSchema, generateParentOrganizationSchema, generateFAQSchema } from '../seo';
 import CMSSectionRenderer from './CMSSectionRenderer.tsx';
 import { trackPageView } from '../../services/cmsAnalyticsService';
 import { getIconComponent, ArrowRight, Phone, Award } from './renderer/iconMap';
-import { CustomContentRenderer } from './renderer/CustomContentRenderer';
+import { CustomContentRenderer } from './renderer/custom-content-renderer';
+import { getCurrentBrand } from '../../config/brands.config';
 
 interface CMSPageRendererProps {
   slug: string;
@@ -49,6 +51,61 @@ export const CMSPageRenderer: React.FC<CMSPageRendererProps> = ({
   const pageViewTracked = useRef(false);
   const pageLoadTime = useRef(Date.now());
   const currentSessionId = useRef<string>('');
+
+  // Generate JSON-LD structured data based on current brand and page slug
+  const jsonLdSchema = useMemo(() => {
+    const brand = getCurrentBrand();
+    const brandSchemas = brand.theme === 'medical'
+      ? [generateMedicalClinicSchema(), generateParentOrganizationSchema()]
+      : [generateEducationalOrganizationSchema(), generateParentOrganizationSchema()];
+
+    // Per-page FAQ schema for featured snippets on target keywords
+    const faqsBySlug: Record<string, { question: string; answer: string }[]> = {
+      'medica-medicina-del-lavoro': [
+        { question: 'Cos\'è la medicina del lavoro?', answer: 'La medicina del lavoro è la branca della medicina che si occupa della salute dei lavoratori in relazione al loro ambiente di lavoro. Si concretizza nella sorveglianza sanitaria obbligatoria prevista dal D.Lgs. 81/08. Element Medica offre il servizio di medico competente a Selvazzano Dentro, servendo aziende di Padova e tutta la provincia.' },
+        { question: 'Quando è obbligatorio il medico competente?', answer: 'Il medico competente è obbligatorio quando esistono rischi specifici per i lavoratori secondo il D.Lgs. 81/08, come rischi da agenti chimici, biologici, fisici (rumore, vibrazioni), videoterminali, lavoro notturno e altri. Il nostro servizio copre Padova e provincia.' },
+        { question: 'Con che frequenza si fanno le visite mediche del lavoro?', answer: 'La frequenza delle visite è stabilita dal medico competente nel protocollo sanitario, solitamente con cadenza annuale o biennale in base al profilo di rischio della mansione.' },
+        { question: 'Quanto costa il servizio di medicina del lavoro aziendale a Padova?', answer: 'Il costo dipende dal numero di dipendenti e dal protocollo sanitario. Element Medica serve aziende a Padova e provincia con tariffe competitive. Per un preventivo personalizzato contatta: +39 351 318 1574.' },
+        { question: 'Cosa succede al lavoratore dopo la visita medica?', answer: 'Il medico competente emette un giudizio di idoneità: idoneo, idoneo con prescrizioni, idoneo con limitazioni, non idoneo temporaneamente o permanentemente.' },
+      ],
+      'medicina-del-lavoro': [
+        { question: 'Cos\'è la sorveglianza sanitaria?', answer: 'La sorveglianza sanitaria è l\'insieme degli atti medici finalizzati alla tutela della salute e sicurezza dei lavoratori in relazione all\'ambiente di lavoro ai rischi professionali e alla promozione della salute, obbligatoria ai sensi dell\'art. 41 del D.Lgs. 81/08. Element Sicurezza eroga il servizio a Selvazzano Dentro per aziende di Padova e provincia.' },
+        { question: 'Perché serve un medico competente in azienda?', answer: 'Il medico competente è obbligatorio per legge (art. 38 D.Lgs. 81/08) quando vi sono specifici rischi lavorativi. Effettua visite preventive, periodiche e a richiesta, e collabora con il datore di lavoro per preservare la salute dei lavoratori. Operiamo a Padova, Selvazzano Dentro e tutta la provincia di Padova.' },
+        { question: 'Quali esami si fanno durante la visita medica del lavoro?', answer: 'Gli accertamenti dipendono dal profilo di rischio: esame fisico, esami del sangue/urine, spirometria per rischi respiratori, audiometria per rumore, ECG per lavoro notturno, esame oculistico per videoterminali.' },
+        { question: 'Quanto costa una visita medica del lavoro a Padova?', answer: 'Il costo varia in base alla tipologia di visita e accertamenti previsti dal protocollo. Serviamo aziende a Padova e provincia con tariffe competitive. Per un preventivo contatta Element Sicurezza: +39 351 623 9176.' },
+      ],
+      'medica-homepage': [
+        { question: 'Dove si trova il poliambulatorio Element Medica?', answer: 'Element Medica si trova in Via Bracciano 34, 35030 Selvazzano Dentro (PD), a soli 10 minuti da Padova. Facilmente raggiungibile da tutta la provincia di Padova e dalla A4.' },
+        { question: 'Quali specialità mediche sono disponibili a Element Medica?', answer: 'Element Medica offre oltre 30 specialità: cardiologia, ortopedia, neurologia, dermatologia, ginecologia, urologia, medicina del lavoro, diagnostica per immagini e molto altro. Siamo il poliambulatorio di riferimento per Padova e provincia.' },
+        { question: 'Come si prenota una visita a Element Medica vicino Padova?', answer: 'Puoi prenotare online su elementmedica.com, telefonicamente al +39 351 318 1574 (Lun-Ven 8:00-19:30, Sab 8:00-13:00) oppure direttamente presso il poliambulatorio a Selvazzano Dentro (PD).' },
+        { question: 'Element Medica è convenzionato con il Servizio Sanitario Nazionale?', answer: 'Element Medica è un poliambulatorio privato a Selvazzano Dentro, vicino Padova. Alcune prestazioni possono essere coperte da assicurazioni sanitarie private convenzionate. Contattaci per informazioni.' },
+      ],
+      'corsi': [
+        { question: 'I corsi di sicurezza di Element Sicurezza sono riconosciuti?', answer: 'Sì, Element Sicurezza è ente accreditato dalla Regione Veneto per l\'erogazione di corsi di formazione sulla sicurezza sul lavoro a Padova e provincia. Tutti gli attestati sono riconosciuti a livello nazionale.' },
+        { question: 'Dove si tengono i corsi sicurezza a Padova?', answer: 'I corsi si svolgono presso la sede di Element Sicurezza a Selvazzano Dentro (PD), a 10 minuti da Padova. Offriamo anche formazione aziendale presso le sedi dei clienti in tutta la provincia di Padova.' },
+        { question: 'Quanto dura un corso sicurezza per lavoratori?', answer: 'La durata varia in base al livello di rischio: 8 ore per rischio basso, 12 ore per rischio medio, 16 ore per rischio alto, come previsto dall\'Accordo Stato-Regioni.' },
+        { question: 'Con che frequenza va rinnovato il corso sicurezza?', answer: 'L\'aggiornamento per lavoratori è obbligatorio ogni 5 anni (6 ore). Per RSPP, RLS e altre figure specifiche le scadenze possono differire.' },
+        { question: 'Si può fare il corso sicurezza online?', answer: 'La formazione generale (modulo base) di alcuni corsi può essere erogata in e-learning. La formazione specifica per rischio medio/alto richiede formazione in presenza o FAD sincrona.' },
+      ],
+      'rspp': [
+        { question: 'Cos\'è l\'RSPP e perché è obbligatorio?', answer: 'Il Responsabile del Servizio di Prevenzione e Protezione (RSPP) è la figura obbligatoria per legge (art. 17 D.Lgs. 81/08) incaricata di coordinare la gestione della sicurezza in azienda. Element Sicurezza fornisce RSPP esterno a Padova e provincia.' },
+        { question: 'Quanto costa il servizio RSPP esterno a Padova?', answer: 'Il costo dipende dalla dimensione dell\'azienda e dal livello di rischio. Element Sicurezza offre pacchetti da €800/anno per micro-imprese a €3.000+/anno per aziende strutturate. Serviamo aziende a Padova, Selvazzano Dentro e tutta la provincia.' },
+        { question: 'Quando conviene nominare un RSPP esterno?', answer: 'L\'RSPP esterno è conveniente per le aziende che non hanno al loro interno un dipendente con la formazione specifica richiesta, o per PMI che preferiscono affidarsi a un professionista dedicato. Element Sicurezza opera da Selvazzano Dentro per tutta la provincia di Padova.' },
+        { question: 'Quali sono le sanzioni per mancata nomina RSPP?', answer: 'L\'omessa nomina RSPP è sanzionata con arresto da 3 a 6 mesi o ammenda da €3.071,27 a €7.862,44 (art. 55 D.Lgs. 81/08).' },
+      ],
+    };
+
+    const faqs = faqsBySlug[slug];
+    const schemas = [
+      ...brandSchemas.map(({ '@context': _, ...rest }) => rest),
+      ...(faqs ? [{ ...generateFAQSchema(faqs), '@context': undefined }] : []),
+    ].filter(s => s);
+
+    return {
+      '@context': 'https://schema.org',
+      '@graph': schemas.map(({ '@context': _, ...rest }) => rest),
+    };
+  }, [slug]);
 
   // Traccia la visualizzazione della pagina CMS
   useEffect(() => {
@@ -155,11 +212,12 @@ export const CMSPageRenderer: React.FC<CMSPageRendererProps> = ({
           ogImage=""
           twitterCard="summary_large_image"
           canonicalUrl={`${window.location.origin}/${slug}`}
+          structuredData={jsonLdSchema}
         />
         <PublicLayout>
           <div
             className={`cms-html-content ${className}`}
-            dangerouslySetInnerHTML={{ __html: page.content }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(page.content) }}
           />
         </PublicLayout>
       </>
@@ -169,7 +227,7 @@ export const CMSPageRenderer: React.FC<CMSPageRendererProps> = ({
   // Valida e sanitizza il contenuto JSON
   const content = validateAndSanitizeCMSContent(page.content);
   if (!content) {
-    console.error('Invalid CMS content structure for page:', slug);
+    if (import.meta.env.DEV) console.error('Invalid CMS content structure for page:', slug);
     return (
       <PublicLayout>
         <div className="container mx-auto px-4 py-16 text-center">
@@ -187,7 +245,8 @@ export const CMSPageRenderer: React.FC<CMSPageRendererProps> = ({
   // Estrai metadati per SEO
   const seoTitle = page.seoTitle || page.title;
   const seoDescription = page.seoDescription || content.hero?.subtitle || '';
-  const seoKeywords = content.seo?.keywords || [];
+  // Support keywords from both content.seo.keywords and content.metadata.keywords
+  const seoKeywords = content.seo?.keywords || (content.metadata as any)?.keywords || [];
   const ogImage = content.seo?.ogImage || content.hero?.image || '';
   const canonicalUrl = content.seo?.canonicalUrl || `${window.location.origin}/${slug}`;
 
@@ -202,10 +261,11 @@ export const CMSPageRenderer: React.FC<CMSPageRendererProps> = ({
         ogImage={ogImage}
         twitterCard={content.seo?.twitterCard || 'summary_large_image'}
         canonicalUrl={canonicalUrl}
+        structuredData={jsonLdSchema}
       />
 
       <PublicLayout>
-        <div className={className}>
+        <div className={className} data-cms-loaded="true">
           {/* Hero Section */}
           {content.hero && (() => {
             // Prepara i pulsanti con le icone convertite da stringa a componenti React

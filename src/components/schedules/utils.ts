@@ -344,13 +344,6 @@ export const computeTrainerCertFilter = (
   };
   const union = (arrays: string[][]): string[] => Array.from(new Set(arrays.flat()));
   const result = { allOf: intersect(all), anyOf: union(all) };
-  console.debug('[computeTrainerCertFilter] Debug varianti:', {
-    variantiTrovate: all.length,
-    certificazioniPerVariante: all,
-    allOf: result.allOf,
-    anyOf: result.anyOf
-  });
-  console.debug('[computeTrainerCertFilter] ✓ Certificazioni richieste (anyOf):', result.anyOf.join(', '));
   return result;
 };
 
@@ -364,18 +357,6 @@ export function filterTrainersByCerts(
   const anyOf = (filter?.anyOf || []).map(normalizeTextFn).filter(Boolean);
 
   // 🔍 DEBUG: Analizza struttura trainers
-  console.debug('[filterTrainersByCerts] 🔍 Analisi trainers:', {
-    totalTrainers: trainers.length,
-    sampleTrainer: trainers[0] ? {
-      id: trainers[0].id,
-      name: `${trainers[0].firstName} ${trainers[0].lastName}`,
-      certifications: trainers[0].certifications,
-      certificationsType: typeof trainers[0].certifications,
-      certificationsIsArray: Array.isArray(trainers[0].certifications)
-    } : null,
-    allOf,
-    anyOf: anyOf.slice(0, 5)
-  });
 
   // Se non ci sono vincoli, tutti i formatori sono idonei
   if (allOf.length === 0 && anyOf.length === 0) {
@@ -404,20 +385,12 @@ export function filterTrainersByCerts(
 
     // Debug dettagliato per i primi 2 trainers
     if (debugCount < 2) {
-      console.debug(`[filterTrainersByCerts] Trainer #${debugCount + 1}: ${tr.firstName} ${tr.lastName}`,
-        '\n  rawCerts:', rawCerts,
-        '\n  certs normalized:', certs,
-        '\n  expandedTrainerCerts:', expandedTrainerCerts,
-        '\n  allOf:', allOf,
-        '\n  anyOf:', anyOf.slice(0, 3), '...',
-        '\n  match:', match);
       debugCount++;
     }
 
     return match;
   });
 
-  console.debug('[filterTrainersByCerts] ✓ Formatori qualificati:', filtered.length, '/', trainers.length);
   return filtered;
 }
 
@@ -442,9 +415,12 @@ export function buildSchedulePayload(
   const startDateTimeISO = new Date(startDateTimeLocal).toISOString();
   const endDateTimeISO = new Date(endDateTimeLocal).toISOString();
 
+  // ✅ FIX: Normalizza employee_ids a stringa per consistenza con backend/frontend
+  // P48 FIX: Include sessionIndex per supportare più sessioni nella stessa data
   const attendanceArr = datesArr.map((dt, idx: number) => ({
     date: dt.date,
-    employee_ids: attendance[idx] || []
+    sessionIndex: idx,  // P48: Unique identifier for each session
+    employee_ids: (attendance[idx] || []).map(id => String(id))
   }));
 
   const validCompanyIds = (selectedCompanies || []).filter(id => id !== null && id !== undefined);
@@ -497,7 +473,6 @@ export function computeDynamicRiskAndTypeOptions(
     const riskValid = !formData.risk_level || !!riskOpts.find(o => o.value === formData.risk_level);
     const typeValid = !formData.course_type || !!typeOpts.find(o => o.value === formData.course_type);
     if (process.env.NODE_ENV === 'development') {
-      console.debug('[Schedules][DynamicOptions] Titolo vuoto, nessuna pillola', { rawTitle, title, riskOptsLen: riskOpts.length, typeOptsLen: typeOpts.length });
     }
     return { riskOpts, typeOpts, riskValid, typeValid, titleEmpty: true };
   }
@@ -514,14 +489,6 @@ export function computeDynamicRiskAndTypeOptions(
   if (!Array.isArray(variants) || variants.length === 0) {
     // DEBUG: Log struttura selectedCourse PRIMA di estrarre i campi
     if (process.env.NODE_ENV === 'development') {
-      console.debug('[Schedules][DynamicOptions] selectedCourse RAW:', {
-        selectedCourse,
-        keys: selectedCourse ? Object.keys(selectedCourse) : [],
-        riskLevel_camel: selectedCourse?.riskLevel,
-        risk_level_snake: (selectedCourse as any)?.risk_level,
-        courseType_camel: selectedCourse?.courseType,
-        course_type_snake: (selectedCourse as any)?.course_type
-      });
     }
 
     const courseRisk = getVariantRisk(selectedCourse);
@@ -538,16 +505,6 @@ export function computeDynamicRiskAndTypeOptions(
     const typeValid = !formData.course_type || !!typeOpts.find(o => o.value === formData.course_type);
 
     if (process.env.NODE_ENV === 'development') {
-      console.debug('[Schedules][DynamicOptions] Nessuna variante trovata, uso valori del corso selezionato', {
-        rawTitle,
-        title,
-        courseRisk,
-        courseType,
-        riskOpts: riskOpts.map(o => o.value),
-        typeOpts: typeOpts.map(o => o.value),
-        riskValid,
-        typeValid
-      });
     }
     return { riskOpts, typeOpts, riskValid, typeValid, titleEmpty: false };
   }
@@ -594,18 +551,6 @@ export function computeDynamicRiskAndTypeOptions(
   const typeValid = !formData.course_type || !!typeOpts.find(o => o.value === formData.course_type);
 
   if (process.env.NODE_ENV === 'development') {
-    console.debug('[Schedules][DynamicOptions] Calcolo completato', {
-      rawTitle,
-      title,
-      sourceLen: Array.isArray(source) ? source.length : 0,
-      variantsLen: variants.length,
-      riskSet: Array.from(riskSet),
-      typeSet: Array.from(typeSet),
-      riskOpts: riskOpts.map(o => o.value),
-      typeOpts: typeOpts.map(o => o.value),
-      riskValid,
-      typeValid
-    });
   }
 
   return { riskOpts, typeOpts, riskValid, typeValid, titleEmpty: false };
@@ -642,22 +587,11 @@ export function resolveVariantSelection(
   const hasTypeOptions = (dynamicCourseTypeOptions?.length || 0) > 0;
 
   if (process.env.NODE_ENV === 'development') {
-    console.debug('[Schedules][VariantSelection] Stato', {
-      rawTitle,
-      title,
-      variantsLen: variants.length,
-      filteredLen: filtered.length,
-      hasRiskOptions,
-      hasTypeOptions,
-      selectedRisk: formData.risk_level,
-      selectedType: formData.course_type
-    });
   }
 
   if (filtered.length === 1) {
     const only = filtered[0] as any;
     if (process.env.NODE_ENV === 'development') {
-      console.debug('[Schedules][VariantSelection] Selezione univoca', { id: only.id, title: (only.title || only.name), risk: getVariantRisk(only), type: getVariantType(only) });
     }
     return { id: only.id, details: only };
   }
@@ -665,13 +599,11 @@ export function resolveVariantSelection(
   if (!hasRiskOptions && !hasTypeOptions && variants.length >= 1 && !formData.training_id) {
     const first = variants[0] as any;
     if (process.env.NODE_ENV === 'development') {
-      console.debug('[Schedules][VariantSelection] Fallback prima variante', { id: first.id, title: (first.title || first.name), risk: getVariantRisk(first), type: getVariantType(first) });
     }
     return { id: first.id, details: first };
   }
 
   if (process.env.NODE_ENV === 'development') {
-    console.debug('[Schedules][VariantSelection] Nessuna selezione automatica', { variantsLen: variants.length, filteredLen: filtered.length });
   }
   return {};
 }
@@ -690,7 +622,6 @@ export function deriveRequiredCerts(
 
   if ((certsFromSelected?.length || 0) > 0) {
     if (process.env.NODE_ENV === 'development') {
-      console.debug('[Schedules][Certs] Uso certificazioni dirette dal corso selezionato', { count: certsFromSelected.length, certsFromSelected });
     }
     return certsFromSelected;
   }
@@ -719,7 +650,6 @@ export function deriveRequiredCerts(
   const flat = lists.flat().filter(Boolean);
 
   if (process.env.NODE_ENV === 'development') {
-    console.debug('[Schedules][Certs] Derivazione certificazioni da varianti', { rawTitle, variantsLen: variants.length, filteredLen: filtered.length, derivedCount: flat.length, sample: flat.slice(0, 5) });
   }
 
   const uniq = Array.from(new Set(flat));
@@ -730,8 +660,9 @@ export function getPersonIdsForCompanyUniversal(persons: Person[], companyId: st
   const cid = String(companyId);
   return persons
     .filter((p) => {
-      const pCompanyId = p.companyId ?? p.company?.id;
-      return String(pCompanyId ?? '') === cid;
+      // P49: person.companyId = CTP UUID, person.company?.id = global Company UUID
+      // Match against both independently (don't use ?? which short-circuits)
+      return String(p.companyId ?? '') === cid || String(p.company?.id ?? '') === cid;
     })
     .map((p) => p.id)
     .filter((id): id is string | number => id !== undefined && id !== null);
@@ -770,6 +701,21 @@ export function validateScheduleForm(
   const dates = formData?.dates || [];
   if (!Array.isArray(dates) || dates.length === 0) {
     return err('Aggiungi almeno una data');
+  }
+
+  // ✅ NEW: Valida che le date successive non siano precedenti alla prima data
+  const firstDate = dates[0]?.date;
+  if (firstDate && dates.length > 1) {
+    const firstDateObj = new Date(firstDate);
+    for (let i = 1; i < dates.length; i++) {
+      const d = dates[i] as any;
+      if (d?.date) {
+        const currentDateObj = new Date(d.date);
+        if (currentDateObj < firstDateObj) {
+          return err(`La data della sessione ${i + 1} non può essere precedente alla prima data (${firstDate})`);
+        }
+      }
+    }
   }
 
   for (let i = 0; i < dates.length; i++) {

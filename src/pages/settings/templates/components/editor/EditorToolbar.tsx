@@ -2,9 +2,10 @@
  * EditorToolbar Component
  * Toolbar with formatting options for Tiptap editor
  * Extended with Logo, Signature, Header, Footer, Page Break
+ * Logo picker supports tenant + branch logos (MEDICA, FORMAZIONE, MDL)
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Editor } from '@tiptap/react';
 import {
   Bold,
@@ -24,8 +25,22 @@ import {
   LayoutPanelTop,
   Minus,
   ChevronDown,
+  Building2,
+  Stethoscope,
+  GraduationCap,
+  Briefcase,
+  ImagePlus,
 } from 'lucide-react';
 import MediaPickerModal from './MediaPickerModal';
+import { useTenant } from '../../../../../context/TenantContext';
+
+interface BranchLogoOption {
+  key: string;
+  label: string;
+  icon: React.ReactNode;
+  logoUrl: string | undefined;
+  color: string;
+}
 
 interface EditorToolbarProps {
   editor: Editor;
@@ -36,6 +51,62 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor, onInsertMarker })
   const [showMediaPicker, setShowMediaPicker] = useState(false);
   const [mediaPickerMode, setMediaPickerMode] = useState<'logo' | 'signature' | 'image'>('image');
   const [showInsertMenu, setShowInsertMenu] = useState(false);
+  const [showLogoMenu, setShowLogoMenu] = useState(false);
+  const logoMenuRef = useRef<HTMLDivElement>(null);
+  const { tenant } = useTenant();
+
+  // Close logo menu on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (logoMenuRef.current && !logoMenuRef.current.contains(e.target as Node)) {
+        setShowLogoMenu(false);
+      }
+    };
+    if (showLogoMenu) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showLogoMenu]);
+
+  // Build branch logo options from tenant settings
+  const settings = (tenant?.settings || {}) as Record<string, unknown>;
+  const branches = (settings.branches || {}) as Record<string, { logo?: string; name?: string }>;
+
+  const logoOptions: BranchLogoOption[] = [
+    {
+      key: 'tenant',
+      label: 'Logo Ente',
+      icon: <Building2 size={16} className="text-gray-600" />,
+      logoUrl: (settings.logoUrl as string) || undefined,
+      color: 'bg-gray-50'
+    },
+    {
+      key: 'medica',
+      label: branches.MEDICA?.name || 'ElementMedica',
+      icon: <Stethoscope size={16} className="text-teal-600" />,
+      logoUrl: branches.MEDICA?.logo || undefined,
+      color: 'bg-teal-50'
+    },
+    {
+      key: 'formazione',
+      label: branches.FORMAZIONE?.name || 'ElementSicurezza',
+      icon: <GraduationCap size={16} className="text-blue-600" />,
+      logoUrl: branches.FORMAZIONE?.logo || undefined,
+      color: 'bg-blue-50'
+    },
+    {
+      key: 'mdl',
+      label: branches.MDL?.name || 'Medicina del Lavoro',
+      icon: <Briefcase size={16} className="text-violet-600" />,
+      logoUrl: branches.MDL?.logo || undefined,
+      color: 'bg-violet-50'
+    },
+  ];
+
+  // Insert a logo directly by URL
+  const insertLogoByUrl = (url: string, alt: string) => {
+    const logoHtml = `<div class="logo-container" style="text-align: center; margin: 10px 0;"><img src="${url}" alt="${alt}" style="max-height: 80px; max-width: 200px; object-fit: contain;" /></div>`;
+    editor.chain().focus().insertContent(logoHtml).run();
+    setShowLogoMenu(false);
+  };
 
   const ToolbarButton = ({
     onClick,
@@ -63,10 +134,16 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor, onInsertMarker })
 
   const ToolbarDivider = () => <div className="w-px h-6 bg-gray-300 mx-1" />;
 
-  // Insert Logo from Media Library
+  // Insert Logo — show branch picker dropdown
   const handleInsertLogo = () => {
+    setShowLogoMenu(!showLogoMenu);
+  };
+
+  // Open media library for logo selection
+  const handleInsertLogoFromLibrary = () => {
     setMediaPickerMode('logo');
     setShowMediaPicker(true);
+    setShowLogoMenu(false);
   };
 
   // Insert Signature from Media Library
@@ -267,13 +344,58 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor, onInsertMarker })
 
         {/* === NEW ADVANCED FEATURES === */}
 
-        {/* Logo */}
-        <ToolbarButton
-          onClick={handleInsertLogo}
-          title="Inserisci Logo"
-        >
-          <FileImage size={18} />
-        </ToolbarButton>
+        {/* Logo Dropdown */}
+        <div className="relative" ref={logoMenuRef}>
+          <button
+            onClick={handleInsertLogo}
+            className="flex items-center gap-1 p-2 rounded hover:bg-gray-100 transition-colors text-gray-700"
+            title="Inserisci Logo (Ente / Sede)"
+          >
+            <FileImage size={18} />
+            <ChevronDown size={12} />
+          </button>
+
+          {showLogoMenu && (
+            <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50 min-w-[220px]">
+              <div className="px-3 py-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                Logo Rapido
+              </div>
+              {logoOptions.map((opt) => (
+                <button
+                  key={opt.key}
+                  onClick={() => opt.logoUrl ? insertLogoByUrl(opt.logoUrl, opt.label) : undefined}
+                  disabled={!opt.logoUrl}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors ${opt.logoUrl
+                    ? `hover:${opt.color} cursor-pointer`
+                    : 'opacity-40 cursor-not-allowed'
+                    }`}
+                >
+                  {opt.icon}
+                  <span className="flex-1">{opt.label}</span>
+                  {opt.logoUrl && (
+                    <img
+                      src={opt.logoUrl}
+                      alt=""
+                      className="h-5 w-8 object-contain rounded"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    />
+                  )}
+                  {!opt.logoUrl && (
+                    <span className="text-xs text-gray-400">Non configurato</span>
+                  )}
+                </button>
+              ))}
+              <hr className="my-1" />
+              <button
+                onClick={handleInsertLogoFromLibrary}
+                className="w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-50 text-sm text-left"
+              >
+                <ImagePlus size={16} className="text-gray-500" />
+                Dalla libreria media...
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* Signature */}
         <ToolbarButton

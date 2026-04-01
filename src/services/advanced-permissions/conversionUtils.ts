@@ -93,7 +93,28 @@ const ENTITY_MAP_TO_BACKEND: Record<string, string> = {
 
   // Tenant e administration
   'tenants': 'TENANTS',
-  'administration': 'ADMINISTRATION'
+  'administration': 'ADMINISTRATION',
+
+  // P69: Clinical / Poliambulatorio
+  'poliambulatori': 'POLIAMBULATORI',
+  'sedi_cliniche': 'SEDI_CLINICHE',
+  'ambulatori': 'AMBULATORI',
+  'prestazioni': 'PRESTAZIONI',
+  'medici_abilitati': 'MEDICI_ABILITATI',
+  'appuntamenti': 'APPUNTAMENTI',
+  'slot_disponibilita': 'SLOT_DISPONIBILITA',
+  'visite': 'VISITE',
+  'referti': 'REFERTI',
+  'documenti_clinici': 'DOCUMENTI_CLINICI',
+  'convenzioni': 'CONVENZIONI',
+  'tariffari': 'TARIFFARI',
+  'fatture_sanitarie': 'FATTURE_SANITARIE',
+  'strumenti': 'STRUMENTI',
+  'coda_pazienti': 'CODA_PAZIENTI',
+  'visit_templates': 'VISIT_TEMPLATES',
+  'protocolli_sanitari': 'PROTOCOLLI_SANITARI',
+  'farmaci': 'FARMACI',
+  'disponibilita_medici': 'DISPONIBILITA_MEDICI'
 };
 
 // Mappa inversa: backend entity name -> frontend entity name
@@ -148,16 +169,36 @@ const ENTITY_MAP_FROM_BACKEND: Record<string, string> = {
   'TENANTS': 'tenants',
   'ADMINISTRATION': 'administration',
   // Mappature aggiuntive per permessi dal backend
-  'SUBMISSIONS': 'form_submissions'  // SUBMISSIONS -> form_submissions
+  'SUBMISSIONS': 'form_submissions',  // SUBMISSIONS -> form_submissions
+
+  // P69: Clinical / Poliambulatorio
+  'POLIAMBULATORI': 'poliambulatori',
+  'SEDI_CLINICHE': 'sedi_cliniche',
+  'AMBULATORI': 'ambulatori',
+  'PRESTAZIONI': 'prestazioni',
+  'MEDICI_ABILITATI': 'medici_abilitati',
+  'APPUNTAMENTI': 'appuntamenti',
+  'SLOT_DISPONIBILITA': 'slot_disponibilita',
+  'VISITE': 'visite',
+  'REFERTI': 'referti',
+  'DOCUMENTI_CLINICI': 'documenti_clinici',
+  'CONVENZIONI': 'convenzioni',
+  'TARIFFARI': 'tariffari',
+  'FATTURE_SANITARIE': 'fatture_sanitarie',
+  'STRUMENTI': 'strumenti',
+  'CODA_PAZIENTI': 'coda_pazienti',
+  'VISIT_TEMPLATES': 'visit_templates',
+  'PROTOCOLLI_SANITARI': 'protocolli_sanitari',
+  'FARMACI': 'farmaci',
+  'DISPONIBILITA_MEDICI': 'disponibilita_medici'
 };
 
 /**
  * Converte i permessi dal formato backend al formato frontend
  * Filtra automaticamente i permessi con entità non riconosciute
- * @version 2.0 - Added proper entity extraction and filtering
+ * @version 3.0 - Added support for new entity:action format (e.g., "notifications:create")
  */
 export function convertFromBackendFormat(backendPermissions: any[]): EntityPermission[] {
-  console.log('📥 [convertFromBackendFormat v2.0] Processing', backendPermissions.length, 'permissions from backend');
 
   return backendPermissions
     .map(permission => {
@@ -166,27 +207,42 @@ export function convertFromBackendFormat(backendPermissions: any[]): EntityPermi
       let entity = 'unknown';
       let action: 'create' | 'read' | 'update' | 'delete' = 'read';
 
-      // Mappa le azioni del backend alle azioni del frontend
-      for (const [backendAction, frontendAction] of Object.entries(ACTION_MAP_FROM_BACKEND)) {
-        if (permissionId.startsWith(backendAction) || permissionId.includes(backendAction)) {
-          action = frontendAction;
-          break;
+      // P69: Check for new format "entity:action" (e.g., "notifications:create")
+      const colonIndex = permissionId.indexOf(':');
+      if (colonIndex > 0) {
+        // New format: entity:action
+        entity = permissionId.substring(0, colonIndex);
+        const actionPart = permissionId.substring(colonIndex + 1);
+        // Map action to CRUD if needed
+        if (actionPart === 'create') action = 'create';
+        else if (actionPart === 'read' || actionPart === 'view') action = 'read';
+        else if (actionPart === 'update' || actionPart === 'edit' || actionPart === 'write') action = 'update';
+        else if (actionPart === 'delete' || actionPart === 'remove') action = 'delete';
+        else if (actionPart === 'manage') action = 'update'; // Map manage to update
+        else action = 'read'; // Default fallback
+      } else {
+        // Legacy format: ACTION_ENTITY (e.g., VIEW_COMPANIES)
+        // Mappa le azioni del backend alle azioni del frontend
+        for (const [backendAction, frontendAction] of Object.entries(ACTION_MAP_FROM_BACKEND)) {
+          if (permissionId.startsWith(backendAction) || permissionId.includes(backendAction)) {
+            action = frontendAction;
+            break;
+          }
         }
-      }
 
-      // Estrae l'entità dal permissionId (es. VIEW_COMPANIES -> COMPANIES -> companies)
-      // Il formato è tipicamente ACTION_ENTITY, quindi splittiamo e prendiamo la parte dopo l'underscore
-      const parts = permissionId.split('_');
-      if (parts.length >= 2) {
-        // Ricostruisci il nome dell'entità (potrebbe essere composto, es. FORM_TEMPLATES)
-        const entityPart = parts.slice(1).join('_');
+        // Estrae l'entità dal permissionId (es. VIEW_COMPANIES -> COMPANIES -> companies)
+        const parts = permissionId.split('_');
+        if (parts.length >= 2) {
+          // Ricostruisci il nome dell'entità (potrebbe essere composto, es. FORM_TEMPLATES)
+          const entityPart = parts.slice(1).join('_');
 
-        // Cerca prima nel mapping inverso
-        if (ENTITY_MAP_FROM_BACKEND[entityPart]) {
-          entity = ENTITY_MAP_FROM_BACKEND[entityPart];
-        } else {
-          // Fallback: converti in lowercase
-          entity = entityPart.toLowerCase();
+          // Cerca prima nel mapping inverso
+          if (ENTITY_MAP_FROM_BACKEND[entityPart]) {
+            entity = ENTITY_MAP_FROM_BACKEND[entityPart];
+          } else {
+            // Fallback: converti in lowercase
+            entity = entityPart.toLowerCase();
+          }
         }
       }
 
@@ -199,7 +255,8 @@ export function convertFromBackendFormat(backendPermissions: any[]): EntityPermi
         entity,
         action,
         scope: permission.scope || 'all',
-        fields: permission.fieldRestrictions || permission.fields || [],
+        // P69: Support backend 'allowedFields' in addition to 'fields' and 'fieldRestrictions'
+        fields: permission.allowedFields || permission.fieldRestrictions || permission.fields || [],
         granted: permission.granted !== false // Default true se non specificato
       };
     })
@@ -293,13 +350,11 @@ const VALID_BACKEND_PERMISSIONS = [
  * @version 2.0 - Fixed entity validation with proper filtering
  */
 export function convertToBackendFormat(frontendPermissions: EntityPermission[]): any[] {
-  console.log('🔄 [convertToBackendFormat v2.0] Processing', frontendPermissions.length, 'permissions');
 
   return frontendPermissions
     .map(permission => {
       // Salta permessi con entità unknown
       if (permission.entity === 'unknown' || !permission.entity) {
-        console.log('⚠️ [convertToBackendFormat] Skipping unknown entity:', permission.entity);
         return null;
       }
 
@@ -307,30 +362,21 @@ export function convertToBackendFormat(frontendPermissions: EntityPermission[]):
       const actionPrefix = ACTION_MAP_TO_BACKEND[permission.action] || 'VIEW_';
       const entityName = ENTITY_MAP_TO_BACKEND[permission.entity];
 
-      // Debug log
-      console.log(`🔍 [convertToBackendFormat] entity: ${permission.entity} -> ${entityName}, action: ${permission.action} -> ${actionPrefix}`);
-
       // Se l'entità non è mappata, salta
       if (!entityName) {
-        console.warn(`⛔ Entity "${permission.entity}" not found in ENTITY_MAP_TO_BACKEND, skipping permission`);
+        if (import.meta.env.DEV) console.warn(`⛔ Entity "${permission.entity}" not found in ENTITY_MAP_TO_BACKEND, skipping permission`);
         return null;
       }
 
       const permissionId = `${actionPrefix}${entityName}`;
 
       // Verifica se il permesso è valido
-      if (!VALID_BACKEND_PERMISSIONS.includes(permissionId)) {
-        console.warn(`⛔ Permission ${permissionId} is not in VALID_BACKEND_PERMISSIONS, skipping...`);
-        return null;
-      }
-
-      console.log(`✅ [convertToBackendFormat] Generated valid permission: ${permissionId}`);
-
       return {
         permissionId: permissionId,
         granted: permission.granted !== false, // Usa il valore dal frontend, default true se non specificato
         scope: permission.scope || 'all',
-        fieldRestrictions: permission.fields || []
+        fieldRestrictions: permission.fields || [],
+        allowedFields: permission.fields || [] // P69: Include both for backend compatibility
       };
     })
     .filter(permission => permission !== null); // Rimuovi i permessi non validi

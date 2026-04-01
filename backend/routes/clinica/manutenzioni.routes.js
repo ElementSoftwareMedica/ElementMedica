@@ -22,7 +22,7 @@
  */
 
 import express from 'express';
-import middleware from '../../auth/middleware.js';
+import middleware from '../../middleware/auth.js';
 import { checkAdvancedPermission } from '../../middleware/advanced-permissions.js';
 import logger from '../../utils/logger.js';
 import { auditClinico, getEffectiveTenantId } from './utils/clinica-utils.js';
@@ -44,7 +44,7 @@ const router = express.Router();
  * @access Authenticated + VIEW_STRUMENTI
  */
 router.get('/',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('strumenti', 'read'),
     auditClinico('list_manutenzioni'),
     async (req, res) => {
@@ -59,14 +59,13 @@ router.get('/',
         } catch (error) {
             logger.error('Failed to list manutenzioni', {
                 component: 'manutenzioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero delle manutenzioni',
-                message: error.message
             });
         }
     }
@@ -78,7 +77,7 @@ router.get('/',
  * @access Authenticated + VIEW_STRUMENTI
  */
 router.get('/scadenza',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('strumenti', 'read'),
     auditClinico('list_manutenzioni_scadenza'),
     async (req, res) => {
@@ -98,14 +97,13 @@ router.get('/scadenza',
         } catch (error) {
             logger.error('Failed to get manutenzioni in scadenza', {
                 component: 'manutenzioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero delle manutenzioni in scadenza',
-                message: error.message
             });
         }
     }
@@ -117,7 +115,7 @@ router.get('/scadenza',
  * @access Authenticated + VIEW_STRUMENTI
  */
 router.get('/stats',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('strumenti', 'read'),
     auditClinico('get_manutenzioni_stats'),
     async (req, res) => {
@@ -134,14 +132,13 @@ router.get('/stats',
         } catch (error) {
             logger.error('Failed to get manutenzioni stats', {
                 component: 'manutenzioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero delle statistiche manutenzioni',
-                message: error.message
             });
         }
     }
@@ -153,7 +150,7 @@ router.get('/stats',
  * @access Authenticated + VIEW_STRUMENTI
  */
 router.get('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('strumenti', 'read'),
     auditClinico('get_manutenzione'),
     async (req, res) => {
@@ -177,7 +174,7 @@ router.get('/:id',
         } catch (error) {
             logger.error('Failed to get manutenzione', {
                 component: 'manutenzioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 manutenzioneId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -185,7 +182,6 @@ router.get('/:id',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero della manutenzione',
-                message: error.message
             });
         }
     }
@@ -197,7 +193,7 @@ router.get('/:id',
  * @access Authenticated + UPDATE_STRUMENTI
  */
 router.post('/',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('strumenti', 'update'),
     auditClinico('create_manutenzione'),
     async (req, res) => {
@@ -218,14 +214,13 @@ router.post('/',
         } catch (error) {
             logger.error('Failed to create manutenzione', {
                 component: 'manutenzioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nella creazione della manutenzione',
-                message: error.message
             });
         }
     }
@@ -237,7 +232,7 @@ router.post('/',
  * @access Authenticated + UPDATE_STRUMENTI
  */
 router.post('/ricorrente',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('strumenti', 'update'),
     auditClinico('create_manutenzioni_ricorrenti'),
     async (req, res) => {
@@ -260,14 +255,13 @@ router.post('/ricorrente',
         } catch (error) {
             logger.error('Failed to create manutenzioni ricorrenti', {
                 component: 'manutenzioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nella creazione delle manutenzioni ricorrenti',
-                message: error.message
             });
         }
     }
@@ -279,7 +273,7 @@ router.post('/ricorrente',
  * @access Authenticated + UPDATE_STRUMENTI
  */
 router.put('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('strumenti', 'update'),
     auditClinico('update_manutenzione'),
     async (req, res) => {
@@ -297,7 +291,7 @@ router.put('/:id',
         } catch (error) {
             logger.error('Failed to update manutenzione', {
                 component: 'manutenzioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 manutenzioneId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -312,7 +306,6 @@ router.put('/:id',
             res.status(500).json({
                 success: false,
                 error: 'Errore nell\'aggiornamento della manutenzione',
-                message: error.message
             });
         }
     }
@@ -324,7 +317,7 @@ router.put('/:id',
  * @access Authenticated + UPDATE_STRUMENTI
  */
 router.put('/:id/completa',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('strumenti', 'update'),
     auditClinico('complete_manutenzione'),
     async (req, res) => {
@@ -346,7 +339,7 @@ router.put('/:id/completa',
         } catch (error) {
             logger.error('Failed to complete manutenzione', {
                 component: 'manutenzioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 manutenzioneId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -361,7 +354,6 @@ router.put('/:id/completa',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel completamento della manutenzione',
-                message: error.message
             });
         }
     }
@@ -373,7 +365,7 @@ router.put('/:id/completa',
  * @access Authenticated + UPDATE_STRUMENTI
  */
 router.put('/:id/annulla',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('strumenti', 'update'),
     auditClinico('cancel_manutenzione'),
     async (req, res) => {
@@ -396,7 +388,7 @@ router.put('/:id/annulla',
         } catch (error) {
             logger.error('Failed to cancel manutenzione', {
                 component: 'manutenzioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 manutenzioneId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -411,7 +403,6 @@ router.put('/:id/annulla',
             res.status(500).json({
                 success: false,
                 error: 'Errore nell\'annullamento della manutenzione',
-                message: error.message
             });
         }
     }
@@ -423,7 +414,7 @@ router.put('/:id/annulla',
  * @access Authenticated + UPDATE_STRUMENTI
  */
 router.delete('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('strumenti', 'update'),
     auditClinico('delete_manutenzione'),
     async (req, res) => {
@@ -440,7 +431,7 @@ router.delete('/:id',
         } catch (error) {
             logger.error('Failed to delete manutenzione', {
                 component: 'manutenzioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 manutenzioneId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -455,7 +446,6 @@ router.delete('/:id',
             res.status(500).json({
                 success: false,
                 error: 'Errore nell\'eliminazione della manutenzione',
-                message: error.message
             });
         }
     }

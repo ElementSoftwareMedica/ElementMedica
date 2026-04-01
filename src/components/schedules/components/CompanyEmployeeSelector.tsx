@@ -43,8 +43,9 @@ export const CompanyEmployeeSelector: React.FC<CompanyEmployeeSelectorProps> = (
   personTab,
   onPersonTabChange
 }) => {
-  const [persons, setPersons] = React.useState<Person[]>(initialPersons || []);
-  const [isLoadingPersons, setIsLoadingPersons] = React.useState(false);
+  // Persons are loaded by ScheduleEventModal and passed as props — use directly
+  const persons = initialPersons || [];
+  const isLoadingPersons = persons.length === 0;
 
   // 🔄 Logica di auto-selezione: wrapper per onCompanyToggle
   const handleCompanyToggleWithLogic = useCallback((companyId: string | number) => {
@@ -52,9 +53,16 @@ export const CompanyEmployeeSelector: React.FC<CompanyEmployeeSelectorProps> = (
 
     if (isCurrentlySelected) {
       // Deseleziono azienda → deseleziono tutti i suoi dipendenti
-      const companyPersonIds = getPersonIdsForCompanyUniversal(persons, companyId);
+      // P49: Match anche con companyTenantProfileId per trovare i dipendenti
+      const company = companies.find(c => String(c.id) === String(companyId));
+      const ctpId = company?.companyTenantProfileId;
+      const allCtpIds = company?.allCompanyTenantProfileIds || [];
+      const byGlobal = getPersonIdsForCompanyUniversal(persons, companyId);
+      const byCtp = ctpId ? getPersonIdsForCompanyUniversal(persons, ctpId) : [];
+      const byAllCtp = allCtpIds.flatMap(cId => getPersonIdsForCompanyUniversal(persons, cId));
+      const companyPersonIds = [...new Set([...byGlobal, ...byCtp, ...byAllCtp].map(String))];
       companyPersonIds.forEach(personId => {
-        if (selectedPersons.includes(personId)) {
+        if (selectedPersons.map(String).includes(personId)) {
           onPersonToggle(personId);
         }
       });
@@ -65,7 +73,7 @@ export const CompanyEmployeeSelector: React.FC<CompanyEmployeeSelectorProps> = (
 
     // Eseguo il toggle dell'azienda
     onCompanyToggle(companyId);
-  }, [selectedCompanies, selectedPersons, persons, onCompanyToggle, onPersonToggle, onPersonTabChange]);
+  }, [selectedCompanies, selectedPersons, persons, companies, onCompanyToggle, onPersonToggle, onPersonTabChange]);
 
   // 🔄 Logica di auto-selezione: wrapper per onPersonToggle
   const handlePersonToggleWithLogic = useCallback((personId: string | number) => {
@@ -83,41 +91,6 @@ export const CompanyEmployeeSelector: React.FC<CompanyEmployeeSelectorProps> = (
     // Eseguo il toggle del dipendente
     onPersonToggle(personId);
   }, [selectedPersons, selectedCompanies, persons, onPersonToggle, onCompanyToggle]);
-
-  // ✅ LAZY LOADING: Carica persons se non forniti (pattern come CourseDetailsForm)
-  useEffect(() => {
-    console.log('[CompanyEmployeeSelector] 🔍 Checking initialPersons:', {
-      isDefined: initialPersons !== undefined,
-      isArray: Array.isArray(initialPersons),
-      length: initialPersons?.length
-    });
-
-    if (!initialPersons || initialPersons.length === 0) {
-      console.log('[CompanyEmployeeSelector] 🔄 No persons provided, loading from server...');
-
-      const loadPersons = async () => {
-        setIsLoadingPersons(true);
-        try {
-          const { getPersons } = await import('../../../services/persons');
-          const result = await getPersons({ limit: 1000, page: 1 });
-          const loadedPersons = result?.persons || [];
-
-          console.log('[CompanyEmployeeSelector] ✅ Loaded persons:', loadedPersons.length);
-          setPersons(loadedPersons);
-        } catch (error) {
-          console.error('[CompanyEmployeeSelector] ❌ Failed to load persons:', error);
-          setPersons([]);
-        } finally {
-          setIsLoadingPersons(false);
-        }
-      };
-
-      loadPersons();
-    } else {
-      console.log('[CompanyEmployeeSelector] ✅ Using persons from props:', initialPersons.length);
-      setPersons(initialPersons);
-    }
-  }, [initialPersons]);
 
   // Se nessuna azienda è attiva nel pannello di destra, seleziona la prima disponibile
   useEffect(() => {
@@ -145,36 +118,32 @@ export const CompanyEmployeeSelector: React.FC<CompanyEmployeeSelectorProps> = (
   const getFilteredPersonsForCompany = useCallback((companyId: string | number) => {
     const normalizedCompanyId = String(companyId);
 
-    // DEBUG: Verifica struttura dei dati in ingresso
-    if (process.env.NODE_ENV === 'development' && persons.length > 0) {
-      const sample = persons[0];
-      console.debug(`[CompanyEmployeeSelector] Person data structure:`, {
-        samplePerson: {
-          id: sample.id,
-          firstName: sample.firstName,
-          lastName: sample.lastName,
-          companyId: sample.companyId,
-          company: sample.company,
-          hasCompanyId: !!sample.companyId,
-          hasCompanyObject: !!sample.company,
-          companyIdType: typeof sample.companyId
-        },
-        totalPersons: persons.length,
-        personsWithCompanyId: persons.filter(p => p.companyId).length,
-        personsWithCompanyObject: persons.filter(p => p.company?.id).length
-      });
-    }
+    // P49: company.id = global Company.id, company.companyTenantProfileId = CTP.id
+    // person.companyId = CTP.id — bisogna matchare anche con companyTenantProfileId
+    const company = companies.find(c => String(c.id) === normalizedCompanyId);
+    const ctpId = company?.companyTenantProfileId ? String(company.companyTenantProfileId) : null;
+    // Multi-tenant: match all CTP IDs (company may exist in multiple tenants)
+    const allCtpIds = (company?.allCompanyTenantProfileIds || []).map(String);
 
     const explicit = (getPersonIdsForCompany(String(companyId)) || []);
     const universal = getPersonIdsForCompanyUniversal(persons, companyId);
-    const ids = new Set([...explicit, ...universal].map((id) => String(id)));
+    // Cerca con CTP ID principale e tutti gli altri
+    const universalCtp = ctpId ? getPersonIdsForCompanyUniversal(persons, ctpId) : [];
+    const universalAllCtp = allCtpIds.flatMap(cId => getPersonIdsForCompanyUniversal(persons, cId));
+    const ids = new Set([...explicit, ...universal, ...universalCtp, ...universalAllCtp].map((id) => String(id)));
 
-    // FIX: Prima filtra per azienda direttamente dal companyId/company.id
     const filteredPersons = persons.filter((person: Person) => {
-      const personCompanyId = String(person.companyId ?? person.company?.id ?? '');
+      // P49: person.companyId = CTP UUID, person.company?.id = global Company UUID
+      // Check both independently to support P49 multi-tenant matching
+      const personCtpId = String(person.companyId ?? '');
+      const personGlobalCompanyId = String(person.company?.id ?? '');
 
-      // Match diretto con l'ID azienda o presente negli ID espliciti/universali
-      const inCompanyScope = personCompanyId === normalizedCompanyId || ids.has(String(person.id));
+      // Match con Company.id (globale), any CompanyTenantProfile.id, o presente negli ID espliciti/universali
+      const inCompanyScope = personCtpId === normalizedCompanyId
+        || personGlobalCompanyId === normalizedCompanyId
+        || (ctpId && personCtpId === ctpId)
+        || allCtpIds.includes(personCtpId)
+        || ids.has(String(person.id));
       const matchesSearch =
         personSearch === '' ||
         `${person.lastName} ${person.firstName}`
@@ -183,29 +152,9 @@ export const CompanyEmployeeSelector: React.FC<CompanyEmployeeSelectorProps> = (
       return inCompanyScope && matchesSearch;
     });
 
-    // Debug logging per capire il problema
-    if (process.env.NODE_ENV === 'development') {
-      console.debug(`[CompanyEmployeeSelector] Company ${normalizedCompanyId}:`, {
-        companyName: getCompanyName(companyId),
-        totalPersons: persons.length,
-        explicitIds: explicit,
-        universalIds: universal,
-        allIds: Array.from(ids),
-        filteredPersons: filteredPersons.length,
-        matchingByCompanyId: persons.filter(p => String(p.companyId ?? p.company?.id ?? '') === normalizedCompanyId).length,
-        sampleFiltered: filteredPersons.slice(0, 3).map(p => ({
-          id: p.id,
-          name: `${p.lastName} ${p.firstName}`,
-          companyId: p.companyId,
-          companyFromObject: p.company?.id,
-          matches: String(p.companyId ?? p.company?.id ?? '') === normalizedCompanyId
-        }))
-      });
-    }
-
     // ✅ Ordina alfabeticamente per cognome
     return filteredPersons.sort((a, b) => a.lastName.localeCompare(b.lastName));
-  }, [persons, personSearch, getPersonIdsForCompany, getCompanyName]);
+  }, [persons, personSearch, getPersonIdsForCompany, companies]);
 
   // Calcola statistiche per ogni azienda
   const getCompanyStats = useCallback((companyId: string | number) => {
@@ -222,10 +171,10 @@ export const CompanyEmployeeSelector: React.FC<CompanyEmployeeSelectorProps> = (
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-gray-800">Partecipanti</h3>
-        <div className="text-sm text-gray-600">
+        <h3 className="font-semibold text-gray-800 dark:text-gray-100">Partecipanti</h3>
+        <div className="text-sm text-gray-600 dark:text-gray-400">
           {isLoadingPersons ? (
-            <span className="text-blue-600">🔄 Caricamento dipendenti...</span>
+            <span className="text-blue-600 dark:text-blue-400">🔄 Caricamento dipendenti...</span>
           ) : (
             <span>{selectedPersons.length} partecipanti selezionati da {selectedCompanies.length} aziende</span>
           )}
@@ -234,11 +183,11 @@ export const CompanyEmployeeSelector: React.FC<CompanyEmployeeSelectorProps> = (
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Pannello Sinistro: Aziende */}
-        <div className="border rounded-md bg-white shadow-sm">
-          <div className="p-3 border-b bg-gray-50 rounded-t-md">
+        <div className="border dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 shadow-sm">
+          <div className="p-3 border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-700 rounded-t-md">
             <div className="flex items-center justify-between">
-              <span className="font-medium text-sm">Tutte le Aziende</span>
-              <span className="text-xs text-gray-500">{filteredCompanies.length} trovate</span>
+              <span className="font-medium text-sm dark:text-gray-100">Tutte le Aziende</span>
+              <span className="text-xs text-gray-500 dark:text-gray-400">{filteredCompanies.length} trovate</span>
             </div>
             <div className="mt-2">
               <Label>Cerca Aziende</Label>
@@ -260,7 +209,7 @@ export const CompanyEmployeeSelector: React.FC<CompanyEmployeeSelectorProps> = (
               return (
                 <div
                   key={company.id}
-                  className={`flex items-center p-3 border-b hover:bg-gray-50 ${isActive ? 'bg-blue-50 border-blue-200' : ''
+                  className={`flex items-center p-3 border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 ${isActive ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-700' : ''
                     }`}
                 >
                   <input
@@ -275,13 +224,13 @@ export const CompanyEmployeeSelector: React.FC<CompanyEmployeeSelectorProps> = (
                     className="flex-1 text-left"
                     onClick={() => onPersonTabChange(company.id)}
                   >
-                    <div className="font-medium text-sm">
+                    <div className="font-medium text-sm dark:text-gray-100">
                       {company.ragioneSociale || company.name}
                     </div>
-                    <div className="text-xs text-gray-500">
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
                       {stats.total} dipendenti
                       {stats.selected > 0 && (
-                        <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-800 rounded-full">
+                        <span className="ml-2 px-2 py-0.5 bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200 rounded-full">
                           {stats.selected} selezionati
                         </span>
                       )}
@@ -293,11 +242,11 @@ export const CompanyEmployeeSelector: React.FC<CompanyEmployeeSelectorProps> = (
           </div>
 
           {selectedCompanies.length > 0 && (
-            <div className="p-3 border-t bg-blue-50 rounded-b-md">
-              <div className="font-medium text-sm mb-1">
+            <div className="p-3 border-t dark:border-gray-700 bg-blue-50 dark:bg-blue-900/30 rounded-b-md">
+              <div className="font-medium text-sm mb-1 dark:text-gray-100">
                 Aziende Selezionate: {selectedCompanies.length}
               </div>
-              <div className="text-xs text-gray-600 max-h-16 overflow-y-auto">
+              <div className="text-xs text-gray-600 dark:text-gray-400 max-h-16 overflow-y-auto">
                 {selectedCompanies.map(companyId => {
                   const stats = getCompanyStats(companyId);
                   return (
@@ -313,12 +262,12 @@ export const CompanyEmployeeSelector: React.FC<CompanyEmployeeSelectorProps> = (
         </div>
 
         {/* Pannello Destro: Dipendenti dell'azienda attiva */}
-        <div className="border rounded-md bg-white shadow-sm">
-          <div className="p-3 border-b bg-gray-50 rounded-t-md">
+        <div className="border dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 shadow-sm">
+          <div className="p-3 border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-700 rounded-t-md">
             <div className="flex items-center justify-between">
               <div>
-                <div className="font-medium text-sm">Dipendenti</div>
-                <div className="text-xs text-gray-500">
+                <div className="font-medium text-sm dark:text-gray-100">Dipendenti</div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">
                   {personTab ? `${getCompanyName(personTab)}` : 'Seleziona un\'azienda a sinistra'}
                 </div>
               </div>
@@ -362,7 +311,7 @@ export const CompanyEmployeeSelector: React.FC<CompanyEmployeeSelectorProps> = (
               getFilteredPersonsForCompany(personTab).map((person: Person) => (
                 <div
                   key={person.id}
-                  className="flex items-center p-3 border-b hover:bg-gray-50 cursor-pointer transition-colors"
+                  className="flex items-center p-3 border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors"
                   onClick={() => handlePersonToggleWithLogic(person.id)}
                 >
                   <input
@@ -373,17 +322,17 @@ export const CompanyEmployeeSelector: React.FC<CompanyEmployeeSelectorProps> = (
                     className="mr-3 w-4 h-4 accent-blue-600 pointer-events-none"
                   />
                   <div className="flex-1 pointer-events-none">
-                    <div className="font-medium text-sm">
+                    <div className="font-medium text-sm dark:text-gray-100">
                       {person.lastName} {person.firstName}
                     </div>
                     {person.email && (
-                      <div className="text-xs text-gray-500">{person.email}</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">{person.email}</div>
                     )}
                     {person.position && (
-                      <div className="text-xs text-gray-500 italic">{person.position}</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 italic">{person.position}</div>
                     )}
                     {person.birthDate && (
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
                         🎂 {new Date(person.birthDate).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                       </div>
                     )}
@@ -391,19 +340,19 @@ export const CompanyEmployeeSelector: React.FC<CompanyEmployeeSelectorProps> = (
                 </div>
               ))
             ) : (
-              <div className="p-6 text-center text-gray-500">
+              <div className="p-6 text-center text-gray-500 dark:text-gray-400">
                 <div className="mb-2">👥</div>
                 <div>Seleziona un'azienda per vedere i dipendenti</div>
               </div>
             )}
           </div>
 
-          <div className="p-3 border-t bg-green-50 rounded-b-md">
-            <div className="font-medium text-sm">
+          <div className="p-3 border-t dark:border-gray-700 bg-green-50 dark:bg-green-900/30 rounded-b-md">
+            <div className="font-medium text-sm dark:text-gray-100">
               Partecipanti selezionati: {selectedPersons.length}
             </div>
             {personTab && (
-              <div className="text-xs text-gray-600 mt-1">
+              <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                 Da questa azienda: {getCompanyStats(personTab).selected}/{getCompanyStats(personTab).total}
               </div>
             )}

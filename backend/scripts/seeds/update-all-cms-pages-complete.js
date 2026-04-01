@@ -1,6 +1,6 @@
 /**
  * Script per aggiornare TUTTE le pagine CMS con contenuti completi
- * - Aggiorna Element Formazione (medicina-del-lavoro, rspp)
+ * - Aggiorna Element Sicurezza (medicina-del-lavoro, rspp)
  * - Crea tenant Element Medica se non esiste
  * - Crea pagine Element Medica complete
  * 
@@ -17,13 +17,13 @@ const TENANT_FORMAZIONE = 'd2bbc5b0-344c-47c7-8ef5-f57755293372';
 const TENANT_MEDICA = 'tenant-element-medica-001';
 
 // ============================================
-// PAGINE ELEMENT FORMAZIONE - COMPLETE
+// PAGINE ELEMENT SICUREZZA - COMPLETE
 // ============================================
 
 const medicinaDelLavoroFormazione = {
     slug: 'medicina-del-lavoro',
-    title: 'Medicina del Lavoro - Element Formazione',
-    seoTitle: 'Medicina del Lavoro Milano | Sorveglianza Sanitaria Aziendale | Element Formazione',
+    title: 'Medicina del Lavoro - Element Sicurezza',
+    seoTitle: 'Medicina del Lavoro Padova | Sorveglianza Sanitaria Aziendale | Element Sicurezza',
     seoDescription: 'Servizi completi di medicina del lavoro: visite preventive, sorveglianza sanitaria, medico competente, esami specialistici. Conformità D.Lgs 81/08. ✓ ISO 9001 ✓ 500+ aziende clienti.',
     status: 'published',
     layout: 'full-width',
@@ -189,7 +189,7 @@ const medicinaDelLavoroFormazione = {
             title: 'Proteggi la Salute dei Tuoi Lavoratori',
             description: 'Contattaci per un consulto gratuito e scopri come possiamo supportare la tua azienda nella gestione della medicina del lavoro.',
             primaryButton: { text: 'Richiedi Consulto Gratuito', href: '/contatti' },
-            secondaryButton: { text: 'Chiamaci Ora', href: 'tel:+390212345678' },
+            secondaryButton: { text: 'Chiamaci: +39 351 623 9176', href: 'tel:+393516239176' },
             badges: ['✓ Risposta in 24h', '✓ Preventivo Gratuito', '✓ Supporto Continuativo']
         }
     },
@@ -198,8 +198,8 @@ const medicinaDelLavoroFormazione = {
 
 const rsppFormazione = {
     slug: 'rspp',
-    title: 'Nomina RSPP - Element Formazione',
-    seoTitle: 'RSPP Esterno Milano | Responsabile Sicurezza | Element Formazione',
+    title: 'Nomina RSPP - Element Sicurezza',
+    seoTitle: 'RSPP Esterno Padova | Responsabile Sicurezza | Element Sicurezza',
     seoDescription: 'Servizio di RSPP esterno qualificato: nomina, DVR, valutazione rischi, consulenza sicurezza sul lavoro. ✓ Tutti i macrosettori ATECO ✓ 500+ aziende clienti.',
     status: 'published',
     layout: 'full-width',
@@ -381,7 +381,7 @@ const rsppFormazione = {
             title: 'Metti la Sicurezza in Mani Esperte',
             description: 'Affida il ruolo di RSPP a professionisti qualificati. Richiedi un preventivo personalizzato.',
             primaryButton: { text: 'Richiedi Preventivo Gratuito', href: '/contatti' },
-            secondaryButton: { text: 'Parla con un Esperto', href: 'tel:+390212345678' },
+            secondaryButton: { text: 'Chiama: +39 351 623 9176', href: 'tel:+393516239176' },
             badges: ['✓ Preventivo in 24h', '✓ Attivazione rapida', '✓ Tutti i macrosettori']
         }
     },
@@ -395,7 +395,7 @@ const rsppFormazione = {
 const homepageMedica = {
     slug: 'medica-homepage',
     title: 'Element Medica - Il Tuo Poliambulatorio di Fiducia',
-    seoTitle: 'Element Medica | Poliambulatorio Milano | Medicina del Lavoro e Visite Specialistiche',
+    seoTitle: 'Element Medica | Poliambulatorio Padova | Medicina del Lavoro e Visite Specialistiche',
     seoDescription: 'Poliambulatorio specializzato in medicina del lavoro, visite specialistiche e diagnostica. Professionisti qualificati, tecnologie avanzate. Prenota online.',
     status: 'published',
     layout: 'full-width',
@@ -466,7 +466,16 @@ const homepageMedica = {
             title: 'Prenota la Tua Visita',
             description: 'Contattaci per prenotare o per maggiori informazioni sui nostri servizi.',
             primaryButton: { text: 'Prenota Online', href: '/prenota' },
-            secondaryButton: { text: 'Chiama Ora', href: 'tel:+390212345678' }
+            secondaryButton: { text: 'Chiama: +39 351 318 1574', href: 'tel:+393513181574' }
+        },
+        emergency: {
+            title: 'Contatto Rapido',
+            subtitle: 'Siamo qui per aiutarti',
+            phone: '+39 351 318 1574',
+            email: 'info@elementmedica.com',
+            hours: 'Lun-Ven 8:00-20:00 | Sab 8:00-13:00',
+            ctaText: 'Prenota Ora',
+            ctaHref: '/prenota'
         }
     },
     blocks: []
@@ -475,7 +484,7 @@ const homepageMedica = {
 const medicinaDelLavoroMedica = {
     slug: 'medica-medicina-del-lavoro',
     title: 'Medicina del Lavoro - Element Medica',
-    seoTitle: 'Medicina del Lavoro Milano | Sorveglianza Sanitaria | Element Medica',
+    seoTitle: 'Medicina del Lavoro Padova | Sorveglianza Sanitaria | Element Medica',
     seoDescription: 'Servizi di medicina del lavoro per aziende: sorveglianza sanitaria, visite mediche, medico competente, esami specialistici. Conformità D.Lgs 81/08.',
     status: 'published',
     layout: 'full-width',
@@ -486,7 +495,7 @@ const medicinaDelLavoroMedica = {
             subtitle: 'Per Aziende e Professionisti',
             description: 'Servizi completi di sorveglianza sanitaria per la tua azienda. Medici competenti qualificati, protocolli personalizzati e gestione digitale.',
             primaryButton: { text: 'Richiedi Preventivo', href: '/contatti' },
-            secondaryButton: { text: 'Chiama Ora', href: 'tel:+390212345678' },
+            secondaryButton: { text: 'Chiama: +39 351 318 1574', href: 'tel:+393513181574' },
             stats: [
                 { number: '300+', label: 'Aziende Clienti' },
                 { number: '8.000+', label: 'Visite/Anno' },
@@ -533,7 +542,7 @@ const medicinaDelLavoroMedica = {
             title: 'Richiedi un Preventivo',
             description: 'Contattaci per un preventivo personalizzato per la tua azienda.',
             primaryButton: { text: 'Richiedi Preventivo', href: '/contatti' },
-            secondaryButton: { text: 'Chiama: 02 1234567', href: 'tel:+390212345678' }
+            secondaryButton: { text: 'Chiama: +39 351 623 9176', href: 'tel:+393516239176' }
         }
     },
     blocks: []
@@ -542,7 +551,7 @@ const medicinaDelLavoroMedica = {
 const visiteSpecialisticheMedica = {
     slug: 'medica-visite-specialistiche',
     title: 'Visite Specialistiche - Element Medica',
-    seoTitle: 'Visite Specialistiche Milano | Cardiologia, Ortopedia, Dermatologia | Element Medica',
+    seoTitle: 'Visite Specialistiche Padova | Cardiologia, Ortopedia, Dermatologia | Element Medica',
     seoDescription: 'Visite specialistiche con medici qualificati: cardiologia, ortopedia, dermatologia, oculistica, otorinolaringoiatria. Prenota online, tempi brevi.',
     status: 'published',
     layout: 'full-width',
@@ -598,7 +607,14 @@ const visiteSpecialisticheMedica = {
             title: 'Prenota la Tua Visita Specialistica',
             description: 'Scegli lo specialista e prenota online. Appuntamento confermato in poche ore.',
             primaryButton: { text: 'Prenota Online', href: '/prenota' },
-            secondaryButton: { text: 'Chiama per Info', href: 'tel:+390212345678' }
+            secondaryButton: { text: 'Chiama: +39 351 318 1574', href: 'tel:+393513181574' }
+        },
+        emergency: {
+            title: 'Prenota la Tua Visita',
+            subtitle: 'Il nostro team è pronto ad accoglierti',
+            phone: '+39 351 318 1574',
+            email: 'info@elementmedica.com',
+            hours: 'Lun-Ven 8:00-20:00 | Sab 8:00-13:00'
         }
     },
     blocks: []
@@ -607,7 +623,7 @@ const visiteSpecialisticheMedica = {
 const diagnosticaMedica = {
     slug: 'medica-diagnostica',
     title: 'Diagnostica - Element Medica',
-    seoTitle: 'Diagnostica Milano | Ecografie, Esami, ECG | Element Medica',
+    seoTitle: 'Diagnostica Padova | Ecografie, Esami, ECG | Element Medica',
     seoDescription: 'Servizi diagnostici completi: ecografie, elettrocardiogramma, spirometria, esami del sangue. Strumentazione all\'avanguardia, referti rapidi.',
     status: 'published',
     layout: 'full-width',
@@ -662,7 +678,13 @@ const diagnosticaMedica = {
             title: 'Prenota il Tuo Esame Diagnostico',
             description: 'Referti disponibili in 24-48 ore. Prenota online o chiama.',
             primaryButton: { text: 'Prenota Online', href: '/prenota' },
-            secondaryButton: { text: 'Chiama Ora', href: 'tel:+390212345678' }
+            secondaryButton: { text: 'Chiama: +39 351 318 1574', href: 'tel:+393513181574' }
+        },
+        emergency: {
+            title: 'Contatto Rapido',
+            phone: '+39 351 318 1574',
+            email: 'info@elementmedica.com',
+            hours: 'Lun-Ven 8:00-20:00 | Sab 8:00-13:00'
         }
     },
     blocks: []
@@ -671,8 +693,8 @@ const diagnosticaMedica = {
 const contattiMedica = {
     slug: 'medica-contatti',
     title: 'Contatti - Element Medica',
-    seoTitle: 'Contatti Element Medica | Prenota Visita Milano',
-    seoDescription: 'Contatta Element Medica per prenotare visite specialistiche o richiedere informazioni. Siamo a Milano, aperti dal lunedì al sabato.',
+    seoTitle: 'Contatti Element Medica | Prenota Visita Padova',
+    seoDescription: 'Contatta Element Medica per prenotare visite specialistiche o richiedere informazioni. Siamo a Selvazzano Dentro (PD), aperti dal lunedì al sabato.',
     status: 'published',
     layout: 'full-width',
     content: {
@@ -683,9 +705,9 @@ const contattiMedica = {
             backgroundVariant: 'medical-light'
         },
         contactInfo: {
-            address: 'Via Example 456, 20100 Milano',
-            phone: '+39 02 1234567',
-            email: 'info@elementmedica.it',
+            address: 'Via Bracciano 34, 35030 Selvazzano Dentro (PD)',
+            phone: '+39 351 318 1574',
+            email: 'info@elementmedica.com',
             hours: [
                 { days: 'Lunedì - Venerdì', time: '08:00 - 19:00' },
                 { days: 'Sabato', time: '08:00 - 13:00' },
@@ -700,7 +722,13 @@ const contattiMedica = {
         cta: {
             title: 'Preferisci Chiamare?',
             description: 'Il nostro team è disponibile per rispondere alle tue domande.',
-            primaryButton: { text: 'Chiama Ora', href: 'tel:+390212345678' }
+            primaryButton: { text: 'Chiama: +39 351 318 1574', href: 'tel:+393513181574' }
+        },
+        emergency: {
+            title: 'Contatto Rapido',
+            phone: '+39 351 318 1574',
+            email: 'info@elementmedica.com',
+            hours: 'Lun-Ven 8:00-20:00 | Sab 8:00-13:00'
         }
     },
     blocks: []
@@ -709,7 +737,7 @@ const contattiMedica = {
 const prenotaMedica = {
     slug: 'medica-prenota',
     title: 'Prenota Online - Element Medica',
-    seoTitle: 'Prenota Visita Online | Element Medica Milano',
+    seoTitle: 'Prenota Visita Online | Element Medica Padova',
     seoDescription: 'Prenota online la tua visita specialistica o esame diagnostico. Sistema di prenotazione semplice e veloce. Conferma immediata.',
     status: 'published',
     layout: 'full-width',
@@ -727,8 +755,8 @@ const prenotaMedica = {
         ],
         contactAlternative: {
             title: 'Preferisci Prenotare per Telefono?',
-            phone: '+39 02 1234567',
-            hours: 'Lun-Ven 08:00-19:00, Sab 08:00-13:00'
+            phone: '+39 351 318 1574',
+            hours: 'Lun-Ven 08:00-20:00, Sab 08:00-13:00'
         }
     },
     blocks: []
@@ -738,8 +766,8 @@ const prenotaMedica = {
 // FUNZIONI DI AGGIORNAMENTO
 // ============================================
 
-async function updateElementFormazionePages() {
-    console.log('\n📄 AGGIORNAMENTO PAGINE ELEMENT FORMAZIONE');
+async function updateElementSicurezzaPages() {
+    console.log('\n📄 AGGIORNAMENTO PAGINE ELEMENT SICUREZZA');
     console.log('==========================================\n');
 
     // Aggiorna Medicina del Lavoro
@@ -784,7 +812,7 @@ async function updateElementFormazionePages() {
         console.log('❌ Non trovata: rspp');
     }
 
-    console.log('\n✅ Pagine Element Formazione aggiornate!\n');
+    console.log('\n✅ Pagine Element Sicurezza aggiornate!\n');
 }
 
 async function createElementMedicaPages() {
@@ -793,28 +821,33 @@ async function createElementMedicaPages() {
 
     // Verifica/crea tenant Element Medica
     let tenantMedica = await prisma.tenant.findFirst({
-        where: { id: TENANT_MEDICA }
+        where: { OR: [{ id: TENANT_MEDICA }, { slug: 'element-medica' }] }
     });
 
     if (!tenantMedica) {
-        tenantMedica = await prisma.tenant.create({
-            data: {
+        tenantMedica = await prisma.tenant.upsert({
+            where: { slug: 'element-medica' },
+            update: { isActive: true },
+            create: {
                 id: TENANT_MEDICA,
                 name: 'Element Medica',
                 slug: 'element-medica',
-                domain: 'elementmedica.it',
+                domain: 'elementmedica.com',
                 isActive: true,
                 settings: {
                     theme: 'medical',
                     primaryColor: '#0d9488',
-                    logo: '/assets/logos/element-medica-logo.svg'
+                    logo: '/assets/logos/element-medica-logo.png'
                 }
             }
         });
-        console.log('✅ Creato tenant: Element Medica');
+        console.log('✅ Creato/aggiornato tenant: Element Medica');
     } else {
         console.log('⏭️  Tenant Element Medica già esistente');
     }
+
+    // Use actual tenant ID from DB
+    const medicaTenantId = tenantMedica.id;
 
     const pagesToCreate = [
         homepageMedica,
@@ -827,7 +860,7 @@ async function createElementMedicaPages() {
 
     for (const pageData of pagesToCreate) {
         const existing = await prisma.cMSPage.findFirst({
-            where: { slug: pageData.slug, tenantId: TENANT_MEDICA }
+            where: { slug: pageData.slug, tenantId: medicaTenantId }
         });
 
         if (!existing) {
@@ -844,22 +877,24 @@ async function createElementMedicaPages() {
                     seoDescription: pageData.seoDescription,
                     isPublished: true,
                     publishedAt: new Date(),
-                    tenantId: TENANT_MEDICA
+                    tenantId: medicaTenantId
                 }
             });
             console.log(`✅ Creata: ${pageData.slug}`);
         } else {
+            // Merge content: preserve sections added by other seed scripts
+            const mergedContent = { ...(existing.content || {}), ...pageData.content };
             await prisma.cMSPage.update({
                 where: { id: existing.id },
                 data: {
                     title: pageData.title,
-                    content: pageData.content,
+                    content: mergedContent,
                     seoTitle: pageData.seoTitle,
                     seoDescription: pageData.seoDescription,
                     updatedAt: new Date()
                 }
             });
-            console.log(`🔄 Aggiornata: ${pageData.slug}`);
+            console.log(`🔄 Aggiornata (merge): ${pageData.slug}`);
         }
     }
 
@@ -872,7 +907,7 @@ async function main() {
     console.log('╚══════════════════════════════════════════════════════════════╝\n');
 
     try {
-        await updateElementFormazionePages();
+        await updateElementSicurezzaPages();
         await createElementMedicaPages();
 
         // Riepilogo finale
@@ -880,9 +915,10 @@ async function main() {
         console.log('===================\n');
 
         const formazionePages = await prisma.cMSPage.count({ where: { tenantId: TENANT_FORMAZIONE } });
-        const medicaPages = await prisma.cMSPage.count({ where: { tenantId: TENANT_MEDICA } });
+        const medicaTenant = await prisma.tenant.findFirst({ where: { slug: 'element-medica' } });
+        const medicaPages = medicaTenant ? await prisma.cMSPage.count({ where: { tenantId: medicaTenant.id } }) : 0;
 
-        console.log(`Element Formazione: ${formazionePages} pagine`);
+        console.log(`Element Sicurezza: ${formazionePages} pagine`);
         console.log(`Element Medica: ${medicaPages} pagine`);
 
         console.log('\n✅ OPERAZIONE COMPLETATA CON SUCCESSO!\n');

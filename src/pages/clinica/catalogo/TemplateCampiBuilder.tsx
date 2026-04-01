@@ -1,13 +1,17 @@
 /**
  * TemplateCampiBuilder - Form Builder per Template Campi Visita
  * 
- * Permette di creare e gestire campi dinamici per le prestazioni mediche.
- * Supporta drag&drop per riordinamento, preview live, e validazione.
+ * P65.7: Refactored per usare VisitTemplate con scope=CATALOGO
+ * invece del legacy TemplateCampoVisita.
  * 
- * @module pages/poliambulatorio/catalogo/TemplateCampiBuilder
+ * Permette di creare e gestire campi dinamici per le prestazioni mediche.
+ * Supporta drag&drop per riordinamento, preview live, configurazione HL7.
+ * 
+ * @module pages/clinica/catalogo/TemplateCampiBuilder
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import { getOptionLabel, getOptionValue } from '@/utils/optionHelpers';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -35,59 +39,70 @@ import {
     AlertCircle,
     CheckCircle,
     ArrowLeft,
-    RefreshCw
+    RefreshCw,
+    FileCode2,
+    Clock
 } from 'lucide-react';
-import { prestazioniApi, TemplateCampoVisita, TipoCampoVisita, Prestazione } from '../../../services/clinicaApi';
+import {
+    prestazioniApi,
+    visitTemplatesApi,
+    type VisitTemplate,
+    type VisitField,
+    type VisitFieldHL7Config,
+    type Prestazione
+} from '../../../services/clinicaApi';
+import { useToast } from '../../../hooks/useToast';
+import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
+import { DatePickerElegante } from '../../../components/ui/DatePickerElegante';
+import HL7FieldConfig from '../impostazioni/visit-templates/components/HL7FieldConfig';
 
 // ============================================
 // TYPES
 // ============================================
 
-interface CampoFormData {
-    nome: string;
-    etichetta: string;
-    tipo: TipoCampoVisita;
-    obbligatorio: boolean;
-    opzioni: string[];
-    valoreDefault: string;
-    placeholder: string;
-    helpText: string;
-    validazione: ValidationRules;
+type FieldType = VisitField['type'];
+
+interface FieldFormData {
+    name: string;
+    label: string;
+    type: FieldType;
+    required: boolean;
+    options?: (string | { value: string; label: string })[];
+    defaultValue?: string;
+    placeholder?: string;
+    helpText?: string;
+    validation?: VisitField['validation'];
+    section: string;
+    visible: boolean;
+    hl7?: VisitFieldHL7Config;
 }
 
-interface ValidationRules {
-    min?: number;
-    max?: number;
-    minLength?: number;
-    maxLength?: number;
-    pattern?: string;
-    customMessage?: string;
-}
-
-const EMPTY_CAMPO: CampoFormData = {
-    nome: '',
-    etichetta: '',
-    tipo: 'TESTO',
-    obbligatorio: false,
-    opzioni: [],
-    valoreDefault: '',
+const EMPTY_FIELD: FieldFormData = {
+    name: '',
+    label: '',
+    type: 'TEXT',
+    required: false,
+    options: [],
+    defaultValue: '',
     placeholder: '',
     helpText: '',
-    validazione: {}
+    validation: {},
+    section: 'main',
+    visible: true
 };
 
 // ============================================
 // FIELD TYPE CONFIG
 // ============================================
 
-const TIPO_CAMPO_CONFIG: Record<TipoCampoVisita, {
+const TIPO_CAMPO_CONFIG: Record<FieldType, {
     label: string;
     icon: React.ElementType;
     description: string;
     hasOptions?: boolean;
     hasValidation?: 'text' | 'number' | 'date';
 }> = {
-    TESTO: {
+    TEXT: {
         label: 'Testo',
         icon: Type,
         description: 'Campo di testo breve',
@@ -99,19 +114,19 @@ const TIPO_CAMPO_CONFIG: Record<TipoCampoVisita, {
         description: 'Campo di testo lungo multiriga',
         hasValidation: 'text'
     },
-    NUMERO: {
-        label: 'Numero intero',
+    RICHTEXT: {
+        label: 'Testo formattato',
+        icon: AlignLeft,
+        description: 'Editor di testo con formattazione',
+        hasValidation: 'text'
+    },
+    NUMBER: {
+        label: 'Numero',
         icon: Hash,
-        description: 'Valore numerico intero',
+        description: 'Valore numerico',
         hasValidation: 'number'
     },
-    DECIMALE: {
-        label: 'Numero decimale',
-        icon: Hash,
-        description: 'Valore numerico con decimali',
-        hasValidation: 'number'
-    },
-    DATA: {
+    DATE: {
         label: 'Data',
         icon: Calendar,
         description: 'Selettore data',
@@ -127,13 +142,13 @@ const TIPO_CAMPO_CONFIG: Record<TipoCampoVisita, {
         icon: CheckSquare,
         description: 'Valore sì/no'
     },
-    SELECT: {
+    DROPDOWN: {
         label: 'Selezione singola',
         icon: List,
         description: 'Menu a tendina con opzioni',
         hasOptions: true
     },
-    MULTISELECT: {
+    MULTI_CHOICE: {
         label: 'Selezione multipla',
         icon: ListChecks,
         description: 'Selezione multipla con checkbox',
@@ -143,189 +158,115 @@ const TIPO_CAMPO_CONFIG: Record<TipoCampoVisita, {
         label: 'File allegato',
         icon: FileText,
         description: 'Upload file/immagine'
+    },
+    VITALS: {
+        label: 'Parametri vitali',
+        icon: Hash,
+        description: 'Parametri vitali strutturati',
+        hasValidation: 'number'
+    },
+    STRUMENTARIO_IMPORT: {
+        label: 'Import Strumentario',
+        icon: FileCode2,
+        description: 'Importa dati da strumentario medico'
     }
 };
 
 const TIPO_OPTIONS = Object.entries(TIPO_CAMPO_CONFIG).map(([value, config]) => ({
-    value: value as TipoCampoVisita,
+    value: value as FieldType,
     label: config.label,
     icon: config.icon,
     description: config.description
 }));
 
+// Scadenza options in mesi
+const SCADENZA_OPTIONS = [
+    { value: 1, label: '1 mese' },
+    { value: 3, label: '3 mesi' },
+    { value: 6, label: '6 mesi' },
+    { value: 12, label: '1 anno' },
+    { value: 18, label: '18 mesi' },
+    { value: 24, label: '2 anni' },
+    { value: 36, label: '3 anni' },
+    { value: 60, label: '5 anni' }
+];
+
 // ============================================
-// COMPONENTS
+// FIELD EDITOR COMPONENT
 // ============================================
 
-/**
- * Campo Form Item nel builder
- */
-const CampoItem: React.FC<{
-    campo: TemplateCampoVisita;
-    index: number;
-    isEditing: boolean;
-    isFirst: boolean;
-    isLast: boolean;
-    onEdit: () => void;
-    onDelete: () => void;
-    onDuplicate: () => void;
-    onMoveUp: () => void;
-    onMoveDown: () => void;
-    onDragStart: (e: React.DragEvent, index: number) => void;
-    onDragOver: (e: React.DragEvent) => void;
-    onDrop: (e: React.DragEvent, index: number) => void;
-}> = ({
-    campo,
-    index,
-    isEditing,
-    isFirst,
-    isLast,
-    onEdit,
-    onDelete,
-    onDuplicate,
-    onMoveUp,
-    onMoveDown,
-    onDragStart,
-    onDragOver,
-    onDrop
-}) => {
-        const config = TIPO_CAMPO_CONFIG[campo.tipo];
-        const Icon = config.icon;
-
-        return (
-            <div
-                draggable={!isEditing}
-                onDragStart={(e) => onDragStart(e, index)}
-                onDragOver={onDragOver}
-                onDrop={(e) => onDrop(e, index)}
-                className={`
-        group flex items-center gap-3 p-4 bg-white border rounded-lg
-        transition-all duration-200
-        ${isEditing ? 'ring-2 ring-teal-500 border-teal-300' : 'border-gray-200 hover:border-teal-300'}
-        ${!isEditing ? 'cursor-grab active:cursor-grabbing' : ''}
-      `}
-            >
-                {/* Drag Handle */}
-                <div className="text-gray-400 group-hover:text-gray-600">
-                    <GripVertical className="h-5 w-5" />
-                </div>
-
-                {/* Campo Info */}
-                <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                        <Icon className="h-4 w-4 text-teal-600" />
-                        <span className="font-medium text-gray-900 truncate">{campo.etichetta}</span>
-                        {campo.obbligatorio && (
-                            <span className="text-red-500 text-sm">*</span>
-                        )}
-                    </div>
-                    <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-                            {config.label}
-                        </span>
-                        <span className="text-xs text-gray-400">
-                            Nome: {campo.nome}
-                        </span>
-                    </div>
-                </div>
-
-                {/* Actions */}
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                        onClick={onMoveUp}
-                        disabled={isFirst}
-                        className="p-1.5 text-gray-400 hover:text-gray-600 disabled:opacity-30"
-                        title="Sposta su"
-                    >
-                        <ChevronUp className="h-4 w-4" />
-                    </button>
-                    <button
-                        onClick={onMoveDown}
-                        disabled={isLast}
-                        className="p-1.5 text-gray-400 hover:text-gray-600 disabled:opacity-30"
-                        title="Sposta giù"
-                    >
-                        <ChevronDown className="h-4 w-4" />
-                    </button>
-                    <button
-                        onClick={onDuplicate}
-                        className="p-1.5 text-gray-400 hover:text-blue-600"
-                        title="Duplica"
-                    >
-                        <Copy className="h-4 w-4" />
-                    </button>
-                    <button
-                        onClick={onEdit}
-                        className="p-1.5 text-gray-400 hover:text-teal-600"
-                        title="Modifica"
-                    >
-                        <Edit className="h-4 w-4" />
-                    </button>
-                    <button
-                        onClick={onDelete}
-                        className="p-1.5 text-gray-400 hover:text-red-600"
-                        title="Elimina"
-                    >
-                        <Trash2 className="h-4 w-4" />
-                    </button>
-                </div>
-            </div>
-        );
-    };
-
-/**
- * Form per creare/modificare un campo
- */
-const CampoForm: React.FC<{
-    initialData?: CampoFormData;
-    onSave: (data: CampoFormData) => void;
+interface FieldEditorProps {
+    field?: VisitField;
+    onSave: (data: FieldFormData) => void;
     onCancel: () => void;
     isLoading?: boolean;
-}> = ({ initialData = EMPTY_CAMPO, onSave, onCancel, isLoading }) => {
-    const [formData, setFormData] = useState<CampoFormData>(initialData);
-    const [newOption, setNewOption] = useState('');
+}
 
-    const config = TIPO_CAMPO_CONFIG[formData.tipo];
-    const showOptions = config.hasOptions;
-    const showValidation = config.hasValidation;
-
-    const handleChange = <K extends keyof CampoFormData>(
-        field: K,
-        value: CampoFormData[K]
-    ) => {
-        setFormData(prev => ({ ...prev, [field]: value }));
-    };
-
-    const handleAddOption = () => {
-        if (newOption.trim()) {
-            handleChange('opzioni', [...formData.opzioni, newOption.trim()]);
-            setNewOption('');
+const FieldEditor: React.FC<FieldEditorProps> = ({ field, onSave, onCancel, isLoading }) => {
+    const [formData, setFormData] = useState<FieldFormData>(() => {
+        if (field) {
+            return {
+                name: field.name,
+                label: field.label,
+                type: field.type,
+                required: field.required || false,
+                options: field.options || [],
+                defaultValue: field.defaultValue as string || '',
+                placeholder: field.placeholder || '',
+                helpText: field.helpText || '',
+                validation: field.validation || {},
+                section: field.section || 'main',
+                visible: field.visible !== false,
+                hl7: field.hl7
+            };
         }
-    };
+        return { ...EMPTY_FIELD };
+    });
 
-    const handleRemoveOption = (index: number) => {
-        handleChange('opzioni', formData.opzioni.filter((_, i) => i !== index));
-    };
+    const [optionInput, setOptionInput] = useState('');
+    const [showHL7Config, setShowHL7Config] = useState(!!field?.hl7);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const typeConfig = TIPO_CAMPO_CONFIG[formData.type];
+
+    const handleAddOption = useCallback(() => {
+        if (optionInput.trim()) {
+            setFormData(prev => ({
+                ...prev,
+                options: [...(prev.options || []), optionInput.trim()]
+            }));
+            setOptionInput('');
+        }
+    }, [optionInput]);
+
+    const handleRemoveOption = useCallback((index: number) => {
+        setFormData(prev => ({
+            ...prev,
+            options: prev.options?.filter((_, i) => i !== index) || []
+        }));
+    }, []);
+
+    const handleSubmit = useCallback((e: React.FormEvent) => {
         e.preventDefault();
-        // Auto-generate nome from etichetta if empty
-        const data = {
+
+        // Genera nome univoco se non specificato
+        const name = formData.name || formData.label
+            .toLowerCase()
+            .replace(/[^a-z0-9]/g, '_')
+            .replace(/_+/g, '_')
+            .replace(/^_|_$/g, '');
+
+        onSave({
             ...formData,
-            nome: formData.nome || formData.etichetta.toLowerCase()
-                .replace(/[^a-z0-9]/gi, '_')
-                .replace(/_+/g, '_')
-                .replace(/^_|_$/g, '')
-        };
-        onSave(data);
-    };
+            name
+        });
+    }, [formData, onSave]);
 
     return (
         <form onSubmit={handleSubmit} className="bg-white border border-teal-200 rounded-lg p-6 space-y-6">
             {/* Header */}
             <div className="flex items-center justify-between border-b border-gray-100 pb-4">
                 <h3 className="text-lg font-semibold text-gray-900">
-                    {initialData?.nome ? 'Modifica Campo' : 'Nuovo Campo'}
+                    {field ? 'Modifica Campo' : 'Nuovo Campo'}
                 </h3>
                 <div className="flex items-center gap-2">
                     <button
@@ -338,40 +279,44 @@ const CampoForm: React.FC<{
                     </button>
                     <button
                         type="submit"
-                        disabled={!formData.etichetta || isLoading}
+                        disabled={!formData.label || isLoading}
                         className="px-3 py-1.5 text-sm bg-teal-600 text-white rounded hover:bg-teal-700 disabled:opacity-50"
                     >
-                        <Save className="h-4 w-4 inline mr-1" />
-                        {isLoading ? 'Salvataggio...' : 'Salva'}
+                        {isLoading ? (
+                            <RefreshCw className="h-4 w-4 inline mr-1 animate-spin" />
+                        ) : (
+                            <Save className="h-4 w-4 inline mr-1" />
+                        )}
+                        Salva
                     </button>
                 </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Etichetta */}
+                {/* Label */}
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                         Etichetta <span className="text-red-500">*</span>
                     </label>
                     <input
                         type="text"
-                        value={formData.etichetta}
-                        onChange={(e) => handleChange('etichetta', e.target.value)}
+                        value={formData.label}
+                        onChange={(e) => setFormData(prev => ({ ...prev, label: e.target.value }))}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-teal-500 focus:border-teal-500"
                         placeholder="es. Pressione arteriosa"
                         required
                     />
                 </div>
 
-                {/* Nome (interno) */}
+                {/* Name (opzionale) */}
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                         Nome campo (interno)
                     </label>
                     <input
                         type="text"
-                        value={formData.nome}
-                        onChange={(e) => handleChange('nome', e.target.value)}
+                        value={formData.name}
+                        onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-teal-500 focus:border-teal-500"
                         placeholder="Auto-generato da etichetta"
                     />
@@ -383,25 +328,27 @@ const CampoForm: React.FC<{
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                         Tipo di campo
                     </label>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
-                        {TIPO_OPTIONS.map((option) => {
-                            const Icon = option.icon;
+                    <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                        {TIPO_OPTIONS.map((opt) => {
+                            const Icon = opt.icon;
+                            const isSelected = formData.type === opt.value;
                             return (
                                 <button
-                                    key={option.value}
+                                    key={opt.value}
                                     type="button"
-                                    onClick={() => handleChange('tipo', option.value)}
+                                    onClick={() => setFormData(prev => ({ ...prev, type: opt.value }))}
                                     className={`
-                    flex flex-col items-center gap-1 p-3 border rounded-lg text-center
-                    transition-all duration-200
-                    ${formData.tipo === option.value
+                                        flex flex-col items-center gap-1 p-3 border rounded-lg text-center
+                                        transition-all duration-200
+                                        ${isSelected
                                             ? 'border-teal-500 bg-teal-50 text-teal-700'
                                             : 'border-gray-200 hover:border-teal-300 text-gray-600 hover:text-teal-600'
                                         }
-                  `}
+                                    `}
+                                    title={opt.description}
                                 >
                                     <Icon className="h-5 w-5" />
-                                    <span className="text-xs font-medium">{option.label}</span>
+                                    <span className="text-xs font-medium">{opt.label}</span>
                                 </button>
                             );
                         })}
@@ -416,7 +363,7 @@ const CampoForm: React.FC<{
                     <input
                         type="text"
                         value={formData.placeholder}
-                        onChange={(e) => handleChange('placeholder', e.target.value)}
+                        onChange={(e) => setFormData(prev => ({ ...prev, placeholder: e.target.value }))}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-teal-500 focus:border-teal-500"
                         placeholder="Testo suggerimento nel campo"
                     />
@@ -429,14 +376,14 @@ const CampoForm: React.FC<{
                     </label>
                     <input
                         type="text"
-                        value={formData.valoreDefault}
-                        onChange={(e) => handleChange('valoreDefault', e.target.value)}
+                        value={formData.defaultValue}
+                        onChange={(e) => setFormData(prev => ({ ...prev, defaultValue: e.target.value }))}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-teal-500 focus:border-teal-500"
                         placeholder="Valore iniziale"
                     />
                 </div>
 
-                {/* Help Text */}
+                {/* Help text */}
                 <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                         Testo di aiuto
@@ -444,28 +391,28 @@ const CampoForm: React.FC<{
                     <input
                         type="text"
                         value={formData.helpText}
-                        onChange={(e) => handleChange('helpText', e.target.value)}
+                        onChange={(e) => setFormData(prev => ({ ...prev, helpText: e.target.value }))}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-teal-500 focus:border-teal-500"
-                        placeholder="Descrizione per aiutare l'utente"
+                        placeholder="Descrizione aggiuntiva per l'utente"
                     />
                 </div>
 
-                {/* Opzioni (per SELECT/MULTISELECT) */}
-                {showOptions && (
+                {/* Opzioni per SELECT/MULTISELECT */}
+                {typeConfig.hasOptions && (
                     <div className="md:col-span-2">
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                             Opzioni disponibili
                         </label>
                         <div className="space-y-2">
-                            {formData.opzioni.map((opt, idx) => (
+                            {formData.options?.map((opt, idx) => (
                                 <div key={idx} className="flex items-center gap-2">
                                     <input
                                         type="text"
-                                        value={opt}
+                                        value={typeof opt === 'string' ? opt : opt.value}
                                         onChange={(e) => {
-                                            const newOpzioni = [...formData.opzioni];
-                                            newOpzioni[idx] = e.target.value;
-                                            handleChange('opzioni', newOpzioni);
+                                            const newOptions = [...(formData.options || [])];
+                                            newOptions[idx] = e.target.value;
+                                            setFormData(prev => ({ ...prev, options: newOptions }));
                                         }}
                                         className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-teal-500 focus:border-teal-500"
                                     />
@@ -481,8 +428,8 @@ const CampoForm: React.FC<{
                             <div className="flex items-center gap-2">
                                 <input
                                     type="text"
-                                    value={newOption}
-                                    onChange={(e) => setNewOption(e.target.value)}
+                                    value={optionInput}
+                                    onChange={(e) => setOptionInput(e.target.value)}
                                     onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddOption())}
                                     className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-teal-500 focus:border-teal-500"
                                     placeholder="Nuova opzione..."
@@ -500,25 +447,28 @@ const CampoForm: React.FC<{
                 )}
 
                 {/* Validazione */}
-                {showValidation && (
+                {typeConfig.hasValidation && (
                     <div className="md:col-span-2 bg-gray-50 rounded-lg p-4">
                         <h4 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
                             <Settings className="h-4 w-4" />
                             Regole di validazione
                         </h4>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            {showValidation === 'text' && (
+                            {typeConfig.hasValidation === 'text' && (
                                 <>
                                     <div>
                                         <label className="block text-xs text-gray-500 mb-1">Lunghezza minima</label>
                                         <input
                                             type="number"
                                             min="0"
-                                            value={formData.validazione.minLength || ''}
-                                            onChange={(e) => handleChange('validazione', {
-                                                ...formData.validazione,
-                                                minLength: e.target.value ? parseInt(e.target.value) : undefined
-                                            })}
+                                            value={formData.validation?.minLength || ''}
+                                            onChange={(e) => setFormData(prev => ({
+                                                ...prev,
+                                                validation: {
+                                                    ...prev.validation,
+                                                    minLength: e.target.value ? parseInt(e.target.value) : undefined
+                                                }
+                                            }))}
                                             className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
                                         />
                                     </div>
@@ -527,27 +477,33 @@ const CampoForm: React.FC<{
                                         <input
                                             type="number"
                                             min="0"
-                                            value={formData.validazione.maxLength || ''}
-                                            onChange={(e) => handleChange('validazione', {
-                                                ...formData.validazione,
-                                                maxLength: e.target.value ? parseInt(e.target.value) : undefined
-                                            })}
+                                            value={formData.validation?.maxLength || ''}
+                                            onChange={(e) => setFormData(prev => ({
+                                                ...prev,
+                                                validation: {
+                                                    ...prev.validation,
+                                                    maxLength: e.target.value ? parseInt(e.target.value) : undefined
+                                                }
+                                            }))}
                                             className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
                                         />
                                     </div>
                                 </>
                             )}
-                            {showValidation === 'number' && (
+                            {typeConfig.hasValidation === 'number' && (
                                 <>
                                     <div>
                                         <label className="block text-xs text-gray-500 mb-1">Valore minimo</label>
                                         <input
                                             type="number"
-                                            value={formData.validazione.min ?? ''}
-                                            onChange={(e) => handleChange('validazione', {
-                                                ...formData.validazione,
-                                                min: e.target.value ? parseFloat(e.target.value) : undefined
-                                            })}
+                                            value={formData.validation?.min ?? ''}
+                                            onChange={(e) => setFormData(prev => ({
+                                                ...prev,
+                                                validation: {
+                                                    ...prev.validation,
+                                                    min: e.target.value ? parseFloat(e.target.value) : undefined
+                                                }
+                                            }))}
                                             className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
                                         />
                                     </div>
@@ -555,29 +511,19 @@ const CampoForm: React.FC<{
                                         <label className="block text-xs text-gray-500 mb-1">Valore massimo</label>
                                         <input
                                             type="number"
-                                            value={formData.validazione.max ?? ''}
-                                            onChange={(e) => handleChange('validazione', {
-                                                ...formData.validazione,
-                                                max: e.target.value ? parseFloat(e.target.value) : undefined
-                                            })}
+                                            value={formData.validation?.max ?? ''}
+                                            onChange={(e) => setFormData(prev => ({
+                                                ...prev,
+                                                validation: {
+                                                    ...prev.validation,
+                                                    max: e.target.value ? parseFloat(e.target.value) : undefined
+                                                }
+                                            }))}
                                             className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
                                         />
                                     </div>
                                 </>
                             )}
-                            <div className="col-span-2">
-                                <label className="block text-xs text-gray-500 mb-1">Messaggio errore personalizzato</label>
-                                <input
-                                    type="text"
-                                    value={formData.validazione.customMessage || ''}
-                                    onChange={(e) => handleChange('validazione', {
-                                        ...formData.validazione,
-                                        customMessage: e.target.value || undefined
-                                    })}
-                                    className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
-                                    placeholder="Messaggio di errore..."
-                                />
-                            </div>
                         </div>
                     </div>
                 )}
@@ -587,8 +533,8 @@ const CampoForm: React.FC<{
                     <label className="flex items-center gap-3 cursor-pointer">
                         <input
                             type="checkbox"
-                            checked={formData.obbligatorio}
-                            onChange={(e) => handleChange('obbligatorio', e.target.checked)}
+                            checked={formData.required}
+                            onChange={(e) => setFormData(prev => ({ ...prev, required: e.target.checked }))}
                             className="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500"
                         />
                         <span className="text-sm font-medium text-gray-700">
@@ -599,65 +545,217 @@ const CampoForm: React.FC<{
                         </span>
                     </label>
                 </div>
+
+                {/* HL7 Config Section */}
+                <div className="md:col-span-2 border-t pt-4">
+                    <button
+                        type="button"
+                        onClick={() => setShowHL7Config(!showHL7Config)}
+                        className="flex items-center gap-2 text-sm text-gray-600 hover:text-teal-600"
+                    >
+                        <FileCode2 className="h-4 w-4" />
+                        Configurazione HL7/FSE
+                        {formData.hl7?.code && (
+                            <span className="px-2 py-0.5 bg-teal-100 text-teal-700 text-xs rounded">
+                                {formData.hl7.code}
+                            </span>
+                        )}
+                        <ChevronDown className={`h-4 w-4 transition-transform ${showHL7Config ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {showHL7Config && (
+                        <div className="mt-3">
+                            <HL7FieldConfig
+                                hl7Config={formData.hl7}
+                                onChange={(hl7: VisitFieldHL7Config | undefined) => setFormData(prev => ({ ...prev, hl7 }))}
+                                fieldLabel={formData.label}
+                                fieldType={formData.type}
+                            />
+                        </div>
+                    )}
+                </div>
             </div>
         </form>
     );
 };
 
-/**
- * Preview del template
- */
-const TemplatePreview: React.FC<{
-    campi: TemplateCampoVisita[];
+// ============================================
+// FIELD CARD COMPONENT
+// ============================================
+
+interface FieldCardProps {
+    field: VisitField;
+    index: number;
+    isFirst: boolean;
+    isLast: boolean;
+    onEdit: () => void;
+    onDelete: () => void;
+    onDuplicate: () => void;
+    onMoveUp: () => void;
+    onMoveDown: () => void;
+    onDragStart: (e: React.DragEvent, index: number) => void;
+    onDragOver: (e: React.DragEvent) => void;
+    onDrop: (e: React.DragEvent, index: number) => void;
+}
+
+const FieldCard: React.FC<FieldCardProps> = ({
+    field,
+    index,
+    isFirst,
+    isLast,
+    onEdit,
+    onDelete,
+    onDuplicate,
+    onMoveUp,
+    onMoveDown,
+    onDragStart,
+    onDragOver,
+    onDrop
+}) => {
+    const typeConfig = TIPO_CAMPO_CONFIG[field.type] || TIPO_CAMPO_CONFIG.TEXT;
+    const Icon = typeConfig.icon;
+
+    return (
+        <div
+            draggable
+            onDragStart={(e) => onDragStart(e, index)}
+            onDragOver={onDragOver}
+            onDrop={(e) => onDrop(e, index)}
+            className="group flex items-center gap-3 p-4 bg-white border rounded-lg transition-all duration-200 border-gray-200 hover:border-teal-300 cursor-grab active:cursor-grabbing"
+        >
+            {/* Drag Handle */}
+            <div className="text-gray-400 group-hover:text-gray-600">
+                <GripVertical className="h-5 w-5" />
+            </div>
+
+            {/* Campo Info */}
+            <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                    <Icon className="h-4 w-4 text-teal-600" />
+                    <span className="font-medium text-gray-900 truncate">{field.label}</span>
+                    {field.required && (
+                        <span className="text-red-500 text-sm">*</span>
+                    )}
+                    {field.hl7?.code && (
+                        <span className="px-2 py-0.5 bg-teal-100 text-teal-700 text-xs rounded flex items-center gap-1">
+                            <FileCode2 className="h-3 w-3" />
+                            {field.hl7.code}
+                        </span>
+                    )}
+                </div>
+                <div className="flex items-center gap-2 mt-1">
+                    <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+                        {typeConfig.label}
+                    </span>
+                    <span className="text-xs text-gray-400">
+                        Nome: {field.name}
+                    </span>
+                </div>
+                {field.helpText && (
+                    <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                        <HelpCircle className="h-3 w-3" />
+                        {field.helpText}
+                    </p>
+                )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                    onClick={onMoveUp}
+                    disabled={isFirst}
+                    className="p-1.5 text-gray-400 hover:text-gray-600 disabled:opacity-30"
+                    title="Sposta su"
+                >
+                    <ChevronUp className="h-4 w-4" />
+                </button>
+                <button
+                    onClick={onMoveDown}
+                    disabled={isLast}
+                    className="p-1.5 text-gray-400 hover:text-gray-600 disabled:opacity-30"
+                    title="Sposta giù"
+                >
+                    <ChevronDown className="h-4 w-4" />
+                </button>
+                <button
+                    onClick={onDuplicate}
+                    className="p-1.5 text-gray-400 hover:text-teal-600"
+                    title="Duplica"
+                >
+                    <Copy className="h-4 w-4" />
+                </button>
+                <button
+                    onClick={onEdit}
+                    className="p-1.5 text-gray-400 hover:text-teal-600"
+                    title="Modifica"
+                >
+                    <Edit className="h-4 w-4" />
+                </button>
+                <button
+                    onClick={onDelete}
+                    className="p-1.5 text-gray-400 hover:text-red-600"
+                    title="Elimina"
+                >
+                    <Trash2 className="h-4 w-4" />
+                </button>
+            </div>
+        </div>
+    );
+};
+
+// ============================================
+// PREVIEW COMPONENT
+// ============================================
+
+interface PreviewProps {
+    fields: VisitField[];
     prestazione?: Prestazione;
-}> = ({ campi, prestazione }) => {
-    const sortedCampi = useMemo(
-        () => [...campi].sort((a, b) => a.ordine - b.ordine),
-        [campi]
+}
+
+const TemplatePreview: React.FC<PreviewProps> = ({ fields, prestazione }) => {
+    const sortedFields = useMemo(
+        () => [...fields].sort((a, b) => (a.order || 0) - (b.order || 0)),
+        [fields]
     );
 
-    const renderField = (campo: TemplateCampoVisita) => {
-        const opzioni = campo.opzioni ? JSON.parse(campo.opzioni) : [];
-
-        switch (campo.tipo) {
-            case 'TESTO':
+    const renderField = (field: VisitField) => {
+        switch (field.type) {
+            case 'TEXT':
                 return (
                     <input
                         type="text"
-                        placeholder={campo.placeholder || ''}
-                        defaultValue={campo.valoreDefault || ''}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        placeholder={field.placeholder || ''}
+                        defaultValue={field.defaultValue as string || ''}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
                         disabled
                     />
                 );
             case 'TEXTAREA':
                 return (
                     <textarea
-                        placeholder={campo.placeholder || ''}
-                        defaultValue={campo.valoreDefault || ''}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        placeholder={field.placeholder || ''}
+                        defaultValue={field.defaultValue as string || ''}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
                         rows={3}
                         disabled
                     />
                 );
-            case 'NUMERO':
-            case 'DECIMALE':
+            case 'NUMBER':
                 return (
                     <input
                         type="number"
-                        step={campo.tipo === 'DECIMALE' ? '0.01' : '1'}
-                        placeholder={campo.placeholder || ''}
-                        defaultValue={campo.valoreDefault || ''}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        placeholder={field.placeholder || ''}
+                        defaultValue={field.defaultValue as string || ''}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
                         disabled
                     />
                 );
-            case 'DATA':
+            case 'DATE':
                 return (
-                    <input
-                        type="date"
-                        defaultValue={campo.valoreDefault || ''}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    <DatePickerElegante
+                        value={field.defaultValue as string || ''}
+                        onChange={() => { }}
+                        theme="teal"
                         disabled
                     />
                 );
@@ -665,8 +763,8 @@ const TemplatePreview: React.FC<{
                 return (
                     <input
                         type="datetime-local"
-                        defaultValue={campo.valoreDefault || ''}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        defaultValue={field.defaultValue as string || ''}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
                         disabled
                     />
                 );
@@ -675,37 +773,37 @@ const TemplatePreview: React.FC<{
                     <label className="flex items-center gap-2">
                         <input
                             type="checkbox"
-                            defaultChecked={campo.valoreDefault === 'true'}
+                            defaultChecked={field.defaultValue === 'true'}
                             className="w-4 h-4 text-teal-600 border-gray-300 rounded"
                             disabled
                         />
                         <span className="text-gray-500">Sì</span>
                     </label>
                 );
-            case 'SELECT':
+            case 'DROPDOWN':
                 return (
                     <select
-                        defaultValue={campo.valoreDefault || ''}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        defaultValue={field.defaultValue as string || ''}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
                         disabled
                     >
                         <option value="">Seleziona...</option>
-                        {opzioni.map((opt: string, i: number) => (
-                            <option key={i} value={opt}>{opt}</option>
+                        {field.options?.map((opt, i) => (
+                            <option key={i} value={getOptionValue(opt)}>{getOptionLabel(opt)}</option>
                         ))}
                     </select>
                 );
-            case 'MULTISELECT':
+            case 'MULTI_CHOICE':
                 return (
                     <div className="space-y-1">
-                        {opzioni.map((opt: string, i: number) => (
+                        {field.options?.map((opt, i) => (
                             <label key={i} className="flex items-center gap-2">
                                 <input
                                     type="checkbox"
                                     className="w-4 h-4 text-teal-600 border-gray-300 rounded"
                                     disabled
                                 />
-                                <span className="text-sm text-gray-700">{opt}</span>
+                                <span className="text-sm text-gray-700">{getOptionLabel(opt)}</span>
                             </label>
                         ))}
                     </div>
@@ -739,24 +837,24 @@ const TemplatePreview: React.FC<{
 
             {/* Preview Content */}
             <div className="p-6 space-y-5">
-                {sortedCampi.length === 0 ? (
+                {sortedFields.length === 0 ? (
                     <div className="text-center py-8 text-gray-500">
                         <HelpCircle className="h-8 w-8 mx-auto mb-2 text-gray-400" />
                         <p className="text-sm">Nessun campo configurato</p>
                         <p className="text-xs">Aggiungi campi per vedere l'anteprima</p>
                     </div>
                 ) : (
-                    sortedCampi.map((campo) => (
-                        <div key={campo.id}>
+                    sortedFields.map((field, index) => (
+                        <div key={field.name || index}>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                                {campo.etichetta}
-                                {campo.obbligatorio && <span className="text-red-500 ml-1">*</span>}
+                                {field.label}
+                                {field.required && <span className="text-red-500 ml-1">*</span>}
                             </label>
-                            {renderField(campo)}
-                            {campo.helpText && (
+                            {renderField(field)}
+                            {field.helpText && (
                                 <p className="mt-1 text-xs text-gray-500 flex items-center gap-1">
                                     <HelpCircle className="h-3 w-3" />
-                                    {campo.helpText}
+                                    {field.helpText}
                                 </p>
                             )}
                         </div>
@@ -775,12 +873,17 @@ export const TemplateCampiBuilder: React.FC = () => {
     const { id: prestazioneId } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const queryClient = useQueryClient();
+    const { showToast } = useToast();
+    const { confirmDelete } = useConfirmDialog();
 
     // State
-    const [editingCampo, setEditingCampo] = useState<string | null>(null);
+    const [editingFieldIndex, setEditingFieldIndex] = useState<number | null>(null);
     const [isCreating, setIsCreating] = useState(false);
     const [showPreview, setShowPreview] = useState(true);
     const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+    const [scadenzaMesi, setScadenzaMesi] = useState<number | null>(null);
+    const [localFields, setLocalFields] = useState<VisitField[]>([]);
+    const [isDirty, setIsDirty] = useState(false);
 
     // Query: Prestazione
     const { data: prestazione } = useQuery({
@@ -789,82 +892,152 @@ export const TemplateCampiBuilder: React.FC = () => {
         enabled: !!prestazioneId
     });
 
-    // Query: Campi
-    const { data: campi = [], isLoading, refetch } = useQuery({
-        queryKey: ['prestazione-campi', prestazioneId],
-        queryFn: () => prestazioniApi.getCampi(prestazioneId!),
+    // Query: Template CATALOGO per questa prestazione
+    const { data: catalogoTemplate, isLoading, refetch } = useQuery({
+        queryKey: ['visit-template-catalogo', prestazioneId],
+        queryFn: async () => {
+            // Cerca template con scope=CATALOGO per questa prestazione
+            const response = await visitTemplatesApi.getAll({
+                prestazioneId,
+                scope: 'CATALOGO',
+                limit: 1
+            });
+            return response.data?.[0] || null;
+        },
         enabled: !!prestazioneId
     });
 
-    // Mutations
-    const addCampoMutation = useMutation({
-        mutationFn: (data: CampoFormData) => {
-            const payload = {
-                nome: data.nome,
-                etichetta: data.etichetta,
-                tipo: data.tipo,
-                obbligatorio: data.obbligatorio,
-                ordine: campi.length,
-                opzioni: data.opzioni.length > 0 ? JSON.stringify(data.opzioni) : undefined,
-                valoreDefault: data.valoreDefault || undefined,
-                placeholder: data.placeholder || undefined,
-                helpText: data.helpText || undefined,
-                validazione: Object.keys(data.validazione).length > 0
-                    ? JSON.stringify(data.validazione)
-                    : undefined
-            };
-            return prestazioniApi.addCampo(prestazioneId!, payload);
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['prestazione-campi', prestazioneId] });
-            setIsCreating(false);
+    // Initialize local state from template
+    useEffect(() => {
+        if (catalogoTemplate) {
+            setLocalFields(catalogoTemplate.fields || []);
+            setScadenzaMesi(catalogoTemplate.defaultScadenzaMesi || null);
+            setIsDirty(false);
         }
-    });
+    }, [catalogoTemplate]);
 
-    const updateCampoMutation = useMutation({
-        mutationFn: ({ campoId, data }: { campoId: string; data: CampoFormData }) => {
-            const payload = {
-                nome: data.nome,
-                etichetta: data.etichetta,
-                tipo: data.tipo,
-                obbligatorio: data.obbligatorio,
-                opzioni: data.opzioni.length > 0 ? JSON.stringify(data.opzioni) : undefined,
-                valoreDefault: data.valoreDefault || undefined,
-                placeholder: data.placeholder || undefined,
-                helpText: data.helpText || undefined,
-                validazione: Object.keys(data.validazione).length > 0
-                    ? JSON.stringify(data.validazione)
-                    : undefined
-            };
-            return prestazioniApi.updateCampo(prestazioneId!, campoId, payload);
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['prestazione-campi', prestazioneId] });
-            setEditingCampo(null);
-        }
-    });
-
-    const deleteCampoMutation = useMutation({
-        mutationFn: (campoId: string) => prestazioniApi.deleteCampo(prestazioneId!, campoId),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['prestazione-campi', prestazioneId] });
-        }
-    });
-
-    const reorderMutation = useMutation({
-        mutationFn: (orderedIds: string[]) => prestazioniApi.reorderCampi(prestazioneId!, orderedIds),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['prestazione-campi', prestazioneId] });
-        }
-    });
-
-    // Sorted campi
-    const sortedCampi = useMemo(
-        () => [...campi].sort((a, b) => a.ordine - b.ordine),
-        [campi]
+    // Sorted fields
+    const sortedFields = useMemo(
+        () => [...localFields].sort((a, b) => (a.order || 0) - (b.order || 0)),
+        [localFields]
     );
 
+    // Save mutation
+    const saveMutation = useMutation({
+        mutationFn: async () => {
+            // Update order before saving
+            const fieldsWithOrder = localFields.map((f, i) => ({ ...f, order: i }));
+
+            if (catalogoTemplate) {
+                // Update existing template
+                return visitTemplatesApi.update(catalogoTemplate.id, {
+                    fields: fieldsWithOrder,
+                    defaultScadenzaMesi: scadenzaMesi || undefined
+                });
+            } else {
+                // Create new CATALOGO template
+                return visitTemplatesApi.create({
+                    name: `Template Catalogo - ${prestazione?.nome || 'Prestazione'}`,
+                    description: `Campi default per ${prestazione?.nome}`,
+                    scope: 'CATALOGO',
+                    prestazioneId: prestazioneId!,
+                    fields: fieldsWithOrder,
+                    defaultScadenzaMesi: scadenzaMesi || undefined,
+                    isDefault: true,
+                    isActive: true
+                });
+            }
+        },
+        onSuccess: () => {
+            showToast({ message: 'Template salvato con successo', type: 'success' });
+            queryClient.invalidateQueries({ queryKey: ['visit-template-catalogo', prestazioneId] });
+            setIsDirty(false);
+        },
+        onError: (error: Error) => {
+            showToast({ message: 'Errore', type: 'error' });
+        }
+    });
+
     // Handlers
+    const handleAddField = useCallback((data: FieldFormData) => {
+        const newField: VisitField = {
+            name: data.name,
+            label: data.label,
+            type: data.type,
+            required: data.required,
+            visible: data.visible,
+            section: data.section,
+            order: localFields.length,
+            options: data.options,
+            defaultValue: data.defaultValue,
+            placeholder: data.placeholder,
+            helpText: data.helpText,
+            validation: data.validation,
+            hl7: data.hl7
+        };
+
+        setLocalFields(prev => [...prev, newField]);
+        setIsCreating(false);
+        setIsDirty(true);
+    }, [localFields.length]);
+
+    const handleUpdateField = useCallback((index: number, data: FieldFormData) => {
+        setLocalFields(prev => prev.map((f, i) => {
+            if (i !== index) return f;
+            return {
+                ...f,
+                name: data.name,
+                label: data.label,
+                type: data.type,
+                required: data.required,
+                visible: data.visible,
+                section: data.section,
+                options: data.options,
+                defaultValue: data.defaultValue,
+                placeholder: data.placeholder,
+                helpText: data.helpText,
+                validation: data.validation,
+                hl7: data.hl7
+            };
+        }));
+        setEditingFieldIndex(null);
+        setIsDirty(true);
+    }, []);
+
+    const handleDeleteField = useCallback(async (index: number) => {
+        if (await confirmDelete('questo campo')) {
+            setLocalFields(prev => prev.filter((_, i) => i !== index));
+            setIsDirty(true);
+        }
+    }, [confirmDelete]);
+
+    const handleDuplicateField = useCallback((index: number) => {
+        const field = localFields[index];
+        const newField: VisitField = {
+            ...field,
+            name: `${field.name}_copy`,
+            label: `${field.label} (copia)`,
+            order: localFields.length
+        };
+        setLocalFields(prev => [...prev, newField]);
+        setIsDirty(true);
+    }, [localFields]);
+
+    const handleMoveField = useCallback((fromIndex: number, toIndex: number) => {
+        if (toIndex < 0 || toIndex >= localFields.length) return;
+
+        const newFields = [...localFields];
+        const [removed] = newFields.splice(fromIndex, 1);
+        newFields.splice(toIndex, 0, removed);
+
+        // Update order
+        newFields.forEach((f, i) => { f.order = i; });
+
+        setLocalFields(newFields);
+        setIsDirty(true);
+    }, [localFields]);
+
+    // Drag handlers
     const handleDragStart = useCallback((e: React.DragEvent, index: number) => {
         setDraggedIndex(index);
         e.dataTransfer.effectAllowed = 'move';
@@ -878,68 +1051,9 @@ export const TemplateCampiBuilder: React.FC = () => {
     const handleDrop = useCallback((e: React.DragEvent, dropIndex: number) => {
         e.preventDefault();
         if (draggedIndex === null || draggedIndex === dropIndex) return;
-
-        const newOrder = [...sortedCampi];
-        const [removed] = newOrder.splice(draggedIndex, 1);
-        newOrder.splice(dropIndex, 0, removed);
-
-        reorderMutation.mutate(newOrder.map(c => c.id));
+        handleMoveField(draggedIndex, dropIndex);
         setDraggedIndex(null);
-    }, [draggedIndex, sortedCampi, reorderMutation]);
-
-    const handleMoveUp = useCallback((index: number) => {
-        if (index === 0) return;
-        const newOrder = [...sortedCampi];
-        [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
-        reorderMutation.mutate(newOrder.map(c => c.id));
-    }, [sortedCampi, reorderMutation]);
-
-    const handleMoveDown = useCallback((index: number) => {
-        if (index === sortedCampi.length - 1) return;
-        const newOrder = [...sortedCampi];
-        [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
-        reorderMutation.mutate(newOrder.map(c => c.id));
-    }, [sortedCampi, reorderMutation]);
-
-    const handleDuplicate = useCallback((campo: TemplateCampoVisita) => {
-        const opzioni = campo.opzioni ? JSON.parse(campo.opzioni) : [];
-        const validazione = campo.validazione ? JSON.parse(campo.validazione) : {};
-
-        addCampoMutation.mutate({
-            nome: `${campo.nome}_copy`,
-            etichetta: `${campo.etichetta} (copia)`,
-            tipo: campo.tipo,
-            obbligatorio: campo.obbligatorio,
-            opzioni,
-            valoreDefault: campo.valoreDefault || '',
-            placeholder: campo.placeholder || '',
-            helpText: campo.helpText || '',
-            validazione
-        });
-    }, [addCampoMutation]);
-
-    const handleDelete = useCallback((campoId: string) => {
-        if (confirm('Sei sicuro di voler eliminare questo campo?')) {
-            deleteCampoMutation.mutate(campoId);
-        }
-    }, [deleteCampoMutation]);
-
-    const getEditingCampoData = useCallback((campoId: string): CampoFormData | undefined => {
-        const campo = campi.find(c => c.id === campoId);
-        if (!campo) return undefined;
-
-        return {
-            nome: campo.nome,
-            etichetta: campo.etichetta,
-            tipo: campo.tipo,
-            obbligatorio: campo.obbligatorio,
-            opzioni: campo.opzioni ? JSON.parse(campo.opzioni) : [],
-            valoreDefault: campo.valoreDefault || '',
-            placeholder: campo.placeholder || '',
-            helpText: campo.helpText || '',
-            validazione: campo.validazione ? JSON.parse(campo.validazione) : {}
-        };
-    }, [campi]);
+    }, [draggedIndex, handleMoveField]);
 
     // Loading state
     if (isLoading) {
@@ -978,12 +1092,12 @@ export const TemplateCampiBuilder: React.FC = () => {
                             <button
                                 onClick={() => setShowPreview(!showPreview)}
                                 className={`
-                  flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors
-                  ${showPreview
+                                    flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors
+                                    ${showPreview
                                         ? 'border-teal-300 bg-teal-50 text-teal-700'
                                         : 'border-gray-300 text-gray-600 hover:bg-gray-50'
                                     }
-                `}
+                                `}
                             >
                                 {showPreview ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                                 <span className="text-sm">{showPreview ? 'Nascondi' : 'Mostra'} Preview</span>
@@ -995,6 +1109,19 @@ export const TemplateCampiBuilder: React.FC = () => {
                             >
                                 <RefreshCw className="h-5 w-5" />
                             </button>
+                            <button
+                                onClick={() => saveMutation.mutate()}
+                                disabled={!isDirty || saveMutation.isPending}
+                                className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2"
+                            >
+                                {saveMutation.isPending ? (
+                                    <RefreshCw className="h-4 w-4 animate-spin" />
+                                ) : (
+                                    <Save className="h-4 w-4" />
+                                )}
+                                Salva Template
+                                {isDirty && <span className="w-2 h-2 bg-yellow-400 rounded-full" />}
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -1005,52 +1132,81 @@ export const TemplateCampiBuilder: React.FC = () => {
                 <div className={`grid gap-6 ${showPreview ? 'lg:grid-cols-2' : 'lg:grid-cols-1'}`}>
                     {/* Builder Column */}
                     <div className="space-y-4">
+                        {/* Scadenza Default */}
+                        <div className="bg-white border border-gray-200 rounded-lg p-4">
+                            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                                <Clock className="h-4 w-4 text-teal-600" />
+                                Scadenza Default per Prossimo Controllo
+                            </label>
+                            <select
+                                value={scadenzaMesi || ''}
+                                onChange={(e) => {
+                                    setScadenzaMesi(e.target.value ? parseInt(e.target.value) : null);
+                                    setIsDirty(true);
+                                }}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-teal-500 focus:border-teal-500"
+                            >
+                                <option value="">Nessuna scadenza predefinita</option>
+                                {SCADENZA_OPTIONS.map(opt => (
+                                    <option key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                    </option>
+                                ))}
+                            </select>
+                            <p className="text-xs text-gray-500 mt-1">
+                                Questa scadenza verrà suggerita automaticamente quando si completa una visita
+                            </p>
+                        </div>
+
                         {/* Stats */}
                         <div className="flex items-center gap-4 p-4 bg-white border border-gray-200 rounded-lg">
                             <div className="flex items-center gap-2 text-sm">
                                 <CheckCircle className="h-4 w-4 text-green-500" />
-                                <span className="text-gray-600">{campi.length} campi configurati</span>
+                                <span className="text-gray-600">{localFields.length} campi configurati</span>
                             </div>
                             <div className="flex items-center gap-2 text-sm">
                                 <AlertCircle className="h-4 w-4 text-amber-500" />
                                 <span className="text-gray-600">
-                                    {campi.filter(c => c.obbligatorio).length} obbligatori
+                                    {localFields.filter(c => c.required).length} obbligatori
+                                </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-sm">
+                                <FileCode2 className="h-4 w-4 text-teal-500" />
+                                <span className="text-gray-600">
+                                    {localFields.filter(c => c.hl7?.code).length} con HL7
                                 </span>
                             </div>
                         </div>
 
                         {/* Creating form */}
                         {isCreating && (
-                            <CampoForm
-                                onSave={(data) => addCampoMutation.mutate(data)}
+                            <FieldEditor
+                                onSave={handleAddField}
                                 onCancel={() => setIsCreating(false)}
-                                isLoading={addCampoMutation.isPending}
                             />
                         )}
 
-                        {/* Campi List */}
+                        {/* Fields List */}
                         <div className="space-y-2">
-                            {sortedCampi.map((campo, index) => (
-                                <React.Fragment key={campo.id}>
-                                    {editingCampo === campo.id ? (
-                                        <CampoForm
-                                            initialData={getEditingCampoData(campo.id)}
-                                            onSave={(data) => updateCampoMutation.mutate({ campoId: campo.id, data })}
-                                            onCancel={() => setEditingCampo(null)}
-                                            isLoading={updateCampoMutation.isPending}
+                            {sortedFields.map((field, index) => (
+                                <React.Fragment key={field.name || index}>
+                                    {editingFieldIndex === index ? (
+                                        <FieldEditor
+                                            field={field}
+                                            onSave={(data) => handleUpdateField(index, data)}
+                                            onCancel={() => setEditingFieldIndex(null)}
                                         />
                                     ) : (
-                                        <CampoItem
-                                            campo={campo}
+                                        <FieldCard
+                                            field={field}
                                             index={index}
-                                            isEditing={editingCampo === campo.id}
                                             isFirst={index === 0}
-                                            isLast={index === sortedCampi.length - 1}
-                                            onEdit={() => setEditingCampo(campo.id)}
-                                            onDelete={() => handleDelete(campo.id)}
-                                            onDuplicate={() => handleDuplicate(campo)}
-                                            onMoveUp={() => handleMoveUp(index)}
-                                            onMoveDown={() => handleMoveDown(index)}
+                                            isLast={index === sortedFields.length - 1}
+                                            onEdit={() => setEditingFieldIndex(index)}
+                                            onDelete={() => handleDeleteField(index)}
+                                            onDuplicate={() => handleDuplicateField(index)}
+                                            onMoveUp={() => handleMoveField(index, index - 1)}
+                                            onMoveDown={() => handleMoveField(index, index + 1)}
                                             onDragStart={handleDragStart}
                                             onDragOver={handleDragOver}
                                             onDrop={handleDrop}
@@ -1061,7 +1217,7 @@ export const TemplateCampiBuilder: React.FC = () => {
                         </div>
 
                         {/* Empty State */}
-                        {sortedCampi.length === 0 && !isCreating && (
+                        {sortedFields.length === 0 && !isCreating && (
                             <div className="text-center py-12 bg-white border border-dashed border-gray-300 rounded-lg">
                                 <Type className="h-12 w-12 text-gray-300 mx-auto mb-4" />
                                 <h3 className="text-lg font-medium text-gray-900 mb-2">
@@ -1074,7 +1230,7 @@ export const TemplateCampiBuilder: React.FC = () => {
                         )}
 
                         {/* Add Button */}
-                        {!isCreating && !editingCampo && (
+                        {!isCreating && editingFieldIndex === null && (
                             <button
                                 onClick={() => setIsCreating(true)}
                                 className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-teal-400 hover:text-teal-600 transition-colors"
@@ -1089,7 +1245,7 @@ export const TemplateCampiBuilder: React.FC = () => {
                     {showPreview && (
                         <div className="lg:sticky lg:top-24 lg:self-start">
                             <TemplatePreview
-                                campi={sortedCampi}
+                                fields={sortedFields}
                                 prestazione={prestazione}
                             />
                         </div>

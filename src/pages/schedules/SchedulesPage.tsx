@@ -36,7 +36,7 @@ import {
   DropdownMenuSeparator
 } from '../../design-system/molecules/DropdownMenu/DropdownMenu';
 import { exportToCsv } from '../../utils/csvExport';
-import { getStatusBadgeColor, statusDotColors } from '../../utils/scheduleStatusColors';
+import { getStatusBadgeColor, getStatusRowColor, statusDotColors } from '../../utils/scheduleStatusColors';
 import { apiGet, apiPut } from '../../services/api';
 import { remove } from '../../services/apiClient';
 import { getTrainers } from '../../services/trainers';
@@ -46,12 +46,15 @@ import { getCourses } from '../../services/courses';
 import { Company, Person } from '../../types';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { useTenantFilter } from '../../context/TenantFilterContext';
+import { useTenantMode } from '../../contexts/TenantModeContext';
+import { useToast } from '../../hooks/useToast';
 
 interface Schedule {
   id: string;
   course: { id: string; name: string; title?: string };
   startDate: string;
   endDate: string;
+  expiryDate?: string;
   location?: string;
   maxParticipants?: number;
   notes?: string;
@@ -70,8 +73,14 @@ interface Schedule {
     trainer?: { id: string; firstName: string; lastName: string };
     co_trainer?: { id: string; firstName: string; lastName: string };
   }>;
+  // P49: ScheduleCompany has companyTenantProfile relation
   companies?: Array<{
-    company: { id: string; ragioneSociale?: string; name?: string };
+    companyTenantProfileId?: string;
+    companyTenantProfile?: {
+      id: string;
+      company: { id: string; ragioneSociale?: string };
+    };
+    company?: { id: string; ragioneSociale?: string };
   }>;
   enrollments?: Array<{
     employee: { id: string; firstName: string; lastName: string };
@@ -99,6 +108,7 @@ interface DataRow {
   partecipanti: number;
   dataInizio: string;
   dataFine: string;
+  dataScadenza: string;
   sessioni: string;
   modalità: string;
   location: string;
@@ -125,7 +135,10 @@ const SchedulesPage: React.FC = () => {
   const loadingRef = useRef(false);
 
   // Tenant filter from global context
-  const { getTenantFilterParams, tenantFilterKey } = useTenantFilter();
+  const { getTenantFilterParams, tenantFilterKey, isReady } = useTenantFilter();
+
+  // Multi-tenant CRUD operations - use selected tenant for operations
+  const { getOperateHeaders } = useTenantMode();
 
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -142,11 +155,11 @@ const SchedulesPage: React.FC = () => {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectAll, setSelectAll] = useState(false);
-  const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const { showToast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilters, setActiveFilters] = useState<Record<string, string>>({});
   const [activeSort, setActiveSort] = useState<{ field: string, direction: 'asc' | 'desc' } | undefined>({ field: 'startDate', direction: 'desc' });
-  const [hiddenColumns, setHiddenColumns] = useState<string[]>(['dataInizio', 'dataFine']);
+  const [hiddenColumns, setHiddenColumns] = useState<string[]>([]);
   const [columnOrder, setColumnOrder] = useState<Record<string, number>>({});
   const [showImportedCourses, setShowImportedCourses] = useState(false);
   const [returnToDetailPage, setReturnToDetailPage] = useState<string | null>(null);
@@ -175,23 +188,20 @@ const SchedulesPage: React.FC = () => {
       const existingSchedule = schedules.find(s => s.id === scheduleId);
 
       if (existingSchedule) {
-        console.log('[SchedulesPage] 📝 Loading schedule for edit:', scheduleId, existingSchedule);
         setEditingSchedule(existingSchedule);
         setSelectedSlot(null);
         setShowForm(true);
       } else {
         // Se non trovato nei dati locali, carica dal server
-        console.log('[SchedulesPage] 🔄 Schedule not found in local data, fetching from server...');
         apiGet(`/api/v1/schedules/${scheduleId}`)
           .then((data) => {
-            console.log('[SchedulesPage] ✅ Schedule loaded:', data);
             setEditingSchedule(data as Schedule | null);
             setSelectedSlot(null);
             setShowForm(true);
           })
           .catch((err) => {
-            console.error('[SchedulesPage] ❌ Failed to load schedule:', err);
-            setAlert({ type: 'error', message: 'Impossibile caricare il corso programmato' });
+            if (import.meta.env.DEV) console.error('[SchedulesPage] ❌ Failed to load schedule:', err);
+            showToast({ message: 'Impossibile caricare il corso programmato', type: 'error' });
           });
       }
     } else if (openModal && !scheduleId && !showForm) {
@@ -253,17 +263,13 @@ const SchedulesPage: React.FC = () => {
   const fetchData = useCallback(async () => {
     // Evita chiamate multiple durante il loading usando ref
     if (loadingRef.current) {
-      console.log('[SchedulesPage] ⏭️ Already loading, skipping fetchData');
       return;
     }
 
     loadingRef.current = true;
     setLoading(true);
-    console.log('[SchedulesPage] 🔄 Fetching data... (loading=true)');
 
     try {
-      console.log('[SchedulesPage] ⏳ Calling Promise.all for schedules, courses, trainers, companies...');
-
       // Build tenant filter params
       const tenantParams = getTenantFilterParams();
       const tenantQueryString = tenantParams.tenantIds
@@ -271,55 +277,42 @@ const SchedulesPage: React.FC = () => {
         : (tenantParams.allTenants ? '?allTenants=true' : '');
 
       // ✅ FIX: Carica solo i dati essenziali nel Promise.all principale
-      // Persons viene caricato separatamente per evitare di bloccare il rendering
-      const [schedulesData, rawCourses, trainersData, companiesData] = await Promise.all([
-        apiGet(`/api/v1/schedules${tenantQueryString}`).then(data => {
-          console.log('[SchedulesPage] ✅ Schedules API response received:', Array.isArray(data) ? `${data.length} items` : typeof data);
-          return data;
-        }),
-        getCourses().then(data => {
-          console.log('[SchedulesPage] ✅ Courses service response received:', Array.isArray(data) ? `${data.length} items` : typeof data);
-          return data;
-        }),
-        getTrainers().then(data => {
-          console.log('[SchedulesPage] ✅ Trainers service response received:', Array.isArray(data) ? `${data.length} items` : typeof data);
-          return data;
-        }),
-        getCompanies().then(data => {
-          console.log('[SchedulesPage] ✅ Companies service response received:', Array.isArray(data) ? `${data.length} items` : typeof data);
-          return data;
+      // Build tenant params for companies and persons
+      const companyTenantParams: { allTenants?: boolean; tenantIds?: string } = {};
+      if (tenantParams.tenantIds) {
+        companyTenantParams.tenantIds = tenantParams.tenantIds.join(',');
+      } else if (tenantParams.allTenants) {
+        companyTenantParams.allTenants = true;
+      }
+
+      // Carica tutti i dati necessari in parallelo (persons incluso — serve al modal)
+      const personsFilter: Record<string, any> = { limit: 1000, page: 1 };
+      if (tenantParams.tenantIds) {
+        personsFilter.tenantIds = tenantParams.tenantIds.join(',');
+      } else if (tenantParams.allTenants) {
+        personsFilter.allTenants = true;
+      }
+
+      const [schedulesData, rawCourses, trainersData, companiesData, personsData] = await Promise.all([
+        apiGet(`/api/v1/schedules${tenantQueryString}`),
+        getCourses(),
+        getTrainers(),
+        getCompanies(companyTenantParams),
+        getPersons(personsFilter).catch(err => {
+          if (import.meta.env.DEV) console.warn('[SchedulesPage] ⚠️ Persons loading failed:', err);
+          return { persons: [] };
         })
       ]);
 
-      console.log('[SchedulesPage] 🎉 Essential data loaded! Loading persons in background...');
-
-      // ✅ Carica persons in background senza bloccare il rendering
-      getPersons({ limit: 1000, page: 1 })
-        .then(data => {
-          console.log('[SchedulesPage] ✅ Persons loaded in background:', (data as any)?.persons?.length || 0, 'persons');
-          const personsArray = (data as any)?.persons ?? data;
-          setPersons(personsArray as Person[]);
-        })
-        .catch(err => {
-          console.warn('[SchedulesPage] ⚠️ Persons loading failed (non-critical):', err);
-          setPersons([]);
-        });
-
-      console.log('[SchedulesPage] 📊 Essential data fetched:', {
-        schedulesCount: Array.isArray(schedulesData) ? schedulesData.length : 0,
-        schedulesType: typeof schedulesData,
-        schedulesIsArray: Array.isArray(schedulesData),
-        coursesCount: Array.isArray(rawCourses) ? rawCourses.length : 0,
-        trainersCount: Array.isArray(trainersData) ? trainersData.length : 0,
-        companiesCount: Array.isArray(companiesData) ? companiesData.length : 0,
-        sampleSchedule: Array.isArray(schedulesData) && schedulesData[0] ? schedulesData[0] : null
-      });
+      // Imposta persons subito
+      const personsArray = (personsData as any)?.persons ?? personsData;
+      setPersons(Array.isArray(personsArray) ? personsArray as Person[] : []);
 
       // Validazione robusta: assicurati che schedulesData sia un array
       const validSchedules = Array.isArray(schedulesData) ? schedulesData : [];
 
       if (!Array.isArray(schedulesData)) {
-        console.error('[SchedulesPage] ⚠️ schedulesData is not an array:', schedulesData);
+        if (import.meta.env.DEV) console.error('[SchedulesPage] ⚠️ schedulesData is not an array:', schedulesData);
       }
 
       // Mappa i corsi del service unificato alla shape locale { id, name }
@@ -333,11 +326,8 @@ const SchedulesPage: React.FC = () => {
       setCourses(coursesData);
       setTrainers(Array.isArray(trainersData) ? trainersData as Trainer[] : []);
       setCompanies(Array.isArray(companiesData) ? companiesData as Company[] : []);
-      // Persons viene impostato dal promise in background (vedi sopra)
-
-      console.log('[SchedulesPage] ✅ States updated with valid data');
     } catch (error) {
-      console.error('[SchedulesPage] ❌ Error fetching data:', error);
+      if (import.meta.env.DEV) console.error('[SchedulesPage] ❌ Error fetching data:', error);
 
       // Imposta stati di default per evitare UI vuota o inconsistente
       setSchedules([]);
@@ -350,7 +340,7 @@ const SchedulesPage: React.FC = () => {
       if (error && typeof error === 'object' && 'response' in error) {
         const responseError = error as { response?: { status?: number } };
         if (responseError.response?.status !== 401 && responseError.response?.status !== 403) {
-          setAlert({
+          showToast({
             type: 'error',
             message: 'Errore durante il caricamento dei dati. Riprova.'
           });
@@ -359,27 +349,27 @@ const SchedulesPage: React.FC = () => {
     } finally {
       loadingRef.current = false;
       setLoading(false);
-      console.log('[SchedulesPage] ✅ Loading complete (loading=false)');
     }
-  }, [getTenantFilterParams]); // Reload when tenant filter changes
+  }, [getTenantFilterParams, tenantFilterKey]); // Reload when tenant filter changes
 
   // ✅ FIX: Carica dati al mount e quando modal si chiude o tenant cambia
   useEffect(() => {
-    console.log('[SchedulesPage] 🎯 Component mounted or modal closed, fetching data...');
+    if (!isReady) return;
     fetchData();
-  }, [fetchData, showForm, tenantFilterKey]); // Reload when modal closes or tenant filter changes
+  }, [fetchData, showForm, tenantFilterKey, isReady]); // Reload when modal closes or tenant filter changes
 
 
   const handleDelete = async (id: string) => {
     const shouldDelete = await confirmDelete('questo programma');
     if (!shouldDelete) return;
     try {
-      await remove('schedules', id);
-      setAlert({ type: 'success', message: 'Corso eliminato con successo.' });
+      const headers = getOperateHeaders();
+      await remove('schedules', id, { headers });
+      showToast({ message: 'Corso eliminato con successo.', type: 'success' });
       await fetchData();
     } catch (error) {
-      setAlert({ type: 'error', message: 'Errore durante l\'eliminazione.' });
-      console.error('Error deleting schedule:', error);
+      showToast({ message: 'Errore durante l\'eliminazione.', type: 'error' });
+      if (import.meta.env.DEV) console.error('Error deleting schedule:', error);
     }
   };
 
@@ -389,14 +379,15 @@ const SchedulesPage: React.FC = () => {
     if (!shouldDelete) return;
     setLoading(true);
     try {
-      await Promise.all(selectedIds.map(id => remove('schedules', id)));
+      const headers = getOperateHeaders();
+      await Promise.all(selectedIds.map(id => remove('schedules', id, { headers })));
       setSelectedIds([]);
       setSelectionMode(false);
-      setAlert({ type: 'success', message: 'Corsi eliminati con successo.' });
+      showToast({ message: 'Corsi eliminati con successo.', type: 'success' });
       await fetchData();
     } catch (error) {
-      setAlert({ type: 'error', message: 'Errore durante l\'eliminazione multipla.' });
-      console.error('Error deleting selected schedules:', error);
+      showToast({ message: 'Errore durante l\'eliminazione multipla.', type: 'error' });
+      if (import.meta.env.DEV) console.error('Error deleting selected schedules:', error);
     } finally {
       setLoading(false);
     }
@@ -413,7 +404,8 @@ const SchedulesPage: React.FC = () => {
 
   const handleStatusChange = async (scheduleId: string, newStatus: string) => {
     try {
-      await apiPut(`/api/v1/schedules/${scheduleId}`, { status: newStatus });
+      const headers = getOperateHeaders();
+      await apiPut(`/api/v1/schedules/${scheduleId}`, { status: newStatus }, { headers });
       // Aggiorna solo lo schedule nella lista locale senza ricaricare tutto
       // Questo evita di chiudere la sezione "Corsi in Scadenza"
       setSchedules(prevSchedules =>
@@ -425,22 +417,36 @@ const SchedulesPage: React.FC = () => {
       );
       // Trigger refresh della sezione corsi in scadenza (senza chiuderla)
       setExpiringCoursesRefreshKey(prev => prev + 1);
-      setAlert({ type: 'success', message: 'Stato aggiornato con successo.' });
-      setTimeout(() => setAlert(null), 3000);
+      showToast({ message: 'Stato aggiornato con successo.', type: 'success' });
     } catch (error) {
-      setAlert({ type: 'error', message: 'Errore durante l\'aggiornamento dello stato.' });
-      console.error('Error updating status:', error);
-      setTimeout(() => setAlert(null), 3000);
+      showToast({ message: 'Errore durante l\'aggiornamento dello stato.', type: 'error' });
+      if (import.meta.env.DEV) console.error('Error updating status:', error);
     }
   };
 
   // Prepara i dati per la tabella
   const data: DataRow[] = schedules.map(schedule => {
-    // Estrai i nomi delle aziende
-    const companyNames = schedule.companies
-      ?.map(c => c.company.ragioneSociale || c.company.name)
-      .filter(Boolean)
-      .join(', ');
+    // P49: Estrai i nomi delle aziende da schedule.companies
+    const directCompanyNames = schedule.companies
+      ?.map(c => {
+        const company = c.companyTenantProfile?.company || c.company;
+        return company?.ragioneSociale;
+      })
+      .filter(Boolean) || [];
+
+    // P48/P49: Estrai anche i nomi aziende dai partecipanti (enrollments)
+    // per mostrare le company effettive dei partecipanti iscritti
+    const participantCompanyNames = schedule.enrollments
+      ?.map(e => {
+        const profile = (e as any).person?.tenantProfiles?.[0];
+        const company = profile?.companyTenantProfile?.company;
+        return company?.ragioneSociale;
+      })
+      .filter(Boolean) || [];
+
+    // Unisci e deduplica i nomi delle aziende (priorità ai partecipanti)
+    const allCompanyNames = [...new Set([...participantCompanyNames, ...directCompanyNames])];
+    const companyNames = allCompanyNames.join(', ');
 
     // Estrai il formatore della prima sessione
     const trainer = schedule.sessions?.[0]?.trainer
@@ -465,20 +471,19 @@ const SchedulesPage: React.FC = () => {
 
     // Determina la modalità di erogazione in italiano
     let deliveryModeItalian = 'N/D';
-    if (schedule.deliveryMode === 'IN_PERSON') deliveryModeItalian = 'In presenza';
-    if (schedule.deliveryMode === 'ONLINE') deliveryModeItalian = 'Online';
-    if (schedule.deliveryMode === 'HYBRID') deliveryModeItalian = 'Ibrida';
+    const deliveryModeUpper = schedule.deliveryMode?.toUpperCase();
+    if (deliveryModeUpper === 'IN_PERSON') deliveryModeItalian = 'In presenza';
+    if (deliveryModeUpper === 'ONLINE') deliveryModeItalian = 'Online';
+    if (deliveryModeUpper === 'HYBRID') deliveryModeItalian = 'Ibrida';
 
     // Mappa lo stato in italiano
     const statusMap: Record<string, string> = {
-      'PENDING': 'Preventivo',
-      'CONFIRMED': 'Confermato',
-      'ACTIVE': 'Attivo',
-      'COMPLETED': 'Completato',
-      'CANCELLED': 'Cancellato',
-      'SUSPENDED': 'Sospeso'
+      'PREVENTIVO': 'Preventivo',
+      'ACCETTATO': 'Accettato',
+      'COMPLETATO': 'Completato',
+      'FATTURATO': 'Fatturato'
     };
-    const statusItalian = statusMap[schedule.status || 'PENDING'] || 'Preventivo';
+    const statusItalian = statusMap[schedule.status || 'PREVENTIVO'] || 'Preventivo';
 
     return {
       id: schedule.id,
@@ -489,6 +494,7 @@ const SchedulesPage: React.FC = () => {
       partecipanti: participantsCount,
       dataInizio: new Date(schedule.startDate).toLocaleDateString('it-IT'),
       dataFine: new Date(schedule.endDate).toLocaleDateString('it-IT'),
+      dataScadenza: schedule.expiryDate ? new Date(schedule.expiryDate).toLocaleDateString('it-IT') : '',
       sessioni: sessionDates || 'N/D',
       modalità: deliveryModeItalian,
       location: schedule.location || 'N/D',
@@ -502,10 +508,24 @@ const SchedulesPage: React.FC = () => {
   const events: ScheduleEvent[] = [];
   schedules.forEach(schedule => {
     const courseName = schedule.course.title || schedule.course.name;
-    const companyNames = schedule.companies
-      ?.map(c => c.company.ragioneSociale || c.company.name)
-      .filter(Boolean)
-      .join(', ');
+    // P48/P49: Estrai i nomi delle aziende - combina companies e enrollments
+    const directCompanyNames = schedule.companies
+      ?.map(c => {
+        const company = c.companyTenantProfile?.company || c.company;
+        return company?.ragioneSociale;
+      })
+      .filter(Boolean) || [];
+
+    const participantCompanyNames = schedule.enrollments
+      ?.map(e => {
+        const profile = (e as any).person?.tenantProfiles?.[0];
+        const company = profile?.companyTenantProfile?.company;
+        return company?.ragioneSociale;
+      })
+      .filter(Boolean) || [];
+
+    const allCompanyNames = [...new Set([...participantCompanyNames, ...directCompanyNames])];
+    const companyNames = allCompanyNames.join(', ');
 
     // Se ci sono sessioni, crea un evento per ogni sessione
     if (schedule.sessions && schedule.sessions.length > 0) {
@@ -544,9 +564,9 @@ const SchedulesPage: React.FC = () => {
             startDate: schedule.startDate,
             endDate: schedule.endDate,
             location: schedule.location,
-            status: schedule.status || 'PENDING',
+            status: schedule.status || 'PREVENTIVO',
             sessions: schedule.sessions,
-            companies: schedule.companies
+            companies: schedule.companies as unknown as ScheduleResource['companies']
           };
 
           events.push({
@@ -556,12 +576,12 @@ const SchedulesPage: React.FC = () => {
             start: startDateTime,
             end: endDateTime,
             resource,
-            status: schedule.status || 'PENDING',
+            status: schedule.status || 'PREVENTIVO',
             tooltip: description || title,
             sessioniTooltipHtml: description || title
           });
         } catch (error) {
-          console.error('Error parsing session dates:', error);
+          if (import.meta.env.DEV) console.error('Error parsing session dates:', error);
         }
       });
     } else {
@@ -582,9 +602,9 @@ const SchedulesPage: React.FC = () => {
             startDate: schedule.startDate,
             endDate: schedule.endDate,
             location: schedule.location,
-            status: schedule.status || 'PENDING',
+            status: schedule.status || 'PREVENTIVO',
             sessions: schedule.sessions,
-            companies: schedule.companies
+            companies: schedule.companies as unknown as ScheduleResource['companies']
           };
 
           events.push({
@@ -594,13 +614,13 @@ const SchedulesPage: React.FC = () => {
             start: startDate,
             end: endDate,
             resource,
-            status: schedule.status || 'PENDING',
+            status: schedule.status || 'PREVENTIVO',
             tooltip: title,
             sessioniTooltipHtml: title
           });
         }
       } catch (error) {
-        console.error('Error parsing schedule dates:', error);
+        if (import.meta.env.DEV) console.error('Error parsing schedule dates:', error);
       }
     }
   });
@@ -678,9 +698,9 @@ const SchedulesPage: React.FC = () => {
           case 'aziende':
             return item.aziende.toLowerCase().includes(value.toLowerCase());
           case 'status':
-            // Status può essere una lista separata da virgole: PENDING,CONFIRMED,ACTIVE
+            // Status può essere una lista separata da virgole: PREVENTIVO,ACCETTATO,COMPLETATO
             const allowedStatuses = value.split(',').map(s => s.trim());
-            return allowedStatuses.includes(item._original?.status || 'PENDING');
+            return allowedStatuses.includes(item._original?.status || 'PREVENTIVO');
           default:
             return true;
         }
@@ -841,33 +861,21 @@ const SchedulesPage: React.FC = () => {
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start">
-                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleStatusChange(row.id, 'PENDING'); }}>
+                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleStatusChange(row.id, 'PREVENTIVO'); }}>
                   <span className="w-2 h-2 rounded-full bg-yellow-500 mr-2" />
                   Preventivo
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleStatusChange(row.id, 'CONFIRMED'); }}>
-                  <span className={`w-2 h-2 rounded-full ${statusDotColors['Confermato']} mr-2`} />
-                  Confermato
+                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleStatusChange(row.id, 'ACCETTATO'); }}>
+                  <span className={`w-2 h-2 rounded-full ${statusDotColors['Accettato']} mr-2`} />
+                  Accettato
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleStatusChange(row.id, 'ACTIVE'); }}>
-                  <span className={`w-2 h-2 rounded-full ${statusDotColors['Attivo']} mr-2`} />
-                  Attivo
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleStatusChange(row.id, 'COMPLETED'); }}>
+                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleStatusChange(row.id, 'COMPLETATO'); }}>
                   <span className={`w-2 h-2 rounded-full ${statusDotColors['Completato']} mr-2`} />
                   Completato
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleStatusChange(row.id, 'SUSPENDED'); }}>
-                  <span className={`w-2 h-2 rounded-full ${statusDotColors['Sospeso']} mr-2`} />
-                  Sospeso
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={(e) => { e.stopPropagation(); handleStatusChange(row.id, 'CANCELLED'); }}
-                  className="text-red-600 focus:text-red-700 focus:bg-red-50"
-                >
-                  <span className={`w-2 h-2 rounded-full ${statusDotColors['Cancellato']} mr-2`} />
-                  Cancellato
+                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleStatusChange(row.id, 'FATTURATO'); }}>
+                  <span className={`w-2 h-2 rounded-full ${statusDotColors['Fatturato']} mr-2`} />
+                  Fatturato
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -875,7 +883,17 @@ const SchedulesPage: React.FC = () => {
         );
       },
     },
-    { key: 'corso', label: 'Corso', width: 150, sortable: true },
+    {
+      key: 'corso',
+      label: 'Corso',
+      width: 200,
+      sortable: true,
+      renderCell: (row) => (
+        <div className="whitespace-normal break-words line-clamp-2 leading-snug">
+          {row.corso}
+        </div>
+      )
+    },
     {
       key: 'aziende',
       label: 'Aziende',
@@ -883,7 +901,7 @@ const SchedulesPage: React.FC = () => {
       sortable: true,
       renderCell: (row) => {
         const companies = row.aziende.split(', ').filter(c => c !== 'N/D');
-        if (companies.length === 0) return <span className="text-gray-400">N/D</span>;
+        if (companies.length === 0) return <span className="text-gray-400 dark:text-gray-500">N/D</span>;
         return (
           <div className="space-y-1">
             {companies.map((company, idx) => (
@@ -902,25 +920,48 @@ const SchedulesPage: React.FC = () => {
         <div className="space-y-1">
           <div className="text-sm font-medium">{row.formatore}</div>
           {row.coFormatore !== '-' && (
-            <div className="text-xs text-gray-500">Co: {row.coFormatore}</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Co: {row.coFormatore}</div>
           )}
         </div>
       )
     },
     { key: 'partecipanti', label: 'Partecipanti', width: 100 },
-    { key: 'dataInizio', label: 'Data Inizio', width: 100, sortable: true, hidden: true },
-    { key: 'dataFine', label: 'Data Fine', width: 100, sortable: true, hidden: true },
+    {
+      key: 'dataInizio',
+      label: 'Date',
+      width: 140,
+      sortable: true,
+      renderCell: (row) => (
+        <div className="space-y-1">
+          <div className="flex items-center gap-1 text-xs">
+            <span className="text-gray-400 dark:text-gray-500 shrink-0">Esec.</span>
+            <span className="font-medium text-gray-700 dark:text-gray-200">{row.dataInizio}</span>
+          </div>
+          {row.dataScadenza ? (
+            <div className="flex items-center gap-1 text-xs">
+              <span className="text-gray-400 dark:text-gray-500 shrink-0">Scad.</span>
+              <span className="text-gray-600 dark:text-gray-300">{row.dataScadenza}</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1 text-xs">
+              <span className="text-gray-400 dark:text-gray-500 shrink-0">Fine</span>
+              <span className="text-gray-600 dark:text-gray-300">{row.dataFine}</span>
+            </div>
+          )}
+        </div>
+      )
+    },
     {
       key: 'sessioni',
       label: 'Sessioni',
       width: 150,
       renderCell: (row) => {
         const sessions = row.sessioni.split(', ').filter(s => s !== 'N/D');
-        if (sessions.length === 0) return <span className="text-gray-400">N/D</span>;
+        if (sessions.length === 0) return <span className="text-gray-400 dark:text-gray-500">N/D</span>;
         return (
           <div className="space-y-1">
             {sessions.map((session, idx) => (
-              <div key={idx} className="text-xs text-gray-600">{session}</div>
+              <div key={idx} className="text-xs text-gray-600 dark:text-gray-400">{session}</div>
             ))}
           </div>
         );
@@ -930,85 +971,23 @@ const SchedulesPage: React.FC = () => {
     { key: 'location', label: 'Luogo', width: 120 },
   ];
 
-  // Component for the search and filter bar
+  // Component for the search and filter bar (solo ricerca + filtri, senza titolo/bottoni primari)
   const SearchFilterBar = () => (
     <div className="space-y-4 mb-4">
-      {/* Prima riga: Descrizione con toggle view mode e pulsante Aggiungi */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex-1">
-          <p className="text-gray-500">
-            Gestisci le pianificazioni dei corsi, visualizza il calendario e crea nuovi eventi.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <ViewModeToggle
-            viewMode={view as 'table' | 'grid'}
-            onChange={(newView) => setView(newView as 'table' | 'calendar')}
-            gridLabel="Calendario"
-            tableLabel="Tabella"
-          />
-
-          <AddEntityDropdown
-            label="Aggiungi Pianificazione"
-            options={[
-              {
-                label: 'Nuova Pianificazione',
-                icon: <Plus className="h-4 w-4" />,
-                onClick: () => {
-                  setEditingSchedule(null);
-                  setShowForm(true);
-                }
-              },
-              {
-                label: 'Importa da CSV',
-                icon: <Upload className="h-4 w-4" />,
-                onClick: () => {
-                  // TODO: Implementare import CSV
-                  console.log('Import CSV');
-                }
-              },
-              {
-                label: 'Scarica template CSV',
-                icon: <FileText className="h-4 w-4" />,
-                onClick: handleDownloadTemplate
-              }
-            ]}
-            icon={<Plus className="h-4 w-4" />}
-            variant="primary"
-          />
-        </div>
-      </div>
-
-      {/* Seconda riga: Search bar a sinistra e pulsanti a destra */}
+      {/* Search bar a sinistra e pulsanti filtro a destra */}
       <div className="flex items-center justify-between gap-4">
         <div className="flex-1 max-w-md">
           <SearchBar
             value={searchTerm}
             onChange={setSearchTerm}
             placeholder="Cerca pianificazioni..."
-            className="h-10 bg-white"
+            className="h-10 bg-white dark:bg-gray-800"
             showButton={false}
             showClearButton={true}
           />
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Toggle per mostrare/nascondere corsi importati */}
-          <Button
-            variant={showImportedCourses ? 'outline' : 'secondary'}
-            size="sm"
-            onClick={() => setShowImportedCourses(!showImportedCourses)}
-            className="h-10 flex items-center gap-2 whitespace-nowrap"
-            title={showImportedCourses ? 'Nascondi corsi importati' : 'Mostra corsi importati'}
-          >
-            {showImportedCourses ? (
-              <><EyeOff className="h-4 w-4" /> Nascondi importati</>
-            ) : (
-              <><Eye className="h-4 w-4" /> Mostra importati</>
-            )}
-          </Button>
-
           <FilterPanel
             filterOptions={[
               {
@@ -1041,8 +1020,8 @@ const SchedulesPage: React.FC = () => {
             }}
             sortOptions={[
               { value: 'corso', label: 'Corso' },
-              { value: 'dataInizio', label: 'Data inizio' },
-              { value: 'dataFine', label: 'Data fine' },
+              { value: 'dataInizio', label: 'Data esecuzione' },
+              { value: 'dataFine', label: 'Data scadenza' },
               { value: 'formatore', label: 'Formatore' },
               { value: 'aziende', label: 'Aziende' }
             ]}
@@ -1077,6 +1056,58 @@ const SchedulesPage: React.FC = () => {
     <EntityListLayout
       title="Pianificazioni"
       subtitle="Gestisci tutti i corsi pianificati"
+      icon={<Calendar className="h-5 w-5" />}
+      count={filteredSchedules.length}
+      extraControls={
+        <>
+          <ViewModeToggle
+            viewMode={view as 'table' | 'grid'}
+            onChange={(newView) => setView(newView as 'table' | 'calendar')}
+            gridLabel="Calendario"
+            tableLabel="Tabella"
+          />
+          <Button
+            variant={showImportedCourses ? 'outline' : 'secondary'}
+            size="sm"
+            onClick={() => setShowImportedCourses(!showImportedCourses)}
+            className="h-9 flex items-center gap-2 whitespace-nowrap"
+            title={showImportedCourses ? 'Nascondi corsi importati' : 'Mostra corsi importati'}
+          >
+            {showImportedCourses ? (
+              <><EyeOff className="h-4 w-4" /> Importati</>
+            ) : (
+              <><Eye className="h-4 w-4" /> Importati</>
+            )}
+          </Button>
+          <AddEntityDropdown
+            label="Aggiungi Pianificazione"
+            options={[
+              {
+                label: 'Nuova Pianificazione',
+                icon: <Plus className="h-4 w-4" />,
+                onClick: () => {
+                  setEditingSchedule(null);
+                  setShowForm(true);
+                }
+              },
+              {
+                label: 'Importa da CSV',
+                icon: <Upload className="h-4 w-4" />,
+                onClick: () => {
+                  // TODO: implement CSV import
+                }
+              },
+              {
+                label: 'Scarica template CSV',
+                icon: <FileText className="h-4 w-4" />,
+                onClick: handleDownloadTemplate
+              }
+            ]}
+            icon={<Plus className="h-4 w-4" />}
+            variant="primary"
+          />
+        </>
+      }
       headerContent={<SearchFilterBar />}
       loading={loading}
       error={undefined}
@@ -1096,7 +1127,6 @@ const SchedulesPage: React.FC = () => {
           }}
           onQuickSchedule={(courseId, personIds, companyIds) => {
             // Riprogrammazione rapida: apri modal con dipendenti e aziende pre-selezionati
-            console.log('[SchedulesPage] 🚀 Quick schedule:', { courseId, personIds, companyIds });
             setPreSelectedCourseId(courseId);
             setPreSelectedPersonIds(personIds);
             setPreSelectedCompanyIds(companyIds);
@@ -1107,25 +1137,10 @@ const SchedulesPage: React.FC = () => {
         />
       </div>
 
-      {alert && (
-        <div className={`mb-4 p-4 ${alert.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'
-          } border rounded-lg`}>
-          <div className="flex items-center justify-between">
-            <span>{alert.message}</span>
-            <button
-              onClick={() => setAlert(null)}
-              className={alert.type === 'success' ? 'text-green-600 hover:text-green-800' : 'text-red-600 hover:text-red-800'}
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-      )}
-
       {selectionMode && (
-        <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+        <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg">
           <div className="flex items-center justify-between">
-            <span className="text-blue-800">
+            <span className="text-blue-800 dark:text-blue-200">
               Modalità selezione attiva - {selectedIds.length} elementi selezionati
             </span>
             <button
@@ -1134,7 +1149,7 @@ const SchedulesPage: React.FC = () => {
                 setSelectedIds([]);
                 setSelectAll(false);
               }}
-              className="text-blue-600 hover:text-blue-800"
+              className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200"
             >
               Annulla
             </button>
@@ -1150,17 +1165,7 @@ const SchedulesPage: React.FC = () => {
               navigate(`/schedules/${row.id}`);
             }
           }}
-          rowClassName={(row) => {
-            const rowColors: Record<string, string> = {
-              'Preventivo': 'bg-yellow-50 hover:bg-yellow-100',
-              'Confermato': 'bg-blue-50 hover:bg-blue-100',
-              'Attivo': 'bg-green-50 hover:bg-green-100',
-              'Completato': 'bg-gray-50 hover:bg-gray-100',
-              'Cancellato': 'bg-red-50 hover:bg-red-100',
-              'Sospeso': 'bg-orange-50 hover:bg-orange-100'
-            };
-            return rowColors[row.status] || '';
-          }}
+          rowClassName={(row) => getStatusRowColor(row.status)}
         />
       ) : (
         <ScheduleCalendar
@@ -1208,7 +1213,21 @@ const SchedulesPage: React.FC = () => {
             delivery_mode: editingSchedule.deliveryMode?.toLowerCase().replace('_', '-') || '',
             risk_level: (editingSchedule.course as any)?.riskLevel || '',
             course_type: (editingSchedule.course as any)?.courseType || '',
-            company_ids: editingSchedule.companies?.map((c) => c.company.id) || [],
+            // P49: usa CompanyTenantProfile.id (non global Company.id) per matchare getCompanies()
+            // Fallback: se schedule.companies è vuoto, deriva da enrollments
+            company_ids: (() => {
+              const fromCompanies = (editingSchedule.companies || [])
+                .map((c: any) => c?.companyTenantProfileId ?? c?.companyTenantProfile?.id)
+                .filter(Boolean);
+              if (fromCompanies.length > 0) return fromCompanies;
+              const profileIds = new Set<string>();
+              ((editingSchedule as any).enrollments || []).forEach((e: any) => {
+                const id = e?.person?.tenantProfiles?.[0]?.companyTenantProfileId
+                  ?? e?.person?.tenantProfiles?.[0]?.companyTenantProfile?.id;
+                if (id) profileIds.add(String(id));
+              });
+              return Array.from(profileIds);
+            })(),
             employee_ids: editingSchedule.enrollments?.map((e: any) => e.person?.id || e.employee?.id).filter(Boolean) || [],
             attendance: editingSchedule.attendance || [],
             isPublic: editingSchedule.isPublic || false, // ✅ FIX: Aggiunto isPublic per calendario pubblico

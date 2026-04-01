@@ -2,16 +2,14 @@ export default {
   // Configuration for ES modules
   transform: {},
   transformIgnorePatterns: [],
-  
+
   testEnvironment: 'node',
   setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
   testMatch: [
     '<rootDir>/tests/**/*.test.js',
     '<rootDir>/tests/**/*.spec.js'
   ],
-  testPathIgnorePatterns: [
-    '<rootDir>/tests/proxy-server.test.js'
-  ],
+  testPathIgnorePatterns: [],
   collectCoverageFrom: [
     'auth/**/*.js',
     'middleware/**/*.js',

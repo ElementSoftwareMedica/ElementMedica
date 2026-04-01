@@ -107,7 +107,7 @@ const GenerateDocumentDialog: React.FC<GenerateDocumentDialogProps> = ({
       };
 
       const result = await templateService.generateDocument(template.id, params);
-      
+
       setGeneratedDocument(result);
       setSuccess(true);
 
@@ -115,8 +115,8 @@ const GenerateDocumentDialog: React.FC<GenerateDocumentDialogProps> = ({
         onSuccess(result);
       }
 
-    } catch (err: any) {
-      setError(err.message || 'Errore durante la generazione del documento');
+    } catch (err: unknown) {
+      setError('Errore durante la generazione del documento');
     } finally {
       setGenerating(false);
     }
@@ -281,7 +281,7 @@ const GenerateDocumentDialog: React.FC<GenerateDocumentDialogProps> = ({
               <p className="text-gray-600 mb-4">
                 Il documento è stato generato con successo
               </p>
-              
+
               {generatedDocument && (
                 <div className="bg-gray-50 rounded-lg p-4 text-left space-y-2 mb-6">
                   <div className="text-sm">

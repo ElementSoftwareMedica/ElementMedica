@@ -1,13 +1,14 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { 
+import {
   Filter,
   Plus,
   X
 } from 'lucide-react';
 import { Button } from '../../../design-system/atoms/Button';
+import { DatePickerElegante } from '../../ui/DatePickerElegante';
 
-export type FilterOperator = 
+export type FilterOperator =
   | 'eq' // equals
   | 'neq' // not equals
   | 'gt' // greater than
@@ -189,11 +190,11 @@ const FilterBuilder: React.FC<FilterBuilderProps> = ({
       if (['isEmpty', 'isNotEmpty'].includes(f.operator)) {
         return true;
       }
-      
+
       if (typeof f.value === 'boolean') {
         return true;
       }
-      
+
       return f.value !== null && f.value !== '';
     });
   }, [filters]);
@@ -231,11 +232,11 @@ const FilterBuilder: React.FC<FilterBuilderProps> = ({
         );
       case 'date':
         return (
-          <input
-            type="date"
-            className="border rounded px-2 py-1 w-full"
+          <DatePickerElegante
             value={filter.value as string || ''}
-            onChange={e => handleValueChange(filter.id, e.target.value)}
+            onChange={(date) => handleValueChange(filter.id, date ? date.toISOString().split('T')[0] : '')}
+            theme="teal"
+            size="sm"
           />
         );
       case 'boolean':
@@ -283,7 +284,7 @@ const FilterBuilder: React.FC<FilterBuilderProps> = ({
             <span className="ml-2 text-gray-500">({filters.length})</span>
           )}
         </Button>
-        
+
         {filters.length > 0 && (
           <Button
             variant="ghost"

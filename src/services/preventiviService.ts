@@ -98,9 +98,13 @@ class PreventiviService {
 
   /**
    * Create new preventivo
+   * 
+   * P49: Mappa aziendaId -> companyTenantProfileId per compatibilità backend
    */
   async create(data: {
-    aziendaId: string;
+    aziendaId?: string;
+    companyTenantProfileId?: string;
+    personaId?: string;
     corsoId?: string;
     scheduleId?: string;
     tipoServizio: string;
@@ -168,16 +172,8 @@ class PreventiviService {
    */
   async download(id: string): Promise<void> {
     try {
-      console.log('📄 Attempting to download preventivo PDF:', id);
-
       const response = await api.get(`${this.basePath}/${id}/pdf`, {
         responseType: 'blob'
-      });
-
-      console.log('📄 PDF response received:', {
-        status: response.status,
-        contentType: response.headers['content-type'],
-        dataSize: (response.data as Blob)?.size || 0
       });
 
       const url = window.URL.createObjectURL(new Blob([response.data as BlobPart]));
@@ -194,24 +190,22 @@ class PreventiviService {
         }
       }
 
-      console.log('📄 Downloading as:', fileName);
-
       link.setAttribute('download', fileName);
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-
-      console.log('✅ Download initiated successfully');
-    } catch (error: any) {
-      console.error('❌ PDF Download Error:', {
-        message: error.message,
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data
-      });
+    } catch (error: unknown) {
+      console.error('❌ PDF Download Error:', error);
       throw error;
     }
+  }
+
+  /**
+   * Get download URL for a preventivo PDF
+   */
+  getDownloadUrl(id: string): string {
+    return `${this.basePath}/${id}/pdf`;
   }
 
   /**

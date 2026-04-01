@@ -43,14 +43,17 @@ import {
     Euro,
     Search,
     Package,
-    ExternalLink
+    ExternalLink,
+    AlertTriangle
 } from 'lucide-react';
-import { convenzioniApi, listiniApi, bundleApi } from '../../../services/clinicaApi';
+import { convenzioniApi, listiniApi, bundleApi, prestazioniApi } from '../../../services/clinicaApi';
 import { getCompanies } from '../../../services/companies';
 import { apiGet } from '../../../services/api';
 import type { Convenzione, TipoConvenzione, ListinoPrezzo, OffertaBundle } from '../../../services/clinicaApi';
 import { useToast } from '../../../hooks/useToast';
+import { useTenantFilter } from '../../../context/TenantFilterContext';
 import AziendeRiconoscimentiSection from '../../../components/clinica/AziendeRiconoscimentiSection';
+import { DatePickerElegante } from '../../../components/ui/DatePickerElegante';
 import '../../../styles/clinica-theme.css';
 
 // =====================================================
@@ -92,6 +95,7 @@ interface FormData {
     codiceSconto: string;
     companyIds: string[];
     bundleIds: string[]; // Bundle associati alla convenzione
+    prestazioniIds: string[]; // Prestazioni associate alla convenzione
 }
 
 interface FormErrors {
@@ -127,25 +131,40 @@ const INITIAL_FORM_DATA: FormData = {
     codiceSconto: '',
     companyIds: [],
     bundleIds: [],
+    prestazioniIds: [],
 };
 
 // =====================================================
-// BUNDLE SELECTION SECTION COMPONENT
+// COMBINED TABBED SELECTION SECTION COMPONENT
 // =====================================================
 
-interface BundleSelectionSectionProps {
+interface TabbedSelectionSectionProps {
+    prestazioniIds: string[];
     bundleIds: string[];
+    onPrestazioniIdsChange: (ids: string[]) => void;
     onBundleIdsChange: (ids: string[]) => void;
 }
 
-const BundleSelectionSection: React.FC<BundleSelectionSectionProps> = ({
+const TabbedSelectionSection: React.FC<TabbedSelectionSectionProps> = ({
+    prestazioniIds,
     bundleIds,
+    onPrestazioniIdsChange,
     onBundleIdsChange
 }) => {
+    const [activeTab, setActiveTab] = useState<'prestazioni' | 'bundle'>('prestazioni');
     const [searchTerm, setSearchTerm] = useState('');
 
+    // Query tutte le prestazioni attive
+    const { data: prestazioniData, isLoading: isLoadingPrestazioni } = useQuery({
+        queryKey: ['prestazioni-for-selection'],
+        queryFn: async () => {
+            const result = await prestazioniApi.getAll({ limit: 500, attivo: true });
+            return result.data || [];
+        },
+    });
+
     // Query tutti i bundle attivi
-    const { data: bundlesData, isLoading } = useQuery({
+    const { data: bundlesData, isLoading: isLoadingBundles } = useQuery({
         queryKey: ['bundles-for-selection'],
         queryFn: async () => {
             const result = await bundleApi.getAll({ limit: 500, attivo: true });
@@ -153,16 +172,31 @@ const BundleSelectionSection: React.FC<BundleSelectionSectionProps> = ({
         },
     });
 
+    const allPrestazioni = prestazioniData || [];
     const allBundles: OffertaBundle[] = bundlesData || [];
 
-    // Filter bundles based on search term
+    // Filter based on search term
+    const filteredPrestazioni = allPrestazioni.filter(prestazione =>
+        searchTerm === '' ||
+        prestazione.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        prestazione.codice.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
     const filteredBundles = allBundles.filter(bundle =>
         searchTerm === '' ||
         bundle.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
         bundle.codice.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    // Toggle bundle selection
+    // Toggle handlers
+    const handlePrestazioneToggle = (prestazioneId: string) => {
+        if (prestazioniIds.includes(prestazioneId)) {
+            onPrestazioniIdsChange(prestazioniIds.filter(id => id !== prestazioneId));
+        } else {
+            onPrestazioniIdsChange([...prestazioniIds, prestazioneId]);
+        }
+    };
+
     const handleBundleToggle = (bundleId: string) => {
         if (bundleIds.includes(bundleId)) {
             onBundleIdsChange(bundleIds.filter(id => id !== bundleId));
@@ -171,313 +205,223 @@ const BundleSelectionSection: React.FC<BundleSelectionSectionProps> = ({
         }
     };
 
+    const totalSelected = prestazioniIds.length + bundleIds.length;
+    const isLoading = activeTab === 'prestazioni' ? isLoadingPrestazioni : isLoadingBundles;
+
     return (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                    <Package className="w-5 h-5 text-purple-600" />
-                    <div>
-                        <h3 className="text-lg font-semibold text-gray-900">Bundle Associati</h3>
-                        <p className="text-sm text-gray-500">Seleziona i bundle da includere in questa convenzione</p>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            {/* Header with Tabs */}
+            <div className="border-b border-gray-200">
+                <div className="flex items-center justify-between px-6 pt-4 pb-0">
+                    <div className="flex items-center gap-2">
+                        <div className="p-2 rounded-lg bg-gradient-to-br from-teal-100 to-purple-100">
+                            <FileText className="w-5 h-5 text-teal-600" />
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-semibold text-gray-900">Servizi Associati</h3>
+                            <p className="text-sm text-gray-500">Seleziona prestazioni e bundle per questa convenzione</p>
+                        </div>
                     </div>
+                    {totalSelected > 0 && (
+                        <span className="text-sm font-medium text-teal-600 bg-teal-100 px-3 py-1 rounded-full">
+                            {totalSelected} totali
+                        </span>
+                    )}
                 </div>
-                {bundleIds.length > 0 && (
-                    <span className="text-sm font-medium text-purple-600 bg-purple-100 px-2 py-1 rounded-full">
-                        {bundleIds.length} selezionati
-                    </span>
-                )}
-            </div>
 
-            {/* Search bar */}
-            <div className="relative mb-3">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Cerca bundle per nome o codice..."
-                    className="input-clinica pl-10 w-full"
-                />
-            </div>
-
-            {/* Selected bundles badges */}
-            {bundleIds.length > 0 && (
-                <div className="flex flex-wrap gap-2 mb-3">
-                    {bundleIds.map(bundleId => {
-                        const bundle = allBundles.find(b => b.id === bundleId);
-                        return bundle ? (
-                            <span
-                                key={bundleId}
-                                className="inline-flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm"
-                            >
-                                <Package className="w-3 h-3" />
-                                {bundle.nome}
-                                <button
-                                    type="button"
-                                    onClick={() => handleBundleToggle(bundleId)}
-                                    className="ml-1 hover:text-purple-600"
-                                >
-                                    ×
-                                </button>
-                            </span>
-                        ) : null;
-                    })}
-                </div>
-            )}
-
-            {/* Bundle list */}
-            {isLoading ? (
-                <div className="flex items-center justify-center py-8">
-                    <Loader2 className="w-6 h-6 animate-spin text-purple-500" />
-                </div>
-            ) : filteredBundles.length === 0 ? (
-                <div className="text-center py-8 bg-gray-50 rounded-lg">
-                    <Package className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                    <p className="text-gray-500 text-sm">
-                        {searchTerm ? 'Nessun bundle trovato' : 'Nessun bundle disponibile'}
-                    </p>
-                    <a
-                        href="/poliambulatorio/catalogo/bundles/nuovo"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 mt-2 text-sm text-teal-600 hover:text-teal-700"
+                {/* Tab buttons */}
+                <div className="flex mt-4">
+                    <button
+                        type="button"
+                        onClick={() => { setActiveTab('prestazioni'); setSearchTerm(''); }}
+                        className={`flex-1 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'prestazioni'
+                            ? 'border-teal-500 text-teal-600 bg-teal-50/50'
+                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                            }`}
                     >
-                        <Plus className="w-4 h-4" />
-                        Crea nuovo bundle
-                    </a>
-                </div>
-            ) : (
-                <div className="border border-gray-200 rounded-lg max-h-64 overflow-y-auto">
-                    {filteredBundles.map((bundle: OffertaBundle) => (
-                        <label
-                            key={bundle.id}
-                            className={`flex items-center gap-3 p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0 transition-colors ${bundleIds.includes(bundle.id) ? 'bg-purple-50' : ''
-                                }`}
-                        >
-                            <input
-                                type="checkbox"
-                                checked={bundleIds.includes(bundle.id)}
-                                onChange={() => handleBundleToggle(bundle.id)}
-                                className="w-4 h-4 rounded border-gray-300 text-purple-500 focus:ring-purple-500"
-                            />
-                            <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                                <Package className="w-5 h-5 text-purple-600" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <p className="font-medium text-gray-900 truncate">{bundle.nome}</p>
-                                <p className="text-sm text-gray-500">
-                                    {bundle.codice}
-                                    {bundle.prezzoBundle && ` • €${Number(bundle.prezzoBundle).toFixed(2)}`}
-                                    {bundle.scontoPercentuale && ` • -${bundle.scontoPercentuale}%`}
-                                </p>
-                            </div>
-                        </label>
-                    ))}
-                </div>
-            )}
-
-            <p className="mt-3 text-xs text-gray-500">
-                I bundle selezionati saranno disponibili per i beneficiari di questa convenzione
-            </p>
-        </div>
-    );
-};
-
-// =====================================================
-// LISTINI ASSOCIATI SECTION COMPONENT (DEPRECATED - not used)
-// =====================================================
-
-interface ListiniAssociatiSectionProps {
-    convenzioneId: string;
-    showToast: (params: { type: 'success' | 'error'; message: string }) => void;
-    queryClient: ReturnType<typeof useQueryClient>;
-}
-
-const ListiniAssociatiSection: React.FC<ListiniAssociatiSectionProps> = ({
-    convenzioneId,
-    showToast,
-    queryClient
-}) => {
-    const [searchTerm, setSearchTerm] = useState('');
-    const [showAddModal, setShowAddModal] = useState(false);
-
-    // Query listini associati
-    const { data: listiniAssociati = [], isLoading: isLoadingAssociati } = useQuery({
-        queryKey: ['convenzioni', convenzioneId, 'listini'],
-        queryFn: () => convenzioniApi.getListini(convenzioneId),
-    });
-
-    // Query tutti i listini disponibili
-    const { data: tuttiListini } = useQuery({
-        queryKey: ['listini'],
-        queryFn: () => listiniApi.getAll(),
-        enabled: showAddModal,
-    });
-
-    // Mutation per associare
-    const associateMutation = useMutation({
-        mutationFn: (listinoId: string) => convenzioniApi.associateListino(convenzioneId, listinoId),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['convenzioni', convenzioneId, 'listini'] });
-            showToast({ type: 'success', message: 'Listino associato con successo' });
-            setShowAddModal(false);
-        },
-        onError: (error: Error) => {
-            showToast({ type: 'error', message: error.message || 'Errore durante l\'associazione' });
-        }
-    });
-
-    // Mutation per rimuovere
-    const removeMutation = useMutation({
-        mutationFn: (listinoId: string) => convenzioniApi.removeListino(convenzioneId, listinoId),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['convenzioni', convenzioneId, 'listini'] });
-            showToast({ type: 'success', message: 'Listino rimosso dalla convenzione' });
-        },
-        onError: (error: Error) => {
-            showToast({ type: 'error', message: error.message || 'Errore durante la rimozione' });
-        }
-    });
-
-    // Filtra listini disponibili (non già associati)
-    const listiniDisponibili = (tuttiListini?.data || []).filter(
-        (l: ListinoPrezzo) => !listiniAssociati.some((a: ListinoPrezzo) => a.id === l.id)
-    ).filter((l: ListinoPrezzo) =>
-        searchTerm === '' ||
-        (l.nome || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        l.prestazione?.nome?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-
-    return (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                    <Euro className="w-5 h-5 text-teal-600" />
-                    <h3 className="text-lg font-semibold text-gray-900">Listini Associati</h3>
-                </div>
-                <button
-                    type="button"
-                    onClick={() => setShowAddModal(true)}
-                    className="btn-clinica-secondary text-sm flex items-center gap-1"
-                >
-                    <Plus className="w-4 h-4" />
-                    Associa Listino
-                </button>
-            </div>
-
-            {isLoadingAssociati ? (
-                <div className="flex items-center justify-center py-8">
-                    <Loader2 className="w-6 h-6 animate-spin text-teal-500" />
-                </div>
-            ) : listiniAssociati.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                    <Euro className="w-12 h-12 mx-auto mb-2 opacity-30" />
-                    <p>Nessun listino associato</p>
-                    <p className="text-sm">Associa un listino per applicare prezzi scontati</p>
-                </div>
-            ) : (
-                <div className="space-y-2">
-                    {listiniAssociati.map((listino: ListinoPrezzo) => (
-                        <div
-                            key={listino.id}
-                            className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                        >
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-teal-100 rounded-lg flex items-center justify-center">
-                                    <Euro className="w-5 h-5 text-teal-600" />
-                                </div>
-                                <div>
-                                    <p className="font-medium text-gray-900">
-                                        {listino.nome || listino.prestazione?.nome || `Listino #${listino.id.slice(-4)}`}
-                                    </p>
-                                    <p className="text-sm text-gray-500">
-                                        €{listino.prezzo?.toFixed(2)} • IVA {listino.ivaAliquota}%
-                                    </p>
-                                </div>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => removeMutation.mutate(listino.id)}
-                                disabled={removeMutation.isPending}
-                                className="p-2 text-red-500 hover:bg-red-100 rounded-lg transition-colors"
-                                title="Rimuovi associazione"
-                            >
-                                {removeMutation.isPending ? (
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                    <Trash2 className="w-4 h-4" />
-                                )}
-                            </button>
-                        </div>
-                    ))}
-                </div>
-            )}
-
-            {/* Modal Aggiungi Listino */}
-            {showAddModal && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-xl shadow-xl max-w-lg w-full mx-4 max-h-[80vh] flex flex-col">
-                        <div className="p-4 border-b border-gray-200">
-                            <h3 className="text-lg font-semibold">Associa Listino</h3>
-                        </div>
-                        <div className="p-4 border-b border-gray-200">
-                            <div className="relative">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                <input
-                                    type="text"
-                                    placeholder="Cerca listino..."
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="input-clinica pl-10"
-                                />
-                            </div>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-4">
-                            {listiniDisponibili.length === 0 ? (
-                                <p className="text-center text-gray-500 py-4">
-                                    Nessun listino disponibile
-                                </p>
-                            ) : (
-                                <div className="space-y-2">
-                                    {listiniDisponibili.map((listino: ListinoPrezzo) => (
-                                        <button
-                                            key={listino.id}
-                                            type="button"
-                                            onClick={() => associateMutation.mutate(listino.id)}
-                                            disabled={associateMutation.isPending}
-                                            className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-teal-50 rounded-lg transition-colors text-left"
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
-                                                    <Euro className="w-5 h-5 text-gray-600" />
-                                                </div>
-                                                <div>
-                                                    <p className="font-medium text-gray-900">
-                                                        {listino.nome || listino.prestazione?.nome || `Listino #${listino.id.slice(-4)}`}
-                                                    </p>
-                                                    <p className="text-sm text-gray-500">
-                                                        €{listino.prezzo?.toFixed(2)} • IVA {listino.ivaAliquota}%
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            <Plus className="w-5 h-5 text-teal-600" />
-                                        </button>
-                                    ))}
-                                </div>
+                        <div className="flex items-center justify-center gap-2">
+                            <FileText className="w-4 h-4" />
+                            Prestazioni
+                            {prestazioniIds.length > 0 && (
+                                <span className="bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded-full text-xs">
+                                    {prestazioniIds.length}
+                                </span>
                             )}
                         </div>
-                        <div className="p-4 border-t border-gray-200">
-                            <button
-                                type="button"
-                                onClick={() => setShowAddModal(false)}
-                                className="btn-clinica-secondary w-full"
-                            >
-                                Chiudi
-                            </button>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => { setActiveTab('bundle'); setSearchTerm(''); }}
+                        className={`flex-1 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'bundle'
+                            ? 'border-purple-500 text-purple-600 bg-purple-50/50'
+                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                            }`}
+                    >
+                        <div className="flex items-center justify-center gap-2">
+                            <Package className="w-4 h-4" />
+                            Bundle
+                            {bundleIds.length > 0 && (
+                                <span className="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full text-xs">
+                                    {bundleIds.length}
+                                </span>
+                            )}
                         </div>
-                    </div>
+                    </button>
                 </div>
-            )}
+            </div>
+
+            {/* Content */}
+            <div className="p-6">
+                {/* Search bar */}
+                <div className="relative mb-4">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                        type="text"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        placeholder={`Cerca ${activeTab === 'prestazioni' ? 'prestazione' : 'bundle'} per nome o codice...`}
+                        className="input-clinica pl-10 w-full"
+                    />
+                </div>
+
+                {/* Selected items badges */}
+                {activeTab === 'prestazioni' && prestazioniIds.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-4">
+                        {prestazioniIds.map(id => {
+                            const prestazione = allPrestazioni.find(p => p.id === id);
+                            return prestazione ? (
+                                <span key={id} className="inline-flex items-center gap-1 px-3 py-1 bg-teal-100 text-teal-800 rounded-full text-sm">
+                                    <FileText className="w-3 h-3" />
+                                    {prestazione.nome}
+                                    <button type="button" onClick={() => handlePrestazioneToggle(id)} className="ml-1 hover:text-teal-600">×</button>
+                                </span>
+                            ) : null;
+                        })}
+                    </div>
+                )}
+
+                {activeTab === 'bundle' && bundleIds.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-4">
+                        {bundleIds.map(id => {
+                            const bundle = allBundles.find(b => b.id === id);
+                            return bundle ? (
+                                <span key={id} className="inline-flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm">
+                                    <Package className="w-3 h-3" />
+                                    {bundle.nome}
+                                    <button type="button" onClick={() => handleBundleToggle(id)} className="ml-1 hover:text-purple-600">×</button>
+                                </span>
+                            ) : null;
+                        })}
+                    </div>
+                )}
+
+                {/* List content */}
+                {isLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                        <Loader2 className={`w-6 h-6 animate-spin ${activeTab === 'prestazioni' ? 'text-teal-500' : 'text-purple-500'}`} />
+                    </div>
+                ) : activeTab === 'prestazioni' ? (
+                    // Prestazioni list
+                    filteredPrestazioni.length === 0 ? (
+                        <div className="text-center py-8 bg-gray-50 rounded-lg">
+                            <FileText className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                            <p className="text-gray-500 text-sm">
+                                {searchTerm ? 'Nessuna prestazione trovata' : 'Nessuna prestazione disponibile'}
+                            </p>
+                            <a
+                                href="/poliambulatorio/catalogo/prestazioni/nuovo"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 mt-2 text-sm text-teal-600 hover:text-teal-700"
+                            >
+                                <Plus className="w-4 h-4" />
+                                Crea nuova prestazione
+                            </a>
+                        </div>
+                    ) : (
+                        <div className="border border-gray-200 rounded-lg max-h-72 overflow-y-auto">
+                            {filteredPrestazioni.map((prestazione) => (
+                                <label
+                                    key={prestazione.id}
+                                    className={`flex items-center gap-3 p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0 transition-colors ${prestazioniIds.includes(prestazione.id) ? 'bg-teal-50' : ''
+                                        }`}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={prestazioniIds.includes(prestazione.id)}
+                                        onChange={() => handlePrestazioneToggle(prestazione.id)}
+                                        className="w-4 h-4 rounded border-gray-300 text-teal-500 focus:ring-teal-500"
+                                    />
+                                    <div className="w-10 h-10 bg-teal-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                        <FileText className="w-5 h-5 text-teal-600" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="font-medium text-gray-900 truncate">{prestazione.nome}</p>
+                                        <p className="text-sm text-gray-500">
+                                            {prestazione.codice}
+                                            {prestazione.tipo && ` • ${prestazione.tipo}`}
+                                        </p>
+                                    </div>
+                                </label>
+                            ))}
+                        </div>
+                    )
+                ) : (
+                    // Bundle list
+                    filteredBundles.length === 0 ? (
+                        <div className="text-center py-8 bg-gray-50 rounded-lg">
+                            <Package className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                            <p className="text-gray-500 text-sm">
+                                {searchTerm ? 'Nessun bundle trovato' : 'Nessun bundle disponibile'}
+                            </p>
+                            <a
+                                href="/poliambulatorio/catalogo/bundles/nuovo"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 mt-2 text-sm text-purple-600 hover:text-purple-700"
+                            >
+                                <Plus className="w-4 h-4" />
+                                Crea nuovo bundle
+                            </a>
+                        </div>
+                    ) : (
+                        <div className="border border-gray-200 rounded-lg max-h-72 overflow-y-auto">
+                            {filteredBundles.map((bundle: OffertaBundle) => (
+                                <label
+                                    key={bundle.id}
+                                    className={`flex items-center gap-3 p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0 transition-colors ${bundleIds.includes(bundle.id) ? 'bg-purple-50' : ''
+                                        }`}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={bundleIds.includes(bundle.id)}
+                                        onChange={() => handleBundleToggle(bundle.id)}
+                                        className="w-4 h-4 rounded border-gray-300 text-purple-500 focus:ring-purple-500"
+                                    />
+                                    <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                        <Package className="w-5 h-5 text-purple-600" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="font-medium text-gray-900 truncate">{bundle.nome}</p>
+                                        <p className="text-sm text-gray-500">
+                                            {bundle.codice}
+                                            {bundle.prezzoBundle && ` • €${Number(bundle.prezzoBundle).toFixed(2)}`}
+                                            {bundle.scontoPercentuale && ` • -${bundle.scontoPercentuale}%`}
+                                        </p>
+                                    </div>
+                                </label>
+                            ))}
+                        </div>
+                    )
+                )}
+
+                <p className="mt-4 text-xs text-gray-500">
+                    {activeTab === 'prestazioni'
+                        ? 'Le prestazioni selezionate saranno disponibili per i beneficiari di questa convenzione'
+                        : 'I bundle selezionati saranno disponibili per i beneficiari di questa convenzione'
+                    }
+                </p>
+            </div>
         </div>
     );
 };
@@ -595,12 +539,14 @@ const ConvenzioneForm: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const queryClient = useQueryClient();
     const { showToast } = useToast();
+    const { getTenantFilterParams, tenantFilterKey, isReady } = useTenantFilter();
     const isEditing = Boolean(id);
 
     // State
     const [formData, setFormData] = useState<FormData>(INITIAL_FORM_DATA);
     const [errors, setErrors] = useState<FormErrors>({});
     const [isDirty, setIsDirty] = useState(false);
+    const [showExitConfirm, setShowExitConfirm] = useState(false);
     const [companySearch, setCompanySearch] = useState('');
 
     // Query for editing
@@ -617,12 +563,18 @@ const ConvenzioneForm: React.FC = () => {
     });
     const companiesList: CompanyOption[] = companiesData || [];
 
-    // Query for codici sconto list
+    // Query for codici sconto list (filtrati per tenant)
     const { data: codiciScontoData } = useQuery<{ success: boolean; data?: CodiceSconto[] }>({
-        queryKey: ['codici-sconto'],
+        queryKey: ['codici-sconto', tenantFilterKey],
         queryFn: async () => {
-            return apiGet<{ success: boolean; data?: CodiceSconto[] }>('/api/v1/codici-sconto');
+            const tenantParams = getTenantFilterParams();
+            const urlParamsObj: Record<string, string> = {};
+            if (tenantParams.tenantIds?.length) urlParamsObj.tenantIds = tenantParams.tenantIds.join(',');
+            if (tenantParams.allTenants) urlParamsObj.allTenants = 'true';
+            const queryString = Object.keys(urlParamsObj).length > 0 ? `?${new URLSearchParams(urlParamsObj).toString()}` : '';
+            return apiGet<{ success: boolean; data?: CodiceSconto[] }>(`/api/v1/codici-sconto${queryString}`);
         },
+        enabled: isReady,
     });
     const codiciScontoList: CodiceSconto[] = codiciScontoData?.data || [];
 
@@ -633,16 +585,17 @@ const ConvenzioneForm: React.FC = () => {
             const condizioni = (convenzione.condizioni || {}) as {
                 codiceSconto?: string;
                 companyIds?: string[];
-                companyId?: string; // Legacy support
                 bundleIds?: string[];
+                prestazioniIds?: string[];
             };
 
-            // Convert legacy companyId to companyIds array
-            const parsedCompanyIds = condizioni.companyIds ||
-                (condizioni.companyId ? [condizioni.companyId] : []);
+            const parsedCompanyIds = condizioni.companyIds || [];
 
             // Parse bundleIds from condizioni
             const parsedBundleIds = condizioni.bundleIds || [];
+
+            // Parse prestazioniIds from condizioni
+            const parsedPrestazioniIds = condizioni.prestazioniIds || [];
 
             setFormData({
                 codice: convenzione.codice || '',
@@ -662,6 +615,7 @@ const ConvenzioneForm: React.FC = () => {
                 codiceSconto: condizioni.codiceSconto || '',
                 companyIds: parsedCompanyIds,
                 bundleIds: parsedBundleIds,
+                prestazioniIds: parsedPrestazioniIds,
             });
         }
     }, [convenzione]);
@@ -675,7 +629,7 @@ const ConvenzioneForm: React.FC = () => {
             navigate('/poliambulatorio/catalogo/convenzioni');
         },
         onError: (error: Error) => {
-            showToast({ type: 'error', message: error.message || 'Errore durante la creazione' });
+            showToast({ type: 'error', message: 'Errore durante la creazione' });
         }
     });
 
@@ -688,7 +642,7 @@ const ConvenzioneForm: React.FC = () => {
             navigate('/poliambulatorio/catalogo/convenzioni');
         },
         onError: (error: Error) => {
-            showToast({ type: 'error', message: error.message || 'Errore durante l\'aggiornamento' });
+            showToast({ type: 'error', message: 'Errore durante l\'aggiornamento' });
         }
     });
 
@@ -803,6 +757,7 @@ const ConvenzioneForm: React.FC = () => {
                 codiceSconto: formData.codiceSconto.trim() || undefined,
                 companyIds: formData.companyIds.length > 0 ? formData.companyIds : undefined,
                 bundleIds: formData.bundleIds.length > 0 ? formData.bundleIds : undefined,
+                prestazioniIds: formData.prestazioniIds.length > 0 ? formData.prestazioniIds : undefined,
             },
         };
 
@@ -814,7 +769,8 @@ const ConvenzioneForm: React.FC = () => {
     };
 
     const handleCancel = () => {
-        if (isDirty && !confirm('Hai modifiche non salvate. Sei sicuro di voler uscire?')) {
+        if (isDirty) {
+            setShowExitConfirm(true);
             return;
         }
         navigate('/poliambulatorio/catalogo/convenzioni');
@@ -1225,11 +1181,10 @@ const ConvenzioneForm: React.FC = () => {
                             <label className="label-clinica">
                                 Data inizio <span className="text-red-500">*</span>
                             </label>
-                            <input
-                                type="date"
+                            <DatePickerElegante
                                 value={formData.dataInizio}
-                                onChange={(e) => handleChange('dataInizio', e.target.value)}
-                                className={`input-clinica ${errors.dataInizio ? 'border-red-500' : ''}`}
+                                onChange={(date) => handleChange('dataInizio', date ? date.toISOString().split('T')[0] : '')}
+                                theme="teal"
                             />
                             {errors.dataInizio && (
                                 <p className="mt-1 text-sm text-red-600">{errors.dataInizio}</p>
@@ -1239,11 +1194,10 @@ const ConvenzioneForm: React.FC = () => {
                         {/* Data Fine */}
                         <div>
                             <label className="label-clinica">Data fine</label>
-                            <input
-                                type="date"
+                            <DatePickerElegante
                                 value={formData.dataFine}
-                                onChange={(e) => handleChange('dataFine', e.target.value)}
-                                className={`input-clinica ${errors.dataFine ? 'border-red-500' : ''}`}
+                                onChange={(date) => handleChange('dataFine', date ? date.toISOString().split('T')[0] : '')}
+                                theme="teal"
                             />
                             {errors.dataFine && (
                                 <p className="mt-1 text-sm text-red-600">{errors.dataFine}</p>
@@ -1260,9 +1214,11 @@ const ConvenzioneForm: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Bundle Associati Card */}
-                <BundleSelectionSection
+                {/* Combined Tabbed Selection for Prestazioni and Bundles */}
+                <TabbedSelectionSection
+                    prestazioniIds={formData.prestazioniIds}
                     bundleIds={formData.bundleIds}
+                    onPrestazioniIdsChange={(ids) => handleChange('prestazioniIds', ids)}
                     onBundleIdsChange={(ids) => handleChange('bundleIds', ids)}
                 />
 
@@ -1320,6 +1276,41 @@ const ConvenzioneForm: React.FC = () => {
                     </button>
                 </div>
             </form>
+
+            {/* Conferma uscita con modifiche non salvate */}
+            {showExitConfirm && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+                    <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full mx-4 overflow-hidden">
+                        <div className="bg-amber-50 border-b border-amber-200 px-6 py-4">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                                    <AlertTriangle className="w-5 h-5 text-amber-600" />
+                                </div>
+                                <h3 className="font-semibold text-gray-900">Modifiche non salvate</h3>
+                            </div>
+                        </div>
+                        <div className="p-6">
+                            <p className="text-gray-700 mb-4">
+                                Hai modifiche non salvate. Sei sicuro di voler uscire?
+                            </p>
+                            <div className="flex gap-3 justify-end">
+                                <button
+                                    onClick={() => setShowExitConfirm(false)}
+                                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+                                >
+                                    Resta
+                                </button>
+                                <button
+                                    onClick={() => navigate('/poliambulatorio/catalogo/convenzioni')}
+                                    className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors font-medium"
+                                >
+                                    Esci senza salvare
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

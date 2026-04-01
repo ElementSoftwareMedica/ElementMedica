@@ -200,7 +200,6 @@ export function evaluateSimpleCondition(
       return asString(fieldValue).length < asNumber(value);
 
     default:
-      console.warn(`Unknown operator: ${operator}`);
       return false;
   }
 }

@@ -80,8 +80,7 @@ const MoveRoleModal: React.FC<MoveRoleModalProps> = ({
       await onMove(selectedLevel, selectedParentRole || undefined);
       onClose();
     } catch (error: unknown) {
-      console.error('Error moving role:', error);
-      setError(error instanceof Error ? error.message : 'Errore nello spostamento del ruolo');
+      setError('Errore nello spostamento del ruolo');
     } finally {
       setLoading(false);
     }

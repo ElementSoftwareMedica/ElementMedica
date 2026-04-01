@@ -39,8 +39,8 @@ class PublicCoursesController {
       const where = {
         isPublic: true,
         deletedAt: null,
-        // Filtra per tenantId del brand (se disponibile)
-        ...(req.brandTenantId && { tenantId: req.brandTenantId }),
+        // P57: Filtra per publicTenantId (determinato da brand/domain)
+        ...(req.publicTenantId && { tenantId: req.publicTenantId }),
       };
 
       if (category) {
@@ -125,8 +125,7 @@ class PublicCoursesController {
       logger.error('Error getting public courses:', error);
       res.status(500).json({
         success: false,
-        error: 'Failed to retrieve public courses',
-        details: error.message
+        error: 'Impossibile recuperare i corsi pubblici'
       });
     }
   }
@@ -167,7 +166,7 @@ class PublicCoursesController {
       if (!course) {
         return res.status(404).json({
           success: false,
-          error: 'Course not found'
+          error: 'Corso non trovato'
         });
       }
 
@@ -182,8 +181,7 @@ class PublicCoursesController {
       logger.error('Error getting public course by slug:', error);
       res.status(500).json({
         success: false,
-        error: 'Failed to retrieve course',
-        details: error.message
+        error: 'Impossibile recuperare il corso'
       });
     }
   }
@@ -213,11 +211,11 @@ class PublicCoursesController {
             subcategories: []
           };
         }
-        
+
         if (course.subcategory && !acc[category].subcategories.includes(course.subcategory)) {
           acc[category].subcategories.push(course.subcategory);
         }
-        
+
         return acc;
       }, {});
 
@@ -234,8 +232,7 @@ class PublicCoursesController {
       logger.error('Error getting public course categories:', error);
       res.status(500).json({
         success: false,
-        error: 'Failed to retrieve categories',
-        details: error.message
+        error: 'Impossibile recuperare le categorie'
       });
     }
   }
@@ -317,8 +314,7 @@ class PublicCoursesController {
       logger.error('Error getting public course stats:', error);
       res.status(500).json({
         success: false,
-        error: 'Failed to retrieve stats',
-        details: error.message
+        error: 'Impossibile recuperare le statistiche'
       });
     }
   }
@@ -346,8 +342,8 @@ class PublicCoursesController {
 
       // Stopwords italiane per un matching più intelligente
       const STOPWORDS = new Set([
-        'di','dei','degli','delle','della','del','dell','lo','la','le','gli','il','i','e','ed','da','un','una','uno',
-        'per','con','su','tra','fra','al','allo','alla','ai','agli','alle','dello','in','a','ad','dal','dai','dagli','dalle'
+        'di', 'dei', 'degli', 'delle', 'della', 'del', 'dell', 'lo', 'la', 'le', 'gli', 'il', 'i', 'e', 'ed', 'da', 'un', 'una', 'uno',
+        'per', 'con', 'su', 'tra', 'fra', 'al', 'allo', 'alla', 'ai', 'agli', 'alle', 'dello', 'in', 'a', 'ad', 'dal', 'dai', 'dagli', 'dalle'
       ]);
       const tokenize = (s = '') => normalize(s).split(' ').filter(w => w && !STOPWORDS.has(w));
       const tokenOverlap = (a, b) => {
@@ -465,7 +461,7 @@ class PublicCoursesController {
                 }
               }
             },
-            orderBy: [ { courseType: 'asc' }, { riskLevel: 'asc' } ]
+            orderBy: [{ courseType: 'asc' }, { riskLevel: 'asc' }]
           });
         }
       }
@@ -579,7 +575,7 @@ class PublicCoursesController {
                 }
               }
             },
-            orderBy: [ { courseType: 'asc' }, { riskLevel: 'asc' } ]
+            orderBy: [{ courseType: 'asc' }, { riskLevel: 'asc' }]
           });
         }
       }
@@ -626,7 +622,7 @@ class PublicCoursesController {
               }
             }
           },
-          orderBy: [ { courseType: 'asc' }, { riskLevel: 'asc' } ]
+          orderBy: [{ courseType: 'asc' }, { riskLevel: 'asc' }]
         });
 
         const wantedTokens = tokenize(courseTitle);
@@ -652,7 +648,7 @@ class PublicCoursesController {
       if (courses.length === 0) {
         return res.status(404).json({
           success: false,
-          error: 'No courses found with this title'
+          error: 'Nessun corso trovato con questo titolo'
         });
       }
 
@@ -665,13 +661,13 @@ class PublicCoursesController {
         category: baseCourse.category,
         subcategory: baseCourse.subcategory,
         image1Url: baseCourse.image1Url,
-        
+
         // Informazioni comuni (dal primo corso o aggregate)
         commonObjectives: [], // Non disponibile nel modello Course
         commonProgram: [], // Non disponibile nel modello Course
         commonRequirements: [], // Non disponibile nel modello Course
         commonCertification: baseCourse.certifications || '',
-        
+
         // Tutte le varianti
         variants: courses.map(course => ({
           id: course.id,
@@ -695,9 +691,9 @@ class PublicCoursesController {
         }))
       };
 
-      logger.info('Retrieved unified courses by title', { 
-        courseTitle, 
-        count: courses.length 
+      logger.info('Retrieved unified courses by title', {
+        courseTitle,
+        count: courses.length
       });
 
       res.json(unifiedCourse);
@@ -706,8 +702,7 @@ class PublicCoursesController {
       logger.error('Error getting unified course by title:', error);
       res.status(500).json({
         success: false,
-        error: 'Failed to retrieve unified course',
-        details: error.message
+        error: 'Impossibile recuperare il corso unificato'
       });
     }
   }
@@ -744,8 +739,7 @@ class PublicCoursesController {
       logger.error('Error getting course titles:', error);
       res.status(500).json({
         success: false,
-        error: 'Failed to retrieve course titles',
-        details: error.message
+        error: 'Impossibile recuperare i titoli dei corsi'
       });
     }
   }
@@ -757,7 +751,7 @@ class PublicCoursesController {
       if (!errors.isEmpty()) {
         return res.status(400).json({
           success: false,
-          error: 'Validation failed',
+          error: 'Validazione fallita',
           details: errors.array()
         });
       }
@@ -795,8 +789,8 @@ class PublicCoursesController {
         ]
       });
 
-      logger.info('Searched courses', { 
-        query: q, 
+      logger.info('Searched courses', {
+        query: q,
         results: courses.length,
         limit: parseInt(limit)
       });
@@ -812,8 +806,7 @@ class PublicCoursesController {
       logger.error('Error searching courses:', error);
       res.status(500).json({
         success: false,
-        error: 'Failed to search courses',
-        details: error.message
+        error: 'Impossibile cercare i corsi'
       });
     }
   }

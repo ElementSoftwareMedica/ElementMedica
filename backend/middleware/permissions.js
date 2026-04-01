@@ -34,7 +34,7 @@ export function checkPermissions(permissions) {
           action: "checkPermissions"
         });
         return res.status(401).json({
-          error: 'Authentication required',
+          error: 'Autenticazione richiesta',
           code: 'AUTH_REQUIRED'
         });
       }
@@ -81,7 +81,7 @@ export function checkPermissions(permissions) {
           required: permissions
         });
         return res.status(403).json({
-          error: 'Permission denied',
+          error: 'Permesso negato',
           code: 'PERMISSION_DENIED',
           required: permissions,
           message: `Richiesto almeno uno dei seguenti permessi: ${permissions.join(', ')}`
@@ -97,7 +97,7 @@ export function checkPermissions(permissions) {
         error: error.message
       });
       res.status(500).json({
-        error: 'Permission check failed',
+        error: 'Controllo permessi fallito',
         code: 'PERMISSION_CHECK_ERROR'
       });
     }

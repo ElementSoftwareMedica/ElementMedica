@@ -36,23 +36,31 @@ export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElem
   required?: boolean;
 }
 
-// Variant styles
+// Variant styles with dark mode support
 const variantStyles: Record<InputVariant, string> = {
   default: `
     border border-gray-300 bg-white
     focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20
+    dark:bg-gray-900 dark:border-gray-600 dark:text-gray-100
+    dark:focus:border-primary-400 dark:focus:ring-primary-400/20
   `,
   filled: `
     border border-transparent bg-gray-50
     focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:bg-white
+    dark:bg-gray-800 dark:text-gray-100
+    dark:focus:bg-gray-900 dark:focus:border-primary-400
   `,
   outline: `
     border-2 border-gray-300 bg-transparent
     focus:border-primary-500 focus:ring-0
+    dark:border-gray-600 dark:text-gray-100
+    dark:focus:border-primary-400
   `,
   flushed: `
     border-0 border-b-2 border-gray-300 bg-transparent rounded-none
     focus:border-primary-500 focus:ring-0
+    dark:border-gray-600 dark:text-gray-100
+    dark:focus:border-primary-400
   `,
 };
 
@@ -63,15 +71,15 @@ const sizeStyles: Record<InputSize, string> = {
   lg: 'px-4 py-3 text-lg min-h-[48px]',
 };
 
-// State styles
+// State styles with dark mode
 const stateStyles: Record<InputState, string> = {
   default: '',
-  error: 'border-red-500 focus:border-red-500 focus:ring-red-500',
-  success: 'border-green-500 focus:border-green-500 focus:ring-green-500',
-  disabled: '!bg-gray-50 text-gray-500 cursor-not-allowed',
+  error: 'border-red-500 focus:border-red-500 focus:ring-red-500 dark:border-red-400 dark:focus:border-red-400',
+  success: 'border-green-500 focus:border-green-500 focus:ring-green-500 dark:border-green-400 dark:focus:border-green-400',
+  disabled: '!bg-gray-50 text-gray-500 cursor-not-allowed dark:!bg-gray-800 dark:text-gray-400',
 };
 
-// Base input styles
+// Base input styles with dark mode
 const baseStyles = `
   w-full
   rounded-full
@@ -80,11 +88,13 @@ const baseStyles = `
   focus:outline-none
   placeholder:text-gray-400
   disabled:cursor-not-allowed disabled:opacity-50
+  dark:placeholder:text-gray-500
 `;
 
-// Label styles
+// Label styles with dark mode
 const labelStyles = `
   block text-sm font-medium text-gray-700 mb-1
+  dark:text-gray-200
 `;
 
 // Helper text styles

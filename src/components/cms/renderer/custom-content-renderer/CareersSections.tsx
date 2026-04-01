@@ -18,24 +18,24 @@ export const WhyWorkWithUsSection: React.FC<{ content: any }> = ({ content }) =>
   if (!content.whyWorkWithUs) return null;
 
   const benefitColors = [
-    { bg: 'bg-gradient-to-br from-blue-500 to-indigo-600', light: 'bg-blue-50', text: 'text-blue-600' },
-    { bg: 'bg-gradient-to-br from-emerald-500 to-teal-600', light: 'bg-emerald-50', text: 'text-emerald-600' },
-    { bg: 'bg-gradient-to-br from-purple-500 to-violet-600', light: 'bg-purple-50', text: 'text-purple-600' },
-    { bg: 'bg-gradient-to-br from-amber-500 to-orange-600', light: 'bg-amber-50', text: 'text-amber-600' },
-    { bg: 'bg-gradient-to-br from-rose-500 to-pink-600', light: 'bg-rose-50', text: 'text-rose-600' },
-    { bg: 'bg-gradient-to-br from-cyan-500 to-sky-600', light: 'bg-cyan-50', text: 'text-cyan-600' },
+    { style: { backgroundImage: 'linear-gradient(to bottom right, var(--color-primary-400), var(--color-primary-500))' } as React.CSSProperties, light: 'bg-primary-50', text: 'text-primary-600' },
+    { style: { backgroundImage: 'linear-gradient(to bottom right, var(--color-primary-500), var(--color-primary-600))' } as React.CSSProperties, light: 'bg-secondary-50', text: 'text-secondary-600' },
+    { style: { backgroundImage: 'linear-gradient(to bottom right, var(--color-primary-600), var(--color-primary-700))' } as React.CSSProperties, light: 'bg-secondary-50', text: 'text-secondary-600' },
+    { style: { backgroundImage: 'linear-gradient(to bottom right, #c084fc, #a855f7)' } as React.CSSProperties, light: 'bg-purple-50', text: 'text-purple-600' },
+    { style: { backgroundImage: 'linear-gradient(to bottom right, #34d399, #10b981)' } as React.CSSProperties, light: 'bg-emerald-50', text: 'text-emerald-600' },
+    { style: { backgroundImage: 'linear-gradient(to bottom right, #38bdf8, #0ea5e9)' } as React.CSSProperties, light: 'bg-sky-50', text: 'text-sky-600' },
   ];
 
   return (
-    <section className="py-20 bg-gradient-to-br from-white via-indigo-50/30 to-purple-50/40 relative overflow-hidden">
+    <section className="py-20 relative overflow-hidden" style={{ backgroundImage: 'linear-gradient(to bottom right, #ffffff, color-mix(in srgb, var(--color-primary-50) 30%, transparent), color-mix(in srgb, var(--color-accent-50) 40%, transparent))' }}>
       {/* Decorative bubbles */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-20 right-10 w-64 h-64 bg-indigo-200/30 rounded-full blur-3xl" />
-        <div className="absolute bottom-20 left-10 w-56 h-56 bg-purple-200/30 rounded-full blur-3xl" />
+        <div className="absolute top-20 right-10 w-64 h-64 bg-primary-200/30 rounded-full blur-3xl" />
+        <div className="absolute bottom-20 left-10 w-56 h-56 bg-secondary-200/30 rounded-full blur-3xl" />
       </div>
       <div className="container mx-auto px-4 relative z-10">
         <div className="text-center mb-16">
-          <span className="inline-block px-4 py-2 bg-indigo-100 text-indigo-700 rounded-full text-sm font-semibold mb-4">
+          <span className="inline-block px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-4">
             {content.whyWorkWithUs.badge || 'Perché Lavorare con Noi'}
           </span>
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
@@ -57,7 +57,7 @@ export const WhyWorkWithUsSection: React.FC<{ content: any }> = ({ content }) =>
                   key={index}
                   className={`group bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-all border border-gray-100`}
                 >
-                  <div className={`w-16 h-16 ${colors.bg} rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-lg`}>
+                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-lg" style={colors.style}>
                     <IconComponent className="w-8 h-8 text-white" />
                   </div>
                   <h3 className="text-xl font-bold text-gray-900 mb-3">{benefit.title}</h3>
@@ -109,9 +109,9 @@ export const OpenPositionsSection: React.FC<{ content: any }> = ({ content }) =>
   const getContractBadgeColor = (type: string) => {
     const lower = type?.toLowerCase() || '';
     if (lower.includes('indeterminato')) return 'bg-emerald-100 text-emerald-700';
-    if (lower.includes('determinato')) return 'bg-blue-100 text-blue-700';
+    if (lower.includes('determinato')) return 'bg-primary-100 text-primary-700';
     if (lower.includes('stage') || lower.includes('tirocinio')) return 'bg-amber-100 text-amber-700';
-    if (lower.includes('partita') || lower.includes('freelance')) return 'bg-purple-100 text-purple-700';
+    if (lower.includes('partita') || lower.includes('freelance')) return 'bg-secondary-100 text-secondary-700';
     return 'bg-gray-100 text-gray-700';
   };
 
@@ -119,7 +119,7 @@ export const OpenPositionsSection: React.FC<{ content: any }> = ({ content }) =>
     <section className="py-20 bg-gradient-to-br from-slate-50 via-gray-50 to-zinc-50">
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
-          <span className="inline-block px-4 py-2 bg-emerald-100 text-emerald-700 rounded-full text-sm font-semibold mb-4">
+          <span className="inline-block px-4 py-2 bg-secondary-100 text-secondary-700 rounded-full text-sm font-semibold mb-4">
             {content.openPositions.badge || 'Posizioni Aperte'}
           </span>
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
@@ -142,7 +142,7 @@ export const OpenPositionsSection: React.FC<{ content: any }> = ({ content }) =>
                 <div className="flex flex-col md:flex-row md:items-center gap-6">
                   <div className="flex-grow">
                     <div className="flex flex-wrap items-center gap-3 mb-3">
-                      <h3 className="text-xl font-bold text-gray-900 group-hover:text-emerald-700 transition-colors">{job.title}</h3>
+                      <h3 className="text-xl font-bold text-gray-900 group-hover:text-secondary-700 transition-colors">{job.title}</h3>
                       {job.isNew && (
                         <span className="px-2 py-0.5 bg-red-100 text-red-600 text-xs font-bold rounded-full uppercase">Nuovo</span>
                       )}
@@ -182,7 +182,7 @@ export const OpenPositionsSection: React.FC<{ content: any }> = ({ content }) =>
                     {job.contract && (
                       <span className={`px-4 py-1 rounded-full text-sm font-semibold ${getContractBadgeColor(job.contract)}`}>
                         {job.contract}
-                    </span>
+                      </span>
                     )}
                     {job.salary && (
                       <span className="flex items-center text-gray-600">
@@ -190,7 +190,7 @@ export const OpenPositionsSection: React.FC<{ content: any }> = ({ content }) =>
                         {job.salary}
                       </span>
                     )}
-                    <button className="flex items-center text-emerald-600 font-semibold group-hover:text-emerald-700 transition-colors">
+                    <button className="flex items-center text-secondary-600 font-semibold group-hover:text-secondary-700 transition-colors">
                       Candidati
                       <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
                     </button>
@@ -246,10 +246,10 @@ export const ApplicationProcessSection: React.FC<{ content: any }> = ({ content 
   const processIcons = [Target, GraduationCap, Users, Sparkles];
 
   return (
-    <section className="py-20 bg-gradient-to-br from-white via-cyan-50/30 to-teal-50/40">
+    <section className="py-20 bg-gradient-to-br from-white via-accent-50/30 to-primary-50/40">
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
-          <span className="inline-block px-4 py-2 bg-cyan-100 text-cyan-700 rounded-full text-sm font-semibold mb-4">
+          <span className="inline-block px-4 py-2 bg-accent-100 text-cyan-700 rounded-full text-sm font-semibold mb-4">
             {content.applicationProcess.badge || 'Processo di Selezione'}
           </span>
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
@@ -265,7 +265,7 @@ export const ApplicationProcessSection: React.FC<{ content: any }> = ({ content 
           <div className="max-w-5xl mx-auto">
             <div className="relative">
               {/* Vertical line for desktop */}
-              <div className="hidden md:block absolute left-1/2 top-0 bottom-0 w-0.5 bg-gradient-to-b from-cyan-200 via-teal-200 to-emerald-200 transform -translate-x-1/2" />
+              <div className="hidden md:block absolute left-1/2 top-0 bottom-0 w-0.5 transform -translate-x-1/2" style={{ backgroundImage: 'linear-gradient(to bottom, var(--color-accent-200), var(--color-primary-200), var(--color-secondary-200))' }} />
 
               <div className="space-y-12">
                 {content.applicationProcess.steps.map((step: any, index: number) => {
@@ -292,7 +292,7 @@ export const ApplicationProcessSection: React.FC<{ content: any }> = ({ content 
 
                       {/* Icon */}
                       <div className="relative z-10 flex-shrink-0">
-                        <div className="w-16 h-16 bg-gradient-to-br from-cyan-500 to-teal-600 rounded-2xl flex items-center justify-center shadow-lg">
+                        <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg" style={{ backgroundImage: 'linear-gradient(to bottom right, var(--color-accent-500), var(--color-primary-600))' }}>
                           <IconComponent className="w-8 h-8 text-white" />
                         </div>
                         <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 text-2xl font-bold text-cyan-600">
@@ -310,7 +310,7 @@ export const ApplicationProcessSection: React.FC<{ content: any }> = ({ content 
           </div>
         )}
         {content.applicationProcess.tips && (
-          <div className="mt-16 max-w-3xl mx-auto bg-gradient-to-br from-cyan-50 to-teal-50 rounded-2xl p-8">
+          <div className="mt-16 max-w-3xl mx-auto rounded-2xl p-8" style={{ backgroundImage: 'linear-gradient(to bottom right, var(--color-accent-50), var(--color-primary-50))' }}>
             <h3 className="text-xl font-bold text-gray-900 mb-6 text-center flex items-center justify-center gap-2">
               <Sparkles className="w-6 h-6 text-cyan-600" />
               Consigli per la Candidatura
@@ -318,7 +318,7 @@ export const ApplicationProcessSection: React.FC<{ content: any }> = ({ content 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {content.applicationProcess.tips.map((tip: string, index: number) => (
                 <div key={index} className="flex items-start bg-white rounded-xl p-4">
-                  <CheckCircle className="w-5 h-5 text-emerald-500 mr-3 mt-0.5 flex-shrink-0" />
+                  <CheckCircle className="w-5 h-5 text-secondary-500 mr-3 mt-0.5 flex-shrink-0" />
                   <span className="text-gray-700">{tip}</span>
                 </div>
               ))}
@@ -337,7 +337,7 @@ export const TeamCultureSection: React.FC<{ content: any }> = ({ content }) => {
   if (!content.teamCulture) return null;
 
   return (
-    <section className="py-20 bg-gradient-to-br from-purple-600 via-indigo-700 to-blue-800 text-white relative overflow-hidden">
+    <section className="py-20 text-white relative overflow-hidden" style={{ backgroundImage: 'linear-gradient(135deg, var(--color-primary-800), var(--color-primary-700), var(--color-primary-600))' }}>
       {/* Background decoration */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full blur-3xl" />

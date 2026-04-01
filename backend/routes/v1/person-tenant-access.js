@@ -39,7 +39,7 @@ router.get('/features',
       });
     } catch (error) {
       logger.error('Error fetching features', { error: error.message });
-      res.status(500).json({ success: false, error: 'Failed to fetch features' });
+      res.status(500).json({ success: false, error: 'Errore nel recupero delle funzionalità' });
     }
   }
 );
@@ -64,7 +64,7 @@ router.get('/presets',
       });
     } catch (error) {
       logger.error('Error fetching feature presets', { error: error.message });
-      res.status(500).json({ success: false, error: 'Failed to fetch feature presets' });
+      res.status(500).json({ success: false, error: 'Errore nel recupero dei preset funzionalità' });
     }
   }
 );
@@ -109,7 +109,7 @@ router.get('/',
           where,
           include: {
             person: {
-              select: { id: true, email: true, firstName: true, lastName: true }
+              select: { id: true, firstName: true, lastName: true, tenantProfiles: { where: { deletedAt: null }, take: 1, select: { email: true } } }
             },
             tenant: {
               select: { id: true, name: true, slug: true }
@@ -137,12 +137,12 @@ router.get('/',
       logger.error({
         component: 'person-tenant-access-routes',
         action: 'getAllAccesses',
-        error: error.message
+        error: 'Operazione non riuscita'
       }, 'Error getting all tenant accesses');
 
       return res.status(500).json({
         success: false,
-        error: 'Failed to get tenant accesses'
+        error: 'Errore nel recupero degli accessi tenant'
       });
     }
   }
@@ -181,12 +181,12 @@ router.get('/my-tenants', authMiddleware, async (req, res) => {
       component: 'person-tenant-access-routes',
       action: 'getMyTenants',
       personId: req.person?.id,
-      error: error.message
+      error: 'Operazione non riuscita'
     }, 'Error getting accessible tenants');
 
     return res.status(500).json({
       success: false,
-      error: 'Failed to get accessible tenants'
+      error: 'Errore nel recupero dei tenant accessibili'
     });
   }
 });
@@ -207,7 +207,7 @@ router.post('/switch-tenant', authMiddleware, async (req, res) => {
     if (!tenantId) {
       return res.status(400).json({
         success: false,
-        error: 'tenantId is required'
+        error: 'tenantId è obbligatorio'
       });
     }
 
@@ -255,7 +255,7 @@ router.post('/switch-tenant', authMiddleware, async (req, res) => {
       component: 'person-tenant-access-routes',
       action: 'switchTenant',
       personId: req.person?.id,
-      error: error.message
+      error: 'Operazione non riuscita'
     }, 'Error switching tenant');
 
     return res.status(500).json({
@@ -285,7 +285,7 @@ router.get('/persons/:personId/tenants',
       if (!person) {
         return res.status(404).json({
           success: false,
-          error: 'Person not found'
+          error: 'Persona non trovata'
         });
       }
 
@@ -305,12 +305,12 @@ router.get('/persons/:personId/tenants',
         component: 'person-tenant-access-routes',
         action: 'getPersonTenants',
         targetPersonId: req.params.personId,
-        error: error.message
+        error: 'Operazione non riuscita'
       }, 'Error getting person tenants');
 
       return res.status(500).json({
         success: false,
-        error: 'Failed to get person tenants'
+        error: 'Errore nel recupero dei tenant della persona'
       });
     }
   }
@@ -338,7 +338,7 @@ router.post('/persons/:personId/tenants',
       if (!tenantId) {
         return res.status(400).json({
           success: false,
-          error: 'tenantId is required'
+          error: 'tenantId è obbligatorio'
         });
       }
 
@@ -347,7 +347,7 @@ router.post('/persons/:personId/tenants',
       if (!validLevels.includes(accessLevel)) {
         return res.status(400).json({
           success: false,
-          error: `Invalid accessLevel. Must be one of: ${validLevels.join(', ')}`
+          error: `Livello di accesso non valido. Deve essere uno tra: ${validLevels.join(', ')}`
         });
       }
 
@@ -356,7 +356,7 @@ router.post('/persons/:personId/tenants',
       if (invalidFeatures.length > 0) {
         return res.status(400).json({
           success: false,
-          error: `Invalid features: ${invalidFeatures.join(', ')}. Valid features: ${AVAILABLE_FEATURES.join(', ')}`
+          error: `Funzionalità non valide: ${invalidFeatures.join(', ')}. Funzionalità disponibili: ${AVAILABLE_FEATURES.join(', ')}`
         });
       }
 
@@ -374,7 +374,7 @@ router.post('/persons/:personId/tenants',
       return res.status(201).json({
         success: true,
         data: access,
-        message: 'Tenant access granted successfully'
+        message: 'Accesso tenant concesso con successo'
       });
 
     } catch (error) {
@@ -382,12 +382,12 @@ router.post('/persons/:personId/tenants',
         component: 'person-tenant-access-routes',
         action: 'grantTenantAccess',
         targetPersonId: req.params.personId,
-        error: error.message
+        error: 'Operazione non riuscita'
       }, 'Error granting tenant access');
 
       return res.status(500).json({
         success: false,
-        error: error.message || 'Failed to grant tenant access'
+        error: 'Errore nella concessione dell\'accesso tenant'
       });
     }
   }
@@ -417,7 +417,7 @@ router.put('/persons/:personId/tenants/:tenantId',
         if (invalidFeatures.length > 0) {
           return res.status(400).json({
             success: false,
-            error: `Invalid features: ${invalidFeatures.join(', ')}`
+            error: `Funzionalità non valide: ${invalidFeatures.join(', ')}`
           });
         }
       }
@@ -437,7 +437,7 @@ router.put('/persons/:personId/tenants/:tenantId',
       return res.json({
         success: true,
         data: access,
-        message: 'Tenant access updated successfully'
+        message: 'Accesso tenant aggiornato con successo'
       });
 
     } catch (error) {
@@ -446,12 +446,12 @@ router.put('/persons/:personId/tenants/:tenantId',
         action: 'updateTenantAccess',
         targetPersonId: req.params.personId,
         tenantId: req.params.tenantId,
-        error: error.message
+        error: 'Operazione non riuscita'
       }, 'Error updating tenant access');
 
       return res.status(500).json({
         success: false,
-        error: error.message || 'Failed to update tenant access'
+        error: 'Errore nell\'aggiornamento dell\'accesso tenant'
       });
     }
   }
@@ -477,7 +477,7 @@ router.delete('/persons/:personId/tenants/:tenantId',
       return res.json({
         success: true,
         data: access,
-        message: 'Tenant access revoked successfully'
+        message: 'Accesso tenant revocato con successo'
       });
 
     } catch (error) {
@@ -486,12 +486,12 @@ router.delete('/persons/:personId/tenants/:tenantId',
         action: 'revokeTenantAccess',
         targetPersonId: req.params.personId,
         tenantId: req.params.tenantId,
-        error: error.message
+        error: 'Operazione non riuscita'
       }, 'Error revoking tenant access');
 
       return res.status(500).json({
         success: false,
-        error: error.message || 'Failed to revoke tenant access'
+        error: 'Errore nella revoca dell\'accesso tenant'
       });
     }
   }
@@ -512,7 +512,7 @@ router.put('/persons/:personId/primary-tenant',
       if (!tenantId) {
         return res.status(400).json({
           success: false,
-          error: 'tenantId is required'
+          error: 'tenantId è obbligatorio'
         });
       }
 
@@ -521,7 +521,7 @@ router.put('/persons/:personId/primary-tenant',
       return res.json({
         success: true,
         data: access,
-        message: 'Primary tenant set successfully'
+        message: 'Tenant principale impostato con successo'
       });
 
     } catch (error) {
@@ -529,12 +529,12 @@ router.put('/persons/:personId/primary-tenant',
         component: 'person-tenant-access-routes',
         action: 'setPrimaryTenant',
         targetPersonId: req.params.personId,
-        error: error.message
+        error: 'Operazione non riuscita'
       }, 'Error setting primary tenant');
 
       return res.status(500).json({
         success: false,
-        error: error.message || 'Failed to set primary tenant'
+        error: 'Errore nell\'impostazione del tenant principale'
       });
     }
   }
@@ -576,12 +576,12 @@ router.get('/tenants/:tenantId/persons',
         component: 'person-tenant-access-routes',
         action: 'getTenantPersons',
         tenantId: req.params.tenantId,
-        error: error.message
+        error: 'Operazione non riuscita'
       }, 'Error getting tenant persons');
 
       return res.status(500).json({
         success: false,
-        error: 'Failed to get tenant persons'
+        error: 'Errore nel recupero delle persone del tenant'
       });
     }
   }
@@ -606,7 +606,7 @@ router.get('/:accessId',
         where: { id: accessId },
         include: {
           person: {
-            select: { id: true, email: true, firstName: true, lastName: true }
+            select: { id: true, firstName: true, lastName: true, tenantProfiles: { where: { deletedAt: null }, take: 1, select: { email: true } } }
           },
           tenant: {
             select: { id: true, name: true, slug: true }
@@ -617,7 +617,7 @@ router.get('/:accessId',
       if (!access || access.deletedAt) {
         return res.status(404).json({
           success: false,
-          error: 'Access not found'
+          error: 'Accesso non trovato'
         });
       }
 
@@ -631,12 +631,12 @@ router.get('/:accessId',
         component: 'person-tenant-access-routes',
         action: 'getAccess',
         accessId: req.params.accessId,
-        error: error.message
+        error: 'Operazione non riuscita'
       }, 'Error getting access');
 
       return res.status(500).json({
         success: false,
-        error: 'Failed to get access'
+        error: 'Errore nel recupero dell\'accesso'
       });
     }
   }
@@ -652,7 +652,7 @@ router.put('/:accessId',
   async (req, res) => {
     try {
       const { accessId } = req.params;
-      const { accessLevel, enabledFeatures, isActive, validUntil } = req.body;
+      const { accessLevel, enabledFeatures, isActive, validUntil, defaultRoleType } = req.body;
 
       // Verifica che l'accesso esista
       const existing = await prisma.personTenantAccess.findUnique({
@@ -662,7 +662,7 @@ router.put('/:accessId',
       if (!existing || existing.deletedAt) {
         return res.status(404).json({
           success: false,
-          error: 'Access not found'
+          error: 'Accesso non trovato'
         });
       }
 
@@ -679,13 +679,29 @@ router.put('/:accessId',
         data: updateData,
         include: {
           person: {
-            select: { id: true, email: true, firstName: true, lastName: true }
+            select: { id: true, firstName: true, lastName: true, tenantProfiles: { where: { deletedAt: null }, take: 1, select: { email: true } } }
           },
           tenant: {
             select: { id: true, name: true, slug: true }
           }
         }
       });
+
+      // Se viene promosso ad admin tenant (o viene passato esplicitamente un defaultRoleType),
+      // assicuriamo la presenza di PersonTenantProfile e PersonRole tenant-scoped.
+      const requestedRoleType = defaultRoleType || (access.accessLevel === 'ADMIN' ? 'TENANT_ADMIN' : null);
+      if (access.isActive && requestedRoleType) {
+        await personTenantAccessService.grantTenantAccess({
+          personId: access.personId,
+          tenantId: access.tenantId,
+          accessLevel: access.accessLevel,
+          enabledFeatures: access.enabledFeatures || [],
+          defaultRoleType: requestedRoleType,
+          isPrimary: access.isPrimary,
+          validUntil: access.validUntil,
+          grantedBy: req.person.id,
+        });
+      }
 
       logger.info({
         component: 'person-tenant-access-routes',
@@ -697,7 +713,7 @@ router.put('/:accessId',
       return res.json({
         success: true,
         data: access,
-        message: 'Access updated successfully'
+        message: 'Accesso aggiornato con successo'
       });
 
     } catch (error) {
@@ -705,12 +721,12 @@ router.put('/:accessId',
         component: 'person-tenant-access-routes',
         action: 'updateAccess',
         accessId: req.params.accessId,
-        error: error.message
+        error: 'Operazione non riuscita'
       }, 'Error updating access');
 
       return res.status(500).json({
         success: false,
-        error: 'Failed to update access'
+        error: 'Errore nell\'aggiornamento dell\'accesso'
       });
     }
   }
@@ -731,7 +747,7 @@ router.delete('/:accessId',
       const existing = await prisma.personTenantAccess.findUnique({
         where: { id: accessId },
         include: {
-          person: { select: { email: true } },
+          person: { select: { firstName: true, lastName: true, tenantProfiles: { where: { deletedAt: null }, take: 1, select: { email: true } } } },
           tenant: { select: { name: true } }
         }
       });
@@ -739,7 +755,7 @@ router.delete('/:accessId',
       if (!existing || existing.deletedAt) {
         return res.status(404).json({
           success: false,
-          error: 'Access not found'
+          error: 'Accesso non trovato'
         });
       }
 
@@ -747,7 +763,7 @@ router.delete('/:accessId',
       if (existing.isPrimary && existing.personId === req.person.id) {
         return res.status(400).json({
           success: false,
-          error: 'Cannot remove access to your primary tenant'
+          error: 'Impossibile rimuovere l\'accesso al tenant primario'
         });
       }
 
@@ -764,14 +780,14 @@ router.delete('/:accessId',
         component: 'person-tenant-access-routes',
         action: 'deleteAccess',
         accessId,
-        personEmail: existing.person.email,
+        personName: `${existing.person.firstName} ${existing.person.lastName}`,
         tenantName: existing.tenant.name,
         deletedBy: req.person.id
       }, 'Access deleted successfully');
 
       return res.json({
         success: true,
-        message: 'Access removed successfully'
+        message: 'Accesso rimosso con successo'
       });
 
     } catch (error) {
@@ -779,12 +795,12 @@ router.delete('/:accessId',
         component: 'person-tenant-access-routes',
         action: 'deleteAccess',
         accessId: req.params.accessId,
-        error: error.message
+        error: 'Operazione non riuscita'
       }, 'Error deleting access');
 
       return res.status(500).json({
         success: false,
-        error: 'Failed to delete access'
+        error: 'Errore nell\'eliminazione dell\'accesso'
       });
     }
   }
@@ -799,68 +815,53 @@ router.post('/',
   requirePermission('users:manage'),
   async (req, res) => {
     try {
-      const { personId, tenantId, accessLevel = 'READ', enabledFeatures = [] } = req.body;
+      const {
+        personId,
+        tenantId,
+        accessLevel = 'READ',
+        enabledFeatures = [],
+        defaultRoleType,
+        isPrimary = false,
+        validUntil = null,
+      } = req.body;
 
       if (!personId || !tenantId) {
         return res.status(400).json({
           success: false,
-          error: 'personId and tenantId are required'
+          error: 'personId e tenantId sono obbligatori'
         });
       }
 
-      // Verifica che persona e tenant esistano
-      const [person, tenant] = await Promise.all([
-        prisma.person.findUnique({ where: { id: personId } }),
-        prisma.tenant.findUnique({ where: { id: tenantId } })
-      ]);
-
-      if (!person) {
-        return res.status(404).json({
+      // Valida accessLevel
+      const validLevels = ['READ', 'WRITE', 'ADMIN', 'FULL'];
+      if (!validLevels.includes(accessLevel)) {
+        return res.status(400).json({
           success: false,
-          error: 'Person not found'
+          error: `Livello di accesso non valido. Deve essere uno tra: ${validLevels.join(', ')}`
         });
       }
 
-      if (!tenant) {
-        return res.status(404).json({
+      // Valida features
+      const invalidFeatures = enabledFeatures.filter(f => !AVAILABLE_FEATURES.includes(f));
+      if (invalidFeatures.length > 0) {
+        return res.status(400).json({
           success: false,
-          error: 'Tenant not found'
+          error: `Funzionalità non valide: ${invalidFeatures.join(', ')}`
         });
       }
 
-      // Verifica che non esista già un accesso
-      const existingAccess = await prisma.personTenantAccess.findFirst({
-        where: {
-          personId,
-          tenantId,
-          deletedAt: null
-        }
-      });
+      // Se accessLevel=ADMIN e non è specificato un ruolo, default a TENANT_ADMIN.
+      const resolvedDefaultRoleType = defaultRoleType || (accessLevel === 'ADMIN' ? 'TENANT_ADMIN' : null);
 
-      if (existingAccess) {
-        return res.status(409).json({
-          success: false,
-          error: 'Access already exists for this person and tenant'
-        });
-      }
-
-      const access = await prisma.personTenantAccess.create({
-        data: {
-          personId,
-          tenantId,
-          accessLevel,
-          enabledFeatures,
-          isActive: true,
-          grantedBy: req.person.id
-        },
-        include: {
-          person: {
-            select: { id: true, email: true, firstName: true, lastName: true }
-          },
-          tenant: {
-            select: { id: true, name: true, slug: true }
-          }
-        }
+      const access = await personTenantAccessService.grantTenantAccess({
+        personId,
+        tenantId,
+        accessLevel,
+        enabledFeatures,
+        defaultRoleType: resolvedDefaultRoleType,
+        isPrimary,
+        validUntil: validUntil ? new Date(validUntil) : null,
+        grantedBy: req.person.id,
       });
 
       logger.info({
@@ -874,19 +875,19 @@ router.post('/',
       return res.status(201).json({
         success: true,
         data: access,
-        message: 'Access created successfully'
+        message: 'Accesso creato con successo'
       });
 
     } catch (error) {
       logger.error({
         component: 'person-tenant-access-routes',
         action: 'createAccess',
-        error: error.message
+        error: 'Operazione non riuscita'
       }, 'Error creating access');
 
       return res.status(500).json({
         success: false,
-        error: 'Failed to create access'
+        error: 'Errore nella creazione dell\'accesso'
       });
     }
   }
@@ -910,19 +911,19 @@ router.post('/migrate',
       return res.json({
         success: true,
         data: result,
-        message: `Migration completed: ${result.migrated} users migrated, ${result.skipped} skipped`
+        message: `Migrazione completata: ${result.migrated} utenti migrati, ${result.skipped} saltati`
       });
 
     } catch (error) {
       logger.error({
         component: 'person-tenant-access-routes',
         action: 'migrate',
-        error: error.message
+        error: 'Operazione non riuscita'
       }, 'Error during migration');
 
       return res.status(500).json({
         success: false,
-        error: error.message || 'Migration failed'
+        error: 'Errore interno del server'
       });
     }
   }

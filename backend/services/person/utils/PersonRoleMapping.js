@@ -53,7 +53,7 @@ class PersonRoleMapping {
     'VISUALIZZATORE': 'VIEWER',
     'OPERATORE': 'OPERATOR',
     'OPERATRICE': 'OPERATOR',
-    
+
     // Ruoli inglesi (già validi)
     'EMPLOYEE': 'EMPLOYEE',
     'HR_MANAGER': 'HR_MANAGER',
@@ -63,7 +63,26 @@ class PersonRoleMapping {
     'EXTERNAL_TRAINER': 'EXTERNAL_TRAINER',
     'SUPER_ADMIN': 'SUPER_ADMIN',
     'COMPANY_ADMIN': 'COMPANY_ADMIN',
-    'TENANT_ADMIN': 'TENANT_ADMIN'
+    'TENANT_ADMIN': 'TENANT_ADMIN',
+    'TRAINING_ADMIN': 'TRAINING_ADMIN',
+    'CLINIC_ADMIN': 'CLINIC_ADMIN',
+    'COMPANY_MANAGER': 'COMPANY_MANAGER',
+    'MEDICO': 'MEDICO',
+    'PAZIENTE': 'PAZIENTE',
+    'INFERMIERE': 'INFERMIERE',
+    'SEGRETERIA_CLINICA': 'SEGRETERIA_CLINICA',
+    'MEDICO_COMPETENTE': 'MEDICO_COMPETENTE',
+    'RSPP': 'RSPP',
+    'ASPP': 'ASPP',
+    'TECNICO_SICUREZZA': 'TECNICO_SICUREZZA',
+    'CONSULENTE_SICUREZZA': 'CONSULENTE_SICUREZZA',
+    // Varianti italiane per ruoli specifici
+    'DOTTORE': 'MEDICO',
+    'DOTTORESSA': 'MEDICO',
+    'MEDICO COMPETENTE': 'MEDICO_COMPETENTE',
+    'SEGRETERIA': 'SEGRETERIA_CLINICA',
+    'PAZIENTE': 'PAZIENTE',
+    'INFERMIERA': 'INFERMIERE',
   };
 
   /**
@@ -73,19 +92,24 @@ class PersonRoleMapping {
    */
   static mapRoleType(roleInput) {
     if (!roleInput) return 'EMPLOYEE';
-    
+
     const roleUpper = roleInput.toString().toUpperCase().trim();
-    const mappedRole = this.ROLE_MAPPING[roleUpper] || 'EMPLOYEE';
-    
+    const mappedRole = this.ROLE_MAPPING[roleUpper];
+
+    if (!mappedRole) {
+      logger.warn('Unmapped role defaulting to EMPLOYEE', { input: roleInput, normalized: roleUpper });
+      return 'EMPLOYEE';
+    }
+
     // Log della mappatura per debug
     if (roleInput && roleUpper !== mappedRole) {
-      logger.info('Role mapping applied:', { 
-        original: roleInput, 
-        normalized: roleUpper, 
-        mapped: mappedRole 
+      logger.info('Role mapping applied:', {
+        original: roleInput,
+        normalized: roleUpper,
+        mapped: mappedRole
       });
     }
-    
+
     return mappedRole;
   }
 
@@ -112,7 +136,7 @@ class PersonRoleMapping {
    * @returns {string[]} Array delle varianti italiane
    */
   static getItalianVariants(roleType) {
-    return Object.keys(this.ROLE_MAPPING).filter(key => 
+    return Object.keys(this.ROLE_MAPPING).filter(key =>
       this.ROLE_MAPPING[key] === roleType
     );
   }

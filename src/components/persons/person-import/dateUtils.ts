@@ -68,7 +68,6 @@ export const formatDateForDisplay = (dateString: string): string => {
     
     return dateString; // Se non riesce a parsare, restituisce l'originale
   } catch (error) {
-    console.warn(`Errore nella formattazione della data: ${dateString}`, error);
     return dateString;
   }
 };
@@ -198,7 +197,6 @@ export const formatDateForAPI = (dateString: string): string => {
       return date.toISOString().split('T')[0]; // Ritorna YYYY-MM-DD
     }
   } catch {
-    console.warn(`Impossibile formattare la data: ${cleanDateStr}`);
   }
 
   return cleanDateStr; // Ritorna il valore originale se non può essere formattato

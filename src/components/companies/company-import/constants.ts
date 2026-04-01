@@ -1,29 +1,74 @@
-// Mappatura degli header CSV ai campi del database - COMPATTA (rimosse colonne legacy sedi)
+/**
+ * Mappatura degli header CSV ai campi interni del frontend.
+ * I campi vengono poi ulteriormente separati in company / profile / site
+ * dalla funzione `separateCompanyData` sul backend.
+ */
 export const csvHeaderMap: Record<string, string> = {
-  // === CAMPI COMPANY (schema Prisma) ===
+  // === COMPANY core (Prisma model Company) ===
   'Ragione Sociale': 'ragioneSociale',
-  'Codice ATECO': 'codiceAteco',
   'P.IVA': 'piva',
+  'Partita IVA': 'piva',
   'Codice Fiscale': 'codiceFiscale',
+  'CF': 'codiceFiscale',
+  'Codice ATECO': 'codiceAteco',
+  'ATECO': 'codiceAteco',
+  'Forma Giuridica': 'formaGiuridica',
   'SDI': 'sdi',
+  'Codice SDI': 'sdi',
+  'PEC Fatturazione': 'pecFatturazione',
+  'Settore': 'settore',
+  'Dimensione': 'dimensione',
+  // Sede legale (Company)
+  'Sede Legale': 'sedeLegaleIndirizzo',
+  'Sede Legale Indirizzo': 'sedeLegaleIndirizzo',
+  'Sede Legale Città': 'sedeLegaleCitta',
+  'Sede Legale Citta': 'sedeLegaleCitta',
+  'Sede Legale CAP': 'sedeLegaleCap',
+  'Sede Legale Provincia': 'sedeLegaleProvincia',
+  'Sede Legale Nazione': 'sedeLegaleNazione',
+
+  // === COMPANY TENANT PROFILE (Prisma model CompanyTenantProfile) ===
   'PEC': 'pec',
   'IBAN': 'iban',
+  'Email': 'mail',
+  'E-mail': 'mail',
+  'Mail': 'mail',
+  'Telefono': 'telefono',
+  'Telefono Generale': 'telefono',
+  'Persona di Riferimento': 'personaRiferimento',
+  'Referente': 'personaRiferimento',
+  'Ruolo Referente': 'referenteRuolo',
+  'Data Inizio Rapporto': 'dataInizioRapporto',
+  'Data Fine Rapporto': 'dataFineRapporto',
+  'Tipo Contratto': 'tipoContratto',
+  'Numero Contratto': 'numeroContratto',
+  'Sconto %': 'scontoPercentuale',
+  'Termini Pagamento': 'terminiPagamento',
+  'Modalità Pagamento': 'modalitaPagamento',
   'Note': 'note',
-  'Slug': 'slug',
-  'Domain': 'domain',
-  'Settings': 'settings',
-  'Subscription Plan': 'subscriptionPlan',
+  'Note Interne': 'note',
+  'Note Commerciali': 'noteCommerciali',
+  'Note Operative': 'noteOperative',
+  'Attivo': 'isActive',
   'Is Active': 'isActive',
-  
-  // === CAMPI COMPANY SITE (tutti i campi dello schema Prisma) ===
+  'Stato': 'status',
+
+  // === COMPANY SITE (Prisma model CompanySite) ===
   'Nome Sede': 'siteName',
+  'Indirizzo': 'indirizzo',
   'Indirizzo Sede': 'siteIndirizzo',
+  'Città': 'citta',
+  'Citta': 'citta',
   'Città Sede': 'siteCitta',
+  'Citta Sede': 'siteCitta',
+  'Provincia': 'provincia',
   'Provincia Sede': 'siteProvincia',
+  'CAP': 'cap',
   'CAP Sede': 'siteCap',
   'Persona Riferimento Sede': 'sitePersonaRiferimento',
   'Telefono Sede': 'siteTelefono',
   'Mail Sede': 'siteMail',
+  'Email Sede': 'siteMail',
   'DVR': 'dvr',
   'RSPP ID': 'rsppId',
   'Medico Competente ID': 'medicoCompetenteId',
@@ -37,26 +82,47 @@ export const csvHeaderMap: Record<string, string> = {
   'Ultimo Sopralluogo Medico': 'ultimoSopralluogoMedico',
   'Prossimo Sopralluogo Medico': 'prossimoSopralluogoMedico',
   'Note Sopralluogo Medico': 'noteSopralluogoMedico',
-  
-  // === ALIAS INGLESI (mappati ai campi canonici) ===
+
+  // === ALIAS INGLESI ===
   'Company Name': 'ragioneSociale',
-  'ATECO Code': 'codiceAteco',
   'VAT Number': 'piva',
   'Tax Code': 'codiceFiscale',
-
-
-  'Notes': 'note'
+  'ATECO Code': 'codiceAteco',
+  'Legal Form': 'formaGiuridica',
+  'Phone': 'telefono',
+  'Address': 'indirizzo',
+  'City': 'citta',
+  'Province': 'provincia',
+  'Zip': 'cap',
+  'Site Name': 'siteName',
+  'Site Address': 'siteIndirizzo',
+  'Site City': 'siteCitta',
+  'Site Province': 'siteProvincia',
+  'Site Zip': 'siteCap',
+  'Site Contact': 'sitePersonaRiferimento',
+  'Site Phone': 'siteTelefono',
+  'Site Email': 'siteMail',
+  'Contact Person': 'personaRiferimento',
+  'Notes': 'note',
+  'Active': 'isActive',
 };
 
-// Ordine delle colonne per il modal di importazione (senza campi site legacy)
+/** Ordine colonne nella tabella di anteprima CSV */
 export const columnOrder = [
   'ragioneSociale',
   'piva',
   'codiceFiscale',
   'codiceAteco',
-
-  
+  'pec',
+  'iban',
+  'mail',
+  'telefono',
+  'personaRiferimento',
   'siteName',
+  'indirizzo',
+  'citta',
+  'provincia',
+  'cap',
   'siteIndirizzo',
   'siteCitta',
   'siteProvincia',
@@ -65,39 +131,20 @@ export const columnOrder = [
   'siteTelefono',
   'siteMail',
   'dvr',
-  'reparti',
-  'note'
+  'note',
 ];
 
-// Campi da formattare in title case
+/** Campi da formattare in Title Case */
 export const titleCaseFields = [
   'ragioneSociale',
-  'sedeAzienda',
-
-  
-
-  
+  'formaGiuridica',
+  'sedeLegaleCitta',
+  'settore',
   'siteName',
   'siteCitta',
   'siteProvincia',
-  'sitePersonaRiferimento'
+  'sitePersonaRiferimento',
+  'personaRiferimento',
+  'citta',
+  'provincia',
 ];
-
-// Mappatura dei campi per l'invio all'API
-export const apiFieldMap: Record<string, string> = {
-  'ragioneSociale': 'name',
-  'codiceAteco': 'atecoCode',
-  'piva': 'vatNumber',
-  'codiceFiscale': 'taxCode',
-  'sdi': 'sdi',
-  'pec': 'pec',
-  'iban': 'iban',
-
-
-  'note': 'notes',
-  'slug': 'slug',
-  'domain': 'domain',
-  'settings': 'settings',
-  'subscriptionPlan': 'subscriptionPlan',
-  'isActive': 'isActive'
-};

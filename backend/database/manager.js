@@ -15,7 +15,7 @@ import { PrismaClient } from '@prisma/client';
 export class DatabaseManager extends EventEmitter {
   constructor(environment = null) {
     super();
-    
+
     this.environment = environment || process.env.NODE_ENV || 'development';
     this.config = getDatabaseConfig(this.environment);
     this.clients = new Map();
@@ -73,7 +73,7 @@ export class DatabaseManager extends EventEmitter {
       this.setupGracefulShutdown();
 
       this.isInitialized = true;
-      
+
       logger.info('Database manager initialized successfully', {
         environment: this.environment,
         clients: Array.from(this.clients.keys()),
@@ -99,16 +99,16 @@ export class DatabaseManager extends EventEmitter {
   async createPrimaryClient() {
     const prismaConfig = createPrismaConfig(this.config);
     const client = new PrismaClient(prismaConfig);
-    
+
     // Setup event listeners
     this.setupClientEventListeners(client, 'primary');
-    
+
     // Test connection
     await this.testConnection(client, 'primary');
-    
+
     this.clients.set('primary', client);
     this.metrics.connections++;
-    
+
     logger.info('Primary database client created', {
       component: 'database-manager'
     });
@@ -127,18 +127,18 @@ export class DatabaseManager extends EventEmitter {
         }
       }
     };
-    
+
     const client = new PrismaClient(readonlyConfig);
-    
+
     // Setup event listeners
     this.setupClientEventListeners(client, 'readonly');
-    
+
     // Test connection
     await this.testConnection(client, 'readonly');
-    
+
     this.clients.set('readonly', client);
     this.metrics.connections++;
-    
+
     logger.info('Readonly database client created', {
       component: 'database-manager'
     });
@@ -157,18 +157,18 @@ export class DatabaseManager extends EventEmitter {
         }
       }
     };
-    
+
     const client = new PrismaClient(analyticsConfig);
-    
+
     // Setup event listeners
     this.setupClientEventListeners(client, 'analytics');
-    
+
     // Test connection
     await this.testConnection(client, 'analytics');
-    
+
     this.clients.set('analytics', client);
     this.metrics.connections++;
-    
+
     logger.info('Analytics database client created', {
       component: 'database-manager'
     });
@@ -183,26 +183,24 @@ export class DatabaseManager extends EventEmitter {
     // Query event listener
     client.$on('query', (event) => {
       this.metrics.queries++;
-      
+
       const duration = event.duration;
       const slowThreshold = this.config.database.queryOptimization.slowQueryThreshold;
-      
+
       if (duration > slowThreshold) {
         this.metrics.slowQueries++;
-        
+
         logger.warn('Slow query detected', {
           client: clientName,
           query: event.query,
           duration: `${duration}ms`,
-          params: event.params,
           component: 'database-performance'
         });
-        
+
         this.emit('slowQuery', {
           client: clientName,
           query: event.query,
-          duration,
-          params: event.params
+          duration
         });
       } else if (this.config.database.queryOptimization.enableQueryLogging) {
         logger.debug('Database query executed', {
@@ -216,14 +214,14 @@ export class DatabaseManager extends EventEmitter {
     // Error event listener
     client.$on('error', (event) => {
       this.metrics.errors++;
-      
+
       logger.error('Database error', {
         client: clientName,
         error: event.message,
         target: event.target,
         component: 'database-error'
       });
-      
+
       this.emit('error', {
         client: clientName,
         error: event
@@ -359,7 +357,7 @@ export class DatabaseManager extends EventEmitter {
       if (params.model === 'Course') {
         if (params.action === 'create' || params.action === 'update' || params.action === 'upsert') {
           const data = params.args.data;
-          
+
           if (data) {
             const convertNumericField = (value, isInteger = false) => {
               if (value === null || value === '' || value === undefined) return null;
@@ -367,7 +365,7 @@ export class DatabaseManager extends EventEmitter {
               if (isNaN(num)) return null;
               return isInteger ? Math.round(num) : num;
             };
-            
+
             // Convert numeric fields
             if ('validityYears' in data) {
               data.validityYears = convertNumericField(data.validityYears, true);
@@ -394,10 +392,10 @@ export class DatabaseManager extends EventEmitter {
     return async (params, next) => {
       const start = Date.now();
       const userId = params.args?.userId || 'system';
-      
+
       try {
         const result = await next(params);
-        
+
         // Log successful operations
         if (['create', 'update', 'delete', 'upsert'].includes(params.action)) {
           logger.info('Database audit log', {
@@ -409,7 +407,7 @@ export class DatabaseManager extends EventEmitter {
             component: 'database-audit'
           });
         }
-        
+
         return result;
       } catch (error) {
         // Log failed operations
@@ -422,7 +420,7 @@ export class DatabaseManager extends EventEmitter {
           error: error.message,
           component: 'database-audit'
         });
-        
+
         throw error;
       }
     };
@@ -437,7 +435,7 @@ export class DatabaseManager extends EventEmitter {
     }
 
     const interval = this.config.database.healthCheck.interval;
-    
+
     this.healthCheckInterval = setInterval(async () => {
       await this.performHealthCheck();
     }, interval);
@@ -455,49 +453,49 @@ export class DatabaseManager extends EventEmitter {
   async performHealthCheck() {
     const results = {};
     const timeout = this.config.database.healthCheck.timeout;
-    
+
     for (const [name, client] of this.clients) {
       try {
         const start = Date.now();
-        
+
         // Create a timeout promise
         const timeoutPromise = new Promise((_, reject) => {
           setTimeout(() => reject(new Error('Health check timeout')), timeout);
         });
-        
+
         // Race between health check and timeout
         await Promise.race([
           client.$queryRaw`SELECT 1`,
           timeoutPromise
         ]);
-        
+
         const duration = Date.now() - start;
-        
+
         results[name] = {
           status: 'healthy',
           duration,
           timestamp: new Date().toISOString()
         };
-        
+
       } catch (error) {
         results[name] = {
           status: 'unhealthy',
           error: error.message,
           timestamp: new Date().toISOString()
         };
-        
+
         logger.error(`Health check failed for ${name}:`, {
           error: error.message,
           component: 'database-health'
         });
-        
+
         this.emit('healthCheckFailed', { client: name, error });
       }
     }
-    
+
     this.metrics.lastHealthCheck = new Date().toISOString();
     this.emit('healthCheckCompleted', results);
-    
+
     return results;
   }
 
@@ -573,7 +571,7 @@ export class DatabaseManager extends EventEmitter {
       logger.info('Shutting down database manager...', {
         component: 'database-manager'
       });
-      
+
       await this.disconnect();
     };
 
@@ -616,14 +614,14 @@ export class DatabaseManager extends EventEmitter {
       );
 
       await Promise.all(disconnectPromises);
-      
+
       this.clients.clear();
       this.isInitialized = false;
-      
+
       logger.info('Database manager shutdown completed', {
         component: 'database-manager'
       });
-      
+
       this.emit('disconnected');
     } catch (error) {
       logger.error('Error during database manager shutdown:', {

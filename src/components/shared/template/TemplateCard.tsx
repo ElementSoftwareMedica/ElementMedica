@@ -1,11 +1,11 @@
 import React from 'react';
-import { 
+import {
   ExternalLink,
   MoreVertical,
   Star
 } from 'lucide-react';
 import { TemplateActionDropdown } from './TemplateActionDropdown';
-import { Template } from '../../../types/template';
+import { Template } from '../../../types/templates';
 
 interface TemplateCardProps {
   template: Template;
@@ -17,7 +17,7 @@ interface TemplateCardProps {
   onViewVersions?: (template: Template) => void;
   openDropdownId: string | null;
   toggleDropdown: (id: string) => void;
-  dropdownRefs: React.MutableRefObject<{[key: string]: React.RefObject<HTMLButtonElement>}>;
+  dropdownRefs: React.MutableRefObject<{ [key: string]: React.RefObject<HTMLButtonElement> }>;
 }
 
 export const TemplateCard: React.FC<TemplateCardProps> = ({
@@ -38,7 +38,7 @@ export const TemplateCard: React.FC<TemplateCardProps> = ({
         <div>
           <h5 className="font-medium">{template.name}</h5>
           <p className="text-xs text-gray-500">
-            {template.fileFormat === 'pptx' ? 'Presentazione' : 'Documento'}
+            {template.fileFormat === 'GOOGLE_SLIDES' ? 'Presentazione' : 'Documento'}
             {template.googleDocsUrl && ' • Google Docs'}
           </p>
           {isDefault && (
@@ -48,7 +48,7 @@ export const TemplateCard: React.FC<TemplateCardProps> = ({
             </div>
           )}
         </div>
-        
+
         <div className="flex items-center relative">
           <div className="relative">
             <button
@@ -66,7 +66,7 @@ export const TemplateCard: React.FC<TemplateCardProps> = ({
             >
               <MoreVertical className="h-4 w-4" />
             </button>
-            
+
             <TemplateActionDropdown
               template={template}
               isOpen={openDropdownId === template.id}
@@ -80,7 +80,7 @@ export const TemplateCard: React.FC<TemplateCardProps> = ({
               buttonRef={dropdownRefs.current[template.id]}
             />
           </div>
-          
+
           {!isDefault && (
             <button
               onClick={() => onSetAsDefault(template.id, template.type)}
@@ -90,7 +90,7 @@ export const TemplateCard: React.FC<TemplateCardProps> = ({
               <Star className="h-4 w-4" />
             </button>
           )}
-          
+
           {template.googleDocsUrl && (
             <a
               href={template.googleDocsUrl}

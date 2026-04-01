@@ -49,12 +49,13 @@ export const RATE_LIMIT_CONFIGS = {
     }
   },
 
-  // Rate limiting per login (più restrittivo per sicurezza)
+  // Rate limiting per login (restrittivo per sicurezza)
+  // SECURITY: Max 10 tentativi in 15 minuti per prevenire brute-force
   login: {
     windowMs: 15 * 60 * 1000, // 15 minuti
-    max: 200, // 200 tentativi di login per IP (aumentato da 50 a 200)
+    max: 10, // 10 tentativi di login per IP - protezione brute-force
     message: {
-      error: 'Too many login attempts from this IP, please try again later.',
+      error: 'Troppi tentativi di accesso. Riprova tra 15 minuti.',
       retryAfter: '15 minutes'
     },
     standardHeaders: true,
@@ -119,6 +120,62 @@ export const RATE_LIMIT_CONFIGS = {
     legacyHeaders: false,
     validate: { ip: false }, // Disable IP validation for proxy compatibility
     keyGenerator: getClientIp
+  },
+
+  // Rate limiting per liste pubbliche di form
+  'public-forms-list': {
+    windowMs: 1 * 60 * 1000, // 1 minuto
+    max: 30, // 30 richieste per minuto
+    message: {
+      error: 'Too many requests to public forms list, please try again later.',
+      retryAfter: '1 minute'
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: { ip: false },
+    keyGenerator: getClientIp
+  },
+
+  // Rate limiting per recupero singolo form pubblico
+  'public-form-get': {
+    windowMs: 1 * 60 * 1000, // 1 minuto
+    max: 60, // 60 richieste per minuto
+    message: {
+      error: 'Too many requests to get public form, please try again later.',
+      retryAfter: '1 minute'
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: { ip: false },
+    keyGenerator: getClientIp
+  },
+
+  // Rate limiting per submit form pubblico
+  'public-form-submit': {
+    windowMs: 5 * 60 * 1000, // 5 minuti
+    max: 10, // 10 submit per 5 minuti
+    message: {
+      error: 'Too many form submissions, please try again later.',
+      retryAfter: '5 minutes'
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: { ip: false },
+    keyGenerator: getClientIp
+  },
+
+  // Rate limiting per submit contatto pubblico
+  'public-contact-submit': {
+    windowMs: 5 * 60 * 1000, // 5 minuti
+    max: 5, // 5 submit per 5 minuti
+    message: {
+      error: 'Too many contact form submissions, please try again later.',
+      retryAfter: '5 minutes'
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: { ip: false },
+    keyGenerator: getClientIp
   }
 };
 
@@ -133,7 +190,11 @@ export const ENVIRONMENT_CONFIGS = {
     upload: { ...RATE_LIMIT_CONFIGS.upload, max: 200 },
     search: { ...RATE_LIMIT_CONFIGS.search, max: 600 },
     mutation: { ...RATE_LIMIT_CONFIGS.mutation, max: 1000 },
-    public: { ...RATE_LIMIT_CONFIGS.public, max: 300 }
+    public: { ...RATE_LIMIT_CONFIGS.public, max: 300 },
+    'public-forms-list': { ...RATE_LIMIT_CONFIGS['public-forms-list'], max: 300 },
+    'public-form-get': { ...RATE_LIMIT_CONFIGS['public-form-get'], max: 600 },
+    'public-form-submit': { ...RATE_LIMIT_CONFIGS['public-form-submit'], max: 100 },
+    'public-contact-submit': { ...RATE_LIMIT_CONFIGS['public-contact-submit'], max: 50 }
   },
 
   test: {
@@ -143,7 +204,11 @@ export const ENVIRONMENT_CONFIGS = {
     upload: { ...RATE_LIMIT_CONFIGS.upload, max: 1000 },
     search: { ...RATE_LIMIT_CONFIGS.search, max: 3000 },
     mutation: { ...RATE_LIMIT_CONFIGS.mutation, max: 5000 },
-    public: { ...RATE_LIMIT_CONFIGS.public, max: 1500 }
+    public: { ...RATE_LIMIT_CONFIGS.public, max: 1500 },
+    'public-forms-list': { ...RATE_LIMIT_CONFIGS['public-forms-list'], max: 1500 },
+    'public-form-get': { ...RATE_LIMIT_CONFIGS['public-form-get'], max: 3000 },
+    'public-form-submit': { ...RATE_LIMIT_CONFIGS['public-form-submit'], max: 500 },
+    'public-contact-submit': { ...RATE_LIMIT_CONFIGS['public-contact-submit'], max: 250 }
   },
 
   production: {
@@ -153,7 +218,11 @@ export const ENVIRONMENT_CONFIGS = {
     upload: RATE_LIMIT_CONFIGS.upload,
     search: RATE_LIMIT_CONFIGS.search,
     mutation: RATE_LIMIT_CONFIGS.mutation,
-    public: RATE_LIMIT_CONFIGS.public
+    public: RATE_LIMIT_CONFIGS.public,
+    'public-forms-list': RATE_LIMIT_CONFIGS['public-forms-list'],
+    'public-form-get': RATE_LIMIT_CONFIGS['public-form-get'],
+    'public-form-submit': RATE_LIMIT_CONFIGS['public-form-submit'],
+    'public-contact-submit': RATE_LIMIT_CONFIGS['public-contact-submit']
   }
 };
 

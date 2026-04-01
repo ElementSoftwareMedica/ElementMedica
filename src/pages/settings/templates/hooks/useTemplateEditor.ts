@@ -50,7 +50,7 @@ export function useTemplateEditor(
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   const [state, setState] = useState<EditorState>({
     content: '',
     header: '',
@@ -107,7 +107,7 @@ export function useTemplateEditor(
 
     try {
       const data = await templateService.getTemplate(id);
-      
+
       if (isMountedRef.current) {
         setTemplate(data);
         setState((prev) => ({
@@ -118,9 +118,8 @@ export function useTemplateEditor(
           isDirty: false,
         }));
       }
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.message || 'Errore nel caricamento del template';
-      setError(errorMessage);
+    } catch (err: unknown) {
+      setError('Errore nel caricamento del template');
       // Toast handled by calling component
     } finally {
       if (isMountedRef.current) {
@@ -169,7 +168,7 @@ export function useTemplateEditor(
       };
 
       const updatedTemplate = await templateService.updateTemplate(templateId, updateData);
-      
+
       if (isMountedRef.current) {
         setTemplate(updatedTemplate);
         setState((prev) => ({
@@ -180,12 +179,11 @@ export function useTemplateEditor(
         }));
         // Toast handled by calling component
       }
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.message || 'Errore nel salvataggio';
+    } catch (err: unknown) {
       setState((prev) => ({
         ...prev,
         isSaving: false,
-        error: errorMessage,
+        error: 'Errore nel salvataggio',
       }));
       // Toast handled by calling component
       throw err;
@@ -200,7 +198,7 @@ export function useTemplateEditor(
 
     try {
       const newTemplate = await templateService.createTemplate(data);
-      
+
       if (isMountedRef.current) {
         setTemplate(newTemplate);
         setState((prev) => ({
@@ -212,15 +210,14 @@ export function useTemplateEditor(
           lastSaved: new Date(),
         }));
         // Toast handled by calling component
-        
+
         // Navigate to editor
         navigate(`/settings/templates/${newTemplate.id}`);
         return newTemplate;
       }
       return null;
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.message || 'Errore nella creazione del template';
-      setError(errorMessage);
+    } catch (err: unknown) {
+      setError('Errore nella creazione del template');
       // Toast handled by calling component
       return null;
     } finally {
@@ -238,16 +235,15 @@ export function useTemplateEditor(
 
     try {
       const updatedTemplate = await templateService.updateTemplate(templateId, data);
-      
+
       if (isMountedRef.current) {
         setTemplate(updatedTemplate);
         // Toast handled by calling component
       }
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.message || 'Errore nell\'aggiornamento';
+    } catch (err: unknown) {
       setState((prev) => ({
         ...prev,
-        error: errorMessage,
+        error: 'Errore nell\'aggiornamento',
       }));
       // Toast handled by calling component
       throw err;

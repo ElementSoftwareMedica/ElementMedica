@@ -209,7 +209,7 @@ const CourseImport: React.FC<CourseImportProps> = ({
       return dataWithIds;
     } catch (error) {
       showToast({
-        message: `Errore durante il processing del file: ${error instanceof Error ? error.message : 'Errore sconosciuto'}`,
+        message: `Errore durante il processing del file: ${'Errore sconosciuto'}`,
         type: 'error'
       });
       throw error;
@@ -294,7 +294,7 @@ const CourseImport: React.FC<CourseImportProps> = ({
       onClose();
     } catch (error) {
       showToast({
-        message: `Errore durante l'importazione: ${error instanceof Error ? error.message : 'Errore sconosciuto'}`,
+        message: `Errore durante l'importazione: ${'Errore sconosciuto'}`,
         type: "error"
       });
     } finally {

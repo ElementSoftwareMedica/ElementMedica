@@ -1,7 +1,7 @@
 [
   {
     "slug": "carriere",
-    "title": "Lavora con Noi - Element Formazione",
+    "title": "Lavora con Noi - Element Sicurezza",
     "tenantId": "d2bbc5b0-344c-47c7-8ef5-f57755293372",
     "status": "published",
     "content": {
@@ -44,7 +44,7 @@
         ],
         "title": "Costruisci il Futuro",
         "subtitle": "della Sicurezza sul Lavoro",
-        "description": "Unisciti a un team di professionisti appassionati. In Element Formazione valorizziamo il talento e investiamo nella crescita delle nostre persone.",
+        "description": "Unisciti a un team di professionisti appassionati. In Element Sicurezza valorizziamo il talento e investiamo nella crescita delle nostre persone.",
         "primaryButton": {
           "href": "#posizioni",
           "icon": "ArrowRight",
@@ -167,7 +167,7 @@
   },
   {
     "slug": "chi-siamo",
-    "title": "Chi Siamo - Element Formazione",
+    "title": "Chi Siamo - Element Sicurezza",
     "tenantId": "d2bbc5b0-344c-47c7-8ef5-f57755293372",
     "status": "published",
     "content": {
@@ -190,7 +190,7 @@
         "ctaText": "Scopri la Nostra Storia",
         "subtitle": "Leader nella Sicurezza sul Lavoro dal 2008",
         "description": "Da oltre 15 anni accompagniamo le aziende italiane nel percorso verso la sicurezza e la conformità normativa, con passione, competenza e innovazione.",
-        "backgroundImage": "/images/hero-chi-siamo.jpg"
+        "backgroundVariant": "gradient"
       },
       "team": {
         "stats": [
@@ -252,7 +252,7 @@
             "year": "2008",
             "color": "blue",
             "title": "La Fondazione",
-            "description": "Element Formazione nasce dalla passione di un gruppo di professionisti della sicurezza sul lavoro"
+            "description": "Element Sicurezza nasce dalla passione di un gruppo di professionisti della sicurezza sul lavoro"
           },
           {
             "year": "2012",
@@ -373,15 +373,15 @@
         "subtitle": "Metodologia collaudata per risultati concreti"
       },
       "metadata": {
-        "title": "Chi Siamo - Element Formazione",
+        "title": "Chi Siamo - Element Sicurezza",
         "keywords": [
           "chi siamo",
-          "element formazione",
+          "element sicurezza",
           "sicurezza lavoro",
           "formazione aziendale",
           "consulenza sicurezza"
         ],
-        "description": "Scopri Element Formazione: leader nella sicurezza sul lavoro con oltre 15 anni di esperienza. Team di esperti, certificazioni e approccio personalizzato."
+        "description": "Scopri Element Sicurezza: leader nella sicurezza sul lavoro con oltre 15 anni di esperienza. Team di esperti, certificazioni e approccio personalizzato."
       },
       "certifications": {
         "items": [
@@ -417,7 +417,7 @@
   },
   {
     "slug": "contatti",
-    "title": "Contattaci - Element Formazione",
+    "title": "Contattaci - Element Sicurezza",
     "tenantId": "d2bbc5b0-344c-47c7-8ef5-f57755293372",
     "status": "published",
     "content": {
@@ -488,7 +488,7 @@
           "text": "Chiama Ora"
         },
         "secondaryButton": {
-          "href": "mailto:info@elementformazione.it",
+          "href": "mailto:info@elementsicurezza.com",
           "icon": "Mail",
           "text": "Scrivi Email"
         },
@@ -540,11 +540,11 @@
         "emails": [
           {
             "label": "Info Generali",
-            "address": "info@elementformazione.it"
+            "address": "info@elementsicurezza.com"
           },
           {
             "label": "Preventivi",
-            "address": "preventivi@elementformazione.it"
+            "address": "preventivi@elementsicurezza.com"
           }
         ],
         "phones": [
@@ -569,7 +569,7 @@
   },
   {
     "slug": "cookie-policy",
-    "title": "Cookie Policy - Element Formazione",
+    "title": "Cookie Policy - Element Sicurezza",
     "tenantId": "d2bbc5b0-344c-47c7-8ef5-f57755293372",
     "status": "published",
     "content": {
@@ -716,7 +716,7 @@
       ],
       "introduction": {
         "title": "Cosa sono i Cookie",
-        "content": "I cookie sono piccoli file di testo che vengono memorizzati sul tuo dispositivo quando visiti un sito web. Ci aiutano a fornire una migliore esperienza di navigazione, ricordare le tue preferenze e analizzare come utilizzi il nostro sito.\n\nElement Formazione utilizza i cookie in conformità con la normativa europea e italiana sulla privacy e sui cookie."
+        "content": "I cookie sono piccoli file di testo che vengono memorizzati sul tuo dispositivo quando visiti un sito web. Ci aiutano a fornire una migliore esperienza di navigazione, ricordare le tue preferenze e analizzare come utilizzi il nostro sito.\n\nElement Sicurezza utilizza i cookie in conformità con la normativa europea e italiana sulla privacy e sui cookie."
       }
     }
   },
@@ -841,7 +841,7 @@
               "name": "Formazione Lavoratori",
               "@type": "Course",
               "provider": {
-                "name": "Element Formazione",
+                "name": "Element Sicurezza",
                 "@type": "Organization"
               }
             },
@@ -849,7 +849,7 @@
               "name": "Formazione Preposti",
               "@type": "Course",
               "provider": {
-                "name": "Element Formazione",
+                "name": "Element Sicurezza",
                 "@type": "Organization"
               }
             },
@@ -857,7 +857,7 @@
               "name": "Formazione Dirigenti",
               "@type": "Course",
               "provider": {
-                "name": "Element Formazione",
+                "name": "Element Sicurezza",
                 "@type": "Organization"
               }
             }
@@ -1220,7 +1220,7 @@
   },
   {
     "slug": "homepage",
-    "title": "Element Formazione - Sicurezza sul Lavoro",
+    "title": "Element Sicurezza - Sicurezza sul Lavoro",
     "tenantId": "d2bbc5b0-344c-47c7-8ef5-f57755293372",
     "status": "published",
     "content": {
@@ -1332,13 +1332,13 @@
         "theme": "formazione",
         "layout": "full-width",
         "structuredData": {
-          "url": "https://elementformazione.it",
-          "logo": "https://elementformazione.it/assets/logos/element-formazione-logo.svg",
-          "name": "Element Formazione",
+          "url": "https://www.elementsicurezza.com",
+          "logo": "https://elementsicurezza.com/assets/logos/element-sicurezza-logo.png",
+          "name": "Element Sicurezza",
           "@type": "EducationalOrganization",
           "sameAs": [
-            "https://linkedin.com/company/element-formazione",
-            "https://facebook.com/elementformazione"
+            "https://linkedin.com/company/element-sicurezza",
+            "https://facebook.com/elementsicurezza"
           ],
           "address": {
             "@type": "PostalAddress",
@@ -1495,7 +1495,7 @@
         {
           "name": "Marco Rossi",
           "role": "Responsabile Risorse Umane",
-          "text": "Collaboriamo con Element Formazione da 5 anni. Professionalità, puntualità e qualità eccellente. La formazione dei nostri dipendenti è sempre completa e aggiornata.",
+          "text": "Collaboriamo con Element Sicurezza da 5 anni. Professionalità, puntualità e qualità eccellente. La formazione dei nostri dipendenti è sempre completa e aggiornata.",
           "avatar": null,
           "rating": 5,
           "company": "Industrie Meccaniche SRL"
@@ -1595,7 +1595,7 @@
   },
   {
     "slug": "medicina-del-lavoro",
-    "title": "Medicina del Lavoro - Element Formazione",
+    "title": "Medicina del Lavoro - Element Sicurezza",
     "tenantId": "d2bbc5b0-344c-47c7-8ef5-f57755293372",
     "status": "published",
     "content": {
@@ -2057,7 +2057,7 @@
   },
   {
     "slug": "privacy-policy",
-    "title": "Privacy Policy - Element Formazione",
+    "title": "Privacy Policy - Element Sicurezza",
     "tenantId": "d2bbc5b0-344c-47c7-8ef5-f57755293372",
     "status": "published",
     "content": {
@@ -2125,12 +2125,12 @@
           "Revoca del consenso",
           "Proporre reclamo al Garante Privacy"
         ],
-        "contact": "Per esercitare i tuoi diritti, contattaci a: privacy@elementformazione.it",
+        "contact": "Per esercitare i tuoi diritti, contattaci a: privacy@elementsicurezza.com",
         "description": "In conformità al GDPR, hai diritto a:"
       },
       "introduction": {
         "title": "Informazioni Generali",
-        "content": "Element Formazione S.r.l. (di seguito \"Element Formazione\", \"noi\", \"nostro\") rispetta la tua privacy e si impegna a proteggere i tuoi dati personali. Questa Privacy Policy spiega come raccogliamo, utilizziamo e proteggiamo le tue informazioni quando utilizzi il nostro sito web e i nostri servizi.\n\nQuesta informativa è conforme al Regolamento Generale sulla Protezione dei Dati (GDPR) UE 2016/679 e al Codice Privacy italiano (D.Lgs. 196/2003 come modificato dal D.Lgs. 101/2018)."
+        "content": "Element Sicurezza S.r.l. (di seguito \"Element Sicurezza\", \"noi\", \"nostro\") rispetta la tua privacy e si impegna a proteggere i tuoi dati personali. Questa Privacy Policy spiega come raccogliamo, utilizziamo e proteggiamo le tue informazioni quando utilizzi il nostro sito web e i nostri servizi.\n\nQuesta informativa è conforme al Regolamento Generale sulla Protezione dei Dati (GDPR) UE 2016/679 e al Codice Privacy italiano (D.Lgs. 196/2003 come modificato dal D.Lgs. 101/2018)."
       },
       "dataCollected": {
         "title": "Dati Personali Raccolti",
@@ -2165,18 +2165,18 @@
         ]
       },
       "dataController": {
-        "vat": "[Partita IVA]",
-        "email": "privacy@elementformazione.it",
-        "phone": "+39 123 456 789",
+        "vat": "05580640281",
+        "email": "privacy@elementsicurezza.com",
+        "phone": "+39 351 623 9176",
         "title": "Titolare del Trattamento",
-        "address": "[Indirizzo completo]",
-        "company": "Element Formazione S.r.l."
+        "address": "Via Piave 4, 35138 Padova (PD)",
+        "company": "Element Sicurezza S.r.l."
       }
     }
   },
   {
     "slug": "rspp",
-    "title": "Nomina RSPP - Element Formazione",
+    "title": "Nomina RSPP - Element Sicurezza",
     "tenantId": "d2bbc5b0-344c-47c7-8ef5-f57755293372",
     "status": "published",
     "content": {
@@ -2399,13 +2399,13 @@
         "theme": "formazione",
         "layout": "full-width",
         "structuredData": {
-          "url": "https://elementformazione.it/rspp-formazione-sicurezza",
-          "name": "Element Formazione - RSPP e Sicurezza",
+          "url": "https://elementsicurezza.com/rspp-formazione-sicurezza",
+          "name": "Element Sicurezza - RSPP e Sicurezza",
           "@type": "ProfessionalService",
           "@context": "https://schema.org",
           "provider": {
-            "url": "https://elementformazione.it",
-            "name": "Element Formazione",
+            "url": "https://www.elementsicurezza.com",
+            "name": "Element Sicurezza",
             "@type": "Organization"
           },
           "telephone": "+39-351-623-9176",
@@ -3195,7 +3195,7 @@
   },
   {
     "slug": "termini",
-    "title": "Termini di Servizio - Element Formazione",
+    "title": "Termini di Servizio - Element Sicurezza",
     "tenantId": "d2bbc5b0-344c-47c7-8ef5-f57755293372",
     "status": "published",
     "content": {
@@ -3222,12 +3222,12 @@
         },
         "responsibility": {
           "title": "Responsabilità dell'Account",
-          "description": "Sei responsabile di tutte le attività che avvengono sotto il tuo account. Element Formazione non è responsabile per perdite derivanti dall'uso non autorizzato del tuo account."
+          "description": "Sei responsabile di tutte le attività che avvengono sotto il tuo account. Element Sicurezza non è responsabile per perdite derivanti dall'uso non autorizzato del tuo account."
         }
       },
       "contact": {
-        "email": "info@elementformazione.it",
-        "phone": "+39 123 456 789",
+        "email": "info@elementsicurezza.com",
+        "phone": "+39 351 623 9176",
         "title": "Contatti",
         "description": "Per domande sui Termini di Servizio, contattaci a:"
       },
@@ -3258,7 +3258,7 @@
       },
       "liability": {
         "title": "Limitazione di Responsabilità",
-        "description": "Element Formazione non è responsabile per danni diretti, indiretti, incidentali o consequenziali derivanti dall'uso o dall'impossibilità di utilizzare il sito o i servizi."
+        "description": "Element Sicurezza non è responsabile per danni diretti, indiretti, incidentali o consequenziali derivanti dall'uso o dall'impossibilità di utilizzare il sito o i servizi."
       },
       "siteUsage": {
         "title": "Utilizzo del Sito Web",
@@ -3287,21 +3287,21 @@
       "lastUpdate": "2025-11-29T06:22:15.698Z",
       "companyInfo": {
         "title": "Informazioni sulla Società",
-        "company": "Element Formazione S.r.l.",
+        "company": "Element Sicurezza S.r.l.",
         "details": {
           "cf": "[Codice Fiscale]",
-          "pec": "elementformazione@pec.it",
-          "rea": "[Numero REA]",
-          "vat": "[Partita IVA]",
-          "email": "info@elementformazione.it",
-          "phone": "+39 123 456 789",
-          "address": "[Indirizzo completo]",
+          "pec": "element.srl@pec.it",
+          "rea": "PD-462421",
+          "vat": "05580640281",
+          "email": "info@elementsicurezza.com",
+          "phone": "+39 351 623 9176",
+          "address": "Via Piave 4, 35138 Padova (PD)",
           "capital": "€ [Importo]"
         }
       },
       "introduction": {
         "title": "Informazioni Generali",
-        "content": "I presenti Termini di Servizio disciplinano l'utilizzo del sito web www.elementformazione.it e dei servizi offerti da Element Formazione S.r.l. (di seguito \"Element Formazione\", \"noi\", \"nostro\").\n\nUtilizzando il nostro sito web o i nostri servizi, accetti integralmente questi termini. Se non accetti questi termini, ti preghiamo di non utilizzare il nostro sito o i nostri servizi."
+        "content": "I presenti Termini di Servizio disciplinano l'utilizzo del sito web www.elementsicurezza.com e dei servizi offerti da Element Sicurezza S.r.l. (di seguito \"Element Sicurezza\", \"noi\", \"nostro\").\n\nUtilizzando il nostro sito web o i nostri servizi, accetti integralmente questi termini. Se non accetti questi termini, ti preghiamo di non utilizzare il nostro sito o i nostri servizi."
       },
       "modifications": {
         "title": "Modifiche ai Termini",
@@ -3311,7 +3311,7 @@
         "title": "Proprietà Intellettuale",
         "content": {
           "title": "Contenuti del Sito",
-          "description": "Tutti i contenuti presenti sul sito (testi, immagini, loghi, video, software) sono di proprietà di Element Formazione o dei rispettivi proprietari e sono protetti dalle leggi sul diritto d'autore."
+          "description": "Tutti i contenuti presenti sul sito (testi, immagini, loghi, video, software) sono di proprietà di Element Sicurezza o dei rispettivi proprietari e sono protetti dalle leggi sul diritto d'autore."
         },
         "license": {
           "title": "Licenza d'Uso",
@@ -3349,7 +3349,6 @@
           "icon": "ArrowRight",
           "text": "Scopri i Servizi"
         },
-        "backgroundImage": "/images/hero-chi-siamo.jpg",
         "secondaryButton": {
           "href": "/contatti",
           "icon": "Phone",
@@ -3558,7 +3557,7 @@
           "text": "Prenota Online"
         },
         "secondaryButton": {
-          "href": "tel:+390212345678",
+          "href": "tel:+393513181574",
           "icon": "Phone",
           "text": "Chiama Ora"
         },
@@ -3594,19 +3593,19 @@
       "location": {
         "title": "La Nostra Sede",
         "address": {
-          "cap": "20100",
-          "city": "Milano",
-          "region": "Lombardia",
-          "street": "Via della Salute, 123"
+          "cap": "35030",
+          "city": "Selvazzano Dentro (PD)",
+          "region": "Veneto",
+          "street": "Via Bracciano 34, Selvazzano Dentro"
         },
         "parking": {
           "name": "ParkMed Convenzionato",
           "rate": "€1,50/ora (tariffa agevolata)",
-          "address": "Via della Salute, 125"
+          "address": "Via Bracciano 34, 35030 Selvazzano Dentro (PD)"
         },
         "directions": {
-          "bus": "Linee 42, 56, 78 - Fermata Via della Salute",
-          "car": "Uscita tangenziale Milano Nord. Parcheggio convenzionato ParkMed a 50m.",
+          "bus": "Linee 42, 56, 78 - Fermata Selvazzano",
+          "car": "Uscita tangenziale Padova Ovest. Parcheggio convenzionato ParkMed a 50m.",
           "metro": "Metro M1 (rossa), fermata Salute. 200m a piedi."
         }
       },
@@ -3687,41 +3686,41 @@
             "icon": "Phone",
             "title": "Telefono",
             "action": {
-              "href": "tel:+390212345678",
+              "href": "tel:+393513181574",
               "type": "tel"
             },
-            "primary": "+39 02 1234 5678",
+            "primary": "+39 351 318 1574",
             "secondary": "Lun-Ven 8:00-19:00, Sab 8:00-13:00"
           },
           {
             "icon": "Mail",
             "title": "Email",
             "action": {
-              "href": "mailto:info@elementmedica.it",
+              "href": "mailto:info@elementmedica.com",
               "type": "mailto"
             },
-            "primary": "info@elementmedica.it",
+            "primary": "info@elementmedica.com",
             "secondary": "Rispondiamo entro 24 ore"
           },
           {
             "icon": "MessageSquare",
             "title": "WhatsApp",
             "action": {
-              "href": "https://wa.me/393331234567",
+              "href": "https://wa.me/393513181574",
               "type": "whatsapp"
             },
-            "primary": "+39 333 123 4567",
+            "primary": "+39 351 318 1574",
             "secondary": "Per prenotazioni rapide"
           },
           {
             "icon": "MapPin",
             "title": "Indirizzo",
             "action": {
-              "href": "https://maps.google.com/?q=Via+della+Salute+123+Milano",
+              "href": "https://maps.google.com/?q=Via+Bracciano+34+Selvazzano+Dentro+PD",
               "type": "maps"
             },
-            "primary": "Via della Salute, 123",
-            "secondary": "20100 Milano (MI)"
+            "primary": "Via Bracciano 34, Selvazzano Dentro",
+            "secondary": "35030 Selvazzano Dentro (PD)"
           }
         ],
         "title": "Come Raggiungerci"
@@ -3731,30 +3730,30 @@
           {
             "icon": "Calendar",
             "name": "Prenotazioni Visite",
-            "email": "prenotazioni@elementmedica.it",
+            "email": "prenotazioni@elementmedica.com",
             "hours": "Lun-Ven 8:00-18:30",
-            "phone": "+39 02 1234 5601"
+            "phone": "+39 351 318 1574"
           },
           {
             "icon": "Briefcase",
             "name": "Medicina del Lavoro",
-            "email": "medicinadellavoro@elementmedica.it",
+            "email": "medicinadellavoro@elementmedica.com",
             "hours": "Lun-Ven 8:30-17:30",
-            "phone": "+39 02 1234 5602"
+            "phone": "+39 351 318 1574"
           },
           {
             "icon": "FlaskConical",
             "name": "Laboratorio Analisi",
-            "email": "laboratorio@elementmedica.it",
+            "email": "laboratorio@elementmedica.com",
             "hours": "Lun-Sab 7:30-10:00",
-            "phone": "+39 02 1234 5603"
+            "phone": "+39 351 318 1574"
           },
           {
             "icon": "FileText",
             "name": "Amministrazione",
-            "email": "amministrazione@elementmedica.it",
+            "email": "amministrazione@elementmedica.com",
             "hours": "Lun-Ven 9:00-17:00",
-            "phone": "+39 02 1234 5604"
+            "phone": "+39 351 318 1574"
           }
         ],
         "title": "Contatti per Reparto"
@@ -4153,7 +4152,7 @@
           "text": "Prenota Online"
         },
         "secondaryButton": {
-          "href": "tel:+390123456789",
+          "href": "tel:+393516239176",
           "icon": "Phone",
           "text": "Chiama Ora"
         }
@@ -4369,9 +4368,9 @@
         "sectionSubtitle": "Un'offerta completa per la tua salute e quella della tua azienda"
       },
       "emergency": {
-        "email": "info@elementmedica.it",
+        "email": "info@elementmedica.com",
         "hours": "Lun-Ven 8:00-20:00 | Sab 8:00-13:00",
-        "phone": "02 1234567",
+        "phone": "+39 351 318 1574",
         "title": "Contatto Rapido",
         "ctaHref": "/prenota",
         "ctaText": "Prenota Ora",
@@ -4543,7 +4542,7 @@
           "text": "Richiedi Preventivo"
         },
         "secondaryButton": {
-          "href": "tel:+390123456789",
+          "href": "tel:+393516239176",
           "icon": "Phone",
           "text": "Chiama Ora"
         }
@@ -4605,7 +4604,7 @@
           "text": "Richiedi Preventivo"
         },
         "secondaryButton": {
-          "href": "tel:+390123456789",
+          "href": "tel:+393516239176",
           "icon": "Phone",
           "text": "Chiama Ora"
         },
@@ -4923,7 +4922,7 @@
         "title": "Hai Bisogno di Aiuto?",
         "description": "Il nostro team e a disposizione per qualsiasi informazione.",
         "primaryButton": {
-          "href": "tel:+390212345678",
+          "href": "tel:+393513181574",
           "icon": "Phone",
           "text": "Chiama Ora"
         },
@@ -5193,12 +5192,12 @@
       "alternativeBooking": {
         "phone": {
           "hours": "Lun-Ven 8:00-18:30, Sab 8:00-12:00",
-          "number": "+39 02 1234 5678"
+          "number": "+39 351 318 1574"
         },
         "title": "Preferisci Prenotare per Telefono?",
         "whatsapp": {
           "text": "Prenota via WhatsApp",
-          "number": "+39 333 123 4567"
+          "number": "+39 351 318 1574"
         },
         "description": "Il nostro team e a disposizione"
       }
@@ -5225,7 +5224,7 @@
           "text": "Prenota Online"
         },
         "secondaryButton": {
-          "href": "tel:+390123456789",
+          "href": "tel:+393516239176",
           "icon": "Phone",
           "text": "Chiama per Info"
         }
@@ -5283,7 +5282,6 @@
           "icon": "Calendar",
           "text": "Prenota Visita"
         },
-        "backgroundImage": "/images/hero-visite.jpg",
         "secondaryButton": {
           "href": "#specialita",
           "icon": "ArrowRight",
@@ -5473,9 +5471,9 @@
         "description": "Oltre 30 specialità mediche con i migliori professionisti. Cardiologia, neurologia, ortopedia e molto altro. Prenota la tua visita."
       },
       "emergency": {
-        "email": "visite@elementmedica.it",
+        "email": "visite@elementmedica.com",
         "hours": "Lun-Ven 8:00-20:00 | Sab 8:00-13:00",
-        "phone": "02 1234567",
+        "phone": "+39 351 318 1574",
         "title": "Prenota la Tua Visita",
         "ctaHref": "/prenota",
         "ctaText": "Prenota Online",

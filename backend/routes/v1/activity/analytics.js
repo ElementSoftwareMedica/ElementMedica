@@ -10,9 +10,11 @@
  */
 
 import express from 'express';
-import { authenticate } from '../../../auth/middleware.js';
+import authMiddleware from '../../../middleware/auth.js';
+const { authenticate } = authMiddleware;
 import { activityService, activityRetentionService } from '../../../services/activity/index.js';
 import logger from '../../../utils/logger.js';
+import { getEffectiveTenantId } from '../../../utils/tenantHelper.js';
 
 const router = express.Router();
 
@@ -27,8 +29,8 @@ const requireAdmin = (req, res, next) => {
   if (!isAdmin) {
     return res.status(403).json({
       success: false,
-      error: 'Access denied',
-      message: 'Admin access required'
+      error: 'Accesso negato',
+      message: 'Accesso amministratore richiesto'
     });
   }
 
@@ -47,7 +49,7 @@ router.get('/tenant', authenticate, requireAdmin, async (req, res) => {
     const { days = 7 } = req.query;
 
     const stats = await activityService.getTenantStats(
-      req.person.tenantId,
+      getEffectiveTenantId(req),
       Math.min(parseInt(days) || 7, 90)
     );
 
@@ -59,12 +61,11 @@ router.get('/tenant', authenticate, requireAdmin, async (req, res) => {
   } catch (error) {
     logger.error('Activity Analytics: Error getting tenant stats', {
       component: 'activity-analytics',
-      error: error.message
+      error: 'Operazione non riuscita'
     });
     res.status(500).json({
       success: false,
-      error: 'Failed to retrieve tenant statistics',
-      message: error.message
+      error: 'Errore nel recupero delle statistiche del tenant',
     });
   }
 });
@@ -76,7 +77,7 @@ router.get('/tenant', authenticate, requireAdmin, async (req, res) => {
  */
 router.get('/retention', authenticate, requireAdmin, async (req, res) => {
   try {
-    const stats = await activityRetentionService.getRetentionStats(req.person.tenantId);
+    const stats = await activityRetentionService.getRetentionStats(getEffectiveTenantId(req));
 
     res.json({
       success: true,
@@ -86,12 +87,11 @@ router.get('/retention', authenticate, requireAdmin, async (req, res) => {
   } catch (error) {
     logger.error('Activity Analytics: Error getting retention stats', {
       component: 'activity-analytics',
-      error: error.message
+      error: 'Operazione non riuscita'
     });
     res.status(500).json({
       success: false,
-      error: 'Failed to retrieve retention statistics',
-      message: error.message
+      error: 'Errore nel recupero delle statistiche di conservazione',
     });
   }
 });
@@ -113,8 +113,8 @@ router.post('/cleanup', authenticate, async (req, res) => {
     if (!isSuperAdmin) {
       return res.status(403).json({
         success: false,
-        error: 'Access denied',
-        message: 'Super Admin access required for cleanup operations'
+        error: 'Accesso negato',
+        message: 'Accesso Super Admin richiesto per le operazioni di pulizia'
       });
     }
 
@@ -128,7 +128,7 @@ router.post('/cleanup', authenticate, async (req, res) => {
 
     const result = await activityRetentionService.runCleanup({
       dryRun,
-      tenantId: req.person.tenantId
+      tenantId: getEffectiveTenantId(req)
     });
 
     res.json({
@@ -139,12 +139,11 @@ router.post('/cleanup', authenticate, async (req, res) => {
   } catch (error) {
     logger.error('Activity Analytics: Error running cleanup', {
       component: 'activity-analytics',
-      error: error.message
+      error: 'Operazione non riuscita'
     });
     res.status(500).json({
       success: false,
-      error: 'Failed to run cleanup',
-      message: error.message
+      error: 'Errore nell\'esecuzione della pulizia',
     });
   }
 });
@@ -170,7 +169,7 @@ router.get('/top-users', authenticate, requireAdmin, async (req, res) => {
     const topUsers = await prisma.activityLog.groupBy({
       by: ['personId'],
       where: {
-        tenantId: req.person.tenantId,
+        tenantId: getEffectiveTenantId(req),
         timestamp: { gte: startDate },
         deletedAt: null
       },
@@ -183,7 +182,7 @@ router.get('/top-users', authenticate, requireAdmin, async (req, res) => {
     const personIds = topUsers.map(u => u.personId);
     const persons = await prisma.person.findMany({
       where: { id: { in: personIds } },
-      select: { id: true, firstName: true, lastName: true, email: true }
+      select: { id: true, firstName: true, lastName: true }
     });
 
     const personMap = new Map(persons.map(p => [p.id, p]));
@@ -205,12 +204,11 @@ router.get('/top-users', authenticate, requireAdmin, async (req, res) => {
   } catch (error) {
     logger.error('Activity Analytics: Error getting top users', {
       component: 'activity-analytics',
-      error: error.message
+      error: 'Operazione non riuscita'
     });
     res.status(500).json({
       success: false,
-      error: 'Failed to retrieve top users',
-      message: error.message
+      error: 'Errore nel recupero degli utenti principali',
     });
   }
 });
@@ -234,7 +232,7 @@ router.get('/failed-operations', authenticate, requireAdmin, async (req, res) =>
 
     const failed = await prisma.activityLog.findMany({
       where: {
-        tenantId: req.person.tenantId,
+        tenantId: getEffectiveTenantId(req),
         timestamp: { gte: startDate },
         success: false,
         deletedAt: null
@@ -260,12 +258,11 @@ router.get('/failed-operations', authenticate, requireAdmin, async (req, res) =>
   } catch (error) {
     logger.error('Activity Analytics: Error getting failed operations', {
       component: 'activity-analytics',
-      error: error.message
+      error: 'Operazione non riuscita'
     });
     res.status(500).json({
       success: false,
-      error: 'Failed to retrieve failed operations',
-      message: error.message
+      error: 'Errore nel recupero delle operazioni fallite',
     });
   }
 });
@@ -289,7 +286,7 @@ router.get('/security', authenticate, requireAdmin, async (req, res) => {
     // Login falliti (nota: questi potrebbero non avere personId)
     const loginFailures = await prisma.activityLog.count({
       where: {
-        tenantId: req.person.tenantId,
+        tenantId: getEffectiveTenantId(req),
         action: 'AUTH_LOGIN_FAILED',
         timestamp: { gte: startDate },
         deletedAt: null
@@ -299,7 +296,7 @@ router.get('/security', authenticate, requireAdmin, async (req, res) => {
     // Session scadute
     const sessionExpired = await prisma.activityLog.count({
       where: {
-        tenantId: req.person.tenantId,
+        tenantId: getEffectiveTenantId(req),
         action: 'AUTH_SESSION_EXPIRED',
         timestamp: { gte: startDate },
         deletedAt: null
@@ -309,7 +306,7 @@ router.get('/security', authenticate, requireAdmin, async (req, res) => {
     // Operazioni admin
     const adminActions = await prisma.activityLog.count({
       where: {
-        tenantId: req.person.tenantId,
+        tenantId: getEffectiveTenantId(req),
         category: 'ADMIN',
         timestamp: { gte: startDate },
         deletedAt: null
@@ -320,7 +317,7 @@ router.get('/security', authenticate, requireAdmin, async (req, res) => {
     const loginsByIp = await prisma.activityLog.groupBy({
       by: ['ipAddress'],
       where: {
-        tenantId: req.person.tenantId,
+        tenantId: getEffectiveTenantId(req),
         action: { in: ['AUTH_LOGIN_SUCCESS', 'AUTH_LOGIN_FAILED'] },
         timestamp: { gte: startDate },
         deletedAt: null,
@@ -348,12 +345,11 @@ router.get('/security', authenticate, requireAdmin, async (req, res) => {
   } catch (error) {
     logger.error('Activity Analytics: Error getting security report', {
       component: 'activity-analytics',
-      error: error.message
+      error: 'Operazione non riuscita'
     });
     res.status(500).json({
       success: false,
-      error: 'Failed to retrieve security report',
-      message: error.message
+      error: 'Errore nel recupero del report di sicurezza',
     });
   }
 });

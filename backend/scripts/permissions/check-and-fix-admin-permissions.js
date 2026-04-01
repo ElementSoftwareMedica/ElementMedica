@@ -26,12 +26,17 @@ const ADMIN_PERMISSIONS = [
 async function checkAndFixAdminPermissions() {
   try {
     console.log('🔍 Checking admin permissions...');
-    
-    // 1. Trova l'utente admin
-    const admin = await prisma.person.findUnique({
-      where: { email: 'admin@example.com' },
+
+    // P48: Trova l'utente admin per email nel PersonTenantProfile
+    const adminProfile = await prisma.personTenantProfile.findFirst({
+      where: { email: 'admin@example.com', deletedAt: null },
+      select: { personId: true, tenantId: true }
+    });
+
+    const admin = adminProfile ? await prisma.person.findUnique({
+      where: { id: adminProfile.personId },
       include: {
-        roles: {
+        personRoles: {
           where: { isActive: true, deletedAt: null },
           include: {
             permissions: true,
@@ -43,28 +48,28 @@ async function checkAndFixAdminPermissions() {
           }
         }
       }
-    });
-    
+    }) : null;
+
     if (!admin) {
       console.log('❌ Admin user not found');
       return;
     }
-    
-    console.log('✅ Admin user found:', admin.email);
-    console.log('📋 Current roles count:', admin.roles.length);
-    
+
+    console.log('✅ Admin user found:', admin.id);
+    console.log('📋 Current roles count:', admin.personRoles.length);
+
     // 2. Verifica se ha un ruolo ADMIN
-    let adminRole = admin.roles.find(role => role.roleType === 'ADMIN');
-    
+    let adminRole = admin.personRoles.find(role => role.roleType === 'ADMIN');
+
     if (!adminRole) {
       console.log('⚠️  Admin role not found, creating one...');
-      
+
       // Crea un ruolo ADMIN per l'utente
       adminRole = await prisma.personRole.create({
         data: {
           personId: admin.id,
           roleType: 'ADMIN',
-          tenantId: admin.tenantId,
+          tenantId: adminProfile.tenantId,
           isActive: true,
           assignedBy: admin.id, // Auto-assegnato
           assignedAt: new Date()
@@ -73,38 +78,38 @@ async function checkAndFixAdminPermissions() {
           permissions: true
         }
       });
-      
+
       console.log('✅ Admin role created');
     } else {
       console.log('✅ Admin role found');
     }
-    
+
     // 3. Verifica i permessi attuali
     const currentPermissions = new Set();
-    
+
     adminRole.permissions.forEach(perm => {
       if (perm.isGranted) {
         currentPermissions.add(perm.permission);
       }
     });
-    
+
     console.log('📊 Current permissions count:', currentPermissions.size);
     console.log('📊 Expected permissions count:', ADMIN_PERMISSIONS.length);
-    
+
     // 4. Trova i permessi mancanti
     const missingPermissions = ADMIN_PERMISSIONS.filter(perm => !currentPermissions.has(perm));
-    
+
     if (missingPermissions.length === 0) {
       console.log('✅ All permissions are already assigned');
       return;
     }
-    
+
     console.log('⚠️  Missing permissions:', missingPermissions.length);
     console.log('Missing:', missingPermissions);
-    
+
     // 5. Aggiungi i permessi mancanti
     console.log('🔧 Adding missing permissions...');
-    
+
     for (const permission of missingPermissions) {
       try {
         await prisma.rolePermission.create({
@@ -137,7 +142,7 @@ async function checkAndFixAdminPermissions() {
         }
       }
     }
-    
+
     // 6. Verifica finale
     const updatedRole = await prisma.personRole.findUnique({
       where: { id: adminRole.id },
@@ -147,10 +152,10 @@ async function checkAndFixAdminPermissions() {
         }
       }
     });
-    
+
     console.log('✅ Final permissions count:', updatedRole.permissions.length);
     console.log('🎉 Admin permissions check and fix completed!');
-    
+
     // 7. Mostra un riepilogo dei permessi per categoria
     const permissionsByCategory = {
       companies: updatedRole.permissions.filter(p => p.permission.includes('COMPANIES')),
@@ -161,12 +166,12 @@ async function checkAndFixAdminPermissions() {
       reports: updatedRole.permissions.filter(p => p.permission.includes('REPORTS')),
       system: updatedRole.permissions.filter(p => ['ADMIN_PANEL', 'SYSTEM_SETTINGS', 'USER_MANAGEMENT'].includes(p.permission))
     };
-    
+
     console.log('\n📊 Permissions by category:');
     Object.entries(permissionsByCategory).forEach(([category, perms]) => {
       console.log(`  ${category}: ${perms.length} permissions`);
     });
-    
+
   } catch (error) {
     console.error('❌ Error:', error.message);
     console.error('Stack:', error.stack);

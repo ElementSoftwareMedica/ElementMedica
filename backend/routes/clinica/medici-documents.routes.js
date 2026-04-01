@@ -11,7 +11,7 @@
 import express from 'express';
 import prisma from '../../config/prisma-optimization.js';
 import logger from '../../utils/logger.js';
-import middleware from '../../auth/middleware.js';
+import middleware from '../../middleware/auth.js';
 import { checkAdvancedPermission } from '../../middleware/advanced-permissions.js';
 import { getEffectiveTenantId } from '../../utils/tenantHelper.js';
 
@@ -28,7 +28,7 @@ const { authenticate: authenticateToken } = middleware;
  * @access Authenticated + VIEW_MEDICI
  */
 router.get('/',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('medici', 'read'),
     async (req, res) => {
         try {
@@ -65,7 +65,7 @@ router.get('/',
         } catch (error) {
             logger.error('Failed to fetch person documents', {
                 component: 'medici-documents-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 personId: req.params.id
             });
 
@@ -87,7 +87,7 @@ router.get('/',
  * @access Authenticated + UPDATE_MEDICI
  */
 router.post('/',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('medici', 'update'),
     async (req, res) => {
         try {
@@ -186,14 +186,13 @@ router.post('/',
         } catch (error) {
             logger.error('Failed to upload person document', {
                 component: 'medici-documents-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 personId: req.params.id
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nel caricamento del documento',
-                message: error.message
             });
         }
     }
@@ -209,7 +208,7 @@ router.post('/',
  * @access Authenticated + VIEW_MEDICI
  */
 router.get('/:docId/versions',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('medici', 'read'),
     async (req, res) => {
         try {
@@ -251,7 +250,7 @@ router.get('/:docId/versions',
         } catch (error) {
             logger.error('Failed to fetch document versions', {
                 component: 'medici-documents-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 docId: req.params.docId
             });
 
@@ -273,7 +272,7 @@ router.get('/:docId/versions',
  * @access Authenticated + UPDATE_MEDICI
  */
 router.delete('/:docId',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('medici', 'update'),
     async (req, res) => {
         try {
@@ -328,7 +327,7 @@ router.delete('/:docId',
         } catch (error) {
             logger.error('Failed to delete person document', {
                 component: 'medici-documents-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 docId: req.params.docId
             });
 

@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { GDPREntityTemplate } from '../../templates/gdpr-entity-page/GDPREntityTemplate';
-import { DataTableColumn } from '../../components/shared/tables/DataTable';
+import { GDPREntityTemplate, DataTableColumn } from '../../templates/gdpr-entity-page/GDPREntityTemplate';
 import { Badge } from '../../design-system';
 import {
   Building2,
@@ -59,11 +58,6 @@ export const PersonsPage: React.FC<PersonsPageProps> = ({
   const { filteredPersons: existingPersonsForImport, refetch: refetchPersonsForImport } = useAllPersonsForImport();
   const { filteredPersons: existingPersons, refetch: refetchPersons } = useAllPersons();
   const { companies: existingCompanies, refresh: refreshCompanies } = useCompanies();
-
-  // Debug logging per capire cosa restituisce useAllPersonsForImport
-  console.log('🔍 PersonsPage - existingPersonsForImport:', existingPersonsForImport?.length || 0, 'elementi');
-  console.log('🔍 PersonsPage - existingPersons:', existingPersons?.length || 0, 'elementi');
-  console.log('🔍 PersonsPage - existingCompanies:', existingCompanies?.length || 0, 'elementi');
 
   // Determina il titolo e sottotitolo in base al tipo di filtro
   const pageTitle = title || (() => {
@@ -522,7 +516,7 @@ export const PersonsPage: React.FC<PersonsPageProps> = ({
       void refetchPersons();
       void refreshCompanies();
     } catch (error) {
-      console.error('Errore durante l\'aggiornamento dei dati:', error);
+      if (import.meta.env.DEV) console.error('Errore durante l\'aggiornamento dei dati:', error);
     }
   };
 
@@ -548,11 +542,11 @@ export const PersonsPage: React.FC<PersonsPageProps> = ({
 
       setShowImportModal(false);
       await refetchPersons();
-    } catch (error: any) {
-      console.error('Errore durante l\'importazione:', error);
+    } catch (error: unknown) {
+      if (import.meta.env.DEV) console.error('Errore durante l\'importazione:', error);
       showToast({
         type: 'error',
-        message: error.message || 'Errore durante l\'importazione delle persone'
+        message: 'Errore durante l\'importazione delle persone'
       });
     }
   };

@@ -12,7 +12,7 @@ const FormTemplatesPage = React.lazy(() => import('./FormTemplatesPage'));
 export const FormTemplatesPageLazy: React.FC = () => {
   return (
     <ErrorBoundary>
-      <Suspense fallback={<LoadingFallback message="Loading Form Templates..." />}>
+      <Suspense fallback={<LoadingFallback message="Caricamento modelli moduli..." />}>
         <FormTemplatesPage />
       </Suspense>
     </ErrorBoundary>

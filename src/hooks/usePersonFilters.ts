@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import { apiGet } from '../services/api';
-import { 
-  Person, 
-  FilterConfig, 
-  filterPersonsByRoleLevel, 
-  filterEmployees, 
+import {
+  Person,
+  FilterConfig,
+  filterPersonsByRoleLevel,
+  filterEmployees,
   filterTrainers,
-  applyCustomFilter 
+  applyCustomFilter
 } from '../services/roleHierarchyService';
 
 export interface UsePersonFiltersOptions {
@@ -26,6 +26,17 @@ export interface UsePersonFiltersReturn {
   totalCount: number;
   filteredCount: number;
 }
+
+/** Formati possibili di risposta dall'API /api/v1/persons */
+interface PersonsApiResponse {
+  persons?: Record<string, unknown>[];
+  data?: { persons?: Record<string, unknown>[] } | Record<string, unknown>[];
+  items?: Record<string, unknown>[];
+  results?: Record<string, unknown>[];
+  rows?: Record<string, unknown>[];
+}
+
+type PersonsResponse = Record<string, unknown>[] | PersonsApiResponse;
 
 /**
  * Hook personalizzato per la gestione delle persone con filtri gerarchici
@@ -48,16 +59,16 @@ export const usePersonFilters = ({
     switch (filterType) {
       case 'employees':
         return filterEmployees(persons);
-      
+
       case 'trainers':
         return filterTrainers(persons);
-      
+
       case 'custom':
         if (filterConfig) {
           return applyCustomFilter(persons, filterConfig);
         }
         return persons;
-      
+
       case 'all':
       default:
         return persons;
@@ -65,27 +76,32 @@ export const usePersonFilters = ({
   }, [persons, filterType, filterConfig]);
 
   // Helper per estrarre lista da possibili formati di risposta
-  const extractList = (resp: any): any[] => {
+  const extractList = (resp: PersonsResponse): Record<string, unknown>[] => {
     if (!resp) return [];
     if (Array.isArray(resp)) return resp;
-    if (Array.isArray(resp?.persons)) return resp.persons; // Risposta paginata v1
-    if (Array.isArray(resp?.data?.persons)) return resp.data.persons; // Variante annidata
-    if (Array.isArray(resp?.data)) return resp.data; // Risposta con data: []
-    if (Array.isArray(resp?.items)) return resp.items; // Risposta con items: []
-    if (Array.isArray(resp?.results)) return resp.results; // Variante results: []
-    if (Array.isArray(resp?.rows)) return resp.rows; // Variante rows: []
+    const r = resp as PersonsApiResponse;
+    if (Array.isArray(r?.persons)) return r.persons!; // Risposta paginata v1
+    if (r?.data && !Array.isArray(r.data) && Array.isArray((r.data as { persons?: Record<string, unknown>[] }).persons)) return (r.data as { persons: Record<string, unknown>[] }).persons; // Variante annidata
+    if (Array.isArray(r?.data)) return r.data as Record<string, unknown>[]; // Risposta con data: []
+    if (Array.isArray(r?.items)) return r.items!; // Risposta con items: []
+    if (Array.isArray(r?.results)) return r.results!; // Variante results: []
+    if (Array.isArray(r?.rows)) return r.rows!; // Variante rows: []
     return [];
   };
 
-  // Normalizza alias dei campi lato frontend per consistenza (es. codiceFiscale/fiscalCode -> taxCode)
-  const mapAliases = (items: any[]): Person[] => {
-    return items.map((p: any) => {
-      // Preserva il valore se già presente, altrimenti usa alias conosciuti (camelCase e snake_case)
-      const taxCode = p.taxCode ?? p.codiceFiscale ?? p.fiscalCode ?? p.codice_fiscale ?? p.fiscal_code ?? p.cf;
+  // Normalizza alias dei campi lato frontend per consistenza
+  // P59: Aggiunge mapping personRoles -> roles per compatibilità con filterPersonsByRoleLevel
+  const mapAliases = (items: Record<string, unknown>[]): Person[] => {
+    return items.map((p: Record<string, unknown>) => {
+      // Preserva il valore se già presente, altrimenti usa alias conosciuti
+      const taxCode = (p.taxCode ?? p.codiceFiscale ?? p.fiscalCode ?? p.codice_fiscale ?? p.fiscal_code ?? p.cf) as string | undefined;
+      // P59: Il backend restituisce personRoles, ma filterPersonsByRoleLevel usa roles
+      const roles = (p.roles ?? p.personRoles ?? []) as string[];
       return {
         ...p,
-        ...(taxCode ? { taxCode } : {})
-      } as Person;
+        ...(taxCode ? { taxCode } : {}),
+        roles // P59: Assicura che roles sia sempre presente per il filtro client-side
+      } as unknown as Person;
     });
   };
 
@@ -94,25 +110,24 @@ export const usePersonFilters = ({
     try {
       setLoading(true);
       setError(null);
-      
+
       // Costruzione parametri: includi soft-deleted quando richiesto
       const LIMIT = 1000; // pagina ampia per l'import
       const qs = new URLSearchParams();
       if (includeDeleted) qs.set('includeDeleted', 'true');
       qs.set('limit', String(LIMIT));
-      
+
       // Strategia: per l'import recupera tutte le pagine finché disponibili
       let page = 1;
-      let all: any[] = [];
+      let all: Record<string, unknown>[] = [];
       let keepFetching = true;
 
       while (keepFetching) {
         qs.set('page', String(page));
         const url = `/api/v1/persons${qs.toString() ? `?${qs.toString()}` : ''}`;
 
-        // Debug leggero
-        console.log(`usePersonFilters: fetching ${url}`);
-        const resp: any = await apiGet<any>(url);
+        // fetch persons page
+        const resp = await apiGet<PersonsResponse>(url);
         const chunk = extractList(resp);
 
         // Se l'API ignora la paginazione e restituisce sempre l'intera lista, evita duplicati
@@ -120,8 +135,8 @@ export const usePersonFilters = ({
           all = chunk;
         } else {
           // Accoda evitando duplicati per id
-          const existingIds = new Set(all.map((x: any) => x.id));
-          const toAdd = chunk.filter((x: any) => x && !existingIds.has(x.id));
+          const existingIds = new Set(all.map((x) => x.id));
+          const toAdd = chunk.filter((x) => x && !existingIds.has(x.id));
           all = all.concat(toAdd);
         }
 
@@ -137,15 +152,13 @@ export const usePersonFilters = ({
 
       const list: Person[] = mapAliases(all);
 
-      console.log(`usePersonFilters: fetched ${list.length} persons (includeDeleted=${includeDeleted}, filterType=${filterType})`);
       if (list.length > 0) {
-        console.log('usePersonFilters: sample item', list[0]);
       }
 
       setPersons(list);
     } catch (err) {
-      console.error('Error fetching persons:', err);
-      setError(err instanceof Error ? err.message : 'Errore nel caricamento delle persone');
+      if (import.meta.env.DEV) console.error('Error fetching persons:', err);
+      setError('Errore nel caricamento delle persone');
       setPersons([]);
     } finally {
       setLoading(false);

@@ -69,29 +69,20 @@ export const useRoleForm = (
 
   const loadRolePermissions = async (roleType: string) => {
     try {
-      console.log('🔍 [useRoleForm] Loading permissions for role:', roleType);
       
       const rolePermissions = await rolesService.getRolePermissions(roleType);
-      console.log('🔍 [useRoleForm] Received permissions from API:', rolePermissions);
-      console.log('🔍 [useRoleForm] Permissions type:', typeof rolePermissions);
-      console.log('🔍 [useRoleForm] Is array:', Array.isArray(rolePermissions));
-      console.log('🔍 [useRoleForm] Length:', rolePermissions?.length);
       
       // Convert array of permissions to Record<string, boolean>
       const permissionsMap: Record<string, boolean> = {};
       if (Array.isArray(rolePermissions)) {
         rolePermissions.forEach((permission: string) => {
-          console.log('🔍 [useRoleForm] Processing permission:', permission);
           // Backend returns permissions already normalized (uppercase)
           // Use them directly as keys
           permissionsMap[permission] = true;
         });
       } else {
-        console.warn('🔍 [useRoleForm] Permissions is not an array:', rolePermissions);
       }
       
-      console.log('🔍 [useRoleForm] Final permissions map:', permissionsMap);
-      console.log('🔍 [useRoleForm] Permissions map keys:', Object.keys(permissionsMap));
       
       // Update form with loaded permissions
       setFormData(prev => {
@@ -99,13 +90,10 @@ export const useRoleForm = (
           ...prev,
           permissions: permissionsMap
         };
-        console.log('🔍 [useRoleForm] Updated form data:', newFormData);
         return newFormData;
       });
       
-      console.log('🔍 [useRoleForm] Form data updated with permissions successfully');
     } catch (error) {
-      console.error('❌ [useRoleForm] Error loading role permissions:', error);
       setError('Errore nel caricamento dei permessi del ruolo');
     }
   };

@@ -12,7 +12,7 @@ const CoursesPage = React.lazy(() => import('./CoursesPage'));
 export const CoursesPageLazy: React.FC = () => {
   return (
     <ErrorBoundary>
-      <Suspense fallback={<LoadingFallback message="Loading Courses..." />}>
+      <Suspense fallback={<LoadingFallback message="Caricamento corsi..." />}>
         <CoursesPage />
       </Suspense>
     </ErrorBoundary>

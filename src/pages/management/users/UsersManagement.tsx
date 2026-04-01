@@ -42,9 +42,12 @@ import {
 import { useAuth } from '../../../hooks/auth/useAuth';
 import { apiGet } from '../../../services/api';
 import { managementApi, type CreatePersonData, type UpdatePersonData } from '../api';
+import { CRUDButton } from '../../../components/shared/CRUDButton';
+import { useTenantFilter } from '../../../context/TenantFilterContext';
 import type { Tenant, PersonTenantAccess, TenantAccessLevel } from '../types';
+import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
 
-interface User {
+interface PersonData {
     id: string;
     firstName: string;
     lastName: string;
@@ -90,11 +93,13 @@ const ROLE_LABELS: Record<string, string> = {
 const UsersManagement: React.FC = () => {
     const navigate = useNavigate();
     const { user: currentUser } = useAuth();
-    const [users, setUsers] = useState<User[]>([]);
+    const { confirm: confirmDialog } = useConfirmDialog();
+    const { getTenantFilterParams, tenantFilterKey, isReady } = useTenantFilter();
+    const [persons, setPersons] = useState<PersonData[]>([]);
     const [tenants, setTenants] = useState<Tenant[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [selectedUser, setSelectedUser] = useState<User | null>(null);
+    const [selectedPerson, setSelectedPerson] = useState<PersonData | null>(null);
     const [showFilters, setShowFilters] = useState(false);
     const [showUserModal, setShowUserModal] = useState(false);
     const [showTenantModal, setShowTenantModal] = useState(false);
@@ -109,35 +114,49 @@ const UsersManagement: React.FC = () => {
         hasMultipleTenants: false
     });
 
-    // Load data on mount
-    useEffect(() => {
-        loadData();
-    }, []);
-
-    const loadData = async () => {
+    // Load data with tenant filter
+    const loadData = useCallback(async () => {
         try {
             setLoading(true);
             setError(null);
 
+            // Get tenant filter params
+            const tenantParams = getTenantFilterParams();
+
+            // Build query string with tenant filter
+            const params = new URLSearchParams({ limit: '500' });
+            if (tenantParams.tenantIds) {
+                params.append('tenantIds', tenantParams.tenantIds.join(','));
+            }
+            if (tenantParams.allTenants) {
+                params.append('allTenants', 'true');
+            }
+
             // Load users and tenants in parallel
             const [usersResponse, tenantsResponse] = await Promise.all([
-                apiGet<{ data: User[]; total: number }>('/api/v1/persons?limit=500'),
+                apiGet<{ data: PersonData[]; total: number }>(`/api/v1/persons?${params.toString()}`),
                 managementApi.getMyTenants()
             ]);
 
-            setUsers(usersResponse.data || []);
+            setPersons(usersResponse.data || []);
             setTenants(tenantsResponse.data || []);
-        } catch (err: any) {
-            console.error('Error loading data:', err);
-            setError(err.message || 'Errore nel caricamento dei dati');
+        } catch (err: unknown) {
+            setError('Errore nel caricamento dei dati');
         } finally {
             setLoading(false);
         }
-    };
+    }, [getTenantFilterParams, tenantFilterKey]);
 
-    // Filter users based on current filters
-    const filteredUsers = useMemo(() => {
-        return users.filter(user => {
+    // Load data when tenant filter is ready or changes
+    useEffect(() => {
+        if (isReady) {
+            loadData();
+        }
+    }, [loadData, isReady]);
+
+    // Filter persons based on current filters
+    const filteredPersons = useMemo(() => {
+        return persons.filter(user => {
             // Search filter
             if (filters.search) {
                 const searchLower = filters.search.toLowerCase();
@@ -183,71 +202,69 @@ const UsersManagement: React.FC = () => {
             const firstNameB = (b.firstName || '').toLowerCase();
             return firstNameA.localeCompare(firstNameB);
         });
-    }, [users, filters]);
+    }, [persons, filters]);
 
     // Get primary role for display
-    const getPrimaryRole = (user: User): string => {
+    const getPrimaryRole = (user: PersonData): string => {
         if (user.globalRole) return user.globalRole;
         const primaryRole = user.personRoles?.find(r => r.isActive);
         return primaryRole?.roleType || 'EMPLOYEE';
     };
 
-    // Count users by role
+    // Count persons by role
     const roleStats = useMemo(() => {
         const stats: Record<string, number> = {};
-        users.forEach(user => {
+        persons.forEach(user => {
             const role = getPrimaryRole(user);
             stats[role] = (stats[role] || 0) + 1;
         });
         return stats;
-    }, [users]);
+    }, [persons]);
 
     // Handle user actions
-    const handleViewUser = (user: User) => {
+    const handleViewUser = (user: PersonData) => {
         // Naviga alla pagina di dettaglio della persona
         navigate(`/management/persons/${user.id}`);
     };
 
-    const handleRowClick = (user: User) => {
+    const handleRowClick = (user: PersonData) => {
         // Naviga alla pagina di dettaglio quando si clicca sulla riga
         navigate(`/management/persons/${user.id}`);
     };
 
-    const handleEditUser = (user: User) => {
-        setSelectedUser(user);
+    const handleEditUser = (user: PersonData) => {
+        setSelectedPerson(user);
         setShowEditModal(true);
     };
 
-    const handleEditTenantAccess = (user: User) => {
-        setSelectedUser(user);
+    const handleEditTenantAccess = (user: PersonData) => {
+        setSelectedPerson(user);
         setShowTenantModal(true);
     };
 
-    const handleDeleteUser = async (user: User) => {
-        if (!confirm(`Sei sicuro di voler disattivare l'utente ${user.lastName} ${user.firstName}?`)) {
+    const handleDeleteUser = async (user: PersonData) => {
+        if (!(await confirmDialog({ title: 'Disattiva utente', message: `Sei sicuro di voler disattivare l'utente ${user.lastName} ${user.firstName}?`, variant: 'warning', confirmLabel: 'Disattiva' }))) {
             return;
         }
         try {
             await managementApi.togglePersonStatus(user.id, false);
             await loadData();
-        } catch (err: any) {
-            console.error('Error deactivating user:', err);
-            setError(err.message || 'Errore nella disattivazione utente');
+        } catch (err: unknown) {
+            setError('Errore nella disattivazione utente');
         }
     };
 
-    const handleToggleUserStatus = async (user: User) => {
+    const handleToggleUserStatus = async (user: PersonData) => {
         const newStatus = !user.isActive;
         const action = newStatus ? 'riattivare' : 'disattivare';
-        if (!confirm(`Sei sicuro di voler ${action} l'utente ${user.lastName} ${user.firstName}?`)) {
+        if (!(await confirmDialog({ title: newStatus ? 'Riattiva utente' : 'Disattiva utente', message: `Sei sicuro di voler ${action} l'utente ${user.lastName} ${user.firstName}?`, variant: 'warning', confirmLabel: newStatus ? 'Riattiva' : 'Disattiva' }))) {
             return;
         }
         try {
             await managementApi.togglePersonStatus(user.id, newStatus);
             await loadData();
-        } catch (err: any) {
-            console.error('Error toggling user status:', err);
-            setError(err.message || 'Errore nel cambio stato utente');
+        } catch (err: unknown) {
+            setError('Errore nel cambio stato utente');
         }
     };
 
@@ -258,7 +275,7 @@ const UsersManagement: React.FC = () => {
 
     const handleEditSuccess = async () => {
         setShowEditModal(false);
-        setSelectedUser(null);
+        setSelectedPerson(null);
         await loadData();
     };
 
@@ -297,7 +314,7 @@ const UsersManagement: React.FC = () => {
                         Gestione Utenti
                     </h1>
                     <p className="text-gray-500 mt-1">
-                        {filteredUsers.length} utenti su {users.length} totali
+                        {filteredPersons.length} utenti su {persons.length} totali
                     </p>
                 </div>
                 <div className="flex items-center gap-3">
@@ -318,25 +335,26 @@ const UsersManagement: React.FC = () => {
                         <Filter className="w-5 h-5" />
                         Filtri
                     </button>
-                    <button
+                    <CRUDButton
+                        operation="create"
                         onClick={() => setShowCreateModal(true)}
                         className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
                     >
                         <Plus className="w-5 h-5" />
                         Nuovo Utente
-                    </button>
+                    </CRUDButton>
                 </div>
             </div>
 
             {/* Stats Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                 <div className="bg-white rounded-xl border border-gray-200 p-4">
-                    <div className="text-2xl font-bold text-gray-900">{users.length}</div>
+                    <div className="text-2xl font-bold text-gray-900">{persons.length}</div>
                     <div className="text-sm text-gray-500">Totali</div>
                 </div>
                 <div className="bg-white rounded-xl border border-gray-200 p-4">
                     <div className="text-2xl font-bold text-green-600">
-                        {users.filter(u => u.isActive).length}
+                        {persons.filter(u => u.isActive).length}
                     </div>
                     <div className="text-sm text-gray-500">Attivi</div>
                 </div>
@@ -468,14 +486,14 @@ const UsersManagement: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
-                            {filteredUsers.length === 0 ? (
+                            {filteredPersons.length === 0 ? (
                                 <tr>
                                     <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
                                         Nessun utente trovato
                                     </td>
                                 </tr>
                             ) : (
-                                filteredUsers.map(user => (
+                                filteredPersons.map(user => (
                                     <tr
                                         key={user.id}
                                         onClick={() => handleRowClick(user)}
@@ -594,30 +612,30 @@ const UsersManagement: React.FC = () => {
             </div>
 
             {/* User Detail Modal */}
-            {showUserModal && selectedUser && (
+            {showUserModal && selectedPerson && (
                 <UserDetailModal
-                    user={selectedUser}
+                    user={selectedPerson}
                     tenants={tenants}
                     onClose={() => {
                         setShowUserModal(false);
-                        setSelectedUser(null);
+                        setSelectedPerson(null);
                     }}
                 />
             )}
 
             {/* Tenant Access Modal */}
-            {showTenantModal && selectedUser && (
+            {showTenantModal && selectedPerson && (
                 <TenantAccessModal
-                    user={selectedUser}
+                    user={selectedPerson}
                     tenants={tenants}
                     onClose={() => {
                         setShowTenantModal(false);
-                        setSelectedUser(null);
+                        setSelectedPerson(null);
                     }}
                     onSave={async () => {
                         await loadData();
                         setShowTenantModal(false);
-                        setSelectedUser(null);
+                        setSelectedPerson(null);
                     }}
                 />
             )}
@@ -632,13 +650,13 @@ const UsersManagement: React.FC = () => {
             )}
 
             {/* Edit User Modal */}
-            {showEditModal && selectedUser && (
+            {showEditModal && selectedPerson && (
                 <EditUserModal
-                    user={selectedUser}
+                    user={selectedPerson}
                     tenants={tenants}
                     onClose={() => {
                         setShowEditModal(false);
-                        setSelectedUser(null);
+                        setSelectedPerson(null);
                     }}
                     onSuccess={handleEditSuccess}
                 />
@@ -651,7 +669,7 @@ const UsersManagement: React.FC = () => {
  * User Detail Modal Component
  */
 const UserDetailModal: React.FC<{
-    user: User;
+    user: PersonData;
     tenants: Tenant[];
     onClose: () => void;
 }> = ({ user, tenants, onClose }) => {
@@ -798,7 +816,7 @@ const UserDetailModal: React.FC<{
  * Tenant Access Modal Component
  */
 const TenantAccessModal: React.FC<{
-    user: User;
+    user: PersonData;
     tenants: Tenant[];
     onClose: () => void;
     onSave: () => Promise<void>;
@@ -878,9 +896,8 @@ const TenantAccessModal: React.FC<{
             }
 
             await onSave();
-        } catch (err: any) {
-            console.error('Error saving tenant access:', err);
-            setError(err.message || 'Errore nel salvataggio degli accessi tenant');
+        } catch (err: unknown) {
+            setError('Errore nel salvataggio degli accessi tenant');
         } finally {
             setSaving(false);
         }
@@ -1022,9 +1039,8 @@ const CreateUserModal: React.FC<{
         try {
             await managementApi.createPerson(formData);
             await onSuccess();
-        } catch (err: any) {
-            console.error('Error creating user:', err);
-            setError(err.message || 'Errore nella creazione utente');
+        } catch (err: unknown) {
+            setError('Errore nella creazione utente');
         } finally {
             setSaving(false);
         }
@@ -1210,7 +1226,7 @@ const CreateUserModal: React.FC<{
  * Edit User Modal Component
  */
 const EditUserModal: React.FC<{
-    user: User;
+    user: PersonData;
     tenants: Tenant[];
     onClose: () => void;
     onSuccess: () => Promise<void>;
@@ -1239,9 +1255,8 @@ const EditUserModal: React.FC<{
         try {
             await managementApi.updatePerson(user.id, formData);
             await onSuccess();
-        } catch (err: any) {
-            console.error('Error updating user:', err);
-            setError(err.message || 'Errore nell\'aggiornamento utente');
+        } catch (err: unknown) {
+            setError('Errore nell\'aggiornamento utente');
         } finally {
             setSaving(false);
         }

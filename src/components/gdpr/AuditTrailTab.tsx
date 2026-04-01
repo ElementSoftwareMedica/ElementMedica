@@ -52,6 +52,7 @@ import {
 } from '@mui/icons-material';
 import { UseAuditTrailReturn, AuditLogEntry, AuditTrailFilters } from '../../types/gdpr';
 import { format, formatDistanceToNow } from 'date-fns';
+import { DatePickerElegante } from '../ui/DatePickerElegante';
 
 interface AuditTrailTabProps {
   hook: UseAuditTrailReturn;
@@ -122,7 +123,6 @@ export const AuditTrailTab: React.FC<AuditTrailTabProps> = ({ hook }) => {
         await exportToJSON();
       }
     } catch (error) {
-      console.error(`Error exporting to ${format}:`, error);
     } finally {
       setExporting(null);
     }
@@ -199,31 +199,31 @@ export const AuditTrailTab: React.FC<AuditTrailTabProps> = ({ hook }) => {
       {/* Header */}
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
         <Typography variant="h6" component="h2">
-          GDPR Audit Trail
+          GDPR Registro attività
         </Typography>
-        
+
         <Stack direction="row" spacing={1} alignItems="center">
           {hasFilters && (
             <Chip
-              label="Filtered"
+              label="Filtrato"
               color="primary"
               size="small"
               onDelete={handleClearFilters}
             />
           )}
-          
-          <Tooltip title="Apply filters">
+
+          <Tooltip title="Applica filtri">
             <IconButton onClick={() => setFilterDialog(true)} size="small">
               <FilterIcon />
             </IconButton>
           </Tooltip>
-          
-          <Tooltip title="Refresh audit trail">
+
+          <Tooltip title="Aggiorna registro attività">
             <IconButton onClick={refreshAuditTrail} disabled={loading} size="small">
               <RefreshIcon />
             </IconButton>
           </Tooltip>
-          
+
           <Button
             variant="outlined"
             startIcon={<DownloadIcon />}
@@ -233,7 +233,7 @@ export const AuditTrailTab: React.FC<AuditTrailTabProps> = ({ hook }) => {
           >
             Export CSV
           </Button>
-          
+
           <Button
             variant="outlined"
             startIcon={<DownloadIcon />}
@@ -265,7 +265,7 @@ export const AuditTrailTab: React.FC<AuditTrailTabProps> = ({ hook }) => {
             </Typography>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent>
             <Typography variant="h6" color="success.main" gutterBottom>
@@ -276,7 +276,7 @@ export const AuditTrailTab: React.FC<AuditTrailTabProps> = ({ hook }) => {
             </Typography>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent>
             <Typography variant="h6" color="info.main" gutterBottom>
@@ -287,7 +287,7 @@ export const AuditTrailTab: React.FC<AuditTrailTabProps> = ({ hook }) => {
             </Typography>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent>
             <Typography variant="h6" color="warning.main" gutterBottom>
@@ -306,7 +306,7 @@ export const AuditTrailTab: React.FC<AuditTrailTabProps> = ({ hook }) => {
           <Typography variant="h6" gutterBottom>
             Audit Log Entries
           </Typography>
-          
+
           {loading && auditLogs.length === 0 ? (
             <Box sx={{ py: 3 }}>
               <LinearProgress />
@@ -320,7 +320,7 @@ export const AuditTrailTab: React.FC<AuditTrailTabProps> = ({ hook }) => {
                 No audit entries found
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                {hasFilters 
+                {hasFilters
                   ? 'Try adjusting your filters to see more results.'
                   : 'No GDPR-related activities have been logged yet.'
                 }
@@ -353,7 +353,7 @@ export const AuditTrailTab: React.FC<AuditTrailTabProps> = ({ hook }) => {
                             />
                           </Stack>
                         </TableCell>
-                        
+
                         <TableCell>
                           <Typography variant="body2">
                             {format(new Date(entry.timestamp), 'MMM dd, yyyy HH:mm:ss')}
@@ -362,17 +362,17 @@ export const AuditTrailTab: React.FC<AuditTrailTabProps> = ({ hook }) => {
                             {formatDistanceToNow(new Date(entry.timestamp))} ago
                           </Typography>
                         </TableCell>
-                        
+
                         <TableCell>
                           <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
                             {entry.ipAddress || 'N/A'}
                           </Typography>
                         </TableCell>
-                        
+
                         <TableCell>
-                          <Typography 
-                            variant="body2" 
-                            sx={{ 
+                          <Typography
+                            variant="body2"
+                            sx={{
                               maxWidth: 200,
                               overflow: 'hidden',
                               textOverflow: 'ellipsis',
@@ -382,9 +382,9 @@ export const AuditTrailTab: React.FC<AuditTrailTabProps> = ({ hook }) => {
                             {entry.userAgent || 'N/A'}
                           </Typography>
                         </TableCell>
-                        
+
                         <TableCell align="right">
-                          <Tooltip title="View details">
+                          <Tooltip title="Visualizza dettagli">
                             <IconButton
                               size="small"
                               onClick={() => handleViewDetails(entry)}
@@ -398,7 +398,7 @@ export const AuditTrailTab: React.FC<AuditTrailTabProps> = ({ hook }) => {
                   </TableBody>
                 </Table>
               </TableContainer>
-              
+
               {/* Pagination */}
               <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
                 <Pagination
@@ -410,9 +410,9 @@ export const AuditTrailTab: React.FC<AuditTrailTabProps> = ({ hook }) => {
                   showLastButton
                 />
               </Box>
-              
+
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'center', mt: 1 }}>
-                Showing {((pagination.currentPage - 1) * pagination.pageSize) + 1} to {Math.min(pagination.currentPage * pagination.pageSize, pagination.totalItems)} of {pagination.totalItems} entries
+                Mostra {((pagination.currentPage - 1) * pagination.pageSize) + 1} - {Math.min(pagination.currentPage * pagination.pageSize, pagination.totalItems)} di {pagination.totalItems} voci
               </Typography>
             </>
           )}
@@ -423,29 +423,29 @@ export const AuditTrailTab: React.FC<AuditTrailTabProps> = ({ hook }) => {
       <Accordion sx={{ mt: 3 }}>
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
           <Typography variant="subtitle1">
-            About GDPR Audit Trail
+            Informazioni sul registro attività GDPR
           </Typography>
         </AccordionSummary>
         <AccordionDetails>
           <Typography variant="body2" paragraph>
-            The GDPR audit trail provides a comprehensive log of all privacy-related activities 
-            in your account. This includes:
+            Il registro attività GDPR fornisce un log completo di tutte le attività
+            relative alla privacy nel tuo account. Include:
           </Typography>
-          
+
           <ul>
-            <li><strong>Consent Management:</strong> When you grant or withdraw consent for data processing</li>
-            <li><strong>Data Exports:</strong> Requests for personal data under the right of access</li>
-            <li><strong>Deletion Requests:</strong> Requests for data deletion under the right to be forgotten</li>
-            <li><strong>Privacy Settings:</strong> Changes to your privacy preferences and settings</li>
+            <li><strong>Gestione consensi:</strong> Quando concedi o revochi il consenso al trattamento dei dati</li>
+            <li><strong>Esportazioni dati:</strong> Richieste di dati personali ai sensi del diritto di accesso</li>
+            <li><strong>Richieste di eliminazione:</strong> Richieste di cancellazione dei dati ai sensi del diritto all'oblio</li>
+            <li><strong>Impostazioni privacy:</strong> Modifiche alle tue preferenze e impostazioni sulla privacy</li>
           </ul>
-          
+
           <Typography variant="body2" paragraph>
-            Each entry includes technical details such as IP address and user agent to ensure 
-            the integrity and traceability of all privacy-related actions.
+            Ogni voce include dettagli tecnici come indirizzo IP e user agent per garantire
+            l'integrità e la tracciabilità di tutte le azioni relative alla privacy.
           </Typography>
-          
+
           <Typography variant="body2">
-            You can export this data at any time for your records or compliance purposes.
+            Puoi esportare questi dati in qualsiasi momento per i tuoi archivi o per finalità di conformità.
           </Typography>
         </AccordionDetails>
       </Accordion>
@@ -460,56 +460,58 @@ export const AuditTrailTab: React.FC<AuditTrailTabProps> = ({ hook }) => {
         <DialogTitle>
           <Stack direction="row" spacing={1} alignItems="center">
             <FilterIcon />
-            Filter Audit Trail
+            Filtra registro attività
           </Stack>
         </DialogTitle>
-        
+
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <FormControl fullWidth>
-              <InputLabel>Action Type</InputLabel>
+              <InputLabel>Tipo azione</InputLabel>
               <Select
                 value={tempFilters.action || ''}
                 onChange={(e) => handleFilterChange('action', e.target.value)}
-                label="Action Type"
+                label="Tipo azione"
               >
-                <MenuItem value="">All Actions</MenuItem>
-                <MenuItem value="consent_granted">Consent Granted</MenuItem>
-                <MenuItem value="consent_withdrawn">Consent Withdrawn</MenuItem>
-                <MenuItem value="data_export">Data Export</MenuItem>
-                <MenuItem value="deletion_request">Deletion Request</MenuItem>
-                <MenuItem value="privacy_settings_updated">Privacy Settings Updated</MenuItem>
+                <MenuItem value="">Tutte le azioni</MenuItem>
+                <MenuItem value="consent_granted">Consenso concesso</MenuItem>
+                <MenuItem value="consent_withdrawn">Consenso revocato</MenuItem>
+                <MenuItem value="data_export">Esportazione dati</MenuItem>
+                <MenuItem value="deletion_request">Richiesta eliminazione</MenuItem>
+                <MenuItem value="privacy_settings_updated">Impostazioni privacy aggiornate</MenuItem>
               </Select>
             </FormControl>
-            
+
             <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 2 }}>
-              <TextField
-                fullWidth
-                type="date"
-                label="Start Date"
-                value={tempFilters.startDate || ''}
-                onChange={(e) => handleFilterChange('startDate', e.target.value)}
-                InputLabelProps={{ shrink: true }}
-              />
-              
-              <TextField
-                fullWidth
-                type="date"
-                label="End Date"
-                value={tempFilters.endDate || ''}
-                onChange={(e) => handleFilterChange('endDate', e.target.value)}
-                InputLabelProps={{ shrink: true }}
-              />
+              <Box>
+                <Typography variant="body2" fontWeight={500} mb={0.5}>Data inizio</Typography>
+                <DatePickerElegante
+                  value={tempFilters.startDate || ''}
+                  onChange={(date) => handleFilterChange('startDate', date ? date.toISOString().split('T')[0] : '')}
+                  theme="teal"
+                  size="sm"
+                />
+              </Box>
+
+              <Box>
+                <Typography variant="body2" fontWeight={500} mb={0.5}>Data fine</Typography>
+                <DatePickerElegante
+                  value={tempFilters.endDate || ''}
+                  onChange={(date) => handleFilterChange('endDate', date ? date.toISOString().split('T')[0] : '')}
+                  theme="teal"
+                  size="sm"
+                />
+              </Box>
             </Box>
-            
+
             <TextField
               fullWidth
-              label="IP Address"
+              label="Indirizzo IP"
               value={tempFilters.ipAddress || ''}
               onChange={(e) => handleFilterChange('ipAddress', e.target.value)}
               placeholder="e.g., 192.168.1.1"
             />
-            
+
             <TextField
               fullWidth
               label="User Agent"
@@ -519,16 +521,16 @@ export const AuditTrailTab: React.FC<AuditTrailTabProps> = ({ hook }) => {
             />
           </Stack>
         </DialogContent>
-        
+
         <DialogActions>
           <Button onClick={handleClearFilters} startIcon={<ClearIcon />}>
             Clear All
           </Button>
           <Button onClick={() => setFilterDialog(false)}>
-            Cancel
+            Annulla
           </Button>
           <Button onClick={handleApplyFilters} variant="contained">
-            Apply Filters
+            Applica filtri
           </Button>
         </DialogActions>
       </Dialog>
@@ -541,16 +543,16 @@ export const AuditTrailTab: React.FC<AuditTrailTabProps> = ({ hook }) => {
         fullWidth
       >
         <DialogTitle>
-          Audit Entry Details
+          Dettagli voce audit
         </DialogTitle>
-        
+
         <DialogContent>
           {selectedEntry && (
             <Box>
               <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: 3 }}>
                 <Box>
                   <Typography variant="subtitle2" gutterBottom>
-                    Action
+                    Azione
                   </Typography>
                   <Chip
                     label={formatActionLabel(selectedEntry.action)}
@@ -558,57 +560,57 @@ export const AuditTrailTab: React.FC<AuditTrailTabProps> = ({ hook }) => {
                     variant="outlined"
                   />
                 </Box>
-                
+
                 <Box>
                   <Typography variant="subtitle2" gutterBottom>
-                    Timestamp
+                    Data e ora
                   </Typography>
                   <Typography variant="body2">
-                    {format(new Date(selectedEntry.timestamp), 'MMMM dd, yyyy HH:mm:ss')}
+                    {format(new Date(selectedEntry.timestamp), 'dd MMMM yyyy, HH:mm:ss')}
                   </Typography>
                 </Box>
-                
+
                 <Box>
                   <Typography variant="subtitle2" gutterBottom>
-                    IP Address
+                    Indirizzo IP
                   </Typography>
                   <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                    {selectedEntry.ipAddress || 'Not recorded'}
+                    {selectedEntry.ipAddress || 'Non registrato'}
                   </Typography>
                 </Box>
-                
+
                 <Box>
                   <Typography variant="subtitle2" gutterBottom>
-                    Entry ID
+                    ID voce
                   </Typography>
                   <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
                     {selectedEntry.id}
                   </Typography>
                 </Box>
-                
+
                 <Box sx={{ gridColumn: '1 / -1' }}>
                   <Typography variant="subtitle2" gutterBottom>
                     User Agent
                   </Typography>
                   <Typography variant="body2" sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
-                    {selectedEntry.userAgent || 'Not recorded'}
+                    {selectedEntry.userAgent || 'Non registrato'}
                   </Typography>
                 </Box>
               </Box>
-              
+
               <Divider sx={{ my: 3 }} />
-              
+
               <Typography variant="subtitle2" gutterBottom>
-                Additional Data
+                Dati aggiuntivi
               </Typography>
               {renderMetadata(selectedEntry.details || {})}
             </Box>
           )}
         </DialogContent>
-        
+
         <DialogActions>
           <Button onClick={() => setDetailDialog(false)}>
-            Close
+            Chiudi
           </Button>
         </DialogActions>
       </Dialog>

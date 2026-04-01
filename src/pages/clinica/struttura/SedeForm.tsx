@@ -27,8 +27,9 @@ import {
     ChevronDown,
     ChevronUp
 } from 'lucide-react';
-import { clinicaApi, type SedePoliambulatorio, type Poliambulatorio } from '../../../services/clinicaApi';
+import { clinicaApi, type SedePoliambulatorio, type SedePoliambulatorioInput, type Poliambulatorio } from '../../../services/clinicaApi';
 import { useToast } from '../../../hooks/useToast';
+import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
 import OrariAperturaEditor, { type OrarioGiornaliero } from '../../../components/clinica/OrariAperturaEditor';
 import ChiusureSpecialiEditor, { type ChiusuraSpeciale } from '../../../components/clinica/ChiusureSpecialiEditor';
 
@@ -82,6 +83,7 @@ const SedeForm: React.FC = () => {
     const poliambulatorioId = searchParams.get('poliambulatorioId');
     const queryClient = useQueryClient();
     const { showToast } = useToast();
+    const { confirmWarning } = useConfirmDialog();
     const isEditing = Boolean(id);
 
     const [formData, setFormData] = useState<FormData>(initialFormData);
@@ -196,8 +198,8 @@ const SedeForm: React.FC = () => {
 
     // Mutations
     const createMutation = useMutation({
-        mutationFn: (data: Partial<SedePoliambulatorio>) =>
-            clinicaApi.sedi.create(selectedPoliambulatorioId, data),
+        mutationFn: (data: SedePoliambulatorioInput) =>
+            clinicaApi.sedi.create(selectedPoliambulatorioId, data as Partial<SedePoliambulatorio>),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['sedi'] });
             queryClient.invalidateQueries({ queryKey: ['poliambulatori'] });
@@ -205,13 +207,13 @@ const SedeForm: React.FC = () => {
             navigate('/poliambulatorio/sedi');
         },
         onError: (error: Error) => {
-            showToast({ type: 'error', message: error.message || 'Errore durante la creazione' });
+            showToast({ type: 'error', message: 'Errore durante la creazione' });
         }
     });
 
     const updateMutation = useMutation({
-        mutationFn: (data: Partial<SedePoliambulatorio>) =>
-            clinicaApi.sedi.update(id!, data),
+        mutationFn: (data: SedePoliambulatorioInput) =>
+            clinicaApi.sedi.update(id!, data as Partial<SedePoliambulatorio>),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['sedi'] });
             queryClient.invalidateQueries({ queryKey: ['sede', id] });
@@ -219,7 +221,7 @@ const SedeForm: React.FC = () => {
             navigate('/poliambulatorio/sedi');
         },
         onError: (error: Error) => {
-            showToast({ type: 'error', message: error.message || 'Errore durante l\'aggiornamento' });
+            showToast({ type: 'error', message: 'Errore durante l\'aggiornamento' });
         }
     });
 
@@ -349,10 +351,7 @@ const SedeForm: React.FC = () => {
             attivo: c.attivo
         }));
 
-        const submitData: Partial<SedePoliambulatorio> & {
-            orariSettimanali?: typeof orariPerBackend;
-            chiusureSpeciali?: typeof chiusurePerBackend;
-        } = {
+        const submitData: SedePoliambulatorioInput = {
             nome: formData.nome,
             codice: formData.codice || undefined,
             indirizzo: formData.indirizzo,
@@ -384,8 +383,8 @@ const SedeForm: React.FC = () => {
         setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
     };
 
-    const handleCancel = () => {
-        if (isDirty && !confirm('Hai modifiche non salvate. Sei sicuro di voler uscire?')) {
+    const handleCancel = async () => {
+        if (isDirty && !(await confirmWarning('Modifiche non salvate', 'Hai modifiche non salvate. Sei sicuro di voler uscire?'))) {
             return;
         }
         navigate('/poliambulatorio/sedi');

@@ -4,7 +4,6 @@
  */
 
 import { DatabaseManager } from './manager.js';
-import { DatabaseBackupManager } from './backup.js';
 import { DatabaseMonitor, createDatabaseMonitor } from './monitoring.js';
 import { QueryOptimizer, createQueryOptimizer } from './query-optimizer.js';
 import { getDatabaseConfig, validateDatabaseConfig, createPrismaConfig } from '../config/database-config.js';
@@ -18,13 +17,12 @@ export class DatabaseService {
   constructor(environment = null) {
     this.environment = environment || process.env.NODE_ENV || 'development';
     this.config = getDatabaseConfig(this.environment);
-    
+
     // Initialize components
     this.manager = null;
-    this.backupManager = null;
     this.monitor = null;
     this.optimizer = null;
-    
+
     this.isInitialized = false;
     this.isShuttingDown = false;
   }
@@ -60,15 +58,6 @@ export class DatabaseService {
         component: 'database-service'
       });
 
-      // Initialize backup manager if enabled
-      if (this.config.backup?.enabled) {
-        this.backupManager = new DatabaseBackupManager(this.environment);
-        await this.backupManager.initialize();
-        logger.info('Database backup manager initialized', {
-          component: 'database-service'
-        });
-      }
-
       // Initialize monitoring if enabled
       if (this.config.monitoring?.enabled) {
         this.monitor = createDatabaseMonitor(this.environment);
@@ -81,12 +70,12 @@ export class DatabaseService {
       // Initialize query optimizer if enabled
       if (this.config.optimization?.enabled) {
         this.optimizer = createQueryOptimizer(this.environment);
-        
+
         // Connect optimizer to manager events
         this.manager.on('queryCompleted', (queryInfo) => {
           this.optimizer.analyzeQuery(queryInfo);
         });
-        
+
         logger.info('Query optimizer initialized', {
           component: 'database-service'
         });
@@ -96,12 +85,11 @@ export class DatabaseService {
       this.setupGracefulShutdown();
 
       this.isInitialized = true;
-      
+
       logger.info('Database service fully initialized', {
         environment: this.environment,
         features: {
           manager: true,
-          backup: !!this.backupManager,
           monitoring: !!this.monitor,
           optimization: !!this.optimizer
         },
@@ -174,61 +162,16 @@ export class DatabaseService {
   }
 
   /**
-   * Create database backup
-   * @param {object} options - Backup options
-   * @returns {Promise<string>} Backup file path
-   */
-  async createBackup(options = {}) {
-    this.ensureInitialized();
-    
-    if (!this.backupManager) {
-      throw new Error('Backup manager not initialized - backup feature disabled');
-    }
-    
-    return await this.backupManager.createBackup(options);
-  }
-
-  /**
-   * Restore from backup
-   * @param {string} backupPath - Path to backup file
-   * @param {object} options - Restore options
-   * @returns {Promise<void>}
-   */
-  async restoreBackup(backupPath, options = {}) {
-    this.ensureInitialized();
-    
-    if (!this.backupManager) {
-      throw new Error('Backup manager not initialized - backup feature disabled');
-    }
-    
-    return await this.backupManager.restoreBackup(backupPath, options);
-  }
-
-  /**
-   * List available backups
-   * @returns {Promise<Array>} List of backups
-   */
-  async listBackups() {
-    this.ensureInitialized();
-    
-    if (!this.backupManager) {
-      throw new Error('Backup manager not initialized - backup feature disabled');
-    }
-    
-    return await this.backupManager.listBackups();
-  }
-
-  /**
    * Get monitoring metrics
    * @returns {object} Current metrics
    */
   getMetrics() {
     this.ensureInitialized();
-    
+
     if (!this.monitor) {
       throw new Error('Monitor not initialized - monitoring feature disabled');
     }
-    
+
     return this.monitor.getMetrics();
   }
 
@@ -238,11 +181,11 @@ export class DatabaseService {
    */
   getPerformanceSummary() {
     this.ensureInitialized();
-    
+
     if (!this.monitor) {
       throw new Error('Monitor not initialized - monitoring feature disabled');
     }
-    
+
     return this.monitor.getPerformanceSummary();
   }
 
@@ -252,11 +195,11 @@ export class DatabaseService {
    */
   getOptimizationReport() {
     this.ensureInitialized();
-    
+
     if (!this.optimizer) {
       throw new Error('Optimizer not initialized - optimization feature disabled');
     }
-    
+
     return this.optimizer.getOptimizationReport();
   }
 
@@ -267,11 +210,11 @@ export class DatabaseService {
    */
   getModelOptimizations(modelName) {
     this.ensureInitialized();
-    
+
     if (!this.optimizer) {
       throw new Error('Optimizer not initialized - optimization feature disabled');
     }
-    
+
     return this.optimizer.getModelOptimizations(modelName);
   }
 
@@ -285,12 +228,10 @@ export class DatabaseService {
       environment: this.environment,
       features: {
         manager: !!this.manager,
-        backup: !!this.backupManager,
         monitoring: !!this.monitor,
         optimization: !!this.optimizer
       },
       config: {
-        backup: this.config.backup?.enabled || false,
         monitoring: this.config.monitoring?.enabled || false,
         optimization: this.config.optimization?.enabled || false
       },
@@ -308,11 +249,11 @@ export class DatabaseService {
   setupGracefulShutdown() {
     const shutdownHandler = async (signal) => {
       if (this.isShuttingDown) return;
-      
+
       logger.info(`Received ${signal}, initiating graceful shutdown...`, {
         component: 'database-service'
       });
-      
+
       await this.shutdown();
       process.exit(0);
     };
@@ -357,14 +298,6 @@ export class DatabaseService {
         });
       }
 
-      // Stop backup manager
-      if (this.backupManager) {
-        await this.backupManager.stop();
-        logger.debug('Backup manager stopped', {
-          component: 'database-service'
-        });
-      }
-
       // Disconnect database manager
       if (this.manager) {
         await this.manager.disconnect();
@@ -374,7 +307,7 @@ export class DatabaseService {
       }
 
       this.isInitialized = false;
-      
+
       logger.info('Database service shutdown completed', {
         component: 'database-service'
       });
@@ -451,7 +384,6 @@ export const getAnalyticsClient = () => {
 // Export all classes and functions
 export {
   DatabaseManager,
-  DatabaseBackupManager,
   DatabaseMonitor,
   QueryOptimizer,
   createDatabaseMonitor,
@@ -465,7 +397,6 @@ export {
 export default {
   DatabaseService,
   DatabaseManager,
-  DatabaseBackupManager,
   DatabaseMonitor,
   QueryOptimizer,
   getDatabaseService,

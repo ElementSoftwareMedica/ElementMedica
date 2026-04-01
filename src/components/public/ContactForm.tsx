@@ -95,7 +95,6 @@ export const ContactForm: React.FC<ContactFormProps> = ({
         marketingAccepted: false
       });
     } catch (error) {
-      console.error('Errore nell\'invio del form:', error);
       showToast({ message: 'Si è verificato un errore nell\'invio del messaggio. Riprova più tardi.', type: 'error' });
     } finally {
       setIsSubmitting(false);

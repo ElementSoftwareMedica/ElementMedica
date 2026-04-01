@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   FileText,
   Download,
@@ -13,8 +13,11 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import EntityListLayout from '../../components/layouts/EntityListLayout';
 import ResizableTable, { ResizableTableColumn } from '../../components/shared/ResizableTable';
 import { FilterPanel } from '../../components/shared/filters/FilterPanel';
+import { CRUDPrimaryButton } from '../../components/shared/CRUDButton';
 import { templateService } from '../../services/templateService';
 import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
+import { useTenantFilter } from '../../context/TenantFilterContext';
+import { useToast } from '../../hooks/useToast';
 import {
   Template,
   TemplateType,
@@ -41,11 +44,12 @@ const TemplateListPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { confirm, confirmDelete } = useConfirmDialog();
+  const { getTenantFilterParams, tenantFilterKey, isReady } = useTenantFilter();
 
   // State
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(false);
-  const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const { showToast } = useToast();
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -62,14 +66,10 @@ const TemplateListPage: React.FC = () => {
   const [pageSize, setPageSize] = useState(25);
   const [totalItems, setTotalItems] = useState(0);
 
-  // Load templates
-  useEffect(() => {
-    fetchTemplates();
-  }, [currentPage, pageSize, activeFilters, activeSort, searchTerm]);
-
-  const fetchTemplates = async () => {
+  const fetchTemplates = useCallback(async () => {
     setLoading(true);
     try {
+      const tenantParams = getTenantFilterParams();
       const params: TemplateListParams = {
         page: currentPage,
         limit: pageSize,
@@ -77,21 +77,29 @@ const TemplateListPage: React.FC = () => {
         type: activeFilters.type as TemplateType || undefined,
         category: activeFilters.category || undefined,
         isActive: activeFilters.status === 'active' ? true : activeFilters.status === 'inactive' ? false : undefined,
-        isDefault: activeFilters.default === 'true' ? true : undefined
-      };
+        isDefault: activeFilters.default === 'true' ? true : undefined,
+        ...(tenantParams.tenantIds && { tenantIds: tenantParams.tenantIds.join(',') }),
+        ...(tenantParams.allTenants && { allTenants: true })
+      } as TemplateListParams;
 
       const response = await templateService.list(params);
       setTemplates(response.data);
       setTotalItems(response.pagination.total);
     } catch (error) {
-      console.error('[TemplateListPage] Error fetching templates:', error);
-      setAlert({ type: 'error', message: 'Errore durante il caricamento dei template' });
+      showToast({ message: 'Errore durante il caricamento dei template', type: 'error' });
       setTemplates([]);
       setTotalItems(0);
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentPage, pageSize, searchTerm, activeFilters, getTenantFilterParams, tenantFilterKey]);
+
+  // Load templates
+  useEffect(() => {
+    if (isReady) {
+      fetchTemplates();
+    }
+  }, [fetchTemplates, isReady]);
 
   // Handle URL modal opening
   useEffect(() => {
@@ -119,11 +127,10 @@ const TemplateListPage: React.FC = () => {
 
     try {
       await templateService.delete(id);
-      setAlert({ type: 'success', message: 'Template eliminato con successo' });
+      showToast({ message: 'Template eliminato con successo', type: 'success' });
       await fetchTemplates();
     } catch (error) {
-      console.error('[TemplateListPage] Error deleting template:', error);
-      setAlert({ type: 'error', message: 'Errore durante l\'eliminazione del template' });
+      showToast({ message: 'Errore durante l\'eliminazione del template', type: 'error' });
     }
   };
 
@@ -143,11 +150,10 @@ const TemplateListPage: React.FC = () => {
       setSelectedIds([]);
       setSelectionMode(false);
       setSelectAll(false);
-      setAlert({ type: 'success', message: 'Template eliminati con successo' });
+      showToast({ message: 'Template eliminati con successo', type: 'success' });
       await fetchTemplates();
     } catch (error) {
-      console.error('[TemplateListPage] Error deleting templates:', error);
-      setAlert({ type: 'error', message: 'Errore durante l\'eliminazione multipla' });
+      showToast({ message: 'Errore durante l\'eliminazione multipla', type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -157,24 +163,22 @@ const TemplateListPage: React.FC = () => {
     try {
       const newName = `${template.name} (Copia)`;
       const duplicated = await templateService.duplicate(template.id, newName);
-      setAlert({ type: 'success', message: 'Template duplicato con successo' });
+      showToast({ message: 'Template duplicato con successo', type: 'success' });
       await fetchTemplates();
       // Navigate to edit the new template
       navigate(`/templates/${duplicated.id}`);
     } catch (error) {
-      console.error('[TemplateListPage] Error duplicating template:', error);
-      setAlert({ type: 'error', message: 'Errore durante la duplicazione' });
+      showToast({ message: 'Errore durante la duplicazione', type: 'error' });
     }
   };
 
   const handleSetDefault = async (template: Template) => {
     try {
       await templateService.setAsDefault(template.id);
-      setAlert({ type: 'success', message: 'Template impostato come predefinito' });
+      showToast({ message: 'Template impostato come predefinito', type: 'success' });
       await fetchTemplates();
     } catch (error) {
-      console.error('[TemplateListPage] Error setting default:', error);
-      setAlert({ type: 'error', message: 'Errore durante l\'impostazione come predefinito' });
+      showToast({ message: 'Errore durante l\'impostazione come predefinito', type: 'error' });
     }
   };
 
@@ -232,6 +236,9 @@ const TemplateListPage: React.FC = () => {
           CERTIFICATE: 'Attestato',
           INVOICE: 'Fattura',
           COURSE_PROGRAM: 'Programma',
+          PREVENTIVO: 'Preventivo',
+          SLIDES: 'Slides',
+          VISITA_MEDICA: 'Visita Medica',
           CUSTOM: 'Altro'
         };
         return <span>{typeLabels[row.tipo] || row.tipo}</span>;
@@ -284,8 +291,8 @@ const TemplateListPage: React.FC = () => {
       sortable: true,
       renderCell: (row: DataRow) => (
         <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${row.stato === 'Attivo'
-            ? 'bg-green-100 text-green-800'
-            : 'bg-gray-100 text-gray-800'
+          ? 'bg-green-100 text-green-800'
+          : 'bg-gray-100 text-gray-800'
           }`}>
           {row.stato}
         </span>
@@ -376,6 +383,9 @@ const TemplateListPage: React.FC = () => {
         { value: 'CERTIFICATE', label: 'Attestato' },
         { value: 'INVOICE', label: 'Fattura' },
         { value: 'COURSE_PROGRAM', label: 'Programma' },
+        { value: 'PREVENTIVO', label: 'Preventivo' },
+        { value: 'SLIDES', label: 'Slides' },
+        { value: 'VISITA_MEDICA', label: 'Visita Medica' },
         { value: 'CUSTOM', label: 'Altro' }
       ]
     },
@@ -403,15 +413,12 @@ const TemplateListPage: React.FC = () => {
   return (
     <EntityListLayout
       title="Template Documenti"
-      subtitle="Gestione template per la generazione automatica di documenti"
+      subtitle="Gestione template per la generazione automatica di documenti (lettere, attestati, registri, fatture, preventivi, slides, visite)"
       extraControls={
-        <button
-          onClick={handleCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-        >
+        <CRUDPrimaryButton operation="create" onClick={handleCreate}>
           <Plus className="h-4 w-4" />
           Nuovo Template
-        </button>
+        </CRUDPrimaryButton>
       }
       searchBarContent={
         <div className="flex flex-col gap-4">
@@ -437,18 +444,6 @@ const TemplateListPage: React.FC = () => {
       }
       loading={loading}
     >
-      {/* Alert */}
-      {alert && (
-        <div className={`mb-4 p-4 rounded-md ${alert.type === 'success' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
-          }`}>
-          <div className="flex items-center justify-between">
-            <span>{alert.message}</span>
-            <button onClick={() => setAlert(null)} className="text-gray-500 hover:text-gray-700">
-              ×
-            </button>
-          </div>
-        </div>
-      )}
 
       <div className="space-y-4">
         {/* Selection controls */}
@@ -514,8 +509,7 @@ const TemplateListPage: React.FC = () => {
         {totalItems > 0 && (
           <div className="flex items-center justify-between px-4 py-3 border-t">
             <div className="text-sm text-gray-700">
-              Showing {(currentPage - 1) * pageSize + 1} to{' '}
-              {Math.min(currentPage * pageSize, totalItems)} of {totalItems} templates
+              {(currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, totalItems)} di {totalItems} template
             </div>
             <div className="flex gap-2">
               <button
@@ -523,17 +517,17 @@ const TemplateListPage: React.FC = () => {
                 disabled={currentPage === 1}
                 className="px-3 py-1 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Previous
+                Precedente
               </button>
               <span className="px-3 py-1">
-                Page {currentPage} of {Math.ceil(totalItems / pageSize)}
+                Pagina {currentPage} di {Math.ceil(totalItems / pageSize)}
               </span>
               <button
                 onClick={() => setCurrentPage(p => p + 1)}
                 disabled={currentPage >= Math.ceil(totalItems / pageSize)}
                 className="px-3 py-1 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Next
+                Successiva
               </button>
             </div>
           </div>

@@ -6,6 +6,7 @@
 
 import { useEffect, useState } from 'react';
 import { SEOProps } from '../../components/seo/SEOHead';
+import { apiGet } from '../../services/api';
 
 interface UseSEOOptions {
   // Fetch automatico della configurazione SEO da backend
@@ -38,35 +39,23 @@ export const useSEO = (
     setError(null);
 
     try {
-      const response = await fetch(
-        `/api/v1/seo/config/${entityType}/${entityId}`,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-        }
+      const data = await apiGet<{ success: boolean; data: Partial<SEOProps> }>(
+        `/api/v1/seo/config/${entityType}/${entityId}`
       );
 
-      if (!response.ok) {
-        // Se non c'è config SEO, usa quella iniziale
-        if (response.status === 404) {
-          setLoading(false);
-          return;
-        }
-        throw new Error('Failed to fetch SEO config');
-      }
-
-      const data = await response.json();
       if (data.success && data.data) {
         setSeoConfig(prevConfig => ({
           ...prevConfig,
           ...data.data
         }));
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
-      console.error('Error fetching SEO config:', err);
+    } catch (err: unknown) {
+      // 404 means no config exists — use initial (not an error)
+      if ((err as { status?: number })?.status === 404) {
+        setLoading(false);
+        return;
+      }
+      setError('Errore sconosciuto');
     } finally {
       setLoading(false);
     }

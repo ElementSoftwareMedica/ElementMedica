@@ -1,4 +1,4 @@
-import { EntityPermission, RelationType, PermissionScope } from '../../../services/advancedPermissions';
+import { EntityPermission, RelationType, PermissionScope } from '../../../services/advanced-permissions';
 import { PERMISSION_ACTIONS } from './constants';
 
 /**

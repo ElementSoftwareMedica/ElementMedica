@@ -55,7 +55,8 @@ router.get('/',
             const exports = await prisma.gdprAuditLog.findMany({
                 where: {
                     personId,
-                    action: 'DATA_EXPORTED'
+                    action: 'DATA_EXPORTED',
+                    tenantId: req.person.tenantId
                 },
                 orderBy: { createdAt: 'desc' },
                 take: limit,
@@ -98,12 +99,12 @@ router.get('/',
             logger.error('Failed to get export history', {
                 component: 'gdpr-data-export',
                 action: 'getExportHistory',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 personId: req.person?.id
             });
 
             res.status(500).json({
-                error: 'Failed to get export history',
+                error: 'Errore nel recupero della cronologia esportazioni',
                 code: 'GDPR_EXPORT_HISTORY_FAILED'
             });
         }
@@ -166,13 +167,13 @@ router.post('/',
             logger.error('Failed to export user data', {
                 component: 'gdpr-data-export',
                 action: 'exportData',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 personId: req.person?.id,
                 body: req.body
             });
 
             res.status(500).json({
-                error: 'Failed to export user data',
+                error: 'Errore nell\'esportazione dei dati utente',
                 code: 'GDPR_EXPORT_FAILED'
             });
         }

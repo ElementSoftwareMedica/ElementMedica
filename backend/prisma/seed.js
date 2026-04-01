@@ -2,7 +2,7 @@
  * Database Seed - Essential Data Only
  * 
  * Questo seed crea SOLO i dati essenziali per far funzionare l'applicazione:
- * - Tenant di default (Element Formazione + Element Medica)
+ * - Tenant di default (Element Sicurezza + Element srl / Element Medica)
  * - Utente admin con tutti i permessi
  * - Ruoli base (ADMIN, USER, EMPLOYEE, etc.)
  * - Azienda e dipendenti di test
@@ -13,7 +13,7 @@
  * @version 3.0.0 - E2E Migration (formato permessi resource:action)
  */
 
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
 import { ALL_PERMISSIONS } from '../constants/permissions.js';
@@ -30,34 +30,73 @@ const prisma = new PrismaClient();
 async function seedTenants() {
   console.log('🏢 Seeding tenants...');
 
-  // Tenant 1: Element Formazione (default)
+  // Tenant 1: Element Sicurezza (default)
   let defaultTenant = await prisma.tenant.findUnique({
-    where: { slug: 'default-company' }
+    where: { slug: 'element-sicurezza' }
   });
+
+  const sicurezzaSettings = {
+    logoUrl: '/assets/logos/element-sicurezza-logo.png',
+    logoWhiteUrl: '/assets/logos/element-sicurezza-logo-white.png',
+    logoCompactUrl: '/assets/logos/element-sicurezza-logo-compact.png',
+    branches: {
+      FORMAZIONE: {
+        name: 'Element Sicurezza',
+        logo: '/assets/logos/element-sicurezza-logo.png',
+        logoWhite: '/assets/logos/element-sicurezza-logo-white.png',
+        logoCompact: '/assets/logos/element-sicurezza-logo-compact.png'
+      },
+      MEDICA: {
+        name: 'Element Medica',
+        logo: '/assets/logos/element-medica-logo.png',
+        logoWhite: '/assets/logos/element-medica-logo-white.png',
+        logoCompact: '/assets/logos/element-medica-logo-compact.png'
+      },
+      MDL: {
+        name: 'Element MDL',
+        logo: '/assets/logos/element-sicurezza-logo.png',
+        logoWhite: '/assets/logos/element-sicurezza-logo-white.png'
+      }
+    },
+    companyName: 'Element Sicurezza',
+    primaryColor: '#2563eb',
+    brandColors: { primary: '#2563eb', secondary: '#1e40af' },
+    phone: '+39 351 318 1574',
+    email: 'info@elementsicurezza.com',
+    vatNumber: '12345678901',
+    fiscalCode: '12345678901',
+    features: ['courses', 'schedules', 'employees', 'companies', 'preventivi']
+  };
 
   if (!defaultTenant) {
     defaultTenant = await prisma.tenant.create({
       data: {
-        name: 'Element Formazione',
-        slug: 'default-company',
+        name: 'Element Sicurezza',
+        slug: 'element-sicurezza',
         domain: 'localhost',
-        settings: {
-          primaryColor: '#2563eb',
-          logo: '/logo-formazione.png',
-          features: ['courses', 'schedules', 'employees', 'companies', 'preventivi']
-        },
+        settings: sicurezzaSettings,
         billingPlan: 'enterprise',
         maxUsers: 1000,
         maxCompanies: 100,
         isActive: true
       }
     });
-    console.log('  ✅ Element Formazione tenant created');
+    console.log('  ✅ Element Sicurezza tenant created');
   } else {
-    console.log('  ✅ Element Formazione tenant exists');
+    // Aggiorna settings se mancano branches/logoUrl
+    const existing = defaultTenant.settings || {};
+    if (!existing.branches || !existing.logoUrl) {
+      await prisma.tenant.update({
+        where: { id: defaultTenant.id },
+        data: { settings: { ...existing, ...sicurezzaSettings } }
+      });
+      console.log('  ✅ Element Sicurezza settings aggiornate (branches/logoUrl)');
+    } else {
+      console.log('  ✅ Element Sicurezza tenant exists');
+    }
   }
 
-  // Tenant 2: Element Medica
+  // Tenant 2: Element srl (frontend pubblico Element Medica)
   let medicaTenant = await prisma.tenant.findUnique({
     where: { slug: 'element-medica' }
   });
@@ -65,13 +104,47 @@ async function seedTenants() {
   if (!medicaTenant) {
     medicaTenant = await prisma.tenant.create({
       data: {
-        name: 'Element Medica',
+        name: 'Element srl',
         slug: 'element-medica',
         domain: 'medica.localhost',
         settings: {
-          primaryColor: '#059669',
-          logo: '/logo-medica.png',
-          features: ['clinica', 'visite', 'referti', 'medici', 'pazienti']
+          logoUrl: '/assets/logos/element-medica-logo.png',
+          logoWhiteUrl: '/assets/logos/element-medica-logo-white.png',
+          logoCompactUrl: '/assets/logos/element-medica-logo-compact.png',
+          logoIconUrl: '/assets/logos/element-medica-icon.png',
+          branches: {
+            MEDICA: {
+              name: 'Element Medica',
+              logo: '/assets/logos/element-medica-logo.png',
+              logoWhite: '/assets/logos/element-medica-logo-white.png',
+              logoCompact: '/assets/logos/element-medica-logo-compact.png'
+            },
+            FORMAZIONE: {
+              name: 'Element Sicurezza',
+              logo: '/assets/logos/element-sicurezza-logo.png',
+              logoWhite: '/assets/logos/element-sicurezza-logo-white.png',
+              logoCompact: '/assets/logos/element-sicurezza-logo-compact.png'
+            },
+            MDL: {
+              name: 'Element MDL',
+              logo: '/assets/logos/element-medica-logo.png',
+              logoWhite: '/assets/logos/element-medica-logo-white.png'
+            }
+          },
+          brandColors: {
+            primary: '#A1C8C1',
+            secondary: '#233747',
+            accent: '#EDF1EE',
+            light: '#F7FAF9'
+          },
+          companyName: 'Element srl',
+          vat: '05580640281',
+          phone: '+39 351 318 1574',
+          email: 'info@elementmedica.com',
+          pec: 'element.srl@pec.it',
+          address: 'Via Bracciano 34, 35030 Selvazzano Dentro (PD)',
+          sedeLegale: 'Via Piave 4, 35138 Padova',
+          features: ['clinica', 'visite', 'referti', 'medici', 'pazienti', 'fatturazione']
         },
         billingPlan: 'enterprise',
         maxUsers: 1000,
@@ -79,9 +152,45 @@ async function seedTenants() {
         isActive: true
       }
     });
-    console.log('  ✅ Element Medica tenant created');
+    console.log('  ✅ Element srl tenant created (frontend: Element Medica)');
   } else {
-    console.log('  ✅ Element Medica tenant exists');
+    // Aggiorna settings se mancano branches/logoUrl
+    const existing = medicaTenant.settings || {};
+    if (!existing.branches || !existing.logoUrl) {
+      await prisma.tenant.update({
+        where: { id: medicaTenant.id },
+        data: {
+          settings: {
+            ...existing,
+            logoUrl: '/assets/logos/element-medica-logo.png',
+            logoWhiteUrl: '/assets/logos/element-medica-logo-white.png',
+            logoCompactUrl: '/assets/logos/element-medica-logo-compact.png',
+            branches: {
+              MEDICA: {
+                name: 'Element Medica',
+                logo: '/assets/logos/element-medica-logo.png',
+                logoWhite: '/assets/logos/element-medica-logo-white.png',
+                logoCompact: '/assets/logos/element-medica-logo-compact.png'
+              },
+              FORMAZIONE: {
+                name: 'Element Sicurezza',
+                logo: '/assets/logos/element-sicurezza-logo.png',
+                logoWhite: '/assets/logos/element-sicurezza-logo-white.png',
+                logoCompact: '/assets/logos/element-sicurezza-logo-compact.png'
+              },
+              MDL: {
+                name: 'Element MDL',
+                logo: '/assets/logos/element-medica-logo.png',
+                logoWhite: '/assets/logos/element-medica-logo-white.png'
+              }
+            }
+          }
+        }
+      });
+      console.log('  ✅ Element srl settings aggiornate (branches/logoUrl)');
+    } else {
+      console.log('  ✅ Element srl tenant exists (frontend: Element Medica)');
+    }
   }
 
   return { defaultTenant, medicaTenant };
@@ -89,6 +198,9 @@ async function seedTenants() {
 
 /**
  * Crea l'utente admin con tutti i permessi
+ * 
+ * PROGETTO 48: Person ora contiene solo dati globali.
+ * email, status, etc. sono in PersonTenantProfile.
  */
 async function seedAdminUser(tenantId) {
   console.log('👤 Seeding admin user...');
@@ -100,8 +212,10 @@ async function seedAdminUser(tenantId) {
     process.exit(1);
   }
 
+  // Cerca per username (campo globale in Person)
   let adminUser = await prisma.person.findUnique({
-    where: { email: 'admin@example.com' }
+    where: { username: 'admin' },
+    include: { tenantProfiles: true }
   });
 
   if (!adminUser) {
@@ -111,27 +225,35 @@ async function seedAdminUser(tenantId) {
       data: {
         firstName: 'Admin',
         lastName: 'User',
-        email: 'admin@example.com',
         username: 'admin',
         password: hashedPassword,
-        status: 'ACTIVE',
-        globalRole: 'ADMIN',
-        tenantId: tenantId,
         gdprConsentDate: new Date(),
         gdprConsentVersion: '1.0',
+        // P49: Person è globale, tenantId è in PersonTenantProfile
+        tenantProfiles: {
+          create: {
+            tenantId: tenantId,
+            email: 'admin@example.com',
+            status: 'ACTIVE',
+            isActive: true,
+            isPrimary: true,
+            title: 'System Administrator'
+          }
+        },
         personRoles: {
           create: {
-            roleType: 'ADMIN',
+            roleType: 'SUPER_ADMIN',
             tenantId: tenantId,
             isActive: true,
             isPrimary: true
           }
         }
-      }
+      },
+      include: { tenantProfiles: true }
     });
-    console.log('  ✅ Admin user created:', adminUser.email);
+    console.log('  ✅ Admin user created:', adminUser.username);
   } else {
-    console.log('  ✅ Admin user exists:', adminUser.email);
+    console.log('  ✅ Admin user exists:', adminUser.username);
   }
 
   return adminUser;
@@ -234,9 +356,9 @@ async function seedPersonTenantAccess(adminUser, tenants) {
           grantedBy: adminUser.id
         }
       });
-      console.log(`  ✅ Access granted: ${adminUser.email} -> ${tenant.slug}`);
+      console.log(`  ✅ Access granted: ${adminUser.username} -> ${tenant.slug}`);
     } else {
-      console.log(`  ✅ Access exists: ${adminUser.email} -> ${tenant.slug}`);
+      console.log(`  ✅ Access exists: ${adminUser.username} -> ${tenant.slug}`);
     }
   }
 }
@@ -247,36 +369,68 @@ async function seedPersonTenantAccess(adminUser, tenants) {
 async function seedTestData(tenantId) {
   console.log('📦 Seeding test data...');
 
-  // Test Company
+  // P49: Company è globale, il link a tenant è in CompanyTenantProfile
+  // Cerco per codiceFiscale (campo globale)
   let testCompany = await prisma.company.findFirst({
-    where: { codiceFiscale: '12345678901', tenantId }
+    where: { codiceFiscale: '12345678901' },
+    include: { tenantProfiles: true }
   });
 
+  let companyTenantProfile;
+
   if (!testCompany) {
+    // Crea Company globale + CompanyTenantProfile
     testCompany = await prisma.company.create({
       data: {
         ragioneSociale: 'Test Company S.r.l.',
         codiceFiscale: '12345678901',
         piva: '12345678901',
-        mail: 'info@testcompany.com',
-        telefono: '+39 123 456 7890',
-        sedeAzienda: 'Via Test 123, Milano',
-        cap: '20100',
-        citta: 'Milano',
-        provincia: 'MI',
-        personaRiferimento: 'Mario Rossi',
-        isActive: true,
-        tenantId
-      }
+        sedeLegaleIndirizzo: 'Via Test 123',
+        sedeLegaleCitta: 'Milano',
+        sedeLegaleCap: '20100',
+        sedeLegaleProvincia: 'MI',
+        sedeLegaleNazione: 'IT',
+        // P49: Email e dati per-tenant vanno in CompanyTenantProfile
+        tenantProfiles: {
+          create: {
+            tenantId,
+            emailGenerale: 'info@testcompany.com',
+            telefonoGenerale: '+39 123 456 7890',
+            // referenteId va impostato dopo creazione persona se necessario
+            tipoContratto: 'Cliente',
+            status: 'ACTIVE',
+            isActive: true
+          }
+        }
+      },
+      include: { tenantProfiles: true }
     });
+    companyTenantProfile = testCompany.tenantProfiles[0];
     console.log('  ✅ Test company created');
   } else {
-    console.log('  ✅ Test company exists');
+    // Verifica se esiste già il profilo per questo tenant
+    companyTenantProfile = testCompany.tenantProfiles.find(p => p.tenantId === tenantId);
+    if (!companyTenantProfile) {
+      companyTenantProfile = await prisma.companyTenantProfile.create({
+        data: {
+          companyId: testCompany.id,
+          tenantId,
+          emailGenerale: 'info@testcompany.com',
+          telefonoGenerale: '+39 123 456 7890',
+          tipoContratto: 'Cliente',
+          status: 'ACTIVE',
+          isActive: true
+        }
+      });
+      console.log('  ✅ Test company profile created for tenant');
+    } else {
+      console.log('  ✅ Test company exists');
+    }
   }
 
-  // Test Course
+  // Test Course - usa compound unique (tenantId_code)
   let testCourse = await prisma.course.findUnique({
-    where: { code: 'SEC001' }
+    where: { tenantId_code: { tenantId, code: 'SEC001' } }
   });
 
   if (!testCourse) {
@@ -299,7 +453,7 @@ async function seedTestData(tenantId) {
     console.log('  ✅ Test course exists');
   }
 
-  // Test Employees
+  // Test Employees (P49: Person globale, dati tenant in PersonTenantProfile)
   const employees = [
     { firstName: 'Mario', lastName: 'Rossi', taxCode: 'RSSMRA80A01H501Z', email: 'mario.rossi@testcompany.com' },
     { firstName: 'Giulia', lastName: 'Bianchi', taxCode: 'BNCGLI85B15F205X', email: 'giulia.bianchi@testcompany.com' },
@@ -317,16 +471,22 @@ async function seedTestData(tenantId) {
         data: {
           firstName: emp.firstName,
           lastName: emp.lastName,
-          email: emp.email,
           username: emp.email.split('@')[0],
           taxCode: emp.taxCode,
           password,
-          status: 'ACTIVE',
-          globalRole: 'USER',
-          tenantId,
-          companyId: testCompany.id,
           gdprConsentDate: new Date(),
           gdprConsentVersion: '1.0',
+          // P49: email e status vanno in tenantProfiles
+          tenantProfiles: {
+            create: {
+              tenantId,
+              email: emp.email,
+              status: 'ACTIVE',
+              isActive: true,
+              isPrimary: true,
+              companyTenantProfileId: companyTenantProfile.id
+            }
+          },
           personRoles: {
             create: {
               roleType: 'EMPLOYEE',
@@ -342,6 +502,139 @@ async function seedTestData(tenantId) {
       console.log(`  ✅ Employee exists: ${emp.firstName} ${emp.lastName}`);
     }
   }
+}
+
+// ============================================
+// SEED TARIFFARIO TEMPLATE MDL
+// ============================================
+
+/**
+ * Crea un tariffario template base per il tenant specificato.
+ * Viene eseguito per ogni tenant in modo idempotente (upsert via codice).
+ * Il template copre tutte le tipologie di voce MDL previste dal D.Lgs 81/08.
+ */
+async function seedTariffarioTemplate(tenantId) {
+  const CODICE = 'TEMPLATE-MDL-BASE';
+
+  const existing = await prisma.tariffarioAziendale.findFirst({
+    where: { tenantId, codice: CODICE, deletedAt: null }
+  });
+
+  if (existing) {
+    console.log(`  ⏭  Tariffario template già presente per tenant ${tenantId}`);
+    return existing;
+  }
+
+  // Helper: aggiunge tenantId a ogni voce (Prisma non lo eredita dal parent)
+  const withTenant = (items) => items.map(v => ({ ...v, tenantId }));
+
+  const tariffario = await prisma.tariffarioAziendale.create({
+    data: {
+      codice: CODICE,
+      nome: 'Tariffario Base Medicina del Lavoro',
+      descrizione: 'Template standard voci MDL — personalizzabile per ogni azienda. Conforme D.Lgs 81/08.',
+      attivo: true,
+      tenantId,
+      voci: {
+        create: withTenant([
+          // ── VISITE MDL (per categoria, art. 41) ──────────────────────────
+          {
+            tipo: 'PRESTAZIONE', nome: 'Visita Medica del Lavoro – Preventiva',
+            categoriaVisita: 'PREVENTIVA', prezzoBase: 60.00, ivaAliquota: 22,
+            frequenza: 'UNA_TANTUM', unitaCalcolo: 'FLAT', modalitaAttivazione: 'SU_ESECUZIONE'
+          },
+          {
+            tipo: 'PRESTAZIONE', nome: 'Visita Medica del Lavoro – Prima Visita',
+            categoriaVisita: 'PRIMA_VISITA', prezzoBase: 60.00, ivaAliquota: 22,
+            frequenza: 'UNA_TANTUM', unitaCalcolo: 'FLAT', modalitaAttivazione: 'SU_ESECUZIONE'
+          },
+          {
+            tipo: 'PRESTAZIONE', nome: 'Visita Medica del Lavoro – Periodica',
+            categoriaVisita: 'PERIODICA', prezzoBase: 50.00, ivaAliquota: 22,
+            frequenza: 'SECONDO_SORVEGLIANZA', unitaCalcolo: 'FLAT', modalitaAttivazione: 'SU_ESECUZIONE'
+          },
+          {
+            tipo: 'PRESTAZIONE', nome: 'Visita Medica del Lavoro – Dopo Assenza',
+            categoriaVisita: 'DOPO_ASSENZA', prezzoBase: 55.00, ivaAliquota: 22,
+            frequenza: 'UNA_TANTUM', unitaCalcolo: 'FLAT', modalitaAttivazione: 'SU_ESECUZIONE'
+          },
+          {
+            tipo: 'PRESTAZIONE', nome: 'Visita Medica del Lavoro – Straordinaria',
+            categoriaVisita: 'STRAORDINARIA', prezzoBase: 65.00, ivaAliquota: 22,
+            frequenza: 'UNA_TANTUM', unitaCalcolo: 'FLAT', modalitaAttivazione: 'SU_ESECUZIONE'
+          },
+          // ── CONSULENZE (oraria MC/RSPP) ───────────────────────────────────
+          {
+            tipo: 'CONSULENZA', nome: 'Consulenza Medico Competente (per ora)',
+            prezzoBase: 120.00, ivaAliquota: 22, durataMinimaMinuti: 30,
+            frequenza: 'UNA_TANTUM', unitaCalcolo: 'FLAT', modalitaAttivazione: 'SU_CONFERMA'
+          },
+          {
+            tipo: 'CONSULENZA', nome: 'Consulenza RSPP (per ora)',
+            prezzoBase: 100.00, ivaAliquota: 22, durataMinimaMinuti: 30,
+            frequenza: 'UNA_TANTUM', unitaCalcolo: 'FLAT', modalitaAttivazione: 'SU_CONFERMA'
+          },
+          // ── SOPRALLUOGHI ──────────────────────────────────────────────────
+          {
+            tipo: 'SOPRALLUOGO_MC', nome: 'Sopralluogo Medico Competente',
+            prezzoBase: 150.00, ivaAliquota: 22,
+            frequenza: 'UNA_TANTUM', unitaCalcolo: 'FLAT', modalitaAttivazione: 'SU_CONFERMA'
+          },
+          {
+            tipo: 'SOPRALLUOGO_RSPP', nome: 'Sopralluogo RSPP',
+            prezzoBase: 150.00, ivaAliquota: 22,
+            frequenza: 'UNA_TANTUM', unitaCalcolo: 'FLAT', modalitaAttivazione: 'SU_CONFERMA'
+          },
+          // ── NOMINE ────────────────────────────────────────────────────────
+          {
+            tipo: 'NOMINA_MC', nome: 'Nomina Medico Competente (annuale)',
+            prezzoBase: 250.00, ivaAliquota: 22,
+            frequenza: 'ANNUALE', unitaCalcolo: 'FLAT', modalitaAttivazione: 'AUTOMATICA'
+          },
+          {
+            tipo: 'NOMINA_RSPP', nome: 'Nomina RSPP (annuale)',
+            prezzoBase: 250.00, ivaAliquota: 22,
+            frequenza: 'ANNUALE', unitaCalcolo: 'FLAT', modalitaAttivazione: 'AUTOMATICA'
+          },
+          // ── DVR ───────────────────────────────────────────────────────────
+          {
+            tipo: 'DVR_NUOVO', nome: 'Nuovo DVR – Prima redazione',
+            descrizione: 'Prima redazione del Documento di Valutazione dei Rischi (Art. 17 D.Lgs 81/08)',
+            prezzoBase: 500.00, ivaAliquota: 22,
+            frequenza: 'UNA_TANTUM', unitaCalcolo: 'FLAT', modalitaAttivazione: 'SU_CONFERMA'
+          },
+          {
+            tipo: 'DVR_AGGIORNAMENTO_CON_MODIFICHE', nome: 'Aggiornamento DVR (con modifiche)',
+            descrizione: 'Revisione DVR con variazioni sostanziali ai rischi o alle misure preventive',
+            prezzoBase: 300.00, ivaAliquota: 22,
+            frequenza: 'UNA_TANTUM', unitaCalcolo: 'FLAT', modalitaAttivazione: 'SU_CONFERMA'
+          },
+          {
+            tipo: 'DVR_AGGIORNAMENTO_SENZA_MODIFICHE', nome: 'Aggiornamento DVR (conferma annuale)',
+            descrizione: 'Revisione annuale di conferma DVR senza variazioni sostanziali',
+            prezzoBase: 200.00, ivaAliquota: 22,
+            frequenza: 'ANNUALE', unitaCalcolo: 'FLAT', modalitaAttivazione: 'SU_CONFERMA'
+          },
+          // ── SPESE FISSE ───────────────────────────────────────────────────
+          {
+            tipo: 'SPESA_FISSA', nome: 'Gestione Cartella Sanitaria',
+            descrizione: 'Apertura e tenuta cartella sanitaria e di rischio per lavoratore',
+            prezzoBase: 30.00, ivaAliquota: 22,
+            frequenza: 'UNA_TANTUM', unitaCalcolo: 'PER_DIPENDENTE', modalitaAttivazione: 'AUTOMATICA'
+          },
+          {
+            tipo: 'SPESA_RICORRENTE', nome: 'Contributo Gestione Protocollo Sanitario',
+            descrizione: 'Quota annuale per aggiornamento e gestione del protocollo sanitario aziendale',
+            prezzoBase: 50.00, ivaAliquota: 22,
+            frequenza: 'ANNUALE', unitaCalcolo: 'FLAT', modalitaAttivazione: 'AUTOMATICA'
+          }
+        ])  // end withTenant
+      }
+    }
+  });
+
+  console.log(`  ✅ Tariffario template creato: "${tariffario.nome}" (${tariffario.codice})`);
+  return tariffario;
 }
 
 // ============================================
@@ -371,6 +664,19 @@ async function main() {
     // 5. Test Data
     await seedTestData(defaultTenant.id);
 
+    // 6. Tariffario Template MDL (per ogni tenant)
+    console.log('\n📋 Creazione tariffario template MDL...');
+    await seedTariffarioTemplate(defaultTenant.id);
+    await seedTariffarioTemplate(medicaTenant.id);
+
+    // 7. Template Documenti Predefiniti (per ogni tenant)
+    console.log('\n📄 Creazione template documenti predefiniti...');
+    const { DefaultTemplateService } = await import('../services/templates/DefaultTemplateService.js');
+    const res1 = await DefaultTemplateService.createDefaultTemplates(defaultTenant.id);
+    console.log(`  ✅ Element Sicurezza: ${res1.created} creati, ${res1.skipped} già presenti`);
+    const res2 = await DefaultTemplateService.createDefaultTemplates(medicaTenant.id);
+    console.log(`  ✅ Element Medica: ${res2.created} creati, ${res2.skipped} già presenti`);
+
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
 
     console.log('\n╔══════════════════════════════════════════════════════════════╗');
@@ -378,9 +684,6 @@ async function main() {
     console.log('╚══════════════════════════════════════════════════════════════╝');
     console.log(`⏱️  Tempo: ${duration}s`);
     console.log(`📅 Data: ${new Date().toLocaleString('it-IT')}\n`);
-
-    console.log('ℹ️  Per importare i template CMS/Form/Document:');
-    console.log('   npm run seed:templates\n');
 
   } catch (error) {
     console.error('\n❌ SEED FAILED:', error.message);

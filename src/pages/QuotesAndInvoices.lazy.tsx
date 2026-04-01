@@ -12,7 +12,7 @@ const QuotesAndInvoices = React.lazy(() => import('./QuotesAndInvoices'));
 export const QuotesAndInvoicesLazy: React.FC = () => {
   return (
     <ErrorBoundary>
-      <Suspense fallback={<LoadingFallback message="Loading Quotes & Invoices..." />}>
+      <Suspense fallback={<LoadingFallback message="Caricamento preventivi e fatture..." />}>
         <QuotesAndInvoices />
       </Suspense>
     </ErrorBoundary>

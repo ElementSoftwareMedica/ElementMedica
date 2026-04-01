@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { 
+import {
   Copy,
   Edit,
   FileOutput,
@@ -9,7 +9,7 @@ import {
   Star,
   Trash2
 } from 'lucide-react';
-import { Template } from '../../../types/template';
+import { Template } from '../../../types/templates';
 
 interface TemplateActionDropdownProps {
   template: Template;
@@ -46,7 +46,7 @@ export const TemplateActionDropdown: React.FC<TemplateActionDropdownProps> = ({
     const handleClickOutside = (event: MouseEvent) => {
       if (
         isOpen &&
-        dropdownRef.current && 
+        dropdownRef.current &&
         !dropdownRef.current.contains(event.target as Node) &&
         buttonRef.current &&
         !buttonRef.current.contains(event.target as Node)
@@ -65,9 +65,9 @@ export const TemplateActionDropdown: React.FC<TemplateActionDropdownProps> = ({
   }, [isOpen, toggleDropdown, buttonRef]);
 
   if (!isOpen) return null;
-  
+
   return (
-    <div 
+    <div
       ref={dropdownRef}
       data-testid="dropdown-content"
       className="absolute right-0 top-full mt-1 bg-white rounded-md shadow-lg py-1 w-56 z-50"
@@ -83,7 +83,7 @@ export const TemplateActionDropdown: React.FC<TemplateActionDropdownProps> = ({
           <Edit className="w-4 h-4 mr-2 text-blue-500" />
           Modifica Contenuto
         </button>
-        
+
         <button
           onClick={() => {
             onEditProperties(template);
@@ -94,7 +94,7 @@ export const TemplateActionDropdown: React.FC<TemplateActionDropdownProps> = ({
           <Settings className="w-4 h-4 mr-2 text-gray-500" />
           Modifica Proprietà
         </button>
-        
+
         <button
           onClick={() => {
             onSetAsDefault(template.id, template.type);
@@ -105,7 +105,7 @@ export const TemplateActionDropdown: React.FC<TemplateActionDropdownProps> = ({
           <Star className="w-4 h-4 mr-2 text-yellow-500" />
           Imposta come Predefinito
         </button>
-        
+
         {onDuplicate && (
           <button
             onClick={() => {
@@ -118,7 +118,7 @@ export const TemplateActionDropdown: React.FC<TemplateActionDropdownProps> = ({
             Duplica Template
           </button>
         )}
-        
+
         {onViewVersions && (
           <button
             onClick={() => {
@@ -131,7 +131,7 @@ export const TemplateActionDropdown: React.FC<TemplateActionDropdownProps> = ({
             Storico Versioni
           </button>
         )}
-        
+
         {onExportPdf && (
           <button
             onClick={() => {
@@ -144,7 +144,7 @@ export const TemplateActionDropdown: React.FC<TemplateActionDropdownProps> = ({
             Esporta PDF
           </button>
         )}
-        
+
         {onExportDocx && (
           <button
             onClick={() => {
@@ -157,7 +157,7 @@ export const TemplateActionDropdown: React.FC<TemplateActionDropdownProps> = ({
             Esporta DOCX
           </button>
         )}
-        
+
         <button
           onClick={() => {
             onRemove(template.id);

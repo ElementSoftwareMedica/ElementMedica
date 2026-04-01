@@ -5,7 +5,7 @@ import { Edit, Eye, Trash2 } from 'lucide-react';
 import { GDPREntityTemplate } from '../GDPREntityTemplate';
 import { companiesConfig, createStandardColumns } from '../GDPREntityConfig';
 import { Company } from '../../../types';
-import { DataTableColumn } from '../../../components/shared/tables/DataTable';
+import { DataTableColumn } from '../GDPREntityTemplate';
 
 /**
  * Esempio di implementazione del template GDPR per la gestione delle aziende
@@ -14,7 +14,7 @@ import { DataTableColumn } from '../../../components/shared/tables/DataTable';
 
 export const CompaniesPageExample: React.FC = () => {
   const navigate = useNavigate();
-  
+
   // Definizione colonne personalizzate per le aziende
   const columns: DataTableColumn<Company>[] = [
     {
@@ -76,35 +76,33 @@ export const CompaniesPageExample: React.FC = () => {
       sortable: true,
       width: 120,
       renderCell: (company) => (
-          <Badge variant={company.status === 'ACTIVE' ? 'default' : 'secondary'}>
-            {company.status || 'ACTIVE'}
-          </Badge>
-        )
+        <Badge variant={company.status === 'ACTIVE' ? 'default' : 'secondary'}>
+          {company.status || 'ACTIVE'}
+        </Badge>
+      )
     }
   ];
-  
+
   // Handler personalizzati
   const handleCreateCompany = () => {
     navigate('/companies/create');
   };
-  
+
   const handleEditCompany = (company: Company) => {
     navigate(`/companies/${company.id}/edit`);
   };
-  
-  const handleDeleteCompany = async (id: string) => {
+
+  const handleDeleteCompany = async (_id: string) => {
     // Implementazione personalizzata per eliminazione azienda
     // Qui potresti aggiungere logica specifica per le aziende
-    console.log('Eliminazione azienda personalizzata:', id);
-    
+
     // Chiamata API personalizzata se necessario
     // await customDeleteCompany(id);
   };
-  
+
   const handleImportCompanies = async (data: any[]) => {
     // Implementazione personalizzata per import aziende
-    console.log('Import aziende personalizzato:', data);
-    
+
     // Logica di validazione e trasformazione dati specifica per aziende
     const validatedData = data.map(item => ({
       ...item,
@@ -113,41 +111,40 @@ export const CompaniesPageExample: React.FC = () => {
       email: item.email?.toLowerCase(), // Email in minuscolo
       status: item.status || 'ACTIVE' // Stato di default
     }));
-    
+
     // Chiamata API per import
     // await importCompanies(validatedData);
   };
-  
+
   const handleExportCompanies = (companies: Company[]) => {
     // Implementazione personalizzata per export aziende
-    console.log('Export aziende personalizzato:', companies);
-    
+
     // Potresti aggiungere logica per formattazione speciale dei dati
     const formattedData = companies.map(company => ({
       ...company,
       full_address: `${company.address || ''}, ${company.city || ''} ${company.province || ''}`.trim(),
       contact_info: `${company.email || ''} - ${company.phone || ''}`.replace(/^\s*-\s*|\s*-\s*$/g, '')
     }));
-    
+
     // Esportazione con dati formattati
     // exportToCsv(formattedData, customHeaders, 'aziende_export.csv');
   };
-  
+
   return (
     <GDPREntityTemplate<Company>
       // Configurazione base da config
       {...companiesConfig}
-      
+
       // Colonne personalizzate
       columns={columns}
-      
+
       // Handler personalizzati
       onCreateEntity={handleCreateCompany}
       onEditEntity={handleEditCompany}
       onDeleteEntity={handleDeleteCompany}
       onImportEntities={handleImportCompanies}
       onExportEntities={handleExportCompanies}
-      
+
       // Configurazioni specifiche per aziende
       filterOptions={[
         {
@@ -170,7 +167,7 @@ export const CompaniesPageExample: React.FC = () => {
           ]
         }
       ]}
-      
+
       sortOptions={[
         { label: 'Nome (A-Z)', key: 'name-asc' },
         { label: 'Nome (Z-A)', key: 'name-desc' },
@@ -179,7 +176,7 @@ export const CompaniesPageExample: React.FC = () => {
         { label: 'Data creazione (recente)', key: 'createdAt-desc' },
         { label: 'Data creazione (meno recente)', key: 'createdAt-asc' }
       ]}
-      
+
       // Configurazione card per vista griglia
       cardConfig={{
         titleField: 'name',
@@ -209,7 +206,7 @@ export const CompaniesPageExample: React.FC = () => {
           }
         ]
       }}
-      
+
       // Configurazioni UI
       enableBatchOperations={true}
       enableImportExport={true}
@@ -231,9 +228,9 @@ export const CompaniesPageMinimal: React.FC = () => {
     { key: 'name', label: 'Nome', width: 200 },
     { key: 'city', label: 'Città', width: 150 },
     { key: 'email', label: 'Email', width: 200 },
-    { 
-      key: 'status', 
-      label: 'Stato', 
+    {
+      key: 'status',
+      label: 'Stato',
       width: 120,
       formatter: (value) => (
         <Badge variant={value === 'ACTIVE' ? 'default' : 'secondary'}>
@@ -242,7 +239,7 @@ export const CompaniesPageMinimal: React.FC = () => {
       )
     }
   ]);
-  
+
   return (
     <GDPREntityTemplate<Company>
       {...companiesConfig}
@@ -262,13 +259,13 @@ export const CompaniesPageCustomPermissions: React.FC = () => {
   return (
     <GDPREntityTemplate<Company>
       {...companiesConfig}
-      
+
       // Override permessi per logica specifica
       readPermission="companies.view"
       writePermission="companies.manage"
       deletePermission="companies.remove"
       exportPermission="companies.export"
-      
+
       columns={createStandardColumns<Company>([
         { key: 'name', label: 'Nome Azienda' },
         { key: 'city', label: 'Città' },

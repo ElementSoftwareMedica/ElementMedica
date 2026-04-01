@@ -6,29 +6,28 @@
  */
 
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../../config/prisma-optimization.js';
 import logger from '../../utils/logger.js';
 
 // Import dei middleware
 import { requireCustomRoleManagement } from './middleware/auth.js';
 import { logRoleOperation, auditRoleChanges } from './middleware/logging.js';
-import { 
+import {
   validateCreateRole,
   validateUpdateRole,
-  validateRouteId 
+  validateRouteId
 } from './middleware/validation.js';
 
 // Import delle utilità
-import { 
-  createSuccessResponse, 
+import {
+  createSuccessResponse,
   createErrorResponse,
-  transformRoleForResponse 
+  transformRoleForResponse
 } from './utils/helpers.js';
 import { filterCustomRoleData } from './utils/filters.js';
 import { validateRoleData } from './utils/validators.js';
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 /**
  * POST /api/roles/custom
@@ -63,7 +62,7 @@ router.post('/',
 
       if (existingRole) {
         return res.status(409).json(createErrorResponse(
-          'Custom role already exists',
+          'Ruolo personalizzato già esistente',
           `A custom role with name '${roleData.name}' already exists`
         ));
       }
@@ -124,20 +123,17 @@ router.post('/',
         })) || [],
         createdAt: newCustomRole.createdAt,
         updatedAt: newCustomRole.updatedAt
-      }, 'Custom role created successfully'));
+      }, 'Ruolo personalizzato creato con successo'));
     } catch (error) {
       logger.error('Error creating custom role', {
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         roleData: req.body,
         createdBy: req.person?.id,
         tenantId: req.tenant?.id || req.person?.tenantId
       });
 
-      res.status(500).json(createErrorResponse(
-        'Failed to create custom role',
-        error.message
-      ));
+      res.status(500).json(createErrorResponse('Errore nella creazione del ruolo personalizzato'));
     }
   }
 );
@@ -177,7 +173,7 @@ router.put('/:id',
 
       if (!existingCustomRole) {
         return res.status(404).json(createErrorResponse(
-          'Custom role not found',
+          'Ruolo personalizzato non trovato',
           `Custom role with ID '${id}' not found`
         ));
       }
@@ -194,7 +190,7 @@ router.put('/:id',
 
         if (duplicateRole) {
           return res.status(409).json(createErrorResponse(
-            'Custom role name already exists',
+            'Nome ruolo personalizzato già in uso',
             `A custom role with name '${updateData.name}' already exists`
           ));
         }
@@ -262,10 +258,10 @@ router.put('/:id',
         })) || [],
         createdAt: updatedCustomRole.createdAt,
         updatedAt: updatedCustomRole.updatedAt
-      }, 'Custom role updated successfully'));
+      }, 'Ruolo personalizzato aggiornato con successo'));
     } catch (error) {
       logger.error('Error updating custom role', {
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         customRoleId: req.params.id,
         updateData: req.body,
@@ -273,10 +269,7 @@ router.put('/:id',
         tenantId: req.tenant?.id || req.person?.tenantId
       });
 
-      res.status(500).json(createErrorResponse(
-        'Failed to update custom role',
-        error.message
-      ));
+      res.status(500).json(createErrorResponse('Errore nell\'aggiornamento del ruolo personalizzato'));
     }
   }
 );
@@ -317,7 +310,7 @@ router.delete('/:id',
 
       if (!customRole) {
         return res.status(404).json(createErrorResponse(
-          'Custom role not found',
+          'Ruolo personalizzato non trovato',
           `Custom role with ID '${id}' not found`
         ));
       }
@@ -368,20 +361,17 @@ router.delete('/:id',
         name: customRole.name,
         deletedAt: new Date().toISOString(),
         usersAffected: force === 'true' ? customRole._count.personRoles : 0
-      }, 'Custom role deleted successfully'));
+      }, 'Ruolo personalizzato eliminato con successo'));
     } catch (error) {
       logger.error('Error deleting custom role', {
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         customRoleId: req.params.id,
         deletedBy: req.person?.id,
         tenantId: req.tenant?.id || req.person?.tenantId
       });
 
-      res.status(500).json(createErrorResponse(
-        'Failed to delete custom role',
-        error.message
-      ));
+      res.status(500).json(createErrorResponse('Errore nell\'eliminazione del ruolo personalizzato'));
     }
   }
 );
@@ -430,9 +420,13 @@ router.get('/:id',
                 person: {
                   select: {
                     id: true,
-                    email: true,
-                    name: true,
-                    isActive: true
+                    firstName: true,
+                    lastName: true,
+                    tenantProfiles: {
+                      where: { tenantId, deletedAt: null },
+                      take: 1,
+                      select: { email: true, isActive: true }
+                    }
                   }
                 }
               }
@@ -443,7 +437,7 @@ router.get('/:id',
 
       if (!customRole) {
         return res.status(404).json(createErrorResponse(
-          'Custom role not found',
+          'Ruolo personalizzato non trovato',
           `Custom role with ID '${id}' not found`
         ));
       }
@@ -468,16 +462,16 @@ router.get('/:id',
         ...(includeUsers === 'true' && {
           users: customRole.personRoles.map(pr => ({
             id: pr.person.id,
-            email: pr.person.email,
-            name: pr.person.name,
-            isActive: pr.person.isActive,
+            email: pr.person.tenantProfiles?.[0]?.email || '',
+            name: `${pr.person.firstName || ''} ${pr.person.lastName || ''}`.trim(),
+            isActive: pr.person.tenantProfiles?.[0]?.isActive ?? true,
             assignedAt: pr.createdAt,
             assignedBy: pr.assignedBy
           }))
         })
       };
 
-      logger.info('Custom role details retrieved', {
+      logger.info('Dettagli ruolo personalizzato recuperati', {
         customRoleId: id,
         name: customRole.name,
         tenantId,
@@ -488,17 +482,14 @@ router.get('/:id',
       res.json(createSuccessResponse(transformedCustomRole, 'Custom role details retrieved successfully'));
     } catch (error) {
       logger.error('Error retrieving custom role details', {
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         customRoleId: req.params.id,
         tenantId: req.tenant?.id || req.person?.tenantId,
         userId: req.person?.id
       });
 
-      res.status(500).json(createErrorResponse(
-        'Failed to retrieve custom role details',
-        error.message
-      ));
+      res.status(500).json(createErrorResponse('Errore nel recupero dei dettagli del ruolo personalizzato'));
     }
   }
 );
@@ -511,8 +502,8 @@ router.get('/',
   logRoleOperation('LIST_CUSTOM_ROLES'),
   async (req, res) => {
     try {
-      const { 
-        search, 
+      const {
+        search,
         active = 'true',
         includeDeleted = 'false'
       } = req.query;
@@ -575,20 +566,17 @@ router.get('/',
         filters: { search, active, includeDeleted }
       });
 
-      res.json(createSuccessResponse(transformedCustomRoles, 'Custom roles retrieved successfully'));
+      res.json(createSuccessResponse(transformedCustomRoles, 'Ruoli personalizzati recuperati con successo'));
     } catch (error) {
       logger.error('Error listing custom roles', {
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         tenantId: req.tenant?.id || req.person?.tenantId,
         userId: req.person?.id,
         query: req.query
       });
 
-      res.status(500).json(createErrorResponse(
-        'Failed to retrieve custom roles',
-        error.message
-      ));
+      res.status(500).json(createErrorResponse('Errore nel recupero dei ruoli personalizzati'));
     }
   }
 );

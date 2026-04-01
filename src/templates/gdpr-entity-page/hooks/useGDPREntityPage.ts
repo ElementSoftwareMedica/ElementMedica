@@ -22,16 +22,16 @@ import { apiService } from '../../../services/api';
 export interface UseGDPREntityPageConfig<T extends BaseEntity = BaseEntity> {
   /** Configurazione template */
   config: GDPREntityPageConfig<T>;
-  
+
   /** Dati iniziali */
   initialData?: T[];
-  
+
   /** Callback personalizzate */
   onEntityCreate?: (entity: Omit<T, 'id'>) => Promise<T>;
   onEntityUpdate?: (id: string, entity: Partial<T>) => Promise<T>;
   onEntityDelete?: (id: string) => Promise<void>;
   onBulkDelete?: (ids: string[]) => Promise<void>;
-  
+
   /** Configurazione cache */
   enableCache?: boolean;
   cacheTTL?: number;
@@ -40,7 +40,7 @@ export interface UseGDPREntityPageConfig<T extends BaseEntity = BaseEntity> {
 /**
  * Azioni del reducer
  */
-type EntityPageAction<T extends BaseEntity> = 
+type EntityPageAction<T extends BaseEntity> =
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_ERROR'; payload: string | null }
   | { type: 'SET_ENTITIES'; payload: T[] }
@@ -65,10 +65,10 @@ function entityPageReducer<T extends BaseEntity>(
   switch (action.type) {
     case 'SET_LOADING':
       return { ...state, loading: action.payload };
-      
+
     case 'SET_ERROR':
       return { ...state, error: action.payload, loading: false };
-      
+
     case 'SET_ENTITIES':
       return {
         ...state,
@@ -80,7 +80,7 @@ function entityPageReducer<T extends BaseEntity>(
           total: action.payload.length
         }
       };
-      
+
     case 'ADD_ENTITY':
       return {
         ...state,
@@ -90,7 +90,7 @@ function entityPageReducer<T extends BaseEntity>(
           total: state.pagination.total + 1
         }
       };
-      
+
     case 'UPDATE_ENTITY':
       return {
         ...state,
@@ -100,7 +100,7 @@ function entityPageReducer<T extends BaseEntity>(
             : entity
         )
       };
-      
+
     case 'REMOVE_ENTITY':
       return {
         ...state,
@@ -111,7 +111,7 @@ function entityPageReducer<T extends BaseEntity>(
           total: Math.max(0, state.pagination.total - 1)
         }
       };
-      
+
     case 'REMOVE_ENTITIES':
       return {
         ...state,
@@ -122,32 +122,32 @@ function entityPageReducer<T extends BaseEntity>(
           total: Math.max(0, state.pagination.total - action.payload.length)
         }
       };
-      
+
     case 'SET_FILTERS':
       return {
         ...state,
         filters: action.payload,
         pagination: { ...state.pagination, page: 1 }
       };
-      
+
     case 'SET_SORTING':
       return { ...state, sorting: action.payload };
-      
+
     case 'SET_PAGINATION':
       return {
         ...state,
         pagination: { ...state.pagination, ...action.payload }
       };
-      
+
     case 'SET_SELECTED_ENTITIES':
       return { ...state, selectedEntities: action.payload };
-      
+
     case 'SET_UI_STATE':
       return {
         ...state,
         ui: { ...state.ui, ...action.payload }
       };
-      
+
     case 'RESET_STATE':
       return {
         entities: [],
@@ -163,7 +163,7 @@ function entityPageReducer<T extends BaseEntity>(
           activeModal: null
         }
       };
-      
+
     default:
       return state;
   }
@@ -182,7 +182,7 @@ export function useGDPREntityPage<T extends BaseEntity = BaseEntity>({
   enableCache = true,
   cacheTTL = 300000 // 5 minuti
 }: UseGDPREntityPageConfig<T>) {
-  
+
   // Stato iniziale
   const initialState: TemplateState<T> = {
     entities: initialData || [],
@@ -202,32 +202,32 @@ export function useGDPREntityPage<T extends BaseEntity = BaseEntity>({
       activeModal: null
     }
   };
-  
+
   const [state, dispatch] = useReducer(entityPageReducer<T>, initialState);
-  
+
   // Ref per accedere ai valori correnti dello state senza causare re-render
   const stateRef = useRef(state);
   stateRef.current = state;
-  
+
   // Hooks GDPR
   const { logAction } = useGDPRAudit({
     config: config.gdpr.auditConfig,
     entityType: config.entity.name
   });
-  
+
   const { checkConsent } = useGDPRConsent({
     config: config.gdpr.consentConfig,
     personId: 'current-user' // Da implementare con context utente reale
   });
-  
+
   // Cache per entità
   const [cache, setCache] = useState<Map<string, { data: T[]; timestamp: number }>>(new Map());
-  
+
   // Carica entità dal server
   const loadEntities = useCallback(async (forceRefresh = false) => {
     const currentState = stateRef.current;
     const cacheKey = `${config.api.baseEndpoint}_${JSON.stringify(currentState.filters)}_${JSON.stringify(currentState.sorting)}`;
-    
+
     // Verifica cache se abilitata
     if (enableCache && !forceRefresh) {
       const cached = cache.get(cacheKey);
@@ -236,9 +236,9 @@ export function useGDPREntityPage<T extends BaseEntity = BaseEntity>({
         return;
       }
     }
-    
+
     dispatch({ type: 'SET_LOADING', payload: true });
-    
+
     try {
       // Log azione
       await logAction('READ' as GDPRAuditAction, undefined, {
@@ -246,34 +246,34 @@ export function useGDPREntityPage<T extends BaseEntity = BaseEntity>({
         sorting: currentState.sorting,
         pagination: currentState.pagination
       });
-      
+
       // Costruisci parametri query
       const params = new URLSearchParams();
-      
+
       // Aggiungi filtri
       Object.entries(currentState.filters).forEach(([key, value]) => {
         if (value !== undefined && value !== null && value !== '') {
           params.append(key, value.toString());
         }
       });
-      
+
       // Aggiungi ordinamento
       if (currentState.sorting) {
         params.append('sortBy', currentState.sorting.field.toString());
         params.append('sortOrder', currentState.sorting.direction);
       }
-      
+
       // Aggiungi paginazione
       params.append('page', currentState.pagination.page.toString());
       params.append('limit', currentState.pagination.pageSize.toString());
-      
+
       // Chiamata API
       const response = await apiService.get(`${config.api.endpoints.list}?${params.toString()}`);
-      
+
       const responseData = response as { data?: T[]; total?: number };
       const entities = responseData.data || [];
       const total = responseData.total || entities.length;
-      
+
       // Aggiorna cache
       if (enableCache) {
         setCache(prev => new Map(prev.set(cacheKey, {
@@ -281,20 +281,20 @@ export function useGDPREntityPage<T extends BaseEntity = BaseEntity>({
           timestamp: Date.now()
         })));
       }
-      
+
       dispatch({ type: 'SET_ENTITIES', payload: entities });
       dispatch({ type: 'SET_PAGINATION', payload: { total } });
-      
+
     } catch (error) {
-      console.error('Errore nel caricamento entità:', error);
+      if (import.meta.env.DEV) console.error('Errore nel caricamento entità:', error);
       dispatch({ type: 'SET_ERROR', payload: 'Errore nel caricamento dei dati' });
     }
   }, [config, enableCache, cacheTTL, cache, logAction]);
-  
+
   // Crea nuova entità
   const createEntity = useCallback(async (entityData: Omit<T, 'id'>) => {
     dispatch({ type: 'SET_LOADING', payload: true });
-    
+
     try {
       // Verifica consensi se richiesto
       if (config.gdpr.requiresConsent && config.gdpr.consentConfig) {
@@ -303,9 +303,9 @@ export function useGDPREntityPage<T extends BaseEntity = BaseEntity>({
           throw new Error('Consensi GDPR mancanti per questa operazione');
         }
       }
-      
+
       let newEntity: T;
-      
+
       if (onEntityCreate) {
         newEntity = await onEntityCreate(entityData);
       } else {
@@ -313,29 +313,29 @@ export function useGDPREntityPage<T extends BaseEntity = BaseEntity>({
         const responseData = response as { data: T };
         newEntity = responseData.data;
       }
-      
+
       dispatch({ type: 'ADD_ENTITY', payload: newEntity });
-      
+
       // Invalida cache
       if (enableCache) {
         setCache(new Map());
       }
-      
+
       return newEntity;
-      
+
     } catch (error) {
-      console.error('Errore nella creazione entità:', error);
+      if (import.meta.env.DEV) console.error('Errore nella creazione entità:', error);
       dispatch({ type: 'SET_ERROR', payload: 'Errore nella creazione dell\'elemento' });
       throw error;
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
     }
   }, [config, onEntityCreate, checkConsent, enableCache]);
-  
+
   // Aggiorna entità esistente
   const updateEntity = useCallback(async (id: string, entityData: Partial<T>) => {
     dispatch({ type: 'SET_LOADING', payload: true });
-    
+
     try {
       // Verifica consensi se richiesto
       if (config.gdpr.requiresConsent && config.gdpr.consentConfig) {
@@ -344,9 +344,9 @@ export function useGDPREntityPage<T extends BaseEntity = BaseEntity>({
           throw new Error('Consensi GDPR mancanti per questa operazione');
         }
       }
-      
+
       let updatedEntity: T;
-      
+
       if (onEntityUpdate) {
         updatedEntity = await onEntityUpdate(id, entityData);
       } else {
@@ -354,56 +354,56 @@ export function useGDPREntityPage<T extends BaseEntity = BaseEntity>({
         const responseData = response as { data: T };
         updatedEntity = responseData.data;
       }
-      
+
       dispatch({ type: 'UPDATE_ENTITY', payload: { id, entity: entityData } });
-      
+
       // Invalida cache
       if (enableCache) {
         setCache(new Map());
       }
-      
+
       return updatedEntity;
-      
+
     } catch (error) {
-      console.error('Errore nell\'aggiornamento entità:', error);
+      if (import.meta.env.DEV) console.error('Errore nell\'aggiornamento entità:', error);
       dispatch({ type: 'SET_ERROR', payload: 'Errore nell\'aggiornamento dell\'elemento' });
       throw error;
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
     }
   }, [config, onEntityUpdate, checkConsent, enableCache]);
-  
+
   // Elimina entità
   const deleteEntity = useCallback(async (id: string) => {
     dispatch({ type: 'SET_LOADING', payload: true });
-    
+
     try {
       if (onEntityDelete) {
         await onEntityDelete(id);
       } else {
         await apiService.delete(config.api.endpoints.delete.replace(':id', id));
       }
-      
+
       dispatch({ type: 'REMOVE_ENTITY', payload: id });
-      
+
       // Invalida cache
       if (enableCache) {
         setCache(new Map());
       }
-      
+
     } catch (error) {
-      console.error('Errore nell\'eliminazione entità:', error);
+      if (import.meta.env.DEV) console.error('Errore nell\'eliminazione entità:', error);
       dispatch({ type: 'SET_ERROR', payload: 'Errore nell\'eliminazione dell\'elemento' });
       throw error;
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
     }
   }, [config, onEntityDelete, enableCache]);
-  
+
   // Elimina entità multiple
   const bulkDelete = useCallback(async (ids: string[]) => {
     dispatch({ type: 'SET_LOADING', payload: true });
-    
+
     try {
       if (onBulkDelete) {
         await onBulkDelete(ids);
@@ -411,27 +411,27 @@ export function useGDPREntityPage<T extends BaseEntity = BaseEntity>({
         await apiService.post(config.api.endpoints.bulkDelete, { ids });
       } else {
         // Fallback: elimina uno per uno
-        await Promise.all(ids.map(id => 
+        await Promise.all(ids.map(id =>
           apiService.delete(config.api.endpoints.delete.replace(':id', id))
         ));
       }
-      
+
       dispatch({ type: 'REMOVE_ENTITIES', payload: ids });
-      
+
       // Invalida cache
       if (enableCache) {
         setCache(new Map());
       }
-      
+
     } catch (error) {
-      console.error('Errore nell\'eliminazione multipla:', error);
+      if (import.meta.env.DEV) console.error('Errore nell\'eliminazione multipla:', error);
       dispatch({ type: 'SET_ERROR', payload: 'Errore nell\'eliminazione degli elementi' });
       throw error;
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
     }
   }, [config, onBulkDelete, enableCache]);
-  
+
   // Azioni template
   const actions: TemplateActions<T> = {
     loadEntities,
@@ -439,59 +439,42 @@ export function useGDPREntityPage<T extends BaseEntity = BaseEntity>({
     updateEntity,
     deleteEntity,
     bulkDelete,
-    
+
     setFilters: (filters) => dispatch({ type: 'SET_FILTERS', payload: filters }),
     setSorting: (field, direction) => dispatch({ type: 'SET_SORTING', payload: { field, direction } }),
     setPage: (page) => dispatch({ type: 'SET_PAGINATION', payload: { page } }),
     setPageSize: (pageSize) => dispatch({ type: 'SET_PAGINATION', payload: { pageSize, page: 1 } }),
     setSelectedEntities: (entities) => dispatch({ type: 'SET_SELECTED_ENTITIES', payload: entities }),
-    
+
     openModal: (modalId) => dispatch({ type: 'SET_UI_STATE', payload: { activeModal: modalId } }),
-    closeModal: () => dispatch({ type: 'SET_UI_STATE', payload: { activeModal: null } }),
-    
-    requestConsent: async (consentTypes) => {
-      // Implementa richiesta consenso
-      console.log('Richiesta consenso:', consentTypes);
-    },
-    revokeConsent: async (consentTypes) => {
-      // Implementa revoca consenso
-      console.log('Revoca consenso:', consentTypes);
-    },
-    exportData: async (format) => {
-      // Implementa export dati
-      console.log('Export dati:', format);
-    },
-    requestDeletion: async (reason) => {
-      // Implementa richiesta cancellazione
-      console.log('Richiesta cancellazione:', reason);
-    }
+    closeModal: () => dispatch({ type: 'SET_UI_STATE', payload: { activeModal: null } })
   };
-  
+
   // Carica dati iniziali
   useEffect(() => {
     if (!initialData) {
       loadEntities();
     }
   }, [initialData, loadEntities]);
-  
+
   // Ricarica quando cambiano filtri, ordinamento o paginazione
   useEffect(() => {
     if (!initialData) {
       loadEntities();
     }
   }, [initialData, loadEntities, state.filters, state.sorting, state.pagination.page, state.pagination.pageSize]);
-  
+
   return {
     state,
     actions,
     loading: state.loading,
     error: state.error,
-    
+
     // Utility functions
     clearError: () => dispatch({ type: 'SET_ERROR', payload: null }),
     resetState: () => dispatch({ type: 'RESET_STATE' }),
     refreshData: () => loadEntities(true),
-    
+
     // Cache utilities
     clearCache: () => setCache(new Map()),
     getCacheSize: () => cache.size

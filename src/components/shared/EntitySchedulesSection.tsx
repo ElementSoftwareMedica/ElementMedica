@@ -8,7 +8,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
+    AlertCircle,
     Calendar,
+    CheckCircle,
     ChevronRight,
     Clock,
     Award,
@@ -20,10 +22,11 @@ import {
     Eye,
     GraduationCap,
     Building2,
-    User
+    User,
+    XCircle
 } from 'lucide-react';
 import { apiGet } from '../../services/api';
-import { format } from 'date-fns';
+import { format, addYears, differenceInDays } from 'date-fns';
 import { it } from 'date-fns/locale';
 
 type EntityType = 'company' | 'trainer' | 'person' | 'course';
@@ -40,14 +43,22 @@ interface Schedule {
         title: string;
         code?: string;
         duration?: number;
+        validityYears?: number;
     };
     trainer?: {
         id: string;
         firstName: string;
         lastName: string;
     };
+    // P49: ScheduleCompany has companyTenantProfile relation
     companies?: Array<{
-        company: {
+        companyTenantProfile?: {
+            company: {
+                id: string;
+                ragioneSociale: string;
+            };
+        };
+        company?: {
             id: string;
             ragioneSociale: string;
         };
@@ -64,6 +75,7 @@ interface Schedule {
         registri?: number;
         lettere?: number;
     };
+    expiryDate?: string;
 }
 
 interface Document {
@@ -85,10 +97,12 @@ interface EntitySchedulesSectionProps {
 }
 
 const statusColors: Record<string, { bg: string; text: string; label: string }> = {
+    PREVENTIVO: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Preventivo' },
+    ACCETTATO: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Accettato' },
+    COMPLETATO: { bg: 'bg-green-100', text: 'text-green-700', label: 'Completato' },
+    FATTURATO: { bg: 'bg-gray-100', text: 'text-gray-700', label: 'Fatturato' },
     SCHEDULED: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Programmato' },
-    IN_PROGRESS: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'In Corso' },
-    COMPLETED: { bg: 'bg-green-100', text: 'text-green-700', label: 'Completato' },
-    CANCELLED: { bg: 'bg-red-100', text: 'text-red-700', label: 'Cancellato' }
+    IN_PROGRESS: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'In Corso' }
 };
 
 const EntitySchedulesSection: React.FC<EntitySchedulesSectionProps> = ({
@@ -150,7 +164,6 @@ const EntitySchedulesSection: React.FC<EntitySchedulesSectionProps> = ({
             // The _count field in schedules includes attestati, registri, lettere counts
             setDocuments([]);
         } catch (error) {
-            console.error('Error fetching entity schedules:', error);
         } finally {
             setLoading(false);
         }
@@ -243,6 +256,44 @@ const EntitySchedulesSection: React.FC<EntitySchedulesSectionProps> = ({
                             <div className="space-y-3">
                                 {displayedSchedules.map(schedule => {
                                     const status = statusColors[schedule.status] || statusColors.SCHEDULED;
+
+                                    // Calculate expiry only for COMPLETATO courses with validity
+                                    let expiryInfo: { label: string; color: string; icon: typeof CheckCircle; daysLeft: number } | null = null;
+                                    if (schedule.status === 'COMPLETATO' && schedule.course.validityYears && schedule.endDate) {
+                                        // Use persisted expiryDate if available, otherwise compute from endDate + validityYears
+                                        const expiryDate = schedule.expiryDate
+                                            ? new Date(schedule.expiryDate)
+                                            : addYears(new Date(schedule.endDate), schedule.course.validityYears);
+                                        const daysLeft = differenceInDays(expiryDate, new Date());
+                                        if (daysLeft < 0) {
+                                            expiryInfo = {
+                                                label: `Scaduto da ${Math.abs(daysLeft)} giorni`,
+                                                color: 'text-red-600 bg-red-50 border-red-200',
+                                                icon: XCircle,
+                                                daysLeft
+                                            };
+                                        } else if (daysLeft <= 90) {
+                                            expiryInfo = {
+                                                label: `Scade tra ${daysLeft} giorni`,
+                                                color: 'text-orange-600 bg-orange-50 border-orange-200',
+                                                icon: AlertCircle,
+                                                daysLeft
+                                            };
+                                        } else {
+                                            const years = Math.floor(daysLeft / 365);
+                                            const months = Math.floor((daysLeft % 365) / 30);
+                                            const validityLabel = years > 0
+                                                ? `${years}a ${months}m`
+                                                : `${months} mesi`;
+                                            expiryInfo = {
+                                                label: `Valido ${validityLabel}`,
+                                                color: 'text-green-600 bg-green-50 border-green-200',
+                                                icon: CheckCircle,
+                                                daysLeft
+                                            };
+                                        }
+                                    }
+
                                     return (
                                         <div
                                             key={schedule.id}
@@ -289,7 +340,11 @@ const EntitySchedulesSection: React.FC<EntitySchedulesSectionProps> = ({
                                                     {entityType === 'trainer' && schedule.companies && schedule.companies.length > 0 && (
                                                         <div className="mt-2 text-sm text-gray-600">
                                                             <Building2 className="h-3.5 w-3.5 inline mr-1" />
-                                                            {schedule.companies.map(c => c.company.ragioneSociale).join(', ')}
+                                                            {/* P49: companies -> companyTenantProfile -> company */}
+                                                            {schedule.companies.map(c => {
+                                                                const company = c.companyTenantProfile?.company || c.company;
+                                                                return company?.ragioneSociale;
+                                                            }).filter(Boolean).join(', ')}
                                                         </div>
                                                     )}
                                                     {entityType === 'course' && schedule.enrollments && (
@@ -300,11 +355,19 @@ const EntitySchedulesSection: React.FC<EntitySchedulesSectionProps> = ({
                                                     )}
                                                 </div>
 
-                                                <div className="flex items-center gap-2 ml-4">
-                                                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${status.bg} ${status.text}`}>
-                                                        {status.label}
-                                                    </span>
-                                                    <ChevronRight className="h-4 w-4 text-gray-400" />
+                                                <div className="flex flex-col items-end gap-1.5 ml-4">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${status.bg} ${status.text}`}>
+                                                            {status.label}
+                                                        </span>
+                                                        <ChevronRight className="h-4 w-4 text-gray-400" />
+                                                    </div>
+                                                    {expiryInfo && (
+                                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-full border ${expiryInfo.color}`}>
+                                                            <expiryInfo.icon className="h-3 w-3" />
+                                                            {expiryInfo.label}
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </div>
 

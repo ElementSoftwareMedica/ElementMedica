@@ -12,7 +12,7 @@ const CompaniesPage = React.lazy(() => import('./CompaniesPage'));
 export const CompaniesPageLazy: React.FC = () => {
   return (
     <ErrorBoundary>
-      <Suspense fallback={<LoadingFallback message="Loading Companies..." />}>
+      <Suspense fallback={<LoadingFallback message="Caricamento aziende..." />}>
         <CompaniesPage />
       </Suspense>
     </ErrorBoundary>

@@ -29,12 +29,16 @@ import {
     Calendar,
     Building2,
     FileText,
-    Info
+    Info,
+    Clock,
+    Percent
 } from 'lucide-react';
 import { listiniApi, prestazioniApi, poliambulatoriApi, convenzioniApi, mediciApi } from '../../../services/clinicaApi';
 import type { ListinoPrezzo, Prestazione, Poliambulatorio, Convenzione, Medico } from '../../../services/clinicaApi';
 import { User } from 'lucide-react';
 import { useToast } from '../../../hooks/useToast';
+import { DatePickerElegante } from '../../../components/ui/DatePickerElegante';
+import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
 import '../../../styles/clinica-theme.css';
 
 // =====================================================
@@ -52,6 +56,12 @@ interface FormData {
     validoDa: string;
     validoA: string;
     attivo: boolean;
+    // P44 - Compenso Medico
+    compensoMedicoTipo: string;
+    compensoMedicoValore: string;
+    compensoMedicoMinimo: string;
+    compensoMedicoMassimo: string;
+    durataMedico: string;
 }
 
 interface FormErrors {
@@ -69,6 +79,13 @@ const IVA_PRESETS = [
     { value: '22', label: '22%' }
 ];
 
+const COMPENSO_TIPO_OPTIONS = [
+    { value: '', label: 'Usa default' },
+    { value: 'PERCENTUALE', label: 'Percentuale sul prezzo' },
+    { value: 'FISSO', label: 'Importo fisso' },
+    { value: 'MINIMO_MASSIMO', label: 'Percentuale con min/max' }
+];
+
 const getInitialFormData = (prestazioneId?: string): FormData => ({
     prestazioneId: prestazioneId || '',
     poliambulatorioId: '',
@@ -80,6 +97,12 @@ const getInitialFormData = (prestazioneId?: string): FormData => ({
     validoDa: new Date().toISOString().split('T')[0],
     validoA: '',
     attivo: true,
+    // P44 - Compenso Medico
+    compensoMedicoTipo: '',
+    compensoMedicoValore: '',
+    compensoMedicoMinimo: '',
+    compensoMedicoMassimo: '',
+    durataMedico: '',
 });
 
 // =====================================================
@@ -92,6 +115,7 @@ const ListinoForm: React.FC = () => {
     const [searchParams] = useSearchParams();
     const queryClient = useQueryClient();
     const { showToast } = useToast();
+    const { confirmWarning } = useConfirmDialog();
     const isEditing = Boolean(id);
 
     // Preselect prestazione from URL
@@ -144,6 +168,12 @@ const ListinoForm: React.FC = () => {
                 validoDa: listino.validoDa ? listino.validoDa.split('T')[0] : '',
                 validoA: listino.validoA ? listino.validoA.split('T')[0] : '',
                 attivo: listino.attivo ?? true,
+                // P44 - Compenso Medico
+                compensoMedicoTipo: listino.compensoMedicoTipo || '',
+                compensoMedicoValore: listino.compensoMedicoValore ? String(listino.compensoMedicoValore) : '',
+                compensoMedicoMinimo: listino.compensoMedicoMinimo ? String(listino.compensoMedicoMinimo) : '',
+                compensoMedicoMassimo: listino.compensoMedicoMassimo ? String(listino.compensoMedicoMassimo) : '',
+                durataMedico: listino.durataMedico ? String(listino.durataMedico) : '',
             });
         }
     }, [listino]);
@@ -157,7 +187,7 @@ const ListinoForm: React.FC = () => {
             navigate('/poliambulatorio/catalogo/listini');
         },
         onError: (error: Error) => {
-            showToast({ type: 'error', message: error.message || 'Errore durante la creazione' });
+            showToast({ type: 'error', message: 'Errore durante la creazione' });
         }
     });
 
@@ -170,7 +200,7 @@ const ListinoForm: React.FC = () => {
             navigate('/poliambulatorio/catalogo/listini');
         },
         onError: (error: Error) => {
-            showToast({ type: 'error', message: error.message || 'Errore durante l\'aggiornamento' });
+            showToast({ type: 'error', message: 'Errore durante l\'aggiornamento' });
         }
     });
 
@@ -260,6 +290,12 @@ const ListinoForm: React.FC = () => {
             validoDa: formData.validoDa,
             validoA: formData.validoA || undefined,
             attivo: formData.attivo,
+            // P44 - Compenso Medico
+            compensoMedicoTipo: (formData.compensoMedicoTipo || undefined) as import('../../../services/clinicaApi').TipoCompensoMedico | undefined,
+            compensoMedicoValore: formData.compensoMedicoValore ? parseFloat(formData.compensoMedicoValore) : undefined,
+            compensoMedicoMinimo: formData.compensoMedicoMinimo ? parseFloat(formData.compensoMedicoMinimo) : undefined,
+            compensoMedicoMassimo: formData.compensoMedicoMassimo ? parseFloat(formData.compensoMedicoMassimo) : undefined,
+            durataMedico: formData.durataMedico ? parseInt(formData.durataMedico) : undefined,
         };
 
         if (isEditing) {
@@ -269,8 +305,8 @@ const ListinoForm: React.FC = () => {
         }
     };
 
-    const handleCancel = () => {
-        if (isDirty && !confirm('Hai modifiche non salvate. Sei sicuro di voler uscire?')) {
+    const handleCancel = async () => {
+        if (isDirty && !(await confirmWarning('Modifiche non salvate', 'Hai modifiche non salvate. Sei sicuro di voler uscire?'))) {
             return;
         }
         navigate('/poliambulatorio/catalogo/listini');
@@ -525,6 +561,139 @@ const ListinoForm: React.FC = () => {
                     </div>
                 </div>
 
+                {/* Compenso Medico Card - P44 Tariffario Avanzato */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <div className="flex items-center gap-3 mb-6">
+                        <div className="p-2 rounded-lg bg-purple-100">
+                            <Percent className="w-5 h-5 text-purple-600" />
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-medium text-gray-900">Compenso Medico</h2>
+                            <p className="text-sm text-gray-500">Configura il compenso per questo listino (opzionale)</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="md:col-span-2">
+                            <label className="label-clinica">Tipo Compenso</label>
+                            <select
+                                value={formData.compensoMedicoTipo}
+                                onChange={(e) => handleChange('compensoMedicoTipo', e.target.value)}
+                                className="select-clinica w-full"
+                            >
+                                {COMPENSO_TIPO_OPTIONS.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                    </option>
+                                ))}
+                            </select>
+                            <p className="mt-1 text-xs text-gray-500">
+                                Se non specificato, verrà usato il compenso configurato per il medico o quello di default
+                            </p>
+                        </div>
+
+                        {formData.compensoMedicoTipo && (
+                            <>
+                                <div>
+                                    <label className="label-clinica">
+                                        {formData.compensoMedicoTipo === 'FISSO' ? 'Importo fisso (€)' : 'Percentuale (%)'}
+                                    </label>
+                                    <input
+                                        type="number"
+                                        value={formData.compensoMedicoValore}
+                                        onChange={(e) => handleChange('compensoMedicoValore', e.target.value)}
+                                        step={formData.compensoMedicoTipo === 'FISSO' ? '0.01' : '1'}
+                                        min="0"
+                                        max={formData.compensoMedicoTipo === 'FISSO' ? '99999.99' : '100'}
+                                        placeholder={formData.compensoMedicoTipo === 'FISSO' ? '50.00' : '30'}
+                                        className="input-clinica"
+                                    />
+                                </div>
+
+                                {formData.compensoMedicoTipo === 'MINIMO_MASSIMO' && (
+                                    <>
+                                        <div>
+                                            <label className="label-clinica">Minimo (€)</label>
+                                            <input
+                                                type="number"
+                                                value={formData.compensoMedicoMinimo}
+                                                onChange={(e) => handleChange('compensoMedicoMinimo', e.target.value)}
+                                                step="0.01"
+                                                min="0"
+                                                placeholder="20.00"
+                                                className="input-clinica"
+                                            />
+                                            <p className="mt-1 text-xs text-gray-500">
+                                                Il compenso non scenderà sotto questo valore
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <label className="label-clinica">Massimo (€)</label>
+                                            <input
+                                                type="number"
+                                                value={formData.compensoMedicoMassimo}
+                                                onChange={(e) => handleChange('compensoMedicoMassimo', e.target.value)}
+                                                step="0.01"
+                                                min="0"
+                                                placeholder="100.00"
+                                                className="input-clinica"
+                                            />
+                                            <p className="mt-1 text-xs text-gray-500">
+                                                Il compenso non supererà questo valore
+                                            </p>
+                                        </div>
+                                    </>
+                                )}
+                            </>
+                        )}
+
+                        <div>
+                            <label className="label-clinica flex items-center gap-2">
+                                <Clock className="w-4 h-4 text-gray-500" />
+                                Durata Medico (minuti)
+                            </label>
+                            <input
+                                type="number"
+                                value={formData.durataMedico}
+                                onChange={(e) => handleChange('durataMedico', e.target.value)}
+                                min="5"
+                                max="480"
+                                step="5"
+                                placeholder="Usa durata prestazione"
+                                className="input-clinica"
+                            />
+                            <p className="mt-1 text-xs text-gray-500">
+                                Override della durata prestazione per questo medico/listino
+                            </p>
+                        </div>
+
+                        {/* Preview compenso calcolato */}
+                        {formData.prezzo && formData.compensoMedicoTipo && formData.compensoMedicoValore && (
+                            <div className="md:col-span-2 p-4 bg-purple-50 rounded-lg">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-purple-700">Compenso medico stimato:</span>
+                                    <span className="text-xl font-bold text-purple-900">
+                                        € {(() => {
+                                            const prezzo = parseFloat(formData.prezzo);
+                                            const valore = parseFloat(formData.compensoMedicoValore);
+                                            if (formData.compensoMedicoTipo === 'FISSO') {
+                                                return valore.toFixed(2);
+                                            }
+                                            let compenso = prezzo * (valore / 100);
+                                            if (formData.compensoMedicoTipo === 'MINIMO_MASSIMO') {
+                                                const min = formData.compensoMedicoMinimo ? parseFloat(formData.compensoMedicoMinimo) : 0;
+                                                const max = formData.compensoMedicoMassimo ? parseFloat(formData.compensoMedicoMassimo) : Infinity;
+                                                compenso = Math.max(min, Math.min(max, compenso));
+                                            }
+                                            return compenso.toFixed(2);
+                                        })()}
+                                    </span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
                 {/* Validità Card */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                     <div className="flex items-center gap-3 mb-6">
@@ -542,11 +711,10 @@ const ListinoForm: React.FC = () => {
                             <label className="label-clinica">
                                 Valido da <span className="text-red-500">*</span>
                             </label>
-                            <input
-                                type="date"
+                            <DatePickerElegante
                                 value={formData.validoDa}
-                                onChange={(e) => handleChange('validoDa', e.target.value)}
-                                className={`input-clinica ${errors.validoDa ? 'border-red-500' : ''}`}
+                                onChange={(date) => handleChange('validoDa', date ? date.toISOString().split('T')[0] : '')}
+                                theme="teal"
                             />
                             {errors.validoDa && (
                                 <p className="mt-1 text-sm text-red-600">{errors.validoDa}</p>
@@ -555,11 +723,10 @@ const ListinoForm: React.FC = () => {
 
                         <div>
                             <label className="label-clinica">Valido fino a</label>
-                            <input
-                                type="date"
+                            <DatePickerElegante
                                 value={formData.validoA}
-                                onChange={(e) => handleChange('validoA', e.target.value)}
-                                className={`input-clinica ${errors.validoA ? 'border-red-500' : ''}`}
+                                onChange={(date) => handleChange('validoA', date ? date.toISOString().split('T')[0] : '')}
+                                theme="teal"
                             />
                             {errors.validoA && (
                                 <p className="mt-1 text-sm text-red-600">{errors.validoA}</p>

@@ -184,7 +184,6 @@ export const getCourseTestAssignments = async (filters?: {
         });
         return response?.data || [];
     } catch (error) {
-        console.error('[courseTestsService] Error fetching assignments:', error);
         throw error;
     }
 };
@@ -199,7 +198,6 @@ export const getCourseTestAssignment = async (id: string): Promise<CourseTestAss
         });
         return response?.data || null;
     } catch (error) {
-        console.error('[courseTestsService] Error fetching assignment:', error);
         throw error;
     }
 };
@@ -213,7 +211,6 @@ export const getTestsForCourse = async (
 ): Promise<CourseTestAssignment[]> => {
     // Defensive check: courseId must be a valid non-empty string
     if (!courseId || typeof courseId !== 'string' || courseId.trim() === '') {
-        console.warn('[courseTestsService] getTestsForCourse called with invalid courseId:', courseId);
         return [];
     }
 
@@ -229,7 +226,6 @@ export const getTestsForCourse = async (
         );
         return response?.data || [];
     } catch (error) {
-        console.error('[courseTestsService] Error fetching tests for course:', error);
         throw error;
     }
 };
@@ -250,7 +246,6 @@ export const createCourseTestAssignment = async (
         }
         return response.data;
     } catch (error) {
-        console.error('[courseTestsService] Error creating assignment:', error);
         throw error;
     }
 };
@@ -272,7 +267,6 @@ export const updateCourseTestAssignment = async (
         }
         return response.data;
     } catch (error) {
-        console.error('[courseTestsService] Error updating assignment:', error);
         throw error;
     }
 };
@@ -289,7 +283,6 @@ export const deleteCourseTestAssignment = async (id: string): Promise<void> => {
             throw new Error(response?.error || 'Errore nell\'eliminazione');
         }
     } catch (error) {
-        console.error('[courseTestsService] Error deleting assignment:', error);
         throw error;
     }
 };
@@ -310,7 +303,6 @@ export const saveTestResult = async (data: SaveResultData): Promise<CourseTestRe
         }
         return response.data;
     } catch (error) {
-        console.error('[courseTestsService] Error saving result:', error);
         throw error;
     }
 };
@@ -328,7 +320,6 @@ export const getTestResultsForSchedule = async (
         );
         return response?.data || [];
     } catch (error) {
-        console.error('[courseTestsService] Error fetching results for schedule:', error);
         throw error;
     }
 };
@@ -344,7 +335,6 @@ export const getTestStatsForSchedule = async (scheduleId: string): Promise<TestS
         );
         return response?.data || [];
     } catch (error) {
-        console.error('[courseTestsService] Error fetching stats for schedule:', error);
         throw error;
     }
 };
@@ -364,7 +354,6 @@ export const getTestResultForPerson = async (
         );
         return response?.data || null;
     } catch (error) {
-        console.error('[courseTestsService] Error fetching result for person:', error);
         throw error;
     }
 };

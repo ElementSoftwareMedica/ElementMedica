@@ -12,7 +12,7 @@ const FormSubmissionsPage = React.lazy(() => import('./FormSubmissionsPage'));
 export const FormSubmissionsPageLazy: React.FC = () => {
   return (
     <ErrorBoundary>
-      <Suspense fallback={<LoadingFallback message="Loading Form Submissions..." />}>
+      <Suspense fallback={<LoadingFallback message="Caricamento invii moduli..." />}>
         <FormSubmissionsPage />
       </Suspense>
     </ErrorBoundary>

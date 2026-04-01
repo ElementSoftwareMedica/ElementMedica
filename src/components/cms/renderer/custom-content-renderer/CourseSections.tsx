@@ -24,13 +24,13 @@ export const CourseCategoriesSection: React.FC<{ content: any }> = ({ content })
     <section className="py-20 bg-gradient-to-br from-white via-amber-50/30 to-orange-50/40 relative overflow-hidden">
       {/* Decorative bubbles */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-20 right-10 w-64 h-64 bg-amber-200/30 rounded-full blur-3xl" />
+        <div className="absolute top-20 right-10 w-64 h-64 bg-accent-200/30 rounded-full blur-3xl" />
         <div className="absolute bottom-20 left-10 w-56 h-56 bg-orange-200/30 rounded-full blur-3xl" />
         <div className="absolute top-1/2 left-1/3 w-72 h-72 bg-yellow-200/20 rounded-full blur-3xl" />
       </div>
       <div className="container mx-auto px-4 relative z-10">
         <div className="text-center mb-16">
-          <span className="inline-block px-4 py-2 bg-amber-100 text-amber-700 rounded-full text-sm font-semibold mb-4">
+          <span className="inline-block px-4 py-2 bg-accent-100 text-accent-700 rounded-full text-sm font-semibold mb-4">
             {content.courseCategories.badge || 'Aree Formative'}
           </span>
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
@@ -58,13 +58,13 @@ export const CourseCategoriesSection: React.FC<{ content: any }> = ({ content })
                     <div className={`w-16 h-16 ${colors.bg} rounded-2xl flex items-center justify-center shadow-lg mb-4 group-hover:scale-110 transition-transform relative z-10`}>
                       <IconComponent className="w-8 h-8 text-white" />
                     </div>
-                    <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-amber-700 transition-colors">{category.name}</h3>
+                    <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-accent-700 transition-colors">{category.name}</h3>
                     <p className="text-gray-600 text-sm leading-relaxed">{category.description}</p>
                   </div>
                   <div className="p-6 bg-white">
                     {category.courseCount && (
                       <div className="flex items-center text-sm text-gray-500 mb-3">
-                        <BookOpen className="w-4 h-4 mr-2 text-amber-500" />
+                        <BookOpen className="w-4 h-4 mr-2 text-accent-500" />
                         {category.courseCount} corsi disponibili
                       </div>
                     )}
@@ -83,7 +83,7 @@ export const CourseCategoriesSection: React.FC<{ content: any }> = ({ content })
                       </div>
                     )}
                     {category.href && (
-                      <div className="flex items-center text-amber-600 font-semibold text-sm group-hover:text-amber-700 transition-colors">
+                      <div className="flex items-center text-accent-600 font-semibold text-sm group-hover:text-accent-700 transition-colors">
                         Vedi tutti i corsi
                         <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
                       </div>
@@ -121,15 +121,15 @@ export const DeliveryModesSection: React.FC<{ content: any }> = ({ content }) =>
   };
 
   return (
-    <section className="py-20 bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/30 relative overflow-hidden">
+    <section className="py-20 bg-gradient-to-br from-slate-50 via-primary-50/30 to-accent-50/30 relative overflow-hidden">
       {/* Decorative elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-10 left-20 w-48 h-48 bg-blue-200/30 rounded-full blur-3xl" />
-        <div className="absolute bottom-10 right-20 w-64 h-64 bg-indigo-200/30 rounded-full blur-3xl" />
+        <div className="absolute top-10 left-20 w-48 h-48 bg-primary-200/30 rounded-full blur-3xl" />
+        <div className="absolute bottom-10 right-20 w-64 h-64 bg-primary-200/30 rounded-full blur-3xl" />
       </div>
       <div className="container mx-auto px-4 relative z-10">
         <div className="text-center mb-16">
-          <span className="inline-block px-4 py-2 bg-indigo-100 text-indigo-700 rounded-full text-sm font-semibold mb-4">
+          <span className="inline-block px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-4">
             {content.deliveryModes.badge || 'Modalità di Erogazione'}
           </span>
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
@@ -190,15 +190,15 @@ export const TrainingCoursesSection: React.FC<{ content: any }> = ({ content }) 
   if (!content.trainingCourses) return null;
 
   return (
-    <section className="py-20 bg-gradient-to-br from-white via-emerald-50/30 to-teal-50/40 relative overflow-hidden">
+    <section className="py-20 bg-gradient-to-br from-white via-secondary-50/30 to-primary-50/40 relative overflow-hidden">
       {/* Decorative bubbles */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-20 left-10 w-64 h-64 bg-emerald-200/30 rounded-full blur-3xl" />
-        <div className="absolute bottom-10 right-20 w-56 h-56 bg-teal-200/30 rounded-full blur-3xl" />
+        <div className="absolute top-20 left-10 w-64 h-64 bg-secondary-200/30 rounded-full blur-3xl" />
+        <div className="absolute bottom-10 right-20 w-56 h-56 bg-primary-200/30 rounded-full blur-3xl" />
       </div>
       <div className="container mx-auto px-4 relative z-10">
         <div className="text-center mb-16">
-          <span className="inline-block px-4 py-2 bg-emerald-100 text-emerald-700 rounded-full text-sm font-semibold mb-4">
+          <span className="inline-block px-4 py-2 bg-secondary-100 text-secondary-700 rounded-full text-sm font-semibold mb-4">
             {content.trainingCourses.badge || 'Corsi in Evidenza'}
           </span>
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
@@ -220,7 +220,7 @@ export const TrainingCoursesSection: React.FC<{ content: any }> = ({ content }) 
                   className="group bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all cursor-pointer"
                   onClick={() => course.href && navigate(course.href)}
                 >
-                  <div className="bg-gradient-to-br from-emerald-500 to-teal-600 p-6 relative overflow-hidden">
+                  <div className="p-6 relative overflow-hidden" style={{ backgroundImage: 'linear-gradient(to bottom right, var(--color-primary-600), var(--color-primary-500))' }}>
                     <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full" />
                     <div className="w-14 h-14 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                       <IconComponent className="w-7 h-7 text-white" />
@@ -240,13 +240,13 @@ export const TrainingCoursesSection: React.FC<{ content: any }> = ({ content }) 
                         </span>
                       )}
                       {course.mode && (
-                        <span className="flex items-center px-2 py-1 bg-emerald-100 text-emerald-700 text-xs rounded-full">
+                        <span className="flex items-center px-2 py-1 bg-secondary-100 text-secondary-700 text-xs rounded-full">
                           <Monitor className="w-3 h-3 mr-1" />
                           {course.mode}
                         </span>
                       )}
                       {course.certification && (
-                        <span className="flex items-center px-2 py-1 bg-amber-100 text-amber-700 text-xs rounded-full">
+                        <span className="flex items-center px-2 py-1 bg-accent-100 text-accent-700 text-xs rounded-full">
                           <Award className="w-3 h-3 mr-1" />
                           Certificato
                         </span>
@@ -255,7 +255,7 @@ export const TrainingCoursesSection: React.FC<{ content: any }> = ({ content }) 
                     {course.price && (
                       <div className="flex items-center justify-between">
                         <span className="text-lg font-bold text-gray-900">{course.price}</span>
-                        <ArrowRight className="w-5 h-5 text-emerald-600 group-hover:translate-x-1 transition-transform" />
+                        <ArrowRight className="w-5 h-5 text-secondary-600 group-hover:translate-x-1 transition-transform" />
                       </div>
                     )}
                   </div>
@@ -285,15 +285,15 @@ export const CourseCalendarSection: React.FC<{ content: any }> = ({ content }) =
   if (!content.courseCalendar) return null;
 
   return (
-    <section className="py-20 bg-gradient-to-br from-slate-50 via-purple-50/30 to-indigo-50/30 relative overflow-hidden">
+    <section className="py-20 bg-gradient-to-br from-slate-50 via-primary-50/30 to-accent-50/30 relative overflow-hidden">
       {/* Decorative elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-10 right-10 w-64 h-64 bg-purple-200/30 rounded-full blur-3xl" />
-        <div className="absolute bottom-20 left-20 w-56 h-56 bg-indigo-200/30 rounded-full blur-3xl" />
+        <div className="absolute top-10 right-10 w-64 h-64 bg-primary-200/30 rounded-full blur-3xl" />
+        <div className="absolute bottom-20 left-20 w-56 h-56 bg-secondary-200/30 rounded-full blur-3xl" />
       </div>
       <div className="container mx-auto px-4 relative z-10">
         <div className="text-center mb-16">
-          <span className="inline-block px-4 py-2 bg-purple-100 text-purple-700 rounded-full text-sm font-semibold mb-4">
+          <span className="inline-block px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-4">
             {content.courseCalendar.badge || 'Calendario Corsi'}
           </span>
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
@@ -313,12 +313,12 @@ export const CourseCalendarSection: React.FC<{ content: any }> = ({ content }) =
                 className="group bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all flex flex-col md:flex-row items-start md:items-center gap-6 cursor-pointer"
                 onClick={() => session.href && navigate(session.href)}
               >
-                <div className="flex-shrink-0 w-20 h-20 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-2xl flex flex-col items-center justify-center text-white shadow-lg">
+                <div className="flex-shrink-0 w-20 h-20 rounded-2xl flex flex-col items-center justify-center text-white shadow-lg" style={{ backgroundImage: 'linear-gradient(to bottom right, var(--color-primary-500), var(--color-primary-700))' }}>
                   <span className="text-2xl font-bold">{session.day || new Date(session.date).getDate()}</span>
                   <span className="text-xs uppercase">{session.month || new Date(session.date).toLocaleDateString('it-IT', { month: 'short' })}</span>
                 </div>
                 <div className="flex-grow">
-                  <h3 className="text-lg font-bold text-gray-900 mb-1 group-hover:text-purple-700 transition-colors">{session.title}</h3>
+                  <h3 className="text-lg font-bold text-gray-900 mb-1 group-hover:text-primary-700 transition-colors">{session.title}</h3>
                   <div className="flex flex-wrap gap-4 text-sm text-gray-500">
                     {session.time && (
                       <span className="flex items-center">
@@ -350,7 +350,7 @@ export const CourseCalendarSection: React.FC<{ content: any }> = ({ content }) =
                   {session.price && (
                     <span className="text-lg font-bold text-gray-900">{session.price}</span>
                   )}
-                  <button className="px-6 py-2 bg-purple-600 text-white font-semibold rounded-xl hover:bg-purple-700 transition-colors flex items-center gap-2">
+                  <button className="px-6 py-2 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 transition-colors flex items-center gap-2">
                     Iscriviti
                     <ArrowRight className="w-4 h-4" />
                   </button>
@@ -386,7 +386,7 @@ export const CourseDetailsSection: React.FC<{ content: any }> = ({ content }) =>
           {/* Course header */}
           <div className="mb-12">
             {course.category && (
-              <span className="inline-block px-3 py-1 bg-amber-100 text-amber-700 text-sm font-semibold rounded-full mb-4">
+              <span className="inline-block px-3 py-1 bg-accent-100 text-accent-700 text-sm font-semibold rounded-full mb-4">
                 {course.category}
               </span>
             )}
@@ -401,28 +401,28 @@ export const CourseDetailsSection: React.FC<{ content: any }> = ({ content }) =>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-12 p-6 bg-gray-50 rounded-2xl">
             {course.duration && (
               <div className="text-center">
-                <Clock className="w-8 h-8 text-amber-500 mx-auto mb-2" />
+                <Clock className="w-8 h-8 text-accent-500 mx-auto mb-2" />
                 <div className="text-sm text-gray-500">Durata</div>
                 <div className="font-bold text-gray-900">{course.duration}</div>
               </div>
             )}
             {course.mode && (
               <div className="text-center">
-                <Monitor className="w-8 h-8 text-blue-500 mx-auto mb-2" />
+                <Monitor className="w-8 h-8 text-primary-500 mx-auto mb-2" />
                 <div className="text-sm text-gray-500">Modalità</div>
                 <div className="font-bold text-gray-900">{course.mode}</div>
               </div>
             )}
             {course.certification && (
               <div className="text-center">
-                <Award className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
+                <Award className="w-8 h-8 text-secondary-500 mx-auto mb-2" />
                 <div className="text-sm text-gray-500">Certificazione</div>
                 <div className="font-bold text-gray-900">{course.certification}</div>
               </div>
             )}
             {course.validity && (
               <div className="text-center">
-                <Calendar className="w-8 h-8 text-purple-500 mx-auto mb-2" />
+                <Calendar className="w-8 h-8 text-primary-500 mx-auto mb-2" />
                 <div className="text-sm text-gray-500">Validità</div>
                 <div className="font-bold text-gray-900">{course.validity}</div>
               </div>
@@ -437,7 +437,7 @@ export const CourseDetailsSection: React.FC<{ content: any }> = ({ content }) =>
                 {course.program.modules?.map((module: any, index: number) => (
                   <div key={index} className="bg-gray-50 rounded-xl p-6">
                     <div className="flex items-start gap-4">
-                      <div className="w-10 h-10 bg-amber-500 rounded-xl flex items-center justify-center text-white font-bold flex-shrink-0">
+                      <div className="w-10 h-10 bg-accent-500 rounded-xl flex items-center justify-center text-white font-bold flex-shrink-0">
                         {index + 1}
                       </div>
                       <div>
@@ -447,7 +447,7 @@ export const CourseDetailsSection: React.FC<{ content: any }> = ({ content }) =>
                           <ul className="space-y-1">
                             {module.topics.map((topic: string, i: number) => (
                               <li key={i} className="flex items-start text-sm text-gray-600">
-                                <CheckCircle className="w-4 h-4 text-emerald-500 mr-2 mt-0.5 flex-shrink-0" />
+                                <CheckCircle className="w-4 h-4 text-secondary-500 mr-2 mt-0.5 flex-shrink-0" />
                                 {topic}
                               </li>
                             ))}
@@ -467,8 +467,8 @@ export const CourseDetailsSection: React.FC<{ content: any }> = ({ content }) =>
               <h2 className="text-2xl font-bold text-gray-900 mb-6">A Chi è Rivolto</h2>
               <ul className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {course.targetAudience.map((target: string, index: number) => (
-                  <li key={index} className="flex items-start bg-blue-50 rounded-xl p-4">
-                    <Users className="w-5 h-5 text-blue-600 mr-3 mt-0.5 flex-shrink-0" />
+                  <li key={index} className="flex items-start bg-primary-50 rounded-xl p-4">
+                    <Users className="w-5 h-5 text-primary-600 mr-3 mt-0.5 flex-shrink-0" />
                     <span className="text-gray-700">{target}</span>
                   </li>
                 ))}
@@ -492,7 +492,7 @@ export const CourseDetailsSection: React.FC<{ content: any }> = ({ content }) =>
           )}
 
           {/* Pricing and CTA */}
-          <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl p-8 text-center">
+          <div className="rounded-2xl p-8 text-center" style={{ backgroundImage: 'linear-gradient(to bottom right, var(--color-accent-50), #fff7ed)' }}>
             {course.price && (
               <div className="mb-6">
                 <span className="text-sm text-gray-500">Prezzo</span>

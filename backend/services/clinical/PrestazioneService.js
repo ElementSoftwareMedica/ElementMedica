@@ -52,7 +52,7 @@ export class PrestazioneService {
                 }
 
                 // Return with relations
-                return tx.prestazione.findUnique({
+                return tx.prestazione.findFirst({
                     where: { id: created.id },
                     include: {
                         listiniPrezzo: {
@@ -161,9 +161,12 @@ export class PrestazioneService {
 
     /**
      * Get all prestazioni for tenant
-     * @param {string} tenantId - Tenant ID
+     * @param {string} tenantId - Primary tenant ID (fallback)
      * @param {Object} options - Query options
      * @param {string} branchType - Branch type (optional for backward compatibility)
+     * @param {string} options.tenantIds - Comma-separated list of tenant IDs (multi-tenant support)
+     * @param {boolean} options.allTenants - If true and accessibleTenantIds provided, show all
+     * @param {string[]} options.accessibleTenantIds - Array of tenant IDs the user can access
      * @returns {Promise<Object>} Prestazioni with pagination
      */
     static async getAll(tenantId, options = {}, branchType = null) {
@@ -175,14 +178,42 @@ export class PrestazioneService {
                 tipo = null,
                 attivo = true,
                 orderBy = 'nome',
-                orderDir = 'asc'
+                orderDir = 'asc',
+                tenantIds = null,
+                allTenants = false,
+                accessibleTenantIds = []
             } = options;
 
             const skip = (page - 1) * limit;
 
+            // Determine tenant filter based on user's access (multi-tenant support)
+            let tenantFilter = {};
+
+            if (tenantIds) {
+                // Handle both array and comma-separated string formats
+                const requestedIds = Array.isArray(tenantIds)
+                    ? tenantIds
+                    : (typeof tenantIds === 'string' ? tenantIds.split(',').map(id => id.trim()) : []);
+                const allowedIds = accessibleTenantIds.length > 0
+                    ? requestedIds.filter(id => accessibleTenantIds.includes(id))
+                    : requestedIds;
+
+                if (allowedIds.length > 0) {
+                    tenantFilter = allowedIds.length === 1
+                        ? { tenantId: allowedIds[0] }
+                        : { tenantId: { in: allowedIds } };
+                } else {
+                    tenantFilter = tenantId ? { tenantId } : {};
+                }
+            } else if (allTenants && accessibleTenantIds.length > 0) {
+                tenantFilter = { tenantId: { in: accessibleTenantIds } };
+            } else if (tenantId) {
+                tenantFilter = { tenantId };
+            }
+
             const where = {
-                tenantId,
                 deletedAt: null,
+                ...tenantFilter,
                 ...(attivo !== undefined && { attivo }),
                 ...(tipo && { tipo }),
                 // Project 45: Add branchType filter if provided
@@ -366,7 +397,7 @@ export class PrestazioneService {
                 }
 
                 // Return with relations
-                return tx.prestazione.findUnique({
+                return tx.prestazione.findFirst({
                     where: { id },
                     include: {
                         listiniPrezzo: {
@@ -691,30 +722,46 @@ export class PrestazioneService {
                             id: true,
                             firstName: true,
                             lastName: true,
-                            email: true,
                             taxCode: true,
-                            registerCode: true,
-                            specialties: true
+                            tenantProfiles: {
+                                where: { tenantId, deletedAt: null },
+                                select: {
+                                    email: true,
+                                    registerCode: true,
+                                    specialties: true
+                                }
+                            }
                         }
                     }
                 }
             });
 
-            // Trasforma in formato più utilizzabile
-            return mediciAbilitati.map(abilitazione => ({
-                id: abilitazione.id,
-                medicoId: abilitazione.medicoId,
-                prestazioneId: abilitazione.prestazioneId,
-                attivo: abilitazione.attivo,
-                dataAbilitazione: abilitazione.dataAbilitazione,
-                durataMedico: abilitazione.durataMedico,
-                compensoTipo: abilitazione.compensoTipo,
-                compensoValore: Number(abilitazione.compensoValore),
-                compensoMinimo: abilitazione.compensoMinimo ? Number(abilitazione.compensoMinimo) : null,
-                compensoMassimo: abilitazione.compensoMassimo ? Number(abilitazione.compensoMassimo) : null,
-                note: abilitazione.note,
-                medico: abilitazione.medico
-            }));
+            // Trasforma in formato più utilizzabile con flatten dei tenantProfiles
+            return mediciAbilitati.map(abilitazione => {
+                const profile = abilitazione.medico?.tenantProfiles?.[0] || {};
+                return {
+                    id: abilitazione.id,
+                    medicoId: abilitazione.medicoId,
+                    prestazioneId: abilitazione.prestazioneId,
+                    attivo: abilitazione.attivo,
+                    dataAbilitazione: abilitazione.dataAbilitazione,
+                    durataMedico: abilitazione.durataMedico,
+                    compensoTipo: abilitazione.compensoTipo,
+                    compensoValore: Number(abilitazione.compensoValore),
+                    compensoMinimo: abilitazione.compensoMinimo ? Number(abilitazione.compensoMinimo) : null,
+                    compensoMassimo: abilitazione.compensoMassimo ? Number(abilitazione.compensoMassimo) : null,
+                    note: abilitazione.note,
+                    medico: {
+                        id: abilitazione.medico?.id,
+                        firstName: abilitazione.medico?.firstName,
+                        lastName: abilitazione.medico?.lastName,
+                        taxCode: abilitazione.medico?.taxCode,
+                        email: profile.email || null,
+                        registerCode: profile.registerCode || null,
+                        specialties: profile.specialties || []
+                    }
+                };
+            });
         } catch (error) {
             logger.error('Failed to get medici abilitati', {
                 component: 'prestazione-service',

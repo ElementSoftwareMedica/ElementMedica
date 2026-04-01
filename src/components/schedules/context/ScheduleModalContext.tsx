@@ -346,15 +346,6 @@ export const ScheduleModalProvider: React.FC<ScheduleModalProviderProps> = ({
   preSelectedCompanyIds = []
 }) => {
   // DEBUG: Log props ricevute dal provider
-  console.debug('[ScheduleModalProvider] Props ricevute:', {
-    trainingsCount: trainings?.length ?? 0,
-    trainersCount: trainers?.length ?? 0,
-    companiesCount: companies?.length ?? 0,
-    personsCount: persons?.length ?? 0,
-    hasExistingEvent: !!existingEvent,
-    personsType: Array.isArray(persons) ? 'array' : typeof persons,
-    samplePerson: persons?.[0] ? { id: persons[0].id, firstName: persons[0].firstName } : null
-  });
   // Inizializzazione stato con supporto a initialDate/initialTime
   const initialDates = React.useMemo(() => {
     const defaultStart = '09:00';
@@ -433,10 +424,14 @@ export const ScheduleModalProvider: React.FC<ScheduleModalProviderProps> = ({
       return new Set(preSelectedCompanyIds);
     }
     // Poi existingEvent
-    const ids = (existingEvent as any)?.company_ids
-      ?? (existingEvent as any)?.companies?.map((c: any) => c?.id)
+    // P49: company IDs devono matchare CompanyTenantProfile.id come restituito da getCompanies()
+    // Supporta: company_ids (esplicito), c.id (se già CompanyTenantProfile), c.companyTenantProfileId, c.companyTenantProfile.id
+    const rawIds = (existingEvent as any)?.company_ids
+      ?? (existingEvent as any)?.companies?.map((c: any) =>
+        c?.companyTenantProfileId ?? c?.companyTenantProfile?.id ?? c?.id
+      )
       ?? [];
-    return new Set(ids.filter((v: any) => v !== undefined && v !== null));
+    return new Set(rawIds.filter((v: any) => v !== undefined && v !== null));
   }, [existingEvent, preSelectedCompanyIds]);
 
   // Inizializza attendance da existingEvent se presente, altrimenti da initialSelectedPersons

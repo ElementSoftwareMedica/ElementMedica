@@ -11,6 +11,7 @@ import { requirePermissions } from '../middleware/rbac.js';
 import { auditLog } from '../middleware/audit.js';
 import logger from '../utils/logger.js';
 import sitemapService from '../services/sitemapService.js';
+import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 
 const { authenticate } = authMiddleware;
 const router = express.Router();
@@ -46,7 +47,7 @@ router.get('/sitemap.xml', async (req, res) => {
     res.send(xml);
   } catch (error) {
     logger.error('[SITEMAP] Error serving sitemap XML:', error);
-    res.status(500).send('Error generating sitemap');
+    res.status(500).send('Errore nella generazione della sitemap');
   }
 });
 
@@ -70,7 +71,7 @@ router.get('/robots.txt', async (req, res) => {
     res.send(robotsTxt);
   } catch (error) {
     logger.error('Error serving robots.txt:', error);
-    res.status(500).send('Error generating robots.txt');
+    res.status(500).send('Errore nella generazione del robots.txt');
   }
 });
 
@@ -85,14 +86,14 @@ router.post('/api/v1/sitemap/regenerate',
   auditLog('REGENERATE_SITEMAP'),
   async (req, res) => {
     try {
-      const tenantId = req.person.tenantId;
+      const tenantId = getEffectiveTenantId(req);
       const baseUrl = process.env.FRONTEND_URL || req.get('origin') || 'http://localhost:5173';
 
       const result = await sitemapService.regenerateFullSitemap(tenantId, baseUrl);
 
       res.json({
         success: true,
-        message: 'Sitemap regenerated successfully',
+        message: 'Sitemap rigenerato con successo',
         data: result
       });
     } catch (error) {
@@ -116,14 +117,14 @@ router.post('/api/v1/sitemap/regenerate/pages',
   auditLog('REGENERATE_SITEMAP_PAGES'),
   async (req, res) => {
     try {
-      const tenantId = req.person.tenantId;
+      const tenantId = getEffectiveTenantId(req);
       const baseUrl = process.env.FRONTEND_URL || req.get('origin') || 'http://localhost:5173';
 
       const results = await sitemapService.regenerateFromCMSPages(tenantId, baseUrl);
 
       res.json({
         success: true,
-        message: 'Sitemap pages regenerated successfully',
+        message: 'Sitemap pagine rigenerato con successo',
         data: {
           count: results.length
         }
@@ -149,14 +150,14 @@ router.post('/api/v1/sitemap/regenerate/courses',
   auditLog('REGENERATE_SITEMAP_COURSES'),
   async (req, res) => {
     try {
-      const tenantId = req.person.tenantId;
+      const tenantId = getEffectiveTenantId(req);
       const baseUrl = process.env.FRONTEND_URL || req.get('origin') || 'http://localhost:5173';
 
       const results = await sitemapService.regenerateFromCourses(tenantId, baseUrl);
 
       res.json({
         success: true,
-        message: 'Sitemap courses regenerated successfully',
+        message: 'Sitemap corsi rigenerato con successo',
         data: {
           count: results.length
         }
@@ -181,7 +182,7 @@ router.get('/api/v1/sitemap/stats',
   requirePermissions('seo:read'),
   async (req, res) => {
     try {
-      const tenantId = req.person.tenantId;
+      const tenantId = getEffectiveTenantId(req);
       const stats = await sitemapService.getSitemapStats(tenantId);
 
       res.json({
@@ -223,13 +224,13 @@ router.delete('/api/v1/sitemap/:entityType/:entityId',
       }
 
       const { entityType, entityId } = req.params;
-      const tenantId = req.person.tenantId;
+      const tenantId = getEffectiveTenantId(req);
 
       await sitemapService.deleteSitemapEntry(entityType, entityId, tenantId);
 
       res.json({
         success: true,
-        message: 'Sitemap entry deleted successfully'
+        message: 'Voce sitemap eliminata con successo'
       });
     } catch (error) {
       logger.error('Error deleting sitemap entry:', error);

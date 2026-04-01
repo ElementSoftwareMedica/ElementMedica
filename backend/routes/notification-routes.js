@@ -27,6 +27,7 @@ import EmailService from '../services/emailService.js';
 import SMSService from '../services/smsService.js';
 import NotificationSchedulerService from '../services/notificationSchedulerService.js';
 import logger from '../utils/logger.js';
+import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 
 const router = express.Router();
 
@@ -71,7 +72,7 @@ router.post('/send',
     async (req, res) => {
         try {
             const { type, entityId, to, templateData } = req.body;
-            const tenantId = req.person.tenantId;
+            const tenantId = getEffectiveTenantId(req);
 
             let result;
 
@@ -81,7 +82,7 @@ router.post('/send',
                     if (!entityId) {
                         return res.status(400).json({
                             success: false,
-                            error: 'entityId required for appointment notifications'
+                            error: 'entityId richiesto per le notifiche appuntamento'
                         });
                     }
                     result = await NotificationSchedulerService.sendAppointmentNotification(
@@ -103,7 +104,7 @@ router.post('/send',
                 default:
                     return res.status(400).json({
                         success: false,
-                        error: 'Notification type not yet implemented'
+                        error: 'Tipo di notifica non ancora implementato'
                     });
             }
 
@@ -123,13 +124,13 @@ router.post('/send',
             logger.error('Failed to send notification', {
                 component: 'NotificationRoutes',
                 action: 'send',
-                error: error.message,
-                tenantId: req.person.tenantId
+                error: 'Operazione non riuscita',
+                tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
-                error: error.message
+                error: 'Errore interno del server'
             });
         }
     }
@@ -159,7 +160,7 @@ router.get('/templates',
         } catch (error) {
             res.status(500).json({
                 success: false,
-                error: error.message
+                error: 'Errore interno del server'
             });
         }
     }
@@ -194,7 +195,7 @@ router.post('/preview',
                 appointmentDate: 'Lunedì 15 Gennaio 2025',
                 appointmentTime: '10:30',
                 serviceName: 'Visita Specialistica',
-                doctorName: 'Dr. Bianchi',
+                doctorName: 'Dott. Bianchi',
                 ...data
             };
 
@@ -207,7 +208,7 @@ router.post('/preview',
         } catch (error) {
             res.status(400).json({
                 success: false,
-                error: error.message
+                error: 'Errore interno del server'
             });
         }
     }
@@ -225,7 +226,7 @@ router.get('/config',
     requirePermission('settings:read'),
     async (req, res) => {
         try {
-            const config = await NotificationSchedulerService._getTenantReminderConfig(req.person.tenantId);
+            const config = await NotificationSchedulerService._getTenantReminderConfig(getEffectiveTenantId(req));
 
             res.json({
                 success: true,
@@ -234,7 +235,7 @@ router.get('/config',
         } catch (error) {
             res.status(500).json({
                 success: false,
-                error: error.message
+                error: 'Errore interno del server'
             });
         }
     }
@@ -260,7 +261,7 @@ router.put('/config',
     async (req, res) => {
         try {
             const result = await NotificationSchedulerService.updateTenantConfig(
-                req.person.tenantId,
+                getEffectiveTenantId(req),
                 req.body
             );
 
@@ -268,7 +269,7 @@ router.put('/config',
                 component: 'NotificationRoutes',
                 action: 'updateConfig',
                 userId: req.person.id,
-                tenantId: req.person.tenantId
+                tenantId: getEffectiveTenantId(req)
             });
 
             res.json({
@@ -278,7 +279,7 @@ router.put('/config',
         } catch (error) {
             res.status(500).json({
                 success: false,
-                error: error.message
+                error: 'Errore interno del server'
             });
         }
     }
@@ -318,7 +319,7 @@ router.post('/test',
                 to,
                 template,
                 data: testData,
-                tenantId: req.person.tenantId
+                tenantId: getEffectiveTenantId(req)
             });
 
             logger.info('Test email sent', {
@@ -331,12 +332,12 @@ router.post('/test',
             res.json({
                 success: true,
                 data: result,
-                message: 'Test email sent successfully'
+                message: 'Email di test inviata con successo'
             });
         } catch (error) {
             res.status(500).json({
                 success: false,
-                error: error.message
+                error: 'Errore interno del server'
             });
         }
     }
@@ -363,7 +364,7 @@ router.get('/status',
         } catch (error) {
             res.status(500).json({
                 success: false,
-                error: error.message
+                error: 'Errore interno del server'
             });
         }
     }
@@ -384,7 +385,7 @@ router.post('/trigger',
             if (process.env.NODE_ENV === 'production') {
                 return res.status(403).json({
                     success: false,
-                    error: 'Not allowed in production'
+                    error: 'Non consentito in produzione'
                 });
             }
 
@@ -397,7 +398,7 @@ router.post('/trigger',
         } catch (error) {
             res.status(500).json({
                 success: false,
-                error: error.message
+                error: 'Errore interno del server'
             });
         }
     }
@@ -445,7 +446,7 @@ router.get('/sms/status',
         } catch (error) {
             res.status(500).json({
                 success: false,
-                error: error.message
+                error: 'Errore interno del server'
             });
         }
     }
@@ -476,7 +477,7 @@ router.get('/sms/templates',
         } catch (error) {
             res.status(500).json({
                 success: false,
-                error: error.message
+                error: 'Errore interno del server'
             });
         }
     }
@@ -510,7 +511,7 @@ router.post('/sms/preview',
         } catch (error) {
             res.status(400).json({
                 success: false,
-                error: error.message
+                error: 'Errore interno del server'
             });
         }
     }
@@ -540,7 +541,7 @@ router.post('/sms/send',
                 to,
                 template,
                 data: data || {},
-                tenantId: req.person.tenantId
+                tenantId: getEffectiveTenantId(req)
             });
 
             logger.info('SMS sent via API', {
@@ -548,7 +549,7 @@ router.post('/sms/send',
                 action: 'sendSMS',
                 template,
                 userId: req.person.id,
-                tenantId: req.person.tenantId
+                tenantId: getEffectiveTenantId(req)
             });
 
             res.json({
@@ -558,7 +559,7 @@ router.post('/sms/send',
         } catch (error) {
             res.status(500).json({
                 success: false,
-                error: error.message
+                error: 'Errore interno del server'
             });
         }
     }
@@ -588,7 +589,7 @@ router.post('/whatsapp/send',
                 to,
                 template,
                 data: data || {},
-                tenantId: req.person.tenantId
+                tenantId: getEffectiveTenantId(req)
             });
 
             logger.info('WhatsApp message sent via API', {
@@ -596,7 +597,7 @@ router.post('/whatsapp/send',
                 action: 'sendWhatsApp',
                 template,
                 userId: req.person.id,
-                tenantId: req.person.tenantId
+                tenantId: getEffectiveTenantId(req)
             });
 
             res.json({
@@ -606,7 +607,7 @@ router.post('/whatsapp/send',
         } catch (error) {
             res.status(500).json({
                 success: false,
-                error: error.message
+                error: 'Errore interno del server'
             });
         }
     }
@@ -635,7 +636,7 @@ router.put('/opt-out',
 
             const result = await SMSService.updateOptOut(
                 patientId,
-                req.person.tenantId,
+                getEffectiveTenantId(req),
                 { smsOptOut, whatsappOptOut }
             );
 
@@ -644,7 +645,7 @@ router.put('/opt-out',
                 action: 'updateOptOut',
                 patientId,
                 userId: req.person.id,
-                tenantId: req.person.tenantId
+                tenantId: getEffectiveTenantId(req)
             });
 
             res.json({
@@ -654,7 +655,7 @@ router.put('/opt-out',
         } catch (error) {
             res.status(500).json({
                 success: false,
-                error: error.message
+                error: 'Errore interno del server'
             });
         }
     }
@@ -682,7 +683,7 @@ router.get('/sms/message/:messageSid',
         } catch (error) {
             res.status(500).json({
                 success: false,
-                error: error.message
+                error: 'Errore interno del server'
             });
         }
     }

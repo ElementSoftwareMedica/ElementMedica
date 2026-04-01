@@ -21,7 +21,7 @@ export const WhenRequiredSection: React.FC<{ content: any }> = ({ content }) => 
   if (!content.whenRequired) return null;
 
   return (
-    <section className="py-20 bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50">
+    <section className="py-20" style={{ backgroundImage: 'linear-gradient(to bottom right, var(--color-accent-50), var(--color-accent-50), var(--color-accent-50))' }}>
       <div className="container mx-auto px-4">
         <div className="text-center mb-12">
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
@@ -62,7 +62,7 @@ export const MedicalExamSection: React.FC<{ content: any }> = ({ content }) => {
   if (!content.medicalExam) return null;
 
   return (
-    <section className="py-20 bg-gradient-to-br from-white via-emerald-50/30 to-teal-50/40">
+    <section className="py-20 bg-gradient-to-br from-white via-secondary-50/30 to-primary-50/40">
       <div className="container mx-auto px-4">
         <div className="text-center mb-12">
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
@@ -90,9 +90,9 @@ export const MedicalExamSection: React.FC<{ content: any }> = ({ content }) => {
           })}
         </div>
         {content.medicalExam.note && (
-          <div className="max-w-3xl mx-auto bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
-            <AlertCircle className="w-5 h-5 text-blue-600 mx-auto mb-2" />
-            <p className="text-sm text-blue-800">{content.medicalExam.note}</p>
+          <div className="max-w-3xl mx-auto bg-primary-50 border border-primary-200 rounded-xl p-4 text-center">
+            <AlertCircle className="w-5 h-5 text-primary-600 mx-auto mb-2" />
+            <p className="text-sm text-primary-800">{content.medicalExam.note}</p>
           </div>
         )}
       </div>
@@ -107,7 +107,7 @@ export const ProcessStepsSection: React.FC<{ content: any }> = ({ content }) => 
   if (!content.process?.steps) return null;
 
   return (
-    <section className="py-20 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+    <section className="py-20" style={{ backgroundImage: 'linear-gradient(to bottom right, var(--color-primary-50), var(--color-primary-50), var(--color-accent-50))' }}>
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
@@ -117,7 +117,7 @@ export const ProcessStepsSection: React.FC<{ content: any }> = ({ content }) => 
         <div className="max-w-5xl mx-auto">
           <div className="relative">
             {/* Vertical line connector */}
-            <div className="hidden lg:block absolute left-1/2 top-0 bottom-0 w-0.5 bg-gradient-to-b from-blue-300 via-indigo-400 to-purple-500 transform -translate-x-1/2" />
+            <div className="hidden lg:block absolute left-1/2 top-0 bottom-0 w-0.5 transform -translate-x-1/2" style={{ backgroundImage: 'linear-gradient(to bottom, var(--color-primary-300), var(--color-primary-400), var(--color-secondary-500))' }} />
 
             {content.process.steps.map((step: any, index: number) => {
               const IconComponent = iconMap[step.icon] || CheckCircle;
@@ -127,20 +127,20 @@ export const ProcessStepsSection: React.FC<{ content: any }> = ({ content }) => 
                   <div className={`flex-1 ${isLeft ? 'lg:text-right' : 'lg:text-left'}`}>
                     <div className={`bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-shadow ${isLeft ? 'lg:mr-8' : 'lg:ml-8'}`}>
                       <div className="flex items-center gap-4 mb-3">
-                        <span className="px-3 py-1 bg-indigo-600 text-white font-bold rounded-lg text-sm">{step.number}</span>
+                        <span className="px-3 py-1 bg-primary-600 text-white font-bold rounded-lg text-sm">{step.number}</span>
                         <h3 className="text-xl font-bold text-gray-900">{step.title}</h3>
                       </div>
                       <p className="text-gray-600 mb-2">{step.description}</p>
                       {step.duration && (
-                        <span className="inline-flex items-center text-sm text-indigo-600">
+                        <span className="inline-flex items-center text-sm text-primary-600">
                           <Clock className="w-4 h-4 mr-1" />
                           {step.duration}
                         </span>
                       )}
                     </div>
                   </div>
-                  <div className="hidden lg:flex w-16 h-16 bg-white rounded-full shadow-lg items-center justify-center z-10 border-4 border-indigo-200">
-                    <IconComponent className="w-8 h-8 text-indigo-600" />
+                  <div className="hidden lg:flex w-16 h-16 bg-white rounded-full shadow-lg items-center justify-center z-10 border-4 border-primary-200">
+                    <IconComponent className="w-8 h-8 text-primary-600" />
                   </div>
                   <div className="flex-1 hidden lg:block" />
                 </div>
@@ -159,10 +159,10 @@ export const ProcessStepsSection: React.FC<{ content: any }> = ({ content }) => 
 export const AdvantagesSection: React.FC<{ content: any }> = ({ content }) => {
   if (!content.advantages) return null;
 
-  const colors = ['bg-blue-500', 'bg-teal-500', 'bg-purple-500', 'bg-orange-500', 'bg-green-500', 'bg-indigo-500'];
+  const colors = ['bg-primary-500', 'bg-primary-500', 'bg-secondary-500', 'bg-orange-500', 'bg-emerald-500', 'bg-secondary-500'];
 
   return (
-    <section className="py-20 bg-gradient-to-br from-slate-50 via-indigo-50/30 to-purple-50/40">
+    <section className="py-20 bg-gradient-to-br from-slate-50 via-primary-50/30 to-accent-50/40">
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
@@ -232,7 +232,7 @@ export const RiskTypesSection: React.FC<{ content: any }> = ({ content }) => {
   if (!content.riskTypes?.items) return null;
 
   return (
-    <section className="py-20 bg-gradient-to-br from-amber-50/50 via-orange-50/40 to-yellow-50/30">
+    <section className="py-20" style={{ backgroundImage: 'linear-gradient(to bottom right, color-mix(in srgb, var(--color-accent-50) 50%, transparent), color-mix(in srgb, var(--color-accent-50) 40%, transparent), color-mix(in srgb, var(--color-accent-50) 30%, transparent))' }}>
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
@@ -248,9 +248,9 @@ export const RiskTypesSection: React.FC<{ content: any }> = ({ content }) => {
           {content.riskTypes.items.map((risk: any, index: number) => {
             const IconComponent = iconMap[risk.icon] || AlertTriangle;
             return (
-              <div key={index} className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl p-6 border-l-4 border-amber-400 hover:shadow-lg transition-shadow">
+              <div key={index} className="rounded-2xl p-6 border-l-4 border-accent-400 hover:shadow-lg transition-shadow" style={{ backgroundImage: 'linear-gradient(to bottom right, var(--color-accent-50), var(--color-accent-50))' }}>
                 <div className="flex items-center gap-4 mb-4">
-                  <div className="w-12 h-12 bg-amber-500 rounded-xl flex items-center justify-center">
+                  <div className="w-12 h-12 bg-accent-500 rounded-xl flex items-center justify-center">
                     <IconComponent className="w-6 h-6 text-white" />
                   </div>
                   <h3 className="font-bold text-gray-900">{risk.title}</h3>
@@ -259,7 +259,7 @@ export const RiskTypesSection: React.FC<{ content: any }> = ({ content }) => {
                 {risk.exams && (
                   <div className="flex flex-wrap gap-2">
                     {risk.exams.map((exam: string, examIndex: number) => (
-                      <span key={examIndex} className="px-3 py-1 bg-white rounded-full text-xs text-amber-700 font-medium">
+                      <span key={examIndex} className="px-3 py-1 bg-white rounded-full text-xs text-accent-700 font-medium">
                         {exam}
                       </span>
                     ))}
@@ -281,7 +281,7 @@ export const ExamsOfferedSection: React.FC<{ content: any }> = ({ content }) => 
   if (!content.examsOffered?.categories) return null;
 
   return (
-    <section className="py-20 bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50">
+    <section className="py-20" style={{ backgroundImage: 'linear-gradient(to bottom right, var(--color-secondary-50), var(--color-primary-50), var(--color-accent-50))' }}>
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
@@ -298,14 +298,14 @@ export const ExamsOfferedSection: React.FC<{ content: any }> = ({ content }) => 
             const IconComponent = iconMap[category.icon] || CheckCircle;
             return (
               <div key={index} className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-shadow">
-                <div className="w-14 h-14 bg-teal-500 rounded-xl flex items-center justify-center mb-4">
+                <div className="w-14 h-14 bg-primary-500 rounded-xl flex items-center justify-center mb-4">
                   <IconComponent className="w-7 h-7 text-white" />
                 </div>
                 <h3 className="font-bold text-gray-900 mb-4">{category.name}</h3>
                 <ul className="space-y-2">
                   {category.items?.map((item: string, itemIndex: number) => (
                     <li key={itemIndex} className="flex items-center gap-2 text-sm text-gray-600">
-                      <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                      <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
                       {item}
                     </li>
                   ))}

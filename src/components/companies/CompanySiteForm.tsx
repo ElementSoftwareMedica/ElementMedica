@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { apiGet, apiPost, apiPut } from '../../services/api';
 import { useToast } from '../../hooks/useToast';
+import { useTenantMode } from '../../contexts/TenantModeContext';
 import { Person } from '../../types';
 import { Calendar } from 'lucide-react';
+import { DatePickerElegante } from '../ui/DatePickerElegante';
 
 interface CompanySite {
   id: string;
@@ -50,15 +52,19 @@ interface CompanySiteFormProps {
   site?: CompanySite | null;
   onSuccess: () => void;
   onClose: () => void;
+  operateHeaders?: Record<string, string>;
 }
 
-const CompanySiteForm: React.FC<CompanySiteFormProps> = ({ companyId, site, onSuccess, onClose }) => {
+const CompanySiteForm: React.FC<CompanySiteFormProps> = ({ companyId, site, onSuccess, onClose, operateHeaders }) => {
+  const { getOperateHeaders } = useTenantMode();
+  const effectiveHeaders = operateHeaders || getOperateHeaders();
   const [formData, setFormData] = useState({
     siteName: site?.siteName || '',
     citta: site?.citta || '',
     indirizzo: site?.indirizzo || '',
     cap: site?.cap || '',
     provincia: site?.provincia || '',
+    numeroPAT: site?.numeroPAT || '',
     personaRiferimento: site?.personaRiferimento || '',
     telefono: site?.telefono || '',
     mail: site?.mail || '',
@@ -78,19 +84,33 @@ const CompanySiteForm: React.FC<CompanySiteFormProps> = ({ companyId, site, onSu
     noteSopralluogoMedico: site?.noteSopralluogoMedico || ''
   });
   const [loading, setLoading] = useState(false);
-  const [persons, setPersons] = useState<Person[]>([]);
+  // P59: Liste separate per RSPP e Medici Competenti con filtri appropriati
+  const [rsppList, setRsppList] = useState<Person[]>([]);
+  const [medicoList, setMedicoList] = useState<Person[]>([]);
   const { showToast } = useToast();
 
   useEffect(() => {
-    fetchPersons();
+    fetchOperators();
   }, []);
 
-  const fetchPersons = async () => {
+  // P59: Carica RSPP e Medici Competenti separatamente con filtri per roleType
+  // Il backend filtra automaticamente per tenant dell'utente loggato
+  const fetchOperators = async () => {
     try {
-      const response = await apiGet('/api/v1/persons') as { persons?: Person[] };
-      setPersons(response.persons || []);
+      // Carica RSPP (roleType: RSPP, CONSULENTE_SICUREZZA, TECNICO_SICUREZZA)
+      const rsppResponse = await apiGet('/api/v1/persons', {
+        roleType: 'RSPP,CONSULENTE_SICUREZZA,TECNICO_SICUREZZA',
+        limit: 100
+      }) as { data?: Person[]; persons?: Person[] };
+      setRsppList(rsppResponse.data || rsppResponse.persons || []);
+
+      // Carica Medici Competenti (roleType: MEDICO_COMPETENTE, MEDICO)
+      const medicoResponse = await apiGet('/api/v1/persons', {
+        roleType: 'MEDICO_COMPETENTE,MEDICO',
+        limit: 100
+      }) as { data?: Person[]; persons?: Person[] };
+      setMedicoList(medicoResponse.data || medicoResponse.persons || []);
     } catch (error) {
-      console.error('Error fetching persons:', error);
     }
   };
 
@@ -105,14 +125,13 @@ const CompanySiteForm: React.FC<CompanySiteFormProps> = ({ companyId, site, onSu
       };
 
       if (site) {
-        await apiPut(`/api/v1/company-sites/${site.id}`, payload);
+        await apiPut(`/api/v1/company-sites/${site.id}`, payload, { headers: effectiveHeaders });
       } else {
-        await apiPost('/api/v1/company-sites', payload);
+        await apiPost('/api/v1/company-sites', payload, { headers: effectiveHeaders });
       }
 
       onSuccess();
     } catch (error) {
-      console.error('Error saving site:', error);
       showToast({ message: 'Errore nel salvataggio della sede', type: 'error' });
     } finally {
       setLoading(false);
@@ -215,6 +234,20 @@ const CompanySiteForm: React.FC<CompanySiteFormProps> = ({ companyId, site, onSu
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Numero PAT (INAIL)
+                </label>
+                <input
+                  type="text"
+                  name="numeroPAT"
+                  value={formData.numeroPAT}
+                  onChange={handleChange}
+                  maxLength={20}
+                  placeholder="es. 12345678/90"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                />
+              </div>
             </div>
           </div>
 
@@ -295,7 +328,7 @@ const CompanySiteForm: React.FC<CompanySiteFormProps> = ({ companyId, site, onSu
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200"
                 >
                   <option value="">Seleziona RSPP</option>
-                  {persons.map((person) => (
+                  {rsppList.map((person) => (
                     <option key={person.id} value={person.id}>
                       {person.firstName} {person.lastName}
                     </option>
@@ -313,7 +346,7 @@ const CompanySiteForm: React.FC<CompanySiteFormProps> = ({ companyId, site, onSu
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200"
                 >
                   <option value="">Seleziona Medico Competente</option>
-                  {persons.map((person) => (
+                  {medicoList.map((person) => (
                     <option key={person.id} value={person.id}>
                       {person.firstName} {person.lastName}
                     </option>
@@ -343,24 +376,20 @@ const CompanySiteForm: React.FC<CompanySiteFormProps> = ({ companyId, site, onSu
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Data Ultimo Sopralluogo RSPP
                     </label>
-                    <input
-                      type="date"
-                      name="ultimoSopralluogoRSPP"
+                    <DatePickerElegante
                       value={formData.ultimoSopralluogoRSPP}
-                      onChange={handleChange}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                      onChange={(date) => handleChange({ target: { name: 'ultimoSopralluogoRSPP', value: date ? date.toISOString().split('T')[0] : '' } } as any)}
+                      theme="teal"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Data Prossimo Sopralluogo RSPP
                     </label>
-                    <input
-                      type="date"
-                      name="prossimoSopralluogoRSPP"
+                    <DatePickerElegante
                       value={formData.prossimoSopralluogoRSPP}
-                      onChange={handleChange}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                      onChange={(date) => handleChange({ target: { name: 'prossimoSopralluogoRSPP', value: date ? date.toISOString().split('T')[0] : '' } } as any)}
+                      theme="teal"
                     />
                   </div>
                   <div>
@@ -390,24 +419,20 @@ const CompanySiteForm: React.FC<CompanySiteFormProps> = ({ companyId, site, onSu
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Data Ultimo Sopralluogo Medico
                     </label>
-                    <input
-                      type="date"
-                      name="ultimoSopralluogoMedico"
+                    <DatePickerElegante
                       value={formData.ultimoSopralluogoMedico}
-                      onChange={handleChange}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200"
+                      onChange={(date) => handleChange({ target: { name: 'ultimoSopralluogoMedico', value: date ? date.toISOString().split('T')[0] : '' } } as any)}
+                      theme="teal"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Data Prossimo Sopralluogo Medico
                     </label>
-                    <input
-                      type="date"
-                      name="prossimoSopralluogoMedico"
+                    <DatePickerElegante
                       value={formData.prossimoSopralluogoMedico}
-                      onChange={handleChange}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200"
+                      onChange={(date) => handleChange({ target: { name: 'prossimoSopralluogoMedico', value: date ? date.toISOString().split('T')[0] : '' } } as any)}
+                      theme="teal"
                     />
                   </div>
                   <div>

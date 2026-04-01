@@ -6,13 +6,14 @@ import prisma from '../../config/prisma-optimization.js';
  */
 const ROLE_MAPPING = {
   'EMPLOYEE': 'EMPLOYEE',
-  'TRAINER': 'TRAINER', 
-  'SYSTEM_USER': 'SYSTEM_USER',
+  'TRAINER': 'TRAINER',
   'ADMIN': 'ADMIN',
   'SUPER_ADMIN': 'SUPER_ADMIN',
   'MANAGER': 'MANAGER',
-  'HR': 'HR',
+  'HR': 'HR_MANAGER',       // backward-compat alias → schema field HR_MANAGER
+  'HR_MANAGER': 'HR_MANAGER',
   'VIEWER': 'VIEWER'
+  // NOTE: SYSTEM_USER removed — not a valid RoleType in schema
 };
 
 /**
@@ -20,7 +21,7 @@ const ROLE_MAPPING = {
  * Estratto da personService.js per migliorare la modularità
  */
 class PersonRoleQueryService {
-  
+
   /**
    * Mappa il tipo di ruolo per retrocompatibilità
    * @param {string} roleType - Tipo di ruolo da mappare
@@ -48,7 +49,7 @@ class PersonRoleQueryService {
       } = options;
 
       const mappedRoleType = this.mapRoleType(roleType);
-      
+
       const where = {
         personRoles: {
           some: {
@@ -62,19 +63,29 @@ class PersonRoleQueryService {
         where.deletedAt = null;
       }
 
-      // Filtro persone attive
+      // P48/P49: Filtri per isActive e companyId tramite tenantProfiles
+      // Person model non ha più isActive e companyId - sono in PersonTenantProfile
+      const tenantProfileFilter = {
+        deletedAt: null
+      };
+
       if (!includeInactive) {
-        where.isActive = true;
+        tenantProfileFilter.isActive = true;
       }
 
-      // Filtro per azienda
       if (companyId) {
-        where.companyId = companyId;
+        tenantProfileFilter.companyTenantProfileId = companyId;
       }
 
-      // Filtro per tenant
       if (tenantId) {
-        where.tenantId = tenantId;
+        tenantProfileFilter.tenantId = tenantId;
+      }
+
+      // Applica filtro tenantProfiles se ci sono condizioni
+      if (Object.keys(tenantProfileFilter).length > 1 || tenantId || companyId) {
+        where.tenantProfiles = {
+          some: tenantProfileFilter
+        };
       }
 
       const queryOptions = {
@@ -84,12 +95,20 @@ class PersonRoleQueryService {
             include: {
               customRole: true,
               assignedByPerson: true,
-              company: true,
+              companyTenantProfile: true, // P49: company -> companyTenantProfile
               tenant: true
             }
           },
-          company: true,
-          tenant: true,
+          // P49: Person.company rimossa, usare tenantProfiles con companyTenantProfile
+          tenantProfiles: {
+            where: tenantProfileFilter,
+            include: {
+              companyTenantProfile: true,
+              site: true,
+              tenant: true
+            }
+          },
+          // P63: Person.Tenant RIMOSSO
           personSessions: {
             where: { deletedAt: null },
             orderBy: { createdAt: 'desc' },
@@ -110,18 +129,18 @@ class PersonRoleQueryService {
 
       const persons = await prisma.person.findMany(queryOptions);
 
-      logger.info('Retrieved persons by role:', { 
-        roleType: mappedRoleType, 
+      logger.info('Retrieved persons by role:', {
+        roleType: mappedRoleType,
         count: persons.length,
-        options 
+        options
       });
 
       return persons;
     } catch (error) {
-      logger.error('Error getting persons by role:', { 
-        error: error.message, 
-        roleType, 
-        options 
+      logger.error('Error getting persons by role:', {
+        error: error.message,
+        roleType,
+        options
       });
       throw error;
     }
@@ -139,7 +158,7 @@ class PersonRoleQueryService {
       'COMPANY_ADMIN', 'HR_MANAGER', 'MANAGER', 'DEPARTMENT_HEAD',
       'TRAINER_COORDINATOR', 'SENIOR_TRAINER', 'TRAINER', 'EXTERNAL_TRAINER',
       'EMPLOYEE', 'COMPANY_MANAGER', 'TRAINING_ADMIN', 'CLINIC_ADMIN',
-      'VIEWER', 'OPERATOR', 'COORDINATOR', 'SUPERVISOR', 'GUEST', 
+      'VIEWER', 'OPERATOR', 'COORDINATOR', 'SUPERVISOR', 'GUEST',
       'CONSULTANT', 'AUDITOR'
     ];
     return this.getPersonsByMultipleRoles(employeeRoleTypes, options);
@@ -155,12 +174,16 @@ class PersonRoleQueryService {
   }
 
   /**
-   * Ottiene utenti di sistema (SYSTEM_USER) - metodo di retrocompatibilità
+   * Ottiene utenti di sistema (admin/super-admin) ex SYSTEM_USER
+   * SYSTEM_USER non è un valore valido di RoleType — usiamo i ruoli admin reali
    * @param {Object} options - Opzioni aggiuntive
    * @returns {Promise<Array>} - Array di utenti di sistema
    */
   static async getSystemUsers(options = {}) {
-    return this.getPersonsByRole('SYSTEM_USER', options);
+    return this.getPersonsByMultipleRoles(
+      ['ADMIN', 'COMPANY_ADMIN', 'SUPER_ADMIN', 'TENANT_ADMIN'],
+      options
+    );
   }
 
   /**
@@ -196,7 +219,7 @@ class PersonRoleQueryService {
    * @returns {Promise<Array>} - Array di persone HR
    */
   static async getHRPersons(options = {}) {
-    return this.getPersonsByRole('HR', options);
+    return this.getPersonsByRole('HR_MANAGER', options);
   }
 
   /**
@@ -226,7 +249,7 @@ class PersonRoleQueryService {
       } = options;
 
       const mappedRoleTypes = roleTypes.map(roleType => this.mapRoleType(roleType));
-      
+
       const where = {
         personRoles: {
           some: {
@@ -242,37 +265,54 @@ class PersonRoleQueryService {
         where.deletedAt = null;
       }
 
-      // Filtro persone attive
+      // P48/P49: Filtri per isActive, companyId e tenantId tramite tenantProfiles
+      // Person model non ha più isActive e companyId - sono in PersonTenantProfile
+      const tenantProfileFilter = {
+        deletedAt: null
+      };
+
       if (!includeInactive) {
-        where.isActive = true;
+        tenantProfileFilter.isActive = true;
       }
 
-      // Filtro per azienda
       if (companyId) {
-        where.companyId = companyId;
+        tenantProfileFilter.companyTenantProfileId = companyId;
       }
 
-      // Filtro per tenant
       if (tenantId) {
-        where.tenantId = tenantId;
+        tenantProfileFilter.tenantId = tenantId;
       }
 
-      // BYPASS TEMPORANEO: Query semplificata per evitare timeout
+      // Applica filtro tenantProfiles se ci sono condizioni
+      if (Object.keys(tenantProfileFilter).length > 1 || tenantId || companyId) {
+        where.tenantProfiles = {
+          some: tenantProfileFilter
+        };
+      }
+
+      // Query ottimizzata con SELECT esplicita per performance (evita N+1 e timeout)
       const queryOptions = {
         where,
         select: {
           id: true,
           firstName: true,
           lastName: true,
-          email: true,
+          // email is in PersonTenantProfile, not Person
           taxCode: true,
-          globalRole: true,
-          companyId: true,
-          tenantId: true,
-          isActive: true,
+          // P48: tenantId e isActive rimossi da Person, ora in tenantProfiles
           createdAt: true,
           updatedAt: true,
-          deletedAt: true
+          deletedAt: true,
+          // Include tenantProfiles per recuperare campi dinamici
+          tenantProfiles: {
+            where: tenantProfileFilter,
+            select: {
+              isActive: true,
+              tenantId: true,
+              email: true,
+              companyTenantProfileId: true
+            }
+          }
         },
         orderBy: [
           { lastName: 'asc' },
@@ -288,18 +328,18 @@ class PersonRoleQueryService {
 
       const persons = await prisma.person.findMany(queryOptions);
 
-      logger.info('Retrieved persons by multiple roles:', { 
-        roleTypes: mappedRoleTypes, 
+      logger.info('Retrieved persons by multiple roles:', {
+        roleTypes: mappedRoleTypes,
         count: persons.length,
-        options 
+        options
       });
 
       return persons;
     } catch (error) {
-      logger.error('Error getting persons by multiple roles:', { 
-        error: error.message, 
-        roleTypes, 
-        options 
+      logger.error('Error getting persons by multiple roles:', {
+        error: error.message,
+        roleTypes,
+        options
       });
       throw error;
     }
@@ -321,7 +361,7 @@ class PersonRoleQueryService {
       } = options;
 
       const mappedRoleType = this.mapRoleType(roleType);
-      
+
       const where = {
         personRoles: {
           some: {
@@ -337,35 +377,44 @@ class PersonRoleQueryService {
         where.deletedAt = null;
       }
 
-      // Filtro persone attive
+      // P48/P49: Filtri per isActive, companyId e tenantId tramite tenantProfiles
+      const tenantProfileFilter = {
+        deletedAt: null
+      };
+
       if (!includeInactive) {
-        where.isActive = true;
+        tenantProfileFilter.isActive = true;
       }
 
-      // Filtro per azienda
       if (companyId) {
-        where.companyId = companyId;
+        tenantProfileFilter.companyTenantProfileId = companyId;
       }
 
-      // Filtro per tenant
       if (tenantId) {
-        where.tenantId = tenantId;
+        tenantProfileFilter.tenantId = tenantId;
+      }
+
+      // Applica filtro tenantProfiles se ci sono condizioni
+      if (Object.keys(tenantProfileFilter).length > 1 || tenantId || companyId) {
+        where.tenantProfiles = {
+          some: tenantProfileFilter
+        };
       }
 
       const count = await prisma.person.count({ where });
 
-      logger.info('Counted persons by role:', { 
-        roleType: mappedRoleType, 
+      logger.info('Counted persons by role:', {
+        roleType: mappedRoleType,
         count,
-        options 
+        options
       });
 
       return count;
     } catch (error) {
-      logger.error('Error counting persons by role:', { 
-        error: error.message, 
-        roleType, 
-        options 
+      logger.error('Error counting persons by role:', {
+        error: error.message,
+        roleType,
+        options
       });
       throw error;
     }
@@ -397,14 +446,27 @@ class PersonRoleQueryService {
       if (!includeDeleted) {
         where.deletedAt = null;
       }
+
+      // P48/P49: Filtri per isActive, companyId e tenantId tramite tenantProfiles
+      const tenantProfileFilter = {
+        deletedAt: null
+      };
+
       if (!includeInactive) {
-        where.isActive = true;
+        tenantProfileFilter.isActive = true;
       }
       if (companyId) {
-        where.companyId = companyId;
+        tenantProfileFilter.companyTenantProfileId = companyId;
       }
       if (tenantId) {
-        where.tenantId = tenantId;
+        tenantProfileFilter.tenantId = tenantId;
+      }
+
+      // Applica filtro tenantProfiles se ci sono condizioni
+      if (Object.keys(tenantProfileFilter).length > 1 || tenantId || companyId) {
+        where.tenantProfiles = {
+          some: tenantProfileFilter
+        };
       }
 
       statistics.total = await prisma.person.count({ where });

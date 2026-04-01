@@ -12,12 +12,12 @@ import { logger } from '../utils/logger.js';
 export class MiddlewareManager {
   constructor(app) {
     logger.debug({ appInstance: !!app, environment: process.env.NODE_ENV || 'development' }, '🚀 [MIDDLEWARE MANAGER] Constructor called');
-    
+
     this.app = app;
     this.middlewares = new Map();
     this.appliedMiddlewares = new Set();
     this.environment = process.env.NODE_ENV || 'development';
-    
+
     logger.debug('🚀 [MIDDLEWARE MANAGER] Constructor completed');
   }
 
@@ -30,7 +30,7 @@ export class MiddlewareManager {
    */
   register(name, middleware, options = {}) {
     logger.debug({ name, options }, `📝 [MIDDLEWARE MANAGER] Registering middleware '${name}'`);
-    
+
     const defaultOptions = {
       enabled: true,
       environment: ['development', 'production', 'test'],
@@ -41,7 +41,7 @@ export class MiddlewareManager {
     };
 
     const config = { ...defaultOptions, ...options };
-    
+
     // Validate middleware function
     if (typeof middleware !== 'function') {
       throw new Error(`Middleware '${name}' must be a function`);
@@ -77,12 +77,12 @@ export class MiddlewareManager {
    */
   apply(middlewareNames = [], globalOptions = {}) {
     logger.debug({ environment: this.environment, registeredMiddlewares: Array.from(this.middlewares.keys()) }, '🔧 [MIDDLEWARE MANAGER] Starting apply() method');
-    
+
     // If no names provided, apply all registered middlewares
     if (middlewareNames.length === 0) {
       middlewareNames = Array.from(this.middlewares.keys());
     }
-    
+
     logger.debug({ middlewareNames }, '🔧 [MIDDLEWARE MANAGER] Middlewares to apply');
 
     // Get middlewares and sort by priority
@@ -103,23 +103,22 @@ export class MiddlewareManager {
     // Apply middlewares
     middlewaresToApply.forEach(({ name, middleware, config }) => {
       const finalConfig = { ...config, ...globalOptions };
-      
+
       logger.debug({ name, enabled: finalConfig.enabled, environment: finalConfig.environment, currentEnv: this.environment, alreadyApplied: this.appliedMiddlewares.has(name) }, `🔧 [MIDDLEWARE MANAGER] Checking middleware '${name}'`);
-      
+
       if (this.shouldApplyMiddleware(name, finalConfig)) {
         try {
           this.app.use(middleware);
           this.appliedMiddlewares.add(name);
-          
+
           logger.debug({ name }, `✅ [MIDDLEWARE MANAGER] Middleware '${name}' applied successfully`);
           logger.info(`Middleware '${name}' applied`, {
             priority: finalConfig.priority,
             environment: this.environment
           });
         } catch (error) {
-          console.error(`❌ [MIDDLEWARE MANAGER] Failed to apply middleware '${name}':`, error);
           logger.error(`Failed to apply middleware '${name}':`, error);
-          
+
           if (finalConfig.errorHandler) {
             finalConfig.errorHandler(error, name);
           } else {
@@ -156,7 +155,7 @@ export class MiddlewareManager {
       if (this.shouldApplyMiddleware(name, finalConfig)) {
         try {
           this.app.use(path, middleware);
-          
+
           logger.info(`Middleware '${name}' applied to route '${path}'`, {
             priority: finalConfig.priority
           });
@@ -241,11 +240,11 @@ export class MiddlewareManager {
   unregister(name) {
     const removed = this.middlewares.delete(name);
     this.appliedMiddlewares.delete(name);
-    
+
     if (removed) {
       logger.info(`Middleware '${name}' unregistered`);
     }
-    
+
     return removed;
   }
 
@@ -263,7 +262,7 @@ export class MiddlewareManager {
 
     entry.config.enabled = enabled;
     logger.info(`Middleware '${name}' ${enabled ? 'enabled' : 'disabled'}`);
-    
+
     return true;
   }
 
@@ -359,6 +358,15 @@ export const COMMON_CONFIGS = {
     condition: () => process.env.ENABLE_DEV_MIDDLEWARE === 'true'
   }
 };
+
+// Import TenantMode utilities (Project 45 - Fase 8)
+export {
+  validateOperateTenant,
+  extractOperateTenantFromBody,
+  enforceOperateTenantInBody,
+  // getOperateTenantId RIMOSSA - usare getEffectiveTenantId da tenantHelper.js
+  isCrossTenantOperation,
+} from './tenantMode.js';
 
 export default {
   MiddlewareManager,

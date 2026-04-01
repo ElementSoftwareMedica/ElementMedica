@@ -24,8 +24,26 @@ import {
   preventiviService,
   validate
 } from './common.js';
+import movimentoContabileService from '../../services/management/movimento-contabile-service.js';
 
 const router = express.Router();
+
+/** Mappa TipoServizio preventivo → TipoAttivitaMovimento */
+const TIPO_SERVIZIO_TO_MOVIMENTO = {
+  CORSO: 'CORSO_FORMAZIONE',
+  DVR: 'DVR_AGGIORNAMENTO_CON_MODIFICHE',
+  RSPP: 'NOMINA_RSPP',
+  MEDICO_COMPETENTE: 'VISITA_MDL',
+  CONSULENZA: 'CONSULENZA',
+  COMPENSO_FORMATORE: 'COMPENSO_FORMATORE',
+  ALTRO: 'CONSULENZA'
+};
+
+/** Mappa clienteType → TipoSoggettoMovimento */
+const CLIENTE_TYPE_TO_SOGGETTO = {
+  AZIENDA: 'AZIENDA',
+  PERSONA: 'DIPENDENTE'
+};
 
 /**
  * GET /api/preventivi
@@ -74,7 +92,7 @@ router.get('/',
 
       if (req.query.clienteId) {
         if (req.query.clienteType === 'azienda') {
-          where.aziendaId = req.query.clienteId;
+          where.companyTenantProfileId = req.query.clienteId;
         } else {
           where.personaId = req.query.clienteId;
         }
@@ -105,8 +123,8 @@ router.get('/',
           take: limit,
           orderBy: { createdAt: 'desc' },
           include: {
-            azienda: {
-              select: { id: true, ragioneSociale: true }
+            companyTenantProfile: {
+              select: { id: true, company: { select: { id: true, ragioneSociale: true } } }
             },
             persona: {
               select: { id: true, firstName: true, lastName: true }
@@ -137,10 +155,19 @@ router.get('/',
         prisma.preventivo.count({ where })
       ]);
 
+      // Map companyTenantProfile to azienda for frontend compatibility
+      const mappedPreventivi = preventivi.map(p => {
+        const { companyTenantProfile, ...rest } = p;
+        return {
+          ...rest,
+          azienda: companyTenantProfile?.company || null
+        };
+      });
+
       res.json({
         success: true,
         data: {
-          preventivi,
+          preventivi: mappedPreventivi,
           currentPage: page,
           totalPages: Math.ceil(total / limit),
           total,
@@ -163,7 +190,7 @@ router.get('/',
       logger.error('Failed to list preventivi', {
         component: 'preventivi-routes',
         action: 'list',
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack
       });
       res.status(500).json({
@@ -243,8 +270,8 @@ router.post('/',
       let corsoInfo = null;
       if (req.body.corsoId) {
         logger.info('Fetching course info', { corsoId: req.body.corsoId });
-        corsoInfo = await prisma.courseSchedule.findUnique({
-          where: { id: req.body.corsoId },
+        corsoInfo = await prisma.courseSchedule.findFirst({
+          where: { id: req.body.corsoId, tenantId: req.person.tenantId },
           select: { course: { select: { title: true } } }
         });
         logger.info('Course info fetched', { corsoInfo });
@@ -299,8 +326,8 @@ router.post('/',
       // Validate scheduledCourseId if provided
       let validatedScheduleId = null;
       if (req.body.corsoId) {
-        const scheduleExists = await prisma.courseSchedule.findUnique({
-          where: { id: req.body.corsoId },
+        const scheduleExists = await prisma.courseSchedule.findFirst({
+          where: { id: req.body.corsoId, tenantId: req.person.tenantId },
           select: { id: true }
         });
 
@@ -342,7 +369,7 @@ router.post('/',
           dataEmissione,
           dataScadenza,
           stato: req.body.stato || 'BOZZA',
-          aziendaId: req.body.aziendaId || null,
+          companyTenantProfileId: req.body.aziendaId || null,
           personaId: req.body.personaId || null,
           scheduledCourseId: validatedScheduleId,
           note: req.body.note || null,
@@ -350,16 +377,55 @@ router.post('/',
           generatedBy: userId
         },
         include: {
-          azienda: { select: { id: true, ragioneSociale: true } },
+          companyTenantProfile: {
+            select: { id: true, company: { select: { id: true, ragioneSociale: true } } }
+          },
           persona: { select: { id: true, firstName: true, lastName: true } }
         }
       });
 
+      // Map companyTenantProfile to azienda for frontend compatibility
+      const { companyTenantProfile: ctp, ...prevRest } = preventivo;
+      const mappedPreventivo = { ...prevRest, azienda: ctp?.company || null };
+
       res.status(201).json({
         success: true,
-        data: preventivo,
+        data: mappedPreventivo,
         message: 'Preventivo creato con successo'
       });
+
+      // Crea bozza MovimentoContabile ENTRATA (non-blocking: non fallisce il create preventivo)
+      // COMPENSO_FORMATORE e' un costo (USCITA), non un ricavo: gestito in lettere-incarico-routes
+      if (preventivo.tipoServizio !== 'COMPENSO_FORMATORE') {
+        const tipoMovimento = TIPO_SERVIZIO_TO_MOVIMENTO[preventivo.tipoServizio] || 'CONSULENZA';
+        const tipoSoggetto = CLIENTE_TYPE_TO_SOGGETTO[preventivo.clienteType] || 'AZIENDA';
+        movimentoContabileService.create(tenantId, {
+          direzione: 'ENTRATA',
+          tipo: tipoMovimento,
+          tipoSoggetto,
+          stato: 'BOZZA',
+          importoLordo: parseFloat(preventivo.importoFinale),
+          importoNetto: parseFloat(preventivo.imponibile),
+          importoIva: parseFloat(preventivo.importoIva),
+          aliquotaIva: parseFloat(preventivo.aliquotaIva),
+          dataEsecuzione: preventivo.dataEmissione,
+          dataScadenza: preventivo.dataScadenza,
+          preventivoId: preventivo.id,
+          courseScheduleId: preventivo.scheduledCourseId || null,
+          companyTenantProfileId: preventivo.companyTenantProfileId || null,
+          personId: preventivo.personaId || null,
+          descrizione: preventivo.titoloServizio,
+          branchType: preventivo.branchTypes?.[0] || 'MEDICA',
+          createdBy: userId
+        }).catch(err => {
+          logger.error('Errore creazione MovimentoContabile ENTRATA per preventivo', {
+            component: 'preventivi-routes',
+            action: 'create-movimento-entrata',
+            preventivoId: preventivo.id,
+            error: 'Operazione non riuscita'
+          });
+        });
+      }
 
       logger.info('Preventivo created', {
         component: 'preventivi-routes',
@@ -374,7 +440,7 @@ router.post('/',
       logger.error('Failed to create preventivo', {
         component: 'preventivi-routes',
         action: 'create',
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack
       });
       res.status(500).json({
@@ -402,7 +468,9 @@ router.get('/:id',
       const preventivo = await prisma.preventivo.findFirst({
         where: { id, tenantId, deletedAt: null },
         include: {
-          azienda: { select: { id: true, ragioneSociale: true } },
+          companyTenantProfile: {
+            select: { id: true, company: { select: { id: true, ragioneSociale: true } } }
+          },
           persona: { select: { id: true, firstName: true, lastName: true } },
           sconti: {
             where: { deletedAt: null },
@@ -421,9 +489,11 @@ router.get('/:id',
       // Calcola statistiche
       const stats = await preventiviService.getPreventivoStats(id);
 
+      // Map companyTenantProfile to azienda for frontend compatibility
+      const { companyTenantProfile: ctp2, ...prevRest2 } = preventivo;
       res.json({
         success: true,
-        data: { ...preventivo, stats }
+        data: { ...prevRest2, azienda: ctp2?.company || null, stats }
       });
 
     } catch (error) {
@@ -431,7 +501,7 @@ router.get('/:id',
         component: 'preventivi-routes',
         action: 'get',
         preventivoId: req.params.id,
-        error: error.message
+        error: 'Operazione non riuscita'
       });
       res.status(500).json({
         success: false,
@@ -527,15 +597,19 @@ router.put('/:id',
         where: { id },
         data: updateData,
         include: {
-          azienda: { select: { id: true, ragioneSociale: true } },
+          companyTenantProfile: {
+            select: { id: true, company: { select: { id: true, ragioneSociale: true } } }
+          },
           persona: { select: { id: true, firstName: true, lastName: true } },
           sconti: { where: { deletedAt: null } }
         }
       });
 
+      // Map companyTenantProfile to azienda for frontend compatibility
+      const { companyTenantProfile: ctp3, ...prevRest3 } = preventivo;
       res.json({
         success: true,
-        data: preventivo,
+        data: { ...prevRest3, azienda: ctp3?.company || null },
         message: 'Preventivo aggiornato con successo'
       });
 
@@ -553,7 +627,7 @@ router.put('/:id',
         component: 'preventivi-routes',
         action: 'update',
         preventivoId: req.params.id,
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack
       });
       res.status(500).json({
@@ -622,7 +696,7 @@ router.delete('/:id',
         component: 'preventivi-routes',
         action: 'delete',
         preventivoId: req.params.id,
-        error: error.message
+        error: 'Operazione non riuscita'
       });
       res.status(500).json({
         success: false,

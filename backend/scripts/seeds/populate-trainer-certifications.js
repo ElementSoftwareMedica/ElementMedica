@@ -11,21 +11,24 @@ async function main() {
   console.log('🔧 Popolamento certificazioni trainers...\n');
 
   try {
-    // Recupera tutti i trainers (persons)
-    const trainers = await prisma.person.findMany({
+    // P48: certifications is on PersonTenantProfile, not Person
+    const trainerProfiles = await prisma.personTenantProfile.findMany({
       where: {
         deletedAt: null
       },
       select: {
         id: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        certifications: true
+        certifications: true,
+        person: {
+          select: {
+            firstName: true,
+            lastName: true
+          }
+        }
       }
     });
 
-    console.log(`✓ Trovati ${trainers.length} trainers\n`);
+    console.log(`✓ Trovati ${trainerProfiles.length} profili trainer\n`);
 
     // Certificazioni comuni da assegnare
     const commonCertifications = [
@@ -35,25 +38,25 @@ async function main() {
       'Sicurezza Specifica'
     ];
 
-    // Aggiorna ogni trainer con certificazioni base
-    for (const trainer of trainers) {
-      const currentCerts = trainer.certifications || [];
-      
+    // Aggiorna ogni profilo trainer con certificazioni base
+    for (const profile of trainerProfiles) {
+      const currentCerts = profile.certifications || [];
+
       // Se già ha certificazioni, salta
       if (currentCerts.length > 0) {
-        console.log(`⏭️  ${trainer.firstName} ${trainer.lastName} - già ha ${currentCerts.length} certificazioni`);
+        console.log(`⏭️  ${profile.person.firstName} ${profile.person.lastName} - già ha ${currentCerts.length} certificazioni`);
         continue;
       }
 
       // Assegna certificazioni base
-      await prisma.person.update({
-        where: { id: trainer.id },
+      await prisma.personTenantProfile.update({
+        where: { id: profile.id },
         data: {
           certifications: commonCertifications
         }
       });
 
-      console.log(`✓ ${trainer.firstName} ${trainer.lastName} - aggiunte ${commonCertifications.length} certificazioni`);
+      console.log(`✓ ${profile.person.firstName} ${profile.person.lastName} - aggiunte ${commonCertifications.length} certificazioni`);
     }
 
     console.log('\n✅ Popolamento completato!');

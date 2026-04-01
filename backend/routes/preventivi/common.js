@@ -13,6 +13,7 @@ import { auditLog } from '../../middleware/audit.js';
 import logger from '../../utils/logger.js';
 import preventiviService from '../../services/preventivi-service.js';
 import codiciScontoService from '../../services/codici-sconto-service.js';
+import movimentoContabileService from '../../services/management/movimento-contabile-service.js';
 
 const { authenticate } = authMiddleware;
 
@@ -51,5 +52,6 @@ export {
   logger,
   preventiviService,
   codiciScontoService,
+  movimentoContabileService,
   validate
 };

@@ -197,8 +197,6 @@ const PannelloChiamataOperatore: React.FC<PannelloChiamataOperatoreProps> = ({
 
         onChiamata?.(paziente, tipo as 'chiamata' | 'richiamata');
 
-        // Simula broadcast WebSocket
-        console.log(`[WebSocket] Broadcast chiamata: ${paziente.numeroChiamata} - ${paziente.ambulatorio}`);
     }, [operatoreNome, onChiamata]);
 
     const handleInVisita = useCallback((paziente: PazienteInAttesa) => {

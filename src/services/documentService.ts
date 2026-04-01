@@ -6,6 +6,7 @@
  */
 
 import { apiGet, apiPost, apiDelete } from './api';
+import { getToken } from './auth';
 import type {
   GeneratedDocument,
   DocumentListParams,
@@ -34,7 +35,7 @@ class DocumentService {
    */
   async list(params?: DocumentListParams): Promise<DocumentListResponse> {
     const queryParams = new URLSearchParams();
-    
+
     if (params) {
       if (params.page) queryParams.append('page', String(params.page));
       if (params.limit) queryParams.append('limit', String(params.limit));
@@ -50,7 +51,7 @@ class DocumentService {
 
     const query = queryParams.toString();
     const url = query ? `${this.basePath}?${query}` : this.basePath;
-    
+
     return await apiGet<DocumentListResponse>(url);
   }
 
@@ -74,8 +75,8 @@ class DocumentService {
    */
   async download(id: string): Promise<void> {
     // Get auth token for download link
-    const token = localStorage.getItem('token');
-    
+    const token = getToken();
+
     // Create temporary link and trigger download
     const url = this.getDownloadUrl(id);
     const link = document.createElement('a');
@@ -247,6 +248,46 @@ class DocumentService {
     }
 
     return { success, failed };
+  }
+
+  /**
+   * Get documents for a patient (Cartella Sanitaria)
+   * @param pazienteId - ID of the patient
+   * @param params - Optional filter params
+   * @returns Documents linked to the patient via metadata.pazienteId
+   */
+  async listByPaziente(
+    pazienteId: string,
+    params?: Omit<DocumentListParams, 'entityType' | 'entityId'>
+  ): Promise<{
+    data: GeneratedDocument[];
+    paziente: { id: string; nome: string; cognome: string };
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      totalPages: number;
+    };
+  }> {
+    const queryParams: Record<string, string | number> = {};
+
+    if (params?.type) queryParams.type = params.type;
+    if (params?.status) queryParams.status = params.status;
+    if (params?.startDate) queryParams.startDate = params.startDate;
+    if (params?.endDate) queryParams.endDate = params.endDate;
+    if (params?.page) queryParams.page = params.page;
+    if (params?.limit) queryParams.limit = params.limit;
+
+    return await apiGet<{
+      data: GeneratedDocument[];
+      paziente: { id: string; nome: string; cognome: string };
+      pagination: {
+        page: number;
+        limit: number;
+        total: number;
+        totalPages: number;
+      };
+    }>(`${this.basePath}/paziente/${pazienteId}`, queryParams);
   }
 }
 

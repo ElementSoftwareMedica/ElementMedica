@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { apiClient } from '../services';
+import { apiGet, apiPut, apiPost } from '../services/api';
 import {
   PrivacySettings,
   PrivacySettingsFormData,
@@ -30,16 +30,16 @@ export const usePrivacySettings = (): UsePrivacySettingsReturn => {
       setLoading(true);
       setError(null);
 
-      const response = await apiClient.get<GDPRApiResponse<{ settings: PrivacySettings }>>(
+      const data = await apiGet<GDPRApiResponse<{ settings: PrivacySettings }>>(
         '/api/v1/persons/me/privacy-settings'
       );
 
       // Handle both wrapped and direct response formats
-      if (response.data.success && response.data.data) {
-        setSettings(response.data.data.settings);
+      if (data.success && data.data) {
+        setSettings(data.data.settings);
         setHasUnsavedChanges(false);
-      } else if ('settings' in response.data) {
-        setSettings((response.data as unknown as { settings: PrivacySettings }).settings);
+      } else if ('settings' in data) {
+        setSettings((data as unknown as { settings: PrivacySettings }).settings);
         setHasUnsavedChanges(false);
       } else {
         // Endpoint may not exist - use default settings
@@ -65,13 +65,11 @@ export const usePrivacySettings = (): UsePrivacySettingsReturn => {
       }
     } catch (err) {
       // Non mostrare errori se l'endpoint non esiste
-      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch privacy settings';
+      const errorMessage = 'Errore nel recupero delle impostazioni privacy';
       if (!errorMessage.includes('404') && !errorMessage.includes('500')) {
         setError(errorMessage);
-        console.error('Error fetching privacy settings:', err);
       } else {
         // Endpoint non disponibile - usa impostazioni di default
-        console.warn('Privacy settings endpoint not available, using defaults');
       }
     } finally {
       setLoading(false);
@@ -86,22 +84,21 @@ export const usePrivacySettings = (): UsePrivacySettingsReturn => {
       setLoading(true);
       setError(null);
 
-      const response = await apiClient.put<GDPRApiResponse<{ settings: PrivacySettings }>>(
+      const respData = await apiPut<GDPRApiResponse<{ settings: PrivacySettings }>>(
         '/api/v1/persons/me/privacy-settings',
         data
       );
 
-      if (response.data.success && response.data.data) {
-        setSettings(response.data.data.settings);
+      if (respData.success && respData.data) {
+        setSettings(respData.data.settings);
         setHasUnsavedChanges(false);
         // Toast handled by calling component
       } else {
-        throw new Error(response.data.error || 'Failed to update privacy settings');
+        throw new Error(respData.error || 'Errore nell\'aggiornamento delle impostazioni privacy');
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to update privacy settings';
+      const errorMessage = 'Errore nell\'aggiornamento delle impostazioni privacy';
       setError(errorMessage);
-      console.error('Error updating privacy settings:', err);
       // Toast handled by calling component
       throw err;
     } finally {
@@ -120,7 +117,6 @@ export const usePrivacySettings = (): UsePrivacySettingsReturn => {
 
     // Filter out read-only properties
     if (key === 'id' || key === 'userId' || key === 'updatedAt') {
-      console.warn(`Cannot update read-only property: ${key}`);
       return;
     }
 
@@ -159,21 +155,20 @@ export const usePrivacySettings = (): UsePrivacySettingsReturn => {
       setLoading(true);
       setError(null);
 
-      const response = await apiClient.post<GDPRApiResponse<{ settings: PrivacySettings }>>(
+      const respData = await apiPost<GDPRApiResponse<{ settings: PrivacySettings }>>(
         '/api/v1/persons/me/privacy-settings/reset'
       );
 
-      if (response.data.success && response.data.data) {
-        setSettings(response.data.data.settings);
+      if (respData.success && respData.data) {
+        setSettings(respData.data.settings);
         setHasUnsavedChanges(false);
         // Toast handled by calling component
       } else {
-        throw new Error(response.data.error || 'Failed to reset privacy settings');
+        throw new Error(respData.error || 'Errore nel ripristino delle impostazioni privacy');
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to reset privacy settings';
+      const errorMessage = 'Errore nel ripristino delle impostazioni privacy';
       setError(errorMessage);
-      console.error('Error resetting privacy settings:', err);
       // Toast handled by calling component
       throw err;
     } finally {

@@ -11,9 +11,11 @@
  */
 
 import express from 'express';
-import { authenticate } from '../../../auth/middleware.js';
+import authMiddleware from '../../../middleware/auth.js';
+const { authenticate } = authMiddleware;
 import { activityService, ActivityCategory, ActivityType } from '../../../services/activity/index.js';
 import logger from '../../../utils/logger.js';
+import { getEffectiveTenantId } from '../../../utils/tenantHelper.js';
 
 const router = express.Router();
 
@@ -46,7 +48,7 @@ router.get('/me', authenticate, async (req, res) => {
       action: action || null,
       startDate: startDate || null,
       endDate: endDate || null,
-      tenantId: req.person.tenantId
+      tenantId: getEffectiveTenantId(req)
     });
 
     res.json({
@@ -58,12 +60,11 @@ router.get('/me', authenticate, async (req, res) => {
     logger.error('Activity API: Error getting personal activities', {
       component: 'activity-api',
       personId: req.person?.id,
-      error: error.message
+      error: 'Operazione non riuscita'
     });
     res.status(500).json({
       success: false,
-      error: 'Failed to retrieve activities',
-      message: error.message
+      error: 'Errore nel recupero delle attività',
     });
   }
 });
@@ -80,7 +81,7 @@ router.get('/me/summary', authenticate, async (req, res) => {
 
     const summary = await activityService.getPersonActivitySummary(
       req.person.id,
-      req.person.tenantId,
+      getEffectiveTenantId(req),
       Math.min(parseInt(days) || 30, 365)
     );
 
@@ -93,12 +94,11 @@ router.get('/me/summary', authenticate, async (req, res) => {
     logger.error('Activity API: Error getting activity summary', {
       component: 'activity-api',
       personId: req.person?.id,
-      error: error.message
+      error: 'Operazione non riuscita'
     });
     res.status(500).json({
       success: false,
-      error: 'Failed to retrieve activity summary',
-      message: error.message
+      error: 'Errore nel recupero del riepilogo attività',
     });
   }
 });
@@ -128,8 +128,8 @@ router.get('/persons/:personId', authenticate, async (req, res) => {
     if (!isAdmin && personId !== req.person.id) {
       return res.status(403).json({
         success: false,
-        error: 'Access denied',
-        message: 'You can only view your own activities'
+        error: 'Accesso negato',
+        message: 'Puoi visualizzare solo le tue attività'
       });
     }
 
@@ -149,7 +149,7 @@ router.get('/persons/:personId', authenticate, async (req, res) => {
       action: action || null,
       startDate: startDate || null,
       endDate: endDate || null,
-      tenantId: req.person.tenantId
+      tenantId: getEffectiveTenantId(req)
     });
 
     res.json({
@@ -161,12 +161,11 @@ router.get('/persons/:personId', authenticate, async (req, res) => {
     logger.error('Activity API: Error getting person activities', {
       component: 'activity-api',
       personId: req.params?.personId,
-      error: error.message
+      error: 'Operazione non riuscita'
     });
     res.status(500).json({
       success: false,
-      error: 'Failed to retrieve activities',
-      message: error.message
+      error: 'Errore nel recupero delle attività',
     });
   }
 });
@@ -191,8 +190,8 @@ router.get('/persons/:personId/summary', authenticate, async (req, res) => {
     if (!isAdmin && personId !== req.person.id) {
       return res.status(403).json({
         success: false,
-        error: 'Access denied',
-        message: 'You can only view your own activity summary'
+        error: 'Accesso negato',
+        message: 'Puoi visualizzare solo il tuo riepilogo attività'
       });
     }
 
@@ -200,7 +199,7 @@ router.get('/persons/:personId/summary', authenticate, async (req, res) => {
 
     const summary = await activityService.getPersonActivitySummary(
       personId,
-      req.person.tenantId,
+      getEffectiveTenantId(req),
       Math.min(parseInt(days) || 30, 365)
     );
 
@@ -213,12 +212,11 @@ router.get('/persons/:personId/summary', authenticate, async (req, res) => {
     logger.error('Activity API: Error getting person activity summary', {
       component: 'activity-api',
       personId: req.params?.personId,
-      error: error.message
+      error: 'Operazione non riuscita'
     });
     res.status(500).json({
       success: false,
-      error: 'Failed to retrieve activity summary',
-      message: error.message
+      error: 'Errore nel recupero del riepilogo attività',
     });
   }
 });
@@ -249,8 +247,8 @@ router.post('/search', authenticate, async (req, res) => {
     if (!isAdmin) {
       return res.status(403).json({
         success: false,
-        error: 'Access denied',
-        message: 'Admin access required for search'
+        error: 'Accesso negato',
+        message: 'Accesso amministratore richiesto per la ricerca'
       });
     }
 
@@ -268,7 +266,7 @@ router.post('/search', authenticate, async (req, res) => {
     } = req.body;
 
     const result = await activityService.search({
-      tenantId: req.person.tenantId,
+      tenantId: getEffectiveTenantId(req),
       personId,
       actions,
       categories,
@@ -289,12 +287,11 @@ router.post('/search', authenticate, async (req, res) => {
   } catch (error) {
     logger.error('Activity API: Error searching activities', {
       component: 'activity-api',
-      error: error.message
+      error: 'Operazione non riuscita'
     });
     res.status(500).json({
       success: false,
-      error: 'Failed to search activities',
-      message: error.message
+      error: 'Errore nella ricerca delle attività',
     });
   }
 });

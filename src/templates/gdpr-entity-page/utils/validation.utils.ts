@@ -622,7 +622,7 @@ export class ValidationUtils {
   static formatErrors(errors: ValidationError[]): string[] {
     return errors.map(error => {
       const fieldName = error.field.split('.').pop() || error.field;
-      return `${fieldName}: ${error.message}`;
+      return '${fieldName}';
     });
   }
   

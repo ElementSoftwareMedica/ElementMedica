@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { GDPREntityTemplate } from '../../templates/gdpr-entity-page/GDPREntityTemplate';
-import { DataTableColumn } from '../../components/shared/tables/DataTable';
+import { DataTableColumn } from '../../templates/gdpr-entity-page/GDPREntityTemplate';
 import { Badge } from '../../design-system';
-import { 
+import {
   Building,
   Clock,
   Edit,
@@ -20,166 +20,166 @@ import { Person } from '../../services/persons';
 import { apiPost } from '../../services/api';
 // Configurazione colonne per la tabella riutilizzabile (con colonna azioni esplicita)
 const getUsersColumns = (): DataTableColumn<Person>[] => [
-    {
-      key: 'actions',
-      label: 'Azioni',
-      sortable: false,
-      width: 120,
-      renderCell: (user) => (
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => console.log('Visualizza utente:', user.id)}
-            className="p-1 text-blue-600 hover:text-blue-800 rounded"
-            title="Visualizza"
-          >
-            <Eye className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => console.log('Modifica utente:', user.id)}
-            className="p-1 text-green-600 hover:text-green-800 rounded"
-            title="Modifica"
-          >
-            <Edit className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => console.log('Elimina utente:', user.id)}
-            className="p-1 text-red-600 hover:text-red-800 rounded"
-            title="Elimina"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
+  {
+    key: 'actions',
+    label: 'Azioni',
+    sortable: false,
+    width: 120,
+    renderCell: (user) => (
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => { /* TODO: view user */ }}
+          className="p-1 text-blue-600 hover:text-blue-800 rounded"
+          title="Visualizza"
+        >
+          <Eye className="h-4 w-4" />
+        </button>
+        <button
+          onClick={() => { /* TODO: edit user */ }}
+          className="p-1 text-green-600 hover:text-green-800 rounded"
+          title="Modifica"
+        >
+          <Edit className="h-4 w-4" />
+        </button>
+        <button
+          onClick={() => { /* TODO: delete user */ }}
+          className="p-1 text-red-600 hover:text-red-800 rounded"
+          title="Elimina"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </div>
+    )
+  },
+  {
+    key: 'name',
+    label: 'Nome',
+    sortable: true,
+    renderCell: (user) => (
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+          <Users className="h-4 w-4 text-blue-600" />
         </div>
-      )
-    },
-    {
-      key: 'name',
-      label: 'Nome',
-      sortable: true,
-      renderCell: (user) => (
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-            <Users className="h-4 w-4 text-blue-600" />
-          </div>
-          <div>
-            <div className="font-medium text-gray-900">{user.firstName} {user.lastName}</div>
-            <div className="text-sm text-gray-500">{user.username || 'N/A'}</div>
-          </div>
+        <div>
+          <div className="font-medium text-gray-900">{user.firstName} {user.lastName}</div>
+          <div className="text-sm text-gray-500">{user.username || 'N/A'}</div>
         </div>
-      )
-    },
-    {
-      key: 'email',
-      label: 'Email',
-      sortable: true,
-      renderCell: (user) => (
-        <div className="flex items-center gap-2">
-          <Mail className="h-4 w-4 text-gray-400" />
-          <a href={`mailto:${user.email}`} className="text-blue-600 hover:text-blue-800">
-            {user.email}
-          </a>
-        </div>
-      )
-    },
-    {
-      key: 'phone',
-      label: 'Telefono',
-      sortable: true,
-      renderCell: (user) => user.phone ? (
-        <div className="flex items-center gap-2">
-          <Phone className="h-4 w-4 text-gray-400" />
-          <a href={`tel:${user.phone}`} className="text-gray-900">
-            {user.phone}
-          </a>
-        </div>
-      ) : (
-        <span className="text-gray-400">N/A</span>
-      )
-    },
-    {
-      key: 'company',
-      label: 'Azienda',
-      sortable: true,
-      renderCell: (user) => (
-        <div className="flex items-center gap-2">
-          <Building className="h-4 w-4 text-gray-400" />
-          <span className="text-gray-900">{user.companyId || 'N/A'}</span>
-        </div>
-      )
-    },
-    {
-      key: 'roleType',
-      label: 'Ruolo',
-      sortable: true,
-      renderCell: (user) => {
-        const roleConfig = {
-          ADMIN: { label: 'Admin', color: 'destructive' as const },
-          SUPER_ADMIN: { label: 'Super Admin', color: 'destructive' as const },
-          MANAGER: { label: 'Manager', color: 'outline' as const },
-          TRAINER: { label: 'Formatore', color: 'default' as const },
-          EMPLOYEE: { label: 'Dipendente', color: 'default' as const }
-        };
-        const config = roleConfig[user.roleType as keyof typeof roleConfig] || { label: user.roleType || 'N/A', color: 'secondary' as const };
-        return <Badge variant={config.color}>{config.label}</Badge>;
-      }
-    },
-    {
-      key: 'onlineStatus',
-      label: 'Stato Online',
-      sortable: true,
-      renderCell: (user) => {
-        // Determina se l'utente è online basandosi su lastActivityAt e sessioni attive
-        const isOnline = user.isOnline || false; // Questo campo verrà popolato dal backend
-        const lastSeen = user.lastActivityAt || user.lastLogin;
-        
-        if (isOnline) {
-          return (
-            <div className="flex items-center gap-2">
-              <Wifi className="h-4 w-4 text-green-500" />
-              <Badge variant="default">Online</Badge>
-            </div>
-          );
-        } else {
-          const lastSeenText = lastSeen 
-            ? `Visto ${new Date(lastSeen).toLocaleDateString('it-IT')} alle ${new Date(lastSeen).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}`
-            : 'Mai visto';
-          
-          return (
-            <div className="flex items-center gap-2">
-              <WifiOff className="h-4 w-4 text-gray-400" />
-              <div className="flex flex-col">
-                <Badge variant="secondary">Offline</Badge>
-                <span className="text-xs text-gray-500 mt-1">{lastSeenText}</span>
-              </div>
-            </div>
-          );
-        }
-      }
-    },
-    {
-      key: 'lastLogin',
-      label: 'Ultimo accesso',
-      sortable: true,
-      renderCell: (user) => (
-        <div className="flex items-center gap-2">
-          <Clock className="h-4 w-4 text-gray-400" />
-          <span className="text-gray-900">{user.lastLogin ? new Date(user.lastLogin).toLocaleDateString('it-IT') : 'Mai'}</span>
-        </div>
-      )
-    },
-    {
-      key: 'isActive',
-      label: 'Stato Account',
-      sortable: true,
-      renderCell: (user) => {
-        const isActive = user.isActive !== false; // Default true se undefined
+      </div>
+    )
+  },
+  {
+    key: 'email',
+    label: 'Email',
+    sortable: true,
+    renderCell: (user) => (
+      <div className="flex items-center gap-2">
+        <Mail className="h-4 w-4 text-gray-400" />
+        <a href={`mailto:${user.email}`} className="text-blue-600 hover:text-blue-800">
+          {user.email}
+        </a>
+      </div>
+    )
+  },
+  {
+    key: 'phone',
+    label: 'Telefono',
+    sortable: true,
+    renderCell: (user) => user.phone ? (
+      <div className="flex items-center gap-2">
+        <Phone className="h-4 w-4 text-gray-400" />
+        <a href={`tel:${user.phone}`} className="text-gray-900">
+          {user.phone}
+        </a>
+      </div>
+    ) : (
+      <span className="text-gray-400">N/A</span>
+    )
+  },
+  {
+    key: 'company',
+    label: 'Azienda',
+    sortable: true,
+    renderCell: (user) => (
+      <div className="flex items-center gap-2">
+        <Building className="h-4 w-4 text-gray-400" />
+        <span className="text-gray-900">{user.companyId || 'N/A'}</span>
+      </div>
+    )
+  },
+  {
+    key: 'roleType',
+    label: 'Ruolo',
+    sortable: true,
+    renderCell: (user) => {
+      const roleConfig = {
+        ADMIN: { label: 'Admin', color: 'destructive' as const },
+        SUPER_ADMIN: { label: 'Super Admin', color: 'destructive' as const },
+        MANAGER: { label: 'Manager', color: 'outline' as const },
+        TRAINER: { label: 'Formatore', color: 'default' as const },
+        EMPLOYEE: { label: 'Dipendente', color: 'default' as const }
+      };
+      const config = roleConfig[user.roleType as keyof typeof roleConfig] || { label: user.roleType || 'N/A', color: 'secondary' as const };
+      return <Badge variant={config.color}>{config.label}</Badge>;
+    }
+  },
+  {
+    key: 'onlineStatus',
+    label: 'Stato Online',
+    sortable: true,
+    renderCell: (user) => {
+      // Determina se l'utente è online basandosi su lastActivityAt e sessioni attive
+      const isOnline = user.isOnline || false; // Questo campo verrà popolato dal backend
+      const lastSeen = user.lastActivityAt || user.lastLogin;
+
+      if (isOnline) {
         return (
-          <Badge variant={isActive ? 'default' : 'destructive'}>
-            {isActive ? 'Attivo' : 'Inattivo'}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Wifi className="h-4 w-4 text-green-500" />
+            <Badge variant="default">Online</Badge>
+          </div>
+        );
+      } else {
+        const lastSeenText = lastSeen
+          ? `Visto ${new Date(lastSeen).toLocaleDateString('it-IT')} alle ${new Date(lastSeen).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}`
+          : 'Mai visto';
+
+        return (
+          <div className="flex items-center gap-2">
+            <WifiOff className="h-4 w-4 text-gray-400" />
+            <div className="flex flex-col">
+              <Badge variant="secondary">Offline</Badge>
+              <span className="text-xs text-gray-500 mt-1">{lastSeenText}</span>
+            </div>
+          </div>
         );
       }
     }
-  ];
+  },
+  {
+    key: 'lastLogin',
+    label: 'Ultimo accesso',
+    sortable: true,
+    renderCell: (user) => (
+      <div className="flex items-center gap-2">
+        <Clock className="h-4 w-4 text-gray-400" />
+        <span className="text-gray-900">{user.lastLogin ? new Date(user.lastLogin).toLocaleDateString('it-IT') : 'Mai'}</span>
+      </div>
+    )
+  },
+  {
+    key: 'isActive',
+    label: 'Stato Account',
+    sortable: true,
+    renderCell: (user) => {
+      const isActive = user.isActive !== false; // Default true se undefined
+      return (
+        <Badge variant={isActive ? 'default' : 'destructive'}>
+          {isActive ? 'Attivo' : 'Inattivo'}
+        </Badge>
+      );
+    }
+  }
+];
 
 // Configurazione card per la vista griglia
 const getUserCardConfig = () => ({
@@ -282,14 +282,11 @@ export const UsersTab: React.FC = () => {
         users: importedUsers,
         overwriteIds: overwriteIds || []
       });
-      
-      // Aggiorna la lista locale (il template si ricaricherà automaticamente)
-      console.log('Import completato:', response);
-      
+
       // Chiudi il modal
       setShowImportModal(false);
     } catch (error) {
-      console.error('Errore durante l\'import:', error);
+      if (import.meta.env.DEV) console.error('Errore durante l\'import:', error);
       throw error; // Rilancia l'errore per permettere al modal di gestirlo
     }
   };
@@ -356,7 +353,7 @@ export const UsersTab: React.FC = () => {
         defaultViewMode="table"
         onImportEntities={handleImportEntities}
       />
-      
+
       {showImportModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">

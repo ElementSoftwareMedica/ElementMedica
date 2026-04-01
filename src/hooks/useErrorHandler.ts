@@ -102,7 +102,6 @@ export function useErrorHandler(): ErrorHandlerResult {
     setError(normalizedError);
     
     // Logga l'errore nella console
-    console.error('Error handled:', normalizedError);
     
     // Toast handled by calling component - error state available via hook return
     const _message = customMessage || sanitizeErrorMessage(normalizedError, 'Si è verificato un errore');
@@ -145,10 +144,8 @@ export function useErrorHandler(): ErrorHandlerResult {
       
       // Logga l'errore se richiesto
       if (logToConsole) {
-        console.error('API Error:', normalizedError);
         
         if (normalizedError.details) {
-          console.error('Error details:', normalizedError.details);
         }
       }
       

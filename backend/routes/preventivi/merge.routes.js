@@ -220,7 +220,7 @@ router.post('/merge',
         component: 'preventivi-routes',
         action: 'merge',
         preventiviIds: req.body.preventiviIds,
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack
       });
       res.status(500).json({
@@ -337,7 +337,7 @@ router.post('/:id/unmerge',
         component: 'preventivi-routes',
         action: 'unmerge',
         preventivoId: req.params.id,
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack
       });
       res.status(500).json({

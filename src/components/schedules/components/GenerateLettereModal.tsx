@@ -10,6 +10,7 @@ import { createPortal } from 'react-dom';
 import { X, FileText, Euro, Clock, Calculator, User, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import lettereIncaricoService from '@/services/lettereIncaricoService';
 import templateService from '@/services/templateService';
+import { PersonTenantProfileService } from '@/services/personTenantProfile';
 
 interface Trainer {
     id: string | number;
@@ -43,6 +44,7 @@ interface GenerateLettereModalProps {
     isOpen: boolean;
     onClose: () => void;
     scheduleId: string | number | null | undefined;
+    tenantId?: string;  // P48: For fetching trainer hourlyRate from PersonTenantProfile
     trainers: Trainer[];
     dates: DateEntry[];
     onSuccess: () => void;
@@ -52,6 +54,7 @@ export const GenerateLettereModal: React.FC<GenerateLettereModalProps> = ({
     isOpen,
     onClose,
     scheduleId,
+    tenantId,
     trainers,
     dates,
     onSuccess
@@ -62,8 +65,10 @@ export const GenerateLettereModal: React.FC<GenerateLettereModalProps> = ({
     const [compensations, setCompensations] = useState<Record<string, TrainerCompensation>>({});
     const [loading, setLoading] = useState(false);
     const [loadingTemplates, setLoadingTemplates] = useState(false);
+    const [loadingHourlyRates, setLoadingHourlyRates] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
+    const [totalCompensationGenerated, setTotalCompensationGenerated] = useState(0);
 
     // Calcola le ore totali per un formatore dalle sessioni
     const calculateTrainerHours = useCallback((trainerId: string | number): number => {
@@ -89,7 +94,6 @@ export const GenerateLettereModal: React.FC<GenerateLettereModalProps> = ({
 
     // Carica i template quando il modal si apre
     useEffect(() => {
-        console.log('🔵 GenerateLettereModal: isOpen changed to', isOpen, 'trainers:', trainers.length, 'dates:', dates.length);
         if (isOpen) {
             loadTemplates();
             initializeTrainers();
@@ -102,42 +106,54 @@ export const GenerateLettereModal: React.FC<GenerateLettereModalProps> = ({
             const result = await templateService.list({ type: 'LETTER_OF_ENGAGEMENT' });
             const templateList = result.data || [];
             setTemplates(templateList);
-            if (templateList.length > 0) {
+            // Auto-select default template, fallback to first available
+            const defaultTemplate = templateList.find((t: any) => t.isDefault === true);
+            if (defaultTemplate) {
+                setSelectedTemplateId(defaultTemplate.id);
+            } else if (templateList.length > 0) {
                 setSelectedTemplateId(templateList[0].id);
             }
         } catch (error) {
-            console.error('Errore caricamento template:', error);
         } finally {
             setLoadingTemplates(false);
         }
     };
 
-    const initializeTrainers = () => {
+    const initializeTrainers = async () => {
         const newCompensations: Record<string, TrainerCompensation> = {};
         const newSelected = new Set<string>();
 
-        console.log('🔵 initializeTrainers: trainers input:', trainers.map(t => ({
-            id: t.id,
-            name: `${t.firstName} ${t.lastName}`,
-            hourlyRate: t.hourlyRate
-        })));
-        console.log('🔵 initializeTrainers: dates input:', dates.map(d => ({
-            date: d.date,
-            trainerId: d.trainerId,
-            duration: d.duration
-        })));
 
-        trainers.forEach(trainer => {
-            const trainerId = String(trainer.id);
-            const hours = calculateTrainerHours(trainerId);
-            newSelected.add(trainerId);
-            newCompensations[trainerId] = {
-                hourlyRate: trainer.hourlyRate || 0,
-                expenses: 0,
-                totalHours: hours
-            };
-            console.log(`🔵 Trainer ${trainerId}: hourlyRate=${trainer.hourlyRate || 0}, totalHours=${hours}`);
-        });
+        // Fetch hourlyRate from PersonTenantProfile for each trainer
+        setLoadingHourlyRates(true);
+        try {
+            for (const trainer of trainers) {
+                const trainerId = String(trainer.id);
+                const hours = calculateTrainerHours(trainerId);
+                newSelected.add(trainerId);
+
+                // Try to get hourlyRate from PersonTenantProfile first
+                let hourlyRate = trainer.hourlyRate || 0;
+
+                if (tenantId) {
+                    try {
+                        const profile = await PersonTenantProfileService.getProfile(trainerId, tenantId);
+                        if (profile?.hourlyRate) {
+                            hourlyRate = Number(profile.hourlyRate);
+                        }
+                    } catch (profileErr) {
+                    }
+                }
+
+                newCompensations[trainerId] = {
+                    hourlyRate,
+                    expenses: 0,
+                    totalHours: hours
+                };
+            }
+        } finally {
+            setLoadingHourlyRates(false);
+        }
 
         setSelectedTrainers(newSelected);
         setCompensations(newCompensations);
@@ -211,16 +227,18 @@ export const GenerateLettereModal: React.FC<GenerateLettereModalProps> = ({
         setLoading(true);
         setError(null);
         setSuccess(false);
+        setTotalCompensationGenerated(0);
 
         try {
             const selectedTrainerIds = Array.from(selectedTrainers);
             let successCount = 0;
             let errorCount = 0;
+            let totalComp = 0;
 
             for (const trainerId of selectedTrainerIds) {
                 try {
                     const comp = compensations[trainerId];
-                    await lettereIncaricoService.generate({
+                    const result = await lettereIncaricoService.generate({
                         scheduleId: String(scheduleId),
                         trainerId,
                         templateId: selectedTemplateId || undefined,
@@ -228,13 +246,16 @@ export const GenerateLettereModal: React.FC<GenerateLettereModalProps> = ({
                         expenses: comp?.expenses || 0
                     });
                     successCount++;
+                    if (result?.preventivoCompenso?.importoFinale) {
+                        totalComp += Number(result.preventivoCompenso.importoFinale);
+                    }
                 } catch (err) {
-                    console.error(`Errore generazione lettera per trainer ${trainerId}:`, err);
                     errorCount++;
                 }
             }
 
             if (successCount > 0) {
+                setTotalCompensationGenerated(totalComp);
                 setSuccess(true);
                 setTimeout(() => {
                     onSuccess();
@@ -245,8 +266,8 @@ export const GenerateLettereModal: React.FC<GenerateLettereModalProps> = ({
             if (errorCount > 0) {
                 setError(`${errorCount} lettere non generate. ${successCount} generate con successo.`);
             }
-        } catch (err: any) {
-            setError(err.message || 'Errore durante la generazione');
+        } catch (err: unknown) {
+            setError('Errore durante la generazione');
         } finally {
             setLoading(false);
         }
@@ -270,23 +291,23 @@ export const GenerateLettereModal: React.FC<GenerateLettereModalProps> = ({
             />
 
             {/* Modal */}
-            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
                 {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
+                <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30">
                     <div className="flex items-center gap-3">
-                        <div className="p-2 bg-blue-100 rounded-lg">
-                            <FileText className="w-5 h-5 text-blue-600" />
+                        <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
+                            <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                         </div>
                         <div>
-                            <h2 className="text-lg font-semibold text-gray-900">Genera Lettere di Incarico</h2>
-                            <p className="text-sm text-gray-500">Configura i compensi per ogni formatore</p>
+                            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Genera Lettere di Incarico</h2>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Configura i compensi per ogni formatore</p>
                         </div>
                     </div>
                     <button
                         onClick={handleClose}
-                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                        className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                     >
-                        <X className="w-5 h-5 text-gray-500" />
+                        <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
                     </button>
                 </div>
 
@@ -294,15 +315,15 @@ export const GenerateLettereModal: React.FC<GenerateLettereModalProps> = ({
                 <div className="flex-1 overflow-y-auto p-6 space-y-6">
                     {/* Template Selection */}
                     <div className="space-y-2">
-                        <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                            <FileText className="w-4 h-4 text-gray-500" />
+                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                            <FileText className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                             Template
                         </label>
                         <select
                             value={selectedTemplateId}
                             onChange={(e) => setSelectedTemplateId(e.target.value)}
                             disabled={loadingTemplates}
-                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:text-gray-200"
                         >
                             <option value="">{loadingTemplates ? "Caricamento..." : "Seleziona template"}</option>
                             {templates.map(template => (
@@ -312,7 +333,7 @@ export const GenerateLettereModal: React.FC<GenerateLettereModalProps> = ({
                             ))}
                         </select>
                         {templates.length === 0 && !loadingTemplates && (
-                            <p className="text-sm text-amber-600">
+                            <p className="text-sm text-amber-600 dark:text-amber-400">
                                 ⚠️ Nessun template disponibile. Verrà usato il template predefinito.
                             </p>
                         )}
@@ -320,8 +341,8 @@ export const GenerateLettereModal: React.FC<GenerateLettereModalProps> = ({
 
                     {/* Trainers List */}
                     <div className="space-y-4">
-                        <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                            <User className="w-4 h-4 text-gray-500" />
+                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                            <User className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                             Formatori e Compensi
                         </label>
 
@@ -336,8 +357,8 @@ export const GenerateLettereModal: React.FC<GenerateLettereModalProps> = ({
                                     <div
                                         key={trainerId}
                                         className={`border rounded-xl p-4 transition-all ${isSelected
-                                                ? 'border-blue-300 bg-blue-50/50 shadow-sm'
-                                                : 'border-gray-200 bg-gray-50/50 opacity-60'
+                                            ? 'border-blue-300 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-900/30 shadow-sm'
+                                            : 'border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 opacity-60'
                                             }`}
                                     >
                                         {/* Trainer Header */}
@@ -347,38 +368,38 @@ export const GenerateLettereModal: React.FC<GenerateLettereModalProps> = ({
                                                 id={`trainer-${trainerId}`}
                                                 checked={isSelected}
                                                 onChange={() => handleTrainerToggle(trainerId)}
-                                                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
                                             />
                                             <label
                                                 htmlFor={`trainer-${trainerId}`}
-                                                className="flex-1 font-medium cursor-pointer text-gray-900"
+                                                className="flex-1 font-medium cursor-pointer text-gray-900 dark:text-gray-100"
                                             >
                                                 {trainer.firstName} {trainer.lastName}
                                             </label>
                                             {trainer.email && (
-                                                <span className="text-xs text-gray-500">{trainer.email}</span>
+                                                <span className="text-xs text-gray-500 dark:text-gray-400">{trainer.email}</span>
                                             )}
                                         </div>
 
                                         {/* Compensation Fields */}
                                         {isSelected && (
-                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3 pt-3 border-t border-gray-200">
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
                                                 {/* Ore Totali */}
                                                 <div className="space-y-1">
-                                                    <label className="text-xs text-gray-500 flex items-center gap-1">
+                                                    <label className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
                                                         <Clock className="w-3 h-3" />
                                                         Ore Totali
                                                     </label>
-                                                    <div className="p-2 bg-gray-100 rounded-lg text-sm font-medium text-center text-gray-700">
+                                                    <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg text-sm font-medium text-center text-gray-700 dark:text-gray-200">
                                                         {comp.totalHours.toFixed(1)} h
                                                     </div>
                                                 </div>
 
                                                 {/* Tariffa Oraria */}
                                                 <div className="space-y-1">
-                                                    <label className="text-xs text-gray-500 flex items-center gap-1">
+                                                    <label className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
                                                         <Euro className="w-3 h-3" />
-                                                        Tariffa/Ora
+                                                        Tariffa/Ora (IVA incl.)
                                                     </label>
                                                     <div className="relative">
                                                         <input
@@ -388,7 +409,7 @@ export const GenerateLettereModal: React.FC<GenerateLettereModalProps> = ({
                                                             value={comp.hourlyRate || ''}
                                                             onChange={(e) => handleHourlyRateChange(trainerId, e.target.value)}
                                                             placeholder="0.00"
-                                                            className="w-full px-3 py-2 pr-8 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                                            className="w-full px-3 py-2 pr-8 border dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-200"
                                                         />
                                                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">€</span>
                                                     </div>
@@ -396,7 +417,7 @@ export const GenerateLettereModal: React.FC<GenerateLettereModalProps> = ({
 
                                                 {/* Rimborso Spese */}
                                                 <div className="space-y-1">
-                                                    <label className="text-xs text-gray-500 flex items-center gap-1">
+                                                    <label className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
                                                         <Calculator className="w-3 h-3" />
                                                         Rimborso Spese
                                                     </label>
@@ -408,7 +429,7 @@ export const GenerateLettereModal: React.FC<GenerateLettereModalProps> = ({
                                                             value={comp.expenses || ''}
                                                             onChange={(e) => handleExpensesChange(trainerId, e.target.value)}
                                                             placeholder="0.00"
-                                                            className="w-full px-3 py-2 pr-8 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                                            className="w-full px-3 py-2 pr-8 border dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-200"
                                                         />
                                                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">€</span>
                                                     </div>
@@ -416,11 +437,11 @@ export const GenerateLettereModal: React.FC<GenerateLettereModalProps> = ({
 
                                                 {/* Totale */}
                                                 <div className="space-y-1">
-                                                    <label className="text-xs text-gray-500 flex items-center gap-1">
+                                                    <label className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
                                                         <CheckCircle className="w-3 h-3" />
                                                         Compenso Totale
                                                     </label>
-                                                    <div className="p-2 bg-green-100 rounded-lg text-sm font-semibold text-green-700 text-center">
+                                                    <div className="p-2 bg-green-100 dark:bg-green-900/50 rounded-lg text-sm font-semibold text-green-700 dark:text-green-400 text-center">
                                                         {formatCurrency(total)}
                                                     </div>
                                                 </div>
@@ -432,7 +453,7 @@ export const GenerateLettereModal: React.FC<GenerateLettereModalProps> = ({
                         </div>
 
                         {trainers.length === 0 && (
-                            <div className="text-center py-8 text-gray-500">
+                            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
                                 <User className="w-12 h-12 mx-auto mb-2 opacity-30" />
                                 <p>Nessun formatore assegnato al corso</p>
                             </div>
@@ -441,26 +462,31 @@ export const GenerateLettereModal: React.FC<GenerateLettereModalProps> = ({
 
                     {/* Error/Success Messages */}
                     {error && (
-                        <div className="flex items-center gap-2 p-3 bg-red-50 text-red-700 rounded-lg border border-red-200">
+                        <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-lg border border-red-200 dark:border-red-800">
                             <AlertCircle className="w-4 h-4 flex-shrink-0" />
                             <span className="text-sm">{error}</span>
                         </div>
                     )}
 
                     {success && (
-                        <div className="flex items-center gap-2 p-3 bg-green-50 text-green-700 rounded-lg border border-green-200">
+                        <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-lg border border-green-200 dark:border-green-800">
                             <CheckCircle className="w-4 h-4 flex-shrink-0" />
-                            <span className="text-sm">Lettere generate con successo!</span>
+                            <span className="text-sm">
+                                Lettere generate con successo!
+                                {totalCompensationGenerated > 0 && (
+                                    <> Compenso registrato: <strong>€{totalCompensationGenerated.toFixed(2)}</strong></>
+                                )}
+                            </span>
                         </div>
                     )}
                 </div>
 
                 {/* Footer */}
-                <div className="flex justify-end gap-3 px-6 py-4 border-t bg-gray-50">
+                <div className="flex justify-end gap-3 px-6 py-4 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
                     <button
                         onClick={handleClose}
                         disabled={loading}
-                        className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+                        className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
                     >
                         Annulla
                     </button>

@@ -9,7 +9,7 @@
  * - Restore con merge o overwrite
  */
 
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/prisma-optimization.js';
 import { logger } from '../utils/logger.js';
 import fs from 'fs/promises';
 import fsSync from 'fs';
@@ -18,7 +18,6 @@ import archiver from 'archiver';
 import unzipper from 'unzipper';
 import crypto from 'crypto';
 
-const prisma = new PrismaClient();
 
 // Definizione entità raggruppate per categoria
 const ENTITY_CATEGORIES = {
@@ -54,8 +53,8 @@ const ENTITY_CATEGORIES = {
         entities: [
             { name: 'TemplateLink', model: 'templateLink', label: 'Template Documenti', priority: 1 },
             { name: 'TemplateVersion', model: 'templateVersion', label: 'Versioni Template', priority: 2 },
-            { name: 'form_templates', model: 'form_templates', label: 'Form Templates', priority: 3 },
-            { name: 'form_fields', model: 'form_fields', label: 'Campi Form', priority: 4 },
+            { name: 'FormTemplate', model: 'formTemplate', label: 'Form Templates', priority: 3 },
+            { name: 'FormField', model: 'formField', label: 'Campi Form', priority: 4 },
             { name: 'GeneratedDocument', model: 'generatedDocument', label: 'Documenti Generati', priority: 5, large: true },
             { name: 'attestati', model: 'attestato', label: 'Attestati', priority: 6 },
             { name: 'preventivi', model: 'preventivo', label: 'Preventivi', priority: 7 },
@@ -138,7 +137,7 @@ const ENTITY_DEPENDENCIES = {
 
     // Templates Dependencies
     'TemplateVersion': ['TemplateLink'],
-    'form_fields': ['form_templates'],
+    'FormField': ['FormTemplate'],
     'GeneratedDocument': ['TemplateLink', 'persons'],
     'attestati': ['CourseSchedule', 'course_enrollments', 'persons'],
     'preventivi': ['Course', 'Company', 'persons'],
@@ -691,12 +690,13 @@ class BackupService {
             selectedEntities = null, // null = tutte
             overwrite = false,
             tenantId,
-            userId
+            userId,
+            useCurrentTenant = false // true = forza tenantId su tutti i record importati
         } = options;
 
         const tempPath = path.join(this.tempDir, `restore_${Date.now()}`);
 
-        logger.info('Avvio restore backup', { zipPath, overwrite, tenantId });
+        logger.info('Avvio restore backup', { zipPath, overwrite, tenantId, useCurrentTenant });
 
         try {
             // Valida prima
@@ -730,7 +730,9 @@ class BackupService {
                     const filePath = path.join(tempPath, 'data', entity.filename);
                     const data = JSON.parse(await fs.readFile(filePath, 'utf8'));
 
-                    const restored = await this.restoreEntity(entity, data, { overwrite, tenantId });
+                    // Se useCurrentTenant=true, forza il tenantId su tutti i record
+                    const effectiveTenantId = useCurrentTenant ? tenantId : null;
+                    const restored = await this.restoreEntity(entity, data, { overwrite, tenantId: effectiveTenantId });
 
                     results.success.push({
                         name: entity.name,
@@ -807,6 +809,60 @@ class BackupService {
     }
 
     /**
+     * Prepara record per import Prisma
+     * - Rimuove campi redacted
+     * - Rimuove relazioni nested (oggetti/array)
+     * - Mantiene solo campi scalari e ID foreign key
+     * - P48/P49: Converte campi legacy (companyId → companyTenantProfileId)
+     */
+    prepareRecordForImport(record, tenantId) {
+        const cleaned = {};
+
+        // P48/P49: Mapping campi legacy → nuovi campi schema
+        const LEGACY_FIELD_MAPPING = {
+            'companyId': 'companyTenantProfileId'  // TemplateLink.companyId → companyTenantProfileId
+        };
+
+        for (const [key, value] of Object.entries(record)) {
+            // Skip campi redacted
+            if (value === '[REDACTED]') continue;
+
+            // P48/P49: Converti campi legacy ai nuovi nomi
+            const mappedKey = LEGACY_FIELD_MAPPING[key] || key;
+
+            // Skip null values
+            if (value === null) {
+                cleaned[mappedKey] = null;
+                continue;
+            }
+
+            // Skip relazioni nested (oggetti non-date e array)
+            if (typeof value === 'object') {
+                // Mantieni Date
+                if (value instanceof Date ||
+                    (typeof value === 'string' && !isNaN(Date.parse(value)) && value.includes('T'))) {
+                    cleaned[mappedKey] = value;
+                    continue;
+                }
+                // Salta array e oggetti (relazioni nested)
+                if (Array.isArray(value) || Object.prototype.toString.call(value) === '[object Object]') {
+                    continue;
+                }
+            }
+
+            // Mantieni campi scalari
+            cleaned[mappedKey] = value;
+        }
+
+        // Sovrascrivi tenantId se specificato
+        if (tenantId && cleaned.tenantId !== undefined) {
+            cleaned.tenantId = tenantId;
+        }
+
+        return cleaned;
+    }
+
+    /**
      * Restore singola entità
      */
     async restoreEntity(entity, data, options) {
@@ -817,16 +873,18 @@ class BackupService {
             throw new Error(`Model ${modelName} non trovato`);
         }
 
-        const results = { imported: 0, updated: 0, skipped: 0 };
+        const results = { imported: 0, updated: 0, skipped: 0, errors: [] };
 
         for (const record of data) {
             try {
-                // Rimuovi campi redacted
-                const cleanRecord = this.cleanRedactedFields(record);
+                // Prepara record per import
+                const cleanRecord = this.prepareRecordForImport(record, tenantId);
 
-                // Sovrascrivi tenantId se specificato
-                if (tenantId && cleanRecord.tenantId) {
-                    cleanRecord.tenantId = tenantId;
+                // Verifica che ci sia l'id
+                if (!cleanRecord.id) {
+                    logger.warn(`Record senza ID in ${entity.name}:`, record);
+                    results.skipped++;
+                    continue;
                 }
 
                 // Controlla se esiste
@@ -836,9 +894,11 @@ class BackupService {
 
                 if (existing) {
                     if (overwrite) {
+                        // Rimuovi id per l'update (non puoi aggiornare l'id)
+                        const { id, ...updateData } = cleanRecord;
                         await prisma[modelName].update({
                             where: { id: cleanRecord.id },
-                            data: cleanRecord
+                            data: updateData
                         });
                         results.updated++;
                     } else {
@@ -851,7 +911,14 @@ class BackupService {
                     results.imported++;
                 }
             } catch (error) {
-                logger.warn(`Errore import record ${entity.name}:`, error.message);
+                logger.warn(`Errore import record ${entity.name}:`, {
+                    error: error.message,
+                    recordId: record?.id
+                });
+                results.errors.push({
+                    id: record?.id,
+                    error: error.message
+                });
                 results.skipped++;
             }
         }
@@ -860,7 +927,7 @@ class BackupService {
     }
 
     /**
-     * Rimuovi campi redacted
+     * Rimuovi campi redacted (legacy, ora usa prepareRecordForImport)
      */
     cleanRedactedFields(record) {
         const cleaned = { ...record };

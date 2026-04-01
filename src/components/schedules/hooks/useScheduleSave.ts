@@ -18,6 +18,11 @@ interface UseScheduleSaveProps {
   totalSelectedHours?: number;
   selectedCompanies?: (string | number)[];
   status?: string;
+  /**
+   * P51: Optional headers for multi-tenant operations
+   * Used to pass X-Operate-Tenant-Id header when admin operates on a different tenant
+   */
+  headers?: Record<string, string>;
 }
 
 interface UseScheduleSaveReturn {
@@ -41,7 +46,8 @@ export function useScheduleSave({
   courseDuration = 0,
   totalSelectedHours = 0,
   selectedCompanies = [],
-  status = 'Preventivo'
+  status = 'Preventivo',
+  headers
 }: UseScheduleSaveProps): UseScheduleSaveReturn {
 
   const handleSave = useCallback(async (
@@ -91,15 +97,16 @@ export function useScheduleSave({
         status
       );
 
-      console.log('[useScheduleSave] Payload da inviare:', JSON.stringify(payload, null, 2));
-      console.log('[useScheduleSave] courseId:', payload.courseId, '| tipo:', typeof payload.courseId);
+
+      // P51: Build config with optional headers for multi-tenant support
+      const config = headers ? { headers } : undefined;
 
       let result;
       if (isEditing && scheduleId) {
-        result = await update('schedules', scheduleId, payload);
+        result = await update('schedules', scheduleId, payload, config);
         // Toast handled by calling component
       } else {
-        result = await create('schedules', payload);
+        result = await create('schedules', payload, config);
         // Toast handled by calling component
       }
 
@@ -114,14 +121,13 @@ export function useScheduleSave({
       }
 
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Errore durante il salvataggio';
-      console.error('Errore durante il salvataggio:', err);
+      const errorMessage = 'Errore durante il salvataggio';
       setError(errorMessage);
       // Toast handled by calling component
     } finally {
       setLoading(false);
     }
-  }, [isEditing, scheduleId, setLoading, setError, setHasScheduled, setScheduleId, onSuccess, dynamicRiskOptions, dynamicCourseTypeOptions, courseDuration, totalSelectedHours, selectedCompanies, status]);
+  }, [isEditing, scheduleId, setLoading, setError, setHasScheduled, setScheduleId, onSuccess, dynamicRiskOptions, dynamicCourseTypeOptions, courseDuration, totalSelectedHours, selectedCompanies, status, headers]);
 
   return {
     handleSave

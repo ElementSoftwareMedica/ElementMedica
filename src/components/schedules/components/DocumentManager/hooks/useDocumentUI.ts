@@ -84,7 +84,6 @@ export const useDocumentUI = (): UseDocumentUIReturn => {
    * Open lettere di incarico modal
    */
   const openLettereModal = () => {
-    console.log('🔵 openLettereModal called, setting showLettereModal to true');
     setShowLettereModal(true);
   };
 

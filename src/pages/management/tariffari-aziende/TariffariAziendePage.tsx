@@ -2,11 +2,11 @@
  * TariffariAziendePage
  * 
  * Pagina principale per la gestione dei Tariffari Aziende - Medicina del Lavoro
- * Accessibile da /management/tariffari-aziende
+ * Accessibile da /poliambulatorio/mdl/tariffari-aziende
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
     Plus,
     Search,
@@ -36,22 +36,33 @@ import {
     DropdownMenuTrigger
 } from '../../../design-system';
 import { useToast } from '../../../hooks/useToast';
+import { CRUDButton } from '../../../components/shared/CRUDButton';
+import { useTenantFilter } from '../../../context/TenantFilterContext';
 import {
     tariffariAziendaliApi,
     TariffarioAziendaleListItem,
     TipoTariffario,
     TIPO_TARIFFARIO_LABELS
 } from '../../../services/tariffarioAziendaleApi';
+import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
 
 const TariffariAziendePage: React.FC = () => {
     const navigate = useNavigate();
     const { showToast } = useToast();
+    const { confirmDelete } = useConfirmDialog();
+    const { getTenantFilterParams, tenantFilterKey, isReady } = useTenantFilter();
+    const [searchParams] = useSearchParams();
+
+    // Read companyId from URL params
+    const companyIdFromUrl = searchParams.get('companyId');
 
     // State
     const [tariffari, setTariffari] = useState<TariffarioAziendaleListItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
-    const [tipoFilter, setTipoFilter] = useState<TipoTariffario | 'ALL'>('ALL');
+    const [companyFilter, setCompanyFilter] = useState<string>(companyIdFromUrl || '');
+    // P59 Sprint 11: Default a 'BASE' per mostrare solo i tariffari template, non i cloni AZIENDALI
+    const [tipoFilter, setTipoFilter] = useState<TipoTariffario | 'ALL'>('BASE');
     const [attivoFilter, setAttivoFilter] = useState<'ALL' | 'true' | 'false'>('ALL');
     const [pagination, setPagination] = useState({
         page: 1,
@@ -60,16 +71,21 @@ const TariffariAziendePage: React.FC = () => {
         totalPages: 0
     });
 
-    // Fetch tariffari
+    // Fetch tariffari with tenant filter
     const fetchTariffari = useCallback(async () => {
         try {
             setLoading(true);
+
+            // Get tenant filter params
+            const tenantParams = getTenantFilterParams();
+
             const response = await tariffariAziendaliApi.getAll({
-                tipo: tipoFilter === 'ALL' ? undefined : tipoFilter,
                 attivo: attivoFilter === 'ALL' ? undefined : attivoFilter === 'true',
                 search: searchQuery || undefined,
                 page: pagination.page,
-                limit: pagination.limit
+                limit: pagination.limit,
+                tenantIds: tenantParams.tenantIds?.join(','),
+                allTenants: tenantParams.allTenants
             });
 
             if (response.success) {
@@ -80,16 +96,17 @@ const TariffariAziendePage: React.FC = () => {
                 }));
             }
         } catch (error) {
-            console.error('Error fetching tariffari:', error);
             showToast({ message: 'Errore nel caricamento dei tariffari', type: 'error' });
         } finally {
             setLoading(false);
         }
-    }, [tipoFilter, attivoFilter, searchQuery, pagination.page, pagination.limit]);
+    }, [tipoFilter, attivoFilter, searchQuery, companyFilter, pagination.page, pagination.limit, getTenantFilterParams, tenantFilterKey]);
 
     useEffect(() => {
-        fetchTariffari();
-    }, [fetchTariffari]);
+        if (isReady) {
+            fetchTariffari();
+        }
+    }, [fetchTariffari, isReady]);
 
     // Handlers
     const handleSearch = (e: React.FormEvent) => {
@@ -99,7 +116,7 @@ const TariffariAziendePage: React.FC = () => {
     };
 
     const handleDelete = async (tariffario: TariffarioAziendaleListItem) => {
-        if (!confirm(`Sei sicuro di voler eliminare il tariffario "${tariffario.nome}"?`)) {
+        if (!(await confirmDelete(tariffario.nome))) {
             return;
         }
 
@@ -108,14 +125,23 @@ const TariffariAziendePage: React.FC = () => {
             showToast({ message: 'Tariffario eliminato con successo', type: 'success' });
             fetchTariffari();
         } catch (error: unknown) {
-            console.error('Error deleting tariffario:', error);
-            const errorMessage = error instanceof Error ? error.message : 'Errore durante l\'eliminazione';
+            const axiosError = error as { response?: { data?: { error?: string } } };
+            const errorMessage = axiosError?.response?.data?.error || 'Errore durante l\'eliminazione';
             showToast({ message: errorMessage, type: 'error' });
         }
     };
 
-    const handleClone = (tariffario: TariffarioAziendaleListItem) => {
-        navigate(`/management/tariffari-aziende/${tariffario.id}/clone`);
+    const handleClone = async (tariffario: TariffarioAziendaleListItem) => {
+        try {
+            const response = await tariffariAziendaliApi.clonaTariffario(tariffario.id);
+            if (response.success) {
+                showToast({ message: response.message || 'Tariffario clonato con successo', type: 'success' });
+                navigate(`/poliambulatorio/mdl/tariffari-aziende/${response.data.id}`);
+            }
+        } catch (error: unknown) {
+            const msg = 'Errore durante la clonazione';
+            showToast({ message: msg, type: 'error' });
+        }
     };
 
     // Format date
@@ -137,10 +163,14 @@ const TariffariAziendePage: React.FC = () => {
                         Gestione tariffari Medicina del Lavoro per aziende
                     </p>
                 </div>
-                <Button onClick={() => navigate('/management/tariffari-aziende/nuovo')}>
-                    <Plus className="h-4 w-4 mr-2" />
+                <CRUDButton
+                    operation="create"
+                    onClick={() => navigate('/poliambulatorio/mdl/tariffari-aziende/nuovo')}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                    <Plus className="h-4 w-4" />
                     Nuovo Tariffario
-                </Button>
+                </CRUDButton>
             </div>
 
             {/* Filters */}
@@ -209,7 +239,7 @@ const TariffariAziendePage: React.FC = () => {
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold text-blue-600">
-                            {tariffari.filter(t => t.tipo === 'BASE').length}
+                            {tariffari.filter(t => (t as unknown as { tipo?: string }).tipo === 'BASE').length}
                         </div>
                     </CardContent>
                 </Card>
@@ -219,7 +249,7 @@ const TariffariAziendePage: React.FC = () => {
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold text-green-600">
-                            {tariffari.filter(t => t.tipo === 'AZIENDALE').length}
+                            {tariffari.filter(t => (t as unknown as { tipo?: string }).tipo === 'AZIENDALE').length}
                         </div>
                     </CardContent>
                 </Card>
@@ -236,13 +266,13 @@ const TariffariAziendePage: React.FC = () => {
                         <div className="flex flex-col items-center justify-center h-64 text-gray-500">
                             <FileText className="h-12 w-12 mb-4 opacity-50" />
                             <p>Nessun tariffario trovato</p>
-                            <Button
-                                variant="ghost"
-                                onClick={() => navigate('/management/tariffari-aziende/nuovo')}
-                                className="text-primary"
+                            <CRUDButton
+                                operation="create"
+                                onClick={() => navigate('/poliambulatorio/mdl/tariffari-aziende/nuovo')}
+                                className="text-primary mt-2 hover:underline"
                             >
                                 Crea il primo tariffario
-                            </Button>
+                            </CRUDButton>
                         </div>
                     ) : (
                         <div className="overflow-x-auto">
@@ -264,24 +294,30 @@ const TariffariAziendePage: React.FC = () => {
                                         <tr
                                             key={tariffario.id}
                                             className="border-b hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
-                                            onClick={() => navigate(`/management/tariffari-aziende/${tariffario.id}`)}
+                                            onClick={() => navigate(`/poliambulatorio/mdl/tariffari-aziende/${tariffario.id}`)}
                                         >
                                             <td className="px-4 py-3 text-sm font-mono">{tariffario.codice}</td>
                                             <td className="px-4 py-3 text-sm font-medium">{tariffario.nome}</td>
                                             <td className="px-4 py-3">
-                                                <Badge variant={tariffario.tipo === 'BASE' ? 'secondary' : 'default'}>
-                                                    {TIPO_TARIFFARIO_LABELS[tariffario.tipo]}
-                                                </Badge>
+                                                {(() => {
+                                                    const t = tariffario as unknown as { tipo?: string }; return (
+                                                        <Badge variant={t.tipo === 'BASE' ? 'secondary' : 'default'}>
+                                                            {t.tipo ? TIPO_TARIFFARIO_LABELS[t.tipo as keyof typeof TIPO_TARIFFARIO_LABELS] : '-'}
+                                                        </Badge>
+                                                    );
+                                                })()}
                                             </td>
                                             <td className="px-4 py-3 text-sm">
-                                                {tariffario.company ? (
-                                                    <div className="flex items-center gap-1">
-                                                        <Building2 className="h-4 w-4 text-gray-400" />
-                                                        <span>{tariffario.company.ragioneSociale}</span>
-                                                    </div>
-                                                ) : (
-                                                    <span className="text-gray-400">-</span>
-                                                )}
+                                                {(() => {
+                                                    const t = tariffario as unknown as { company?: { ragioneSociale: string } }; return t.company ? (
+                                                        <div className="flex items-center gap-1">
+                                                            <Building2 className="h-4 w-4 text-gray-400" />
+                                                            <span>{t.company.ragioneSociale}</span>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-gray-400">-</span>
+                                                    );
+                                                })()}
                                             </td>
                                             <td className="px-4 py-3 text-sm">
                                                 <div className="flex items-center gap-1 text-gray-500">
@@ -315,7 +351,7 @@ const TariffariAziendePage: React.FC = () => {
                                                     </DropdownMenuTrigger>
                                                     <DropdownMenuContent align="end">
                                                         <DropdownMenuItem
-                                                            onClick={() => navigate(`/management/tariffari-aziende/${tariffario.id}`)}
+                                                            onClick={() => navigate(`/poliambulatorio/mdl/tariffari-aziende/${tariffario.id}`)}
                                                         >
                                                             <Edit className="h-4 w-4 mr-2" />
                                                             Modifica

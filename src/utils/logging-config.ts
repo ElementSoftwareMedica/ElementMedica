@@ -250,13 +250,6 @@ export class ConditionalLogger {
     const errorCount = logs.filter(log => log.level === 'error').length;
     const warnCount = logs.filter(log => log.level === 'warn').length;
     
-    console.log(`📊 ${this.logType} Batch Summary:`, {
-      totalLogs: logs.length,
-      errors: errorCount,
-      warnings: warnCount,
-      timespan: `${logs[0]?.timestamp} - ${logs[logs.length - 1]?.timestamp}`,
-      sample: logs.slice(-3) // Ultimi 3 log come esempio
-    });
   }
 
   // Log immediato
@@ -326,7 +319,6 @@ if (typeof window !== 'undefined') {
         logOnlyErrors: false,
         maxLogsPerMinute: 1000 
       });
-      console.log('🔧 All logging enabled');
     },
     disableAll: () => {
       setDetailedLogging(false);
@@ -334,11 +326,9 @@ if (typeof window !== 'undefined') {
         logOnlyErrors: true,
         maxLogsPerMinute: 10 
       });
-      console.log('🔧 All logging disabled');
     },
     resetRateLimits: () => {
       loggingConfigManager['logCounts'].clear();
-      console.log('🔧 Rate limits reset');
     }
   };
 }

@@ -158,9 +158,8 @@ const SystemReportsPage: React.FC = () => {
                 ]
             });
 
-        } catch (err: any) {
-            console.error('Error loading report data:', err);
-            setError(err.message || 'Errore nel caricamento dei report');
+        } catch (err: unknown) {
+            setError('Errore nel caricamento dei report');
             
             // Set mock data on error
             setReportData({
@@ -179,7 +178,7 @@ const SystemReportsPage: React.FC = () => {
                     { label: 'EMPLOYEE', value: 23, color: '#6b7280' }
                 ],
                 usersByTenant: [
-                    { label: 'Element Formazione', value: 25, color: '#8b5cf6' },
+                    { label: 'Element Sicurezza', value: 25, color: '#8b5cf6' },
                     { label: 'Element Medica', value: 18, color: '#06b6d4' },
                     { label: 'Default Company', value: 5, color: '#f59e0b' }
                 ],

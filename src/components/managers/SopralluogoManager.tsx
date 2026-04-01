@@ -5,8 +5,10 @@ import { Input } from '../../design-system/atoms/Input';
 import { Label } from '../../design-system/atoms/Label';
 import { Badge } from '../../design-system/atoms/Badge';
 import { apiGet, apiDelete, apiPost, apiPut } from '../../services/api';
+import { useTenantMode } from '../../contexts/TenantModeContext';
 import { useToast } from '../../hooks/useToast';
 import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
+import { DatePickerElegante } from '../ui/DatePickerElegante';
 
 interface Sopralluogo {
   id: string;
@@ -42,6 +44,8 @@ interface SopralluogoManagerProps {
 }
 
 const SopralluogoManager: React.FC<SopralluogoManagerProps> = ({ siteId, siteName }) => {
+  const { getOperateHeaders } = useTenantMode();
+  const operateHeaders = getOperateHeaders();
   const [sopralluoghi, setSopralluoghi] = useState<Sopralluogo[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -64,7 +68,6 @@ const SopralluogoManager: React.FC<SopralluogoManagerProps> = ({ siteId, siteNam
       const response = await apiGet(`/api/v1/sopralluogo/site/${siteId}`) as { sopralluoghi?: Sopralluogo[] };
       setSopralluoghi(response.sopralluoghi || []);
     } catch (error) {
-      console.error('Error loading sopralluoghi:', error);
       showToast({ message: 'Errore nel caricamento dei sopralluoghi', type: 'error' });
     } finally {
       setLoading(false);
@@ -77,18 +80,17 @@ const SopralluogoManager: React.FC<SopralluogoManagerProps> = ({ siteId, siteNam
     try {
       if (editingSopralluogo) {
         // Update existing sopralluogo
-        await apiPut(`/api/v1/sopralluogo/${editingSopralluogo.id}`, formData);
+        await apiPut(`/api/v1/sopralluogo/${editingSopralluogo.id}`, formData, { headers: operateHeaders });
         showToast({ message: 'Sopralluogo aggiornato con successo', type: 'success' });
       } else {
         // Create new sopralluogo
-        await apiPost(`/api/v1/sopralluogo/site/${siteId}`, formData);
+        await apiPost(`/api/v1/sopralluogo/site/${siteId}`, formData, { headers: operateHeaders });
         showToast({ message: 'Sopralluogo creato con successo', type: 'success' });
       }
 
       resetForm();
       loadSopralluoghi();
     } catch (error) {
-      console.error('Error saving sopralluogo:', error);
       showToast({ message: 'Errore nel salvataggio del sopralluogo', type: 'error' });
     }
   };
@@ -110,11 +112,10 @@ const SopralluogoManager: React.FC<SopralluogoManagerProps> = ({ siteId, siteNam
     }
 
     try {
-      await apiDelete(`/api/v1/sopralluogo/${sopralluogoId}`);
+      await apiDelete(`/api/v1/sopralluogo/${sopralluogoId}`, { headers: operateHeaders });
       showToast({ message: 'Sopralluogo eliminato con successo', type: 'success' });
       loadSopralluoghi();
     } catch (error) {
-      console.error('Error deleting sopralluogo:', error);
       showToast({ message: 'Errore nell\'eliminazione del sopralluogo', type: 'error' });
     }
   };
@@ -182,12 +183,10 @@ const SopralluogoManager: React.FC<SopralluogoManagerProps> = ({ siteId, siteNam
                 </div>
                 <div>
                   <Label htmlFor="dataEsecuzione">Data Esecuzione *</Label>
-                  <Input
-                    id="dataEsecuzione"
-                    type="date"
+                  <DatePickerElegante
                     value={formData.dataEsecuzione}
-                    onChange={(e) => setFormData({ ...formData, dataEsecuzione: e.target.value })}
-                    required
+                    onChange={(date) => setFormData({ ...formData, dataEsecuzione: date ? date.toISOString().split('T')[0] : '' })}
+                    theme="teal"
                   />
                 </div>
               </div>

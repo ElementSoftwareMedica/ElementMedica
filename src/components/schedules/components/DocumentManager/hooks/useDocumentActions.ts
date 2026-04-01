@@ -8,7 +8,13 @@ import lettereIncaricoService from '../../../../../services/lettereIncaricoServi
 import registriPresenzeService from '../../../../../services/registriPresenzeService';
 import attestatiService from '../../../../../services/attestatiService';
 import preventiviService from '../../../../../services/preventiviService';
+import { apiPost } from '../../../../../api/api';
 import { useToast } from '../../../../../hooks/useToast';
+import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
+import { useTenantMode } from '@/contexts/TenantModeContext';
+import type { SignaturePlacement } from '../components/SigningWorkflowModal';
+
+export type DocumentType = 'attestato' | 'lettera' | 'registro';
 
 export interface UseDocumentActionsReturn {
   downloadLettera: (id: string) => Promise<void>;
@@ -22,6 +28,8 @@ export interface UseDocumentActionsReturn {
   deleteRegistro: (id: string) => Promise<void>;
   deleteAttestato: (id: string) => Promise<void>;
   deletePreventivo: (id: string) => Promise<void>;
+  signDocument: (id: string, signatureData: string, placement: SignaturePlacement, docType?: DocumentType) => Promise<void>;
+  signDocumentsBulk: (ids: string[], signatureData: string, placement: SignaturePlacement, docType?: DocumentType) => Promise<{ succeeded: string[]; failed: string[] }>;
 }
 
 /**
@@ -35,6 +43,8 @@ export const useDocumentActions = (
   scheduleId?: string | number | null
 ): UseDocumentActionsReturn => {
   const { showToast } = useToast();
+  const { confirmDelete } = useConfirmDialog();
+  const { getOperateHeaders } = useTenantMode();
 
   /**
    * Download lettera di incarico
@@ -43,7 +53,6 @@ export const useDocumentActions = (
     try {
       await lettereIncaricoService.download(id);
     } catch (error) {
-      console.error('Errore download lettera:', error);
       showToast({ message: 'Errore durante il download della lettera', type: 'error' });
     }
   };
@@ -55,7 +64,6 @@ export const useDocumentActions = (
     try {
       await registriPresenzeService.download(id);
     } catch (error) {
-      console.error('Errore download registro:', error);
       showToast({ message: 'Errore durante il download del registro', type: 'error' });
     }
   };
@@ -67,7 +75,6 @@ export const useDocumentActions = (
     try {
       await attestatiService.download(id);
     } catch (error) {
-      console.error('Errore download attestato:', error);
       showToast({ message: 'Errore durante il download dell\'attestato', type: 'error' });
     }
   };
@@ -79,7 +86,6 @@ export const useDocumentActions = (
     try {
       await preventiviService.download(id);
     } catch (error) {
-      console.error('Errore download preventivo:', error);
       showToast({ message: 'Errore durante il download del preventivo', type: 'error' });
     }
   };
@@ -91,7 +97,6 @@ export const useDocumentActions = (
     try {
       await attestatiService.downloadZipBatch(ids);
     } catch (error) {
-      console.error('Errore download ZIP attestati:', error);
       showToast({ message: 'Errore durante il download del file ZIP attestati', type: 'error' });
     }
   };
@@ -107,7 +112,6 @@ export const useDocumentActions = (
     try {
       await lettereIncaricoService.downloadZip(String(scheduleId), ids);
     } catch (error) {
-      console.error('Errore download ZIP lettere:', error);
       showToast({ message: 'Errore durante il download del file ZIP lettere', type: 'error' });
     }
   };
@@ -123,7 +127,6 @@ export const useDocumentActions = (
     try {
       await registriPresenzeService.downloadZip(String(scheduleId), ids);
     } catch (error) {
-      console.error('Errore download ZIP registri:', error);
       showToast({ message: 'Errore durante il download del file ZIP registri', type: 'error' });
     }
   };
@@ -132,14 +135,13 @@ export const useDocumentActions = (
    * Delete lettera di incarico (with confirmation)
    */
   const deleteLettera = async (id: string) => {
-    if (!confirm('Sei sicuro di voler eliminare questa lettera?')) return;
+    if (!(await confirmDelete('lettera'))) return;
 
     try {
       await lettereIncaricoService.delete(id);
       onRefresh();
       showToast({ message: 'Lettera eliminata con successo', type: 'success' });
     } catch (error) {
-      console.error('Errore eliminazione lettera:', error);
       showToast({ message: 'Errore durante l\'eliminazione della lettera', type: 'error' });
     }
   };
@@ -148,14 +150,13 @@ export const useDocumentActions = (
    * Delete registro presenze (with confirmation)
    */
   const deleteRegistro = async (id: string) => {
-    if (!confirm('Sei sicuro di voler eliminare questo registro?')) return;
+    if (!(await confirmDelete('registro'))) return;
 
     try {
       await registriPresenzeService.delete(id);
       onRefresh();
       showToast({ message: 'Registro eliminato con successo', type: 'success' });
     } catch (error) {
-      console.error('Errore eliminazione registro:', error);
       showToast({ message: 'Errore durante l\'eliminazione del registro', type: 'error' });
     }
   };
@@ -164,14 +165,13 @@ export const useDocumentActions = (
    * Delete attestato (with confirmation)
    */
   const deleteAttestato = async (id: string) => {
-    if (!confirm('Sei sicuro di voler eliminare questo attestato?')) return;
+    if (!(await confirmDelete('attestato'))) return;
 
     try {
       await attestatiService.delete(id);
       onRefresh();
       showToast({ message: 'Attestato eliminato con successo', type: 'success' });
     } catch (error) {
-      console.error('Errore eliminazione attestato:', error);
       showToast({ message: 'Errore durante l\'eliminazione dell\'attestato', type: 'error' });
     }
   };
@@ -180,16 +180,64 @@ export const useDocumentActions = (
    * Delete preventivo (with confirmation)
    */
   const deletePreventivo = async (id: string) => {
-    if (!confirm('Sei sicuro di voler eliminare questo preventivo?')) return;
+    if (!(await confirmDelete('preventivo'))) return;
 
     try {
       await preventiviService.delete(id);
       onRefresh();
       showToast({ message: 'Preventivo eliminato con successo', type: 'success' });
     } catch (error) {
-      console.error('Errore eliminazione preventivo:', error);
       showToast({ message: 'Errore durante l\'eliminazione del preventivo', type: 'error' });
     }
+  };
+
+  /**
+   * Get the API base path for a document type
+   */
+  const getSignBasePath = (docType?: DocumentType): string => {
+    switch (docType) {
+      case 'attestato': return '/api/v1/attestati';
+      case 'lettera': return '/api/v1/lettere-incarico';
+      case 'registro': return '/api/v1/registri-presenze';
+      default: return '/api/v1/attestati';
+    }
+  };
+
+  /**
+   * Sign a single document by ID
+   */
+  const signDocument = async (id: string, signatureData: string, placement: SignaturePlacement, docType?: DocumentType): Promise<void> => {
+    const basePath = getSignBasePath(docType);
+    await apiPost(`${basePath}/${id}/sign`, { signatureData, placement }, { headers: getOperateHeaders() });
+    onRefresh();
+    showToast({ message: 'Documento firmato con successo', type: 'success' });
+  };
+
+  /**
+   * Sign multiple documents in bulk with the same signature
+   */
+  const signDocumentsBulk = async (
+    ids: string[],
+    signatureData: string,
+    placement: SignaturePlacement,
+    docType?: DocumentType
+  ): Promise<{ succeeded: string[]; failed: string[] }> => {
+    const basePath = getSignBasePath(docType);
+    const result = await apiPost<{ succeeded: string[]; failed: string[] }>(
+      `${basePath}/bulk-sign`,
+      { documentIds: ids, signatureData, placement },
+      { headers: getOperateHeaders() }
+    );
+    onRefresh();
+    const succeeded = result?.succeeded ?? [];
+    const failed = result?.failed ?? [];
+    if (succeeded.length > 0) {
+      showToast({ message: `${succeeded.length} document${succeeded.length === 1 ? 'o firmato' : 'i firmati'} con successo`, type: 'success' });
+    }
+    if (failed.length > 0) {
+      showToast({ message: `${failed.length} document${failed.length === 1 ? 'o non firmato' : 'i non firmati'} per errore`, type: 'error' });
+    }
+    return { succeeded, failed };
   };
 
   return {
@@ -203,6 +251,8 @@ export const useDocumentActions = (
     deleteLettera,
     deleteRegistro,
     deleteAttestato,
-    deletePreventivo
+    deletePreventivo,
+    signDocument,
+    signDocumentsBulk
   };
 };

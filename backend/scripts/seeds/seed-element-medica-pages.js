@@ -1,13 +1,14 @@
 /**
  * Script per creare/aggiornare le pagine CMS di Element Medica
- * Rende le pagine complete e professionali come quelle di Element Formazione
+ * Rende le pagine complete e professionali come quelle di Element Sicurezza
  */
 
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-const ELEMENT_MEDICA_TENANT_ID = 'tenant-element-medica-001';
+// Tenant ID resolved dynamically (see seedElementMedicaPages)
+let ELEMENT_MEDICA_TENANT_ID = null;
 
 // =====================================================
 // HOMEPAGE ELEMENT MEDICA - VERSIONE COMPLETA
@@ -173,8 +174,8 @@ const medicaHomepageContent = {
             icon: "Calendar"
         },
         secondaryButton: {
-            text: "Chiama Ora",
-            href: "tel:+390123456789",
+            text: "Chiama: +39 351 318 1574",
+            href: "tel:+393513181574",
             icon: "Phone"
         },
         badges: [
@@ -182,6 +183,15 @@ const medicaHomepageContent = {
             "✓ Conferma immediata",
             "✓ Promemoria automatico"
         ]
+    },
+    emergency: {
+        title: 'Contatto Rapido',
+        subtitle: 'Siamo qui per aiutarti',
+        phone: '+39 351 318 1574',
+        email: 'info@elementmedica.com',
+        hours: 'Lun-Ven 8:00-20:00 | Sab 8:00-13:00',
+        ctaText: 'Prenota Ora',
+        ctaHref: '/prenota'
     },
     metadata: {
         title: "Element Medica - Centro Medico Polispecialistico",
@@ -204,8 +214,8 @@ const medicaMedicinaDelLavoroContent = {
             icon: "ArrowRight"
         },
         secondaryButton: {
-            text: "Chiama Ora",
-            href: "tel:+390123456789",
+            text: "Chiama: +39 351 318 1574",
+            href: "tel:+393513181574",
             icon: "Phone"
         },
         stats: [
@@ -424,8 +434,8 @@ const medicaMedicinaDelLavoroContent = {
             icon: "ArrowRight"
         },
         secondaryButton: {
-            text: "Chiama Ora",
-            href: "tel:+390123456789",
+            text: "Chiama: +39 351 318 1574",
+            href: "tel:+393513181574",
             icon: "Phone"
         },
         badges: [
@@ -433,6 +443,15 @@ const medicaMedicinaDelLavoroContent = {
             "✓ Nessun impegno",
             "✓ Consulenza gratuita"
         ]
+    },
+    emergency: {
+        title: 'Contatto Rapido',
+        subtitle: 'Siamo qui per aiutarti',
+        phone: '+39 351 318 1574',
+        email: 'info@elementmedica.com',
+        hours: 'Lun-Ven 8:00-20:00 | Sab 8:00-13:00',
+        ctaText: 'Richiedi Preventivo',
+        ctaHref: '/contatti'
     },
     metadata: {
         title: "Medicina del Lavoro - Element Medica",
@@ -646,8 +665,8 @@ const medicaVisiteSpecialisticheContent = {
             icon: "Calendar"
         },
         secondaryButton: {
-            text: "Chiama per Info",
-            href: "tel:+390123456789",
+            text: "Chiama: +39 351 318 1574",
+            href: "tel:+393513181574",
             icon: "Phone"
         },
         badges: [
@@ -655,6 +674,15 @@ const medicaVisiteSpecialisticheContent = {
             "✓ Sconto nuovi pazienti",
             "✓ Convenzioni attive"
         ]
+    },
+    emergency: {
+        title: 'Contatto Rapido',
+        subtitle: 'Siamo qui per aiutarti',
+        phone: '+39 351 318 1574',
+        email: 'info@elementmedica.com',
+        hours: 'Lun-Ven 8:00-20:00 | Sab 8:00-13:00',
+        ctaText: 'Prenota Visita',
+        ctaHref: '/prenota'
     },
     metadata: {
         title: "Visite Specialistiche - Element Medica",
@@ -918,6 +946,15 @@ const medicaDiagnosticaContent = {
             "✓ Bassa dose radiazioni"
         ]
     },
+    emergency: {
+        title: 'Contatto Rapido',
+        subtitle: 'Siamo qui per aiutarti',
+        phone: '+39 351 318 1574',
+        email: 'info@elementmedica.com',
+        hours: 'Lun-Ven 8:00-20:00 | Sab 8:00-13:00',
+        ctaText: 'Prenota Esame',
+        ctaHref: '/prenota'
+    },
     metadata: {
         title: "Diagnostica per Immagini - Element Medica",
         description: "Centro di diagnostica per immagini: ecografie, radiografie, risonanze magnetiche, TAC. Tecnologia avanzata e refertazione rapida.",
@@ -943,8 +980,7 @@ const medicaChiSiamoContent = {
             href: "/contatti",
             icon: "Phone"
         },
-        backgroundVariant: "gradient",
-        backgroundImage: "/images/hero-chi-siamo.jpg"
+        backgroundVariant: "gradient"
     },
     mission: {
         title: "La Nostra Missione",
@@ -1104,6 +1140,15 @@ const medicaChiSiamoContent = {
             icon: "Calendar"
         }
     },
+    emergency: {
+        title: 'Contatto Rapido',
+        subtitle: 'Siamo qui per aiutarti',
+        phone: '+39 351 318 1574',
+        email: 'info@elementmedica.com',
+        hours: 'Lun-Ven 8:00-20:00 | Sab 8:00-13:00',
+        ctaText: 'Contattaci',
+        ctaHref: '/contatti'
+    },
     metadata: {
         title: "Chi Siamo - Element Medica",
         description: "Scopri Element Medica: centro medico polispecialistico con oltre 15 anni di esperienza. Team di esperti, tecnologie avanzate, approccio umano.",
@@ -1116,6 +1161,24 @@ const medicaChiSiamoContent = {
 // =====================================================
 async function seedElementMedicaPages() {
     console.log('🏥 Starting Element Medica CMS Pages Seed...\n');
+
+    // Dynamically resolve tenant ID
+    const tenant = await prisma.tenant.findFirst({
+        where: {
+            OR: [
+                { slug: 'element-medica' },
+                { name: 'Element Medica' }
+            ]
+        }
+    });
+
+    if (!tenant) {
+        console.error('❌ Tenant "Element Medica" non trovato nel database!');
+        return;
+    }
+
+    ELEMENT_MEDICA_TENANT_ID = tenant.id;
+    console.log(`📌 Tenant ID: ${ELEMENT_MEDICA_TENANT_ID}\n`);
 
     const pages = [
         {
@@ -1147,27 +1210,27 @@ async function seedElementMedicaPages() {
 
     for (const page of pages) {
         try {
-            // Since slug is globally unique, check if page exists first
+            // Find existing page by slug (query without tenantId fallback)
             const existing = await prisma.cMSPage.findFirst({
                 where: {
-                    slug: page.slug,
-                    tenantId: ELEMENT_MEDICA_TENANT_ID
+                    slug: page.slug
                 }
             });
 
             if (existing) {
-                // Update existing page
+                // Merge content: preserve sections from other seed scripts
+                const mergedContent = { ...(existing.content || {}), ...page.content };
                 await prisma.cMSPage.update({
                     where: { id: existing.id },
                     data: {
                         title: page.title,
-                        content: page.content,
+                        content: mergedContent,
                         status: 'published',
                         isPublished: true,
                         updatedAt: new Date()
                     }
                 });
-                console.log(`✅ ${page.slug}: Updated`);
+                console.log(`✅ ${page.slug}: Updated (merge)`);
             } else {
                 // Create new page
                 await prisma.cMSPage.create({

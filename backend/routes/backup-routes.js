@@ -19,9 +19,20 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs/promises';
 import { logger } from '../utils/logger.js';
+import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 import backupService, { ENTITY_CATEGORIES } from '../services/backupService.js';
+import middleware from '../middleware/auth.js';
+
+const { authenticate: authenticateToken, requirePermission } = middleware;
+
+
+// Allowed base directory for user-supplied tempPath (path traversal protection)
+const ALLOWED_TEMP_BASE = path.resolve(process.cwd(), 'temp');
 
 const router = express.Router();
+
+// All backup routes require authentication
+router.use(authenticateToken);
 
 // Configurazione multer per upload backup
 const storage = multer.diskStorage({
@@ -55,11 +66,11 @@ const upload = multer({
  * GET /api/v1/backup/entities
  * Ottiene lista entità raggruppate con conteggi
  */
-router.get('/entities', async (req, res) => {
+router.get('/entities', requirePermission('backup:manage'), async (req, res) => {
     try {
         logger.info('Richiesta lista entità backup');
 
-        const tenantId = req.person?.tenantId;
+        const tenantId = getEffectiveTenantId(req);
         const entities = await backupService.getEntitiesWithCounts(tenantId);
 
         // Calcola totali
@@ -88,7 +99,6 @@ router.get('/entities', async (req, res) => {
         res.status(500).json({
             success: false,
             error: 'Errore nel recupero delle entità',
-            details: error.message
         });
     }
 });
@@ -97,7 +107,7 @@ router.get('/entities', async (req, res) => {
  * POST /api/v1/backup/validate-dependencies
  * Valida le dipendenze delle entità selezionate
  */
-router.post('/validate-dependencies', async (req, res) => {
+router.post('/validate-dependencies', requirePermission('backup:manage'), async (req, res) => {
     try {
         const { entities } = req.body;
 
@@ -119,7 +129,6 @@ router.post('/validate-dependencies', async (req, res) => {
         res.status(500).json({
             success: false,
             error: 'Errore nella validazione delle dipendenze',
-            details: error.message
         });
     }
 });
@@ -128,7 +137,7 @@ router.post('/validate-dependencies', async (req, res) => {
  * POST /api/v1/backup/create
  * Crea nuovo backup con entità selezionate
  */
-router.post('/create', async (req, res) => {
+router.post('/create', requirePermission('backup:manage'), async (req, res) => {
     try {
         const { entities, includeMedia = false } = req.body;
 
@@ -146,7 +155,7 @@ router.post('/create', async (req, res) => {
         });
 
         const result = await backupService.createBackup(entities, {
-            tenantId: req.person?.tenantId,
+            tenantId: getEffectiveTenantId(req),
             includeMedia,
             userId: req.person?.id
         });
@@ -160,7 +169,6 @@ router.post('/create', async (req, res) => {
         res.status(500).json({
             success: false,
             error: 'Errore nella creazione del backup',
-            details: error.message
         });
     }
 });
@@ -169,9 +177,15 @@ router.post('/create', async (req, res) => {
  * GET /api/v1/backup/download/:id
  * Scarica file backup
  */
-router.get('/download/:id', async (req, res) => {
+router.get('/download/:id', requirePermission('backup:manage'), async (req, res) => {
     try {
         const { id } = req.params;
+
+        // Prevent path traversal: backupId must be safe filename characters only
+        if (!id || !/^[a-zA-Z0-9_-]+$/.test(id)) {
+            return res.status(400).json({ success: false, error: 'ID backup non valido' });
+        }
+
         const filePath = backupService.getBackupPath(id);
 
         // Verifica esistenza
@@ -192,7 +206,6 @@ router.get('/download/:id', async (req, res) => {
         res.status(500).json({
             success: false,
             error: 'Errore nel download del backup',
-            details: error.message
         });
     }
 });
@@ -201,7 +214,7 @@ router.get('/download/:id', async (req, res) => {
  * POST /api/v1/backup/upload
  * Upload file backup per preview/restore
  */
-router.post('/upload', upload.single('backup'), async (req, res) => {
+router.post('/upload', requirePermission('backup:manage'), upload.single('backup'), async (req, res) => {
     try {
         if (!req.file) {
             return res.status(400).json({
@@ -240,7 +253,6 @@ router.post('/upload', upload.single('backup'), async (req, res) => {
         res.status(500).json({
             success: false,
             error: 'Errore nel caricamento del backup',
-            details: error.message
         });
     }
 });
@@ -249,7 +261,7 @@ router.post('/upload', upload.single('backup'), async (req, res) => {
  * POST /api/v1/backup/preview
  * Preview contenuto backup
  */
-router.post('/preview', async (req, res) => {
+router.post('/preview', requirePermission('backup:manage'), async (req, res) => {
     try {
         const { tempPath } = req.body;
 
@@ -260,7 +272,14 @@ router.post('/preview', async (req, res) => {
             });
         }
 
-        const preview = await backupService.previewBackup(tempPath);
+        // Prevent path traversal: ensure tempPath resolves within the allowed temp directory
+        const resolvedPath = path.resolve(tempPath);
+        if (!resolvedPath.startsWith(ALLOWED_TEMP_BASE + path.sep) && resolvedPath !== ALLOWED_TEMP_BASE) {
+            logger.warn('[BACKUP] Path traversal attempt in preview', { tempPath, resolvedPath, userId: req.person?.id });
+            return res.status(400).json({ success: false, error: 'Path file non valido' });
+        }
+
+        const preview = await backupService.previewBackup(resolvedPath);
 
         res.json({
             success: true,
@@ -271,7 +290,6 @@ router.post('/preview', async (req, res) => {
         res.status(500).json({
             success: false,
             error: 'Errore nella preview del backup',
-            details: error.message
         });
     }
 });
@@ -280,7 +298,7 @@ router.post('/preview', async (req, res) => {
  * POST /api/v1/backup/restore
  * Esegue restore da backup
  */
-router.post('/restore', async (req, res) => {
+router.post('/restore', requirePermission('backup:manage'), async (req, res) => {
     try {
         const { tempPath, entities, overwrite = false } = req.body;
 
@@ -291,6 +309,13 @@ router.post('/restore', async (req, res) => {
             });
         }
 
+        // Prevent path traversal: ensure tempPath resolves within the allowed temp directory
+        const resolvedPath = path.resolve(tempPath);
+        if (!resolvedPath.startsWith(ALLOWED_TEMP_BASE + path.sep) && resolvedPath !== ALLOWED_TEMP_BASE) {
+            logger.warn('[BACKUP] Path traversal attempt in restore', { tempPath, resolvedPath, userId: req.person?.id });
+            return res.status(400).json({ success: false, error: 'Path file non valido' });
+        }
+
         logger.info('Avvio restore', {
             tempPath,
             entities: entities?.length || 'all',
@@ -298,16 +323,16 @@ router.post('/restore', async (req, res) => {
             userId: req.person?.id
         });
 
-        const result = await backupService.restoreBackup(tempPath, {
+        const result = await backupService.restoreBackup(resolvedPath, {
             selectedEntities: entities,
             overwrite,
-            tenantId: req.person?.tenantId,
+            tenantId: getEffectiveTenantId(req),
             userId: req.person?.id
         });
 
         // Cleanup temp file
         try {
-            await fs.unlink(tempPath);
+            await fs.unlink(resolvedPath);
         } catch { }
 
         res.json({
@@ -319,7 +344,6 @@ router.post('/restore', async (req, res) => {
         res.status(500).json({
             success: false,
             error: 'Errore nel ripristino del backup',
-            details: error.message
         });
     }
 });
@@ -328,7 +352,7 @@ router.post('/restore', async (req, res) => {
  * GET /api/v1/backup/history
  * Lista backup precedenti
  */
-router.get('/history', async (req, res) => {
+router.get('/history', requirePermission('backup:manage'), async (req, res) => {
     try {
         const backups = await backupService.listBackups();
 
@@ -341,7 +365,6 @@ router.get('/history', async (req, res) => {
         res.status(500).json({
             success: false,
             error: 'Errore nel recupero dello storico backup',
-            details: error.message
         });
     }
 });
@@ -350,7 +373,7 @@ router.get('/history', async (req, res) => {
  * DELETE /api/v1/backup/:id
  * Elimina backup
  */
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission('backup:manage'), async (req, res) => {
     try {
         const { id } = req.params;
 
@@ -367,7 +390,6 @@ router.delete('/:id', async (req, res) => {
         res.status(500).json({
             success: false,
             error: 'Errore nell\'eliminazione del backup',
-            details: error.message
         });
     }
 });

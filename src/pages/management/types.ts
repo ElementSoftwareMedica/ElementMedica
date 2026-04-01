@@ -3,13 +3,49 @@
  * @project 43 - Tenant Roles Management System
  */
 
+/**
+ * Tenant Settings - Campi usati nei placeholder dei template
+ */
+export interface BranchBranding {
+    name?: string;
+    logo?: string;
+}
+
+export interface TenantSettings {
+    // Dati anagrafici azienda
+    address?: string;
+    cap?: string;
+    city?: string;
+    provincia?: string;
+    vatNumber?: string;
+    fiscalCode?: string;
+    iban?: string;
+    sdi?: string;
+    // Contatti
+    phone?: string;
+    email?: string;
+    pec?: string;
+    website?: string;
+    // Branding
+    logoUrl?: string;
+    // Branding per branch
+    branches?: {
+        MEDICA?: BranchBranding;
+        FORMAZIONE?: BranchBranding;
+        MDL?: BranchBranding;
+        [key: string]: BranchBranding | undefined;
+    };
+    // Altri campi custom
+    [key: string]: unknown;
+}
+
 export interface Tenant {
     id: string;
     name: string;
     slug: string;
     domain?: string;
     billingPlan: string;
-    settings?: Record<string, unknown>;
+    settings?: TenantSettings;
     isActive: boolean;
     accessLevel?: TenantAccessLevel;
     enabledFeatures?: string[];
@@ -61,6 +97,23 @@ export interface FeaturePreset {
     name: string;
     description: string;
     features: string[];
+}
+
+export interface TenantFeatureRecord {
+    id: string;
+    tenantId: string;
+    featureKey: string;
+    isEnabled: boolean;
+    tier: string | null;
+    config: Record<string, unknown> | null;
+    validFrom: string;
+    validUntil: string | null;
+    usageCount: number;
+    usageLimit: number | null;
+    lastUsedAt: string | null;
+    enabledBy: string | null;
+    enabledAt: string | null;
+    notes: string | null;
 }
 
 export interface ManagementTab {

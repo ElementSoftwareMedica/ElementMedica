@@ -15,12 +15,6 @@ export const logPermissionCheck = (
   hasChildren: boolean,
   currentUserHierarchy: any
 ) => {
-  console.log(`🔍 Debug pulsanti per nodo ${nodeName} (${roleType}):`);
-  console.log(`  - canEdit: ${canEdit}`);
-  console.log(`  - canCreate: ${canCreate}`);
-  console.log(`  - canDelete: ${canDelete}`);
-  console.log(`  - hasChildren: ${hasChildren}`);
-  console.log(`  - currentUserHierarchy:`, currentUserHierarchy);
 };
 
 /**

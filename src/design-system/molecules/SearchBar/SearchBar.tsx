@@ -125,7 +125,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
         />
 
         {/* Search Icon */}
-        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500">
           <Icon name="search" size={size === 'sm' ? 'sm' : 'base'} />
         </div>
 
@@ -135,7 +135,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
             type="button"
             onClick={handleClear}
             disabled={disabled}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 disabled:opacity-50"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-50"
             data-testid="search-bar-clear-button"
           >
             <Icon name="x" size="sm" />

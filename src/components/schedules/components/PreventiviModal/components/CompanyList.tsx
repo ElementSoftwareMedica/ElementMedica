@@ -29,12 +29,12 @@ export function CompanyList({
 }: CompanyListProps) {
   return (
     <div className="h-full flex flex-col">
-      <div className="p-4 bg-white flex-shrink-0">
-        <h3 className="font-semibold text-gray-700 text-sm mb-1 flex items-center gap-2">
+      <div className="p-4 bg-white dark:bg-gray-800 flex-shrink-0">
+        <h3 className="font-semibold text-gray-700 dark:text-gray-200 text-sm mb-1 flex items-center gap-2">
           <Building2 className="w-4 h-4" />
           Aziende Partecipanti
         </h3>
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-gray-500 dark:text-gray-400">
           Configura il numero di partecipanti per ciascuna azienda
         </p>
       </div>

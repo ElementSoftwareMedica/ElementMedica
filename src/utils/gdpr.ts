@@ -36,10 +36,7 @@ const GDPR_LOGGING_CONFIG = {
   alwaysLogErrors: true,
   alwaysLogCriticalActions: ['DELETE_PERSON', 'EXPORT_DATA', 'REVOKE_CONSENT'],
   // Abilita logging dettagliato solo con flag specifico
-  enableDetailedLogging: (typeof window !== 'undefined' &&
-    (localStorage?.getItem('ENABLE_GDPR_LOGGING') === 'true' ||
-      localStorage?.getItem('NODE_ENV') === 'development')) ||
-    (typeof import.meta !== 'undefined' && import.meta.env?.DEV),
+  enableDetailedLogging: typeof import.meta !== 'undefined' && import.meta.env?.DEV,
   // Limite massimo log in memoria
   maxLogsInMemory: 100
 };
@@ -71,11 +68,6 @@ export async function checkConsent(
     return result;
   } catch (error) {
     // Log sempre gli errori
-    console.error('🔒 GDPR Consent Check Error:', {
-      userId,
-      consentType,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
 
     // In caso di errore, consenti comunque l'accesso per evitare blocchi
     return {
@@ -193,14 +185,6 @@ export function logGdprSummary(): void {
   const actionTypes = [...new Set(recentLogs.map(log => log.action))];
   const entityTypes = [...new Set(recentLogs.map(log => log.entityType))];
 
-  console.log('🔒 GDPR Summary:', {
-    totalActions: gdprLogs.length,
-    recentActions: recentLogs.length,
-    errorRate: recentLogs.length > 0 ? Math.round((errorCount / recentLogs.length) * 100) + '%' : '0%',
-    actionTypes,
-    entityTypes,
-    lastAction: recentLogs[recentLogs.length - 1]?.action || 'none'
-  });
 }
 
 // Richiedi consenso
@@ -227,7 +211,7 @@ export async function requestConsent(
 
     return granted;
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorMessage = 'Unknown error';
 
     logGdprAction(
       userId,
@@ -268,7 +252,7 @@ export async function revokeConsent(
 
     return revoked;
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorMessage = 'Unknown error';
 
     logGdprAction(
       userId,
@@ -304,12 +288,6 @@ export async function getUserConsents(userId: string): Promise<ConsentCheckResul
         displayUserId = String(userId);
       }
 
-      console.log('🔒 GDPR User Consents (missing):', {
-        userId: displayUserId,
-        totalConsents: consents.length,
-        missingCount: missingConsents.length,
-        missingTypes: missingConsents.map(c => c.consentType)
-      });
     }
 
     return consents;
@@ -322,10 +300,6 @@ export async function getUserConsents(userId: string): Promise<ConsentCheckResul
       displayUserId = String(userId);
     }
 
-    console.error('🔒 GDPR Get User Consents Error:', {
-      userId: displayUserId,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
     return [];
   }
 }
@@ -340,7 +314,6 @@ export function clearGdprLogs(): void {
   }
 
   if (GDPR_LOGGING_CONFIG.enableDetailedLogging) {
-    console.log('🔒 GDPR logs cleared');
   }
 }
 
@@ -425,18 +398,15 @@ if (GDPR_LOGGING_CONFIG.enableDetailedLogging) {
     logSummary: logGdprSummary,
     enableLogging: () => {
       localStorage.setItem('ENABLE_GDPR_LOGGING', 'true');
-      console.log('🔒 GDPR logging enabled. Reload page to take effect.');
     },
     disableLogging: () => {
       localStorage.removeItem('ENABLE_GDPR_LOGGING');
-      console.log('🔒 GDPR logging disabled. Reload page to take effect.');
     },
     testActions: () => {
       // Test per verificare il sistema di logging
       logGdprAction('test-user', 'TEST_ACTION', 'person', 'test-id', { test: true });
       logGdprAction('test-user', 'DELETE_PERSON', 'person', 'test-id', { critical: true });
       logGdprAction('test-user', 'FAILED_ACTION', 'person', 'test-id', { test: true }, false, 'Test error');
-      console.log('🔒 Test actions logged');
     }
   };
 }

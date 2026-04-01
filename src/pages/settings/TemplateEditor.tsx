@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { sanitizeRichHtml } from '../../utils/sanitize';
 import { useToast } from '../../hooks/useToast';
 import { apiGet, apiPost, apiPut } from '../../services/api';
 import { ChevronLeft, Save, Download, Layout, Image, Eye, FileEdit, ChevronDown, ChevronUp, RotateCcw, Monitor, Smartphone, FileText, Presentation, Code } from 'lucide-react';
@@ -49,6 +50,11 @@ const TemplateEditor: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { showToast } = useToast();
+
+  // Determine the base path for navigation (management or settings)
+  const isInManagement = location.pathname.startsWith('/management');
+  const basePath = isInManagement ? '/management/templates' : '/settings/templates';
+
   const [template, setTemplate] = useState<Template | null>(null);
   const [templateName, setTemplateName] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -69,11 +75,15 @@ const TemplateEditor: React.FC = () => {
   const [templateType, setTemplateType] = useState<string>('');
   const [googleCardExpanded, setGoogleCardExpanded] = useState(true);
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
-  const [showLivePreview, setShowLivePreview] = useState(false);
+  const [showLivePreview, setShowLivePreview] = useState(true);
   const templateFormat = new URLSearchParams(location.search).get('format') || 'HTML';
 
   // Editor mode: 'document' for text editor, 'slide' for canvas-style editor, 'html' for raw HTML code
   const [editorMode, setEditorMode] = useState<'document' | 'slide' | 'html'>('document');
+
+  // Refs to preserve HTML source across mode switches (prevents TipTap from stripping styles/scripts)
+  const htmlSourceRef = useRef<{ content: string; header: string; footer: string } | null>(null);
+  const editedInDocModeRef = useRef<boolean>(false);
 
   // Slide elements state for canvas-style editing
   const [slideElements, setSlideElements] = useState<SlideElement[]>([]);
@@ -200,7 +210,6 @@ const TemplateEditor: React.FC = () => {
 
       if (id) {
         try {
-          console.log('Fetching template with ID:', id);
           const response = await apiGet<any>(`/api/v1/templates/${id}`);
           const templateData = response?.data;
 
@@ -208,7 +217,6 @@ const TemplateEditor: React.FC = () => {
             throw new Error(`Template with ID ${id} not found`);
           }
 
-          console.log('Template loaded:', templateData);
           setTemplate(templateData);
           setTemplateName(templateData.name);
           setIsDefault(templateData.isDefault || false);
@@ -232,9 +240,8 @@ const TemplateEditor: React.FC = () => {
               parsedElements = typeof templateData.slideElements === 'string'
                 ? JSON.parse(templateData.slideElements)
                 : templateData.slideElements;
-              console.log('Parsed slideElements field:', parsedElements?.length, 'elements');
             } catch (e) {
-              console.error('Failed to parse slideElements:', e);
+              // slideElements parse failure — fallback below
             }
           }
 
@@ -247,31 +254,27 @@ const TemplateEditor: React.FC = () => {
                 const parsed = JSON.parse(trimmedContent);
 
                 // Check for HTML editor wrapper: { __htmlEditor: true, rawHtml: '...' }
+                // Legacy format — extract rawHtml and set as plain content
                 if (parsed.__htmlEditor && parsed.rawHtml) {
                   setContent(parsed.rawHtml);
                   setEditorMode('html');
                   contentAlreadySet = true; // Mark content as set
-                  console.log('Loaded raw HTML content from htmlEditor wrapper');
                 }
                 // Check for wrapper format: { __slideEditor: true, elements: [...] }
                 else if (parsed.__slideEditor && Array.isArray(parsed.elements)) {
                   parsedElements = parsed.elements;
-                  console.log('Parsed slideElements from wrapper:', parsedElements?.length, 'elements');
                   // Extract orientation from wrapper
                   if (parsed.orientation && (parsed.orientation === 'portrait' || parsed.orientation === 'landscape')) {
                     setOrientation(parsed.orientation);
-                    console.log('Loaded orientation from wrapper:', parsed.orientation);
                   }
                 }
                 // Check if it's a direct array of elements
                 else if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].id && parsed[0].type) {
                   parsedElements = parsed;
-                  console.log('Parsed slideElements from direct array:', parsedElements?.length, 'elements');
                 }
               }
             } catch (e) {
               // Content is not JSON - it's HTML content, which is fine
-              console.log('Content is not JSON, treating as HTML');
             }
           }
 
@@ -281,9 +284,18 @@ const TemplateEditor: React.FC = () => {
             setEditorMode('slide');
             // Don't set content since we're in slide mode
           } else if (!contentAlreadySet) {
-            // Load content normally (HTML mode) - only if not already set from JSON parsing
+            // Load content normally - only if not already set from JSON parsing
             if (templateData.content && !templateData.content.trim().startsWith('{') && !templateData.content.trim().startsWith('[')) {
               setContent(templateData.content);
+              // Auto-detect complex HTML with Handlebars markers, <style> tags, or @page rules
+              // These MUST be edited in raw HTML mode — TipTap would strip/mangle them
+              const raw = templateData.content;
+              const hasHandlebars = /\{\{[#/]?[a-zA-Z]/.test(raw);
+              const hasStyleTag = /<style[\s>]/i.test(raw);
+              const hasDoctype = /<!DOCTYPE/i.test(raw);
+              if (hasHandlebars || hasStyleTag || hasDoctype) {
+                setEditorMode('html');
+              }
             } else if (templateData.url && !templateData.url.includes('placeholder')) {
               try {
                 const contentData = await apiGet<string>(`${templateData.url}`);
@@ -292,8 +304,7 @@ const TemplateEditor: React.FC = () => {
                     ? contentData
                     : JSON.stringify(contentData));
                 }
-              } catch (err) {
-                console.error('Could not load template content:', err);
+              } catch {
                 setContent('<p>Inserisci il tuo contenuto qui...</p>');
                 setError('Non è stato possibile caricare il contenuto del template');
               }
@@ -308,8 +319,7 @@ const TemplateEditor: React.FC = () => {
             url.searchParams.set('format', templateData.fileFormat);
             window.history.replaceState({}, '', url.toString());
           }
-        } catch (err) {
-          console.error('Failed to load template:', err);
+        } catch {
           setError('Impossibile caricare il template');
           setContent('<p>Inserisci il tuo contenuto qui...</p>');
         }
@@ -339,6 +349,75 @@ const TemplateEditor: React.FC = () => {
       setGoogleCardExpanded(false);
     }
   }, [editorMode, googleCardExpanded]);
+
+  // Preserve HTML source across mode switches to prevent TipTap from stripping styles
+  const prevEditorModeRef = useRef<'document' | 'slide' | 'html'>(editorMode);
+  useEffect(() => {
+    const prev = prevEditorModeRef.current;
+    prevEditorModeRef.current = editorMode;
+
+    if (prev === editorMode) return;
+
+    if (prev === 'html' && editorMode === 'document') {
+      // Switching from HTML → Document: save original HTML source
+      htmlSourceRef.current = { content, header, footer };
+      editedInDocModeRef.current = false;
+    } else if (prev === 'document' && editorMode === 'html') {
+      // Switching from Document → HTML: restore original if user didn't edit in TipTap
+      if (!editedInDocModeRef.current && htmlSourceRef.current) {
+        setContent(htmlSourceRef.current.content);
+        setHeader(htmlSourceRef.current.header);
+        setFooter(htmlSourceRef.current.footer);
+      }
+      htmlSourceRef.current = null;
+    }
+  }, [editorMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Handler for editor mode switch with warning for Canvas ↔ HTML/Document transitions
+  const handleEditorModeSwitch = useCallback((targetMode: 'document' | 'slide' | 'html') => {
+    if (targetMode === editorMode) return;
+
+    // Document ↔ HTML: seamless switch (both work with HTML content)
+    if ((editorMode === 'document' && targetMode === 'html') ||
+      (editorMode === 'html' && targetMode === 'document')) {
+      setEditorMode(targetMode);
+      return;
+    }
+
+    // Canvas → HTML/Document: convert canvas elements to basic HTML
+    if (editorMode === 'slide' && (targetMode === 'document' || targetMode === 'html')) {
+      if (slideElements.length > 0) {
+        const htmlParts = slideElements.map(el => {
+          if (el.type === 'text') return `<p>${el.content || ''}</p>`;
+          if (el.type === 'image') return `<img src="${el.content || ''}" style="max-width:100%;" />`;
+          if (el.type === 'rectangle' || el.type === 'ellipse') return `<div style="width:${el.width}px; height:${el.height}px; background:${el.style?.backgroundColor || '#ddd'};"></div>`;
+          return '';
+        }).filter(Boolean);
+        if (htmlParts.length > 0 && !content.trim()) {
+          setContent(htmlParts.join('\n'));
+        }
+      }
+      setEditorMode(targetMode);
+      return;
+    }
+
+    // HTML/Document → Canvas: warn about content loss
+    if ((editorMode === 'document' || editorMode === 'html') && targetMode === 'slide') {
+      const hasContent = content.trim().length > 0;
+      if (hasContent) {
+        const confirmed = window.confirm(
+          'Passando alla modalità Canvas, il contenuto HTML attuale non verrà convertito automaticamente. ' +
+          'Il Canvas partirà vuoto. Vuoi continuare?'
+        );
+        if (!confirmed) return;
+      }
+      setSlideElements([]);
+      setEditorMode(targetMode);
+      return;
+    }
+
+    setEditorMode(targetMode);
+  }, [editorMode, slideElements, content]);
 
   // Handle save action
   const handleSave = async () => {
@@ -385,16 +464,12 @@ const TemplateEditor: React.FC = () => {
           templateData.header = header || '';
           templateData.footer = footer || '';
         } else if (editorMode === 'html') {
-          // For HTML mode, save raw HTML content directly
-          // Mark it as raw HTML for proper handling
-          const htmlContent = JSON.stringify({
-            __htmlEditor: true,
-            editorMode: 'html',
-            version: 1,
-            rawHtml: content
-          });
-          templateData.content = htmlContent;
-          templateData.editorMode = 'html';
+          // For HTML mode, save raw HTML directly — NO JSON wrapping
+          // This ensures the content field always contains plain HTML
+          // that can be rendered directly by PDF generators
+          templateData.content = content || '';
+          templateData.header = header || '';
+          templateData.footer = footer || '';
         } else {
           // For slide mode, save elements as JSON wrapper in content field
           // This allows proper parsing on load
@@ -411,8 +486,6 @@ const TemplateEditor: React.FC = () => {
           templateData.editorMode = 'slide';
         }
       }
-
-      console.log('Saving template data:', templateData);
 
       // Validate: do not save if content is empty and no Google Docs URL
       if (!googleDocsUrl) {
@@ -432,21 +505,14 @@ const TemplateEditor: React.FC = () => {
       // Backend now handles automatically unsetting other default templates
       if (id) {
         await apiPut(`/api/v1/templates/${id}`, templateData);
-        console.log(`Template with ID ${id} updated`);
       } else {
-        const response = await apiPost<any>('/api/v1/templates', templateData);
-        const newTemplate = response?.data;
-        console.log('New template created:', newTemplate);
+        await apiPost<any>('/api/v1/templates', templateData);
       }
 
       // Navigate back to templates list
-      navigate('/settings/templates');
-    } catch (err: any) {
-      console.error('Error saving template:', err);
-      let errorMessage = 'Errore durante il salvataggio del template';
-      if (err.response?.data?.error) {
-        errorMessage += `: ${err.response.data.error}`;
-      }
+      navigate(basePath);
+    } catch (err: unknown) {
+      const errorMessage = 'Errore durante il salvataggio del template';
       setError(errorMessage);
     } finally {
       setSaving(false);
@@ -472,7 +538,7 @@ const TemplateEditor: React.FC = () => {
         {/* Header with back button */}
         <div className="mb-8">
           <button
-            onClick={() => navigate('/settings/templates')}
+            onClick={() => navigate(basePath)}
             className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900 mb-4 transition-colors"
           >
             <ChevronLeft className="w-5 h-5" />
@@ -589,7 +655,7 @@ const TemplateEditor: React.FC = () => {
                 </label>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => setEditorMode('document')}
+                    onClick={() => handleEditorModeSwitch('document')}
                     className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all ${editorMode === 'document'
                       ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm'
                       : 'border-slate-200 bg-slate-50 hover:border-slate-300 text-slate-600'
@@ -599,7 +665,7 @@ const TemplateEditor: React.FC = () => {
                     <span className="text-sm font-medium">📝 Documento</span>
                   </button>
                   <button
-                    onClick={() => setEditorMode('slide')}
+                    onClick={() => handleEditorModeSwitch('slide')}
                     className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all ${editorMode === 'slide'
                       ? 'border-purple-500 bg-purple-50 text-purple-700 shadow-sm'
                       : 'border-slate-200 bg-slate-50 hover:border-slate-300 text-slate-600'
@@ -609,7 +675,7 @@ const TemplateEditor: React.FC = () => {
                     <span className="text-sm font-medium">🎨 Canvas</span>
                   </button>
                   <button
-                    onClick={() => setEditorMode('html')}
+                    onClick={() => handleEditorModeSwitch('html')}
                     className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all ${editorMode === 'html'
                       ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-sm'
                       : 'border-slate-200 bg-slate-50 hover:border-slate-300 text-slate-600'
@@ -623,8 +689,8 @@ const TemplateEditor: React.FC = () => {
                   {editorMode === 'document'
                     ? '📝 Editor di testo classico con header, contenuto e footer separati'
                     : editorMode === 'slide'
-                    ? '🎨 Canvas stile Google Slides per posizionare liberamente testo, immagini e forme'
-                    : '💻 Codice HTML puro per template personalizzati e layout complessi'}
+                      ? '🎨 Canvas stile Google Slides per posizionare liberamente testo, immagini e forme'
+                      : '💻 Codice HTML puro per template personalizzati e layout complessi'}
                 </p>
               </div>
             </div>
@@ -669,7 +735,6 @@ const TemplateEditor: React.FC = () => {
                 initialTemplateUrl={googleDocsUrl}
                 onTemplateSelected={(url, id) => {
                   setGoogleDocsUrl(url);
-                  console.log(`Template selezionato: ${id}`);
                 }}
               />
             </div>
@@ -795,6 +860,7 @@ const TemplateEditor: React.FC = () => {
                         content={header}
                         onChange={(newHeader: string) => {
                           setHeader(newHeader);
+                          editedInDocModeRef.current = true;
                           // Close Google card on any input
                           if (googleCardExpanded) {
                             setGoogleCardExpanded(false);
@@ -841,6 +907,7 @@ const TemplateEditor: React.FC = () => {
                         content={content}
                         onChange={(newContent: string) => {
                           setContent(newContent);
+                          editedInDocModeRef.current = true;
                           // Close Google card on any input
                           if (googleCardExpanded) {
                             setGoogleCardExpanded(false);
@@ -877,6 +944,7 @@ const TemplateEditor: React.FC = () => {
                         content={footer}
                         onChange={(newFooter: string) => {
                           setFooter(newFooter);
+                          editedInDocModeRef.current = true;
                           if (newFooter.length > 10 && googleCardExpanded) {
                             setGoogleCardExpanded(false);
                           }
@@ -896,25 +964,35 @@ const TemplateEditor: React.FC = () => {
                 </div>
               </div>
 
-              {/* Live Preview Section */}
-              {showLivePreview && (
-                <div className="mt-6">
-                  <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-                    <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-4 border-b border-slate-200">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Eye className="w-5 h-5 text-green-600" />
-                          <h3 className="font-semibold text-green-800">Anteprima Live</h3>
-                          <span className="text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded">Con dati di esempio</span>
-                        </div>
-                        <button
-                          onClick={() => setShowLivePreview(false)}
-                          className="text-slate-400 hover:text-slate-600"
-                        >
-                          <ChevronUp className="w-5 h-5" />
-                        </button>
+              {/* Live Preview Section — always visible in Document mode */}
+              <div className="mt-6">
+                <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-4 border-b border-slate-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Eye className="w-5 h-5 text-green-600" />
+                        <h3 className="font-semibold text-green-800">Anteprima Live</h3>
+                        <span className="text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded">Con dati di esempio</span>
                       </div>
+                      <button
+                        onClick={() => setShowLivePreview(!showLivePreview)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1 ${showLivePreview
+                          ? 'bg-green-600 text-white'
+                          : 'bg-green-100 text-green-700 hover:bg-green-200'
+                          }`}
+                      >
+                        <Eye className="w-3 h-3" />
+                        {showLivePreview ? 'Comprimi' : 'Espandi'}
+                      </button>
                     </div>
+                    {/* Info banner for complex HTML content */}
+                    {htmlSourceRef.current && (
+                      <div className="mt-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
+                        ⚠️ Contenuto HTML complesso rilevato. L'anteprima mostra il rendering completo. Per modifiche a stili e struttura, usa la <strong>Modalità HTML</strong>.
+                      </div>
+                    )}
+                  </div>
+                  {showLivePreview && (
                     <div className="p-6 bg-slate-50">
                       <div
                         className="bg-white shadow-lg mx-auto"
@@ -927,13 +1005,30 @@ const TemplateEditor: React.FC = () => {
                       >
                         <div
                           className="preview-content"
-                          dangerouslySetInnerHTML={{ __html: previewHtml }}
+                          dangerouslySetInnerHTML={{
+                            __html: sanitizeRichHtml(htmlSourceRef.current ? (() => {
+                              // Use original HTML source for preview when available
+                              const src = htmlSourceRef.current!;
+                              let result = `
+                              <div style="display:flex;flex-direction:column;min-height:${pageDimensions.height};height:100%;padding:15mm;font-family:Arial,sans-serif;box-sizing:border-box;">
+                                ${src.header ? `<div style="flex-shrink:0;border-bottom:1px solid #e2e8f0;padding-bottom:5mm;margin-bottom:10mm;">${src.header}</div>` : ''}
+                                <div style="flex:1;overflow:hidden;">${src.content || '<p style="color:#9ca3af;font-style:italic;">Nessun contenuto</p>'}</div>
+                                ${src.footer ? `<div style="flex-shrink:0;border-top:1px solid #e2e8f0;padding-top:5mm;margin-top:10mm;font-size:0.85em;color:#64748b;">${src.footer}</div>` : ''}
+                              </div>`;
+                              result = result
+                                .replace(/\{\{AZIENDA_RAGIONE_SOCIALE\}\}/g, 'Azienda Test S.p.A.')
+                                .replace(/\{\{DATA_GENERAZIONE\}\}/g, new Date().toLocaleDateString('it-IT'))
+                                .replace(/\{\{NOME_FORMATORE\}\}/g, 'Mario')
+                                .replace(/\{\{COGNOME_FORMATORE\}\}/g, 'Rossi');
+                              return result;
+                            })() : previewHtml)
+                          }}
                         />
                       </div>
                     </div>
-                  </div>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
 
             {/* Placeholder Selector - 1/4 dello spazio */}
@@ -1091,11 +1186,10 @@ const TemplateEditor: React.FC = () => {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => setShowLivePreview(!showLivePreview)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1 ${
-                          showLivePreview 
-                            ? 'bg-emerald-600 text-white' 
-                            : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
-                        }`}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1 ${showLivePreview
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                          }`}
                       >
                         <Eye className="w-3 h-3" />
                         {showLivePreview ? 'Nascondi Anteprima' : 'Mostra Anteprima'}
@@ -1103,17 +1197,38 @@ const TemplateEditor: React.FC = () => {
                     </div>
                   </div>
                 </div>
-                
+
                 <div className={`grid ${showLivePreview ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                  {/* Code Editor */}
+                  {/* Code Editor — sections for header, content, footer */}
                   <div className="border-r border-slate-200">
-                    <div className="bg-slate-800 text-slate-100 p-2 text-xs font-mono border-b border-slate-700">
+                    {/* Header textarea */}
+                    <div className="bg-slate-800 text-slate-100 p-2 text-xs font-mono border-b border-slate-700 flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+                      <span className="text-blue-400">header.html</span>
+                    </div>
+                    <textarea
+                      value={header}
+                      onChange={(e) => {
+                        setHeader(e.target.value);
+                        if (htmlSourceRef.current) htmlSourceRef.current.header = e.target.value;
+                      }}
+                      className="w-full h-[100px] p-3 font-mono text-xs bg-slate-900 text-slate-100 focus:outline-none resize-none border-b border-slate-700"
+                      placeholder="<!-- Header HTML: logo, intestazione -->"
+                      spellCheck={false}
+                    />
+
+                    {/* Content textarea */}
+                    <div className="bg-slate-800 text-slate-100 p-2 text-xs font-mono border-b border-slate-700 flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
                       <span className="text-emerald-400">content.html</span>
                     </div>
                     <textarea
                       value={content}
-                      onChange={(e) => setContent(e.target.value)}
-                      className="w-full h-[600px] p-4 font-mono text-sm bg-slate-900 text-slate-100 focus:outline-none resize-none"
+                      onChange={(e) => {
+                        setContent(e.target.value);
+                        if (htmlSourceRef.current) htmlSourceRef.current.content = e.target.value;
+                      }}
+                      className="w-full h-[400px] p-4 font-mono text-sm bg-slate-900 text-slate-100 focus:outline-none resize-none"
                       placeholder={`<!DOCTYPE html>
 <html>
 <head>
@@ -1131,8 +1246,24 @@ const TemplateEditor: React.FC = () => {
 </html>`}
                       spellCheck={false}
                     />
+
+                    {/* Footer textarea */}
+                    <div className="bg-slate-800 text-slate-100 p-2 text-xs font-mono border-b border-slate-700 border-t border-slate-700 flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-orange-400"></span>
+                      <span className="text-orange-400">footer.html</span>
+                    </div>
+                    <textarea
+                      value={footer}
+                      onChange={(e) => {
+                        setFooter(e.target.value);
+                        if (htmlSourceRef.current) htmlSourceRef.current.footer = e.target.value;
+                      }}
+                      className="w-full h-[80px] p-3 font-mono text-xs bg-slate-900 text-slate-100 focus:outline-none resize-none"
+                      placeholder="<!-- Footer HTML: contatti, note legali -->"
+                      spellCheck={false}
+                    />
                   </div>
-                  
+
                   {/* Live Preview */}
                   {showLivePreview && (
                     <div className="bg-slate-100">
@@ -1140,31 +1271,24 @@ const TemplateEditor: React.FC = () => {
                         <span>📄 Anteprima (Live)</span>
                       </div>
                       <div className="p-4 h-[600px] overflow-auto">
-                        <div 
+                        <div
                           className="bg-white shadow-lg mx-auto p-4"
-                          style={{ 
-                            width: '210mm', 
+                          style={{
+                            width: '210mm',
                             minHeight: '297mm',
                             maxWidth: '100%',
                             transform: 'scale(0.6)',
                             transformOrigin: 'top center'
                           }}
-                          dangerouslySetInnerHTML={{ 
-                            __html: content
-                              .replace(/\{\{AZIENDA_RAGIONE_SOCIALE\}\}/g, 'Azienda Test S.p.A.')
-                              .replace(/\{\{DATA_GENERAZIONE\}\}/g, new Date().toLocaleDateString('it-IT'))
-                              .replace(/\{\{NOME_FORMATORE\}\}/g, 'Mario')
-                              .replace(/\{\{COGNOME_FORMATORE\}\}/g, 'Rossi')
-                              .replace(/\{\{CORSO_TITOLO\}\}/g, 'Corso Sicurezza sul Lavoro')
-                              .replace(/\{\{ORE_TOTALI\}\}/g, '8')
-                              .replace(/\{\{NUMERO_PROGRESSIVO\}\}/g, 'DOC-001')
+                          dangerouslySetInnerHTML={{
+                            __html: sanitizeRichHtml(previewHtml)
                           }}
                         />
                       </div>
                     </div>
                   )}
                 </div>
-                
+
                 <div className="p-4 bg-slate-50 border-t border-slate-200">
                   <p className="text-xs text-slate-500 text-center">
                     💡 Scrivi codice HTML/CSS completo • Usa i placeholder come {'{{NOME_CAMPO}}'} • Il CSS @page controlla i margini del PDF
@@ -1283,7 +1407,7 @@ td { padding: 6px; border-bottom: 1px solid #e0e0e0; }
   <div class="header-row">
     <div class="logo">{{AZIENDA_RAGIONE_SOCIALE}}</div>
     <div class="company-info">
-      Via Roma 123, 20100 Milano (MI)<br>
+      Via Esempio 123, 35030 Selvazzano Dentro (PD)<br>
       P.IVA: 12345678901
     </div>
   </div>
@@ -1377,7 +1501,7 @@ td { padding: 6px; border-bottom: 1px solid #e0e0e0; }
         <div className="mt-8 flex gap-3 justify-end pb-8">
           <Button
             variant="outline"
-            onClick={() => navigate('/settings/templates')}
+            onClick={() => navigate(basePath)}
             className="px-6"
           >
             <ChevronLeft className="mr-2 h-4 w-4" /> Annulla

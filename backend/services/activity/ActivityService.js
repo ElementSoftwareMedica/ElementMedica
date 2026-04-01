@@ -16,6 +16,7 @@ import prisma from '../../config/prisma-optimization.js';
 import logger from '../../utils/logger.js';
 import { ActivityType, ActivityCategory, getActivityCategory, SKIP_LOG_ACTIONS } from './ActivityTypes.js';
 import { activityFormatter } from './ActivityFormatter.js';
+import { getEffectiveTenantId } from '../../utils/tenantHelper.js';
 
 /**
  * Configurazione del servizio
@@ -614,13 +615,20 @@ class ActivityService {
    * @param {Object} [extra] - Dati extra
    */
   logFromRequest(req, action, extra = {}) {
-    if (!req.person?.id || !req.person?.tenantId) {
+    if (!req.person?.id) {
+      return;
+    }
+    
+    // P57: Usa getEffectiveTenantId per loggare nel tenant su cui si sta operando
+    // (supporta admin cross-tenant via X-Frontend-Id header)
+    const tenantId = getEffectiveTenantId(req);
+    if (!tenantId) {
       return;
     }
 
     this.log({
       personId: req.person.id,
-      tenantId: req.person.tenantId,
+      tenantId,
       action,
       ipAddress: this._getClientIp(req),
       userAgent: req.get?.('User-Agent') || req.headers?.['user-agent'],

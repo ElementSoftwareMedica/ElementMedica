@@ -72,7 +72,6 @@ export const AdminGDPR: React.FC = () => {
       setProcessDialog({ open: false, request: null, action: null });
       setProcessingNotes('');
     } catch (err) {
-      console.error('Error processing request:', err);
     } finally {
       setProcessing(false);
     }

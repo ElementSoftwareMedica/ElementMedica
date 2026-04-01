@@ -1,14 +1,14 @@
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
-import middleware from '../auth/middleware.js';
+import prisma from '../config/prisma-optimization.js';
+import middleware from '../middleware/auth.js';
 import { body, validationResult } from 'express-validator';
 import logger from '../utils/logger.js';
 import { roleDataFilter, filterResponseFields } from '../middleware/role-data-filter.js';
+import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
-const { authenticate: authenticateToken, authorize: requirePermission, requireSameCompany: requireCompanyAccess } = middleware;
+const { authenticate: authenticateToken, requirePermission } = middleware;
 
 // Validation middleware for schedule creation/update
 const validateSchedule = [
@@ -22,7 +22,7 @@ const validateSchedule = [
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
-        error: 'Validation error',
+        error: 'Errore di validazione',
         details: errors.array()
       });
     }
@@ -31,7 +31,7 @@ const validateSchedule = [
 ];
 
 // Get all schedules
-router.get('/', authenticateToken(), requirePermission('schedules:read'), roleDataFilter, filterResponseFields, async (req, res) => {
+router.get('/', authenticateToken, requirePermission('schedules:read'), roleDataFilter, filterResponseFields, async (req, res) => {
   try {
     const person = req.person;
 
@@ -39,7 +39,7 @@ router.get('/', authenticateToken(), requirePermission('schedules:read'), roleDa
     const personRoles = await prisma.personRole.findMany({
       where: {
         personId: person.id,
-        tenantId: req.person.tenantId,
+        tenantId: getEffectiveTenantId(req),
         isActive: true,
         deletedAt: null
       },
@@ -59,7 +59,8 @@ router.get('/', authenticateToken(), requirePermission('schedules:read'), roleDa
     }
 
     const where = {
-      deletedAt: null // ✅ FIX: Filtra soft delete
+      tenantId: getEffectiveTenantId(req),
+      deletedAt: null
     };
 
     // Filter by courseId
@@ -76,16 +77,12 @@ router.get('/', authenticateToken(), requirePermission('schedules:read'), roleDa
       };
     }
 
-    // Filter by trainerId (schedules where this person is trainer in any session)
+    // Filter by trainerId (schedules where this person is trainer at schedule or session level)
     if (trainerId) {
-      where.sessions = {
-        some: {
-          OR: [
-            { trainerId: trainerId },
-            { coTrainerId: trainerId }
-          ]
-        }
-      };
+      where.OR = [
+        { trainerId: trainerId },
+        { sessions: { some: { OR: [{ trainerId: trainerId }, { coTrainerId: trainerId }] } } }
+      ];
     }
 
     // Filter by personId (schedules where this person is enrolled)
@@ -113,7 +110,7 @@ router.get('/', authenticateToken(), requirePermission('schedules:read'), roleDa
           },
         },
         companies: {
-          include: { company: true },
+          include: { companyTenantProfile: { include: { company: true } } },
         },
         enrollments: {
           include: { person: true },
@@ -154,13 +151,13 @@ router.get('/', authenticateToken(), requirePermission('schedules:read'), roleDa
     logger.error('Failed to fetch schedules', {
       component: 'schedules-routes',
       action: 'getSchedules',
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       personId: req.person?.id
     });
     res.status(500).json({
-      error: 'Internal server error',
-      message: 'Failed to fetch schedules'
+      error: 'Errore interno del server',
+      message: 'Errore nel recupero delle programmazioni'
     });
   }
 });
@@ -181,9 +178,9 @@ router.get('/', authenticateToken(), requirePermission('schedules:read'), roleDa
  * - companyId: filtra per azienda
  * - personId: filtra per dipendente
  */
-router.get('/expiring-courses', authenticateToken(), requirePermission('schedules:read'), roleDataFilter, filterResponseFields, async (req, res) => {
+router.get('/expiring-courses', authenticateToken, requirePermission('schedules:read'), roleDataFilter, filterResponseFields, async (req, res) => {
   try {
-    const { tenantId } = req.person;
+    const tenantId = getEffectiveTenantId(req);
     const person = req.person;
     const expiredDays = parseInt(req.query.expiredDays) || 30;
     const expiringDays = parseInt(req.query.expiringDays) || 60;
@@ -230,10 +227,10 @@ router.get('/expiring-courses', authenticateToken(), requirePermission('schedule
     const where = {
       tenantId,
       deletedAt: null,
-      status: 'COMPLETED',
+      status: 'COMPLETATO',
       schedule: {
         deletedAt: null,
-        status: 'COMPLETED',
+        status: 'COMPLETATO',
         course: {
           validityYears: { not: null }
         }
@@ -255,12 +252,23 @@ router.get('/expiring-courses', authenticateToken(), requirePermission('schedule
             firstName: true,
             lastName: true,
             taxCode: true,
-            companyId: true,
-            company: {
+            tenantProfiles: {
+              where: { tenantId, deletedAt: null },
               select: {
-                id: true,
-                ragioneSociale: true
-              }
+                companyTenantProfileId: true,
+                companyTenantProfile: {
+                  select: {
+                    id: true,
+                    company: {
+                      select: {
+                        id: true,
+                        ragioneSociale: true
+                      }
+                    }
+                  }
+                }
+              },
+              take: 1
             }
           }
         },
@@ -270,6 +278,7 @@ router.get('/expiring-courses', authenticateToken(), requirePermission('schedule
             startDate: true,
             endDate: true,
             status: true,
+            source: true,
             course: {
               select: {
                 id: true,
@@ -285,10 +294,13 @@ router.get('/expiring-courses', authenticateToken(), requirePermission('schedule
       }
     });
 
-    // Filtra per companyId se specificato
+    // Filtra per companyId se specificato (via CompanyTenantProfile → Company)
     let filteredEnrollments = enrollments;
     if (companyId) {
-      filteredEnrollments = enrollments.filter(e => e.person?.companyId === companyId);
+      filteredEnrollments = enrollments.filter(e => {
+        const profile = e.person?.tenantProfiles?.[0];
+        return profile?.companyTenantProfile?.company?.id === companyId;
+      });
     }
 
     // Calcola le scadenze
@@ -318,48 +330,38 @@ router.get('/expiring-courses', authenticateToken(), requirePermission('schedule
       }
 
       // Verifica se esiste un corso COMPLETATO più recente (rinnovo già effettuato)
-      // Se sì, non mostrare questo corso come in scadenza - avrà una nuova data di scadenza
-      // NOTA: Cerchiamo l'enrollment del dipendente in uno schedule COMPLETED più recente
-      // Non richiediamo che anche l'enrollment sia COMPLETED per gestire casi dove
-      // lo schedule è stato marcato completato ma gli enrollment non sono stati aggiornati
       const renewedCourse = await prisma.courseEnrollment.findFirst({
         where: {
           tenantId,
           personId: person.id,
           deletedAt: null,
-          // Rimuoviamo il filtro status enrollment per essere più permissivi
           schedule: {
             deletedAt: null,
             courseId: schedule.course.id,
-            status: 'COMPLETED',
-            endDate: { gt: schedule.endDate } // Completato DOPO il corso attuale
+            status: 'COMPLETATO',
+            endDate: { gt: schedule.endDate }
           }
         }
       });
 
       if (renewedCourse) {
-        // Corso già rinnovato, non mostrare nella lista scadenze
         continue;
       }
 
       // Verifica se esiste già una programmazione per questo dipendente/corso
-      // Cerca schedule attivi - usando EnrollmentStatus enum values!
-      // PENDING = in attesa (preventivo), CONFIRMED = confermato, ACTIVE = attivo
-      const activeStatuses = ['PENDING', 'CONFIRMED', 'ACTIVE'];
+      const activeStatuses = ['PREVENTIVO', 'ACCETTATO'];
 
-      // Query separata per evitare problemi di validazione Prisma con nested status
       const activeSchedules = await prisma.courseSchedule.findMany({
         where: {
           tenantId,
           deletedAt: null,
           courseId: schedule.course.id,
           status: { in: activeStatuses },
-          id: { not: schedule.id } // Escludi lo schedule completato corrente
+          id: { not: schedule.id }
         },
         select: { id: true, startDate: true, status: true }
       });
 
-      // Verifica se il dipendente è iscritto a uno di questi schedule attivi
       let futureSchedule = null;
       if (activeSchedules.length > 0) {
         const enrollmentInActiveSchedule = await prisma.courseEnrollment.findFirst({
@@ -382,15 +384,18 @@ router.get('/expiring-courses', authenticateToken(), requirePermission('schedule
         futureSchedule = enrollmentInActiveSchedule;
       }
 
-      // Determina se è effettivamente programmato (status attivo)
       const isActiveSchedule = futureSchedule &&
         activeStatuses.includes(futureSchedule.schedule.status);
+
+      // Estrai company dal tenant profile (P48)
+      const personProfile = person.tenantProfiles?.[0];
+      const personCompany = personProfile?.companyTenantProfile?.company || null;
 
       expiringCourses.push({
         id: `${enrollment.id}-${schedule.id}`,
         enrollmentId: enrollment.id,
         scheduleId: schedule.id,
-        source: schedule.source || 'INTERNAL', // INTERNAL, EXTERNAL, IMPORT
+        source: schedule.source || 'INTERNAL',
         person: {
           id: person.id,
           firstName: person.firstName,
@@ -398,9 +403,9 @@ router.get('/expiring-courses', authenticateToken(), requirePermission('schedule
           taxCode: person.taxCode,
           fullName: `${person.firstName} ${person.lastName}`
         },
-        company: person.company ? {
-          id: person.company.id,
-          ragioneSociale: person.company.ragioneSociale
+        company: personCompany ? {
+          id: personCompany.id,
+          ragioneSociale: personCompany.ragioneSociale
         } : null,
         course: {
           id: schedule.course.id,
@@ -455,7 +460,7 @@ router.get('/expiring-courses', authenticateToken(), requirePermission('schedule
     logger.error('Failed to get expiring courses', {
       component: 'schedules-routes',
       action: 'getExpiringCourses',
-      error: error.message,
+      error: 'Operazione non riuscita',
       errorName: error.name,
       errorCode: error.code,
       stack: error.stack,
@@ -463,9 +468,9 @@ router.get('/expiring-courses', authenticateToken(), requirePermission('schedule
       tenantId: req.person?.tenantId
     });
     res.status(500).json({
-      error: 'Internal server error',
-      message: 'Failed to get expiring courses',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      error: 'Errore interno del server',
+      message: 'Errore nel recupero dei corsi in scadenza',
+
     });
   }
 });
@@ -483,15 +488,15 @@ router.get('/expiring-courses', authenticateToken(), requirePermission('schedule
  * - courseType: tipo corso
  * - completedDate: data esecuzione corso
  */
-router.post('/import-expiring-courses', authenticateToken(), requirePermission('schedules:update'), async (req, res) => {
+router.post('/import-expiring-courses', authenticateToken, requirePermission('schedules:update'), async (req, res) => {
   try {
     const { tenantId } = req.person;
     const { records } = req.body;
 
     if (!Array.isArray(records) || records.length === 0) {
       return res.status(400).json({
-        error: 'Validation error',
-        message: 'Records array is required and must not be empty'
+        error: 'Errore di validazione',
+        message: 'L\'array records è obbligatorio e non deve essere vuoto'
       });
     }
 
@@ -508,25 +513,34 @@ router.post('/import-expiring-courses', authenticateToken(), requirePermission('
       if (!taxCode || !courseName || !completedDate) {
         results.errors.push({
           record,
-          error: 'Missing required fields: taxCode, courseName, completedDate'
+          error: 'Campi obbligatori mancanti: taxCode, courseName, completedDate'
         });
         continue;
       }
 
       try {
-        // Trova il dipendente tramite CF
+        // Trova il dipendente tramite CF (P48: Person non ha tenantId, cerchiamo via tenantProfiles)
         const person = await prisma.person.findFirst({
           where: {
-            tenantId,
             taxCode: taxCode.toUpperCase(),
-            deletedAt: null
+            deletedAt: null,
+            tenantProfiles: {
+              some: { tenantId, deletedAt: null }
+            }
+          },
+          include: {
+            tenantProfiles: {
+              where: { tenantId, deletedAt: null },
+              select: { companyTenantProfileId: true },
+              take: 1
+            }
           }
         });
 
         if (!person) {
           results.errors.push({
             record,
-            error: `Person with taxCode ${taxCode} not found`
+            error: `Persona con codice fiscale ${taxCode} non trovata`
           });
           continue;
         }
@@ -555,7 +569,7 @@ router.post('/import-expiring-courses', authenticateToken(), requirePermission('
         if (!course) {
           results.errors.push({
             record,
-            error: `Course "${courseName}" not found${riskLevel ? ` with riskLevel ${riskLevel}` : ''}${courseType ? ` and courseType ${courseType}` : ''}`
+            error: `Corso "${courseName}" non trovato${riskLevel ? ` con livello rischio ${riskLevel}` : ''}${courseType ? ` e tipo corso ${courseType}` : ''}`
           });
           continue;
         }
@@ -595,21 +609,26 @@ router.post('/import-expiring-courses', authenticateToken(), requirePermission('
         }
 
         // Crea lo ScheduledCourse con source IMPORT
+        const importExpiryDate = course.validityYears ? new Date(completedDateParsed) : null;
+        if (importExpiryDate && course.validityYears) {
+          importExpiryDate.setFullYear(importExpiryDate.getFullYear() + course.validityYears);
+        }
         const newSchedule = await prisma.courseSchedule.create({
           data: {
             tenantId,
             courseId: course.id,
-            companyId: person.companyId || null,
+            companyTenantProfileId: person.tenantProfiles?.[0]?.companyTenantProfileId || null,
             startDate: completedDateParsed,
             endDate: completedDateParsed,
             externalCompletedDate: completedDateParsed,
             source: 'IMPORT',
-            status: 'COMPLETED',
+            status: 'COMPLETATO',
             isPublic: false, // Corsi importati non sono pubblici di default
             importedBy: req.person.id,
             importedAt: new Date(),
             importNotes: record.notes || null,
-            notes: `Corso esterno importato - ${course.title}`
+            notes: `Corso esterno importato - ${course.title}`,
+            expiryDate: importExpiryDate
           }
         });
 
@@ -619,7 +638,7 @@ router.post('/import-expiring-courses', authenticateToken(), requirePermission('
             tenantId,
             scheduleId: newSchedule.id,
             personId: person.id,
-            status: 'COMPLETED'
+            status: 'COMPLETATO'
           }
         });
 
@@ -635,14 +654,14 @@ router.post('/import-expiring-courses', authenticateToken(), requirePermission('
       } catch (recordError) {
         results.errors.push({
           record,
-          error: recordError.message
+          error: 'Errore nell\'importazione del record'
         });
       }
     }
 
     res.json({
       success: true,
-      message: `Import completed: ${results.imported.length} imported, ${results.skipped.length} skipped, ${results.errors.length} errors`,
+      message: `Importazione completata: ${results.imported.length} importati, ${results.skipped.length} saltati, ${results.errors.length} errori`,
       results
     });
 
@@ -650,25 +669,27 @@ router.post('/import-expiring-courses', authenticateToken(), requirePermission('
     logger.error('Failed to import expiring courses', {
       component: 'schedules-routes',
       action: 'importExpiringCourses',
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       personId: req.person?.id
     });
     res.status(500).json({
-      error: 'Internal server error',
-      message: 'Failed to import expiring courses'
+      error: 'Errore interno del server',
+      message: 'Errore nell\'importazione dei corsi in scadenza'
     });
   }
 });
 
 // Get schedule by ID
-router.get('/:id', authenticateToken(), requirePermission('schedules:read'), roleDataFilter, filterResponseFields, async (req, res) => {
+router.get('/:id', authenticateToken, requirePermission('schedules:read'), roleDataFilter, filterResponseFields, async (req, res) => {
   try {
     const { id } = req.params;
 
-    const schedule = await prisma.courseSchedule.findUnique({
+    const schedule = await prisma.courseSchedule.findFirst({
       where: {
-        id
+        id,
+        tenantId: getEffectiveTenantId(req),
+        deletedAt: null
       },
       include: {
         course: true,
@@ -678,15 +699,31 @@ router.get('/:id', authenticateToken(), requirePermission('schedules:read'), rol
             coTrainer: true,
           },
         },
-        companies: { include: { company: true } },
-        enrollments: { include: { person: true } },
+        companies: { include: { companyTenantProfile: { include: { company: true } } } },
+        enrollments: {
+          include: {
+            person: {
+              include: {
+                tenantProfiles: {
+                  where: { tenantId: getEffectiveTenantId(req), deletedAt: null },
+                  include: {
+                    companyTenantProfile: {
+                      include: { company: true }
+                    }
+                  },
+                  take: 1
+                }
+              }
+            }
+          }
+        },
       },
     });
 
     if (!schedule) {
       return res.status(404).json({
-        error: 'Schedule not found',
-        message: `Schedule with ID ${id} does not exist`
+        error: 'Programmazione non trovata',
+        message: `La programmazione con ID ${id} non esiste`
       });
     }
 
@@ -695,34 +732,32 @@ router.get('/:id', authenticateToken(), requirePermission('schedules:read'), rol
     logger.error('Failed to fetch schedule', {
       component: 'schedules-routes',
       action: 'getSchedule',
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       personId: req.person?.id,
       scheduleId: req.params?.id
     });
     res.status(500).json({
-      error: 'Internal server error',
-      message: 'Failed to fetch schedule'
+      error: 'Errore interno del server',
+      message: 'Errore nel recupero della programmazione'
     });
   }
 });
 
 // Get schedules with attestati
-router.get('/with-attestati', authenticateToken(), requirePermission('schedules:read'), roleDataFilter, filterResponseFields, async (req, res) => {
+router.get('/with-attestati', authenticateToken, requirePermission('schedules:read'), roleDataFilter, filterResponseFields, async (req, res) => {
   try {
     const schedules = await prisma.courseSchedule.findMany({
       where: {
-        status: 'completed'
+        tenantId: getEffectiveTenantId(req),
+        deletedAt: null,
+        status: 'COMPLETATO'
       },
       include: {
         course: true,
         enrollments: {
           include: {
-            employee: {
-              include: {
-                company: true
-              }
-            }
+            person: true
           }
         }
       },
@@ -734,20 +769,20 @@ router.get('/with-attestati', authenticateToken(), requirePermission('schedules:
     logger.error('Failed to fetch schedules with attestati', {
       component: 'schedules-routes',
       action: 'getSchedulesWithAttestati',
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       personId: req.person?.id
     });
     res.status(500).json({
-      error: 'Internal server error',
-      message: 'Failed to fetch schedules with attestati'
+      error: 'Errore interno del server',
+      message: 'Errore nel recupero delle programmazioni con attestati'
     });
   }
 });
 
 // Create new schedule
 router.post('/',
-  authenticateToken(),
+  authenticateToken,
   requirePermission('schedules:create'),
   validateSchedule,
   async (req, res) => {
@@ -772,17 +807,17 @@ router.post('/',
       const mainCompanyId = Array.isArray(companyIds) && companyIds.length > 0 ? companyIds[0] : null;
       if (!mainCompanyId) {
         return res.status(400).json({
-          error: 'Validation error',
-          message: 'At least one companyId is required'
+          error: 'Errore di validazione',
+          message: 'Almeno un companyId è obbligatorio'
         });
       }
 
       // Get tenantId from authenticated person
-      const tenantId = req.person.tenantId;
+      const tenantId = getEffectiveTenantId(req);
       if (!tenantId) {
         return res.status(400).json({
-          error: 'Validation error',
-          message: 'Tenant ID is required'
+          error: 'Errore di validazione',
+          message: 'Tenant ID è obbligatorio'
         });
       }
 
@@ -808,6 +843,17 @@ router.post('/',
         createdAt: new Date(),
         updatedAt: new Date()
       };
+
+      // Compute expiryDate from course.validityYears if available
+      const courseForExpiry = await prisma.course.findUnique({
+        where: { id: courseId },
+        select: { validityYears: true }
+      });
+      if (courseForExpiry?.validityYears && endDate) {
+        const expiry = new Date(endDate);
+        expiry.setFullYear(expiry.getFullYear() + courseForExpiry.validityYears);
+        scheduleData.expiryDate = expiry;
+      }
 
       // 1. Create the main schedule
       const schedule = await prisma.courseSchedule.create({
@@ -840,12 +886,32 @@ router.post('/',
       }
 
       // 3. Create schedule-company links
+      // P49: companyIds may contain global Company.id — resolve to CompanyTenantProfile.id
       if (Array.isArray(companyIds)) {
         for (const companyId of companyIds) {
+          // Try as CompanyTenantProfile.id first, then resolve from global Company.id
+          let ctpId = companyId;
+          const directCtp = await prisma.companyTenantProfile.findFirst({
+            where: { id: companyId, tenantId, deletedAt: null },
+            select: { id: true }
+          });
+          if (!directCtp) {
+            // companyId is a global Company.id — find the CTP for this tenant
+            const resolvedCtp = await prisma.companyTenantProfile.findFirst({
+              where: { companyId, tenantId, deletedAt: null },
+              select: { id: true }
+            });
+            if (resolvedCtp) {
+              ctpId = resolvedCtp.id;
+            } else {
+              logger.warn(`ScheduleCompany: nessun CompanyTenantProfile trovato per companyId=${companyId} nel tenant ${tenantId}`);
+              continue;
+            }
+          }
           await prisma.scheduleCompany.create({
             data: {
               scheduleId: schedule.id,
-              companyId,
+              companyTenantProfileId: ctpId,
               tenantId: tenantId
             },
           });
@@ -890,7 +956,7 @@ router.post('/',
               coTrainer: true,
             },
           },
-          companies: { include: { company: true } },
+          companies: { include: { companyTenantProfile: { include: { company: true } } } },
           enrollments: { include: { person: true } },
         },
       });
@@ -900,7 +966,7 @@ router.post('/',
       logger.error('Failed to create schedule', {
         component: 'schedules-routes',
         action: 'createSchedule',
-        error: error.message,
+        error: 'Operazione non riuscita',
         code: error.code,
         stack: error.stack,
         personId: req.person?.id,
@@ -909,20 +975,20 @@ router.post('/',
 
       if (error.code === 'P2002') {
         return res.status(409).json({
-          error: 'Conflict',
-          message: 'A schedule with this information already exists'
+          error: 'Conflitto',
+          message: 'Una programmazione con queste informazioni esiste già'
         });
       }
 
       res.status(500).json({
-        error: 'Internal server error',
-        message: 'Failed to create schedule'
+        error: 'Errore interno del server',
+        message: 'Errore nella creazione della programmazione'
       });
     }
   });
 
 // Update schedule
-router.put('/:id', authenticateToken(), requirePermission('schedules:update'), async (req, res) => {
+router.put('/:id', authenticateToken, requirePermission('schedules:update'), async (req, res) => {
   const {
     courseId,
     startDate,
@@ -944,16 +1010,18 @@ router.put('/:id', authenticateToken(), requirePermission('schedules:update'), a
     const { id } = req.params;
 
     // Check if schedule exists
-    const existingSchedule = await prisma.courseSchedule.findUnique({
+    const existingSchedule = await prisma.courseSchedule.findFirst({
       where: {
-        id
+        id,
+        tenantId: getEffectiveTenantId(req),
+        deletedAt: null
       }
     });
 
     if (!existingSchedule) {
       return res.status(404).json({
-        error: 'Schedule not found',
-        message: `Schedule with ID ${id} does not exist`
+        error: 'Programmazione non trovata',
+        message: `La programmazione con ID ${id} non esiste`
       });
     }
 
@@ -981,21 +1049,17 @@ router.put('/:id', authenticateToken(), requirePermission('schedules:update'), a
     // ✅ FIX: Map status from frontend format to database EnrollmentStatus enum
     if (status !== undefined) {
       const statusMap = {
-        'preventivo': 'PENDING',
-        'pending': 'PENDING',
-        'confermato': 'CONFIRMED',
-        'confirmed': 'CONFIRMED',
-        'attivo': 'ACTIVE',
-        'active': 'ACTIVE',
-        'completato': 'COMPLETED',
-        'completed': 'COMPLETED',
-        'cancellato': 'CANCELLED',
-        'cancelled': 'CANCELLED',
-        'sospeso': 'SUSPENDED',
-        'suspended': 'SUSPENDED'
+        'preventivo': 'PREVENTIVO',
+        'accettato': 'ACCETTATO',
+        'completato': 'COMPLETATO',
+        'fatturato': 'FATTURATO'
       };
       const normalizedStatus = String(status).toLowerCase();
+      const VALID_STATUSES = ['PREVENTIVO', 'ACCETTATO', 'COMPLETATO', 'FATTURATO'];
       const mappedStatus = statusMap[normalizedStatus] || status.toUpperCase();
+      if (!VALID_STATUSES.includes(mappedStatus)) {
+        return res.status(400).json({ success: false, error: 'Stato non valido' });
+      }
       updateData.status = mappedStatus;
     }
 
@@ -1007,17 +1071,44 @@ router.put('/:id', authenticateToken(), requirePermission('schedules:update'), a
       updateData.source = source;
     }
 
+    // Recalculate expiryDate when endDate changes
+    if (endDate) {
+      const scheduleWithCourse = await prisma.courseSchedule.findUnique({
+        where: { id },
+        select: { courseId: true, course: { select: { validityYears: true } } }
+      });
+      if (scheduleWithCourse?.course?.validityYears) {
+        const expiry = new Date(endDate);
+        expiry.setFullYear(expiry.getFullYear() + scheduleWithCourse.course.validityYears);
+        updateData.expiryDate = expiry;
+      }
+    }
+
     const schedule = await prisma.courseSchedule.update({
       where: { id },
       data: updateData,
     });
 
+    // Propaga cambio status agli enrollment (es. COMPLETATO → enrollment COMPLETATO)
+    if (status !== undefined && updateData.status) {
+      await prisma.courseEnrollment.updateMany({
+        where: {
+          scheduleId: id,
+          tenantId: getEffectiveTenantId(req),
+          deletedAt: null
+        },
+        data: {
+          status: updateData.status,
+          updatedAt: new Date()
+        }
+      });
+    }
+
     // 2. Update sessions if provided
     if (Array.isArray(dates)) {
       // Delete existing sessions
-      await prisma.courseSession.deleteMany({ where: { scheduleId: schedule.id } });
-      // Create new sessions
-      const tenantId = req.person.tenantId;
+      const tenantId = getEffectiveTenantId(req);
+      await prisma.courseSession.deleteMany({ where: { scheduleId: schedule.id, tenantId } });
       for (const session of dates) {
         const sessionData = {
           schedule: {
@@ -1044,16 +1135,34 @@ router.put('/:id', authenticateToken(), requirePermission('schedules:update'), a
     }
 
     // 3. Update company associations if provided
+    // P49: companyIds may contain global Company.id — resolve to CompanyTenantProfile.id
     if (Array.isArray(companyIds)) {
       // Delete existing associations
-      await prisma.scheduleCompany.deleteMany({ where: { scheduleId: schedule.id } });
-      // Create new associations
-      const tenantId = req.person.tenantId;
+      const tenantId = getEffectiveTenantId(req);
+      await prisma.scheduleCompany.deleteMany({ where: { scheduleId: schedule.id, tenantId } });
       for (const companyId of companyIds) {
+        // Try as CompanyTenantProfile.id first, then resolve from global Company.id
+        let ctpId = companyId;
+        const directCtp = await prisma.companyTenantProfile.findFirst({
+          where: { id: companyId, tenantId, deletedAt: null },
+          select: { id: true }
+        });
+        if (!directCtp) {
+          const resolvedCtp = await prisma.companyTenantProfile.findFirst({
+            where: { companyId, tenantId, deletedAt: null },
+            select: { id: true }
+          });
+          if (resolvedCtp) {
+            ctpId = resolvedCtp.id;
+          } else {
+            logger.warn(`ScheduleCompany update: nessun CompanyTenantProfile trovato per companyId=${companyId} nel tenant ${tenantId}`);
+            continue;
+          }
+        }
         await prisma.scheduleCompany.create({
           data: {
             scheduleId: schedule.id,
-            companyId,
+            companyTenantProfileId: ctpId,
             tenantId,
           },
         });
@@ -1062,13 +1171,14 @@ router.put('/:id', authenticateToken(), requirePermission('schedules:update'), a
 
     // 4. Update enrollments if provided
     if (Array.isArray(personIds)) {
-      const tenantId = req.person.tenantId;
+      const tenantId = getEffectiveTenantId(req);
       const uniquePersonIds = [...new Set(personIds.map(id => (id || '').trim()))];
 
       // Delete enrollments not in the new list
       await prisma.courseEnrollment.deleteMany({
         where: {
           scheduleId: schedule.id,
+          tenantId,
           personId: { notIn: uniquePersonIds }
         }
       });
@@ -1099,7 +1209,7 @@ router.put('/:id', authenticateToken(), requirePermission('schedules:update'), a
             coTrainer: true,
           },
         },
-        companies: { include: { company: true } },
+        companies: { include: { companyTenantProfile: { include: { company: true } } } },
         enrollments: { include: { person: true } },
       },
     });
@@ -1109,7 +1219,7 @@ router.put('/:id', authenticateToken(), requirePermission('schedules:update'), a
     logger.error('Failed to update schedule', {
       component: 'schedules-routes',
       action: 'updateSchedule',
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       personId: req.person?.id,
       scheduleId: req.params?.id
@@ -1117,28 +1227,29 @@ router.put('/:id', authenticateToken(), requirePermission('schedules:update'), a
 
     if (error.code === 'P2002') {
       return res.status(409).json({
-        error: 'Conflict',
-        message: 'A schedule with this information already exists'
+        error: 'Conflitto',
+        message: 'Una programmazione con queste informazioni esiste già'
       });
     }
 
     res.status(500).json({
-      error: 'Internal server error',
-      message: 'Failed to update schedule',
-      details: error.message
+      error: 'Errore interno del server',
+      message: 'Errore nell\'aggiornamento della programmazione',
     });
   }
 });
 
 // Soft delete schedule
-router.delete('/:id', authenticateToken(), requirePermission('schedules:delete'), async (req, res) => {
+router.delete('/:id', authenticateToken, requirePermission('schedules:delete'), async (req, res) => {
   try {
     const { id } = req.params;
 
     // Check if schedule exists
-    const existingSchedule = await prisma.courseSchedule.findUnique({
+    const existingSchedule = await prisma.courseSchedule.findFirst({
       where: {
-        id
+        id,
+        tenantId: getEffectiveTenantId(req),
+        deletedAt: null
       },
       include: {
         enrollments: true,
@@ -1148,8 +1259,8 @@ router.delete('/:id', authenticateToken(), requirePermission('schedules:delete')
 
     if (!existingSchedule) {
       return res.status(404).json({
-        error: 'Schedule not found',
-        message: `Schedule with ID ${id} does not exist`
+        error: 'Programmazione non trovata',
+        message: `La programmazione con ID ${id} non esiste`
       });
     }
 
@@ -1171,14 +1282,14 @@ router.delete('/:id', authenticateToken(), requirePermission('schedules:delete')
     logger.error('Failed to delete schedule', {
       component: 'schedules-routes',
       action: 'deleteSchedule',
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       personId: req.person?.id,
       scheduleId: req.params?.id
     });
     res.status(500).json({
-      error: 'Internal server error',
-      message: 'Failed to delete schedule'
+      error: 'Errore interno del server',
+      message: 'Errore nell\'eliminazione della programmazione'
     });
   }
 });

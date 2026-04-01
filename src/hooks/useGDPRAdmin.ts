@@ -23,20 +23,19 @@ export const useGDPRAdmin = (): UseGDPRAdminReturn => {
     try {
       setLoading(true);
       setError(null);
-      
+
       const response = await apiClient.get<GDPRApiResponse<{ requests: DeletionRequest[] }>>(
         '/api/gdpr/pending-deletions'
       );
-      
+
       if (response.data.success && response.data.data) {
         setDeletionRequests(response.data.data.requests);
       } else {
-        throw new Error(response.data.message || 'Failed to fetch deletion requests');
+        throw new Error('Errore nel recupero delle richieste di cancellazione');
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch deletion requests';
+      const errorMessage = 'Errore nel recupero delle richieste di cancellazione';
       setError(errorMessage);
-      console.error('Error fetching deletion requests:', err);
     } finally {
       setLoading(false);
     }
@@ -51,7 +50,7 @@ export const useGDPRAdmin = (): UseGDPRAdminReturn => {
     try {
       setLoading(true);
       setError(null);
-      
+
       const response = await apiClient.post<GDPRApiResponse>(
         `/api/gdpr/delete/process/${requestId}`,
         {
@@ -59,19 +58,18 @@ export const useGDPRAdmin = (): UseGDPRAdminReturn => {
           notes
         }
       );
-      
+
       if (response.data.success) {
         // Remove the processed request from the list
-        setDeletionRequests(prev => 
+        setDeletionRequests(prev =>
           prev.filter(request => request.id !== requestId)
         );
       } else {
-        throw new Error(response.data.message || 'Failed to process deletion request');
+        throw new Error('Errore nell\'elaborazione della richiesta di cancellazione');
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to process deletion request';
+      const errorMessage = 'Errore nell\'elaborazione della richiesta di cancellazione';
       setError(errorMessage);
-      console.error('Error processing deletion request:', err);
       throw err;
     } finally {
       setLoading(false);
@@ -83,25 +81,24 @@ export const useGDPRAdmin = (): UseGDPRAdminReturn => {
     try {
       setLoading(true);
       setError(null);
-      
+
       const params = new URLSearchParams();
       if (companyId) {
         params.append('companyId', companyId);
       }
-      
+
       const response = await apiClient.get<GDPRApiResponse<{ report: ComplianceReport }>>(
         `/api/gdpr/compliance-report?${params.toString()}`
       );
-      
+
       if (response.data.success && response.data.data) {
         setComplianceReport(response.data.data.report);
       } else {
-        throw new Error(response.data.message || 'Failed to generate compliance report');
+        throw new Error('Errore nella generazione del report di conformità');
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to generate compliance report';
+      const errorMessage = 'Errore nella generazione del report di conformità';
       setError(errorMessage);
-      console.error('Error generating compliance report:', err);
     } finally {
       setLoading(false);
     }
@@ -115,7 +112,6 @@ export const useGDPRAdmin = (): UseGDPRAdminReturn => {
         generateComplianceReport()
       ]);
     } catch (err) {
-      console.error('Error refreshing admin data:', err);
     }
   }, [fetchDeletionRequests, generateComplianceReport]);
 

@@ -42,10 +42,9 @@ const CourseDetails: React.FC = () => {
       const data = await getCourse(courseId);
       setCourse(data);
       setNotFound(false);
-    } catch (err: any) {
-      console.error('Error fetching course:', err);
-
-      if (err.status === 404) {
+    } catch (err: unknown) {
+      const axiosErr = err as { status?: number };
+      if (axiosErr.status === 404) {
         setNotFound(true);
         setError(null);
       } else if (retryCount < 2) {
@@ -53,7 +52,7 @@ const CourseDetails: React.FC = () => {
         setTimeout(() => fetchCourse(courseId, retryCount + 1), 1000);
         return;
       } else {
-        setError(err.message || 'Errore nel caricamento del corso');
+        setError('Errore nel caricamento del corso');
         setNotFound(false);
       }
       setCourse(null);
@@ -144,7 +143,7 @@ const CourseDetails: React.FC = () => {
       </div>
 
       {/* Header */}
-      <div className="bg-white rounded-lg shadow p-6">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-black/30 p-6">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between">
           <div className="flex items-center">
             <div className="h-16 w-16 bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg flex items-center justify-center">
@@ -160,11 +159,11 @@ const CourseDetails: React.FC = () => {
                     {course.subcategory}
                   </span>
                 )}
-                <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
+                <span className="px-2 py-1 text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-full">
                   {course.code || 'N/D'}
                 </span>
               </div>
-              <h1 className="text-2xl font-bold text-gray-800">
+              <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">
                 {course.title || 'Corso di Sicurezza sul Lavoro'}
               </h1>
             </div>
@@ -177,48 +176,48 @@ const CourseDetails: React.FC = () => {
           </div>
         </div>
 
-        <div className="mt-4 border-t border-gray-200 pt-4 grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="mt-4 border-t border-gray-200 dark:border-gray-700 pt-4 grid grid-cols-1 md:grid-cols-3 gap-6">
           <div>
-            <h2 className="text-lg font-semibold text-gray-800 mb-3">Informazioni Generali</h2>
+            <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3">Informazioni Generali</h2>
             <ul className="space-y-2">
               <li className="flex items-start">
                 <Clock className="h-4 w-4 text-gray-400 mt-0.5" />
                 <div className="ml-2">
-                  <span className="block text-xs font-medium text-gray-800">Durata</span>
-                  <span className="block text-sm text-gray-600">{course.duration || 'N/D'} ore</span>
+                  <span className="block text-xs font-medium text-gray-800 dark:text-gray-200">Durata</span>
+                  <span className="block text-sm text-gray-600 dark:text-gray-400">{course.duration || 'N/D'} ore</span>
                 </div>
               </li>
               {course.practicalHours && (
                 <li className="flex items-start">
                   <BookOpen className="h-4 w-4 text-gray-400 mt-0.5" />
                   <div className="ml-2">
-                    <span className="block text-xs font-medium text-gray-800">Ore Pratiche</span>
-                    <span className="block text-sm text-gray-600">{course.practicalHours} ore</span>
+                    <span className="block text-xs font-medium text-gray-800 dark:text-gray-200">Ore Pratiche</span>
+                    <span className="block text-sm text-gray-600 dark:text-gray-400">{course.practicalHours} ore</span>
                   </div>
                 </li>
               )}
               <li className="flex items-start">
-                <Calendar className="h-4 w-4 text-gray-400 mt-0.5" />
+                <Calendar className="h-4 w-4 text-gray-400 dark:text-gray-500 mt-0.5" />
                 <div className="ml-2">
-                  <span className="block text-xs font-medium text-gray-800">Validità</span>
-                  <span className="block text-sm text-gray-600">{course.validityYears ? `${course.validityYears} anni` : 'N/D'}</span>
+                  <span className="block text-xs font-medium text-gray-800 dark:text-gray-200">Validità</span>
+                  <span className="block text-sm text-gray-600 dark:text-gray-400">{course.validityYears ? `${course.validityYears} anni` : 'N/D'}</span>
                 </div>
               </li>
               <li className="flex items-start">
-                <Users className="h-4 w-4 text-gray-400 mt-0.5" />
+                <Users className="h-4 w-4 text-gray-400 dark:text-gray-500 mt-0.5" />
                 <div className="ml-2">
-                  <span className="block text-xs font-medium text-gray-800">Max Partecipanti</span>
-                  <span className="block text-sm text-gray-600">{course.maxPeople || 'N/D'}</span>
+                  <span className="block text-xs font-medium text-gray-800 dark:text-gray-200">Max Partecipanti</span>
+                  <span className="block text-sm text-gray-600 dark:text-gray-400">{course.maxPeople || 'N/D'}</span>
                 </div>
               </li>
               {course.riskLevel && (
                 <li className="flex items-start">
-                  <AlertTriangle className="h-4 w-4 text-gray-400 mt-0.5" />
+                  <AlertTriangle className="h-4 w-4 text-gray-400 dark:text-gray-500 mt-0.5" />
                   <div className="ml-2">
-                    <span className="block text-xs font-medium text-gray-800">Livello di Rischio</span>
-                    <span className={`inline-block px-2 py-0.5 text-xs rounded-full font-medium ${course.riskLevel === 'ALTO' || course.riskLevel === 'A' ? 'bg-red-100 text-red-800' :
-                      course.riskLevel === 'MEDIO' || course.riskLevel === 'B' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-green-100 text-green-800'
+                    <span className="block text-xs font-medium text-gray-800 dark:text-gray-200">Livello di Rischio</span>
+                    <span className={`inline-block px-2 py-0.5 text-xs rounded-full font-medium ${course.riskLevel === 'ALTO' || course.riskLevel === 'A' ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300' :
+                      course.riskLevel === 'MEDIO' || course.riskLevel === 'B' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300' :
+                        'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
                       }`}>
                       {getRiskLevelLabel(course.riskLevel, course.title)}
                     </span>
@@ -227,10 +226,10 @@ const CourseDetails: React.FC = () => {
               )}
               {course.courseType && (
                 <li className="flex items-start">
-                  <Layers className="h-4 w-4 text-gray-400 mt-0.5" />
+                  <Layers className="h-4 w-4 text-gray-400 dark:text-gray-500 mt-0.5" />
                   <div className="ml-2">
-                    <span className="block text-xs font-medium text-gray-800">Tipo Corso</span>
-                    <span className={`inline-block px-2 py-0.5 text-xs rounded-full font-medium ${course.courseType === 'PRIMO_CORSO' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
+                    <span className="block text-xs font-medium text-gray-800 dark:text-gray-200">Tipo Corso</span>
+                    <span className={`inline-block px-2 py-0.5 text-xs rounded-full font-medium ${course.courseType === 'PRIMO_CORSO' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300' : 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300'
                       }`}>
                       {course.courseType === 'PRIMO_CORSO' ? 'Primo Corso' : course.courseType === 'AGGIORNAMENTO' ? 'Aggiornamento' : course.courseType}
                     </span>
@@ -244,8 +243,8 @@ const CourseDetails: React.FC = () => {
                   <EyeOff className="h-4 w-4 text-gray-400 mt-0.5" />
                 )}
                 <div className="ml-2">
-                  <span className="block text-xs font-medium text-gray-800">Visibilità Pubblica</span>
-                  <span className={`inline-block px-2 py-0.5 text-xs rounded-full font-medium ${course.isPublic ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                  <span className="block text-xs font-medium text-gray-800 dark:text-gray-200">Visibilità Pubblica</span>
+                  <span className={`inline-block px-2 py-0.5 text-xs rounded-full font-medium ${course.isPublic ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
                     }`}>
                     {course.isPublic ? 'Visibile sul sito pubblico' : 'Non visibile'}
                   </span>
@@ -254,42 +253,42 @@ const CourseDetails: React.FC = () => {
             </ul>
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-gray-800 mb-3">Dettagli Commerciali</h2>
+            <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3">Dettagli Commerciali</h2>
             <ul className="space-y-2">
               <li className="flex items-start">
-                <Euro className="h-4 w-4 text-gray-400 mt-0.5" />
+                <Euro className="h-4 w-4 text-gray-400 dark:text-gray-500 mt-0.5" />
                 <div className="ml-2">
-                  <span className="block text-xs font-medium text-gray-800">Prezzo per Persona</span>
-                  <span className="block text-sm text-gray-600">
+                  <span className="block text-xs font-medium text-gray-800 dark:text-gray-200">Prezzo per Persona</span>
+                  <span className="block text-sm text-gray-600 dark:text-gray-400">
                     {course.pricePerPerson ? `€ ${Number(course.pricePerPerson).toFixed(2)}` : 'N/D'}
                   </span>
                 </div>
               </li>
               <li className="flex items-start">
-                <Award className="h-4 w-4 text-gray-400 mt-0.5" />
+                <Award className="h-4 w-4 text-gray-400 dark:text-gray-500 mt-0.5" />
                 <div className="ml-2">
-                  <span className="block text-xs font-medium text-gray-800">Certificazioni</span>
-                  <span className="block text-sm text-gray-600">{course.certifications || 'Attestato di Partecipazione'}</span>
+                  <span className="block text-xs font-medium text-gray-800 dark:text-gray-200">Certificazioni</span>
+                  <span className="block text-sm text-gray-600 dark:text-gray-400">{course.certifications || 'Attestato di Partecipazione'}</span>
                 </div>
               </li>
               <li className="flex items-start">
-                <FileText className="h-4 w-4 text-gray-400 mt-0.5" />
+                <FileText className="h-4 w-4 text-gray-400 dark:text-gray-500 mt-0.5" />
                 <div className="ml-2">
-                  <span className="block text-xs font-medium text-gray-800">Normativa</span>
-                  <span className="block text-sm text-gray-600">{course.regulation || 'D.Lgs. 81/08'}</span>
+                  <span className="block text-xs font-medium text-gray-800 dark:text-gray-200">Normativa</span>
+                  <span className="block text-sm text-gray-600 dark:text-gray-400">{course.regulation || 'D.Lgs. 81/08'}</span>
                 </div>
               </li>
             </ul>
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-gray-800 mb-3">Descrizione</h2>
-            <p className="text-sm text-gray-600 leading-relaxed">
+            <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3">Descrizione</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
               {course.description || course.shortDescription || 'Nessuna descrizione disponibile.'}
             </p>
             {course.contents && (
               <div className="mt-3">
-                <h3 className="text-sm font-medium text-gray-800 mb-1">Contenuti</h3>
-                <p className="text-sm text-gray-600 leading-relaxed">{course.contents}</p>
+                <h3 className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-1">Contenuti</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">{course.contents}</p>
               </div>
             )}
           </div>

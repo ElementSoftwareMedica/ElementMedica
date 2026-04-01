@@ -41,18 +41,18 @@ export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   children?: React.ReactNode;
 }
 
-// Variant styles
+// Variant styles with dark mode support
 const variantStyles: Record<CardVariant, string> = {
-  default: 'bg-white border border-gray-200',
-  outlined: 'bg-white border-2 border-gray-300',
-  elevated: 'bg-white shadow-md border-0',
-  filled: 'bg-gray-50 border-0',
+  default: 'bg-white border border-gray-200 dark:bg-gray-800 dark:border-gray-700',
+  outlined: 'bg-white border-2 border-gray-300 dark:bg-gray-800 dark:border-gray-600',
+  elevated: 'bg-white shadow-md border-0 dark:bg-gray-800 dark:shadow-lg dark:shadow-black/20',
+  filled: 'bg-gray-50 border-0 dark:bg-gray-700',
 };
 
 // Size styles
 const sizeStyles: Record<CardSize, string> = {
   sm: 'p-3',
-  md: 'p-4', 
+  md: 'p-4',
   lg: 'p-6',
   xl: 'p-8',
 };
@@ -64,35 +64,39 @@ const baseStyles = `
   overflow-hidden
 `;
 
-// Header styles
+// Header styles with dark mode
 const headerStyles = `
   border-b border-gray-200 pb-4 mb-4
+  dark:border-gray-700
 `;
 
-// Footer styles
+// Footer styles with dark mode
 const footerStyles = `
   border-t border-gray-200 pt-4 mt-4
+  dark:border-gray-700
 `;
 
-// Title styles
+// Title styles with dark mode
 const titleStyles = `
   text-lg font-semibold text-gray-900 mb-1
+  dark:text-gray-50
 `;
 
-// Subtitle styles
+// Subtitle styles with dark mode
 const subtitleStyles = `
   text-sm text-gray-600 mb-4
+  dark:text-gray-400
 `;
 
-// Loading skeleton
+// Loading skeleton with dark mode
 const LoadingSkeleton = () => (
   <div className="animate-pulse">
-    <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
-    <div className="h-3 bg-gray-200 rounded w-1/2 mb-4"></div>
+    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mb-2"></div>
+    <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2 mb-4"></div>
     <div className="space-y-2">
-      <div className="h-3 bg-gray-200 rounded"></div>
-      <div className="h-3 bg-gray-200 rounded w-5/6"></div>
-      <div className="h-3 bg-gray-200 rounded w-4/6"></div>
+      <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded"></div>
+      <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6"></div>
+      <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-4/6"></div>
     </div>
   </div>
 );
@@ -120,8 +124,8 @@ export const Card: React.FC<CardProps> = ({
     baseStyles,
     variantStyles[variant],
     sizeStyles[size],
-    hoverable && 'hover:shadow-lg transition-shadow duration-200',
-    clickable && 'cursor-pointer hover:shadow-lg hover:scale-[1.02]',
+    hoverable && 'hover:shadow-lg dark:hover:shadow-black/30 transition-shadow duration-200',
+    clickable && 'cursor-pointer hover:shadow-lg dark:hover:shadow-black/30 hover:scale-[1.02]',
     disabled && 'opacity-50 cursor-not-allowed',
     loading && 'animate-pulse',
     className
@@ -133,7 +137,7 @@ export const Card: React.FC<CardProps> = ({
 
   const renderImage = () => {
     if (!image) return null;
-    
+
     return (
       <div className="aspect-video w-full overflow-hidden">
         <img
@@ -147,7 +151,7 @@ export const Card: React.FC<CardProps> = ({
 
   const renderHeader = () => {
     if (!header && !cardTitle && !subtitle) return null;
-    
+
     return (
       <div className={headerStyles}>
         {header && header}
@@ -163,7 +167,7 @@ export const Card: React.FC<CardProps> = ({
 
   const renderActions = () => {
     if (!actions) return null;
-    
+
     return (
       <div className="flex items-center justify-end space-x-2 mt-4">
         {actions}
@@ -173,7 +177,7 @@ export const Card: React.FC<CardProps> = ({
 
   const renderFooter = () => {
     if (!footer) return null;
-    
+
     return (
       <div className={footerStyles}>
         {footer}
@@ -211,13 +215,13 @@ export const Card: React.FC<CardProps> = ({
       {...props}
     >
       {renderImage()}
-      
+
       <div className={contentClasses}>
         {renderHeader()}
         {renderContent()}
         {renderActions()}
       </div>
-      
+
       {renderFooter()}
     </div>
   );

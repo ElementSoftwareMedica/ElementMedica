@@ -7,12 +7,10 @@
  * @module pages/poliambulatorio/clinica/CartellaPaziente
  */
 
-import React, { useState, useMemo } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
-    LineChart,
-    Line,
     XAxis,
     YAxis,
     CartesianGrid,
@@ -28,7 +26,6 @@ import {
     Calendar,
     FileText,
     Activity,
-    Clock,
     Phone,
     Mail,
     MapPin,
@@ -36,18 +33,22 @@ import {
     Download,
     Eye,
     Plus,
-    Filter,
     Search,
     RefreshCw,
     Stethoscope,
-    ClipboardList,
     Paperclip,
     TrendingUp,
     Heart,
     Thermometer,
     AlertCircle,
     CheckCircle2,
-    History
+    History,
+    Shield,
+    Droplets,
+    Candy,
+    GraduationCap,
+    ClipboardList,
+    XCircle
 } from 'lucide-react';
 import {
     pazientiApi,
@@ -59,13 +60,22 @@ import {
     Referto,
     Appuntamento
 } from '../../../services/clinicaApi';
+import { documentService } from '../../../services/documentService';
+import { apiGet } from '../../../services/api';
 import { formatDate, formatTime } from '../../../utils/dateUtils';
+import { formatMedicoName } from '../../../utils/textFormatters';
+import { ConsentFSEForm, ConsentFSESummary } from '../../../components/clinica/consent-fse';
+import ConsentiTabletFirmati from './components/ConsentiTabletFirmati';
+import { useBillingAccess } from '../../../hooks/useBillingAccess';
+import QuickFatturazioneTab from '../../finance/billing/components/QuickFatturazioneTab';
+import { ProfiloSaluteCard } from '../../../components/clinica/ProfiloSaluteCard';
+import { Euro } from 'lucide-react';
 
 // ============================================
 // TYPES
 // ============================================
 
-type TabType = 'overview' | 'visite' | 'referti' | 'documenti' | 'trend';
+type TabType = 'overview' | 'visite' | 'documenti' | 'trend' | 'consensi' | 'fatturazione' | 'medicina_lavoro' | 'formazione';
 
 interface TimelineEvent {
     id: string;
@@ -86,11 +96,13 @@ interface TimelineEvent {
  */
 const PatientHeader: React.FC<{
     paziente: Paziente;
+    personId?: string;
     onEdit: () => void;
-}> = ({ paziente, onEdit }) => {
+}> = ({ paziente, personId, onEdit }) => {
     const eta = useMemo(() => {
-        if (!paziente.dataNascita) return null;
-        const nascita = new Date(paziente.dataNascita);
+        const dob = paziente.birthDate || paziente.dataNascita;
+        if (!dob) return null;
+        const nascita = new Date(dob);
         const oggi = new Date();
         let eta = oggi.getFullYear() - nascita.getFullYear();
         const m = oggi.getMonth() - nascita.getMonth();
@@ -98,7 +110,7 @@ const PatientHeader: React.FC<{
             eta--;
         }
         return eta;
-    }, [paziente.dataNascita]);
+    }, [paziente.birthDate, paziente.dataNascita]);
 
     return (
         <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -111,10 +123,10 @@ const PatientHeader: React.FC<{
                     <div className="flex items-start justify-between">
                         <div>
                             <h1 className="text-2xl font-bold text-gray-900">
-                                {paziente.cognome} {paziente.nome}
+                                {paziente.lastName || paziente.cognome} {paziente.firstName || paziente.nome}
                             </h1>
                             <p className="text-gray-500">
-                                {paziente.codiceFiscale || 'CF non disponibile'}
+                                {paziente.taxCode || paziente.codiceFiscale || 'CF non disponibile'}
                                 {eta && ` • ${eta} anni`}
                             </p>
                         </div>
@@ -127,10 +139,10 @@ const PatientHeader: React.FC<{
                     </div>
 
                     <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {paziente.telefono && (
+                        {(paziente.phone || paziente.telefono) && (
                             <div className="flex items-center gap-2 text-gray-600">
                                 <Phone className="h-4 w-4 text-gray-400" />
-                                <span>{paziente.telefono}</span>
+                                <span>{paziente.phone || paziente.telefono}</span>
                             </div>
                         )}
                         {paziente.email && (
@@ -139,15 +151,22 @@ const PatientHeader: React.FC<{
                                 <span>{paziente.email}</span>
                             </div>
                         )}
-                        {paziente.indirizzo && (
+                        {(paziente.residenceAddress || paziente.indirizzo) && (
                             <div className="flex items-center gap-2 text-gray-600">
                                 <MapPin className="h-4 w-4 text-gray-400" />
-                                <span>{paziente.indirizzo}</span>
+                                <span>{paziente.residenceAddress || paziente.indirizzo}</span>
                             </div>
                         )}
                     </div>
                 </div>
             </div>
+
+            {/* Profilo di Salute — sezione integrata nella card anagrafica */}
+            {personId && (
+                <div className="mt-6 pt-6 border-t border-gray-200">
+                    <ProfiloSaluteCard personId={personId} tabLayout />
+                </div>
+            )}
         </div>
     );
 };
@@ -311,18 +330,23 @@ const Timeline: React.FC<{
 };
 
 /**
- * Visits List
+ * Visits List — shows prestazione, medico, and referto PDF access
  */
 const VisiteList: React.FC<{
-    visite: Visita[];
+    visite: (Visita & {
+        prestazione?: { id: string; nome: string; codice?: string } | null;
+        medico?: { id: string; firstName?: string; lastName?: string; gender?: 'MALE' | 'FEMALE' | 'OTHER' | 'NOT_SPECIFIED' | null } | null;
+        referti?: { id: string; titolo?: string; stato?: string }[] | null;
+    })[];
 }> = ({ visite }) => {
     const [search, setSearch] = useState('');
 
     const filteredVisite = useMemo(() =>
         visite.filter(v =>
             !search ||
-            v.note?.toLowerCase().includes(search.toLowerCase())
-        ).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+            v.note?.toLowerCase().includes(search.toLowerCase()) ||
+            (v.prestazione?.nome || '').toLowerCase().includes(search.toLowerCase())
+        ).sort((a, b) => new Date(b.dataOra || b.createdAt).getTime() - new Date(a.dataOra || a.createdAt).getTime()),
         [visite, search]
     );
 
@@ -334,8 +358,8 @@ const VisiteList: React.FC<{
                     type="text"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Cerca nelle visite..."
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg"
+                    placeholder="Cerca nelle visite…"
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm"
                 />
             </div>
 
@@ -345,34 +369,68 @@ const VisiteList: React.FC<{
                     <p className="text-gray-500">Nessuna visita trovata</p>
                 </div>
             ) : (
-                <div className="space-y-3">
-                    {filteredVisite.map(visita => (
-                        <Link
-                            key={visita.id}
-                            to={`/poliambulatorio/visite/${visita.id}`}
-                            className="block p-4 bg-white rounded-lg border border-gray-200 hover:border-teal-300 transition-colors group"
-                        >
-                            <div className="flex items-start justify-between">
-                                <div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="font-medium text-gray-900 group-hover:text-teal-600">
-                                            Visita del {formatDate(new Date(visita.createdAt), 'short')}
-                                        </span>
-                                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${visita.stato === 'COMPLETATA' ? 'bg-green-100 text-green-700' :
-                                            visita.stato === 'IN_CORSO' ? 'bg-amber-100 text-amber-700' :
-                                                'bg-gray-100 text-gray-700'
-                                            }`}>
-                                            {visita.stato}
-                                        </span>
+                <div className="space-y-2">
+                    {filteredVisite.map(visita => {
+                        const dataOra = visita.dataOra || visita.createdAt;
+                        const referto = visita.referti?.[0];
+                        return (
+                            <div
+                                key={visita.id}
+                                className="p-4 bg-white rounded-lg border border-gray-200 hover:border-teal-200 hover:shadow-sm transition-all"
+                            >
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="font-medium text-gray-900 text-sm">
+                                                {visita.prestazione?.nome || 'Visita'}
+                                            </span>
+                                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${visita.stato === 'COMPLETATA' ? 'bg-green-100 text-green-700' :
+                                                visita.stato === 'IN_CORSO' ? 'bg-amber-100 text-amber-700' :
+                                                    visita.stato === 'ANNULLATA' ? 'bg-red-100 text-red-700' :
+                                                        'bg-gray-100 text-gray-700'
+                                                }`}>
+                                                {visita.stato}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-3 mt-1 text-xs text-gray-500 flex-wrap">
+                                            <span className="flex items-center gap-1">
+                                                <Calendar className="h-3 w-3" />
+                                                {formatDate(new Date(dataOra), 'short')}
+                                            </span>
+                                            {visita.medico && (
+                                                <span className="flex items-center gap-1">
+                                                    <Stethoscope className="h-3 w-3" />
+                                                    {formatMedicoName(visita.medico)}
+                                                </span>
+                                            )}
+                                        </div>
+                                        {visita.note && (
+                                            <p className="text-xs text-gray-400 mt-1 line-clamp-1">{visita.note}</p>
+                                        )}
                                     </div>
-                                    {visita.note && (
-                                        <p className="text-sm text-gray-500 mt-1 line-clamp-2">{visita.note}</p>
-                                    )}
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        {referto && (
+                                            <Link
+                                                to={`/poliambulatorio/referti/${referto.id}`}
+                                                className="flex items-center gap-1 text-xs px-2.5 py-1.5 border border-teal-300 text-teal-700 rounded-lg hover:bg-teal-50 transition-colors"
+                                                title="Apri referto"
+                                            >
+                                                <Eye className="h-3.5 w-3.5" />
+                                                Referto
+                                            </Link>
+                                        )}
+                                        <Link
+                                            to={`/poliambulatorio/visite/${visita.id}`}
+                                            className="p-1.5 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded transition-colors"
+                                            title="Apri visita"
+                                        >
+                                            <ChevronRight className="h-4 w-4" />
+                                        </Link>
+                                    </div>
                                 </div>
-                                <ChevronRight className="h-5 w-5 text-gray-400 group-hover:text-teal-600" />
                             </div>
-                        </Link>
-                    ))}
+                        );
+                    })}
                 </div>
             )}
         </div>
@@ -380,83 +438,147 @@ const VisiteList: React.FC<{
 };
 
 /**
- * Reports List
+ * DocumentiList - Lista documenti paziente (Cartella Sanitaria)
+ * Mostra referti PDF generati, attestati, certificati, ecc.
  */
-const RefertiList: React.FC<{
-    referti: Referto[];
-}> = ({ referti }) => {
-    const [filter, setFilter] = useState<'all' | 'firmato' | 'bozza'>('all');
+const DocumentiList: React.FC<{
+    pazienteId: string;
+}> = ({ pazienteId }) => {
+    const [filter, setFilter] = useState<'all' | 'VISITA_MEDICA' | 'CERTIFICATE' | 'other'>('all');
 
-    const filteredReferti = useMemo(() =>
-        referti
-            .filter(r => {
-                if (filter === 'firmato') return r.firmato;
-                if (filter === 'bozza') return !r.firmato;
-                return true;
-            })
-            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
-        [referti, filter]
-    );
+    const { data: docsResponse, isLoading, error, refetch } = useQuery({
+        queryKey: ['paziente-documents', pazienteId, filter],
+        queryFn: async () => {
+            // VISITA_MEDICA and CERTIFICATE are valid TemplateType enum values
+            const filterType = filter !== 'all' && filter !== 'other' ? filter : undefined;
+            return documentService.listByPaziente(pazienteId, { type: filterType as any });
+        },
+        enabled: !!pazienteId
+    });
+
+    const documents = docsResponse?.data || [];
+
+    // Filter 'other' documents (not VISITA_MEDICA or CERTIFICATE)
+    const filteredDocs = useMemo(() => {
+        if (filter === 'other') {
+            return documents.filter(d =>
+                (d.type as string) !== 'VISITA_MEDICA' && (d.type as string) !== 'CERTIFICATE'
+            );
+        }
+        return documents;
+    }, [documents, filter]);
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center py-12">
+                <RefreshCw className="h-6 w-6 text-teal-600 animate-spin" />
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="text-center py-12">
+                <AlertCircle className="h-12 w-12 text-red-300 mx-auto mb-4" />
+                <p className="text-red-500">Errore nel caricamento documenti</p>
+                <button
+                    onClick={() => refetch()}
+                    className="mt-4 px-4 py-2 text-teal-600 hover:bg-teal-50 rounded-lg"
+                >
+                    Riprova
+                </button>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-4">
-            <div className="flex gap-2">
-                {(['all', 'firmato', 'bozza'] as const).map(f => (
+            {/* Filter tabs */}
+            <div className="flex gap-2 flex-wrap">
+                {([
+                    { key: 'all', label: 'Tutti' },
+                    { key: 'VISITA_MEDICA', label: 'Referti' },
+                    { key: 'CERTIFICATE', label: 'Attestati/Certificati' },
+                    { key: 'other', label: 'Altri' }
+                ] as const).map(f => (
                     <button
-                        key={f}
-                        onClick={() => setFilter(f)}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${filter === f
+                        key={f.key}
+                        onClick={() => setFilter(f.key)}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${filter === f.key
                             ? 'bg-teal-100 text-teal-700'
                             : 'text-gray-600 hover:bg-gray-100'
                             }`}
                     >
-                        {f === 'all' ? 'Tutti' : f === 'firmato' ? 'Firmati' : 'Bozze'}
+                        {f.label}
                     </button>
                 ))}
             </div>
 
-            {filteredReferti.length === 0 ? (
+            {filteredDocs.length === 0 ? (
                 <div className="text-center py-8">
-                    <FileText className="h-10 w-10 text-gray-300 mx-auto mb-2" />
-                    <p className="text-gray-500">Nessun referto trovato</p>
+                    <Paperclip className="h-10 w-10 text-gray-300 mx-auto mb-2" />
+                    <p className="text-gray-500">Nessun documento trovato</p>
                 </div>
             ) : (
                 <div className="space-y-3">
-                    {filteredReferti.map(referto => (
-                        <div
-                            key={referto.id}
-                            className="p-4 bg-white rounded-lg border border-gray-200 hover:border-teal-300 transition-colors"
-                        >
-                            <div className="flex items-start justify-between">
-                                <div>
+                    {filteredDocs.map(doc => {
+                        // Use displayFilename from metadata if available
+                        const displayName = (doc.metadata as { displayFilename?: string })?.displayFilename || doc.filename;
+                        const docDate = new Date(doc.generatedAt);
+
+                        return (
+                            <div
+                                key={doc.id}
+                                className="p-4 bg-white rounded-lg border border-gray-200 hover:border-teal-300 transition-colors"
+                            >
+                                <div className="flex items-start justify-between">
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-2">
+                                            <FileText className="h-5 w-5 text-gray-400" />
+                                            <span className="font-medium text-gray-900">
+                                                {displayName}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
+                                            <span>{formatDate(docDate, 'short')}</span>
+                                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${(doc.type as string) === 'VISITA_MEDICA' ? 'bg-teal-100 text-teal-700' :
+                                                (doc.type as string) === 'CERTIFICATE' ? 'bg-blue-100 text-blue-700' :
+                                                    'bg-gray-100 text-gray-700'
+                                                }`}>
+                                                {(doc.type as string) === 'VISITA_MEDICA' ? 'Referto' :
+                                                    (doc.type as string) === 'CERTIFICATE' ? 'Attestato/Certificato' :
+                                                        doc.type}
+                                            </span>
+                                            {doc.generator && (
+                                                <span className="text-xs">
+                                                    di {doc.generator.lastName} {doc.generator.firstName}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
                                     <div className="flex items-center gap-2">
-                                        <span className="font-medium text-gray-900">
-                                            Referto del {formatDate(new Date(referto.createdAt), 'short')}
-                                        </span>
-                                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${referto.firmato ? 'bg-green-100 text-green-700' :
-                                            referto.stato === 'COMPLETATO' ? 'bg-blue-100 text-blue-700' :
-                                                'bg-amber-100 text-amber-700'
-                                            }`}>
-                                            {referto.firmato ? 'Firmato' : referto.stato}
-                                        </span>
+                                        <a
+                                            href={doc.fileUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="p-2 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded"
+                                            title="Visualizza"
+                                        >
+                                            <Eye className="h-5 w-5" />
+                                        </a>
+                                        <a
+                                            href={doc.fileUrl}
+                                            download={displayName}
+                                            className="p-2 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded"
+                                            title="Scarica"
+                                        >
+                                            <Download className="h-5 w-5" />
+                                        </a>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <Link
-                                        to={`/poliambulatorio/referti/${referto.id}`}
-                                        className="p-2 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded"
-                                    >
-                                        <Eye className="h-5 w-5" />
-                                    </Link>
-                                    {referto.firmato && (
-                                        <button className="p-2 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded">
-                                            <Download className="h-5 w-5" />
-                                        </button>
-                                    )}
-                                </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             )}
         </div>
@@ -465,19 +587,131 @@ const RefertiList: React.FC<{
 
 /**
  * Trend Chart Component - Grafici parametri vitali
+ * @param initialField - Optional field name from URL param to auto-select the corresponding metric
  */
-const TrendChart: React.FC = () => {
-    const [selectedMetric, setSelectedMetric] = useState<'pressione' | 'frequenza' | 'temperatura' | 'peso'>('pressione');
+type MetricKey = 'pressione' | 'frequenza' | 'temperatura' | 'peso' | 'bmi' | 'saturazione' | 'glicemia';
 
-    // Dati mock per demo - in produzione verrebbero dalle visite
-    const trendData = useMemo(() => [
-        { data: '01/10', pressione_sys: 125, pressione_dia: 82, frequenza: 72, temperatura: 36.4, peso: 75.2 },
-        { data: '15/10', pressione_sys: 128, pressione_dia: 85, frequenza: 75, temperatura: 36.6, peso: 75.0 },
-        { data: '01/11', pressione_sys: 122, pressione_dia: 80, frequenza: 70, temperatura: 36.5, peso: 74.8 },
-        { data: '15/11', pressione_sys: 120, pressione_dia: 78, frequenza: 68, temperatura: 36.3, peso: 74.5 },
-        { data: '01/12', pressione_sys: 118, pressione_dia: 76, frequenza: 70, temperatura: 36.5, peso: 74.6 },
-        { data: '12/12', pressione_sys: 120, pressione_dia: 80, frequenza: 72, temperatura: 36.5, peso: 74.5 },
-    ], []);
+/** Maps visit field names (from datiStrutturati) to TrendChart metric keys */
+const FIELD_TO_METRIC: Record<string, MetricKey> = {
+    pressioneSistolica: 'pressione',
+    pressioneDiastolica: 'pressione',
+    sistolica: 'pressione',
+    diastolica: 'pressione',
+    pressione: 'pressione',
+    frequenzaCardiaca: 'frequenza',
+    frequenza: 'frequenza',
+    temperatura: 'temperatura',
+    peso: 'peso',
+    altezza: 'peso',
+    bmi: 'bmi',
+    saturazione: 'saturazione',
+    saturazioneO2: 'saturazione',
+    glicemia: 'glicemia',
+};
+
+const TrendChart: React.FC<{ pazienteId: string; initialField?: string }> = ({ pazienteId, initialField }) => {
+    const [selectedMetric, setSelectedMetric] = useState<MetricKey>(() => {
+        if (initialField) {
+            return FIELD_TO_METRIC[initialField] || 'pressione';
+        }
+        return 'pressione';
+    });
+
+    // Sync selectedMetric when initialField changes (e.g., navigating from different vital parameter)
+    useEffect(() => {
+        if (initialField) {
+            const mapped = FIELD_TO_METRIC[initialField];
+            if (mapped) {
+                setSelectedMetric(mapped);
+            }
+        }
+    }, [initialField]);
+
+    // Fetch real historical data from patient visits
+    const { data: storicoData, isLoading: isLoadingStorico } = useQuery({
+        queryKey: ['paziente-trend-storico', pazienteId],
+        queryFn: () => pazientiApi.getStorico(pazienteId),
+        enabled: !!pazienteId,
+        staleTime: 5 * 60 * 1000
+    });
+
+    // Extract vital parameters from datiStrutturati of each visit
+    const trendData = useMemo(() => {
+        if (!storicoData?.visite) return [];
+
+        const dataPoints: Array<{
+            data: string;
+            dataOraRaw: string;
+            pressione_sys: number | null;
+            pressione_dia: number | null;
+            frequenza: number | null;
+            temperatura: number | null;
+            peso: number | null;
+            bmi: number | null;
+            saturazione: number | null;
+            glicemia: number | null;
+        }> = [];
+
+        for (const visita of storicoData.visite) {
+            if (!visita.datiStrutturati || typeof visita.datiStrutturati !== 'object') continue;
+
+            const dati = visita.datiStrutturati as Record<string, unknown>;
+            const dateStr = visita.dataOra || visita.createdAt;
+
+            // Helper: extract numeric value from individual field or composite VITALS object
+            const extractNum = (keys: string[]): number | null => {
+                for (const key of keys) {
+                    if (typeof dati[key] === 'number') return dati[key] as number;
+                }
+                // Also check composite VITALS objects (e.g., parametriVitali.sistolica)
+                for (const val of Object.values(dati)) {
+                    if (val && typeof val === 'object' && !Array.isArray(val)) {
+                        const obj = val as Record<string, unknown>;
+                        for (const key of keys) {
+                            if (typeof obj[key] === 'number') return obj[key] as number;
+                        }
+                    }
+                }
+                return null;
+            };
+
+            const sys = extractNum(['pressioneSistolica', 'sistolica']);
+            const dia = extractNum(['pressioneDiastolica', 'diastolica']);
+            const fc = extractNum(['frequenzaCardiaca', 'frequenza']);
+            const temp = extractNum(['temperatura']);
+            const peso = extractNum(['peso']);
+            const altezza = extractNum(['altezza']);
+            const spo2 = extractNum(['saturazioneO2', 'saturazione']);
+            const glic = extractNum(['glicemia']);
+            // Calculate BMI from peso/altezza if both present
+            const rawBmi = extractNum(['bmi']);
+            const bmi = rawBmi !== null ? rawBmi
+                : (peso !== null && altezza !== null && altezza > 0)
+                    ? Math.round((peso / Math.pow(altezza / 100, 2)) * 10) / 10
+                    : null;
+
+            if (sys !== null || dia !== null || fc !== null || temp !== null || peso !== null || bmi !== null || spo2 !== null || glic !== null) {
+                const d = new Date(dateStr);
+                dataPoints.push({
+                    data: d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }),
+                    dataOraRaw: dateStr,
+                    pressione_sys: sys,
+                    pressione_dia: dia,
+                    frequenza: fc,
+                    temperatura: temp,
+                    peso: peso,
+                    bmi: bmi,
+                    saturazione: spo2,
+                    glicemia: glic
+                });
+            }
+        }
+
+        // Sort chronologically and take last 20 data points
+        return dataPoints
+            .sort((a, b) => new Date(a.dataOraRaw).getTime() - new Date(b.dataOraRaw).getTime())
+            .slice(-20);
+    }, [storicoData?.visite]);
 
     const metrics = {
         pressione: {
@@ -510,6 +744,27 @@ const TrendChart: React.FC = () => {
             color: '#10b981',
             unit: 'kg',
             lines: [{ key: 'peso', name: 'Peso', color: '#10b981' }]
+        },
+        bmi: {
+            label: 'BMI (Indice Massa Corporea)',
+            icon: Activity,
+            color: '#8b5cf6',
+            unit: '',
+            lines: [{ key: 'bmi', name: 'BMI', color: '#8b5cf6' }]
+        },
+        saturazione: {
+            label: 'Saturazione O₂',
+            icon: Droplets,
+            color: '#06b6d4',
+            unit: '%',
+            lines: [{ key: 'saturazione', name: 'SpO₂', color: '#06b6d4' }]
+        },
+        glicemia: {
+            label: 'Glicemia',
+            icon: Candy,
+            color: '#d97706',
+            unit: 'mg/dL',
+            lines: [{ key: 'glicemia', name: 'Glicemia', color: '#d97706' }]
         }
     };
 
@@ -517,24 +772,42 @@ const TrendChart: React.FC = () => {
     const Icon = currentMetric.icon;
 
     // Calcola ultimo valore e variazione - type-safe
-    const lastValue = trendData[trendData.length - 1];
-    const prevValue = trendData[trendData.length - 2];
+    const lastValue = trendData.length > 0 ? trendData[trendData.length - 1] : null;
+    const prevValue = trendData.length > 1 ? trendData[trendData.length - 2] : null;
 
-    // Tipo per i dati del trend e le sue chiavi numeriche
-    type TrendDataPoint = typeof trendData[0];
-    type TrendDataKey = 'pressione_sys' | 'pressione_dia' | 'frequenza' | 'temperatura' | 'peso';
+    type TrendDataKey = 'pressione_sys' | 'pressione_dia' | 'frequenza' | 'temperatura' | 'peso' | 'bmi' | 'saturazione' | 'glicemia';
 
-    // Helper function per accedere ai valori numerici in modo type-safe
-    const getValueFromTrendData = (dataPoint: TrendDataPoint, key: TrendDataKey): number => {
-        return dataPoint[key];
-    };
+    // Fields where increase is NOT positive (higher = worse)
+    const inverseFields: TrendDataKey[] = ['bmi', 'temperatura', 'glicemia'];
 
     const getVariation = (key: TrendDataKey) => {
-        const curr = getValueFromTrendData(lastValue, key);
-        const prev = getValueFromTrendData(prevValue, key);
-        const diff = curr - prev;
+        const curr = lastValue?.[key] ?? null;
+        const prev = prevValue?.[key] ?? null;
+        if (curr === null) return null;
+        const diff = prev !== null ? curr - prev : 0;
         return { value: curr, diff, isPositive: diff >= 0 };
     };
+
+    // Loading state
+    if (isLoadingStorico) {
+        return (
+            <div className="flex items-center justify-center py-16">
+                <RefreshCw className="h-6 w-6 text-teal-600 animate-spin mr-3" />
+                <span className="text-gray-500">Caricamento trend...</span>
+            </div>
+        );
+    }
+
+    // Empty state
+    if (trendData.length === 0) {
+        return (
+            <div className="text-center py-16">
+                <Activity className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-gray-600 mb-2">Nessun dato disponibile</h3>
+                <p className="text-sm text-gray-400">I dati dei parametri vitali appariranno qui dopo le visite con campi compilati.</p>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -548,8 +821,8 @@ const TrendChart: React.FC = () => {
                             key={key}
                             onClick={() => setSelectedMetric(key)}
                             className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${selectedMetric === key
-                                    ? 'bg-teal-100 text-teal-700 ring-2 ring-teal-500'
-                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                ? 'bg-teal-100 text-teal-700 ring-2 ring-teal-500'
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                                 }`}
                         >
                             <MetricIcon className="h-4 w-4" />
@@ -568,7 +841,7 @@ const TrendChart: React.FC = () => {
                         </div>
                         <div>
                             <h3 className="font-semibold text-gray-900">{currentMetric.label}</h3>
-                            <p className="text-sm text-gray-500">Ultimi 3 mesi</p>
+                            <p className="text-sm text-gray-500">Ultime {trendData.length} rilevazioni</p>
                         </div>
                     </div>
 
@@ -576,15 +849,28 @@ const TrendChart: React.FC = () => {
                     <div className="text-right">
                         {currentMetric.lines.map(line => {
                             const variation = getVariation(line.key as TrendDataKey);
+                            if (!variation) return (
+                                <div key={line.key} className="mb-1 last:mb-0">
+                                    <span className="text-gray-400 text-sm">N/D</span>
+                                </div>
+                            );
                             return (
                                 <div key={line.key} className="mb-1 last:mb-0">
                                     <span className="text-2xl font-bold" style={{ color: line.color }}>
                                         {variation.value}
                                     </span>
                                     <span className="text-gray-500 ml-1">{currentMetric.unit}</span>
-                                    <span className={`ml-2 text-sm ${variation.diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                        {variation.diff >= 0 ? '↑' : '↓'} {Math.abs(variation.diff).toFixed(1)}
-                                    </span>
+                                    {prevValue && variation.diff !== 0 && (() => {
+                                        const isInverse = inverseFields.includes(line.key as TrendDataKey);
+                                        const isPositive = isInverse
+                                            ? variation.diff < 0  // For BMI/temp, decrease is positive
+                                            : variation.diff > 0;
+                                        return (
+                                            <span className={`ml-2 text-sm ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                                                {variation.diff >= 0 ? '↑' : '↓'} {Math.abs(variation.diff).toFixed(1)}
+                                            </span>
+                                        );
+                                    })()}
                                 </div>
                             );
                         })}
@@ -639,7 +925,7 @@ const TrendChart: React.FC = () => {
                     const metric = metrics[key];
                     const MetricIcon = metric.icon;
                     const lastValKey = metric.lines[0].key as TrendDataKey;
-                    const lastVal = getValueFromTrendData(lastValue, lastValKey);
+                    const lastVal = lastValue?.[lastValKey] ?? null;
                     return (
                         <div
                             key={key}
@@ -652,8 +938,8 @@ const TrendChart: React.FC = () => {
                             </div>
                             <p className="text-xl font-bold text-gray-900">
                                 {key === 'pressione'
-                                    ? `${lastValue.pressione_sys}/${lastValue.pressione_dia}`
-                                    : lastVal
+                                    ? `${lastValue?.pressione_sys ?? '—'}/${lastValue?.pressione_dia ?? '—'}`
+                                    : lastVal ?? '—'
                                 }
                                 <span className="text-sm font-normal text-gray-500 ml-1">
                                     {metric.unit}
@@ -674,7 +960,23 @@ const TrendChart: React.FC = () => {
 export const CartellaPaziente: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const [activeTab, setActiveTab] = useState<TabType>('overview');
+    const { hasBillingFeature } = useBillingAccess();
+
+    // Read tab from query params (e.g., ?tab=trend&field=peso)
+    useEffect(() => {
+        const tabParam = searchParams.get('tab');
+        const allowedTabs = hasBillingFeature
+            ? ['overview', 'visite', 'documenti', 'trend', 'consensi', 'fatturazione', 'medicina_lavoro', 'formazione']
+            : ['overview', 'visite', 'documenti', 'trend', 'consensi', 'medicina_lavoro', 'formazione'];
+
+        if (tabParam && allowedTabs.includes(tabParam)) {
+            setActiveTab(tabParam as TabType);
+        } else if (!hasBillingFeature && activeTab === 'fatturazione') {
+            setActiveTab('overview');
+        }
+    }, [activeTab, hasBillingFeature, searchParams]);
 
     // Queries
     const { data: paziente, isLoading: loadingPaziente } = useQuery({
@@ -741,6 +1043,54 @@ export const CartellaPaziente: React.FC = () => {
         return events;
     }, [visite, referti, appuntamentiData]);
 
+    // Check if patient has a company assigned (for MDL tab visibility)
+    const isPatientWithCompany = useMemo(() => {
+        const profiles: any[] = (paziente as any)?.tenantProfiles || [];
+        const roles: any[] = (paziente as any)?.personRoles || [];
+        return profiles.some((p: any) => p.companyTenantProfileId != null) ||
+            roles.some((r: any) => r.roleType === 'EMPLOYEE');
+    }, [paziente]);
+
+    // MDL data (lazy loaded when tab is active)
+    const { data: mdlData } = useQuery<{ mansioni: any[]; rischi: any[] }>({
+        queryKey: ['mdl-rischi-paziente', id],
+        queryFn: () => apiGet<any>(`/api/v1/clinica/mansioni/worker/${id}/risks`)
+            .then((r: any) => {
+                const data = r?.data;
+                return {
+                    rischi: Array.isArray(data?.rischi) ? data.rischi : [],
+                    mansioni: Array.isArray(data?.mansioni) ? data.mansioni : [],
+                };
+            })
+            .catch(() => ({ rischi: [], mansioni: [] })),
+        enabled: !!id && (activeTab === 'medicina_lavoro' || isPatientWithCompany)
+    });
+
+    const { data: mdlGiudizi } = useQuery({
+        queryKey: ['mdl-giudizi-paziente', id],
+        queryFn: () => apiGet<any>(`/api/v1/clinica/giudizi-idoneita?personId=${id}&limit=10`)
+            .then(r => Array.isArray(r) ? r : (r?.data || r?.giudizi || []))
+            .catch(() => []),
+        enabled: !!id && (activeTab === 'medicina_lavoro' || isPatientWithCompany)
+    });
+
+    // Courses (formazione)
+    const { data: corsiFData } = useQuery({
+        queryKey: ['corsi-paziente', id],
+        queryFn: () => apiGet<any>(`/api/v1/schedules?personId=${id}&limit=10`)
+            .then(r => Array.isArray(r) ? r : (r?.data || r?.items || []))
+            .catch(() => []),
+        enabled: !!id && activeTab === 'formazione'
+    });
+
+    const { data: attestatiData } = useQuery({
+        queryKey: ['attestati-paziente', id],
+        queryFn: () => documentService.listByPaziente(id!, { type: 'CERTIFICATE' as any })
+            .then(res => res.data || [])
+            .catch(() => []),
+        enabled: !!id && activeTab === 'formazione'
+    });
+
     // Loading
     if (loadingPaziente) {
         return (
@@ -784,7 +1134,7 @@ export const CartellaPaziente: React.FC = () => {
                         </button>
                         <div>
                             <h1 className="text-xl font-bold text-gray-900">Cartella Paziente</h1>
-                            <p className="text-sm text-gray-500">{paziente.cognome} {paziente.nome}</p>
+                            <p className="text-sm text-gray-500">{paziente.lastName || paziente.cognome} {paziente.firstName || paziente.nome}</p>
                         </div>
                     </div>
                 </div>
@@ -795,6 +1145,7 @@ export const CartellaPaziente: React.FC = () => {
                 {/* Patient Header */}
                 <PatientHeader
                     paziente={paziente}
+                    personId={id}
                     onEdit={() => navigate(`/poliambulatorio/pazienti/${id}/modifica`)}
                 />
 
@@ -812,9 +1163,12 @@ export const CartellaPaziente: React.FC = () => {
                             {([
                                 { key: 'overview', label: 'Panoramica', icon: <Activity className="h-4 w-4" /> },
                                 { key: 'visite', label: 'Visite', icon: <Stethoscope className="h-4 w-4" /> },
-                                { key: 'referti', label: 'Referti', icon: <FileText className="h-4 w-4" /> },
                                 { key: 'documenti', label: 'Documenti', icon: <Paperclip className="h-4 w-4" /> },
-                                { key: 'trend', label: 'Trend', icon: <TrendingUp className="h-4 w-4" /> }
+                                { key: 'trend', label: 'Trend', icon: <TrendingUp className="h-4 w-4" /> },
+                                { key: 'consensi', label: 'Consensi', icon: <Shield className="h-4 w-4" /> },
+                                ...(hasBillingFeature ? [{ key: 'fatturazione' as const, label: 'Fatture', icon: <Euro className="h-4 w-4" /> }] : []),
+                                ...(isPatientWithCompany ? [{ key: 'medicina_lavoro' as const, label: 'Medicina del Lavoro', icon: <ClipboardList className="h-4 w-4" /> }] : []),
+                                { key: 'formazione' as const, label: 'Formazione', icon: <GraduationCap className="h-4 w-4" /> }
                             ] as const).map(tab => (
                                 <button
                                     key={tab.key}
@@ -884,18 +1238,242 @@ export const CartellaPaziente: React.FC = () => {
                                         </div>
                                     )}
                                 </div>
+                                {/* Consensi FSE Summary */}
+                                {id && (
+                                    <div className="lg:col-span-2">
+                                        <ConsentFSESummary
+                                            personId={id}
+                                            onViewDetails={() => setActiveTab('consensi')}
+                                        />
+                                    </div>
+                                )}
+
                             </div>
                         )}
 
-                        {activeTab === 'visite' && <VisiteList visite={visite || []} />}
-                        {activeTab === 'referti' && <RefertiList referti={referti || []} />}
-                        {activeTab === 'documenti' && (
-                            <div className="text-center py-12">
-                                <Paperclip className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                                <p className="text-gray-500">Gestione documenti in sviluppo</p>
+                        {activeTab === 'visite' && <VisiteList visite={(paziente as any)?.visiteComePaziente || visite || []} />}
+                        {activeTab === 'documenti' && id && (
+                            <div className="space-y-6">
+                                {/* Referti clinici dalla cartella */}
+                                {(referti || []).length > 0 && (
+                                    <div>
+                                        <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                                            <FileText className="h-4 w-4 text-teal-600" />
+                                            Referti Clinici
+                                        </h4>
+                                        <div className="space-y-2">
+                                            {[...(referti || [])]
+                                                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                                                .map(referto => (
+                                                    <div key={referto.id} className="p-3 bg-white rounded-lg border border-gray-200 hover:border-teal-300 transition-colors flex items-center justify-between gap-3">
+                                                        <div className="flex items-center gap-3 min-w-0">
+                                                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${referto.firmato ? 'bg-green-100 text-green-700'
+                                                                    : referto.stato === 'COMPLETATO' ? 'bg-blue-100 text-blue-700'
+                                                                        : 'bg-amber-100 text-amber-700'
+                                                                }`}>
+                                                                {referto.firmato ? 'Firmato' : referto.stato}
+                                                            </span>
+                                                            <span className="text-sm text-gray-700 truncate">
+                                                                {referto.titolo || `Referto del ${formatDate(new Date(referto.createdAt), 'short')}`}
+                                                            </span>
+                                                        </div>
+                                                        <Link
+                                                            to={`/poliambulatorio/referti/${referto.id}`}
+                                                            className="p-1.5 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded flex-shrink-0 transition-colors"
+                                                            title="Apri referto"
+                                                        >
+                                                            <Eye className="h-4 w-4" />
+                                                        </Link>
+                                                    </div>
+                                                ))}
+                                        </div>
+                                    </div>
+                                )}
+                                {/* Documenti generati (PDF) */}
+                                <DocumentiList pazienteId={id} />
                             </div>
                         )}
-                        {activeTab === 'trend' && <TrendChart />}
+                        {activeTab === 'trend' && id && <TrendChart pazienteId={id} initialField={searchParams.get('field') || undefined} />}
+                        {activeTab === 'consensi' && id && (
+                            <div>
+                                <ConsentFSEForm
+                                    personId={id}
+                                    personName={`${paziente.lastName || paziente.cognome} ${paziente.firstName || paziente.nome}`}
+                                />
+                                <ConsentiTabletFirmati pazienteId={id} />
+                            </div>
+                        )}
+                        {hasBillingFeature && activeTab === 'fatturazione' && id && (
+                            <QuickFatturazioneTab
+                                context={{
+                                    tipoServizio: 'VISITA',
+                                    personaId: id,
+                                    cessionarioDenominazione: `${paziente.lastName || paziente.cognome || ''} ${paziente.firstName || paziente.nome || ''}`.trim(),
+                                    cessionarioCF: paziente.codiceFiscale || paziente.taxCode,
+                                    sistemaTsDefault: 0,
+                                }}
+                                compact={false}
+                            />
+                        )}
+
+                        {activeTab === 'medicina_lavoro' && (
+                            <div className="space-y-6">
+                                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                                    <ClipboardList className="h-5 w-5 text-teal-600" />
+                                    Medicina del Lavoro
+                                </h3>
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                    {/* Mansioni e Rischi */}
+                                    <div>
+                                        <h4 className="text-sm font-semibold text-gray-700 mb-3">Mansioni Assegnate</h4>
+                                        {!mdlData?.mansioni?.length ? (
+                                            <div className="bg-gray-50 rounded-lg p-4 text-sm text-gray-500">Nessuna mansione assegnata.</div>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                {mdlData.mansioni.map((m: any, idx: number) => (
+                                                    <div key={idx} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                                                        <p className="text-sm font-medium text-gray-800">
+                                                            {m.denominazione || m.codice || `Mansione ${idx + 1}`}
+                                                            {m.isPrimaria && <span className="ml-2 text-xs bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded">Primaria</span>}
+                                                        </p>
+                                                        {m.denominazione && m.codice && (
+                                                            <p className="text-xs text-gray-400 mt-0.5">{m.codice}</p>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {(mdlData?.rischi?.length ?? 0) > 0 && (
+                                            <div className="mt-4">
+                                                <h4 className="text-sm font-semibold text-gray-700 mb-2">Rischi Lavorativi</h4>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {mdlData!.rischi.map((r: any, idx: number) => (
+                                                        <span key={idx} className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-1 rounded-full">
+                                                            {r.codiceRischio || r.codice || r.nome}{r.livello ? ` – Lv.${r.livello}` : ''}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                    {/* Giudizi di Idoneità */}
+                                    <div>
+                                        <h4 className="text-sm font-semibold text-gray-700 mb-3">Giudizi di Idoneità</h4>
+                                        {!mdlGiudizi || mdlGiudizi.length === 0 ? (
+                                            <div className="bg-gray-50 rounded-lg p-4 text-sm text-gray-500">Nessun giudizio registrato.</div>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                {(mdlGiudizi as any[]).slice(0, 5).map((g: any, idx: number) => {
+                                                    const tipo = g.tipoGiudizio || g.tipo || '';
+                                                    const ok = tipo.startsWith('IDONEO') && !tipo.includes('NON');
+                                                    const nok = tipo.startsWith('NON_IDONEO');
+                                                    return (
+                                                        <div key={idx} className="bg-gray-50 rounded-lg p-3 border border-gray-200 flex items-start gap-2">
+                                                            {ok ? <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" /> : nok ? <XCircle className="h-4 w-4 text-red-500 mt-0.5" /> : <AlertCircle className="h-4 w-4 text-amber-500 mt-0.5" />}
+                                                            <div className="flex-1">
+                                                                <p className={`text-sm font-medium ${ok ? 'text-green-700' : nok ? 'text-red-700' : 'text-amber-700'}`}>{tipo.replace(/_/g, ' ')}</p>
+                                                                {g.dataScadenza && <p className="text-xs text-gray-400">Scade: {new Date(g.dataScadenza).toLocaleDateString('it-IT')}</p>}
+                                                            </div>
+                                                            <span className="text-xs text-gray-400 flex-shrink-0">{g.dataVisita ? new Date(g.dataVisita).toLocaleDateString('it-IT') : ''}</span>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'formazione' && (
+                            <div className="space-y-6">
+                                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                                    <GraduationCap className="h-5 w-5 text-blue-600" />
+                                    Formazione
+                                </h3>
+
+                                {/* Corsi */}
+                                <div>
+                                    <h4 className="text-sm font-semibold text-gray-700 mb-3">Corsi Frequentati</h4>
+                                    {!corsiFData || (corsiFData as any[]).length === 0 ? (
+                                        <div className="bg-gray-50 rounded-lg p-6 text-center text-sm text-gray-500">
+                                            Nessun corso registrato.
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            {(corsiFData as any[]).map((corso: any, idx: number) => {
+                                                const status = (corso.status || corso.stato || '').toUpperCase();
+                                                const statusCls = status === 'COMPLETED' || status === 'COMPLETATO'
+                                                    ? 'bg-green-100 text-green-700'
+                                                    : status === 'IN_PROGRESS' || status === 'IN_CORSO'
+                                                        ? 'bg-blue-100 text-blue-700'
+                                                        : status === 'CANCELLED' || status === 'ANNULLATO'
+                                                            ? 'bg-red-100 text-red-700'
+                                                            : 'bg-gray-100 text-gray-600';
+                                                const statusLabel = status === 'COMPLETED' || status === 'COMPLETATO' ? 'Completato'
+                                                    : status === 'IN_PROGRESS' || status === 'IN_CORSO' ? 'In corso'
+                                                        : status === 'CANCELLED' || status === 'ANNULLATO' ? 'Annullato'
+                                                            : status === 'PLANNED' || status === 'PIANIFICATO' ? 'Pianificato'
+                                                                : status || null;
+                                                const dataCorso = corso.startDate || corso.dataInizio;
+                                                return (
+                                                    <div key={idx} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                                                        <div className="flex items-start justify-between gap-2">
+                                                            <div>
+                                                                <p className="text-sm font-medium text-gray-800">
+                                                                    {corso.course?.title || corso.course?.nome || corso.courseName || corso.nome || `Corso ${idx + 1}`}
+                                                                </p>
+                                                                {dataCorso && (
+                                                                    <p className="text-xs text-gray-400 mt-0.5">
+                                                                        {new Date(dataCorso).toLocaleDateString('it-IT')}
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                            {statusLabel && (
+                                                                <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${statusCls}`}>
+                                                                    {statusLabel}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Attestati / Certificati (da DocumentoCompilato tipo CERTIFICATE) */}
+                                {(attestatiData as any[])?.length > 0 && (
+                                    <div>
+                                        <h4 className="text-sm font-semibold text-gray-700 mb-3">Attestati / Certificati</h4>
+                                        <div className="space-y-2">
+                                            {(attestatiData as any[]).map((att: any, idx: number) => {
+                                                const nome = att.metadata?.displayFilename || att.metadata?.courseName || att.filename || `Attestato ${idx + 1}`;
+                                                return (
+                                                    <div key={att.id || idx} className="bg-blue-50 rounded-lg p-3 border border-blue-200 flex items-start justify-between gap-2">
+                                                        <div>
+                                                            <p className="text-sm font-medium text-blue-900">{nome}</p>
+                                                            {att.generatedAt && (
+                                                                <p className="text-xs text-blue-600 mt-0.5">
+                                                                    Generato: {new Date(att.generatedAt).toLocaleDateString('it-IT')}
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                        <Link
+                                                            to={`/poliambulatorio/documenti/${att.id}`}
+                                                            className="p-1 text-blue-400 hover:text-blue-600 rounded flex-shrink-0 transition-colors"
+                                                            title="Apri attestato"
+                                                        >
+                                                            <Eye className="h-4 w-4" />
+                                                        </Link>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

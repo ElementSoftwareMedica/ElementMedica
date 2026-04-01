@@ -7,7 +7,7 @@ import {
   Link2,
   Lock
 } from 'lucide-react';
-import { EntityDefinition, EntityPermission } from '../../../services/advancedPermissions';
+import { EntityDefinition, EntityPermission } from '../../../services/advanced-permissions';
 import { Tenant } from '../../../hooks/useTenants';
 import { PERMISSION_ACTIONS, PERMISSION_SCOPES } from './constants';
 import { getPermission } from './utils';
@@ -80,25 +80,25 @@ const PermissionsSection: React.FC<PermissionsSectionProps> = ({
   };
 
   return (
-    <div className="bg-white border-r border-gray-200 h-full flex flex-col">
+    <div className="bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 h-full flex flex-col">
       {/* Header generale con controlli */}
-      <div className={`p-4 border-b border-gray-200 ${bulkMode ? 'bg-orange-50' : 'bg-gray-50'}`}>
+      <div className={`p-4 border-b border-gray-200 dark:border-gray-700 ${bulkMode ? 'bg-orange-50 dark:bg-orange-900/20' : 'bg-gray-50 dark:bg-gray-700/50'}`}>
         <div className="flex items-center justify-between mb-3">
-          <h4 className="font-medium text-gray-900">
+          <h4 className="font-medium text-gray-900 dark:text-gray-50">
             {bulkMode ? 'Modalità Multipla' : 'Permessi Azioni'}
           </h4>
           <div className="flex space-x-2">
             <button
               type="button"
               onClick={onSelectAllActions}
-              className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+              className="text-xs px-2 py-1 bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 rounded hover:bg-violet-200 dark:hover:bg-violet-800/40"
             >
               Seleziona Tutto
             </button>
             <button
               type="button"
               onClick={onClearActionSelection}
-              className="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+              className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
             >
               Deseleziona
             </button>
@@ -241,6 +241,24 @@ const PermissionsSection: React.FC<PermissionsSectionProps> = ({
                       }
                       compact={true}
                     />
+                    {/* P69: Cross-tenant option for relational permissions */}
+                    <label className="flex items-center gap-2 mt-2 text-xs text-gray-600 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={permission.allowCrossTenant ?? false}
+                        onChange={() => {
+                          // Toggle allowCrossTenant - will be handled by parent
+                          onPermissionUpdate(
+                            entity.name,
+                            action.name,
+                            'relational',
+                            permission.relationType as RelationType
+                          );
+                        }}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span>Cross-tenant (accesso a più tenant)</span>
+                    </label>
                   </div>
                 )}
 

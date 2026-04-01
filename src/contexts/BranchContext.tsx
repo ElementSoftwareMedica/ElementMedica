@@ -22,7 +22,7 @@ export type BranchType = 'MEDICA' | 'FORMAZIONE';
  */
 const FRONTEND_TO_BRANCH: Record<string, BranchType> = {
     'element-medica': 'MEDICA',
-    'element-formazione': 'FORMAZIONE',
+    'element-sicurezza': 'FORMAZIONE',
 };
 
 /**

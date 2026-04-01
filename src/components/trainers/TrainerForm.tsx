@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Phone, Mail, User, FileText, Calendar, MapPin, Briefcase, Building, CreditCard } from 'lucide-react';
+import { Phone, Mail, User, FileText, Calendar, MapPin, Briefcase, Building, CreditCard, AlertTriangle } from 'lucide-react';
 import Select from 'react-select';
 import { getCourses } from '../../services/courses';
 import EntityFormLayout from '../shared/form/EntityFormLayout';
 import EntityFormField from '../shared/form/EntityFormField';
 import EntityFormGrid, { EntityFormSection, EntityFormFullWidthField } from '../shared/form/EntityFormGrid';
-import { isValidCodiceFiscale } from '../../lib/utils';
-import { useAsyncValidation } from '../../hooks/useAsyncValidation';
-import { checkEmailAvailability, checkTaxCodeAvailability } from '../../services/validation';
+import { validateCodiceFiscale } from '../../lib/utils';
+import { checkEmailAvailabilityDetails, checkTaxCodeAvailabilityDetails } from '../../services/validation';
+import { DatePickerElegante } from '../ui/DatePickerElegante';
+import { extractBirthPlaceFromTaxCode, extractGenderFromTaxCode, generateTaxCode } from '../../utils/codiceFiscale';
 
 type Trainer = {
   id?: string;
@@ -22,6 +23,9 @@ type Trainer = {
   registerCode?: string;
   iban?: string;
   birthDate?: string | null;
+  birthPlace?: string;
+  birthProvince?: string;
+  gender?: string;
   residenceAddress?: string;
   residenceCity?: string;
   province?: string;
@@ -49,6 +53,9 @@ export default function TrainerForm({ trainer, onSubmit, onCancel, roleType = 'T
   const [certOptions, setCertOptions] = useState<{ value: string; label: string }[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // P59: Warning (non bloccante) per email già esistente
+  const [emailWarning, setEmailWarning] = useState<string>('');
+
   const [formData, setFormData] = useState<TrainerInsert>({
     firstName: '',
     lastName: '',
@@ -61,6 +68,9 @@ export default function TrainerForm({ trainer, onSubmit, onCancel, roleType = 'T
     registerCode: '',
     iban: '',
     birthDate: '',
+    birthPlace: '',
+    birthProvince: '',
+    gender: '',
     residenceAddress: '',
     residenceCity: '',
     province: '',
@@ -70,28 +80,80 @@ export default function TrainerForm({ trainer, onSubmit, onCancel, roleType = 'T
     specialties: [],
   });
 
-  // Validazione async per email (skip se in edit mode)
-  const emailValidation = useAsyncValidation({
-    value: formData.email || '',
-    validator: checkEmailAvailability,
-    errorMessage: 'Questa email è già utilizzata',
-    skip: !!trainer?.id, // Skip in edit mode
-    debounceMs: 800
-  });
+  // P59: Validazione async email - ora solo per warning, non blocca
+  // Non usiamo più useAsyncValidation per email perché vogliamo solo un warning
+  useEffect(() => {
+    const checkEmail = async () => {
+      if (!formData.email || trainer?.id) {
+        setEmailWarning('');
+        return;
+      }
 
-  // Validazione async per codice fiscale (skip se in edit mode)
-  const taxCodeValidation = useAsyncValidation({
-    value: formData.taxCode || '',
-    validator: checkTaxCodeAvailability,
-    errorMessage: 'Questo codice fiscale è già utilizzato',
-    skip: !!trainer?.id, // Skip in edit mode
-    debounceMs: 800
-  });
+      const result = await checkEmailAvailabilityDetails(formData.email);
+      if (!result.available && result.existingPerson) {
+        setEmailWarning(`Questa email è già utilizzata da ${result.existingPerson.fullName}`);
+      } else {
+        setEmailWarning('');
+      }
+    };
+
+    const timer = setTimeout(checkEmail, 800);
+    return () => clearTimeout(timer);
+  }, [formData.email, trainer?.id]);
+
+  // P59: Warning e info per CF cross-tenant
+  const [taxCodeInfo, setTaxCodeInfo] = useState<{
+    warning?: string;
+    canImport?: boolean;
+    existingPerson?: { firstName: string; lastName: string; birthDate?: string };
+  }>({});
+
+  // P59: Validazione CF con supporto cross-tenant import
+  useEffect(() => {
+    const checkTaxCode = async () => {
+      if (!formData.taxCode || trainer?.id || formData.taxCode.length < 16) {
+        setTaxCodeInfo({});
+        return;
+      }
+
+      const result = await checkTaxCodeAvailabilityDetails(formData.taxCode);
+
+      if (result.existsInOtherTenant && result.canImport && result.existingPerson) {
+        // CF esiste in altro tenant - mostra info import
+        setTaxCodeInfo({
+          warning: `Persona esistente in altro tenant: ${result.existingPerson.fullName}. I dati anagrafici verranno importati automaticamente.`,
+          canImport: true,
+          existingPerson: {
+            firstName: result.existingPerson.firstName || '',
+            lastName: result.existingPerson.lastName || '',
+            birthDate: (result.existingPerson as { birthDate?: string }).birthDate
+          }
+        });
+
+        // Auto-compila i campi dalla persona esistente se vuoti
+        setFormData(prev => ({
+          ...prev,
+          firstName: prev.firstName || result.existingPerson?.firstName || '',
+          lastName: prev.lastName || result.existingPerson?.lastName || ''
+        }));
+      } else if (!result.available && result.existsInCurrentTenant) {
+        // CF esiste nello stesso tenant - errore bloccante
+        setTaxCodeInfo({
+          warning: `Questo CF è già associato a ${result.existingPerson?.fullName || 'una persona'} nello stesso tenant`
+        });
+      } else {
+        setTaxCodeInfo({});
+      }
+    };
+
+    const timer = setTimeout(checkTaxCode, 800);
+    return () => clearTimeout(timer);
+  }, [formData.taxCode, trainer?.id]);
 
   // Estrai la data di nascita dal codice fiscale (YYYY-MM-DD)
   const extractBirthDateFromCF = (cf: string): string | null => {
     if (!cf || cf.length < 11) return null;
-    const months = ['A','B','C','D','E','H','L','M','P','R','S','T'];
+    const months = ['A', 'B', 'C', 'D', 'E', 'H', 'L', 'M', 'P', 'R', 'S', 'T'];
     const year = parseInt(cf.substr(6, 2), 10);
     const currentYear = new Date().getFullYear() % 100;
     const fullYear = year > currentYear ? 1900 + year : 2000 + year;
@@ -105,10 +167,15 @@ export default function TrainerForm({ trainer, onSubmit, onCancel, roleType = 'T
 
   useEffect(() => {
     if (trainer) {
+      const taxCodeStr = (trainer.taxCode ?? '') as string;
+      const derivedGender =
+        (trainer.gender as string) ||
+        (taxCodeStr.length === 16 ? (extractGenderFromTaxCode(taxCodeStr) || '') : '');
+
       setFormData({
         firstName: trainer.firstName ?? '',
         lastName: trainer.lastName ?? '',
-        taxCode: trainer.taxCode ?? '',
+        taxCode: taxCodeStr,
         phone: trainer.phone ?? '',
         email: trainer.email ?? '',
         certifications: trainer.certifications ?? [],
@@ -117,6 +184,9 @@ export default function TrainerForm({ trainer, onSubmit, onCancel, roleType = 'T
         registerCode: trainer.registerCode ?? '',
         iban: trainer.iban ?? '',
         birthDate: trainer.birthDate ?? '',
+        birthPlace: trainer.birthPlace ?? '',
+        birthProvince: trainer.birthProvince ?? '',
+        gender: derivedGender,
         residenceAddress: trainer.residenceAddress ?? '',
         residenceCity: trainer.residenceCity ?? '',
         province: trainer.province ?? '',
@@ -131,7 +201,7 @@ export default function TrainerForm({ trainer, onSubmit, onCancel, roleType = 'T
   useEffect(() => {
     async function fetchCerts() {
       try {
-        const courses = (await getCourses()) as Array<{ certifications?: string | string[] }>; 
+        const courses = (await getCourses()) as Array<{ certifications?: string | string[] }>;
         const allCerts: string[] = [];
         (courses || []).forEach((c: { certifications?: string | string[] }) => {
           if (c && c.certifications) {
@@ -165,7 +235,49 @@ export default function TrainerForm({ trainer, onSubmit, onCancel, roleType = 'T
         }
       }
     }
+    // Estrai comune e provincia di nascita se i campi sono vuoti
+    if (formData.taxCode && formData.taxCode.length === 16) {
+      const birthPlaceInfo = extractBirthPlaceFromTaxCode(formData.taxCode);
+      if (birthPlaceInfo) {
+        setFormData(prev => ({
+          ...prev,
+          birthPlace: prev.birthPlace || birthPlaceInfo.comune,
+          birthProvince: prev.birthProvince || birthPlaceInfo.provincia
+        }));
+      }
+      // Auto-fill sesso da codice fiscale se campo vuoto
+      const gender = extractGenderFromTaxCode(formData.taxCode);
+      if (gender) {
+        setFormData(prev => ({ ...prev, gender: prev.gender || (gender as string) }));
+      }
+    }
   }, [formData.taxCode, errors.birthDate]);
+
+  // Auto-genera il codice fiscale quando tutti i dati anagrafici sono presenti e il CF è vuoto
+  useEffect(() => {
+    if (
+      !formData.firstName?.trim() ||
+      !formData.lastName?.trim() ||
+      !formData.birthDate ||
+      !formData.birthPlace?.trim() ||
+      !formData.gender ||
+      formData.gender === 'OTHER' ||
+      formData.taxCode?.trim()
+    ) {
+      return; // Non generare se mancano dati o CF già inserito
+    }
+
+    const generated = generateTaxCode(
+      formData.lastName,
+      formData.firstName,
+      formData.birthDate,
+      formData.gender as 'MALE' | 'FEMALE',
+      formData.birthPlace
+    );
+    if (generated) {
+      setFormData(prev => ({ ...prev, taxCode: generated }));
+    }
+  }, [formData.firstName, formData.lastName, formData.birthDate, formData.birthPlace, formData.gender]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -189,24 +301,25 @@ export default function TrainerForm({ trainer, onSubmit, onCancel, roleType = 'T
     if (!formData.firstName.trim()) ne.firstName = 'Il Nome è obbligatorio';
     if (!formData.lastName.trim()) ne.lastName = 'Il Cognome è obbligatorio';
 
+    // P48 Fix: Usa validateCodiceFiscale per messaggi di errore più specifici
     if (!formData.taxCode || !formData.taxCode.trim()) {
       ne.taxCode = 'Il Codice Fiscale è obbligatorio';
-    } else if (!isValidCodiceFiscale(formData.taxCode)) {
-      ne.taxCode = 'Formato Codice Fiscale non valido';
-    } else if (taxCodeValidation.error) {
-      ne.taxCode = taxCodeValidation.error;
+    } else {
+      const cfValidation = validateCodiceFiscale(formData.taxCode);
+      if (!cfValidation.isValid) {
+        ne.taxCode = cfValidation.error || 'Codice Fiscale non valido';
+      } else if (taxCodeInfo.warning && !taxCodeInfo.canImport) {
+        // P59: Blocca solo se CF esiste nello stesso tenant (non può importare)
+        ne.taxCode = taxCodeInfo.warning;
+      }
+      // NOTA: Se canImport=true, non blocchiamo - è solo un warning per import cross-tenant
     }
 
+    // P59: Email validation - solo formato, non disponibilità (è solo un warning)
     if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       ne.email = 'Formato email non valido';
-    } else if (emailValidation.error) {
-      ne.email = emailValidation.error;
     }
-
-    // Blocca submit se validazione async in corso
-    if (emailValidation.isValidating || taxCodeValidation.isValidating) {
-      ne._async = 'Validazione in corso...';
-    }
+    // NOTA: Non blocchiamo più su email già usata - è solo un warning
 
     setErrors(ne);
     return Object.keys(ne).length === 0;
@@ -227,7 +340,7 @@ export default function TrainerForm({ trainer, onSubmit, onCancel, roleType = 'T
       };
       await onSubmit(payload);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save trainer');
+      setError('Errore nel salvataggio del formatore');
     } finally {
       setLoading(false);
     }
@@ -267,30 +380,78 @@ export default function TrainerForm({ trainer, onSubmit, onCancel, roleType = 'T
             size="md"
             error={errors.lastName}
           />
-          <EntityFormField
-            name="taxCode"
-            label="Codice Fiscale"
-            value={formData.taxCode}
-            onChange={handleChange}
-            leftIcon={<FileText size={18} />}
-            variant="pill"
-            size="md"
-            required
-            error={errors.taxCode || taxCodeValidation.error}
-            helpText={taxCodeValidation.isValidating ? 'Verifica disponibilità...' : undefined}
-          />
-          <EntityFormField
-            name="birthDate"
-            label="Data di Nascita"
-            type="date"
-            value={formData.birthDate || ''}
-            onChange={handleChange}
-            leftIcon={<Calendar size={18} />}
-            variant="pill"
-            size="md"
-            error={errors.birthDate}
-            helpText="Estratta automaticamente dal codice fiscale"
-          />
+          <div className="relative">
+            <EntityFormField
+              name="taxCode"
+              label="Codice Fiscale"
+              value={formData.taxCode}
+              onChange={handleChange}
+              leftIcon={<FileText size={18} />}
+              variant="pill"
+              size="md"
+              required
+              error={errors.taxCode}
+            />
+            {/* P59: Mostra warning per CF cross-tenant (import possibile) */}
+            {taxCodeInfo.canImport && taxCodeInfo.warning && (
+              <div className="mt-1 flex items-center gap-1 text-sm text-amber-600">
+                <AlertTriangle size={14} className="flex-shrink-0" />
+                <span>{taxCodeInfo.warning}</span>
+              </div>
+            )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Data di Nascita</label>
+            <DatePickerElegante
+              value={formData.birthDate || ''}
+              onChange={(date) => handleChange({ target: { name: 'birthDate', value: date ? date.toISOString().split('T')[0] : '' } } as any)}
+              theme="teal"
+            />
+            {errors.birthDate && <p className="mt-1 text-xs text-red-500">{errors.birthDate}</p>}
+            <p className="mt-1 text-xs text-gray-500">Estratta automaticamente dal codice fiscale</p>
+          </div>
+          <div>
+            <EntityFormField
+              name="gender"
+              label="Sesso"
+              type="select"
+              value={formData.gender || ''}
+              onChange={handleChange}
+              leftIcon={<User size={18} />}
+              variant="pill"
+              size="md"
+              options={[
+                { value: '', label: 'Non specificato' },
+                { value: 'MALE', label: 'Maschio' },
+                { value: 'FEMALE', label: 'Femmina' },
+                { value: 'OTHER', label: 'Altro' },
+              ]}
+            />
+          </div>
+          <div>
+            <EntityFormField
+              name="birthPlace"
+              label="Comune di Nascita"
+              value={formData.birthPlace || ''}
+              onChange={handleChange}
+              leftIcon={<MapPin size={18} />}
+              variant="pill"
+              size="md"
+              placeholder="Auto-compilato dal C.F."
+            />
+          </div>
+          <div>
+            <EntityFormField
+              name="birthProvince"
+              label="Prov. Nascita"
+              value={formData.birthProvince || ''}
+              onChange={handleChange}
+              leftIcon={<MapPin size={18} />}
+              variant="pill"
+              size="md"
+              placeholder="Es. MI"
+            />
+          </div>
         </EntityFormGrid>
       </EntityFormSection>
 
@@ -337,19 +498,27 @@ export default function TrainerForm({ trainer, onSubmit, onCancel, roleType = 'T
 
       <EntityFormSection title="Contatti">
         <EntityFormGrid columns={2}>
-          <EntityFormField
-            name="email"
-            label="Email"
-            type="email"
-            value={formData.email}
-            onChange={handleChange}
-            leftIcon={<Mail size={18} />}
-            required
-            variant="pill"
-            size="md"
-            error={errors.email || emailValidation.error}
-            helpText={emailValidation.isValidating ? 'Verifica disponibilità...' : undefined}
-          />
+          <div className="relative">
+            <EntityFormField
+              name="email"
+              label="Email"
+              type="email"
+              value={formData.email}
+              onChange={handleChange}
+              leftIcon={<Mail size={18} />}
+              required
+              variant="pill"
+              size="md"
+              error={errors.email}
+            />
+            {/* P59: Warning per email già esistente (non bloccante) */}
+            {emailWarning && !errors.email && (
+              <div className="mt-1 flex items-center gap-1.5 text-amber-600 text-sm">
+                <AlertTriangle size={14} className="flex-shrink-0" />
+                <span>{emailWarning}</span>
+              </div>
+            )}
+          </div>
           <EntityFormField
             name="phone"
             label="Telefono"
@@ -481,7 +650,8 @@ export default function TrainerForm({ trainer, onSubmit, onCancel, roleType = 'T
                   const values = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
                   setFormData(prev => ({ ...prev, specialties: values }));
                 }}
-                placeholder="Es. Sicurezza, Antincendio"
+                placeholder="Es. Sicurezza, Antincendio, RSPP"
+                helpText="Se la persona ricopre il ruolo di RSPP, aggiungi 'RSPP' tra le specializzazioni"
                 variant="pill"
                 size="md"
               />

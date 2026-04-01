@@ -23,7 +23,7 @@
  */
 
 import express from 'express';
-import middleware from '../../auth/middleware.js';
+import middleware from '../../middleware/auth.js';
 import { checkAdvancedPermission } from '../../middleware/advanced-permissions.js';
 import logger from '../../utils/logger.js';
 import { auditClinico, getEffectiveTenantId } from './utils/clinica-utils.js';
@@ -46,7 +46,7 @@ const router = express.Router();
  * @access Authenticated + VIEW_LISTINI
  */
 router.get('/',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('listini', 'read'),
     auditClinico('list_bundle'),
     async (req, res) => {
@@ -85,14 +85,13 @@ router.get('/',
             logger.error('Failed to list bundles', {
                 component: 'bundle-routes',
                 action: 'list_bundle',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero dei bundle',
-                message: error.message
             });
         }
     }
@@ -104,7 +103,7 @@ router.get('/',
  * @access Authenticated + VIEW_LISTINI
  */
 router.get('/by-prestazione/:prestazioneId',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('listini', 'read'),
     auditClinico('bundle_by_prestazione'),
     async (req, res) => {
@@ -122,7 +121,7 @@ router.get('/by-prestazione/:prestazioneId',
             logger.error('Failed to find bundles by prestazione', {
                 component: 'bundle-routes',
                 action: 'bundle_by_prestazione',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 prestazioneId: req.params.prestazioneId,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -130,7 +129,6 @@ router.get('/by-prestazione/:prestazioneId',
             res.status(500).json({
                 success: false,
                 error: 'Errore nella ricerca bundle',
-                message: error.message
             });
         }
     }
@@ -142,7 +140,7 @@ router.get('/by-prestazione/:prestazioneId',
  * @access Authenticated + VIEW_LISTINI
  */
 router.get('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('listini', 'read'),
     auditClinico('view_bundle'),
     async (req, res) => {
@@ -173,7 +171,7 @@ router.get('/:id',
             logger.error('Failed to get bundle', {
                 component: 'bundle-routes',
                 action: 'view_bundle',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 bundleId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -181,7 +179,6 @@ router.get('/:id',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero del bundle',
-                message: error.message
             });
         }
     }
@@ -193,7 +190,7 @@ router.get('/:id',
  * @access Authenticated + CREATE_LISTINI
  */
 router.post('/',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('listini', 'create'),
     auditClinico('create_bundle'),
     async (req, res) => {
@@ -212,7 +209,7 @@ router.post('/',
             logger.error('Failed to create bundle', {
                 component: 'bundle-routes',
                 action: 'create_bundle',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
@@ -226,14 +223,13 @@ router.post('/',
             if (error.message.includes('not found')) {
                 return res.status(400).json({
                     success: false,
-                    error: error.message
+                    error: 'Errore interno del server'
                 });
             }
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nella creazione del bundle',
-                message: error.message
             });
         }
     }
@@ -245,7 +241,7 @@ router.post('/',
  * @access Authenticated + VIEW_LISTINI
  */
 router.post('/check-applicability',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('listini', 'read'),
     async (req, res) => {
         try {
@@ -269,14 +265,13 @@ router.post('/check-applicability',
             logger.error('Failed to check bundle applicability', {
                 component: 'bundle-routes',
                 action: 'check_bundle_applicability',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore verifica applicabilità bundle',
-                message: error.message
             });
         }
     }
@@ -288,7 +283,7 @@ router.post('/check-applicability',
  * @access Authenticated + VIEW_LISTINI
  */
 router.post('/for-patient',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('listini', 'read'),
     async (req, res) => {
         try {
@@ -306,14 +301,13 @@ router.post('/for-patient',
             logger.error('Failed to get applicable bundles for patient', {
                 component: 'bundle-routes',
                 action: 'bundles_for_patient',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore recupero bundle per paziente',
-                message: error.message
             });
         }
     }
@@ -325,7 +319,7 @@ router.post('/for-patient',
  * @access Authenticated + UPDATE_LISTINI
  */
 router.post('/:id/increment-usage',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('listini', 'update'),
     async (req, res) => {
         try {
@@ -343,7 +337,7 @@ router.post('/:id/increment-usage',
             logger.error('Failed to increment bundle usage', {
                 component: 'bundle-routes',
                 action: 'increment_bundle_usage',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 bundleId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -351,7 +345,6 @@ router.post('/:id/increment-usage',
             res.status(500).json({
                 success: false,
                 error: 'Errore incremento utilizzo bundle',
-                message: error.message
             });
         }
     }
@@ -363,7 +356,7 @@ router.post('/:id/increment-usage',
  * @access Authenticated + UPDATE_LISTINI
  */
 router.put('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('listini', 'update'),
     auditClinico('update_bundle'),
     async (req, res) => {
@@ -388,7 +381,7 @@ router.put('/:id',
             logger.error('Failed to update bundle', {
                 component: 'bundle-routes',
                 action: 'update_bundle',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 bundleId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -403,14 +396,13 @@ router.put('/:id',
             if (error.message.includes('already exists')) {
                 return res.status(409).json({
                     success: false,
-                    error: error.message
+                    error: 'Errore interno del server'
                 });
             }
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nell\'aggiornamento del bundle',
-                message: error.message
             });
         }
     }
@@ -422,7 +414,7 @@ router.put('/:id',
  * @access Authenticated + UPDATE_LISTINI
  */
 router.patch('/:id/toggle',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('listini', 'update'),
     auditClinico('toggle_bundle'),
     async (req, res) => {
@@ -449,7 +441,7 @@ router.patch('/:id/toggle',
             logger.error('Failed to toggle bundle', {
                 component: 'bundle-routes',
                 action: 'toggle_bundle',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 bundleId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -457,7 +449,6 @@ router.patch('/:id/toggle',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel cambio stato bundle',
-                message: error.message
             });
         }
     }
@@ -469,7 +460,7 @@ router.patch('/:id/toggle',
  * @access Authenticated + DELETE_LISTINI
  */
 router.delete('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('listini', 'delete'),
     auditClinico('delete_bundle'),
     async (req, res) => {
@@ -493,7 +484,7 @@ router.delete('/:id',
             logger.error('Failed to delete bundle', {
                 component: 'bundle-routes',
                 action: 'delete_bundle',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 bundleId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -508,7 +499,6 @@ router.delete('/:id',
             res.status(500).json({
                 success: false,
                 error: 'Errore nell\'eliminazione del bundle',
-                message: error.message
             });
         }
     }

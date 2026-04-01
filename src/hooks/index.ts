@@ -53,9 +53,6 @@ export {
   default as useRouteGuardDefault
 } from './routing/useRouteGuard';
 
-// Re-export legacy toast hook for backward compatibility
-export { default as useToastLegacy } from './useToast';
-
 // GDPR Hooks
 export { useGDPRConsent } from './useGDPRConsent';
 export { useAuditTrail } from './useAuditTrail';
@@ -64,10 +61,37 @@ export { useDeletionRequest } from './useDeletionRequest';
 export { usePrivacySettings } from './usePrivacySettings';
 export { useGDPRAdmin } from './useGDPRAdmin';
 
+// Date Filter Hooks (Project P65 - Daily persistence)
+export { useDateFilter, default as useDateFilterDefault } from './useDateFilter';
+export type { DateFilterMode, DateRange, UseDateFilterOptions, DateFilterState, UseDateFilterReturn } from './useDateFilter';
+export { useDailyReset, default as useDailyResetDefault } from './useDailyReset';
+export type { ResetMode, DailyResetConfig } from './useDailyReset';
+
 // Tenant Access Hooks
 export { useTenantAccess, default as useTenantAccessDefault } from './useTenantAccess';
 export type { AccessibleTenant } from './useTenantAccess';
 
+// TenantMode Hooks (Project 45 - Fase 8)
+export { useCRUDPermission, useCanCreate, useCreateTenantId, default as useCRUDPermissionDefault } from './useCRUDPermission';
+export type { CRUDPermission } from './useCRUDPermission';
+
 // User Preferences hooks
 // Removed useUserPreferences - now using unified PreferencesContext
 // useTheme is already exported from './state/useAppState' above
+
+// Cross-Tenant Import Hooks (Project 57)
+export {
+  useCheckCrossTenant,
+  default as useCheckCrossTenantDefault,
+  PERSON_DATA_TYPES,
+  COMPANY_DATA_TYPES
+} from './import/useCheckCrossTenant';
+export type {
+  EntityType,
+  CheckExistingParams,
+  PersonCheckResult,
+  CompanyCheckResult,
+  CheckResult,
+  ImportCrossTenantParams,
+  ImportResult
+} from './import/useCheckCrossTenant';

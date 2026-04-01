@@ -20,6 +20,7 @@ class MediaService {
   constructor() {
     this.uploadDir = process.env.UPLOAD_DIR || './uploads/cms';
     this.maxFileSize = parseInt(process.env.MAX_FILE_SIZE || '10485760'); // 10MB default
+    // F288 update: SVG riabilitato con scansione XSS obbligatoria (vedi validateFile)
     this.allowedMimeTypes = [
       'image/jpeg',
       'image/jpg',
@@ -49,6 +50,18 @@ class MediaService {
     if (file.size > this.maxFileSize) {
       logger.warn({ size: file.size, maxSize: this.maxFileSize }, 'File too large');
       throw new Error(`File too large. Maximum size: ${this.maxFileSize / 1024 / 1024}MB`);
+    }
+
+    // F288 update: SVG XSS scan — rifiuta SVG con script/handler embedded
+    if (file.mimetype === 'image/svg+xml' && file.buffer) {
+      const svgContent = file.buffer.toString('utf8');
+      const dangerousPatterns = [/<script/i, /on\w+\s*=/i, /javascript\s*:/i, /<iframe/i, /<object/i, /<embed/i];
+      for (const pattern of dangerousPatterns) {
+        if (pattern.test(svgContent)) {
+          logger.warn({ filename: file.originalname }, 'SVG upload rifiutato: contenuto potenzialmente pericoloso');
+          throw new Error('File SVG non consentito: contiene elementi non sicuri (script, eventi, iframe).');
+        }
+      }
     }
   }
 
@@ -87,7 +100,9 @@ class MediaService {
       let metadata = null;
 
       if (file.mimetype.startsWith('image/') && file.mimetype !== 'image/svg+xml') {
-        const image = sharp(file.buffer);
+        // limitInputPixels: false — il limite di dimensione file (10MB) già previene abusi;
+        // il default sharp di ~268MP può bloccare immagini legittime ad alta risoluzione
+        const image = sharp(file.buffer, { limitInputPixels: false });
         metadata = await image.metadata();
 
         // Salva original

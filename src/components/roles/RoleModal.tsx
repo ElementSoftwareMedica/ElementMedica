@@ -134,9 +134,8 @@ const RoleModal: React.FC<RoleModalProps> = ({
 
       await onSave(roleData);
       onClose();
-    } catch (error: any) {
-      console.error('[RoleModal] Error saving role:', error);
-      setError(error.message || 'Errore nel salvataggio del ruolo');
+    } catch (error: unknown) {
+      setError('Errore nel salvataggio del ruolo');
     } finally {
       setLoading(false);
     }

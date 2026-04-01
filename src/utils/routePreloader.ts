@@ -41,7 +41,7 @@ class RoutePreloader {
 
     const config = this.routeConfigs.get(route);
     if (!config) {
-      console.warn(`Route ${route} not registered for preloading`);
+      if (import.meta.env.DEV) console.warn(`Route ${route} not registered for preloading`);
       return;
     }
 
@@ -56,9 +56,8 @@ class RoutePreloader {
     try {
       await preloadPromise;
       this.preloadedRoutes.add(route);
-      console.log(`✅ Preloaded route: ${route}`);
     } catch (error) {
-      console.error(`❌ Failed to preload route ${route}:`, error);
+      if (import.meta.env.DEV) console.error(`Errore precaricamento route ${route}:`, error);
       this.preloadPromises.delete(route);
     }
   }
@@ -83,11 +82,11 @@ class RoutePreloader {
     document.addEventListener('mouseover', (event) => {
       const target = event.target as HTMLElement;
       const link = target.closest('a[href]') as HTMLAnchorElement;
-      
+
       if (link && this.isInternalLink(link.href)) {
         const route = this.extractRoute(link.href);
         const config = this.routeConfigs.get(route);
-        
+
         if (config && config.preloadOn === 'hover') {
           this.preloadRoute(route);
         }
@@ -107,7 +106,7 @@ class RoutePreloader {
           if (entry.isIntersecting) {
             const element = entry.target as HTMLElement;
             const route = element.dataset.preloadRoute;
-            
+
             if (route) {
               const config = this.routeConfigs.get(route);
               if (config && config.preloadOn === 'visible') {
@@ -264,7 +263,7 @@ routePreloader.registerRoute({
 });
 
 routePreloader.registerRoute({
-  route: '/quotes-and-invoices',
+  route: '/preventivi',
   loader: () => import('../pages/QuotesAndInvoices.lazy'),
   priority: 'low',
   preloadOn: 'hover'
@@ -272,7 +271,7 @@ routePreloader.registerRoute({
 
 routePreloader.registerRoute({
   route: '/documents-corsi',
-  loader: () => import('../pages/DocumentsCorsiNew.lazy'),
+  loader: () => import('../pages/DocumentsCorsi.lazy'),
   priority: 'low',
   preloadOn: 'hover'
 });

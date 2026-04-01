@@ -71,7 +71,7 @@ export default defineConfig({
 
   /* Run your local dev server before starting the tests */
   webServer: {
-    // Avvia solo il frontend (Vite su 5173); il backend è già in esecuzione sul proxy 4003
+    // P64: Frontend on 5173, backend api server on 4001 (proxy eliminated)
     command: 'npm run start:frontend',
     // Attende il frontend, allineato con use.baseURL
     url: 'http://localhost:5173',

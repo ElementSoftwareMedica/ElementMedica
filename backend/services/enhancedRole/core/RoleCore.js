@@ -1,8 +1,7 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '../../../config/prisma-optimization.js';
 import { logger } from '../../../utils/logger.js';
 import { ROLE_TYPES, ROLE_SCOPES } from '../utils/RoleTypes.js';
 
-const prisma = new PrismaClient();
 
 /**
  * Gestione delle operazioni CRUD sui ruoli
@@ -22,13 +21,25 @@ export async function assignRole(personId, tenantId, roleType, options = {}) {
       customPermissions = null
     } = options;
 
-    // Verifica che la persona esista e appartenga al tenant
+    // P48: Verifica che la persona esista e appartenga al tenant
+    // companyId e globalRole sono ora in tenantProfiles/personRoles
+    // P63: Person non ha tenantId — usa tenantProfiles.some o personRoles SUPER_ADMIN
     const person = await prisma.person.findFirst({
       where: {
         id: personId,
+        deletedAt: null,
         OR: [
-          { companyId: tenantId },
-          { globalRole: 'SUPER_ADMIN' }
+          { tenantProfiles: { some: { tenantId, deletedAt: null } } },
+          // P48: Super admin check via personRoles
+          {
+            personRoles: {
+              some: {
+                roleType: 'SUPER_ADMIN',
+                isActive: true,
+                deletedAt: null
+              }
+            }
+          }
         ]
       }
     });
@@ -47,13 +58,14 @@ export async function assignRole(personId, tenantId, roleType, options = {}) {
       roleScope = ROLE_SCOPES.DEPARTMENT;
     }
 
-    // Verifica se esiste già un ruolo simile
+    // Verifica se esiste già un ruolo simile (solo non eliminati)
     const existingRole = await prisma.personRole.findFirst({
       where: {
         personId,
         tenantId,
         roleType,
         companyId,
+        deletedAt: null,
       }
     });
 
@@ -119,6 +131,7 @@ export async function getUserRoles(personId, tenantId = null) {
     const where = {
       personId,
       isActive: true,
+      deletedAt: null, // F221: exclude soft-deleted roles
       OR: [
         { validUntil: null },
         { validUntil: { gt: new Date() } }
@@ -140,10 +153,15 @@ export async function getUserRoles(personId, tenantId = null) {
             slug: true
           }
         },
-        company: {
+        companyTenantProfile: {
           select: {
             id: true,
-            ragioneSociale: true
+            company: {
+              select: {
+                id: true,
+                ragioneSociale: true
+              }
+            }
           }
         }
       },
@@ -153,36 +171,8 @@ export async function getUserRoles(personId, tenantId = null) {
       ]
     });
 
-    // Ottieni anche il globalRole dalla tabella Person
-    const person = await prisma.person.findUnique({
-      where: { id: personId },
-      select: { globalRole: true }
-    });
-
-    // Se l'utente ha un globalRole, aggiungilo alla lista dei ruoli
-    if (person?.globalRole) {
-      const globalRoleEntry = {
-        id: `global-${personId}`,
-        personId,
-        roleType: person.globalRole,
-        roleScope: ROLE_SCOPES.GLOBAL,
-        isActive: true,
-        assignedAt: new Date(),
-        validUntil: null,
-        tenantId: null,
-        companyId: null,
-        assignedByPersonId: null,
-        permissions: null,
-        tenant: null,
-        company: null
-      };
-      
-      // Aggiungi il globalRole solo se non è già presente nei personRoles
-      const hasGlobalRoleInPersonRoles = personRoles.some(role => role.roleType === person.globalRole);
-      if (!hasGlobalRoleInPersonRoles) {
-        personRoles.unshift(globalRoleEntry);
-      }
-    }
+    // P48: globalRole non esiste più, tutti i ruoli sono in personRoles
+    // Nessuna logica aggiuntiva necessaria
 
     return personRoles;
   } catch (error) {
@@ -199,11 +189,12 @@ export async function getUsersByRole(roleType, tenantId, companyId = null) {
     const where = {
       roleType,
       tenantId,
-      isActive: true
+      isActive: true,
+      deletedAt: null // F221: exclude soft-deleted roles
     };
 
     if (companyId) {
-      where.companyId = companyId;
+      where.companyTenantProfileId = companyId;
     }
 
     return await prisma.personRole.findMany({
@@ -213,16 +204,24 @@ export async function getUsersByRole(roleType, tenantId, companyId = null) {
           select: {
             id: true,
             username: true,
-            email: true,
             firstName: true,
             lastName: true,
-            isActive: true
+            tenantProfiles: {
+              where: { tenantId, deletedAt: null, isActive: true },
+              select: { email: true, isActive: true },
+              take: 1
+            }
           }
         },
-        company: {
+        companyTenantProfile: {
           select: {
             id: true,
-            ragioneSociale: true
+            company: {
+              select: {
+                id: true,
+                ragioneSociale: true
+              }
+            }
           }
         }
       }
@@ -295,9 +294,10 @@ export async function hasRole(personId, roleType, tenantId = null, companyId = n
     }
 
     if (companyId) {
-      where.companyId = companyId;
+      where.companyTenantProfileId = companyId;
     }
 
+    where.deletedAt = null;
     const role = await prisma.personRole.findFirst({ where });
     return !!role;
   } catch (error) {
@@ -312,7 +312,7 @@ export async function hasRole(personId, roleType, tenantId = null, companyId = n
 export async function getPrimaryRole(personId, tenantId) {
   try {
     const roles = await getUserRoles(personId, tenantId);
-    
+
     // Ordine di priorità per determinare il ruolo primario
     const priorityOrder = [
       ROLE_TYPES.SUPER_ADMIN,

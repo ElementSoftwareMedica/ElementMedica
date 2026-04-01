@@ -20,15 +20,16 @@ export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
   className?: string;
 }
 
+// Badge variants with dark mode support
 const badgeVariants: Record<BadgeVariant, string> = {
-  default: 'bg-primary-600 text-white',
-  secondary: 'bg-gray-100 text-gray-800',
-  outline: 'border border-gray-300 bg-transparent text-gray-700',
-  destructive: 'bg-red-600 text-white',
-  success: 'bg-green-600 text-white',
-  warning: 'bg-yellow-500 text-white',
-  info: 'bg-blue-600 text-white',
-  error: 'bg-red-600 text-white'
+  default: 'bg-primary-600 text-white dark:bg-primary-500',
+  secondary: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200',
+  outline: 'border border-gray-300 bg-transparent text-gray-700 dark:border-gray-600 dark:text-gray-300',
+  destructive: 'bg-red-600 text-white dark:bg-red-700',
+  success: 'bg-green-600 text-white dark:bg-green-700',
+  warning: 'bg-yellow-500 text-white dark:bg-yellow-600',
+  info: 'bg-blue-600 text-white dark:bg-blue-700',
+  error: 'bg-red-600 text-white dark:bg-red-700'
 };
 
 const badgeSizes: Record<BadgeSize, string> = {

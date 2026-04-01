@@ -14,12 +14,10 @@ enum CourseStatus {
 }
 
 enum EnrollmentStatus {
-  PENDING
-  CONFIRMED
-  ACTIVE
-  COMPLETED
-  CANCELLED
-  SUSPENDED
+  PREVENTIVO
+  ACCETTATO
+  COMPLETATO
+  FATTURATO
 }
 
 enum PersonStatus {

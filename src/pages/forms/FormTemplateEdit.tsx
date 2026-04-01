@@ -8,7 +8,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   Button
 } from '../../design-system/atoms/Button';
@@ -95,7 +95,13 @@ interface FormTemplateData {
 const FormTemplateEdit: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { showToast } = useToast();
+
+  // Detect context: CMS management or Test section
+  const contextBasePath = location.pathname.includes('/management/cms')
+    ? '/management/cms/forms'
+    : '/test';
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [draggedField, setDraggedField] = useState<string | null>(null);
@@ -144,7 +150,7 @@ const FormTemplateEdit: React.FC = () => {
       setLoadingCourses(true);
       getCourses()
         .then(courses => setAvailableCourses(courses))
-        .catch(err => console.error('Errore caricamento corsi:', err))
+        .catch(() => showToast({ message: 'Impossibile caricare i corsi disponibili', type: 'error' }))
         .finally(() => setLoadingCourses(false));
     }
   }, [formData.testAssignment?.enabled, availableCourses.length]);
@@ -208,14 +214,15 @@ const FormTemplateEdit: React.FC = () => {
           };
         }
       } catch (err) {
-        console.log('No test assignments found for this template');
+        // No test assignments found for this template
       }
 
-      console.log('📥 Loaded template:', {
-        fields: template.fields,
-        sections,
-        fieldWithOptions: template.fields?.find(f => f.options)
-      });
+      // Assegna i campi senza sectionId alla prima sezione (campi caricati dal DB potrebbero non averlo)
+      const defaultSectionId = sections[0]?.id || 'section-1';
+      const fieldsWithSection = (template.fields || []).map((f: any) => ({
+        ...f,
+        sectionId: f.sectionId || defaultSectionId
+      }));
 
       setFormData({
         name: template.name,
@@ -223,16 +230,15 @@ const FormTemplateEdit: React.FC = () => {
         type: template.type || 'CUSTOM_FORM',
         isPublic: template.isPublic || false,
         allowAnonymous: template.allowAnonymous || false,
-        fields: template.fields || [],
+        fields: fieldsWithSection,
         sections,
         successMessage: (template as any).successMessage || '',
         redirectUrl: (template as any).redirectUrl || '',
         testAssignment: testAssignmentConfig
       });
     } catch (error) {
-      console.error('Errore caricamento template:', error);
       showToast({ message: 'Errore nel caricamento', type: 'error' });
-      navigate('/forms');
+      navigate(contextBasePath);
     } finally {
       setInitialLoading(false);
     }
@@ -550,11 +556,9 @@ const FormTemplateEdit: React.FC = () => {
 
       await formTemplatesService.updateFormTemplate(id, updateData);
       showToast({ message: 'Template salvato con successo!', type: 'success' });
-      navigate('/forms');
-    } catch (error: any) {
-      console.error('Errore salvataggio:', error);
-      const errorMsg = error.response?.data?.message || 'Errore nel salvataggio';
-      showToast({ message: errorMsg, type: 'error' });
+      navigate(contextBasePath);
+    } catch (error: unknown) {
+      showToast({ message: 'Errore nel salvataggio del template', type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -584,7 +588,7 @@ const FormTemplateEdit: React.FC = () => {
             <div className="flex items-center space-x-4">
               <Button
                 variant="ghost"
-                onClick={() => navigate('/forms')}
+                onClick={() => navigate(contextBasePath)}
                 className="flex items-center"
               >
                 <ArrowLeft className="w-4 h-4 mr-2" />

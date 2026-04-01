@@ -16,10 +16,13 @@ export {
     requirePermissions,
     requireRoles,
     requireCompanyAccess,
-    requireOwnership,
     checkHierarchicalPermission,
     rbacMiddleware
 } from './RBACMiddleware.js';
+
+// Alias for backward compatibility (singular form)
+import { requirePermissions as _requirePermissions } from './RBACMiddleware.js';
+export const requirePermission = _requirePermissions;
 
 // Default export for backward compatibility
 import { RBACService } from '../services/RBACService.js';
@@ -27,5 +30,6 @@ import * as middleware from './RBACMiddleware.js';
 
 export default {
     RBACService,
-    ...middleware
+    ...middleware,
+    requirePermission: _requirePermissions
 };

@@ -17,7 +17,7 @@ export const ContactInfoSection: React.FC<{ content: any }> = ({ content }) => {
   if (!content.contactInfo) return null;
 
   return (
-    <section className="py-20 bg-gradient-to-br from-slate-50 via-gray-50 to-blue-50/30">
+    <section className="py-20 bg-gradient-to-br from-slate-50 via-gray-50 to-primary-50/30">
       <div className="container mx-auto px-4">
         {/* Section Title */}
         <div className="text-center mb-16">
@@ -62,7 +62,7 @@ export const ContactInfoSection: React.FC<{ content: any }> = ({ content }) => {
                 {content.contactInfo.phones.map((phone: any, idx: number) => (
                   <div key={idx}>
                     {phone.badge && (
-                      <span className="inline-flex items-center px-2 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-full mb-1">
+                      <span className="inline-flex items-center px-2 py-1 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full mb-1">
                         {phone.badge}
                       </span>
                     )}
@@ -87,7 +87,7 @@ export const ContactInfoSection: React.FC<{ content: any }> = ({ content }) => {
                 {content.contactInfo.emails.map((email: any, idx: number) => (
                   <div key={idx}>
                     {email.badge && (
-                      <span className="inline-block px-2 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full mb-1">
+                      <span className="inline-block px-2 py-1 bg-primary-100 text-primary-700 text-xs font-semibold rounded-full mb-1">
                         {email.badge}
                       </span>
                     )}
@@ -143,14 +143,14 @@ export const MapSection: React.FC<{ content: any }> = ({ content }) => {
         <div className="max-w-6xl mx-auto">
           <div className="rounded-2xl overflow-hidden shadow-2xl">
             <iframe
-              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2801.045!2d11.8772!3d45.4061!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x477eda5a22b7c9ad%3A0x7e5f8c5e8c5e8c5e!2sVia%20Lanari%2C%2014%2C%2035129%20Padova%20PD%2C%20Italy!5e0!3m2!1sen!2sit!4v1700220000000!5m2!1sen!2sit"
+              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2801.045!2d11.7932!3d45.3661!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2sVia%20Bracciano%2034%2C%2035030%20Selvazzano%20Dentro%20PD!5e0!3m2!1sen!2sit!4v1700220000000!5m2!1sen!2sit"
               width="100%"
               height="450"
               style={{ border: 0 }}
               allowFullScreen
               loading="lazy"
               referrerPolicy="no-referrer-when-downgrade"
-              title="Mappa Google - Element Formazione - Via Lanari 14, Padova"
+              title="Mappa Google - Element Sicurezza - Via Bracciano 34, Selvazzano Dentro (PD)"
               className="w-full"
             />
           </div>
@@ -204,11 +204,11 @@ export const ContactFormSection: React.FC<{ content: any }> = ({ content }) => {
   if (!content.contactForm) return null;
 
   return (
-    <section className="py-20 bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 relative overflow-hidden">
+    <section className="py-20 bg-gradient-to-br from-slate-50 via-primary-50/30 to-accent-50/20 relative overflow-hidden">
       {/* Decorative bubbles */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-20 right-10 w-64 h-64 bg-blue-200/20 rounded-full blur-3xl" />
-        <div className="absolute bottom-20 left-10 w-48 h-48 bg-indigo-200/20 rounded-full blur-3xl" />
+        <div className="absolute top-20 right-10 w-64 h-64 bg-primary-200/20 rounded-full blur-3xl" />
+        <div className="absolute bottom-20 left-10 w-48 h-48 bg-secondary-200/20 rounded-full blur-3xl" />
       </div>
       <div className="container mx-auto px-4 relative z-10">
         <div className="max-w-4xl mx-auto">
@@ -246,20 +246,20 @@ export const DepartmentsSection: React.FC<{ content: any }> = ({ content }) => {
             return (
               <div key={index} className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-shadow">
                 <div className="flex items-center gap-4 mb-4">
-                  <div className="w-12 h-12 bg-teal-500 rounded-xl flex items-center justify-center">
+                  <div className="w-12 h-12 bg-primary-500 rounded-xl flex items-center justify-center">
                     <IconComponent className="w-6 h-6 text-white" />
                   </div>
                   <h3 className="font-bold text-gray-900">{dept.name}</h3>
                 </div>
                 <div className="space-y-2 text-sm">
                   {dept.phone && (
-                    <a href={`tel:${dept.phone}`} className="flex items-center gap-2 text-gray-600 hover:text-teal-600">
+                    <a href={`tel:${dept.phone}`} className="flex items-center gap-2 text-gray-600 hover:text-primary-600">
                       <Phone className="w-4 h-4" />
                       {dept.phone}
                     </a>
                   )}
                   {dept.email && (
-                    <a href={`mailto:${dept.email}`} className="flex items-center gap-2 text-gray-600 hover:text-teal-600">
+                    <a href={`mailto:${dept.email}`} className="flex items-center gap-2 text-gray-600 hover:text-primary-600">
                       <Mail className="w-4 h-4" />
                       {dept.email}
                     </a>
@@ -287,7 +287,7 @@ export const OpeningHoursSection: React.FC<{ content: any }> = ({ content }) => 
   if (!content.openingHours?.schedule) return null;
 
   return (
-    <section className="py-20 bg-gradient-to-br from-slate-50 via-gray-50 to-blue-50/30">
+    <section className="py-20 bg-gradient-to-br from-slate-50 via-gray-50 to-primary-50/30">
       <div className="container mx-auto px-4">
         <div className="text-center mb-12">
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
@@ -295,13 +295,13 @@ export const OpeningHoursSection: React.FC<{ content: any }> = ({ content }) => 
           </h2>
         </div>
         <div className="max-w-2xl mx-auto">
-          <div className="bg-gradient-to-br from-teal-50 to-cyan-50 rounded-2xl p-8">
+          <div className="rounded-2xl p-8" style={{ backgroundImage: 'linear-gradient(to bottom right, var(--color-primary-50), var(--color-accent-50))' }}>
             <div className="space-y-4 mb-8">
               {content.openingHours.schedule.map((item: any, index: number) => (
-                <div key={index} className="flex items-center justify-between py-3 border-b border-teal-100 last:border-0">
+                <div key={index} className="flex items-center justify-between py-3 border-b border-primary-100 last:border-0">
                   <span className="font-semibold text-gray-900">{item.days}</span>
                   <div className="text-right">
-                    <span className={`font-medium ${item.hours === 'Chiuso' ? 'text-red-500' : 'text-teal-600'}`}>
+                    <span className={`font-medium ${item.hours === 'Chiuso' ? 'text-red-500' : 'text-primary-600'}`}>
                       {item.hours}
                     </span>
                     {item.services && <p className="text-xs text-gray-500">{item.services}</p>}
@@ -315,7 +315,7 @@ export const OpeningHoursSection: React.FC<{ content: any }> = ({ content }) => 
                   const IconComponent = iconMap[note.icon] || Clock;
                   return (
                     <div key={index} className="flex items-center gap-3 text-sm text-gray-600">
-                      <IconComponent className="w-4 h-4 text-teal-500" />
+                      <IconComponent className="w-4 h-4 text-primary-500" />
                       {note.text}
                     </div>
                   );
@@ -347,7 +347,7 @@ export const LocationSection: React.FC<{ content: any }> = ({ content }) => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="bg-white rounded-2xl p-8 shadow-lg">
               <div className="flex items-center gap-4 mb-6">
-                <div className="w-12 h-12 bg-teal-500 rounded-xl flex items-center justify-center">
+                <div className="w-12 h-12 bg-primary-500 rounded-xl flex items-center justify-center">
                   <MapPin className="w-6 h-6 text-white" />
                 </div>
                 <h3 className="text-xl font-bold text-gray-900">Indirizzo</h3>
@@ -364,7 +364,7 @@ export const LocationSection: React.FC<{ content: any }> = ({ content }) => {
                 <div className="space-y-4">
                   {content.location.directions.car && (
                     <div className="flex items-start gap-3">
-                      <Car className="w-5 h-5 text-teal-500 flex-shrink-0 mt-1" />
+                      <Car className="w-5 h-5 text-primary-500 flex-shrink-0 mt-1" />
                       <div>
                         <span className="font-medium text-gray-900">Auto</span>
                         <p className="text-sm text-gray-600">{content.location.directions.car}</p>
@@ -373,7 +373,7 @@ export const LocationSection: React.FC<{ content: any }> = ({ content }) => {
                   )}
                   {content.location.directions.metro && (
                     <div className="flex items-start gap-3">
-                      <MapPin className="w-5 h-5 text-teal-500 flex-shrink-0 mt-1" />
+                      <MapPin className="w-5 h-5 text-primary-500 flex-shrink-0 mt-1" />
                       <div>
                         <span className="font-medium text-gray-900">Metro</span>
                         <p className="text-sm text-gray-600">{content.location.directions.metro}</p>
@@ -382,7 +382,7 @@ export const LocationSection: React.FC<{ content: any }> = ({ content }) => {
                   )}
                   {content.location.directions.bus && (
                     <div className="flex items-start gap-3">
-                      <MapPin className="w-5 h-5 text-teal-500 flex-shrink-0 mt-1" />
+                      <MapPin className="w-5 h-5 text-primary-500 flex-shrink-0 mt-1" />
                       <div>
                         <span className="font-medium text-gray-900">Bus</span>
                         <p className="text-sm text-gray-600">{content.location.directions.bus}</p>
@@ -406,7 +406,7 @@ export const SocialMediaSection: React.FC<{ content: any }> = ({ content }) => {
   if (!content.socialMedia?.platforms) return null;
 
   return (
-    <section className="py-16 bg-gradient-to-r from-blue-900 via-indigo-900 to-blue-900 text-white">
+    <section className="py-16 text-white" style={{ backgroundImage: 'linear-gradient(to right, var(--color-primary-800), var(--color-primary-700), var(--color-primary-800))' }}>
       <div className="container mx-auto px-4 text-center">
         <h2 className="text-2xl font-bold mb-6">{content.socialMedia.title}</h2>
         <div className="flex justify-center gap-6">
@@ -435,15 +435,15 @@ export const AlternativeBookingSection: React.FC<{ content: any }> = ({ content 
   if (!content.alternativeBooking) return null;
 
   return (
-    <section className="py-16 bg-teal-600 text-white">
+    <section className="py-16 bg-primary-600 text-white">
       <div className="container mx-auto px-4 text-center">
         <h2 className="text-2xl font-bold mb-4">{content.alternativeBooking.title}</h2>
-        <p className="text-teal-100 mb-6">{content.alternativeBooking.description}</p>
+        <p className="text-primary-100 mb-6">{content.alternativeBooking.description}</p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           {content.alternativeBooking.phone && (
             <a
               href={`tel:${content.alternativeBooking.phone.number}`}
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-white text-teal-700 font-bold rounded-xl hover:bg-teal-50 transition-colors"
+              className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-white text-primary-700 font-bold rounded-xl hover:bg-primary-50 transition-colors"
             >
               <Phone className="w-5 h-5" />
               {content.alternativeBooking.phone.number}
@@ -454,7 +454,7 @@ export const AlternativeBookingSection: React.FC<{ content: any }> = ({ content 
               href={`https://wa.me/${content.alternativeBooking.whatsapp.number.replace(/\D/g, '')}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-green-500 text-white font-bold rounded-xl hover:bg-green-600 transition-colors"
+              className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-colors"
             >
               <MessageSquare className="w-5 h-5" />
               {content.alternativeBooking.whatsapp.text}

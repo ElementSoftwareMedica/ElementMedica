@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
 import { GDPREntityTemplate } from '../../templates/gdpr-entity-page/GDPREntityTemplate';
-import { DataTableColumn } from '../../components/shared/tables/DataTable';
+import { DataTableColumn } from '../../templates/gdpr-entity-page/GDPREntityTemplate';
 import { Badge } from '../../design-system';
 import {
   Award,
   BookOpen,
-  Building,
   Calendar,
   Clock,
   Euro,
@@ -18,6 +17,7 @@ import CourseImport from '../../components/courses/CourseImport';
 import { apiPost, apiGet } from '../../services/api';
 import { useToast } from '../../hooks/useToast';
 import { getRiskLevelLabel } from '../../utils/courseLabels';
+import { useTenantMode } from '../../contexts/TenantModeContext';
 // Configurazione colonne per la tabella
 const getCoursesColumns = (): DataTableColumn<Course>[] => [
   {
@@ -37,43 +37,39 @@ const getCoursesColumns = (): DataTableColumn<Course>[] => [
     )
   },
   {
-    key: 'code',
-    label: 'Codice',
-    sortable: true,
-    renderCell: (course) => (
-      <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">{course.code}</span>
-    )
-  },
-  {
     key: 'category',
     label: 'Categoria',
     sortable: true,
     renderCell: (course) => (
-      <div className="flex items-center gap-2">
-        <Building className="h-4 w-4 text-gray-400" />
-        <Badge variant="secondary">{course.category}</Badge>
-      </div>
+      <Badge variant="secondary" size="sm" className="whitespace-normal leading-tight text-center max-w-[120px] block">
+        {course.category}
+      </Badge>
     )
   },
   {
     key: 'riskLevel',
-    label: 'Livello rischio',
+    label: 'Tipo / Rischio',
     sortable: true,
-    renderCell: (course) => (
-      <div className="flex items-center gap-2">
-        <Badge variant="outline">{course.riskLevel ? getRiskLevelLabel(course.riskLevel, course.title) : 'N/D'}</Badge>
-      </div>
-    )
-  },
-  {
-    key: 'courseType',
-    label: 'Tipo',
-    sortable: true,
-    renderCell: (course) => (
-      <div className="flex items-center gap-2">
-        <Badge variant="outline">{course.courseType === 'AGGIORNAMENTO' ? 'Aggiornamento' : course.courseType === 'PRIMO_CORSO' ? 'Primo Corso' : 'N/D'}</Badge>
-      </div>
-    )
+    renderCell: (course) => {
+      const level = course.riskLevel;
+      const riskVariant = level === 'BASSO' ? 'success' : level === 'MEDIO' ? 'warning' : level === 'ALTO' || (level as string) === 'MOLTO_ALTO' ? 'error' : 'outline';
+      const isAggiornamento = course.courseType === 'AGGIORNAMENTO';
+      const isPrimo = course.courseType === 'PRIMO_CORSO';
+      return (
+        <div className="flex flex-col gap-1">
+          <Badge
+            variant={isPrimo ? 'info' : isAggiornamento ? 'secondary' : 'outline'}
+            size="sm"
+            className={isAggiornamento ? 'bg-violet-100 text-violet-700 dark:bg-violet-900 dark:text-violet-300' : undefined}
+          >
+            {isPrimo ? 'Primo Corso' : isAggiornamento ? 'Aggiornamento' : 'N/D'}
+          </Badge>
+          <Badge variant={riskVariant} size="sm">
+            {level ? getRiskLevelLabel(level, course.title) : 'N/D'}
+          </Badge>
+        </div>
+      );
+    }
   },
   {
     key: 'duration',
@@ -94,17 +90,6 @@ const getCoursesColumns = (): DataTableColumn<Course>[] => [
       <div className="flex items-center gap-2">
         <Calendar className="h-4 w-4 text-gray-400" />
         <span>{course.validityYears} anni</span>
-      </div>
-    )
-  },
-  {
-    key: 'renewalDuration',
-    label: 'Rinnovo',
-    sortable: true,
-    renderCell: (course) => (
-      <div className="flex items-center gap-2">
-        <Award className="h-4 w-4 text-gray-400" />
-        <span>{course.renewalDuration}h</span>
       </div>
     )
   },
@@ -255,7 +240,11 @@ const csvHeaders = [
 export default function CoursesPage(): JSX.Element {
   const [showImportModal, setShowImportModal] = useState(false);
   const [courses, setCourses] = useState<Course[]>([]);
+  // P51: refreshTrigger per forzare il refresh della lista dopo import
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
   const { showToast } = useToast();
+  // P51: Usa operateTenantId per operazioni CRUD multi-tenant
+  const { getCreateTenantId, getOperateHeaders } = useTenantMode();
 
   // Carica i corsi esistenti per supportare la rilevazione duplicati nel modal di import
   React.useEffect(() => {
@@ -267,7 +256,6 @@ export default function CoursesPage(): JSX.Element {
           setCourses(res);
         }
       } catch (e) {
-        console.error('Errore caricando corsi esistenti per import:', e);
       }
     })();
     return () => {
@@ -285,7 +273,9 @@ export default function CoursesPage(): JSX.Element {
 
   const handleImportCourses = async (importedCourses: any[], overwriteIds?: string[]) => {
     try {
-      const tenantId = localStorage.getItem('tenantId') || localStorage.getItem('TENANT_ID') || undefined;
+      // P51: Usa getCreateTenantId per ottenere il tenant corretto per le operazioni CRUD
+      const tenantId = getCreateTenantId();
+      const headers = getOperateHeaders();
 
       // Includi tenantId su ogni riga per compat con prisma.createMany che richiede tenantId nel data
       const payloadCourses = (importedCourses || []).map((c) => ({
@@ -293,12 +283,12 @@ export default function CoursesPage(): JSX.Element {
         ...(tenantId ? { tenantId } : {}),
       }));
 
-      // Invia i dati al backend
+      // Invia i dati al backend con headers multi-tenant
       const response: any = await apiPost('/api/v1/courses/bulk-import', {
         tenantId, // anche top-level per massima compatibilità
         courses: payloadCourses,
         overwriteIds: overwriteIds || []
-      });
+      }, { headers });
 
       // Mostra riepilogo con eventuali duplicati
       const totalSubmitted = response?.totalSubmitted ?? payloadCourses.length;
@@ -334,10 +324,11 @@ export default function CoursesPage(): JSX.Element {
         type: hasDuplicates ? 'info' : 'success'
       });
 
-      // Chiudi il modal
+      // Chiudi il modal e forza refresh della lista
       setShowImportModal(false);
+      // P51: Incrementa refreshTrigger per forzare il refresh del GDPREntityTemplate
+      setRefreshTrigger(prev => prev + 1);
     } catch (error) {
-      console.error('Errore durante l\'import:', error);
       throw error; // Rilancia l'errore per permettere al modal di gestirlo
     }
   };
@@ -353,7 +344,7 @@ export default function CoursesPage(): JSX.Element {
         writePermission="courses:write"
         deletePermission="courses:delete"
         exportPermission="courses:export"
-        apiEndpoint="/courses"
+        apiEndpoint="/api/v1/courses"
         columns={getCoursesColumns()}
         searchFields={['title', 'code', 'category', 'description', 'certifications', 'regulation', 'contents']}
         defaultSort={{ field: 'title', direction: 'asc' }}
@@ -429,6 +420,7 @@ export default function CoursesPage(): JSX.Element {
         enableAdvancedFilters={true}
         defaultViewMode="table"
         onImportEntities={handleImportEntities}
+        refreshTrigger={refreshTrigger}
       />
 
       {showImportModal && (

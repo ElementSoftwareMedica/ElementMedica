@@ -2,7 +2,9 @@ import {
   Eye, Edit, Trash2, Globe, Building, Database, Shield, MapPin, Briefcase, ClipboardCheck, BookOpen,
   Plus, User, Users, Settings, FileText, Link2, GraduationCap, UserCog, AlertTriangle, FileCheck,
   Wrench, Bell, BarChart3, Lock, Key, Calendar, Receipt, CreditCard, Percent, Layout, Image, Navigation,
-  Search, FileType, ClipboardList, RefreshCw, FolderArchive, Plug, GitBranch, ShieldCheck
+  Search, FileType, ClipboardList, RefreshCw, FolderArchive, Plug, GitBranch, ShieldCheck,
+  Stethoscope, Activity, Heart, Pill, Clock, ListOrdered, FileHeart, Thermometer, Syringe,
+  HandCoins, Package, MonitorCheck
 } from 'lucide-react';
 
 // Definizioni delle azioni CRUD
@@ -146,6 +148,49 @@ export const RELATION_TYPES = [
     displayName: 'Auditor',
     description: 'Report e dati delle aziende da auditare',
     applicableTo: ['companies', 'reports']
+  },
+  // P69: Clinical / Poliambulatorio relation types
+  {
+    id: 'MEDICO_AMBULATORIO',
+    name: 'MEDICO_AMBULATORIO',
+    displayName: 'Medico - Ambulatori',
+    description: 'Appuntamenti e visite degli ambulatori assegnati al medico',
+    applicableTo: ['appuntamenti', 'visite', 'ambulatori', 'slot_disponibilita', 'coda_pazienti']
+  },
+  {
+    id: 'MEDICO_PAZIENTI',
+    name: 'MEDICO_PAZIENTI',
+    displayName: 'Medico - Pazienti',
+    description: 'Visite, referti e documenti dei pazienti assegnati al medico',
+    applicableTo: ['visite', 'referti', 'documenti_clinici', 'appuntamenti', 'fatture_sanitarie', 'persons']
+  },
+  {
+    id: 'MEDICO_PRESTAZIONI',
+    name: 'MEDICO_PRESTAZIONI',
+    displayName: 'Medico - Prestazioni',
+    description: 'Prestazioni a cui il medico è abilitato e relativi appuntamenti',
+    applicableTo: ['prestazioni', 'medici_abilitati', 'appuntamenti']
+  },
+  {
+    id: 'CLINIC_ADMIN_POLIAMBULATORIO',
+    name: 'CLINIC_ADMIN_POLIAMBULATORIO',
+    displayName: 'Admin Clinica - Poliambulatorio',
+    description: 'Gestione completa di tutte le risorse del poliambulatorio',
+    applicableTo: ['poliambulatori', 'sedi_cliniche', 'ambulatori', 'prestazioni', 'appuntamenti', 'visite', 'referti', 'convenzioni', 'tariffari', 'fatture_sanitarie', 'strumenti', 'coda_pazienti']
+  },
+  {
+    id: 'AMBULATORIO_STRUMENTI',
+    name: 'AMBULATORIO_STRUMENTI',
+    displayName: 'Ambulatorio - Strumenti',
+    description: 'Strumenti assegnati all\'ambulatorio',
+    applicableTo: ['strumenti', 'ambulatori']
+  },
+  {
+    id: 'CONVENZIONE_AZIENDA',
+    name: 'CONVENZIONE_AZIENDA',
+    displayName: 'Convenzione - Azienda',
+    description: 'Tariffari e condizioni per le aziende convenzionate',
+    applicableTo: ['convenzioni', 'tariffari', 'companies']
   }
 ] as const;
 
@@ -222,6 +267,27 @@ export const ENTITY_ICON_MAP: Record<string, React.ComponentType<{ className?: s
   // Tenant e administration
   tenants: Building,
   administration: Lock,
+
+  // P69: Clinical / Poliambulatorio entities
+  poliambulatori: Activity,
+  sedi_cliniche: MapPin,
+  ambulatori: Stethoscope,
+  prestazioni: Heart,
+  medici_abilitati: UserCog,
+  appuntamenti: Calendar,
+  slot_disponibilita: Clock,
+  visite: Stethoscope,
+  referti: FileHeart,
+  documenti_clinici: FileText,
+  convenzioni: HandCoins,
+  tariffari: Receipt,
+  fatture_sanitarie: CreditCard,
+  strumenti: Wrench,
+  coda_pazienti: ListOrdered,
+  visit_templates: FileType,
+  protocolli_sanitari: ClipboardCheck,
+  farmaci: Pill,
+  disponibilita_medici: Calendar,
 
   // Default
   default: Database

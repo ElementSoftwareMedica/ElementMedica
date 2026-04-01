@@ -5,6 +5,9 @@
  * Permette agli utenti con accesso multi-tenant di filtrare le entità
  * per uno o più tenant selezionati.
  * 
+ * INTEGRAZIONE: Questo context si sincronizza automaticamente con TenantModeContext.
+ * Quando l'utente cambia il tenant nel TenantModeSelector, questo context si aggiorna.
+ * 
  * Logica:
  * - Utenti normali: vedono solo le entità del proprio tenant (nessun filtro UI)
  * - Utenti con più tenant: vedono dropdown multi-select per filtrare
@@ -12,10 +15,12 @@
  * 
  * @module context/TenantFilterContext
  * @project 43 - Tenant Roles Management System
+ * @updated Project 45 - TenantMode Integration
  */
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import { useAuth } from './AuthContext';
+import { useTenantModeOptional } from '../contexts/TenantModeContext';
 import { apiGet } from '../services/api';
 
 // =====================================================
@@ -61,6 +66,7 @@ interface TenantFilterContextType {
     refreshTenants: () => Promise<void>;
 
     // Query params per le API
+    // tenantIds è un array, i consumer fanno .join(',') quando necessario
     getTenantFilterParams: () => { tenantIds?: string[]; allTenants?: boolean };
 
     // Stringa stabile per queryKey (evita re-render)
@@ -118,6 +124,9 @@ interface MyTenantsResponse {
 export const TenantFilterProvider: React.FC<TenantFilterProviderProps> = ({ children }) => {
     const { user, isAuthenticated } = useAuth();
 
+    // Sincronizzazione con TenantModeContext
+    const tenantMode = useTenantModeOptional();
+
     const [accessibleTenants, setAccessibleTenants] = useState<TenantInfo[]>([]);
     const [selectedTenantIds, setSelectedTenantIds] = useState<string[]>([]);
     const [loading, setLoading] = useState(false);
@@ -142,8 +151,6 @@ export const TenantFilterProvider: React.FC<TenantFilterProviderProps> = ({ chil
             setLoading(true);
             setError(null);
 
-            console.log('🏢 TenantFilterContext: Loading accessible tenants...');
-
             const response = await apiGet<MyTenantsResponse>('/api/v1/person-tenant-access/my-tenants');
 
             const tenants: TenantInfo[] = (response.data || []).map(t => ({
@@ -158,12 +165,27 @@ export const TenantFilterProvider: React.FC<TenantFilterProviderProps> = ({ chil
             setAccessibleTenants(tenants);
 
             // Inizializza selectedTenantIds
-            // Per utenti con accesso multi-tenant (es. ADMIN): default TUTTI i tenant
-            // Per utenti singolo tenant: solo il proprio tenant
+            // PRIORITÀ: 
+            // 1. Se TenantModeContext ha già viewTenantIds (es. da localStorage), usali
+            // 2. Altrimenti, per multi-tenant: tutti i tenant
+            // 3. Per single-tenant: solo il proprio tenant
             if (!initialized) {
-                if (tenants.length > 1) {
-                    // Multi-tenant user: default = tutti i tenant accessibili
-                    console.log('🏢 TenantFilterContext: Multi-tenant user, defaulting to ALL tenants');
+                // Controlla se TenantModeContext ha già un tenant selezionato (es. reload pagina)
+                const modeViewTenantIds = tenantMode?.viewTenantIds;
+
+                if (modeViewTenantIds && modeViewTenantIds.length > 0) {
+                    // Usa i tenant dal TenantModeContext (filtrati per quelli accessibili)
+                    const validTenantIds = modeViewTenantIds.filter(id =>
+                        tenants.some(t => t.id === id)
+                    );
+                    if (validTenantIds.length > 0) {
+                        setSelectedTenantIds(validTenantIds);
+                    } else if (tenants.length > 0) {
+                        // Fallback: usa tutti i tenant accessibili
+                        setSelectedTenantIds(tenants.map(t => t.id));
+                    }
+                } else if (tenants.length > 1) {
+                    // Multi-tenant user senza selezione precedente: default = tutti i tenant accessibili
                     setSelectedTenantIds(tenants.map(t => t.id));
                 } else if (userTenantId) {
                     // Single tenant user: default = proprio tenant
@@ -178,16 +200,16 @@ export const TenantFilterProvider: React.FC<TenantFilterProviderProps> = ({ chil
             }
 
             setInitialized(true);
-
-            console.log('✅ TenantFilterContext: Loaded', tenants.length, 'tenants');
         } catch (err) {
-            console.error('❌ TenantFilterContext: Error loading tenants:', err);
             setError('Errore nel caricamento dei tenant');
             setAccessibleTenants([]);
+            // P59 FIX: Anche in caso di errore, settiamo initialized=true
+            // per permettere ai componenti di procedere con il fallback al tenant dell'utente
+            setInitialized(true);
         } finally {
             setLoading(false);
         }
-    }, [isAuthenticated, userTenantId, initialized]);
+    }, [isAuthenticated, userTenantId, initialized, tenantMode?.viewTenantIds]);
 
     // Carica tenant all'autenticazione
     useEffect(() => {
@@ -205,6 +227,37 @@ export const TenantFilterProvider: React.FC<TenantFilterProviderProps> = ({ chil
         }
     }, [isAuthenticated]);
 
+    // === SINCRONIZZAZIONE CON TenantModeContext ===
+    // Quando l'utente cambia il tenant nel TenantModeSelector,
+    // aggiorniamo selectedTenantIds per mantenere coerenza
+
+    // Calcola la chiave stabile per viewTenantIds (evita problemi con array reference)
+    const viewTenantIdsKey = tenantMode?.viewTenantIds ? [...tenantMode.viewTenantIds].sort().join(',') : '';
+
+    useEffect(() => {
+        if (!tenantMode || !initialized) {
+            return;
+        }
+
+        const { viewMode, viewTenantIds: contextViewTenantIds } = tenantMode;
+
+        // Se viewTenantIds è vuoto, non fare niente (stato transitorio)
+        if (!contextViewTenantIds || contextViewTenantIds.length === 0) {
+            return;
+        }
+
+        // Sincronizza sempre con viewTenantIds (funziona per entrambi 'all' e 'single')
+        setSelectedTenantIds(prev => {
+            const prevSorted = [...prev].sort().join(',');
+            const newSorted = [...contextViewTenantIds].sort().join(',');
+            // Evita aggiornamenti inutili
+            if (prevSorted === newSorted) {
+                return prev;
+            }
+            return [...contextViewTenantIds];
+        });
+    }, [viewTenantIdsKey, initialized]);
+
     /**
      * Verifica se l'utente ha accesso a più tenant
      */
@@ -217,7 +270,9 @@ export const TenantFilterProvider: React.FC<TenantFilterProviderProps> = ({ chil
      */
     const tenantFilterKey = useMemo(() => {
         if (!initialized) return '__not_ready__';
-        return selectedTenantIds.sort().join(',') || userTenantId || 'default';
+        // Usa [...selectedTenantIds] per evitare di modificare l'array originale
+        const key = [...selectedTenantIds].sort().join(',') || userTenantId || 'default';
+        return key;
     }, [initialized, selectedTenantIds, userTenantId]);
 
     /**
@@ -274,8 +329,9 @@ export const TenantFilterProvider: React.FC<TenantFilterProviderProps> = ({ chil
         }
 
         // Se solo alcuni tenant sono selezionati
+        // Restituisce array - i consumer faranno .join(',') quando necessario
         if (selectedTenantIds.length > 0) {
-            return { tenantIds: selectedTenantIds };
+            return { tenantIds: [...selectedTenantIds] };
         }
 
         // Fallback: solo il tenant dell'utente

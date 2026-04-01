@@ -8,9 +8,9 @@ import { API_BASE_URL } from '../../../../config/api';
 import { getToken } from '../../../../services/auth';
 
 // Create axios instance with interceptors
-// Uses centralized API_BASE_URL which routes through proxy (port 4003) in development
+// P64: Uses centralized API_BASE_URL which routes to api:4001 via Vite proxy (dev) or Nginx (prod)
 const apiClient = axios.create({
-  baseURL: API_BASE_URL
+  baseURL: API_BASE_URL,
 });
 
 // Add auth token to requests with method validation

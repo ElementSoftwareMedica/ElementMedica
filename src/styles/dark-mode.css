@@ -1,0 +1,581 @@
+/**
+ * Dark Mode CSS Variables & Utilities
+ * P60: Design System Unificato e Dark Mode
+ * 
+ * Questo file definisce:
+ * - Variabili CSS per light/dark mode
+ * - Utilities Tailwind per dark mode
+ * - Classi helper per transizioni
+ */
+
+/* ===========================================
+   LIGHT MODE (Default)
+   =========================================== */
+:root {
+    /* Backgrounds */
+    --color-bg-primary: 255 255 255;
+    /* #ffffff */
+    --color-bg-secondary: 249 250 251;
+    /* gray-50 */
+    --color-bg-tertiary: 243 244 246;
+    /* gray-100 */
+    --color-bg-elevated: 255 255 255;
+    /* white with shadow */
+    --color-bg-hover: 249 250 251;
+    /* gray-50 */
+
+    /* Surfaces */
+    --color-surface-card: 255 255 255;
+    /* white */
+    --color-surface-modal: 255 255 255;
+    /* white */
+    --color-surface-dropdown: 255 255 255;
+    /* white */
+    --color-surface-input: 255 255 255;
+    /* white */
+
+    /* Text */
+    --color-text-primary: 17 24 39;
+    /* gray-900 */
+    --color-text-secondary: 107 114 128;
+    /* gray-500 */
+    --color-text-muted: 156 163 175;
+    /* gray-400 */
+    --color-text-inverted: 255 255 255;
+    /* white */
+
+    /* Borders */
+    --color-border-default: 229 231 235;
+    /* gray-200 */
+    --color-border-strong: 209 213 219;
+    /* gray-300 */
+    --color-border-input: 209 213 219;
+    /* gray-300 */
+    --color-border-focus: 59 130 246;
+    /* blue-500 */
+
+    /* Semantic Colors (invarianti tra temi) */
+    --color-success: 34 197 94;
+    /* green-500 */
+    --color-warning: 245 158 11;
+    /* amber-500 */
+    --color-error: 239 68 68;
+    /* red-500 */
+    --color-info: 59 130 246;
+    /* blue-500 */
+
+    /* Brand Colors - Invarianti */
+    --color-brand-medica: 13 148 136;
+    /* teal-600 */
+    --color-brand-medica-hover: 15 118 110;
+    /* teal-700 */
+    --color-brand-sicurezza: 37 99 235;
+    /* blue-600 */
+    --color-brand-sicurezza-hover: 29 78 216;
+    /* blue-700 */
+    --color-brand-management: 124 58 237;
+    /* violet-600 */
+    --color-brand-management-hover: 109 40 217;
+    /* violet-700 */
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+}
+
+/* ===========================================
+   DARK MODE
+   =========================================== */
+.dark {
+    /* Backgrounds */
+    --color-bg-primary: 17 24 39;
+    /* gray-900 */
+    --color-bg-secondary: 31 41 55;
+    /* gray-800 */
+    --color-bg-tertiary: 55 65 81;
+    /* gray-700 */
+    --color-bg-elevated: 31 41 55;
+    /* gray-800 */
+    --color-bg-hover: 55 65 81;
+    /* gray-700 */
+
+    /* Surfaces */
+    --color-surface-card: 31 41 55;
+    /* gray-800 */
+    --color-surface-modal: 31 41 55;
+    /* gray-800 */
+    --color-surface-dropdown: 31 41 55;
+    /* gray-800 */
+    --color-surface-input: 17 24 39;
+    /* gray-900 */
+
+    /* Text */
+    --color-text-primary: 249 250 251;
+    /* gray-50 */
+    --color-text-secondary: 209 213 219;
+    /* gray-300 */
+    --color-text-muted: 156 163 175;
+    /* gray-400 */
+    --color-text-inverted: 17 24 39;
+    /* gray-900 */
+
+    /* Borders */
+    --color-border-default: 55 65 81;
+    /* gray-700 */
+    --color-border-strong: 75 85 99;
+    /* gray-600 */
+    --color-border-input: 75 85 99;
+    /* gray-600 */
+    --color-border-focus: 96 165 250;
+    /* blue-400 */
+
+    /* Shadows - più sottili in dark mode */
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.3);
+    --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.4), 0 8px 10px -6px rgb(0 0 0 / 0.3);
+}
+
+/* ===========================================
+   THEME TRANSITION
+   =========================================== */
+/* Classe per transizione fluida quando cambia tema */
+.theme-transition,
+.theme-transition *,
+.theme-transition *::before,
+.theme-transition *::after {
+    transition: background-color 150ms ease-out,
+        border-color 150ms ease-out,
+        color 150ms ease-out !important;
+}
+
+/* ===========================================
+   UTILITY CLASSES
+   =========================================== */
+
+/* Background utilities usando variabili */
+.bg-primary {
+    background-color: rgb(var(--color-bg-primary));
+}
+
+.bg-secondary {
+    background-color: rgb(var(--color-bg-secondary));
+}
+
+.bg-tertiary {
+    background-color: rgb(var(--color-bg-tertiary));
+}
+
+.bg-elevated {
+    background-color: rgb(var(--color-bg-elevated));
+}
+
+/* Surface utilities */
+.surface-card {
+    background-color: rgb(var(--color-surface-card));
+}
+
+.surface-modal {
+    background-color: rgb(var(--color-surface-modal));
+}
+
+.surface-dropdown {
+    background-color: rgb(var(--color-surface-dropdown));
+}
+
+.surface-input {
+    background-color: rgb(var(--color-surface-input));
+}
+
+/* Text utilities */
+.text-primary {
+    color: rgb(var(--color-text-primary));
+}
+
+.text-secondary {
+    color: rgb(var(--color-text-secondary));
+}
+
+.text-muted {
+    color: rgb(var(--color-text-muted));
+}
+
+/* Border utilities */
+.border-default {
+    border-color: rgb(var(--color-border-default));
+}
+
+.border-strong {
+    border-color: rgb(var(--color-border-strong));
+}
+
+/* ===========================================
+   COMPONENT OVERRIDES
+   =========================================== */
+
+/* Card base - dark mode support */
+.card-base {
+    background-color: rgb(255 255 255);
+    border: 1px solid rgb(229 231 235);
+    border-radius: 0.5rem;
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+}
+
+.dark .card-base {
+    background-color: rgb(31 41 55);
+    border-color: rgb(55 65 81);
+}
+
+/* Input base - dark mode support */
+.input-base {
+    background-color: rgb(255 255 255);
+    border: 1px solid rgb(209 213 219);
+    color: rgb(17 24 39);
+}
+
+.input-base::placeholder {
+    color: rgb(156 163 175);
+}
+
+.input-base:focus {
+    border-color: rgb(59 130 246);
+    box-shadow: 0 0 0 2px rgb(59 130 246 / 0.2);
+}
+
+.dark .input-base {
+    background-color: rgb(17 24 39);
+    border-color: rgb(75 85 99);
+    color: rgb(243 244 246);
+}
+
+.dark .input-base::placeholder {
+    color: rgb(107 114 128);
+}
+
+.dark .input-base:focus {
+    border-color: rgb(96 165 250);
+    box-shadow: 0 0 0 2px rgb(96 165 250 / 0.2);
+}
+
+/* Button base con dark mode */
+.btn-base {
+    transition: background-color 150ms, color 150ms, border-color 150ms;
+}
+
+/* Table row hover - dark mode */
+.table-row-hover:hover {
+    background-color: rgb(249 250 251);
+}
+
+.dark .table-row-hover:hover {
+    background-color: rgb(55 65 81 / 0.5);
+}
+
+/* Divider - dark mode */
+.divider {
+    border-color: rgb(229 231 235);
+}
+
+.dark .divider {
+    border-color: rgb(55 65 81);
+}
+
+/* Scrollbar styling per dark mode */
+.dark ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.dark ::-webkit-scrollbar-track {
+    background: rgb(31 41 55);
+    /* gray-800 */
+}
+
+.dark ::-webkit-scrollbar-thumb {
+    background: rgb(75 85 99);
+    /* gray-600 */
+    border-radius: 4px;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+    background: rgb(107 114 128);
+    /* gray-500 */
+}
+
+/* ===========================================
+   ACCESSIBILITY: Focus Visible
+   =========================================== */
+.dark *:focus-visible {
+    outline: 2px solid rgb(96 165 250);
+    /* blue-400 */
+    outline-offset: 2px;
+}
+
+/* ===========================================
+   CONTRAST FIX: Ensure readability
+   =========================================== */
+
+/* Fix per badge in dark mode */
+.dark .badge-default {
+    background-color: rgb(55 65 81);
+    color: rgb(229 231 235);
+}
+
+.dark .badge-success {
+    background-color: rgb(20 83 45 / 0.5);
+    color: rgb(134 239 172);
+}
+
+.dark .badge-warning {
+    background-color: rgb(120 53 15 / 0.5);
+    color: rgb(252 211 77);
+}
+
+.dark .badge-error {
+    background-color: rgb(127 29 29 / 0.5);
+    color: rgb(252 165 165);
+}
+
+/* Fix per select/dropdown in dark mode */
+.dark select option {
+    background-color: rgb(31 41 55);
+    /* gray-800 */
+    color: rgb(249 250 251);
+    /* gray-50 */
+}
+
+/* ===========================================
+   AUTOMATIC TAILWIND CLASS OVERRIDES
+   Per garantire dark mode senza modificare ogni componente
+   =========================================== */
+
+/* Background white -> dark mode gray-800/900 */
+.dark .bg-white {
+    background-color: rgb(31 41 55) !important;
+    /* gray-800 */
+}
+
+.dark .bg-gray-50 {
+    background-color: rgb(55 65 81) !important;
+    /* gray-700 */
+}
+
+.dark .bg-gray-100 {
+    background-color: rgb(55 65 81) !important;
+    /* gray-700 */
+}
+
+/* Text colors */
+.dark .text-gray-900 {
+    color: rgb(249 250 251) !important;
+    /* gray-50 */
+}
+
+.dark .text-gray-800 {
+    color: rgb(229 231 235) !important;
+    /* gray-200 */
+}
+
+.dark .text-gray-700 {
+    color: rgb(209 213 219) !important;
+    /* gray-300 */
+}
+
+.dark .text-gray-600 {
+    color: rgb(156 163 175) !important;
+    /* gray-400 */
+}
+
+.dark .text-gray-500 {
+    color: rgb(156 163 175) !important;
+    /* gray-400 */
+}
+
+/* Border colors */
+.dark .border-gray-200 {
+    border-color: rgb(55 65 81) !important;
+    /* gray-700 */
+}
+
+.dark .border-gray-300 {
+    border-color: rgb(75 85 99) !important;
+    /* gray-600 */
+}
+
+.dark .border-gray-100 {
+    border-color: rgb(55 65 81) !important;
+    /* gray-700 */
+}
+
+/* Ring colors */
+.dark .ring-gray-200 {
+    --tw-ring-color: rgb(75 85 99) !important;
+    /* gray-600 */
+}
+
+/* Divide colors */
+.dark .divide-gray-200> :not([hidden])~ :not([hidden]) {
+    border-color: rgb(55 65 81) !important;
+    /* gray-700 */
+}
+
+/* Hover states */
+.dark .hover\:bg-gray-50:hover {
+    background-color: rgb(55 65 81) !important;
+    /* gray-700 */
+}
+
+.dark .hover\:bg-gray-100:hover {
+    background-color: rgb(55 65 81) !important;
+    /* gray-700 */
+}
+
+/* Shadow adjustments for dark mode */
+.dark .shadow-sm,
+.dark .shadow,
+.dark .shadow-md {
+    --tw-shadow-color: rgb(0 0 0 / 0.3) !important;
+}
+
+/* Placeholder colors */
+.dark .placeholder\:text-gray-400::placeholder,
+.dark .placeholder-gray-400::placeholder {
+    color: rgb(107 114 128) !important;
+    /* gray-500 */
+}
+
+/* Focus rings */
+.dark .focus\:ring-blue-500:focus {
+    --tw-ring-color: rgb(96 165 250) !important;
+    /* blue-400 */
+}
+
+.dark .focus\:border-blue-500:focus {
+    border-color: rgb(96 165 250) !important;
+    /* blue-400 */
+}
+
+/* ===========================================
+   SPECIAL COMPONENT OVERRIDES
+   =========================================== */
+
+/* ResizableTable specific dark mode */
+.dark [data-component="resizable-table"] th {
+    background-color: rgb(31 41 55) !important;
+    color: rgb(209 213 219) !important;
+    border-color: rgb(55 65 81) !important;
+}
+
+.dark [data-component="resizable-table"] td {
+    background-color: rgb(17 24 39) !important;
+    border-color: rgb(55 65 81) !important;
+}
+
+.dark [data-component="resizable-table"] tr:hover td {
+    background-color: rgb(31 41 55) !important;
+}
+
+/* Dropdown/Menu items */
+.dark [role="menu"],
+.dark [role="listbox"] {
+    background-color: rgb(31 41 55) !important;
+    border-color: rgb(55 65 81) !important;
+}
+
+.dark [role="menuitem"]:hover,
+.dark [role="option"]:hover {
+    background-color: rgb(55 65 81) !important;
+}
+
+/* Modal overlay */
+.dark .fixed.inset-0.bg-black\/50,
+.dark .fixed.inset-0.bg-gray-900\/50 {
+    background-color: rgb(0 0 0 / 0.7) !important;
+}
+
+/* Form labels */
+.dark label {
+    color: rgb(209 213 219);
+    /* gray-300 */
+}
+
+/* Input fields general */
+.dark input:not([type="checkbox"]):not([type="radio"]),
+.dark textarea,
+.dark select {
+    background-color: rgb(17 24 39) !important;
+    /* gray-900 */
+    border-color: rgb(75 85 99) !important;
+    /* gray-600 */
+    color: rgb(249 250 251) !important;
+    /* gray-50 */
+}
+
+.dark input:focus,
+.dark textarea:focus,
+.dark select:focus {
+    border-color: rgb(96 165 250) !important;
+    /* blue-400 */
+}
+
+/* Checkbox and radio buttons */
+.dark input[type="checkbox"],
+.dark input[type="radio"] {
+    background-color: rgb(31 41 55) !important;
+    border-color: rgb(75 85 99) !important;
+}
+
+.dark input[type="checkbox"]:checked,
+.dark input[type="radio"]:checked {
+    background-color: rgb(59 130 246) !important;
+    /* blue-500 */
+    border-color: rgb(59 130 246) !important;
+}
+
+/* Tooltips */
+.dark [role="tooltip"] {
+    background-color: rgb(55 65 81) !important;
+    /* gray-700 */
+    color: rgb(249 250 251) !important;
+}
+
+/* Loading spinners - mantieni colori brand */
+.dark .animate-spin {
+    color: rgb(96 165 250);
+    /* blue-400 */
+}
+
+/* ===========================================
+   PAGE LAYOUT OVERRIDES
+   =========================================== */
+
+/* Main content area */
+.dark main,
+.dark [data-main-content] {
+    background-color: rgb(17 24 39) !important;
+    /* gray-900 */
+}
+
+/* Sidebar */
+.dark aside,
+.dark [data-sidebar] {
+    background-color: rgb(31 41 55) !important;
+    /* gray-800 */
+    border-color: rgb(55 65 81) !important;
+}
+
+/* Header */
+.dark header,
+.dark [data-header] {
+    background-color: rgb(31 41 55) !important;
+    /* gray-800 */
+    border-color: rgb(55 65 81) !important;
+}
+
+/* Footer */
+.dark footer {
+    background-color: rgb(31 41 55) !important;
+    border-color: rgb(55 65 81) !important;
+}

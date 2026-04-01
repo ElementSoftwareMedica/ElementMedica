@@ -1,4 +1,4 @@
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
@@ -16,31 +16,35 @@ async function createAdmin() {
       return;
     }
 
-    // Check if admin already exists
-    const existingAdmin = await prisma.person.findUnique({
-      where: { email: 'admin@example.com' }
+    // P48: Check if admin already exists via PersonTenantProfile
+    const existingProfile = await prisma.personTenantProfile.findFirst({
+      where: { email: 'admin@example.com', tenantId: defaultTenant.id, deletedAt: null }
     });
 
-    if (existingAdmin) {
+    if (existingProfile) {
       console.log('✅ Admin user already exists');
       return;
     }
 
-    // Create admin user
+    // P48: Create admin user with PersonTenantProfile
     const hashedPassword = await bcrypt.hash('Admin123!', 10);
-    
+
     const adminUser = await prisma.person.create({
       data: {
         firstName: 'Admin',
         lastName: 'User',
-        email: 'admin@example.com',
         username: 'admin',
         password: hashedPassword,
-        status: 'ACTIVE',
-        globalRole: 'ADMIN',
-        tenantId: defaultTenant.id,
         gdprConsentDate: new Date(),
         gdprConsentVersion: '1.0',
+        tenantProfiles: {
+          create: {
+            tenantId: defaultTenant.id,
+            email: 'admin@example.com',
+            status: 'ACTIVE',
+            isPrimary: true
+          }
+        },
         personRoles: {
           create: {
             roleType: 'ADMIN',
@@ -52,7 +56,7 @@ async function createAdmin() {
       }
     });
 
-    console.log('✅ Admin user created:', adminUser.email);
+    console.log('✅ Admin user created:', adminUser.id);
   } catch (error) {
     console.error('❌ Error creating admin:', error);
   } finally {

@@ -5,5 +5,6 @@
  */
 
 export { default as TariffariAziendePage } from './TariffariAziendePage';
+export { default as TariffarioAziendaleDetails } from './TariffarioAziendaleDetails';
 export { default as TariffarioAziendaleForm } from './TariffarioAziendaleForm';
-export { default as CloneTariffarioPage } from './CloneTariffarioPage';
+// P63: CloneTariffarioPage rimossa - metodo clone() deprecato e rimosso

@@ -29,16 +29,11 @@ MAX_RETRIES=3
 RETRY_DELAY=5
 
 # Services to check
+# P64: Simplified — single instance per service, no blue/green
 declare -A SERVICES=(
-    ["nginx"]="http://localhost:8080/health"
-    ["api_blue"]="http://localhost:4000/health"
-    ["api_green"]="http://localhost:4001/health"
-    ["frontend_blue"]="http://localhost:3000/health"
-    ["frontend_green"]="http://localhost:3001/health"
-    ["docs_blue"]="http://localhost:4002/health"
-    ["docs_green"]="http://localhost:4003/health"
-    ["main_blue"]="http://localhost:3001/health"
-    ["main_green"]="http://localhost:3002/health"
+    ["nginx"]="http://localhost:80/health"
+    ["api"]="http://localhost:4001/health"
+    ["documents"]="http://localhost:4002/health"
     ["postgres"]="postgresql://localhost:5432"
     ["redis"]="redis://localhost:6379"
     ["prometheus"]="http://localhost:9090/-/healthy"
@@ -47,7 +42,7 @@ declare -A SERVICES=(
 )
 
 # Critical services that must be healthy
-CRITICAL_SERVICES=("nginx" "postgres" "redis")
+CRITICAL_SERVICES=("nginx" "api" "documents")
 
 # Initialize logging
 log() {

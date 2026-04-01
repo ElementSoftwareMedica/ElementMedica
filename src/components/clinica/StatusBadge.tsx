@@ -22,22 +22,26 @@ import {
     FileText,
     Edit,
     Send,
-    Archive
+    Archive,
+    Receipt,
+    RotateCcw
 } from 'lucide-react';
 
 // =====================================================
 // TYPES
 // =====================================================
 
-// Appointment statuses
+// Appointment statuses (matches StatoAppuntamento enum from backend)
 type AppointmentStatus =
     | 'PRENOTATO'
     | 'CONFERMATO'
     | 'IN_ATTESA'
     | 'IN_CORSO'
     | 'COMPLETATO'
+    | 'FATTURATO'
     | 'ANNULLATO'
-    | 'NO_SHOW';
+    | 'NO_SHOW'
+    | 'RINVIATO';
 
 // Visit statuses
 type VisitStatus =
@@ -127,6 +131,20 @@ const appointmentStatusConfig: Record<AppointmentStatus, StatusConfig> = {
         bgColor: 'bg-gray-50',
         borderColor: 'border-gray-200',
         icon: <AlertCircle className="w-full h-full" />
+    },
+    FATTURATO: {
+        label: 'Fatturato',
+        color: 'text-purple-700',
+        bgColor: 'bg-purple-50',
+        borderColor: 'border-purple-200',
+        icon: <Receipt className="w-full h-full" />
+    },
+    RINVIATO: {
+        label: 'Rinviato',
+        color: 'text-orange-700',
+        bgColor: 'bg-orange-50',
+        borderColor: 'border-orange-200',
+        icon: <RotateCcw className="w-full h-full" />
     }
 };
 

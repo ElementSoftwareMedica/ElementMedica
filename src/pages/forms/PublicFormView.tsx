@@ -50,13 +50,6 @@ export function PublicFormView() {
 
       // Carica il template pubblico (no auth required)
       const template = await formTemplatesService.getPublicTemplate(slug);
-      console.log('📥 [PUBLIC FORM] Template loaded:', {
-        id: template.id,
-        name: template.name,
-        fieldsCount: template.fields?.length,
-        fields: template.fields?.map(f => ({ name: f.name, type: f.type, hasOptions: !!f.options, optionsCount: Array.isArray(f.options) ? f.options.length : 0 }))
-      });
-
       // Verifica accesso al form
       const canAccessAnonymously = template.isPublic && template.allowAnonymous;
       const canAccessAuthenticated = template.isPublic && isAuthenticated;
@@ -92,9 +85,8 @@ export function PublicFormView() {
           email: prev.email || user.email || ''
         }));
       }
-    } catch (err: any) {
-      console.error('Error loading form template:', err);
-      setError(err.message || 'Errore nel caricamento del form');
+    } catch (err: unknown) {
+      setError('Errore nel caricamento del form');
     } finally {
       setLoading(false);
     }
@@ -142,27 +134,22 @@ export function PublicFormView() {
     try {
       // Submit solo i dati del form (senza templateId, userId, source)
       // Il service wrappa automaticamente in formData e aggiunge source
-      console.log('📤 Submitting form data:', { templateId: template.id, formData });
       await formTemplatesService.submitForm(template.id, formData);
 
-      console.log('✅ Form submitted successfully', {
-        authenticated: isAuthenticated,
-        userId: user?.id
-      });
       setSubmitted(true);
 
       // Reset form dopo successo
       setFormData({});
       setValidationErrors([]);
-    } catch (err: any) {
-      console.error('❌ Error submitting form:', err);
+    } catch (err: unknown) {
 
       // Gestisci errori di validazione dal server
-      if (err.response?.data?.validationErrors) {
-        setValidationErrors(err.response.data.validationErrors);
+      const axiosErr = err as { response?: { data?: { validationErrors?: Array<{ field: string; message: string }> } } };
+      if (axiosErr.response?.data?.validationErrors) {
+        setValidationErrors(axiosErr.response.data.validationErrors as import('../../utils/formValidation').ValidationError[]);
         setError('Alcuni campi contengono errori. Correggili e riprova.');
       } else {
-        setError(err.message || 'Errore nell\'invio del form');
+        setError('Errore nell\'invio del form');
       }
     } finally {
       setSubmitting(false);
@@ -182,20 +169,17 @@ export function PublicFormView() {
           const parsed = JSON.parse(field.options);
           options = Array.isArray(parsed) ? parsed : [];
         } catch (e) {
-          console.error('❌ Failed to parse field options:', field.name, field.options);
           options = [];
         }
       } else if (Array.isArray(field.options)) {
         options = field.options;
       } else {
-        console.warn('⚠️ Options is not an array or string:', field.name, typeof field.options);
         options = [];
       }
     }
 
     // Log info for fields with options (solo se ci sono problemi)
     if (['select', 'radio', 'checkbox', 'single_choice', 'multiple_choice'].includes(fieldType) && options.length === 0) {
-      console.info('ℹ️ Field without options configured:', field.name, '- showing warning message');
     }
 
     switch (fieldType) {
@@ -325,24 +309,14 @@ export function PublicFormView() {
   // Organizza i campi per sezioni con conditional logic completa (30 operatori)
   const sections = useMemo(() => {
     if (!template) {
-      console.warn('⚠️ No template in sections useMemo');
       return [];
     }
 
     const templateSections = (template.settings?.sections || []) as FormSection[];
     const fields = template.fields || [];
 
-    console.log('📊 Section organization:', {
-      templateName: template.name,
-      totalSections: templateSections.length,
-      totalFields: fields.length,
-      fieldsWithSectionId: fields.filter(f => f.sectionId).length
-    });
-
     // Se non ci sono sezioni definite, crea una sezione di default con campi visibili
     if (templateSections.length === 0) {
-      console.log('✅ Using DEFAULT SECTION');
-
       const defaultSection = {
         id: 'default',
         title: template.name,
@@ -354,11 +328,6 @@ export function PublicFormView() {
           .filter(f => evaluateCondition(f.conditional, formData))
           .sort((a, b) => a.order - b.order)
       };
-
-      console.log('🎯 Default section:', {
-        totalFields: fields.length,
-        visibleFields: defaultSection.fields.length
-      });
 
       return [defaultSection];
     }
@@ -374,13 +343,6 @@ export function PublicFormView() {
     const linkedSectionIds = new Set<string>();
     fields.forEach(field => {
       const fieldValue = formData[field.name];
-      console.log(`🔗 Checking field ${field.name}:`, {
-        hasOptions: !!field.options,
-        optionsCount: field.options?.length,
-        fieldValue,
-        valueType: typeof fieldValue
-      });
-
       if (field.options && fieldValue) {
         // Trova le opzioni selezionate
         const selectedOptions = field.options.filter((opt: any) => {
@@ -390,22 +352,14 @@ export function PublicFormView() {
           return opt.value === fieldValue;
         });
 
-        console.log(`  ✓ Selected options for ${field.name}:`, selectedOptions.map((o: any) => ({
-          value: o.value,
-          linkedSectionId: o.linkedSectionId
-        })));
-
         // Aggiungi i linkedSectionId
         selectedOptions.forEach((opt: any) => {
           if (opt.linkedSectionId) {
-            console.log(`    → Adding linkedSectionId: ${opt.linkedSectionId}`);
             linkedSectionIds.add(opt.linkedSectionId);
           }
         });
       }
     });
-
-    console.log('🔗 Total linked section IDs:', Array.from(linkedSectionIds));
 
     // Aggiungi le sezioni linkate se non sono già visibili
     linkedSectionIds.forEach(sectionId => {
@@ -438,14 +392,6 @@ export function PublicFormView() {
         ...visibleSections[0].fields
       ];
     }
-
-    console.log('📋 Visible sections:', visibleSections.map(s => ({
-      id: s.id,
-      title: s.title,
-      fields: s.fields.length,
-      hasConditional: !!s.conditional,
-      isLinked: linkedSectionIds.has(s.id)
-    })));
 
     return visibleSections;
   }, [template, formData]);
@@ -533,11 +479,6 @@ export function PublicFormView() {
 
   // Debug: check sections
   if (template && sections.length === 0) {
-    console.error('❌ NO SECTIONS AVAILABLE:', {
-      template: template.name,
-      fieldsCount: template.fields?.length || 0,
-      settingsSections: template.settings?.sections?.length || 0
-    });
   }
 
   if (error || !template) {

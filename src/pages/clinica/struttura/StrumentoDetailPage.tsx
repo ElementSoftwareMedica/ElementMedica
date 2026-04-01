@@ -63,7 +63,7 @@ const StrumentoDetailPage: React.FC = () => {
                         Errore nel caricamento
                     </h3>
                     <p className="text-red-600 text-sm mb-4">
-                        {error instanceof Error ? error.message : 'Strumento non trovato'}
+                        {'Strumento non trovato'}
                     </p>
                     <button
                         onClick={() => navigate('/poliambulatorio/strumenti')}

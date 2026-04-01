@@ -140,6 +140,7 @@ export const PERMISSIONS = {
     ATTESTATI_DELETE: 'attestati:delete',
     ATTESTATI_MANAGE: 'attestati:manage',
     ATTESTATI_GENERATE: 'attestati:generate',
+    ATTESTATI_DOWNLOAD: 'attestati:download',
 
     // ----------------------------------------
     // CMS
@@ -240,7 +241,7 @@ export const PERMISSIONS = {
     SEO_UPDATE: 'seo:update',
     SEO_MANAGE: 'seo:manage',
     SEO_DELETE: 'seo:delete',
-    SITEMAP_GENERATE: 'sitemap:generate',
+    SITEMAP_GENERATE: 'seo:sitemap_generate',
 
     // ----------------------------------------
     // API KEYS
@@ -310,18 +311,30 @@ export const PERMISSIONS = {
     APPUNTAMENTI_UPDATE: 'clinica.appuntamenti:update',
     APPUNTAMENTI_DELETE: 'clinica.appuntamenti:delete',
     APPUNTAMENTI_MANAGE: 'clinica.appuntamenti:manage',
+    APPUNTAMENTI_VIEW_OTHERS: 'clinica.appuntamenti:view_others', // Permesso per vedere appuntamenti di altri medici
 
     VISITE_READ: 'clinica.visite:read',
     VISITE_CREATE: 'clinica.visite:create',
     VISITE_UPDATE: 'clinica.visite:update',
     VISITE_DELETE: 'clinica.visite:delete',
     VISITE_MANAGE: 'clinica.visite:manage',
+    // Granular visit permissions (P67)
+    VISITE_CHANGE_REFERTANTE: 'clinica.visite:change_refertante',  // Cambiare medico refertante
+    VISITE_VIEW_PRICES: 'clinica.visite:view_prices',              // Vedere importi prestazioni in visita
+    VISITE_MANAGE_CONVENZIONI: 'clinica.visite:manage_convenzioni', // Gestire convenzioni/sconti in visita
 
     REFERTI_READ: 'clinica.referti:read',
     REFERTI_CREATE: 'clinica.referti:create',
     REFERTI_UPDATE: 'clinica.referti:update',
     REFERTI_DELETE: 'clinica.referti:delete',
     REFERTI_MANAGE: 'clinica.referti:manage',
+
+    // Firme Digitali (P65)
+    SIGNATURES_READ: 'clinica.signatures:read',
+    SIGNATURES_CREATE: 'clinica.signatures:create',
+    SIGNATURES_DELETE: 'clinica.signatures:delete',
+    SIGNATURES_VALIDATE: 'clinica.signatures:validate',
+    SIGNATURES_MANAGE: 'clinica.signatures:manage',
 
     STRUMENTI_READ: 'clinica.strumenti:read',
     STRUMENTI_CREATE: 'clinica.strumenti:create',
@@ -335,41 +348,59 @@ export const PERMISSIONS = {
     MANUTENZIONI_DELETE: 'clinica.manutenzioni:delete',
     MANUTENZIONI_MANAGE: 'clinica.manutenzioni:manage',
 
+    FERIE_READ: 'clinica.ferie:read',
+    FERIE_CREATE: 'clinica.ferie:create',
+    FERIE_UPDATE: 'clinica.ferie:update',
+    FERIE_DELETE: 'clinica.ferie:delete',
+    FERIE_MANAGE: 'clinica.ferie:manage',
+    FERIE_APPROVE: 'clinica.ferie:approve',
+
     CONVENZIONI_READ: 'clinica.convenzioni:read',
     CONVENZIONI_CREATE: 'clinica.convenzioni:create',
     CONVENZIONI_UPDATE: 'clinica.convenzioni:update',
     CONVENZIONI_DELETE: 'clinica.convenzioni:delete',
     CONVENZIONI_MANAGE: 'clinica.convenzioni:manage',
 
-    TARIFFARI_READ: 'tariffari:read',
-    TARIFFARI_CREATE: 'tariffari:create',
-    TARIFFARI_UPDATE: 'tariffari:update',
-    TARIFFARI_DELETE: 'tariffari:delete',
-    TARIFFARI_MANAGE: 'tariffari:manage',
+    TARIFFARI_READ: 'clinica.tariffari:read',
+    TARIFFARI_CREATE: 'clinica.tariffari:create',
+    TARIFFARI_UPDATE: 'clinica.tariffari:update',
+    TARIFFARI_DELETE: 'clinica.tariffari:delete',
+    TARIFFARI_MANAGE: 'clinica.tariffari:manage',
 
-    CARTELLA_PAZIENTE_READ: 'cartella_paziente:read',
-    CARTELLA_PAZIENTE_CREATE: 'cartella_paziente:create',
-    CARTELLA_PAZIENTE_UPDATE: 'cartella_paziente:update',
-    CARTELLA_PAZIENTE_DELETE: 'cartella_paziente:delete',
-    CARTELLA_PAZIENTE_MANAGE: 'cartella_paziente:manage',
+    CARTELLA_PAZIENTE_READ: 'clinica.cartella_paziente:read',
+    CARTELLA_PAZIENTE_CREATE: 'clinica.cartella_paziente:create',
+    CARTELLA_PAZIENTE_UPDATE: 'clinica.cartella_paziente:update',
+    CARTELLA_PAZIENTE_DELETE: 'clinica.cartella_paziente:delete',
+    CARTELLA_PAZIENTE_MANAGE: 'clinica.cartella_paziente:manage',
 
-    FATTURE_SANITARIE_READ: 'fatture_sanitarie:read',
-    FATTURE_SANITARIE_CREATE: 'fatture_sanitarie:create',
-    FATTURE_SANITARIE_UPDATE: 'fatture_sanitarie:update',
-    FATTURE_SANITARIE_DELETE: 'fatture_sanitarie:delete',
-    FATTURE_SANITARIE_MANAGE: 'fatture_sanitarie:manage',
-
-    OFFERTE_BUNDLE_READ: 'offerte_bundle:read',
-    OFFERTE_BUNDLE_CREATE: 'offerte_bundle:create',
-    OFFERTE_BUNDLE_UPDATE: 'offerte_bundle:update',
-    OFFERTE_BUNDLE_DELETE: 'offerte_bundle:delete',
-    OFFERTE_BUNDLE_MANAGE: 'offerte_bundle:manage',
+    OFFERTE_BUNDLE_READ: 'clinica.offerte_bundle:read',
+    OFFERTE_BUNDLE_CREATE: 'clinica.offerte_bundle:create',
+    OFFERTE_BUNDLE_UPDATE: 'clinica.offerte_bundle:update',
+    OFFERTE_BUNDLE_DELETE: 'clinica.offerte_bundle:delete',
+    OFFERTE_BUNDLE_MANAGE: 'clinica.offerte_bundle:manage',
 
     SCONTI_READ: 'clinica.sconti:read',
     SCONTI_CREATE: 'clinica.sconti:create',
     SCONTI_UPDATE: 'clinica.sconti:update',
     SCONTI_DELETE: 'clinica.sconti:delete',
     SCONTI_MANAGE: 'clinica.sconti:manage',
+
+    // ----------------------------------------
+    // P66 - SCADENZE CENTRALIZZATE (Deadlines & Farmaci)
+    // ----------------------------------------
+    SCADENZE_READ: 'scadenze:read',
+    SCADENZE_CREATE: 'scadenze:create',
+    SCADENZE_UPDATE: 'scadenze:update',
+    SCADENZE_DELETE: 'scadenze:delete',
+    SCADENZE_MANAGE: 'scadenze:manage',
+    // Alias comuni per RBAC middleware
+    SCADENZE_WRITE: 'scadenze:write',
+
+    FARMACI_READ: 'farmaci:read',
+    FARMACI_CREATE: 'farmaci:create',
+    FARMACI_UPDATE: 'farmaci:update',
+    FARMACI_DELETE: 'farmaci:delete',
+    FARMACI_MANAGE: 'farmaci:manage',
 
     // ----------------------------------------
     // CALENDAR
@@ -384,6 +415,86 @@ export const PERMISSIONS = {
     // ----------------------------------------
     PUBLIC_CONTENT_READ: 'public_content:read',
     PUBLIC_CONTENT_MANAGE: 'public_content:manage',
+
+    // ----------------------------------------
+    // P68 - HR MANAGEMENT
+    // ----------------------------------------
+    HR_READ: 'hr:read',
+    HR_WRITE: 'hr:write',
+
+    // Turni
+    HR_TURNI_READ: 'hr.turni:read',
+    HR_TURNI_ASSIGN: 'hr.turni:assign',
+    HR_TURNI_MANAGE: 'hr.turni:manage',
+
+    // Timbrature
+    HR_TIMBRATURE_READ: 'hr.timbrature:read',
+    HR_TIMBRATURE_MANAGE: 'hr.timbrature:manage',
+
+    // Assenze
+    HR_ASSENZE_READ: 'hr.assenze:read',
+    HR_ASSENZE_APPROVE: 'hr.assenze:approve',
+    HR_ASSENZE_MANAGE: 'hr.assenze:manage',
+
+    // Mansioni
+    HR_MANSIONI_READ: 'hr.mansioni:read',
+    HR_MANSIONI_MANAGE: 'hr.mansioni:manage',
+
+    // Cartellini
+    HR_CARTELLINO_READ: 'hr.cartellino:read',
+    HR_CARTELLINO_MANAGE: 'hr.cartellino:manage',
+
+    // Report
+    HR_REPORT_READ: 'hr.report:read',
+    HR_REPORT_MANAGE: 'hr.report:manage',
+
+    // ----------------------------------------
+    // CROSS-TENANT
+    // ----------------------------------------
+    CROSS_TENANT_READ: 'cross_tenant:read',
+    CROSS_TENANT_APPROVE: 'cross_tenant:approve',
+    CROSS_TENANT_REJECT: 'cross_tenant:reject',
+    CROSS_TENANT_MANAGE: 'cross_tenant:manage',
+
+    // ----------------------------------------
+    // CLINICA - ADDITIONAL RESOURCES
+    // ----------------------------------------
+    PATIENTS_READ: 'clinica.pazienti:read',
+    PATIENTS_CREATE: 'clinica.pazienti:create',
+    PATIENTS_UPDATE: 'clinica.pazienti:update',
+    PATIENTS_DELETE: 'clinica.pazienti:delete',
+    PATIENTS_MANAGE: 'clinica.pazienti:manage',
+
+    GIUDIZI_READ: 'clinica.giudizi:read',
+    GIUDIZI_CREATE: 'clinica.giudizi:create',
+    GIUDIZI_UPDATE: 'clinica.giudizi:update',
+    GIUDIZI_DELETE: 'clinica.giudizi:delete',
+    GIUDIZI_MANAGE: 'clinica.giudizi:manage',
+
+    FATTURE_READ: 'clinica.fatture:read',
+    FATTURE_CREATE: 'clinica.fatture:create',
+    FATTURE_UPDATE: 'clinica.fatture:update',
+    FATTURE_DELETE: 'clinica.fatture:delete',
+    FATTURE_MANAGE: 'clinica.fatture:manage',
+
+    BILLING_READ: 'clinica.billing:read',
+    BILLING_CREATE: 'clinica.billing:create',
+    BILLING_MANAGE: 'clinica.billing:manage',
+
+    CONTABILITA_READ: 'clinica.contabilita:read',
+    CONTABILITA_MANAGE: 'clinica.contabilita:manage',
+
+    IMPOSTAZIONI_READ: 'clinica.impostazioni:read',
+    IMPOSTAZIONI_WRITE: 'clinica.impostazioni:update',
+    IMPOSTAZIONI_MANAGE: 'clinica.impostazioni:manage',
+
+    EMAIL_TEMPLATES_READ: 'clinica.email_templates:read',
+    EMAIL_TEMPLATES_WRITE: 'clinica.email_templates:update',
+    EMAIL_TEMPLATES_MANAGE: 'clinica.email_templates:manage',
+
+    INTERNAL_DOCUMENTS_READ: 'internal_documents:read',
+    INTERNAL_DOCUMENTS_WRITE: 'internal_documents:create',
+    INTERNAL_DOCUMENTS_MANAGE: 'internal_documents:manage',
 };
 
 // ============================================
@@ -406,59 +517,155 @@ export const ALL_PERMISSIONS = Object.values(PERMISSIONS);
 export const ADMIN_PERMISSIONS = ALL_PERMISSIONS;
 
 /**
- * Permessi per ruolo USER base
+ * Permessi base condivisi da tutti i ruoli autenticati
  */
-export const USER_PERMISSIONS = [
-    PERMISSIONS.DASHBOARD_READ,
-    PERMISSIONS.PERSONS_READ,
-    PERMISSIONS.COMPANIES_READ,
-    PERMISSIONS.COURSES_READ,
-    PERMISSIONS.SCHEDULES_READ,
-    PERMISSIONS.DOCUMENTS_READ,
+export const BASE_PERMISSIONS = [
     PERMISSIONS.NOTIFICATIONS_READ,
 ];
 
 /**
- * Permessi per ruolo EMPLOYEE
+ * Permessi per ruolo EMPLOYEE — solo propri corsi, attestati, documenti
  */
 export const EMPLOYEE_PERMISSIONS = [
-    ...USER_PERMISSIONS,
+    ...BASE_PERMISSIONS,
+    PERMISSIONS.COURSES_READ,
+    PERMISSIONS.SCHEDULES_READ,
     PERMISSIONS.ENROLLMENTS_READ,
+    PERMISSIONS.DOCUMENTS_READ,
     PERMISSIONS.DOCUMENTS_DOWNLOAD,
+    PERMISSIONS.ATTESTATI_READ,
+    PERMISSIONS.ATTESTATI_DOWNLOAD,
+    PERMISSIONS.COMPANIES_READ,
 ];
 
 /**
- * Permessi per ruolo TRAINER
+ * Permessi per ruolo TRAINER — propri corsi, partecipanti, documenti
  */
 export const TRAINER_PERMISSIONS = [
-    ...USER_PERMISSIONS,
+    ...BASE_PERMISSIONS,
+    PERMISSIONS.COURSES_READ,
     PERMISSIONS.SCHEDULES_READ,
     PERMISSIONS.SCHEDULES_UPDATE,
     PERMISSIONS.ENROLLMENTS_READ,
     PERMISSIONS.ENROLLMENTS_UPDATE,
+    PERMISSIONS.EMPLOYEES_READ,
+    PERMISSIONS.COMPANIES_READ,
     PERMISSIONS.DOCUMENTS_READ,
     PERMISSIONS.DOCUMENTS_CREATE,
+    PERMISSIONS.DOCUMENTS_DOWNLOAD,
+    PERMISSIONS.ATTESTATI_READ,
+    PERMISSIONS.ATTESTATI_CREATE,
+    PERMISSIONS.ATTESTATI_DOWNLOAD,
+    PERMISSIONS.ATTESTATI_GENERATE,
+    PERMISSIONS.REPORTS_READ,
+    PERMISSIONS.CALENDAR_READ,
 ];
 
 /**
- * Permessi per ruolo MEDICO (Element Medica)
+ * Permessi per ruolo MEDICO — visite/referti/appuntamenti del proprio ambulatorio
  */
 export const MEDICO_PERMISSIONS = [
-    PERMISSIONS.DASHBOARD_READ,
-    PERMISSIONS.CLINICA_READ,
-    PERMISSIONS.POLIAMBULATORI_READ,
-    PERMISSIONS.AMBULATORI_READ,
-    PERMISSIONS.PRESTAZIONI_READ,
-    PERMISSIONS.APPUNTAMENTI_READ,
-    PERMISSIONS.APPUNTAMENTI_UPDATE,
+    ...BASE_PERMISSIONS,
     PERMISSIONS.VISITE_READ,
     PERMISSIONS.VISITE_CREATE,
     PERMISSIONS.VISITE_UPDATE,
+    PERMISSIONS.VISITE_DELETE,
     PERMISSIONS.REFERTI_READ,
     PERMISSIONS.REFERTI_CREATE,
     PERMISSIONS.REFERTI_UPDATE,
+    PERMISSIONS.APPUNTAMENTI_READ,
+    PERMISSIONS.APPUNTAMENTI_CREATE,
+    PERMISSIONS.APPUNTAMENTI_UPDATE,
     PERMISSIONS.CARTELLA_PAZIENTE_READ,
     PERMISSIONS.CARTELLA_PAZIENTE_UPDATE,
+    PERMISSIONS.POLIAMBULATORI_READ,
+    PERMISSIONS.AMBULATORI_READ,
+    PERMISSIONS.PRESTAZIONI_READ,
+    PERMISSIONS.STRUMENTI_READ,
+    PERMISSIONS.SIGNATURES_READ,
+    PERMISSIONS.SIGNATURES_CREATE,
+    PERMISSIONS.CONVENZIONI_READ,
+    PERMISSIONS.TARIFFARI_READ,
+    PERMISSIONS.FERIE_READ,
+    PERMISSIONS.FERIE_CREATE,
+    PERMISSIONS.DOCUMENTS_READ,
+    PERMISSIONS.DOCUMENTS_CREATE,
+    PERMISSIONS.DOCUMENTS_DOWNLOAD,
+    PERMISSIONS.REPORTS_READ,
+    PERMISSIONS.REPORTS_CREATE,
+    PERMISSIONS.CALENDAR_READ,
+    PERMISSIONS.CALENDAR_CREATE,
+    PERMISSIONS.CALENDAR_UPDATE,
+    PERMISSIONS.PERSONS_READ,
+    PERMISSIONS.EMPLOYEES_READ,
+    PERMISSIONS.SETTINGS_READ,
+];
+
+/**
+ * Permessi per ruolo PAZIENTE — solo propri dati
+ */
+export const PAZIENTE_PERMISSIONS = [
+    ...BASE_PERMISSIONS,
+    PERMISSIONS.APPUNTAMENTI_READ,
+    PERMISSIONS.VISITE_READ,
+    PERMISSIONS.REFERTI_READ,
+    PERMISSIONS.CARTELLA_PAZIENTE_READ,
+    PERMISSIONS.DOCUMENTS_READ,
+    PERMISSIONS.DOCUMENTS_DOWNLOAD,
+];
+
+/**
+ * Permessi per ruolo SEGRETERIA_CLINICA — gestione pazienti, appuntamenti, calendario
+ */
+export const SEGRETERIA_CLINICA_PERMISSIONS = [
+    ...BASE_PERMISSIONS,
+    PERMISSIONS.APPUNTAMENTI_READ,
+    PERMISSIONS.APPUNTAMENTI_CREATE,
+    PERMISSIONS.APPUNTAMENTI_UPDATE,
+    PERMISSIONS.APPUNTAMENTI_DELETE,
+    PERMISSIONS.VISITE_READ,
+    PERMISSIONS.REFERTI_READ,
+    PERMISSIONS.CARTELLA_PAZIENTE_READ,
+    PERMISSIONS.POLIAMBULATORI_READ,
+    PERMISSIONS.AMBULATORI_READ,
+    PERMISSIONS.PRESTAZIONI_READ,
+    PERMISSIONS.STRUMENTI_READ,
+    PERMISSIONS.CONVENZIONI_READ,
+    PERMISSIONS.TARIFFARI_READ,
+    PERMISSIONS.PERSONS_READ,
+    PERMISSIONS.PERSONS_CREATE,
+    PERMISSIONS.PERSONS_UPDATE,
+    PERMISSIONS.EMPLOYEES_READ,
+    PERMISSIONS.COMPANIES_READ,
+    PERMISSIONS.DOCUMENTS_READ,
+    PERMISSIONS.DOCUMENTS_CREATE,
+    PERMISSIONS.CALENDAR_READ,
+    PERMISSIONS.CALENDAR_CREATE,
+    PERMISSIONS.CALENDAR_UPDATE,
+    PERMISSIONS.SCHEDULES_READ,
+    PERMISSIONS.SCHEDULES_CREATE,
+    PERMISSIONS.SCHEDULES_UPDATE,
+    PERMISSIONS.REPORTS_READ,
+];
+
+/**
+ * Permessi per ruolo INFERMIERE — supporto visite, pazienti in lettura
+ */
+export const INFERMIERE_PERMISSIONS = [
+    ...BASE_PERMISSIONS,
+    PERMISSIONS.VISITE_READ,
+    PERMISSIONS.APPUNTAMENTI_READ,
+    PERMISSIONS.APPUNTAMENTI_UPDATE,
+    PERMISSIONS.REFERTI_READ,
+    PERMISSIONS.CARTELLA_PAZIENTE_READ,
+    PERMISSIONS.POLIAMBULATORI_READ,
+    PERMISSIONS.AMBULATORI_READ,
+    PERMISSIONS.PRESTAZIONI_READ,
+    PERMISSIONS.STRUMENTI_READ,
+    PERMISSIONS.DOCUMENTS_READ,
+    PERMISSIONS.DOCUMENTS_CREATE,
+    PERMISSIONS.PERSONS_READ,
+    PERMISSIONS.CALENDAR_READ,
 ];
 
 // ============================================
@@ -487,28 +694,70 @@ export function getPermissionsByResource(resource) {
 }
 
 /**
- * Verifica se un permesso match con wildcards
+ * Verifica se un'azione utente implica l'azione richiesta.
+ * - manage → tutte le azioni
+ * - write → create, update
+ * - create/update → write
+ * @param {string} userAction - Azione posseduta dall'utente
+ * @param {string} requiredAction - Azione richiesta dalla route
+ * @returns {boolean}
+ */
+function actionImplies(userAction, requiredAction) {
+    if (userAction === requiredAction) return true;
+    if (userAction === '*') return true;
+    if (userAction === 'manage') return true;
+    if (userAction === 'write' && (requiredAction === 'create' || requiredAction === 'update')) return true;
+    if ((userAction === 'create' || userAction === 'update') && requiredAction === 'write') return true;
+    return false;
+}
+
+/**
+ * Verifica se un permesso match con wildcards, sub-resource e action aliases.
+ *
+ * Matching rules (ordine):
+ * 1. Exact match: 'visite:read' === 'visite:read'
+ * 2. Wildcard all: '*:*' matches everything
+ * 3. Resource wildcard: 'clinica:*' matches 'clinica.visite:read'
+ * 4. Action aliases: 'visite:write' matches 'visite:create' (write→create/update)
+ * 5. Reverse sub-resource: user 'clinica.visite:read' matches required 'visite:read'
+ * 6. Parent resource with action: 'clinica:read' matches 'clinica.visite:read'
+ *
  * @param {string} userPermission - Permesso dell'utente (può contenere *)
  * @param {string} requiredPermission - Permesso richiesto
  * @returns {boolean}
  */
 export function matchPermission(userPermission, requiredPermission) {
-    // Exact match
+    // 1. Exact match
     if (userPermission === requiredPermission) return true;
 
-    // Wildcard all
+    // 2. Wildcard all
     if (userPermission === '*:*') return true;
 
-    // Resource wildcard (resource:*)
-    if (userPermission.endsWith(':*')) {
-        const userResource = userPermission.slice(0, -2);
-        const [reqResource] = requiredPermission.split(':');
+    const [userResource, userAction] = userPermission.split(':');
+    const [reqResource, reqAction] = requiredPermission.split(':');
 
-        // Check direct match
+    // 3. Resource wildcard (resource:*)
+    if (userAction === '*') {
         if (userResource === reqResource) return true;
+        // clinica:* matches clinica.visite:read
+        if (reqResource.startsWith(userResource + '.')) return true;
+    }
 
-        // Check sub-resource (clinica:* matches clinica.visite:read)
-        if (requiredPermission.startsWith(userResource + '.')) return true;
+    // 4. Action aliases on same resource (visite:write matches visite:create)
+    if (userResource === reqResource && actionImplies(userAction, reqAction)) return true;
+
+    // 5. Reverse sub-resource matching
+    //    User has clinica.visite:read, route requires visite:read
+    if (userResource.includes('.')) {
+        const childResource = userResource.split('.').slice(1).join('.');
+        if (childResource === reqResource && actionImplies(userAction, reqAction)) return true;
+    }
+
+    // 6. Parent resource with specific action
+    //    User has clinica:read, route requires clinica.visite:read
+    if (reqResource.includes('.')) {
+        const parentResource = reqResource.split('.')[0];
+        if (userResource === parentResource && actionImplies(userAction, reqAction)) return true;
     }
 
     return false;

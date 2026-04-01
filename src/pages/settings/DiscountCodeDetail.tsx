@@ -94,7 +94,8 @@ const DiscountCodeDetail: React.FC = () => {
         enabled: Boolean(id),
     });
 
-    const formatDate = (dateString: string) => {
+    const formatDate = (dateString: string | null | undefined) => {
+        if (!dateString) return 'Nessuna scadenza';
         return new Date(dateString).toLocaleDateString('it-IT', {
             day: '2-digit',
             month: 'long',
@@ -107,12 +108,11 @@ const DiscountCodeDetail: React.FC = () => {
 
         const now = new Date();
         const dataInizio = new Date(codiceSconto.dataInizio);
-        const dataFine = new Date(codiceSconto.dataFine);
 
         if (!codiceSconto.attivo) {
             return { label: 'Disattivato', color: 'gray', icon: XCircle, bgColor: 'bg-gray-100', textColor: 'text-gray-800' };
         }
-        if (now > dataFine) {
+        if (codiceSconto.dataFine && now > new Date(codiceSconto.dataFine)) {
             return { label: 'Scaduto', color: 'red', icon: AlertCircle, bgColor: 'bg-red-100', textColor: 'text-red-800' };
         }
         if (now < dataInizio) {
@@ -359,7 +359,7 @@ const DiscountCodeDetail: React.FC = () => {
                             </div>
                             <div>
                                 <div className="text-sm text-gray-500">A</div>
-                                <div className="font-semibold text-gray-900">{formatDate(codiceSconto.dataFine)}</div>
+                                <div className="font-semibold text-gray-900">{codiceSconto.dataFine ? formatDate(codiceSconto.dataFine) : 'Nessuna scadenza'}</div>
                             </div>
                         </div>
                     </section>

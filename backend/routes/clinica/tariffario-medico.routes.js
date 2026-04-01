@@ -18,7 +18,7 @@
  */
 
 import express from 'express';
-import middleware from '../../auth/middleware.js';
+import middleware from '../../middleware/auth.js';
 import { checkAdvancedPermission } from '../../middleware/advanced-permissions.js';
 import logger from '../../utils/logger.js';
 import { auditClinico, getEffectiveTenantId } from './utils/clinica-utils.js';
@@ -40,7 +40,7 @@ const router = express.Router();
  * @access Authenticated + VIEW_LISTINI
  */
 router.get('/',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('listini', 'read'),
     async (req, res) => {
         try {
@@ -55,14 +55,13 @@ router.get('/',
             logger.error('Failed to list tariffari medico', {
                 component: 'tariffario-medico-routes',
                 action: 'list_tariffari_medico',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore lista tariffari medico',
-                message: error.message
             });
         }
     }
@@ -74,7 +73,7 @@ router.get('/',
  * @access Authenticated + VIEW_LISTINI
  */
 router.get('/by-medico/:medicoId',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('listini', 'read'),
     async (req, res) => {
         try {
@@ -91,7 +90,7 @@ router.get('/by-medico/:medicoId',
             logger.error('Failed to get tariffari by medico', {
                 component: 'tariffario-medico-routes',
                 action: 'tariffari_by_medico',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 medicoId: req.params.medicoId,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -99,7 +98,6 @@ router.get('/by-medico/:medicoId',
             res.status(500).json({
                 success: false,
                 error: 'Errore recupero tariffari medico',
-                message: error.message
             });
         }
     }
@@ -111,7 +109,7 @@ router.get('/by-medico/:medicoId',
  * @access Authenticated + VIEW_LISTINI
  */
 router.post('/effective',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('listini', 'read'),
     async (req, res) => {
         try {
@@ -141,14 +139,13 @@ router.post('/effective',
             logger.error('Failed to get effective tariffario', {
                 component: 'tariffario-medico-routes',
                 action: 'effective_tariffario',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore recupero tariffario effettivo',
-                message: error.message
             });
         }
     }
@@ -160,7 +157,7 @@ router.post('/effective',
  * @access Authenticated + CREATE_LISTINI
  */
 router.post('/',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('listini', 'create'),
     auditClinico('create_tariffario_medico'),
     async (req, res) => {
@@ -183,14 +180,13 @@ router.post('/',
             logger.error('Failed to create tariffario medico', {
                 component: 'tariffario-medico-routes',
                 action: 'create_tariffario_medico',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(error.message.includes('già') ? 409 : 500).json({
                 success: false,
                 error: 'Errore creazione tariffario medico',
-                message: error.message
             });
         }
     }
@@ -202,7 +198,7 @@ router.post('/',
  * @access Authenticated + UPDATE_LISTINI
  */
 router.put('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('listini', 'update'),
     auditClinico('update_tariffario_medico'),
     async (req, res) => {
@@ -221,7 +217,7 @@ router.put('/:id',
             logger.error('Failed to update tariffario medico', {
                 component: 'tariffario-medico-routes',
                 action: 'update_tariffario_medico',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tariffarioId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -229,7 +225,6 @@ router.put('/:id',
             res.status(error.message.includes('non trovato') ? 404 : 500).json({
                 success: false,
                 error: 'Errore aggiornamento tariffario medico',
-                message: error.message
             });
         }
     }
@@ -241,7 +236,7 @@ router.put('/:id',
  * @access Authenticated + DELETE_LISTINI
  */
 router.delete('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('listini', 'delete'),
     auditClinico('delete_tariffario_medico'),
     async (req, res) => {
@@ -259,7 +254,7 @@ router.delete('/:id',
             logger.error('Failed to delete tariffario medico', {
                 component: 'tariffario-medico-routes',
                 action: 'delete_tariffario_medico',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tariffarioId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -267,7 +262,6 @@ router.delete('/:id',
             res.status(error.message.includes('non trovato') ? 404 : 500).json({
                 success: false,
                 error: 'Errore eliminazione tariffario medico',
-                message: error.message
             });
         }
     }

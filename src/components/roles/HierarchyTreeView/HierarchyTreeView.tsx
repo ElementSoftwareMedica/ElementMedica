@@ -14,13 +14,13 @@
 import React from 'react';
 import type { HierarchyTreeViewProps, TreeNode } from './types';
 import { useTreeData, useTreeNavigation, useTreeActions, useTreeDragDrop } from './hooks';
-import { 
-  TreeNodeComponent, 
-  RoleForm, 
-  TreeHeader, 
-  EmptyState, 
-  LoadingState, 
-  ErrorState 
+import {
+  TreeNodeComponent,
+  RoleForm,
+  TreeHeader,
+  EmptyState,
+  LoadingState,
+  ErrorState
 } from './components';
 
 const HierarchyTreeView: React.FC<HierarchyTreeViewProps> = ({
@@ -86,8 +86,8 @@ const HierarchyTreeView: React.FC<HierarchyTreeViewProps> = ({
     const isCreating = creatingChild === node.id;
     const isDragged = draggedNode === node.id;
     const canEdit = canEditRole(node.roleType);
-    const canCreate = hasPermission('CREATE_ROLES');
-    const canDelete = canEditRole(node.roleType) && hasPermission('DELETE_ROLES');
+    const canCreate = hasPermission('roles:create');
+    const canDelete = canEditRole(node.roleType) && hasPermission('roles:delete');
 
     return (
       <TreeNodeComponent
@@ -136,7 +136,7 @@ const HierarchyTreeView: React.FC<HierarchyTreeViewProps> = ({
     <div className="space-y-4">
       {/* Header con azioni globali */}
       <TreeHeader
-        hasCreatePermission={hasPermission('CREATE_ROLES')}
+        hasCreatePermission={hasPermission('roles:create')}
         onCreateRoot={() => startCreating(null)}
         onRefresh={reloadHierarchy}
       />
@@ -156,7 +156,7 @@ const HierarchyTreeView: React.FC<HierarchyTreeViewProps> = ({
           )}
 
           {/* Albero della gerarchia */}
-          <div 
+          <div
             className="space-y-1"
             onDragOver={handleDragOver}
             onDrop={(e) => handleDrop(e, null)}
@@ -167,7 +167,7 @@ const HierarchyTreeView: React.FC<HierarchyTreeViewProps> = ({
           {/* Empty state */}
           {treeData.length === 0 && (
             <EmptyState
-              hasCreatePermission={hasPermission('CREATE_ROLES')}
+              hasCreatePermission={hasPermission('roles:create')}
               onCreateRoot={() => startCreating(null)}
             />
           )}

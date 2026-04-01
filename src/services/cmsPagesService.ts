@@ -61,6 +61,7 @@ export interface CreateCMSPageData {
   layout?: 'full-width' | 'boxed' | 'sidebar-left' | 'sidebar-right';
   seoTitle?: string;
   seoDescription?: string;
+  tenantId?: string;
 }
 
 export interface UpdateCMSPageData {
@@ -94,7 +95,7 @@ class CMSPagesService {
     const response = await apiClient.get<{ success: boolean; data: CMSPageListResponse; error?: string }>(url);
 
     if (!response.data.success) {
-      throw new Error(response.data.error || 'Failed to list pages');
+      throw new Error('Errore nel recupero delle pagine');
     }
 
     return response.data.data;
@@ -107,7 +108,7 @@ class CMSPagesService {
     const response = await apiClient.get<{ success: boolean; data: CMSPage; error?: string }>(`${this.baseURL}/${id}`);
 
     if (!response.data.success) {
-      throw new Error(response.data.error || 'Failed to get page');
+      throw new Error('Errore nel recupero della pagina');
     }
 
     return response.data.data;
@@ -133,7 +134,7 @@ class CMSPagesService {
     const response = await apiClient.post<{ success: boolean; data: CMSPage; error?: string }>(this.baseURL, data);
 
     if (!response.data.success) {
-      throw new Error(response.data.error || 'Failed to create page');
+      throw new Error('Errore nella creazione della pagina');
     }
 
     return response.data.data;
@@ -146,7 +147,7 @@ class CMSPagesService {
     const response = await apiClient.patch<{ success: boolean; data: CMSPage; error?: string }>(`${this.baseURL}/${id}`, data);
 
     if (!response.data.success) {
-      throw new Error(response.data.error || 'Failed to update page');
+      throw new Error('Errore nell\'aggiornamento della pagina');
     }
 
     return response.data.data;
@@ -159,7 +160,7 @@ class CMSPagesService {
     const response = await apiClient.post<{ success: boolean; data: CMSPage; error?: string }>(`${this.baseURL}/${id}/publish`);
 
     if (!response.data.success) {
-      throw new Error(response.data.error || 'Failed to publish page');
+      throw new Error('Errore nella pubblicazione della pagina');
     }
 
     return response.data.data;
@@ -172,7 +173,7 @@ class CMSPagesService {
     const response = await apiClient.post<{ success: boolean; data: CMSPage; error?: string }>(`${this.baseURL}/${id}/unpublish`);
 
     if (!response.data.success) {
-      throw new Error(response.data.error || 'Failed to unpublish page');
+      throw new Error('Errore nella depubblicazione della pagina');
     }
 
     return response.data.data;
@@ -185,7 +186,7 @@ class CMSPagesService {
     const response = await apiClient.post<{ success: boolean; data: CMSPage; error?: string }>(`${this.baseURL}/${id}/duplicate`);
 
     if (!response.data.success) {
-      throw new Error(response.data.error || 'Failed to duplicate page');
+      throw new Error('Errore nella duplicazione della pagina');
     }
 
     return response.data.data;
@@ -198,7 +199,7 @@ class CMSPagesService {
     const response = await apiClient.delete<{ success: boolean; data: CMSPage; error?: string }>(`${this.baseURL}/${id}`);
 
     if (!response.data.success) {
-      throw new Error(response.data.error || 'Failed to delete page');
+      throw new Error('Errore nell\'eliminazione della pagina');
     }
 
     return response.data.data;

@@ -58,7 +58,9 @@ import {
   getUserRoleHierarchy,
   updateRoleHierarchy,
   addRoleToHierarchy,
-  getVisibleRolesForUser
+  getVisibleRolesForUser,
+  canMoveRole,
+  moveRoleInHierarchy
 } from './DatabaseOperations.js';
 
 /**
@@ -66,9 +68,9 @@ import {
  * Mantiene la compatibilità con l'interfaccia esistente
  */
 class RoleHierarchyService {
-  
+
   // ==================== METODI STATICI DI DEFINIZIONE ====================
-  
+
   /**
    * Ottiene la gerarchia statica dei ruoli
    * @returns {Object} Gerarchia dei ruoli
@@ -243,6 +245,32 @@ class RoleHierarchyService {
     return await getVisibleRolesForUser(userId, tenantId);
   }
 
+  /**
+   * P69: Verifica se un utente può spostare un ruolo nella gerarchia
+   * @param {string} userId - ID dell'utente
+   * @param {string} roleId - ID/tipo del ruolo
+   * @param {number} newLevel - Nuovo livello
+   * @param {string} newParentId - Nuovo genitore
+   * @param {string} tenantId - ID del tenant
+   * @returns {Promise<boolean>} True se può spostare
+   */
+  static async canMoveRole(userId, roleId, newLevel, newParentId, tenantId) {
+    return await canMoveRole(userId, roleId, newLevel, newParentId, tenantId);
+  }
+
+  /**
+   * P69: Sposta un ruolo nella gerarchia
+   * @param {string} roleId - ID/tipo del ruolo
+   * @param {number} newLevel - Nuovo livello
+   * @param {string} newParentId - Nuovo genitore
+   * @param {string} userId - ID utente che esegue
+   * @param {string} tenantId - ID del tenant
+   * @returns {Promise<Object>} Risultato dello spostamento
+   */
+  static async moveRoleInHierarchy(roleId, newLevel, newParentId, userId, tenantId) {
+    return await moveRoleInHierarchy(roleId, newLevel, newParentId, userId, tenantId);
+  }
+
   // ==================== METODI UTILITY AGGIUNTIVI ====================
 
   /**
@@ -363,7 +391,7 @@ export {
   getRoleInfo,
   getAllRoleTypes,
   getRolesByLevel,
-  
+
   // Calcoli
   calculatePath,
   canAssignToRole,
@@ -376,7 +404,7 @@ export {
   calculateHierarchicalDistance,
   areSameLevel,
   getSiblingRoles,
-  
+
   // Permessi
   getAssignablePermissions,
   getAllPermissions,
@@ -390,7 +418,7 @@ export {
   validatePermissionsForRole,
   getCommonPermissions,
   getAllUniquePermissions,
-  
+
   // Database
   getRoleHierarchy,
   assignRoleWithHierarchy,
@@ -398,5 +426,7 @@ export {
   getUserRoleHierarchy,
   updateRoleHierarchy,
   addRoleToHierarchy,
-  getVisibleRolesForUser
+  getVisibleRolesForUser,
+  canMoveRole,
+  moveRoleInHierarchy
 };

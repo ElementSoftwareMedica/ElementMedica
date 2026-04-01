@@ -7,6 +7,7 @@ import { auditLog } from '../middleware/audit.js';
 import logger from '../utils/logger.js';
 import { roleDataFilter, filterResponseFields } from '../middleware/role-data-filter.js';
 import { BRANCH_TYPES } from '../utils/branchHelper.js';
+import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 
 const { authenticate } = authMiddleware;
 const DEFAULT_BRANCH = BRANCH_TYPES.FORMAZIONE;
@@ -125,6 +126,11 @@ const sanitizeCoursePayload = (input) => {
     data.status = 'ACTIVE';
   }
 
+  // Normalizza case per enum CourseStatus (frontend potrebbe inviare mixed case)
+  if (data.status && typeof data.status === 'string') {
+    data.status = data.status.toUpperCase();
+  }
+
   if (data.courseType !== undefined && (data.courseType === '' || data.courseType === null)) {
     data.courseType = null;
   }
@@ -144,7 +150,7 @@ router.get('/', authenticate, roleDataFilter, filterResponseFields, async (req, 
     const personRoles = await prisma.personRole.findMany({
       where: {
         personId: person.id,
-        tenantId: req.person.tenantId,
+        tenantId: getEffectiveTenantId(req),
         isActive: true,
         deletedAt: null
       },
@@ -156,6 +162,7 @@ router.get('/', authenticate, roleDataFilter, filterResponseFields, async (req, 
       !roleTypes.some(r => ['ADMIN', 'TRAINING_ADMIN', 'HR_MANAGER', 'COMPANY_MANAGER', 'SITE_MANAGER', 'TRAINER'].includes(r));
 
     let whereClause = {
+      tenantId: getEffectiveTenantId(req),
       deletedAt: null,
       branchType: DEFAULT_BRANCH
     };
@@ -166,6 +173,7 @@ router.get('/', authenticate, roleDataFilter, filterResponseFields, async (req, 
       const enrollments = await prisma.courseEnrollment.findMany({
         where: {
           personId: person.id,
+          tenantId: getEffectiveTenantId(req),
           deletedAt: null
         },
         select: { scheduleId: true }
@@ -178,6 +186,7 @@ router.get('/', authenticate, roleDataFilter, filterResponseFields, async (req, 
         const schedules = await prisma.courseSchedule.findMany({
           where: {
             id: { in: scheduleIds },
+            tenantId: getEffectiveTenantId(req),
             deletedAt: null
           },
           select: { courseId: true }
@@ -202,14 +211,14 @@ router.get('/', authenticate, roleDataFilter, filterResponseFields, async (req, 
     logger.error('Failed to fetch courses', {
       component: 'courses-routes',
       action: 'getCourses',
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       personId: req.person?.id,
       companyId: req.query?.companyId
     });
     res.status(500).json({
-      error: 'Internal server error',
-      message: 'Failed to fetch courses'
+      error: 'Errore interno del server',
+      message: 'Errore nel recupero dei corsi'
     });
   }
 });
@@ -226,9 +235,10 @@ router.get('/:id', authenticate, roleDataFilter, filterResponseFields, async (re
       return next();
     }
 
-    const course = await prisma.course.findUnique({
+    const course = await prisma.course.findFirst({
       where: {
         id: courseId,
+        tenantId: getEffectiveTenantId(req),
         deletedAt: null,
         branchType: DEFAULT_BRANCH
       },
@@ -238,27 +248,22 @@ router.get('/:id', authenticate, roleDataFilter, filterResponseFields, async (re
     });
 
     if (!course) {
-      return res.status(404).json({ error: 'Course not found' });
+      return res.status(404).json({ error: 'Corso non trovato' });
     }
-
-    // TODO: Add company isolation check when courses table is updated
-    // if (course.company_id !== req.user.company_id) {
-    //   return res.status(403).json({ error: 'Access denied' });
-    // }
 
     res.json(course);
   } catch (error) {
     logger.error('Failed to fetch course', {
       component: 'courses-routes',
       action: 'getCourse',
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       personId: req.person?.id,
       courseId: req.params?.id
     });
     res.status(500).json({
-      error: 'Internal server error',
-      message: 'Failed to fetch course'
+      error: 'Errore interno del server',
+      message: 'Errore nel recupero del corso'
     });
   }
 });
@@ -272,8 +277,8 @@ router.post('/', authenticate, requirePermissions('courses:create'), async (req,
 
     if (!incomingTitle || !description) {
       return res.status(400).json({
-        error: 'Validation error',
-        message: 'Title and description are required'
+        error: 'Errore di validazione',
+        message: 'Titolo e descrizione sono obbligatori'
       });
     }
 
@@ -283,18 +288,18 @@ router.post('/', authenticate, requirePermissions('courses:create'), async (req,
     // Imposta tenant dalla sessione/auth, non dal client
     if (!req.person?.tenantId) {
       return res.status(400).json({
-        error: 'Missing tenant',
-        message: 'Tenant context is required'
+        error: 'Tenant mancante',
+        message: 'Contesto tenant obbligatorio'
       });
     }
-    courseData.tenantId = req.person.tenantId;
+    courseData.tenantId = getEffectiveTenantId(req);
     courseData.branchType = DEFAULT_BRANCH;
 
     // Ripristino se esiste un corso soft-deleted con lo stesso code per lo stesso tenant; altrimenti crea
     let course;
     if (courseData.code) {
-      const existingByCode = await prisma.course.findUnique({
-        where: { code: courseData.code },
+      const existingByCode = await prisma.course.findFirst({
+        where: { code: courseData.code, tenantId: courseData.tenantId },
         select: { id: true, deletedAt: true, tenantId: true }
       });
 
@@ -302,8 +307,8 @@ router.post('/', authenticate, requirePermissions('courses:create'), async (req,
         if (existingByCode.deletedAt) {
           if (existingByCode.tenantId !== courseData.tenantId) {
             return res.status(409).json({
-              error: 'Conflict',
-              message: 'A course with this title or code already exists'
+              error: 'Conflitto',
+              message: 'Un corso con questo titolo o codice esiste già'
             });
           }
           course = await prisma.course.update({
@@ -323,8 +328,8 @@ router.post('/', authenticate, requirePermissions('courses:create'), async (req,
           return res.status(200).json(course);
         } else {
           return res.status(409).json({
-            error: 'Conflict',
-            message: 'A course with this title or code already exists'
+            error: 'Conflitto',
+            message: 'Un corso con questo titolo o codice esiste già'
           });
         }
       }
@@ -341,7 +346,7 @@ router.post('/', authenticate, requirePermissions('courses:create'), async (req,
     logger.error('Failed to create course', {
       component: 'courses-routes',
       action: 'createCourse',
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       personId: req.person?.id,
       courseTitle: req.body?.title || req.body?.name
@@ -349,14 +354,14 @@ router.post('/', authenticate, requirePermissions('courses:create'), async (req,
 
     if (error.code === 'P2002') {
       return res.status(409).json({
-        error: 'Conflict',
-        message: 'A course with this title or code already exists'
+        error: 'Conflitto',
+        message: 'Un corso con questo titolo o codice esiste già'
       });
     }
 
     res.status(500).json({
-      error: 'Internal server error',
-      message: 'Failed to create course'
+      error: 'Errore interno del server',
+      message: 'Errore nella creazione del corso'
     });
   }
 });
@@ -369,7 +374,7 @@ router.put('/:id', authenticate, requirePermissions('courses:update'), async (re
     // Validate UUID format
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(courseId)) {
-      return res.status(400).json({ error: 'Invalid course ID format' });
+      return res.status(400).json({ error: 'Formato ID corso non valido' });
     }
 
     // First check if course exists and user has access
@@ -379,12 +384,12 @@ router.put('/:id', authenticate, requirePermissions('courses:update'), async (re
     });
 
     if (!existingCourse || existingCourse.deletedAt) {
-      return res.status(404).json({ error: 'Course not found' });
+      return res.status(404).json({ error: 'Corso non trovato' });
     }
 
     // Verifica isolamento tenant
-    if (req.person?.tenantId && existingCourse.tenantId !== req.person.tenantId) {
-      return res.status(403).json({ error: 'Access denied' });
+    if (req.person?.tenantId && existingCourse.tenantId !== getEffectiveTenantId(req)) {
+      return res.status(403).json({ error: 'Accesso negato' });
     }
 
     const courseData = sanitizeCoursePayload(req.body);
@@ -402,7 +407,7 @@ router.put('/:id', authenticate, requirePermissions('courses:update'), async (re
     logger.error('Failed to update course', {
       component: 'courses-routes',
       action: 'updateCourse',
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       personId: req.person?.id,
       courseId: req.params?.id
@@ -410,14 +415,14 @@ router.put('/:id', authenticate, requirePermissions('courses:update'), async (re
 
     if (error.code === 'P2002') {
       return res.status(409).json({
-        error: 'Conflict',
-        message: 'A course with this title or code already exists'
+        error: 'Conflitto',
+        message: 'Un corso con questo titolo o codice esiste già'
       });
     }
 
     res.status(500).json({
-      error: 'Internal server error',
-      message: 'Failed to update course'
+      error: 'Errore interno del server',
+      message: 'Errore nell\'aggiornamento del corso'
     });
   }
 });
@@ -430,25 +435,21 @@ router.delete('/:id', authenticate, requirePermissions('courses:delete'), async 
     // Validate UUID format
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(courseId)) {
-      return res.status(400).json({ error: 'Invalid course ID format' });
+      return res.status(400).json({ error: 'Formato ID corso non valido' });
     }
 
     // First check if course exists and user has access
-    const existingCourse = await prisma.course.findUnique({
+    const existingCourse = await prisma.course.findFirst({
       where: {
         id: courseId,
+        tenantId: getEffectiveTenantId(req),
         deletedAt: null
       }
     });
 
     if (!existingCourse) {
-      return res.status(404).json({ error: 'Course not found' });
+      return res.status(404).json({ error: 'Corso non trovato' });
     }
-
-    // TODO: Add company isolation check when courses table is updated
-    // if (existingCourse.company_id !== req.user.company_id) {
-    //   return res.status(403).json({ error: 'Access denied' });
-    // }
 
     // Implement soft delete instead of hard delete
     await prisma.course.update({
@@ -459,21 +460,21 @@ router.delete('/:id', authenticate, requirePermissions('courses:delete'), async 
     });
 
     res.json({
-      message: 'Course deleted successfully',
+      message: 'Corso eliminato con successo',
       id: courseId
     });
   } catch (error) {
     logger.error('Failed to delete course', {
       component: 'courses-routes',
       action: 'deleteCourse',
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       personId: req.person?.id,
       courseId: req.params?.id
     });
     res.status(500).json({
-      error: 'Internal server error',
-      message: 'Failed to delete course'
+      error: 'Errore interno del server',
+      message: 'Errore nell\'eliminazione del corso'
     });
   }
 });
@@ -528,7 +529,7 @@ router.get('/variants', authenticate, roleDataFilter, filterResponseFields, asyn
 
     // Accesso: corsi del tenant oppure pubblici
     const accessWhere = req.person?.tenantId
-      ? { OR: [{ tenantId: req.person.tenantId }, { isPublic: true }] }
+      ? { OR: [{ tenantId: getEffectiveTenantId(req) }, { isPublic: true }] }
       : { isPublic: true };
 
     logger.info('Access where clause', { accessWhere });
@@ -682,14 +683,14 @@ router.get('/variants', authenticate, roleDataFilter, filterResponseFields, asyn
     logger.error('Failed to fetch course variants', {
       component: 'courses-routes',
       action: 'getCourseVariants',
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       personId: req.person?.id,
       query: req.query
     });
     return res.status(500).json({
-      error: 'Internal server error',
-      message: 'Failed to fetch course variants'
+      error: 'Errore interno del server',
+      message: 'Errore nel recupero delle varianti del corso'
     });
   }
 });
@@ -701,19 +702,19 @@ router.get('/variants', authenticate, roleDataFilter, filterResponseFields, asyn
 router.post('/bulk-import', authenticate, requirePermissions('courses:create'), async (req, res) => {
   try {
     const { courses, overwriteIds = [] } = req.body;
-    const tenantId = req.person?.tenantId;
+    const tenantId = getEffectiveTenantId(req);
 
     if (!tenantId) {
       return res.status(400).json({
-        error: 'Missing tenant',
-        message: 'Tenant context is required'
+        error: 'Tenant mancante',
+        message: 'Contesto tenant obbligatorio'
       });
     }
 
     if (!courses || !Array.isArray(courses)) {
       return res.status(400).json({
-        error: 'Validation error',
-        message: 'Array of courses is required'
+        error: 'Errore di validazione',
+        message: 'Array di corsi obbligatorio'
       });
     }
 
@@ -774,13 +775,13 @@ router.post('/bulk-import', authenticate, requirePermissions('courses:create'), 
         }
       } catch (err) {
         logger.error('[COURSES] Bulk import single course failed', {
-          error: err.message,
+          error: 'Operazione non riuscita',
           courseTitle: courseData.title,
           tenantId
         });
         errors.push({
           course: courseData.title || courseData.code || 'Unknown',
-          error: err.message
+          error: 'Errore nell\'importazione del corso'
         });
         skipped++;
       }
@@ -807,14 +808,13 @@ router.post('/bulk-import', authenticate, requirePermissions('courses:create'), 
 
   } catch (error) {
     logger.error('[COURSES] Bulk import failed', {
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       personId: req.person?.id
     });
     res.status(500).json({
-      error: 'Internal server error',
-      message: 'Failed to import courses',
-      details: error.message
+      error: 'Errore interno del server',
+      message: 'Errore nell\'importazione dei corsi',
     });
   }
 });

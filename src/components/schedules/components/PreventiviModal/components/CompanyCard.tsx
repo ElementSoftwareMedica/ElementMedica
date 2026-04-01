@@ -33,8 +33,8 @@ export function CompanyCard({
       className={`
         p-3 rounded-lg border-2 cursor-pointer transition-all
         ${isSelected
-          ? 'border-orange-400 bg-orange-50 shadow-sm'
-          : 'border-gray-200 bg-white hover:border-orange-200 hover:bg-orange-50/30'
+          ? 'border-orange-400 dark:border-orange-500 bg-orange-50 dark:bg-orange-900/30 shadow-sm'
+          : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 hover:border-orange-200 dark:hover:border-orange-600 hover:bg-orange-50/30 dark:hover:bg-orange-900/20'
         }
         ${!config?.enabled ? 'opacity-50' : ''}
       `}
@@ -63,8 +63,8 @@ export function CompanyCard({
         <div className="flex-1 min-w-0">
           {/* Company Name */}
           <div className="flex items-center gap-2 mb-2">
-            <Building2 className="w-4 h-4 text-gray-400 flex-shrink-0" />
-            <span className="font-medium text-sm text-gray-800 truncate">
+            <Building2 className="w-4 h-4 text-gray-400 dark:text-gray-500 flex-shrink-0" />
+            <span className="font-medium text-sm text-gray-800 dark:text-gray-200 truncate">
               {getCompanyName(company)}
             </span>
           </div>
@@ -73,8 +73,8 @@ export function CompanyCard({
           {config?.enabled && (
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-gray-400" />
-                <label className="text-xs text-gray-600">Partecipanti:</label>
+                <Users className="w-4 h-4 text-gray-400 dark:text-gray-500" />
+                <label className="text-xs text-gray-600 dark:text-gray-400">Partecipanti:</label>
                 <input
                   type="number"
                   min="1"
@@ -84,14 +84,14 @@ export function CompanyCard({
                     onUpdateParticipants(parseInt(e.target.value) || 1);
                   }}
                   onClick={(e) => e.stopPropagation()}
-                  className="w-20 px-2 py-1 border rounded text-sm text-center"
+                  className="w-20 px-2 py-1 border dark:border-gray-600 rounded text-sm text-center dark:bg-gray-700 dark:text-gray-200"
                 />
               </div>
 
               {/* Preview Total */}
               {totals && (
-                <div className="text-xs text-gray-600 bg-white px-2 py-1 rounded border">
-                  Totale: <span className="font-semibold text-orange-600">
+                <div className="text-xs text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-700 px-2 py-1 rounded border dark:border-gray-600">
+                  Totale: <span className="font-semibold text-orange-600 dark:text-orange-400">
                     €{totals.importoFinale.toFixed(2)}
                   </span>
                 </div>

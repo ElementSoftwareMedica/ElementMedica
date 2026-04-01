@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Check, Eye, EyeOff, ToggleLeft, ToggleRight } from 'lucide-react';
-import { EntityDefinition, EntityPermission } from '../../../services/advancedPermissions';
+import { EntityDefinition, EntityPermission } from '../../../services/advanced-permissions';
 import { getPermission } from './utils';
 import DeniedFieldsSelector from './DeniedFieldsSelector';
 
@@ -85,12 +85,12 @@ const FieldsSection: React.FC<FieldsSectionProps> = ({
   };
 
   return (
-    <div className="bg-white h-full flex flex-col">
+    <div className="bg-white dark:bg-gray-800 h-full flex flex-col">
       {/* Header */}
-      <div className="p-4 border-b border-gray-200">
+      <div className="p-4 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center justify-between">
           <div>
-            <h4 className="font-medium text-gray-900">
+            <h4 className="font-medium text-gray-900 dark:text-gray-50">
               {bulkMode
                 ? 'Campi per Azioni Multiple'
                 : selectedAction

@@ -251,6 +251,7 @@ const BackupRestoreTab: React.FC = () => {
     const [preview, setPreview] = useState<PreviewResult | null>(null);
     const [selectedRestoreEntities, setSelectedRestoreEntities] = useState<Set<string>>(new Set());
     const [overwriteExisting, setOverwriteExisting] = useState(false);
+    const [useCurrentTenant, setUseCurrentTenant] = useState(true); // Default: importa sul tenant corrente
     const [isRestoring, setIsRestoring] = useState(false);
     const [restoreResult, setRestoreResult] = useState<RestoreResult | null>(null);
     const [isUploading, setIsUploading] = useState(false);
@@ -287,7 +288,6 @@ const BackupRestoreTab: React.FC = () => {
             setSelectedEntities(defaultSelected);
         } catch (err) {
             setError('Errore nel caricamento delle entità');
-            console.error(err);
         } finally {
             setIsLoading(false);
         }
@@ -298,7 +298,6 @@ const BackupRestoreTab: React.FC = () => {
             const history = await backupService.getHistory();
             setBackupHistory(history);
         } catch (err) {
-            console.error('Errore caricamento storico:', err);
         }
     };
 
@@ -316,7 +315,6 @@ const BackupRestoreTab: React.FC = () => {
                 setDependencyWarnings(validation.warnings);
                 setSuggestedEntities(validation.suggestions);
             } catch (err) {
-                console.error('Errore validazione dipendenze:', err);
             }
         };
 
@@ -399,8 +397,8 @@ const BackupRestoreTab: React.FC = () => {
 
             setSuccess(`Backup creato con successo! (${backupService.formatSize(result.size)}, ${result.records} record)`);
             loadHistory();
-        } catch (err: any) {
-            setError(err.response?.data?.error || 'Errore nella creazione del backup');
+        } catch (err: unknown) {
+            setError('Errore nella creazione del backup');
         } finally {
             setIsCreatingBackup(false);
             setBackupProgress('');
@@ -430,8 +428,8 @@ const BackupRestoreTab: React.FC = () => {
             if (!previewData.valid) {
                 setError('Attenzione: il backup presenta errori di validazione');
             }
-        } catch (err: any) {
-            setError(err.response?.data?.error || 'Errore nel caricamento del file');
+        } catch (err: unknown) {
+            setError('Errore nel caricamento del file');
         } finally {
             setIsUploading(false);
         }
@@ -448,7 +446,8 @@ const BackupRestoreTab: React.FC = () => {
             const result = await backupService.restoreBackup(
                 uploadedFile.tempPath,
                 Array.from(selectedRestoreEntities),
-                overwriteExisting
+                overwriteExisting,
+                useCurrentTenant
             );
 
             setRestoreResult(result);
@@ -456,8 +455,8 @@ const BackupRestoreTab: React.FC = () => {
 
             // Ricarica entità per aggiornare conteggi
             loadEntities();
-        } catch (err: any) {
-            setError(err.response?.data?.error || 'Errore nel ripristino del backup');
+        } catch (err: unknown) {
+            setError('Errore nel ripristino del backup');
         } finally {
             setIsRestoring(false);
         }
@@ -472,8 +471,8 @@ const BackupRestoreTab: React.FC = () => {
             await backupService.deleteBackup(id);
             setSuccess('Backup eliminato');
             loadHistory();
-        } catch (err: any) {
-            setError(err.response?.data?.error || 'Errore nell\'eliminazione');
+        } catch (err: unknown) {
+            setError('Errore nell\'eliminazione del backup');
         }
     };
 
@@ -481,7 +480,7 @@ const BackupRestoreTab: React.FC = () => {
     const handleDownloadFromHistory = async (id: string) => {
         try {
             await backupService.downloadBackup(id);
-        } catch (err: any) {
+        } catch (err: unknown) {
             setError('Errore nel download del backup');
         }
     };
@@ -774,6 +773,37 @@ const BackupRestoreTab: React.FC = () => {
                                     <p className="text-sm text-amber-700">Se deselezionato, i record esistenti verranno saltati</p>
                                 </div>
                             </label>
+
+                            {/* Opzione tenant selection */}
+                            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
+                                <p className="font-medium text-blue-900">Destinazione tenant:</p>
+                                <label className="flex items-start gap-3 cursor-pointer">
+                                    <input
+                                        type="radio"
+                                        name="tenantMode"
+                                        checked={useCurrentTenant}
+                                        onChange={() => setUseCurrentTenant(true)}
+                                        className="mt-1 h-4 w-4 text-blue-600 border-blue-300 focus:ring-blue-500"
+                                    />
+                                    <div>
+                                        <span className="font-medium text-blue-900">Importa sul tenant corrente</span>
+                                        <p className="text-sm text-blue-700">Tutti i dati verranno associati al tuo tenant attuale</p>
+                                    </div>
+                                </label>
+                                <label className="flex items-start gap-3 cursor-pointer">
+                                    <input
+                                        type="radio"
+                                        name="tenantMode"
+                                        checked={!useCurrentTenant}
+                                        onChange={() => setUseCurrentTenant(false)}
+                                        className="mt-1 h-4 w-4 text-blue-600 border-blue-300 focus:ring-blue-500"
+                                    />
+                                    <div>
+                                        <span className="font-medium text-blue-900">Mantieni tenant originali</span>
+                                        <p className="text-sm text-blue-700">I dati manterranno il tenant originale del backup (richiede i tenant già esistenti)</p>
+                                    </div>
+                                </label>
+                            </div>
 
                             {/* Risultato restore */}
                             {restoreResult && (

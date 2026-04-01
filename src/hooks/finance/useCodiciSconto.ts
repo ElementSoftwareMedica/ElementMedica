@@ -166,9 +166,8 @@ export const useCodiciSconto = (): UseCodiciScontoReturn => {
       } else {
         throw new Error(response.message || 'Errore nel recupero dei codici sconto');
       }
-    } catch (err: any) {
-      console.error('Errore fetch codici sconto:', err);
-      setError(err.message || 'Errore nel caricamento dei codici sconto');
+    } catch (err: unknown) {
+      setError('Errore nel caricamento dei codici sconto');
       setCodici([]);
     } finally {
       setLoading(false);
@@ -190,9 +189,8 @@ export const useCodiciSconto = (): UseCodiciScontoReturn => {
       } else {
         throw new Error(response.message || 'Errore nel recupero del codice sconto');
       }
-    } catch (err: any) {
-      console.error('Errore get codice sconto:', err);
-      setError(err.message || 'Errore nel caricamento del codice sconto');
+    } catch (err: unknown) {
+      setError('Errore nel caricamento del codice sconto');
       throw err;
     } finally {
       setLoading(false);
@@ -216,9 +214,8 @@ export const useCodiciSconto = (): UseCodiciScontoReturn => {
       } else {
         throw new Error(response.message || 'Errore nella creazione del codice sconto');
       }
-    } catch (err: any) {
-      console.error('Errore creazione codice sconto:', err);
-      setError(err.message || 'Errore nella creazione del codice sconto');
+    } catch (err: unknown) {
+      setError('Errore nella creazione del codice sconto');
       throw err;
     } finally {
       setLoading(false);
@@ -244,9 +241,8 @@ export const useCodiciSconto = (): UseCodiciScontoReturn => {
       } else {
         throw new Error(response.message || 'Errore nell\'aggiornamento del codice sconto');
       }
-    } catch (err: any) {
-      console.error('Errore update codice sconto:', err);
-      setError(err.message || 'Errore nell\'aggiornamento del codice sconto');
+    } catch (err: unknown) {
+      setError('Errore nell\'aggiornamento del codice sconto');
       throw err;
     } finally {
       setLoading(false);
@@ -269,9 +265,8 @@ export const useCodiciSconto = (): UseCodiciScontoReturn => {
       } else {
         throw new Error(response.message || 'Errore nell\'eliminazione del codice sconto');
       }
-    } catch (err: any) {
-      console.error('Errore delete codice sconto:', err);
-      setError(err.message || 'Errore nell\'eliminazione del codice sconto');
+    } catch (err: unknown) {
+      setError('Errore nell\'eliminazione del codice sconto');
       throw err;
     } finally {
       setLoading(false);
@@ -291,9 +286,8 @@ export const useCodiciSconto = (): UseCodiciScontoReturn => {
 
       // Rimuovi i codici dalla lista locale
       setCodici(prev => prev.filter(c => !ids.includes(c.id)));
-    } catch (err: any) {
-      console.error('Errore bulk delete codici sconto:', err);
-      setError(err.message || 'Errore nell\'eliminazione multipla dei codici sconto');
+    } catch (err: unknown) {
+      setError('Errore nell\'eliminazione multipla dei codici sconto');
       throw err;
     } finally {
       setLoading(false);
@@ -348,9 +342,8 @@ export const useCodiciSconto = (): UseCodiciScontoReturn => {
       } else {
         throw new Error(response.message || 'Errore nella validazione del codice sconto');
       }
-    } catch (err: any) {
-      console.error('Errore validazione codice sconto:', err);
-      setError(err.message || 'Errore nella validazione del codice sconto');
+    } catch (err: unknown) {
+      setError('Errore nella validazione del codice sconto');
       throw err;
     } finally {
       setLoading(false);

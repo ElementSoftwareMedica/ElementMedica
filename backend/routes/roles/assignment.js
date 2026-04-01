@@ -6,27 +6,27 @@
  */
 
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../../config/prisma-optimization.js';
 import logger from '../../utils/logger.js';
 
 // Import dei middleware
 import { requireRoleAssignmentPermission } from './middleware/auth.js';
 import { logRoleOperation, auditRoleChanges } from './middleware/logging.js';
-import { 
+import {
   validateRoleAssignmentData,
-  validateRoleRemoval 
+  validateRoleRemoval
 } from './middleware/validation.js';
 
 // Import delle utilità
-import { 
-  createSuccessResponse, 
-  createErrorResponse 
+import {
+  createSuccessResponse,
+  createErrorResponse
 } from './utils/helpers.js';
 import { filterUserData } from './utils/filters.js';
 import { validateRoleAssignment as validateAssignmentData } from './utils/validators.js';
+import { getEffectiveTenantId } from '../../utils/tenantHelper.js';
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 /**
  * POST /api/roles/assign
@@ -40,29 +40,35 @@ router.post('/assign',
   async (req, res) => {
     try {
       const { personId, roleType, customRoleId } = req.body;
-      const tenantId = req.tenant?.id || req.person?.tenantId;
+      const tenantId = getEffectiveTenantId(req);
 
       // Valida i dati di assegnazione
       const validation = validateAssignmentData({ personId, roleType, customRoleId });
       if (!validation.isValid) {
         return res.status(400).json(createErrorResponse(
-          'Invalid assignment data',
+          'Dati di assegnazione non validi',
           validation.errors.join(', ')
         ));
       }
 
       // Verifica che l'utente target esista e appartenga al tenant
-      const targetUser = await prisma.person.findFirst({
+      const targetProfile = await prisma.personTenantProfile.findFirst({
         where: {
-          id: personId,
-          tenantId
+          personId,
+          tenantId,
+          deletedAt: null
+        },
+        include: {
+          person: {
+            select: { id: true, firstName: true, lastName: true }
+          }
         }
       });
 
-      if (!targetUser) {
+      if (!targetProfile) {
         return res.status(404).json(createErrorResponse(
-          'User not found',
-          'The specified user does not exist or does not belong to your tenant'
+          'Utente non trovato',
+          'L\'utente specificato non esiste o non appartiene al tuo tenant'
         ));
       }
 
@@ -70,34 +76,20 @@ router.post('/assign',
 
       if (roleType) {
         // Assegnazione di un ruolo di sistema
-        
-        // Verifica che il ruolo esista
-        const role = await prisma.role.findFirst({
-          where: {
-            roleType,
-            tenantId,
-            isActive: true
-          }
-        });
-
-        if (!role) {
-          return res.status(404).json(createErrorResponse(
-            'Role not found',
-            `Role with type '${roleType}' not found or inactive`
-          ));
-        }
 
         // Verifica se l'utente ha già questo ruolo
         const existingAssignment = await prisma.personRole.findFirst({
           where: {
             personId,
-            roleId: role.id
+            roleType,
+            tenantId,
+            deletedAt: null
           }
         });
 
         if (existingAssignment) {
           return res.status(409).json(createErrorResponse(
-            'Role already assigned',
+            'Ruolo già assegnato',
             `User already has the role '${roleType}'`
           ));
         }
@@ -106,17 +98,13 @@ router.post('/assign',
         assignmentResult = await prisma.personRole.create({
           data: {
             personId,
-            roleId: role.id,
+            roleType,
+            tenantId,
             assignedBy: req.person.id
           },
           include: {
-            role: true,
             person: {
-              select: {
-                id: true,
-                email: true,
-                name: true
-              }
+              select: { id: true, firstName: true, lastName: true }
             }
           }
         });
@@ -125,34 +113,36 @@ router.post('/assign',
           assignerId: req.person.id,
           targetUserId: personId,
           roleType,
-          roleId: role.id,
           tenantId
         });
 
       } else if (customRoleId) {
         // Assegnazione di un ruolo personalizzato
-        
+
         // Verifica che il ruolo personalizzato esista
         const customRole = await prisma.customRole.findFirst({
           where: {
             id: customRoleId,
             tenantId,
-            isActive: true
+            isActive: true,
+            deletedAt: null
           }
         });
 
         if (!customRole) {
           return res.status(404).json(createErrorResponse(
-            'Custom role not found',
+            'Ruolo personalizzato non trovato',
             `Custom role with ID '${customRoleId}' not found or inactive`
           ));
         }
 
         // Verifica se l'utente ha già questo ruolo personalizzato
-        const existingAssignment = await prisma.personCustomRole.findFirst({
+        const existingAssignment = await prisma.personRole.findFirst({
           where: {
             personId,
-            customRoleId
+            customRoleId,
+            tenantId,
+            deletedAt: null
           }
         });
 
@@ -164,20 +154,17 @@ router.post('/assign',
         }
 
         // Assegna il ruolo personalizzato
-        assignmentResult = await prisma.personCustomRole.create({
+        assignmentResult = await prisma.personRole.create({
           data: {
             personId,
             customRoleId,
+            tenantId,
             assignedBy: req.person.id
           },
           include: {
             customRole: true,
             person: {
-              select: {
-                id: true,
-                email: true,
-                name: true
-              }
+              select: { id: true, firstName: true, lastName: true }
             }
           }
         });
@@ -197,9 +184,7 @@ router.post('/assign',
           user: filterUserData(assignmentResult.person),
           role: roleType ? {
             type: 'system',
-            roleType: assignmentResult.role.roleType,
-            name: assignmentResult.role.name,
-            description: assignmentResult.role.description
+            roleType: assignmentResult.roleType
           } : {
             type: 'custom',
             id: assignmentResult.customRole.id,
@@ -209,21 +194,18 @@ router.post('/assign',
           assignedAt: assignmentResult.createdAt,
           assignedBy: req.person.id
         }
-      }, 'Role assigned successfully'));
+      }, 'Ruolo assegnato con successo'));
 
     } catch (error) {
       logger.error('Error assigning role', {
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         assignerId: req.person?.id,
         requestData: req.body,
-        tenantId: req.tenant?.id || req.person?.tenantId
+        tenantId: getEffectiveTenantId(req)
       });
 
-      res.status(500).json(createErrorResponse(
-        'Failed to assign role',
-        error.message
-      ));
+      res.status(500).json(createErrorResponse('Errore nell\'assegnazione del ruolo'));
     }
   }
 );
@@ -240,27 +222,33 @@ router.delete('/remove',
   async (req, res) => {
     try {
       const { personId, roleType, customRoleId } = req.body;
-      const tenantId = req.tenant?.id || req.person?.tenantId;
+      const tenantId = getEffectiveTenantId(req);
 
       if (!personId || (!roleType && !customRoleId)) {
         return res.status(400).json(createErrorResponse(
-          'Invalid input',
+          'Dati non validi',
           'personId and either roleType or customRoleId are required'
         ));
       }
 
       // Verifica che l'utente target esista e appartenga al tenant
-      const targetUser = await prisma.person.findFirst({
+      const targetProfile = await prisma.personTenantProfile.findFirst({
         where: {
-          id: personId,
-          tenantId
+          personId,
+          tenantId,
+          deletedAt: null
+        },
+        include: {
+          person: {
+            select: { id: true, firstName: true, lastName: true }
+          }
         }
       });
 
-      if (!targetUser) {
+      if (!targetProfile) {
         return res.status(404).json(createErrorResponse(
-          'User not found',
-          'The specified user does not exist or does not belong to your tenant'
+          'Utente non trovato',
+          'L\'utente specificato non esiste o non appartiene al tuo tenant'
         ));
       }
 
@@ -268,58 +256,55 @@ router.delete('/remove',
 
       if (roleType) {
         // Rimozione di un ruolo di sistema
-        
-        // Trova il ruolo
-        const role = await prisma.role.findFirst({
-          where: {
-            roleType,
-            tenantId
-          }
-        });
-
-        if (!role) {
-          return res.status(404).json(createErrorResponse(
-            'Role not found',
-            `Role with type '${roleType}' not found`
-          ));
-        }
 
         // Trova l'assegnazione
         const assignment = await prisma.personRole.findFirst({
           where: {
             personId,
-            roleId: role.id
+            roleType,
+            tenantId,
+            deletedAt: null
           },
           include: {
-            role: true,
             person: {
-              select: {
-                id: true,
-                email: true,
-                name: true
-              }
+              select: { id: true, firstName: true, lastName: true }
             }
           }
         });
 
         if (!assignment) {
           return res.status(404).json(createErrorResponse(
-            'Role assignment not found',
+            'Assegnazione ruolo non trovata',
             `User does not have the role '${roleType}'`
           ));
         }
 
-        // Rimuovi l'assegnazione
-        await prisma.personRole.delete({
-          where: { id: assignment.id }
+        // Soft delete dell'assegnazione
+        await prisma.personRole.update({
+          where: { id: assignment.id },
+          data: { deletedAt: new Date(), isActive: false }
+        });
+
+        // GDPR audit log
+        await prisma.gdprAuditLog.create({
+          data: {
+            tenantId,
+            personId: req.person.id,
+            action: 'DELETE',
+            resourceType: 'PersonRole',
+            resourceId: assignment.id,
+            dataAccessed: {
+              targetPersonId: personId,
+              roleType
+            }
+          }
         });
 
         removalResult = {
           user: filterUserData(assignment.person),
           role: {
             type: 'system',
-            roleType: assignment.role.roleType,
-            name: assignment.role.name
+            roleType: assignment.roleType
           },
           removedAt: new Date().toISOString(),
           removedBy: req.person.id
@@ -329,56 +314,71 @@ router.delete('/remove',
           removerId: req.person.id,
           targetUserId: personId,
           roleType,
-          roleId: role.id,
           tenantId
         });
 
       } else if (customRoleId) {
         // Rimozione di un ruolo personalizzato
-        
+
         // Trova il ruolo personalizzato
         const customRole = await prisma.customRole.findFirst({
           where: {
             id: customRoleId,
-            tenantId
+            tenantId,
+            deletedAt: null
           }
         });
 
         if (!customRole) {
           return res.status(404).json(createErrorResponse(
-            'Custom role not found',
+            'Ruolo personalizzato non trovato',
             `Custom role with ID '${customRoleId}' not found`
           ));
         }
 
         // Trova l'assegnazione
-        const assignment = await prisma.personCustomRole.findFirst({
+        const assignment = await prisma.personRole.findFirst({
           where: {
             personId,
-            customRoleId
+            customRoleId,
+            tenantId,
+            deletedAt: null
           },
           include: {
             customRole: true,
             person: {
-              select: {
-                id: true,
-                email: true,
-                name: true
-              }
+              select: { id: true, firstName: true, lastName: true }
             }
           }
         });
 
         if (!assignment) {
           return res.status(404).json(createErrorResponse(
-            'Custom role assignment not found',
+            'Assegnazione ruolo personalizzato non trovata',
             `User does not have the custom role '${customRole.name}'`
           ));
         }
 
-        // Rimuovi l'assegnazione
-        await prisma.personCustomRole.delete({
-          where: { id: assignment.id }
+        // Soft delete dell'assegnazione
+        await prisma.personRole.update({
+          where: { id: assignment.id },
+          data: { deletedAt: new Date(), isActive: false }
+        });
+
+        // GDPR audit log
+        await prisma.gdprAuditLog.create({
+          data: {
+            tenantId,
+            personId: req.person.id,
+            action: 'DELETE',
+            resourceType: 'PersonRole',
+            resourceId: assignment.id,
+            dataAccessed: {
+              targetPersonId: personId,
+              customRoleId,
+              customRoleName: customRole.name
+            }
+          }
         });
 
         removalResult = {
@@ -403,21 +403,18 @@ router.delete('/remove',
 
       res.json(createSuccessResponse({
         removal: removalResult
-      }, 'Role removed successfully'));
+      }, 'Ruolo rimosso con successo'));
 
     } catch (error) {
       logger.error('Error removing role', {
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         removerId: req.person?.id,
         requestData: req.body,
-        tenantId: req.tenant?.id || req.person?.tenantId
+        tenantId: getEffectiveTenantId(req)
       });
 
-      res.status(500).json(createErrorResponse(
-        'Failed to remove role',
-        error.message
-      ));
+      res.status(500).json(createErrorResponse('Errore nella rimozione del ruolo'));
     }
   }
 );
@@ -433,35 +430,37 @@ router.post('/bulk-assign',
   async (req, res) => {
     try {
       const { userIds, roleType, customRoleId } = req.body;
-      const tenantId = req.tenant?.id || req.person?.tenantId;
+      const tenantId = getEffectiveTenantId(req);
 
       if (!Array.isArray(userIds) || userIds.length === 0) {
         return res.status(400).json(createErrorResponse(
-          'Invalid input',
+          'Dati non validi',
           'userIds must be a non-empty array'
         ));
       }
 
       if (!roleType && !customRoleId) {
         return res.status(400).json(createErrorResponse(
-          'Invalid input',
+          'Dati non validi',
           'Either roleType or customRoleId is required'
         ));
       }
 
       // Verifica che tutti gli utenti esistano e appartengano al tenant
-      const users = await prisma.person.findMany({
+      const profiles = await prisma.personTenantProfile.findMany({
         where: {
-          id: { in: userIds },
-          tenantId
-        }
+          personId: { in: userIds },
+          tenantId,
+          deletedAt: null
+        },
+        select: { personId: true }
       });
 
-      if (users.length !== userIds.length) {
-        const foundIds = users.map(u => u.id);
+      const foundIds = profiles.map(p => p.personId);
+      if (foundIds.length !== userIds.length) {
         const missingIds = userIds.filter(id => !foundIds.includes(id));
         return res.status(404).json(createErrorResponse(
-          'Some users not found',
+          'Alcuni utenti non trovati',
           `Users with IDs ${missingIds.join(', ')} not found or do not belong to your tenant`
         ));
       }
@@ -470,26 +469,14 @@ router.post('/bulk-assign',
 
       if (roleType) {
         // Assegnazione bulk di un ruolo di sistema
-        const role = await prisma.role.findFirst({
-          where: {
-            roleType,
-            tenantId,
-            isActive: true
-          }
-        });
-
-        if (!role) {
-          return res.status(404).json(createErrorResponse(
-            'Role not found',
-            `Role with type '${roleType}' not found or inactive`
-          ));
-        }
 
         // Trova gli utenti che non hanno già questo ruolo
         const existingAssignments = await prisma.personRole.findMany({
           where: {
             personId: { in: userIds },
-            roleId: role.id
+            roleType,
+            tenantId,
+            deletedAt: null
           }
         });
 
@@ -501,7 +488,8 @@ router.post('/bulk-assign',
           await prisma.personRole.createMany({
             data: newUserIds.map(userId => ({
               personId: userId,
-              roleId: role.id,
+              roleType,
+              tenantId,
               assignedBy: req.person.id
             }))
           });
@@ -509,7 +497,6 @@ router.post('/bulk-assign',
           assignments = newUserIds.map(userId => ({
             userId,
             roleType,
-            roleName: role.name,
             type: 'system'
           }));
         }
@@ -529,22 +516,25 @@ router.post('/bulk-assign',
           where: {
             id: customRoleId,
             tenantId,
-            isActive: true
+            isActive: true,
+            deletedAt: null
           }
         });
 
         if (!customRole) {
           return res.status(404).json(createErrorResponse(
-            'Custom role not found',
+            'Ruolo personalizzato non trovato',
             `Custom role with ID '${customRoleId}' not found or inactive`
           ));
         }
 
         // Trova gli utenti che non hanno già questo ruolo personalizzato
-        const existingAssignments = await prisma.personCustomRole.findMany({
+        const existingAssignments = await prisma.personRole.findMany({
           where: {
             personId: { in: userIds },
-            customRoleId
+            customRoleId,
+            tenantId,
+            deletedAt: null
           }
         });
 
@@ -553,10 +543,11 @@ router.post('/bulk-assign',
 
         if (newUserIds.length > 0) {
           // Crea le nuove assegnazioni
-          await prisma.personCustomRole.createMany({
+          await prisma.personRole.createMany({
             data: newUserIds.map(userId => ({
               personId: userId,
               customRoleId,
+              tenantId,
               assignedBy: req.person.id
             }))
           });
@@ -591,17 +582,14 @@ router.post('/bulk-assign',
 
     } catch (error) {
       logger.error('Error in bulk role assignment', {
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         assignerId: req.person?.id,
         requestData: req.body,
-        tenantId: req.tenant?.id || req.person?.tenantId
+        tenantId: getEffectiveTenantId(req)
       });
 
-      res.status(500).json(createErrorResponse(
-        'Failed to perform bulk role assignment',
-        error.message
-      ));
+      res.status(500).json(createErrorResponse('Errore nell\'assegnazione multipla dei ruoli'));
     }
   }
 );

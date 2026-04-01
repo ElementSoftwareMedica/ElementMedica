@@ -558,11 +558,280 @@ export const EXTENDED_ENTITY_DEFINITIONS: EntityDefinition[] = [
 ];
 
 /**
+ * Entità cliniche e poliambulatorio - P69 Session 5.11
+ * Derivate dai modelli Prisma della sezione clinica
+ */
+export const CLINICAL_ENTITY_DEFINITIONS: EntityDefinition[] = [
+  // --- Struttura ---
+  {
+    id: 'poliambulatori',
+    name: 'poliambulatori',
+    displayName: 'Poliambulatori',
+    fields: [
+      { id: 'nome', name: 'nome', displayName: 'Nome', type: 'string' },
+      { id: 'codiceRegionale', name: 'codiceRegionale', displayName: 'Codice Regionale', type: 'string' },
+      { id: 'partitaIva', name: 'partitaIva', displayName: 'Partita IVA', type: 'string' },
+      { id: 'telefono', name: 'telefono', displayName: 'Telefono', type: 'phone' },
+      { id: 'email', name: 'email', displayName: 'Email', type: 'email' },
+      { id: 'indirizzo', name: 'indirizzo', displayName: 'Indirizzo', type: 'string' },
+      { id: 'isActive', name: 'isActive', displayName: 'Attivo', type: 'boolean' }
+    ]
+  },
+  {
+    id: 'sedi_cliniche',
+    name: 'sedi_cliniche',
+    displayName: 'Sedi Cliniche',
+    fields: [
+      { id: 'nome', name: 'nome', displayName: 'Nome Sede', type: 'string' },
+      { id: 'indirizzo', name: 'indirizzo', displayName: 'Indirizzo', type: 'string' },
+      { id: 'telefono', name: 'telefono', displayName: 'Telefono', type: 'phone' },
+      { id: 'orarioApertura', name: 'orarioApertura', displayName: 'Orario Apertura', type: 'string' },
+      { id: 'isActive', name: 'isActive', displayName: 'Attivo', type: 'boolean' }
+    ]
+  },
+  {
+    id: 'ambulatori',
+    name: 'ambulatori',
+    displayName: 'Ambulatori',
+    fields: [
+      { id: 'nome', name: 'nome', displayName: 'Nome Ambulatorio', type: 'string' },
+      { id: 'tipo', name: 'tipo', displayName: 'Tipo', type: 'string' },
+      { id: 'piano', name: 'piano', displayName: 'Piano', type: 'string' },
+      { id: 'capacita', name: 'capacita', displayName: 'Capacità', type: 'number' },
+      { id: 'isActive', name: 'isActive', displayName: 'Attivo', type: 'boolean' }
+    ]
+  },
+
+  // --- Catalogo Prestazioni ---
+  {
+    id: 'prestazioni',
+    name: 'prestazioni',
+    displayName: 'Prestazioni',
+    fields: [
+      { id: 'codice', name: 'codice', displayName: 'Codice', type: 'string' },
+      { id: 'nome', name: 'nome', displayName: 'Nome Prestazione', type: 'string' },
+      { id: 'descrizione', name: 'descrizione', displayName: 'Descrizione', type: 'string' },
+      { id: 'durata', name: 'durata', displayName: 'Durata (min)', type: 'number' },
+      { id: 'prezzo', name: 'prezzo', displayName: 'Prezzo', type: 'number', sensitive: true },
+      { id: 'categoria', name: 'categoria', displayName: 'Categoria', type: 'string' },
+      { id: 'isActive', name: 'isActive', displayName: 'Attivo', type: 'boolean' }
+    ]
+  },
+  {
+    id: 'medici_abilitati',
+    name: 'medici_abilitati',
+    displayName: 'Medici Abilitati',
+    fields: [
+      { id: 'medicoId', name: 'medicoId', displayName: 'Medico', type: 'string' },
+      { id: 'prestazioneId', name: 'prestazioneId', displayName: 'Prestazione', type: 'string' },
+      { id: 'isActive', name: 'isActive', displayName: 'Abilitato', type: 'boolean' }
+    ]
+  },
+
+  // --- Agenda e Appuntamenti ---
+  {
+    id: 'appuntamenti',
+    name: 'appuntamenti',
+    displayName: 'Appuntamenti',
+    fields: [
+      { id: 'dataOra', name: 'dataOra', displayName: 'Data e Ora', type: 'date' },
+      { id: 'durata', name: 'durata', displayName: 'Durata (min)', type: 'number' },
+      { id: 'stato', name: 'stato', displayName: 'Stato', type: 'string' },
+      { id: 'pazienteId', name: 'pazienteId', displayName: 'Paziente', type: 'string', sensitive: true },
+      { id: 'medicoId', name: 'medicoId', displayName: 'Medico', type: 'string' },
+      { id: 'ambulatorioId', name: 'ambulatorioId', displayName: 'Ambulatorio', type: 'string' },
+      { id: 'note', name: 'note', displayName: 'Note', type: 'string' }
+    ]
+  },
+  {
+    id: 'slot_disponibilita',
+    name: 'slot_disponibilita',
+    displayName: 'Slot Disponibilità',
+    fields: [
+      { id: 'data', name: 'data', displayName: 'Data', type: 'date' },
+      { id: 'oraInizio', name: 'oraInizio', displayName: 'Ora Inizio', type: 'string' },
+      { id: 'oraFine', name: 'oraFine', displayName: 'Ora Fine', type: 'string' },
+      { id: 'medicoId', name: 'medicoId', displayName: 'Medico', type: 'string' },
+      { id: 'ambulatorioId', name: 'ambulatorioId', displayName: 'Ambulatorio', type: 'string' },
+      { id: 'isAvailable', name: 'isAvailable', displayName: 'Disponibile', type: 'boolean' }
+    ]
+  },
+
+  // --- Clinica ---
+  {
+    id: 'visite',
+    name: 'visite',
+    displayName: 'Visite Mediche',
+    fields: [
+      { id: 'data', name: 'data', displayName: 'Data Visita', type: 'date' },
+      { id: 'tipo', name: 'tipo', displayName: 'Tipo Visita', type: 'string' },
+      { id: 'stato', name: 'stato', displayName: 'Stato', type: 'string' },
+      { id: 'pazienteId', name: 'pazienteId', displayName: 'Paziente', type: 'string', sensitive: true },
+      { id: 'medicoId', name: 'medicoId', displayName: 'Medico', type: 'string' },
+      { id: 'diagnosi', name: 'diagnosi', displayName: 'Diagnosi', type: 'string', sensitive: true },
+      { id: 'note', name: 'note', displayName: 'Note Cliniche', type: 'string', sensitive: true },
+      { id: 'giudizio', name: 'giudizio', displayName: 'Giudizio Idoneità', type: 'string', sensitive: true }
+    ]
+  },
+  {
+    id: 'referti',
+    name: 'referti',
+    displayName: 'Referti',
+    fields: [
+      { id: 'titolo', name: 'titolo', displayName: 'Titolo', type: 'string' },
+      { id: 'contenuto', name: 'contenuto', displayName: 'Contenuto', type: 'string', sensitive: true },
+      { id: 'tipo', name: 'tipo', displayName: 'Tipo Referto', type: 'string' },
+      { id: 'stato', name: 'stato', displayName: 'Stato', type: 'string' },
+      { id: 'dataReferto', name: 'dataReferto', displayName: 'Data Referto', type: 'date' },
+      { id: 'medicoId', name: 'medicoId', displayName: 'Medico', type: 'string' },
+      { id: 'pazienteId', name: 'pazienteId', displayName: 'Paziente', type: 'string', sensitive: true }
+    ]
+  },
+  {
+    id: 'documenti_clinici',
+    name: 'documenti_clinici',
+    displayName: 'Documenti Clinici',
+    fields: [
+      { id: 'titolo', name: 'titolo', displayName: 'Titolo', type: 'string' },
+      { id: 'tipo', name: 'tipo', displayName: 'Tipo Documento', type: 'string' },
+      { id: 'contenuto', name: 'contenuto', displayName: 'Contenuto', type: 'string', sensitive: true },
+      { id: 'pazienteId', name: 'pazienteId', displayName: 'Paziente', type: 'string', sensitive: true },
+      { id: 'dataDocumento', name: 'dataDocumento', displayName: 'Data Documento', type: 'date' }
+    ]
+  },
+
+  // --- Convenzioni e Tariffari ---
+  {
+    id: 'convenzioni',
+    name: 'convenzioni',
+    displayName: 'Convenzioni',
+    fields: [
+      { id: 'nome', name: 'nome', displayName: 'Nome Convenzione', type: 'string' },
+      { id: 'tipo', name: 'tipo', displayName: 'Tipo', type: 'string' },
+      { id: 'dataInizio', name: 'dataInizio', displayName: 'Data Inizio', type: 'date' },
+      { id: 'dataFine', name: 'dataFine', displayName: 'Data Fine', type: 'date' },
+      { id: 'sconto', name: 'sconto', displayName: 'Sconto %', type: 'number', sensitive: true },
+      { id: 'isActive', name: 'isActive', displayName: 'Attiva', type: 'boolean' }
+    ]
+  },
+  {
+    id: 'tariffari',
+    name: 'tariffari',
+    displayName: 'Tariffari',
+    fields: [
+      { id: 'nome', name: 'nome', displayName: 'Nome Tariffario', type: 'string' },
+      { id: 'tipo', name: 'tipo', displayName: 'Tipo', type: 'string' },
+      { id: 'validoDal', name: 'validoDal', displayName: 'Valido Dal', type: 'date' },
+      { id: 'validoAl', name: 'validoAl', displayName: 'Valido Al', type: 'date' },
+      { id: 'isActive', name: 'isActive', displayName: 'Attivo', type: 'boolean' }
+    ]
+  },
+
+  // --- Fatturazione ---
+  {
+    id: 'fatture_sanitarie',
+    name: 'fatture_sanitarie',
+    displayName: 'Fatture Sanitarie',
+    fields: [
+      { id: 'numero', name: 'numero', displayName: 'Numero Fattura', type: 'string' },
+      { id: 'data', name: 'data', displayName: 'Data Fattura', type: 'date' },
+      { id: 'importo', name: 'importo', displayName: 'Importo', type: 'number', sensitive: true },
+      { id: 'stato', name: 'stato', displayName: 'Stato', type: 'string' },
+      { id: 'pazienteId', name: 'pazienteId', displayName: 'Paziente', type: 'string', sensitive: true },
+      { id: 'metodoPagamento', name: 'metodoPagamento', displayName: 'Metodo Pagamento', type: 'string' }
+    ]
+  },
+
+  // --- Strumentario ---
+  {
+    id: 'strumenti',
+    name: 'strumenti',
+    displayName: 'Strumenti Medici',
+    fields: [
+      { id: 'nome', name: 'nome', displayName: 'Nome Strumento', type: 'string' },
+      { id: 'tipo', name: 'tipo', displayName: 'Tipo', type: 'string' },
+      { id: 'matricola', name: 'matricola', displayName: 'Matricola', type: 'string' },
+      { id: 'dataCalibrazione', name: 'dataCalibrazione', displayName: 'Ultima Calibrazione', type: 'date' },
+      { id: 'stato', name: 'stato', displayName: 'Stato', type: 'string' }
+    ]
+  },
+
+  // --- Coda Pazienti ---
+  {
+    id: 'coda_pazienti',
+    name: 'coda_pazienti',
+    displayName: 'Coda Pazienti',
+    fields: [
+      { id: 'pazienteId', name: 'pazienteId', displayName: 'Paziente', type: 'string', sensitive: true },
+      { id: 'stato', name: 'stato', displayName: 'Stato', type: 'string' },
+      { id: 'priorita', name: 'priorita', displayName: 'Priorità', type: 'number' },
+      { id: 'ambulatorioId', name: 'ambulatorioId', displayName: 'Ambulatorio', type: 'string' },
+      { id: 'oraArrivo', name: 'oraArrivo', displayName: 'Ora Arrivo', type: 'date' }
+    ]
+  },
+
+  // --- Templates Visite ---
+  {
+    id: 'visit_templates',
+    name: 'visit_templates',
+    displayName: 'Template Visite',
+    fields: [
+      { id: 'nome', name: 'nome', displayName: 'Nome Template', type: 'string' },
+      { id: 'tipo', name: 'tipo', displayName: 'Tipo Visita', type: 'string' },
+      { id: 'contenuto', name: 'contenuto', displayName: 'Contenuto', type: 'string' },
+      { id: 'versione', name: 'versione', displayName: 'Versione', type: 'number' },
+      { id: 'isActive', name: 'isActive', displayName: 'Attivo', type: 'boolean' }
+    ]
+  },
+
+  // --- Medicina del Lavoro ---
+  {
+    id: 'protocolli_sanitari',
+    name: 'protocolli_sanitari',
+    displayName: 'Protocolli Sanitari',
+    fields: [
+      { id: 'nome', name: 'nome', displayName: 'Nome Protocollo', type: 'string' },
+      { id: 'descrizione', name: 'descrizione', displayName: 'Descrizione', type: 'string' },
+      { id: 'prestazioni', name: 'prestazioni', displayName: 'Prestazioni Incluse', type: 'string' },
+      { id: 'periodicita', name: 'periodicita', displayName: 'Periodicità (mesi)', type: 'number' },
+      { id: 'isActive', name: 'isActive', displayName: 'Attivo', type: 'boolean' }
+    ]
+  },
+  {
+    id: 'farmaci',
+    name: 'farmaci',
+    displayName: 'Farmaci',
+    fields: [
+      { id: 'nome', name: 'nome', displayName: 'Nome', type: 'string' },
+      { id: 'principioAttivo', name: 'principioAttivo', displayName: 'Principio Attivo', type: 'string' },
+      { id: 'dosaggio', name: 'dosaggio', displayName: 'Dosaggio', type: 'string' },
+      { id: 'formaFarmaceutica', name: 'formaFarmaceutica', displayName: 'Forma Farmaceutica', type: 'string' },
+      { id: 'aic', name: 'aic', displayName: 'Codice AIC', type: 'string' }
+    ]
+  },
+
+  // --- Disponibilità Medici ---
+  {
+    id: 'disponibilita_medici',
+    name: 'disponibilita_medici',
+    displayName: 'Disponibilità Medici',
+    fields: [
+      { id: 'medicoId', name: 'medicoId', displayName: 'Medico', type: 'string' },
+      { id: 'giorno', name: 'giorno', displayName: 'Giorno', type: 'string' },
+      { id: 'oraInizio', name: 'oraInizio', displayName: 'Ora Inizio', type: 'string' },
+      { id: 'oraFine', name: 'oraFine', displayName: 'Ora Fine', type: 'string' },
+      { id: 'ambulatorioId', name: 'ambulatorioId', displayName: 'Ambulatorio', type: 'string' }
+    ]
+  }
+];
+
+/**
  * Combina tutte le definizioni delle entità
  */
 export const ALL_ENTITY_DEFINITIONS: EntityDefinition[] = [
   ...STATIC_ENTITY_DEFINITIONS,
-  ...EXTENDED_ENTITY_DEFINITIONS
+  ...EXTENDED_ENTITY_DEFINITIONS,
+  ...CLINICAL_ENTITY_DEFINITIONS
 ];
 
 /**

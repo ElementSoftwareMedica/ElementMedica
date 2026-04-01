@@ -3,8 +3,8 @@
 # =============================================================================
 # Deploy Script per PRODUCTION - ElementMedica Multi-Domain
 # =============================================================================
-# Deploy su Hetzner VPS: 128.140.15.15
-# - elementformazione.com (CRM)
+# Deploy su Hetzner VPS: 178.104.44.177
+# - elementsicurezza.com (CRM)
 # - elementmedica.com (Frontend Pubblico)
 # =============================================================================
 
@@ -19,7 +19,7 @@ PURPLE='\033[0;35m'
 NC='\033[0m' # No Color
 
 # Configurazione Hetzner
-SERVER_IP="128.140.15.15"
+SERVER_IP="178.104.44.177"
 SERVER_USER="elementmedica"
 SERVER_PATH="/var/www/elementmedica"
 SSH_KEY="$HOME/.ssh/id_ed25519"
@@ -78,45 +78,79 @@ log_success "Build directories OK"
 echo "   • dist/: $(du -sh dist | cut -f1)"
 echo "   • dist-public/: $(du -sh dist-public | cut -f1)"
 
-# Test connessione SSH
-log_info "Testing SSH connection..."
-if ssh -i $SSH_KEY -o ConnectTimeout=10 -o BatchMode=yes $SERVER_USER@$SERVER_IP "echo 'SSH OK'" 2>/dev/null; then
-    log_success "SSH connection OK"
+# =============================================================================
+# SSH CONTROLMASTER (richiede passphrase 1 sola volta)
+# =============================================================================
+CONTROL_SOCKET="/tmp/ssh-elementmedica-$$"
+
+log_info "Apertura connessione SSH (passphrase richiesta 1 sola volta)..."
+ssh -i $SSH_KEY \
+    -M -S "$CONTROL_SOCKET" \
+    -o ControlPersist=300 \
+    -o StrictHostKeyChecking=accept-new \
+    -f -N \
+    $SERVER_USER@$SERVER_IP
+
+if [ $? -eq 0 ]; then
+    log_success "SSH ControlMaster attivo"
 else
-    log_warning "SSH requires passphrase. Please enter when prompted."
+    log_warning "SSH ControlMaster non disponibile, uso connessione standard"
+    CONTROL_SOCKET=""
 fi
+
+# Helper SSH con socket condiviso
+SSH_CMD() {
+    if [ -n "$CONTROL_SOCKET" ] && [ -S "$CONTROL_SOCKET" ]; then
+        ssh -S "$CONTROL_SOCKET" $SERVER_USER@$SERVER_IP "$@"
+    else
+        ssh -i $SSH_KEY $SERVER_USER@$SERVER_IP "$@"
+    fi
+}
+
+# Helper rsync con socket condiviso
+# --no-perms --chmod: forza permessi corretti su Linux (evita problemi macOS quarantine 700)
+RSYNC_CMD() {
+    if [ -n "$CONTROL_SOCKET" ] && [ -S "$CONTROL_SOCKET" ]; then
+        rsync -avz --delete \
+            --no-perms \
+            --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r \
+            --exclude '.DS_Store' \
+            --exclude '*.DS_Store' \
+            --exclude 'Thumbs.db' \
+            -e "ssh -S $CONTROL_SOCKET" \
+            "$@"
+    else
+        rsync -avz --delete \
+            --no-perms \
+            --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r \
+            --exclude '.DS_Store' \
+            --exclude '*.DS_Store' \
+            --exclude 'Thumbs.db' \
+            -e "ssh -i $SSH_KEY" \
+            "$@"
+    fi
+}
+
+# Cleanup socket on exit
+trap 'ssh -S "$CONTROL_SOCKET" -O exit '$SERVER_USER'@'$SERVER_IP' 2>/dev/null || true' EXIT
 
 # =============================================================================
 # BACKUP REMOTO
 # =============================================================================
 echo ""
-log_deploy "Creating remote backup..."
+log_deploy "Creating remote backup (lightweight) + cleanup old backups..."
 
-ssh -i $SSH_KEY $SERVER_USER@$SERVER_IP "
-    cd $SERVER_PATH
-    mkdir -p backups/frontend
-    BACKUP_DATE=\$(date +%Y%m%d_%H%M%S)
-    if [ -d dist ]; then
-        tar -czf backups/frontend/dist_\$BACKUP_DATE.tar.gz dist 2>/dev/null || true
-    fi
-    if [ -d dist-public ]; then
-        tar -czf backups/frontend/dist-public_\$BACKUP_DATE.tar.gz dist-public 2>/dev/null || true
-    fi
-    echo 'Backup completato'
-" || log_warning "Backup skipped (directories may not exist yet)"
+SSH_CMD "cd $SERVER_PATH && mkdir -p backups/frontend && BACKUP_COUNT=\$(ls backups/frontend/*.html 2>/dev/null | wc -l) && if [ \$BACKUP_COUNT -gt 4 ]; then ls -t backups/frontend/ 2>/dev/null | tail -n +5 | xargs -I{} rm -f backups/frontend/{}; fi && find $SERVER_PATH/backend/logs -name '*.log' -mtime +3 -delete 2>/dev/null || true && BACKUP_DATE=\$(date +%Y%m%d_%H%M%S) && [ -f dist/index.html ] && cp dist/index.html backups/frontend/dist-index_\${BACKUP_DATE}.html || true && [ -f dist-public/index.html ] && cp dist-public/index.html backups/frontend/dist-public-index_\${BACKUP_DATE}.html || true && echo 'Backup leggero completato'" || log_warning "Backup skipped (directories may not exist yet)"
 
 # =============================================================================
-# UPLOAD FRONTEND CRM (elementformazione.com)
+# UPLOAD FRONTEND CRM (elementsicurezza.com)
 # =============================================================================
 echo ""
-log_deploy "Uploading Element Formazione (CRM)..."
+log_deploy "Uploading Element Sicurezza (CRM)..."
 
-rsync -avz --delete \
-    -e "ssh -i $SSH_KEY" \
-    dist/ \
-    $SERVER_USER@$SERVER_IP:$SERVER_PATH/dist/
+RSYNC_CMD dist/ $SERVER_USER@$SERVER_IP:$SERVER_PATH/dist/
 
-log_success "Element Formazione uploaded → elementformazione.com"
+log_success "Element Sicurezza uploaded → elementsicurezza.com"
 
 # =============================================================================
 # UPLOAD FRONTEND PUBBLICO (elementmedica.com)
@@ -124,12 +158,17 @@ log_success "Element Formazione uploaded → elementformazione.com"
 echo ""
 log_deploy "Uploading Element Medica (Pubblico)..."
 
-rsync -avz --delete \
-    -e "ssh -i $SSH_KEY" \
-    dist-public/ \
-    $SERVER_USER@$SERVER_IP:$SERVER_PATH/dist-public/
+RSYNC_CMD dist-public/ $SERVER_USER@$SERVER_IP:$SERVER_PATH/dist-public/
 
 log_success "Element Medica uploaded → elementmedica.com"
+
+# =============================================================================
+# FIX PERMISSIONS (prevenire 403 Forbidden su asset statici)
+# rsync --chmod non è sempre rispettato su macOS → forziamo chmod esplicito
+# =============================================================================
+log_info "Fixing file permissions (prevenire 403 su logo/assets)..."
+SSH_CMD "find $SERVER_PATH/dist -type f -exec chmod 644 {} + ; find $SERVER_PATH/dist -type d -exec chmod 755 {} + ; find $SERVER_PATH/dist-public -type f -exec chmod 644 {} + ; find $SERVER_PATH/dist-public -type d -exec chmod 755 {} +"
+log_success "Permissions OK (files=644, dirs=755)"
 
 # =============================================================================
 # UPLOAD BACKEND (opzionale)
@@ -140,29 +179,44 @@ read -p "Vuoi aggiornare anche il backend? (y/N): " UPDATE_BACKEND
 if [[ "$UPDATE_BACKEND" =~ ^[Yy]$ ]]; then
     log_deploy "Uploading Backend..."
     
-    rsync -avz --delete \
-        --exclude 'node_modules' \
-        --exclude '.git' \
-        --exclude 'logs/*' \
-        --exclude '*.log' \
-        -e "ssh -i $SSH_KEY" \
-        backend/ \
-        $SERVER_USER@$SERVER_IP:$SERVER_PATH/backend/
+    if [ -n "$CONTROL_SOCKET" ] && [ -S "$CONTROL_SOCKET" ]; then
+        rsync -avz --delete \
+            --exclude 'node_modules' \
+            --exclude '.git' \
+            --exclude 'logs/*' \
+            --exclude '*.log' \
+            -e "ssh -S $CONTROL_SOCKET" \
+            backend/ \
+            $SERVER_USER@$SERVER_IP:$SERVER_PATH/backend/
+    else
+        rsync -avz --delete \
+            --exclude 'node_modules' \
+            --exclude '.git' \
+            --exclude 'logs/*' \
+            --exclude '*.log' \
+            -e "ssh -i $SSH_KEY" \
+            backend/ \
+            $SERVER_USER@$SERVER_IP:$SERVER_PATH/backend/
+    fi
     
     log_info "Installing backend dependencies..."
-    ssh -i $SSH_KEY $SERVER_USER@$SERVER_IP "
-        cd $SERVER_PATH/backend
-        npm ci --production
-        npx prisma generate
-    "
+    SSH_CMD "cd $SERVER_PATH/backend && npm ci --production && npx prisma generate"
     
     log_success "Backend updated"
     
     # Riavvio PM2 (con autorizzazione)
     read -p "Vuoi riavviare i servizi PM2? (y/N): " RESTART_PM2
     if [[ "$RESTART_PM2" =~ ^[Yy]$ ]]; then
-        ssh -i $SSH_KEY $SERVER_USER@$SERVER_IP "pm2 restart all"
+        SSH_CMD "pm2 restart all"
         log_success "PM2 services restarted"
+    fi
+
+    # Seed CMS pages (idempotente - upsert, sicuro da ripetere)
+    read -p "Vuoi eseguire il seed CMS pages? (y/N): " RUN_CMS_SEED
+    if [[ "$RUN_CMS_SEED" =~ ^[Yy]$ ]]; then
+        log_info "Running CMS pages seed (idempotent upsert)..."
+        SSH_CMD "cd $SERVER_PATH/backend && node scripts/seeds/seed-cms-pages-production.js"
+        log_success "CMS pages seed completed"
     fi
 fi
 
@@ -170,11 +224,29 @@ fi
 # RELOAD NGINX
 # =============================================================================
 echo ""
+read -p "Vuoi aggiornare anche la configurazione Nginx? (y/N): " UPDATE_NGINX
+
+if [[ "$UPDATE_NGINX" =~ ^[Yy]$ ]]; then
+    log_deploy "Deploying Nginx config..."
+    
+    if [ -n "$CONTROL_SOCKET" ] && [ -S "$CONTROL_SOCKET" ]; then
+        scp -o "ControlPath=$CONTROL_SOCKET" \
+            nginx/elementmedica-multi.conf \
+            $SERVER_USER@$SERVER_IP:/etc/nginx/sites-available/elementmedica-multi.conf
+    else
+        scp -i $SSH_KEY \
+            nginx/elementmedica-multi.conf \
+            $SERVER_USER@$SERVER_IP:/etc/nginx/sites-available/elementmedica-multi.conf
+    fi
+    
+    # Test Nginx config before enabling
+    SSH_CMD "nginx -t"
+    log_success "Nginx config valid"
+fi
+
 log_info "Reloading Nginx..."
-
-ssh -i $SSH_KEY $SERVER_USER@$SERVER_IP "sudo nginx -t && sudo systemctl reload nginx"
-
-log_success "Nginx reloaded"
+SSH_CMD "sudo nginx -t && sudo systemctl reload nginx"
+log_success "Nginx ricaricato"
 
 # =============================================================================
 # HEALTH CHECKS
@@ -189,13 +261,13 @@ else
     log_warning "Backend health: Check required"
 fi
 
-# Test elementformazione.com
-if curl -sf --max-time 10 http://elementformazione.com > /dev/null 2>&1; then
-    log_success "elementformazione.com: OK"
-elif curl -sf --max-time 10 https://elementformazione.com > /dev/null 2>&1; then
-    log_success "elementformazione.com (HTTPS): OK"
+# Test elementsicurezza.com
+if curl -sf --max-time 10 http://elementsicurezza.com > /dev/null 2>&1; then
+    log_success "elementsicurezza.com: OK"
+elif curl -sf --max-time 10 https://elementsicurezza.com > /dev/null 2>&1; then
+    log_success "elementsicurezza.com (HTTPS): OK"
 else
-    log_warning "elementformazione.com: Check DNS/SSL configuration"
+    log_warning "elementsicurezza.com: Check DNS/SSL configuration"
 fi
 
 # Test elementmedica.com
@@ -204,7 +276,7 @@ if curl -sf --max-time 10 http://elementmedica.com > /dev/null 2>&1; then
 elif curl -sf --max-time 10 https://elementmedica.com > /dev/null 2>&1; then
     log_success "elementmedica.com (HTTPS): OK"
 else
-    log_warning "elementmedica.com: DNS not yet configured (128.140.15.15)"
+    log_warning "elementmedica.com: DNS not yet configured (178.104.44.177)"
 fi
 
 # =============================================================================
@@ -212,7 +284,7 @@ fi
 # =============================================================================
 echo ""
 log_info "PM2 Status:"
-ssh -i $SSH_KEY $SERVER_USER@$SERVER_IP "pm2 status" 2>/dev/null || log_warning "PM2 status non disponibile"
+SSH_CMD "pm2 status" 2>/dev/null || log_warning "PM2 status non disponibile"
 
 # =============================================================================
 # SUMMARY
@@ -223,12 +295,12 @@ echo -e "${GREEN}✅ DEPLOY COMPLETATO${NC}"
 echo -e "${GREEN}=============================================${NC}"
 echo ""
 echo "🌐 Domains:"
-echo "   • https://elementformazione.com (CRM)"
+echo "   • https://elementsicurezza.com (CRM)"
 echo "   • https://elementmedica.com (Pubblico)"
 echo ""
 echo "📋 Prossimi passi:"
 echo "   1. Verifica i siti nel browser"
-echo "   2. Testa il login: admin@example.com / Admin123!"
+echo "   2. Testa il login con le credenziali salvate in modo sicuro"
 echo "   3. Controlla i logs: ssh $SERVER_USER@$SERVER_IP 'pm2 logs'"
 echo ""
 echo "📞 Per problemi:"

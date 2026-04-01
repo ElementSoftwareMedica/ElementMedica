@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { apiClient } from '../services';
+import { apiGet, apiPost } from '../services/api';
 import {
   GDPRConsent,
   ConsentFormData,
@@ -32,28 +32,25 @@ export const useGDPRConsent = (): UseGDPRConsentReturn => {
       setLoading(true);
       setError(null);
 
-      const response = await apiClient.get('/api/v1/gdpr/consents/current-user');
+      const data = await apiGet<{ consents: GDPRConsent[]; history: GDPRConsent[] } | ConsentsListResponse>('/api/v1/gdpr/consents/current-user');
 
       // Backend returns { consents, history } directly, not wrapped in { success, data }
-      const data = response.data as { consents: GDPRConsent[]; history: GDPRConsent[] } | ConsentsListResponse;
       if ('success' in data && data.success && data.data) {
         setConsents(data.data.consents);
       } else if ('consents' in data) {
         setConsents(data.consents);
       } else {
-        throw new Error('Failed to fetch consents');
+        throw new Error('Errore nel recupero dei consensi');
       }
     } catch (err) {
       // Non mostrare errori se l'endpoint non esiste o restituisce errore
       // Gli utenti potrebbero non avere ancora consensi registrati
-      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch consents';
+      const errorMessage = 'Errore nel recupero dei consensi';
       if (!errorMessage.includes('500') && !errorMessage.includes('404')) {
         setError(errorMessage);
-        console.error('Error fetching consents:', err);
       } else {
         // Errore 500/404 = endpoint non funzionante o tabella vuota, set array vuoto
         setConsents([]);
-        console.warn('GDPR consent endpoint not available, using empty state');
       }
     } finally {
       setLoading(false);
@@ -68,14 +65,13 @@ export const useGDPRConsent = (): UseGDPRConsentReturn => {
       setLoading(true);
       setError(null);
 
-      const response = await apiClient.post('/api/v1/gdpr/consents', {
+      const respData = await apiPost<{ consent: GDPRConsent; message: string } | ConsentResponse>('/api/v1/gdpr/consents', {
         consentType: data.consentType,
         purpose: data.purpose,
         legalBasis: data.legalBasis || 'consent'
       });
 
       // Backend returns { message, consent } directly
-      const respData = response.data as { consent: GDPRConsent; message: string } | ConsentResponse;
       const newConsent = 'data' in respData && respData.data ? respData.data.consent : (respData as { consent: GDPRConsent }).consent;
 
       if (newConsent) {
@@ -87,12 +83,11 @@ export const useGDPRConsent = (): UseGDPRConsentReturn => {
 
         // Toast handled by calling component
       } else {
-        throw new Error('Failed to grant consent');
+        throw new Error('Errore nella concessione del consenso');
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to grant consent';
+      const errorMessage = 'Errore nella concessione del consenso';
       setError(errorMessage);
-      console.error('Error granting consent:', err);
       // Toast handled by calling component
       throw err;
     } finally {
@@ -108,13 +103,12 @@ export const useGDPRConsent = (): UseGDPRConsentReturn => {
       setLoading(true);
       setError(null);
 
-      const response = await apiClient.post('/api/v1/gdpr/consents/withdraw', {
+      const respData = await apiPost<{ consent: GDPRConsent; message: string } | ConsentResponse>('/api/v1/gdpr/consents/withdraw', {
         consentType: data.consentType,
         reason: data.reason
       });
 
       // Backend returns { message, consent } directly
-      const respData = response.data as { consent: GDPRConsent; message: string } | ConsentResponse;
       const withdrawnConsent = 'data' in respData && respData.data ? respData.data.consent : (respData as { consent: GDPRConsent }).consent;
 
       if (withdrawnConsent) {
@@ -129,12 +123,11 @@ export const useGDPRConsent = (): UseGDPRConsentReturn => {
 
         // Toast handled by calling component
       } else {
-        throw new Error('Failed to withdraw consent');
+        throw new Error('Errore nella revoca del consenso');
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to withdraw consent';
+      const errorMessage = 'Errore nella revoca del consenso';
       setError(errorMessage);
-      console.error('Error withdrawing consent:', err);
       // Toast handled by calling component
       throw err;
     } finally {

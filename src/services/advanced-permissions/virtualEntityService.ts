@@ -20,9 +20,8 @@ export class VirtualEntityService {
         virtualEntityName,
         permissions
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       const message = error?.response?.data?.message || error?.message || 'Errore nell\'assegnazione dei permessi';
-      console.error('Errore nell\'assegnazione permessi entità virtuali:', message);
       throw new Error(message);
     }
   }
@@ -41,9 +40,8 @@ export class VirtualEntityService {
         virtualEntityName,
         permissions
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       const message = error?.response?.data?.message || error?.message || 'Errore nella rimozione dei permessi';
-      console.error('Errore nella rimozione permessi entità virtuali:', message);
       throw new Error(message);
     }
   }
@@ -55,9 +53,8 @@ export class VirtualEntityService {
     try {
       const result = await apiService.get<any>(`/virtual-entities/permissions/role/${roleId}`);
       return result?.data || result || [];
-    } catch (error: any) {
+    } catch (error: unknown) {
       const message = error?.response?.data?.message || error?.message || 'Errore nel recupero dei permessi del ruolo';
-      console.error('Errore nel recupero permessi ruolo entità virtuali:', message);
       throw new Error(message);
     }
   }
@@ -77,7 +74,6 @@ export class VirtualEntityService {
 
       return result?.data?.hasPermission ?? result?.hasPermission ?? false;
     } catch (error) {
-      console.error('Errore nella verifica permesso entità virtuale:', error);
       return false;
     }
   }
@@ -89,9 +85,8 @@ export class VirtualEntityService {
     try {
       const result = await apiService.get<any>('/virtual-entities/permissions');
       return result?.data || result || {};
-    } catch (error: any) {
+    } catch (error: unknown) {
       const message = error?.response?.data?.message || error?.message || 'Errore nel recupero dei permessi delle entità virtuali';
-      console.error('Errore nel recupero permessi entità virtuali:', message);
       return {};
     }
   }

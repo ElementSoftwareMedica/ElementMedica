@@ -13,7 +13,9 @@
  */
 
 import React, { useState } from 'react';
-import { FileText, Users, Award, Calculator, RefreshCw, FileQuestion } from 'lucide-react';
+import { FileText, Users, Award, Calculator, RefreshCw, FileQuestion, Euro } from 'lucide-react';
+import { useTenantMode } from '../../../../contexts/TenantModeContext';
+import { useBillingAccess } from '../../../../hooks/useBillingAccess';
 
 // Hooks
 import {
@@ -29,6 +31,8 @@ import {
   DocumentSummaryCards,
   DocumentSection
 } from './components';
+import SigningWorkflowModal from './components/SigningWorkflowModal';
+import type { SignaturePlacement } from './components/SigningWorkflowModal';
 
 // Utils & Types
 import {
@@ -48,6 +52,7 @@ import type { DocumentManagerProps } from './types';
 // External components
 import RegenerateAttestatiModal from '../RegenerateAttestatiModal';
 import PreventiviModal from '../PreventiviModal';
+import QuickFatturazioneTab from '../../../../pages/finance/billing/components/QuickFatturazioneTab';
 import GenerateRegistriModal from '../GenerateRegistriModal';
 import GenerateLettereModal from '../GenerateLettereModal';
 import TestManagerModal from '../TestManagerModal';
@@ -70,6 +75,10 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
   onPendingPreventiviCreated
 }) => {
   const statusOptions = ['Preventivo', 'Conferma', 'Fattura', 'Pagamento'];
+  const { hasBillingFeature } = useBillingAccess();
+
+  // Tenant mode for cross-tenant PDF preview headers
+  const { getOperateHeaders } = useTenantMode();
 
   // Computed values
   const hasAttendance = hasAttendanceData(dates, attendance);
@@ -100,7 +109,7 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
     onRefresh: refresh
   });
 
-  // Hook 3: Document actions (download/delete)
+  // Hook 3: Document actions (download/delete/sign)
   const {
     downloadLettera,
     downloadRegistro,
@@ -112,7 +121,9 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
     deleteLettera,
     deleteRegistro,
     deleteAttestato,
-    deletePreventivo
+    deletePreventivo,
+    signDocument,
+    signDocumentsBulk
   } = useDocumentActions(refresh, scheduleId);
 
   // Hook 4: UI state (modals)
@@ -135,6 +146,43 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
   // State for Test modal
   const [showTestModal, setShowTestModal] = useState(false);
 
+  // ── Signature modal state ──────────────────────────────────────────────────
+  const [signatureModal, setSignatureModal] = useState<{
+    open: boolean;
+    /** Primary doc whose PDF is shown for placement */
+    documentId: string;
+    /** Remaining docs for batch signing */
+    batchDocIds: string[];
+    label: string;
+    batchLabel: string;
+    /** Pre-existing trainer signature (base64/dataURL) to offer in step 1 */
+    savedSignature?: string | null;
+  }>({ open: false, documentId: '', batchDocIds: [], label: '', batchLabel: '', savedSignature: null });
+
+  const openSignModal = (docId: string, label: string, savedSignature?: string | null) =>
+    setSignatureModal({ open: true, documentId: docId, batchDocIds: [], label, batchLabel: '', savedSignature: savedSignature ?? null });
+
+  const openSignAllModal = (firstId: string, remainingIds: string[], label: string, savedSignature?: string | null) =>
+    setSignatureModal({ open: true, documentId: firstId, batchDocIds: remainingIds, label, batchLabel: label, savedSignature: savedSignature ?? null });
+
+  const closeSignModal = () =>
+    setSignatureModal(prev => ({ ...prev, open: false }));
+
+  const handleSignConfirm = async ({
+    signatureDataUrl,
+    placement,
+    applyToAll
+  }: { signatureDataUrl: string; placement: SignaturePlacement; applyToAll: boolean }) => {
+    closeSignModal();
+    if (applyToAll && signatureModal.batchDocIds.length > 0) {
+      const allIds = [signatureModal.documentId, ...signatureModal.batchDocIds];
+      await signDocumentsBulk(allIds, signatureDataUrl, placement);
+    } else {
+      await signDocument(signatureModal.documentId, signatureDataUrl, placement);
+    }
+  };
+  // ─────────────────────────────────────────────────────────────────────────
+
   // Get status information
   const statusInfo = getStatusInfo(status);
 
@@ -142,12 +190,12 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-gray-800">📄 Gestione Documenti</h3>
+        <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">📄 Gestione Documenti</h3>
         <div className="flex items-center gap-3">
           {hasScheduleId && (
             <button
               onClick={refresh}
-              className="text-sm flex items-center gap-1 text-gray-600 hover:text-gray-800 px-3 py-1 rounded-lg hover:bg-gray-100 transition-colors"
+              className="text-sm flex items-center gap-1 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 px-3 py-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               title="Ricarica documenti"
             >
               <RefreshCw className="w-4 h-4" />
@@ -155,14 +203,14 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
             </button>
           )}
           {!hasScheduleId && (
-            <div className="text-sm text-amber-600 bg-amber-50 px-3 py-1 rounded-full border border-amber-200">
+            <div className="text-sm text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-3 py-1 rounded-full border border-amber-200 dark:border-amber-800">
               ⚠️ Salva il corso per abilitare la generazione documenti
             </div>
           )}
         </div>
       </div>
 
-      <div className="border rounded-lg p-5 bg-white shadow-sm space-y-6">
+      <div className="border dark:border-gray-700 rounded-lg p-5 bg-white dark:bg-gray-800 shadow-sm space-y-6">
         {/* Status Selector */}
         <DocumentStatusSelector
           status={status}
@@ -181,7 +229,7 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
 
         {/* Document Generation Sections */}
         <div className="space-y-4">
-          <h4 className="font-semibold text-sm text-gray-700 border-b pb-2">
+          <h4 className="font-semibold text-sm text-gray-700 dark:text-gray-300 border-b dark:border-gray-700 pb-2">
             Generazione Documenti
           </h4>
 
@@ -198,7 +246,7 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
               selectedCompanies.length > 0 ? (
                 <span>
                   {companies
-                    .filter(c => selectedCompanies.includes(c.id))
+                    .filter(c => selectedCompanies.map(String).includes(String(c.id)))
                     .map(c => getCompanyName(c))
                     .join(', ')}
                 </span>
@@ -243,6 +291,15 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
             documents={lettereList}
             onDownload={downloadLettera}
             onDelete={deleteLettera}
+            onSign={(id) => {
+              const doc = lettereList.find(d => d.id === id);
+              const label = doc?.trainer ? `${doc.trainer.firstName} ${doc.trainer.lastName}` : 'Lettera di Incarico';
+              openSignModal(id, label, doc?.firmaFormatore);
+            }}
+            onSignAll={() => {
+              const unsigned = lettereList.filter(d => !d.signedAt);
+              if (unsigned.length > 0) openSignAllModal(unsigned[0].id, unsigned.slice(1).map(d => d.id), 'Lettere di Incarico', unsigned[0].firmaFormatore);
+            }}
             getDocumentName={(doc) =>
               doc.trainer ? `${doc.trainer.firstName} ${doc.trainer.lastName}` : doc.nomeFile
             }
@@ -269,6 +326,11 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
             documents={registriList}
             onDownload={downloadRegistro}
             onDelete={deleteRegistro}
+            onSign={(id) => openSignModal(id, 'Registro Presenze', registriList.find(d => d.id === id)?.firmaFormatore)}
+            onSignAll={() => {
+              const unsigned = registriList.filter(d => !d.signedAt);
+              if (unsigned.length > 0) openSignAllModal(unsigned[0].id, unsigned.slice(1).map(d => d.id), 'Registri Presenze', unsigned[0].firmaFormatore);
+            }}
             getDocumentName={(doc) => doc.nomeFile || doc.fileName || `Registro ${doc.id}`}
             buttonText="Genera Registri"
             showZipDownload={true}
@@ -294,6 +356,15 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
             showZipDownload={true}
             onDownload={downloadAttestato}
             onDelete={deleteAttestato}
+            onSign={(id) => {
+              const doc = attestatiList.find(d => d.id === id);
+              const label = doc?.person ? `${doc.person.firstName} ${doc.person.lastName}` : 'Attestato';
+              openSignModal(id, label, doc?.firmaFormatore);
+            }}
+            onSignAll={() => {
+              const unsigned = attestatiList.filter(d => !d.signedAt);
+              if (unsigned.length > 0) openSignAllModal(unsigned[0].id, unsigned.slice(1).map(d => d.id), 'Attestati', unsigned[0].firmaFormatore);
+            }}
             onDownloadZip={() => downloadAttestatiZip(attestatiList.map(a => a.id))}
             getDocumentName={(doc) =>
               doc.person ? `${doc.person.firstName} ${doc.person.lastName}` : doc.fileName
@@ -302,15 +373,15 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
           />
 
           {/* 5. Test e Questionari */}
-          <div className="border border-gray-200 rounded-lg p-4 hover:border-indigo-300 transition-colors">
+          <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:border-indigo-300 dark:hover:border-indigo-600 transition-colors">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-indigo-100">
-                  <FileQuestion className="h-5 w-5 text-indigo-600" />
+                <div className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900/50">
+                  <FileQuestion className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
                 </div>
                 <div>
-                  <h4 className="font-medium text-gray-900">Test e Questionari</h4>
-                  <p className="text-sm text-gray-500">
+                  <h4 className="font-medium text-gray-900 dark:text-gray-100">Test e Questionari</h4>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
                     Gestisci test iniziali, finali e valutazioni per i partecipanti
                   </p>
                 </div>
@@ -328,23 +399,46 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
         </div>
 
         {/* Status Information */}
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg border border-blue-200">
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
           <div className="text-sm">
-            <div className="font-semibold text-blue-900 mb-1 flex items-center gap-2">
-              <span className="w-2 h-2 bg-blue-600 rounded-full"></span>
+            <div className="font-semibold text-blue-900 dark:text-blue-300 mb-1 flex items-center gap-2">
+              <span className="w-2 h-2 bg-blue-600 dark:bg-blue-400 rounded-full"></span>
               Stato attuale: {status}
             </div>
-            <div className="text-blue-700 text-xs">{statusInfo.description}</div>
+            <div className="text-blue-700 dark:text-blue-400 text-xs">{statusInfo.description}</div>
           </div>
         </div>
       </div>
+
+      {/* Sezione Fatturazione Rapida */}
+      {hasScheduleId && hasBillingFeature && (
+        <div className="border dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 shadow-sm overflow-hidden">
+          <div className="flex items-center gap-3 px-5 py-3 bg-teal-50 dark:bg-teal-900/30 border-b border-teal-200 dark:border-teal-800">
+            <Euro className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+            <h4 className="font-semibold text-sm text-teal-800 dark:text-teal-200">Fatturazione</h4>
+          </div>
+          <div className="p-4">
+            <QuickFatturazioneTab
+              context={{
+                tipoServizio: 'FORMAZIONE',
+                courseScheduleId: String(scheduleId),
+                aziendaId: selectedCompanies.length === 1 ? String(selectedCompanies[0]) : undefined,
+                descrizioneDefault: selectedCourse?.name || selectedCourse?.nome || selectedCourse?.title,
+                prezzoDefault: selectedCourse?.price ?? selectedCourse?.prezzo,
+                sistemaTsDefault: 1,
+              }}
+              compact={true}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Modal: Preventivi */}
       {showPreventiviModal && selectedCourse && (
         <PreventiviModal
           isOpen={showPreventiviModal}
           onClose={closePreventiviModal}
-          selectedCompanies={companies.filter(c => selectedCompanies.includes(c.id))}
+          selectedCompanies={companies.filter(c => selectedCompanies.map(String).includes(String(c.id)))}
           selectedCourse={selectedCourse as any}
           dates={dates as any}
           scheduleId={scheduleId}
@@ -428,6 +522,18 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
           lastName: p.lastName,
           email: (p as any).email
         }))}
+      />
+      {/* Modal: Firma Documento */}
+      <SigningWorkflowModal
+        isOpen={signatureModal.open}
+        documentId={signatureModal.documentId}
+        documentLabel={signatureModal.label}
+        batchDocIds={signatureModal.batchDocIds}
+        batchLabel={signatureModal.batchLabel}
+        savedSignatureUrl={signatureModal.savedSignature}
+        previewHttpHeaders={getOperateHeaders()}
+        onClose={closeSignModal}
+        onConfirm={handleSignConfirm}
       />
     </div>
   );

@@ -27,13 +27,21 @@ describe('EmployeeImportService E2E Tests', () => {
       }
     });
 
-    // Crea azienda per test bulk assignment (usa upsert per evitare conflitti)
+    // P49/P63: Company non ha più tenantId - creare CompanyTenantProfile separatamente
     const company = await prisma.company.upsert({
       where: { piva: '66666666661' },
       update: {},
       create: {
         ragioneSociale: 'Test Company for Employees',
-        piva: '66666666661', // P.IVA valida diversa da quelle usate in CompanyImportService tests
+        piva: '66666666661' // P.IVA valida diversa da quelle usate in CompanyImportService tests
+      }
+    });
+    // Crea il profilo tenant per l'azienda
+    await prisma.companyTenantProfile.upsert({
+      where: { companyId_tenantId: { companyId: company.id, tenantId: TEST_TENANT_ID } },
+      update: {},
+      create: {
+        companyId: company.id,
         tenantId: TEST_TENANT_ID
       }
     });
@@ -41,21 +49,40 @@ describe('EmployeeImportService E2E Tests', () => {
   });
 
   afterAll(async () => {
+    // P63: Person.tenantId RIMOSSO - cleanup tramite PersonTenantProfile
     // Pulisci nella corretta sequenza per evitare foreign key constraints
     await prisma.personRole.deleteMany({ where: { tenantId: TEST_TENANT_ID } });
-    await prisma.person.deleteMany({ where: { tenantId: TEST_TENANT_ID } });
-    await prisma.companySite.deleteMany({
-      where: { company: { tenantId: TEST_TENANT_ID } }
+    // Trova le persone tramite i loro profili nel tenant
+    const profiles = await prisma.personTenantProfile.findMany({
+      where: { tenantId: TEST_TENANT_ID },
+      select: { personId: true }
     });
-    await prisma.company.deleteMany({ where: { tenantId: TEST_TENANT_ID } });
-    await prisma.tenant.delete({ where: { id: TEST_TENANT_ID } }).catch(() => {});
+    const personIds = profiles.map(p => p.personId);
+    await prisma.personTenantProfile.deleteMany({ where: { tenantId: TEST_TENANT_ID } });
+    if (personIds.length > 0) {
+      await prisma.person.deleteMany({ where: { id: { in: personIds } } });
+    }
+    await prisma.companySite.deleteMany({
+      where: { companyTenantProfile: { tenantId: TEST_TENANT_ID } }
+    });
+    await prisma.companyTenantProfile.deleteMany({ where: { tenantId: TEST_TENANT_ID } });
+    await prisma.company.deleteMany({ where: { piva: '66666666661' } }); // Cleanup by known P.IVA
+    await prisma.tenant.delete({ where: { id: TEST_TENANT_ID } }).catch(() => { });
     await prisma.$disconnect();
   });
 
   beforeEach(async () => {
-    // Pulisci persone e relazioni prima di ogni test
+    // P63: Person.tenantId RIMOSSO - cleanup tramite PersonTenantProfile
     await prisma.personRole.deleteMany({ where: { tenantId: TEST_TENANT_ID } });
-    await prisma.person.deleteMany({ where: { tenantId: TEST_TENANT_ID } });
+    const profiles = await prisma.personTenantProfile.findMany({
+      where: { tenantId: TEST_TENANT_ID },
+      select: { personId: true }
+    });
+    const personIds = profiles.map(p => p.personId);
+    await prisma.personTenantProfile.deleteMany({ where: { tenantId: TEST_TENANT_ID } });
+    if (personIds.length > 0) {
+      await prisma.person.deleteMany({ where: { id: { in: personIds } } });
+    }
   });
 
   describe('validateEmployees', () => {
@@ -139,13 +166,18 @@ describe('EmployeeImportService E2E Tests', () => {
     });
 
     it('dovrebbe rilevare conflitti con database', async () => {
-      // Crea persona esistente con ruolo EMPLOYEE
+      // P48: Crea persona esistente con profilo tenant e ruolo EMPLOYEE
       await prisma.person.create({
         data: {
           firstName: 'Giulia',
           lastName: 'Gialli',
           taxCode: 'GLLGLU88E20H501V', // Test 3 - Giulia (conflitto DB)
-          tenantId: TEST_TENANT_ID,
+          tenantProfiles: {
+            create: {
+              tenantId: TEST_TENANT_ID,
+              isPrimary: true
+            }
+          },
           personRoles: {
             create: {
               roleType: 'EMPLOYEE',
@@ -195,11 +227,11 @@ describe('EmployeeImportService E2E Tests', () => {
       expect(result.updated).toBe(0);
       expect(result.skipped).toBe(0);
 
-      // Verifica nel database
+      // Verifica nel database - P48: Person non ha tenantId, cercare tramite tenantProfiles
       const imported = await prisma.person.findMany({
-        where: { 
-          tenantId: TEST_TENANT_ID,
-          taxCode: { in: ['BRNCRL79F30H501U', 'RSSDVD82G15H501T'] }
+        where: {
+          taxCode: { in: ['BRNCRL79F30H501U', 'RSSDVD82G15H501T'] },
+          tenantProfiles: { some: { tenantId: TEST_TENANT_ID } }
         },
         include: { personRoles: true }
       });
@@ -226,12 +258,16 @@ describe('EmployeeImportService E2E Tests', () => {
       expect(result.success).toBe(true);
       expect(result.created).toBe(1);
 
-      // Verifica relazione con Company tramite companyId
+      // P48: Verifica relazione con Company tramite PersonTenantProfile.companyTenantProfileId
       const person = await prisma.person.findFirst({
-        where: { taxCode: 'FRRLNE87H25H501S' }
+        where: { taxCode: 'FRRLNE87H25H501S' },
+        include: { tenantProfiles: { where: { tenantId: TEST_TENANT_ID } } }
       });
 
-      expect(person.companyId).toBe(testCompanyId);
+      const companyProfile = await prisma.companyTenantProfile.findFirst({
+        where: { companyId: testCompanyId, tenantId: TEST_TENANT_ID }
+      });
+      expect(person.tenantProfiles[0]?.companyTenantProfileId).toBe(companyProfile?.id);
     });
 
     it('dovrebbe aggiornare dipendente esistente se in overwriteIds', async () => {
@@ -240,8 +276,13 @@ describe('EmployeeImportService E2E Tests', () => {
           firstName: 'Francesco',
           lastName: 'Totti',
           taxCode: 'TTTFNC76M27H501R', // Test 6 - Francesco
-          email: 'old@test.com',
-          tenantId: TEST_TENANT_ID,
+          tenantProfiles: {
+            create: {
+              tenantId: TEST_TENANT_ID,
+              email: 'old@test.com',
+              isPrimary: true
+            }
+          },
           personRoles: {
             create: { roleType: 'EMPLOYEE', tenantId: TEST_TENANT_ID }
           }
@@ -266,22 +307,25 @@ describe('EmployeeImportService E2E Tests', () => {
 
       expect(result.updated).toBe(1);
 
-      const updated = await prisma.person.findUnique({ where: { id: existing.id } });
+      const updated = await prisma.person.findUnique({
+        where: { id: existing.id },
+        include: { tenantProfiles: { where: { tenantId: TEST_TENANT_ID } } }
+      });
       expect(updated.lastName).toBe('Totti Updated');
-      expect(updated.email).toBe('new@test.com');
+      expect(updated.tenantProfiles[0]?.email).toBe('new@test.com');
     });
   });
 
   describe('bulkAssignToCompany', () => {
     it('dovrebbe assegnare multiple persone ad azienda', async () => {
-      // Crea 3 persone con CF unici per questo test
+      // P48: Crea 3 persone con profili tenant
       const persons = await Promise.all([
         prisma.person.create({
           data: {
             firstName: 'Giorgio',
             lastName: 'Armani',
             taxCode: 'RMNGRI68L12H501Q', // Test 7 - Giorgio
-            tenantId: TEST_TENANT_ID,
+            tenantProfiles: { create: { tenantId: TEST_TENANT_ID, isPrimary: true } },
             personRoles: { create: { roleType: 'EMPLOYEE', tenantId: TEST_TENANT_ID } }
           }
         }),
@@ -290,7 +334,7 @@ describe('EmployeeImportService E2E Tests', () => {
             firstName: 'Silvia',
             lastName: 'Romano',
             taxCode: 'RMNSLV91M50H501P', // Test 7 - Silvia
-            tenantId: TEST_TENANT_ID,
+            tenantProfiles: { create: { tenantId: TEST_TENANT_ID, isPrimary: true } },
             personRoles: { create: { roleType: 'EMPLOYEE', tenantId: TEST_TENANT_ID } }
           }
         }),
@@ -299,7 +343,7 @@ describe('EmployeeImportService E2E Tests', () => {
             firstName: 'Andrea',
             lastName: 'Bocelli',
             taxCode: 'BCLNDR58P09H501O', // Test 7 - Andrea
-            tenantId: TEST_TENANT_ID,
+            tenantProfiles: { create: { tenantId: TEST_TENANT_ID, isPrimary: true } },
             personRoles: { create: { roleType: 'EMPLOYEE', tenantId: TEST_TENANT_ID } }
           }
         })
@@ -315,14 +359,15 @@ describe('EmployeeImportService E2E Tests', () => {
       expect(result.success).toBe(true);
       expect(result.assigned).toBe(3);
 
-      // Verifica che tutte le persone siano assegnate via companyId
-      const assignedPersons = await prisma.person.findMany({
-        where: { 
-          id: { in: personIds },
-          companyId: testCompanyId
+      // P48: Verifica che tutte le persone siano assegnate via companyTenantProfileId nel profilo
+      const assignedProfiles = await prisma.personTenantProfile.findMany({
+        where: {
+          personId: { in: personIds },
+          tenantId: TEST_TENANT_ID,
+          companyTenantProfileId: { not: null }
         }
       });
-      expect(assignedPersons).toHaveLength(3);
+      expect(assignedProfiles).toHaveLength(3);
     });
   });
 });

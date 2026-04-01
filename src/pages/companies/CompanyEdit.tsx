@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
-import CompanyFormNew from '../../components/companies/CompanyFormNew';
+import CompanyForm from '../../components/companies/CompanyForm';
+import type { ComponentProps } from 'react';
+
+type CompanyData = NonNullable<ComponentProps<typeof CompanyForm>['company']>;
 import { useCompanies } from '../../hooks/useCompanies';
 import { useToast } from '../../hooks/useToast';
 import { apiGet } from '../../services/api';
@@ -13,43 +16,42 @@ export default function CompanyEdit() {
   const { companies, refresh: refreshCompanies } = useCompanies();
   const { showToast } = useToast();
   const [loading, setLoading] = useState(id ? true : false);
-  const [company, setCompany] = useState<any>(null);
+  const [company, setCompany] = useState<CompanyData | undefined>(undefined);
   const [fetchAttempts, setFetchAttempts] = useState(0);
   const isFetchingRef = useRef(false);
   const companyDataFetchedRef = useRef(false); // Track if we've already fetched company data
   const MAX_RETRY_ATTEMPTS = 3;
-  
+
   // Fetch company data with improved retry logic
   useEffect(() => {
     // If we've already successfully fetched the company data, don't fetch again
     // This prevents the company data from being reloaded during form editing
     if (!id || isFetchingRef.current || companyDataFetchedRef.current) return;
-    
+
     const fetchCompany = async () => {
       if (fetchAttempts >= MAX_RETRY_ATTEMPTS) {
         showToast({
-          message: `Failed to load company data after ${MAX_RETRY_ATTEMPTS} attempts.`,
+          message: `Impossibile caricare i dati dell'azienda dopo ${MAX_RETRY_ATTEMPTS} tentativi.`,
           type: 'error'
         });
         setLoading(false);
         navigate('/companies');
         return;
       }
-      
+
       isFetchingRef.current = true;
-      
+
       try {
         const data = await apiGet(`/api/v1/companies/${id}`);
-        setCompany(data);
+        setCompany(data as CompanyData);
         companyDataFetchedRef.current = true; // Mark that we've successfully fetched company data
         setLoading(false);
       } catch (error) {
-        console.error('Error fetching company:', error);
-        
+
         // Increment attempt counter
         const nextAttempt = fetchAttempts + 1;
         setFetchAttempts(nextAttempt);
-        
+
         if (error instanceof Error && error.message.includes('not found')) {
           // If it's a 404, show message and navigate away immediately
           showToast({
@@ -79,17 +81,19 @@ export default function CompanyEdit() {
         isFetchingRef.current = false;
       }
     };
-    
+
     fetchCompany();
   }, [id, navigate, showToast, fetchAttempts]);
 
   const handleSuccess = () => {
     refreshCompanies();
-    navigate('/companies');
+    // P59: Torna alla pagina dettaglio azienda invece della lista
+    navigate(`/companies/${id}`);
   };
 
   const handleClose = () => {
-    navigate('/companies');
+    // P59: Torna alla pagina dettaglio azienda invece della lista
+    navigate(`/companies/${id}`);
   };
 
   if (loading) {
@@ -98,7 +102,7 @@ export default function CompanyEdit() {
         <div className="flex flex-col items-center">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
           <p className="mt-4 text-gray-600">
-            {fetchAttempts > 0 ? `Loading company data (attempt ${fetchAttempts + 1}/${MAX_RETRY_ATTEMPTS})...` : 'Loading company data...'}
+            {fetchAttempts > 0 ? `Caricamento dati azienda (tentativo ${fetchAttempts + 1}/${MAX_RETRY_ATTEMPTS})...` : 'Caricamento dati azienda...'}
           </p>
         </div>
       </div>
@@ -108,16 +112,16 @@ export default function CompanyEdit() {
   return (
     <div className="container mx-auto px-4 py-8 max-w-5xl">
       <div className="mb-4">
-        <Link 
-          to="/companies" 
+        <Link
+          to="/companies"
           className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800"
         >
           <ChevronLeft className="h-4 w-4 mr-1" />
           Torna all'elenco aziende
         </Link>
       </div>
-      
-      <CompanyFormNew
+
+      <CompanyForm
         company={company}
         onSuccess={handleSuccess}
         onClose={handleClose}

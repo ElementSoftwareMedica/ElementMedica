@@ -12,51 +12,6 @@ export interface UserPermissions {
   }>;
 }
 
-// Migrazione e normalizzazione chiavi di storage
-export const migrateStorageKeys = (): void => {
-  if (typeof localStorage === 'undefined') return;
-  try {
-    // Access token: supporta alias legacy 'token' e 'accessToken'
-    const currentAuth = localStorage.getItem('authToken');
-    const legacyToken = localStorage.getItem('token');
-    const legacyAccess = localStorage.getItem('accessToken');
-    if (!currentAuth) {
-      const migrated = legacyToken || legacyAccess;
-      if (migrated) {
-        localStorage.setItem('authToken', migrated);
-        // Pulisci chiavi legacy
-        localStorage.removeItem('token');
-        localStorage.removeItem('accessToken');
-      }
-    } else {
-      // Se presente chiave standard, elimina eventuali duplicati legacy
-      if (legacyToken) localStorage.removeItem('token');
-      if (legacyAccess) localStorage.removeItem('accessToken');
-    }
-
-    // Refresh token: supporta alias legacy 'refresh_token'
-    const currentRefresh = localStorage.getItem('refreshToken');
-    const legacyRefresh = localStorage.getItem('refresh_token');
-    if (!currentRefresh && legacyRefresh) {
-      localStorage.setItem('refreshToken', legacyRefresh);
-      localStorage.removeItem('refresh_token');
-    } else if (currentRefresh && legacyRefresh) {
-      localStorage.removeItem('refresh_token');
-    }
-
-    // tenantId: normalizza eventuale 'tenantID' -> 'tenantId'
-    const legacyTenantID = localStorage.getItem('tenantID');
-    if (legacyTenantID && !localStorage.getItem('tenantId')) {
-      localStorage.setItem('tenantId', legacyTenantID);
-      localStorage.removeItem('tenantID');
-    } else if (legacyTenantID) {
-      localStorage.removeItem('tenantID');
-    }
-  } catch (_) {
-    // Non bloccare in caso di errori di storage (es. Safari in Private Mode)
-  }
-};
-
 export const login = async (identifier: string, password: string): Promise<AuthResponse> => {
   return await apiPost<AuthResponse>('/api/v1/auth/login', {
     identifier,
@@ -76,78 +31,107 @@ export const resetPassword = async (token: string, password: string): Promise<{ 
   return await apiPost<{ message: string }>('/api/v1/auth/reset-password', { token, password });
 };
 
+export const changePassword = async (currentPassword: string, newPassword: string): Promise<{ success: boolean; message: string }> => {
+  return await apiPost<{ success: boolean; message: string }>('/api/v1/auth/change-password', {
+    currentPassword,
+    newPassword,
+  });
+};
+
+/**
+ * F318: Acccess token in-memory storage.
+ * L'access token è volutamente in-memory (non in localStorage) per prevenire XSS.
+ * In caso di reload, l'AuthContext recupera automaticamente un nuovo access token
+ * tramite il refresh token (che rimane in localStorage).
+ */
+let _accessTokenMemory: string | null = null;
+
 export const saveToken = (token: string): void => {
-  migrateStorageKeys();
-  localStorage.setItem('authToken', token);
+  _accessTokenMemory = token;
+  // Rimuovi eventuali residui di versioni precedenti che usavano localStorage
+  try { localStorage.removeItem('authToken'); } catch { /* ignore */ }
 };
 
 export const getToken = (): string | null => {
-  migrateStorageKeys();
-  return localStorage.getItem('authToken');
+  return _accessTokenMemory;
 };
 
 export const removeToken = (): void => {
-  // Rimuovi chiavi standard e legacy
-  localStorage.removeItem('authToken');
-  localStorage.removeItem('token');
-  localStorage.removeItem('accessToken');
+  _accessTokenMemory = null;
+  try { localStorage.removeItem('authToken'); } catch { /* ignore */ }
 };
 
 // Gestione Refresh Token
 export const saveRefreshToken = (refreshToken: string): void => {
-  migrateStorageKeys();
   localStorage.setItem('refreshToken', refreshToken);
 };
 
 export const getRefreshToken = (): string | null => {
-  migrateStorageKeys();
   return localStorage.getItem('refreshToken');
 };
 
 export const removeRefreshToken = (): void => {
-  // Rimuovi chiavi standard e legacy
   localStorage.removeItem('refreshToken');
-  localStorage.removeItem('refresh_token');
 };
 
 export const isAuthenticated = (): boolean => {
   return !!getToken();
 };
 
+/**
+ * F321: Refresh guard — previene chiamate concorrenti a /refresh.
+ * React StrictMode (dev) monta gli effetti due volte; senza il guard,
+ * entrambe le invocazioni chiamerebbero refreshAccess simultaneamente:
+ * la prima consuma il refresh token (token rotation), la seconda ottiene 401
+ * e poi chiama removeToken/removeRefreshToken azzerando la sessione.
+ * Con il guard, la seconda chiamata si aggancia alla stessa Promise della prima.
+ */
+let _refreshPromise: Promise<string | null> | null = null;
+
 // Refresh access token lato client usando header x-refresh-token
 export const refreshAccess = async (): Promise<string | null> => {
-  try {
-    const currentRefresh = getRefreshToken();
-    if (!currentRefresh) return null;
+  // Se c'è già un refresh in corso, restituisci la stessa Promise
+  if (_refreshPromise) return _refreshPromise;
 
-    // Usa fetch per evitare interferenze con interceptor ed eventuali loop
-    // API_BASE_URL già include /api, quindi usiamo solo /v1/auth/refresh
-    const resp = await fetch(`${API_BASE_URL}/v1/auth/refresh`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-refresh-token': currentRefresh
-      },
-      credentials: 'include'
-    });
+  _refreshPromise = (async () => {
+    try {
+      const currentRefresh = getRefreshToken();
+      if (!currentRefresh) return null;
 
-    if (!resp.ok) {
-      console.warn('refreshAccess: refresh failed with status', resp.status);
+      // Usa fetch per evitare interferenze con interceptor ed eventuali loop
+      // API_BASE_URL già include /api, quindi usiamo solo /v1/auth/refresh
+      const resp = await fetch(`${API_BASE_URL}/v1/auth/refresh`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-refresh-token': currentRefresh
+        },
+        credentials: 'include'
+      });
+
+      if (!resp.ok) {
+        if (import.meta.env.DEV) console.warn('refreshAccess: refresh failed with status', resp.status);
+        return null;
+      }
+
+      const data: any = await resp.json();
+      const newAccess = data?.access_token || data?.tokens?.access_token || data?.token || null;
+      const newRefresh = data?.refresh_token || data?.tokens?.refresh_token || null;
+
+      if (newAccess) saveToken(newAccess);
+      if (newRefresh) saveRefreshToken(newRefresh);
+
+      return newAccess;
+    } catch (e) {
+      if (import.meta.env.DEV) console.error('refreshAccess: error while refreshing token', e);
       return null;
+    } finally {
+      // Rilascia il guard dopo 100ms per consentire retry veloci ma non loop
+      setTimeout(() => { _refreshPromise = null; }, 100);
     }
+  })();
 
-    const data: any = await resp.json();
-    const newAccess = data?.access_token || data?.tokens?.access_token || data?.token || null;
-    const newRefresh = data?.refresh_token || data?.tokens?.refresh_token || null;
-
-    if (newAccess) saveToken(newAccess);
-    if (newRefresh) saveRefreshToken(newRefresh);
-
-    return newAccess;
-  } catch (e) {
-    console.error('refreshAccess: error while refreshing token', e);
-    return null;
-  }
+  return _refreshPromise;
 };
 
 // Logout lato backend: revoca la sessione usando il refresh token, se disponibile
@@ -170,10 +154,7 @@ export const logout = async (refreshToken?: string): Promise<{ success: boolean 
 
 export const getUserPermissions = async (personId: string): Promise<UserPermissions> => {
   try {
-    console.log('🔍 getUserPermissions: Calling API for personId:', personId);
     const response = await apiGet<{ success: boolean; data: { personId: string; role: string; permissions: Record<string, boolean> } }>(`/api/v1/auth/permissions/${personId}`);
-
-    console.log('🔍 getUserPermissions: Raw API response received');
 
     // Convert backend response format to frontend expected format
     const permissionsArray = Object.entries(response.data.permissions || {})
@@ -189,23 +170,20 @@ export const getUserPermissions = async (personId: string): Promise<UserPermissi
       })
       .filter(p => p.resource !== 'unknown' && p.action !== 'unknown');
 
-    console.log('🔍 getUserPermissions: Converted permissions count:', permissionsArray.length);
-
     return {
       role: response.data.role,
       permissions: permissionsArray
     };
-  } catch (error: any) {
-    console.error('❌ getUserPermissions: Error fetching user permissions:', {
-      error: error.message,
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      data: error.response?.data,
-      personId
-    });
+  } catch (error: unknown) {
+    if (import.meta.env.DEV) {
+      console.error('❌ getUserPermissions: Error fetching user permissions:', {
+        status: error.response?.status,
+        personId
+      });
+    }
 
     // Return default EMPLOYEE role if there's an error
-    console.warn('⚠️ getUserPermissions: Returning default EMPLOYEE role due to error');
+    if (import.meta.env.DEV) console.warn('⚠️ getUserPermissions: Returning default EMPLOYEE role due to error');
     return {
       role: 'EMPLOYEE',
       permissions: []
@@ -213,11 +191,65 @@ export const getUserPermissions = async (personId: string): Promise<UserPermissi
   }
 };
 
+// ============================================
+// PROGETTO 49 - Login Multi-Step
+// ============================================
+
+/**
+ * Identifica se l'identifier (email/username/CF) è univoco o ha più account
+ * @returns IdentifyResponse con unique=true/false e lista accounts se multipli
+ */
+export interface IdentifyAccount {
+  personId: string;
+  firstName: string;
+  lastName: string;
+  displayName: string;
+  hasUsername: boolean;
+  hasTaxCode: boolean;
+  tenants: Array<{
+    tenantId: string;
+    tenantName: string;
+    profileId: string;
+    email: string;
+  }>;
+}
+
+export interface IdentifyResponse {
+  success: boolean;
+  unique?: boolean;
+  personId?: string;
+  displayName?: string;
+  identifiedBy?: 'email' | 'username' | 'taxCode';
+  tenantName?: string;
+  accounts?: IdentifyAccount[];
+  allowAlternative?: boolean;
+  message?: string;
+  error?: string;
+}
+
+export const identify = async (identifier: string): Promise<IdentifyResponse> => {
+  return await apiPost<IdentifyResponse>('/api/v1/auth/identify', { identifier });
+};
+
+/**
+ * Login con personId già identificato (Step 2 del multi-step login)
+ * Usato dopo la selezione account
+ */
+export const loginWithPersonId = async (personId: string, password: string): Promise<AuthResponse> => {
+  return await apiPost<AuthResponse>('/api/v1/auth/login', {
+    personId,
+    password,
+  });
+};
+
 export default {
   login,
+  loginWithPersonId,
+  identify,
   verifyToken,
   forgotPassword,
   resetPassword,
+  changePassword,
   saveToken,
   getToken,
   removeToken,
@@ -226,6 +258,5 @@ export default {
   removeRefreshToken,
   logout,
   isAuthenticated,
-  refreshAccess,
-  migrateStorageKeys
+  refreshAccess
 };

@@ -17,19 +17,28 @@ class PersonStats {
         ...filters
       };
 
+      // P48: status è su tenantProfiles, non su Person
       const [total, active, inactive, roleStats, recentLogins] = await Promise.all([
         prisma.person.count({ where: baseWhere }),
-        prisma.person.count({ 
-          where: { 
-            ...baseWhere, 
-            status: 'ACTIVE' 
-          } 
+        prisma.person.count({
+          where: {
+            ...baseWhere,
+            tenantProfiles: {
+              some: {
+                status: 'ACTIVE'
+              }
+            }
+          }
         }),
-        prisma.person.count({ 
-          where: { 
-            ...baseWhere, 
-            status: 'INACTIVE' 
-          } 
+        prisma.person.count({
+          where: {
+            ...baseWhere,
+            tenantProfiles: {
+              some: {
+                status: 'INACTIVE'
+              }
+            }
+          }
         }),
         this.getRoleStats(baseWhere),
         this.getRecentLoginsCount(baseWhere)
@@ -86,7 +95,7 @@ class PersonStats {
   static async getRecentLoginsCount(baseWhere = {}, days = 30) {
     try {
       const cutoffDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-      
+
       return await prisma.person.count({
         where: {
           ...baseWhere,
@@ -135,7 +144,7 @@ class PersonStats {
 
       // Raggruppa per periodo
       const activityByPeriod = this.groupActivityByPeriod(activePersons, groupBy);
-      
+
       // Calcola statistiche per ruolo nel periodo
       const roleActivity = this.calculateRoleActivity(activePersons);
 
@@ -219,7 +228,7 @@ class PersonStats {
   static async getSessionStats() {
     try {
       const now = new Date();
-      
+
       const [totalSessions, activeSessions, expiredSessions] = await Promise.all([
         prisma.personSession.count(),
         prisma.personSession.count({
@@ -294,7 +303,7 @@ class PersonStats {
   static async getGrowthStats(days = 30) {
     try {
       const cutoffDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-      
+
       const [newUsers, newUsersByRole] = await Promise.all([
         prisma.person.count({
           where: {

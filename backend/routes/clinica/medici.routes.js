@@ -11,7 +11,7 @@
 import express from 'express';
 import prisma from '../../config/prisma-optimization.js';
 import logger from '../../utils/logger.js';
-import middleware from '../../auth/middleware.js';
+import middleware from '../../middleware/auth.js';
 import { checkAdvancedPermission } from '../../middleware/advanced-permissions.js';
 import { clinicalValidators } from '../../config/validation-clinical.js';
 import { getEffectiveTenantId } from '../../utils/tenantHelper.js';
@@ -34,7 +34,7 @@ router.use('/:id/documents', medicoDocumentsRouter);
  * @access Authenticated + VIEW_MEDICI
  */
 router.get('/',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('medici', 'read'),
     auditClinico('list_medici'),
     async (req, res) => {
@@ -43,13 +43,19 @@ router.get('/',
             const { page = 1, limit = 20, search, specializzazione, attivo } = req.query;
 
             const where = {
-                tenantId,
                 deletedAt: null,
+                tenantProfiles: {
+                    some: {
+                        tenantId,
+                        deletedAt: null
+                    }
+                },
                 personRoles: {
                     some: {
                         roleType: 'MEDICO',
                         isActive: true,
-                        deletedAt: null
+                        deletedAt: null,
+                        tenantId
                     }
                 }
             };
@@ -58,13 +64,19 @@ router.get('/',
                 where.OR = [
                     { firstName: { contains: search, mode: 'insensitive' } },
                     { lastName: { contains: search, mode: 'insensitive' } },
-                    { email: { contains: search, mode: 'insensitive' } },
+                    { tenantProfiles: { some: { email: { contains: search, mode: 'insensitive' }, tenantId, deletedAt: null } } },
                     { taxCode: { contains: search, mode: 'insensitive' } }
                 ];
             }
 
             if (attivo !== undefined) {
-                where.status = attivo === 'true' ? 'ACTIVE' : 'INACTIVE';
+                where.tenantProfiles = {
+                    some: {
+                        tenantId,
+                        deletedAt: null,
+                        status: attivo === 'true' ? 'ACTIVE' : 'INACTIVE'
+                    }
+                };
             }
 
             const offset = (parseInt(page) - 1) * parseInt(limit);
@@ -75,16 +87,30 @@ router.get('/',
                     skip: offset,
                     take: parseInt(limit),
                     include: {
-                        personRoles: { where: { deletedAt: null } }
+                        personRoles: { where: { deletedAt: null } },
+                        tenantProfiles: { where: { tenantId, deletedAt: null }, take: 1 }
                     },
                     orderBy: { lastName: 'asc' }
                 }),
                 prisma.person.count({ where })
             ]);
 
+            // P48: Flatten tenantProfile fields for frontend compatibility
+            const flatMedici = medici.map(m => {
+                const profile = m.tenantProfiles?.[0] || {};
+                const { tenantProfiles, ...personFields } = m;
+                return {
+                    ...personFields,
+                    email: profile.email || null,
+                    phone: profile.phone || null,
+                    status: profile.status || 'PENDING',
+                    specialties: profile.specialties || [],
+                };
+            });
+
             res.json({
                 success: true,
-                data: medici,
+                data: flatMedici,
                 pagination: {
                     page: parseInt(page),
                     limit: parseInt(limit),
@@ -95,14 +121,13 @@ router.get('/',
         } catch (error) {
             logger.error('Failed to list medici', {
                 component: 'medici-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero dei medici',
-                message: error.message
             });
         }
     }
@@ -118,7 +143,7 @@ router.get('/',
  * @access Authenticated + VIEW_MEDICI
  */
 router.get('/stats',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('medici', 'read'),
     auditClinico('stats_medici'),
     async (req, res) => {
@@ -128,26 +153,25 @@ router.get('/stats',
             const [total, active, inactive] = await Promise.all([
                 prisma.person.count({
                     where: {
-                        tenantId,
                         deletedAt: null,
-                        personRoles: { some: { roleType: 'MEDICO', deletedAt: null } }
+                        tenantProfiles: { some: { tenantId, deletedAt: null } },
+                        personRoles: { some: { roleType: 'MEDICO', deletedAt: null, tenantId } }
                     }
                 }),
                 prisma.person.count({
                     where: {
-                        tenantId,
                         deletedAt: null,
-                        status: 'ACTIVE',
-                        personRoles: { some: { roleType: 'MEDICO', isActive: true, deletedAt: null } }
+                        tenantProfiles: { some: { tenantId, deletedAt: null, status: 'ACTIVE' } },
+                        personRoles: { some: { roleType: 'MEDICO', isActive: true, deletedAt: null, tenantId } }
                     }
                 }),
                 prisma.person.count({
                     where: {
-                        tenantId,
                         deletedAt: null,
+                        tenantProfiles: { some: { tenantId, deletedAt: null } },
                         OR: [
-                            { status: 'INACTIVE' },
-                            { personRoles: { some: { roleType: 'MEDICO', isActive: false, deletedAt: null } } }
+                            { tenantProfiles: { some: { tenantId, deletedAt: null, status: 'INACTIVE' } } },
+                            { personRoles: { some: { roleType: 'MEDICO', isActive: false, deletedAt: null, tenantId } } }
                         ]
                     }
                 })
@@ -160,14 +184,13 @@ router.get('/stats',
         } catch (error) {
             logger.error('Failed to get medici stats', {
                 component: 'medici-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero delle statistiche',
-                message: error.message
             });
         }
     }
@@ -183,7 +206,7 @@ router.get('/stats',
  * @access Authenticated + VIEW_MEDICI
  */
 router.get('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('medici', 'read'),
     clinicalValidators.params.id,
     auditClinico('view_medico'),
@@ -195,12 +218,13 @@ router.get('/:id',
             const medico = await prisma.person.findFirst({
                 where: {
                     id,
-                    tenantId,
                     deletedAt: null,
-                    personRoles: { some: { roleType: 'MEDICO', deletedAt: null } }
+                    tenantProfiles: { some: { tenantId, deletedAt: null } },
+                    personRoles: { some: { roleType: 'MEDICO', deletedAt: null, tenantId } }
                 },
                 include: {
                     personRoles: { where: { deletedAt: null } },
+                    tenantProfiles: { where: { tenantId, deletedAt: null }, take: 1 },
                     abilitazioni: {
                         where: { deletedAt: null, attivo: true },
                         include: { prestazione: true }
@@ -215,11 +239,38 @@ router.get('/:id',
                 });
             }
 
-            res.json({ success: true, data: medico });
+            // P48: Flatten tenantProfile fields for frontend compatibility
+            const profile = medico.tenantProfiles?.[0] || {};
+            const { tenantProfiles, ...personFields } = medico;
+            const flatMedico = {
+                ...personFields,
+                email: profile.email || null,
+                phone: profile.phone || null,
+                pec: profile.pec || null,
+                status: profile.status || 'PENDING',
+                residenceAddress: profile.residenceAddress || null,
+                residenceCity: profile.residenceCity || null,
+                province: profile.province || null,
+                postalCode: profile.postalCode || null,
+                iban: profile.iban || null,
+                notes: profile.notes || null,
+                specialties: profile.specialties || [],
+                registerCode: profile.registerCode || null,
+                registerCode2: profile.registerCode2 || null,
+                shortDescription: profile.shortDescription || null,
+                fullDescription: profile.fullDescription || null,
+                hiredDate: profile.hiredDate || null,
+                endDate: profile.endDate || null,
+                hourlyRate: profile.hourlyRate || null,
+                monthlyRate: profile.monthlyRate || null,
+                preferences: profile.preferences || {},
+            };
+
+            res.json({ success: true, data: flatMedico });
         } catch (error) {
             logger.error('Failed to get medico', {
                 component: 'medici-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 medicoId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -227,7 +278,6 @@ router.get('/:id',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero del medico',
-                message: error.message
             });
         }
     }
@@ -243,7 +293,7 @@ router.get('/:id',
  * @access Authenticated + CREATE_MEDICI
  */
 router.post('/',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('medici', 'create'),
     auditClinico('create_medico'),
     async (req, res) => {
@@ -332,7 +382,7 @@ router.post('/',
             }
 
             // Create new person with MEDICO role
-            const bcrypt = await import('bcryptjs');
+            const bcrypt = await import('bcrypt');
             const hashedPassword = await bcrypt.default.hash(password, 12);
 
             let baseUsername = `${firstName.toLowerCase()}.${lastName.toLowerCase()}`
@@ -352,28 +402,34 @@ router.post('/',
                 data: {
                     firstName,
                     lastName,
-                    email,
-                    phone,
                     taxCode: taxCode?.toUpperCase(),
                     birthDate: birthDate ? new Date(birthDate) : null,
-                    pec,
-                    residenceAddress,
-                    residenceCity,
-                    province,
-                    postalCode,
-                    iban: iban?.toUpperCase(),
                     profileImage,
-                    notes: notes || '',
-                    specialties: specialties || (specializzazione ? [specializzazione] : []),
-                    registerCode: registerCode || numeroIscrizione,
-                    registerCode2,
-                    shortDescription,
-                    fullDescription,
                     username: createAccount ? username : null,
                     password: createAccount ? hashedPassword : null,
-                    status: 'ACTIVE',
-                    tenantId,
-                    preferences: alboRegione ? { alboRegione } : {},
+                    // P48: campi tenant-specific in PersonTenantProfile
+                    tenantProfiles: {
+                        create: {
+                            tenantId,
+                            email,
+                            phone,
+                            pec,
+                            residenceAddress,
+                            residenceCity,
+                            province,
+                            postalCode,
+                            iban: iban?.toUpperCase(),
+                            notes: notes || '',
+                            specialties: specialties || (specializzazione ? [specializzazione] : []),
+                            registerCode: registerCode || numeroIscrizione,
+                            registerCode2,
+                            shortDescription,
+                            fullDescription,
+                            status: 'ACTIVE',
+                            isPrimary: true,
+                            preferences: alboRegione ? { alboRegione } : {}
+                        }
+                    },
                     personRoles: {
                         create: {
                             roleType: 'MEDICO',
@@ -383,7 +439,10 @@ router.post('/',
                         }
                     }
                 },
-                include: { personRoles: { where: { deletedAt: null } } }
+                include: {
+                    personRoles: { where: { deletedAt: null } },
+                    tenantProfiles: { where: { tenantId, deletedAt: null }, take: 1 }
+                }
             });
 
             await prisma.gdprAuditLog.create({
@@ -425,7 +484,7 @@ router.post('/',
         } catch (error) {
             logger.error('Failed to create medico', {
                 component: 'medici-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
@@ -439,7 +498,6 @@ router.post('/',
             res.status(500).json({
                 success: false,
                 error: 'Errore nella creazione del medico',
-                message: error.message
             });
         }
     }
@@ -455,7 +513,7 @@ router.post('/',
  * @access Authenticated + CREATE_MEDICI
  */
 router.post('/enable',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('medici', 'create'),
     auditClinico('enable_medico'),
     async (req, res) => {
@@ -503,14 +561,15 @@ router.post('/enable',
                 }
             });
 
+            // P48: specialties/registerCode sono su PersonTenantProfile
             const updateData = {};
             if (specialties?.length > 0) updateData.specialties = specialties;
             if (registerCode) updateData.registerCode = registerCode;
             if (registerCode2) updateData.registerCode2 = registerCode2;
 
             if (Object.keys(updateData).length > 0) {
-                await prisma.person.update({
-                    where: { id: person.id },
+                await prisma.personTenantProfile.updateMany({
+                    where: { personId: person.id, tenantId, deletedAt: null },
                     data: updateData
                 });
             }
@@ -540,14 +599,13 @@ router.post('/enable',
         } catch (error) {
             logger.error('Failed to enable person as medico', {
                 component: 'medici-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nell\'abilitazione del medico',
-                message: error.message
             });
         }
     }
@@ -563,7 +621,7 @@ router.post('/enable',
  * @access Authenticated + UPDATE_MEDICI
  */
 router.put('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('medici', 'update'),
     clinicalValidators.params.id,
     auditClinico('update_medico'),
@@ -585,9 +643,9 @@ router.put('/:id',
             const existing = await prisma.person.findFirst({
                 where: {
                     id,
-                    tenantId,
                     deletedAt: null,
-                    personRoles: { some: { roleType: 'MEDICO', deletedAt: null } }
+                    tenantProfiles: { some: { tenantId, deletedAt: null } },
+                    personRoles: { some: { roleType: 'MEDICO', deletedAt: null, tenantId } }
                 }
             });
 
@@ -598,44 +656,57 @@ router.put('/:id',
                 });
             }
 
-            const updateData = {};
-            if (firstName) updateData.firstName = firstName;
-            if (lastName) updateData.lastName = lastName;
-            if (email) updateData.email = email;
-            if (phone !== undefined) updateData.phone = phone;
-            if (taxCode) updateData.taxCode = taxCode.toUpperCase();
-            if (status) updateData.status = status;
-            if (birthDate !== undefined) updateData.birthDate = birthDate ? new Date(birthDate) : null;
-            if (pec !== undefined) updateData.pec = pec || null;
-            if (residenceAddress !== undefined) updateData.residenceAddress = residenceAddress || null;
-            if (residenceCity !== undefined) updateData.residenceCity = residenceCity || null;
-            if (province !== undefined) updateData.province = province || null;
-            if (postalCode !== undefined) updateData.postalCode = postalCode || null;
-            if (iban !== undefined) updateData.iban = iban?.toUpperCase() || null;
-            if (profileImage !== undefined) updateData.profileImage = profileImage || null;
-            if (notes !== undefined) updateData.notes = notes || null;
-            if (shortDescription !== undefined) updateData.shortDescription = shortDescription || null;
-            if (fullDescription !== undefined) updateData.fullDescription = fullDescription || null;
+            // P48: Person global fields
+            const personData = {};
+            if (firstName) personData.firstName = firstName;
+            if (lastName) personData.lastName = lastName;
+            if (taxCode) personData.taxCode = taxCode.toUpperCase();
+            if (birthDate !== undefined) personData.birthDate = birthDate ? new Date(birthDate) : null;
+            if (profileImage !== undefined) personData.profileImage = profileImage || null;
+
+            // P48: PersonTenantProfile fields
+            const profileData = {};
+            if (email) profileData.email = email;
+            if (phone !== undefined) profileData.phone = phone;
+            if (status) profileData.status = status;
+            if (pec !== undefined) profileData.pec = pec || null;
+            if (residenceAddress !== undefined) profileData.residenceAddress = residenceAddress || null;
+            if (residenceCity !== undefined) profileData.residenceCity = residenceCity || null;
+            if (province !== undefined) profileData.province = province || null;
+            if (postalCode !== undefined) profileData.postalCode = postalCode || null;
+            if (iban !== undefined) profileData.iban = iban?.toUpperCase() || null;
+            if (notes !== undefined) profileData.notes = notes || null;
+            if (shortDescription !== undefined) profileData.shortDescription = shortDescription || null;
+            if (fullDescription !== undefined) profileData.fullDescription = fullDescription || null;
 
             if (specialties !== undefined) {
-                updateData.specialties = specialties || [];
+                profileData.specialties = specialties || [];
             } else if (specializzazione) {
-                updateData.specialties = [specializzazione];
+                profileData.specialties = [specializzazione];
             }
 
-            if (registerCode !== undefined) updateData.registerCode = registerCode || null;
-            if (numeroIscrizione !== undefined && registerCode === undefined) updateData.registerCode = numeroIscrizione || null;
-            if (registerCode2 !== undefined) updateData.registerCode2 = registerCode2 || null;
+            if (registerCode !== undefined) profileData.registerCode = registerCode || null;
+            if (numeroIscrizione !== undefined && registerCode === undefined) profileData.registerCode = numeroIscrizione || null;
+            if (registerCode2 !== undefined) profileData.registerCode2 = registerCode2 || null;
 
             if (alboRegione !== undefined) {
                 const existingPrefs = existing.preferences || {};
-                updateData.preferences = { ...existingPrefs, alboRegione };
+                profileData.preferences = { ...existingPrefs, alboRegione };
             }
 
-            await prisma.person.update({
-                where: { id },
-                data: updateData
-            });
+            if (Object.keys(personData).length > 0) {
+                await prisma.person.update({
+                    where: { id },
+                    data: personData
+                });
+            }
+
+            if (Object.keys(profileData).length > 0) {
+                await prisma.personTenantProfile.updateMany({
+                    where: { personId: id, tenantId, deletedAt: null },
+                    data: profileData
+                });
+            }
 
             // Handle prestazioni abilitate
             if (prestazioniIds !== undefined) {
@@ -676,6 +747,7 @@ router.put('/:id',
                 where: { id },
                 include: {
                     personRoles: { where: { deletedAt: null } },
+                    tenantProfiles: { where: { tenantId, deletedAt: null }, take: 1 },
                     abilitazioni: {
                         where: { deletedAt: null, attivo: true },
                         include: { prestazione: true }
@@ -689,21 +761,44 @@ router.put('/:id',
                     action: 'UPDATE',
                     resourceType: 'PERSON_MEDICO',
                     resourceId: id,
-                    dataAccessed: { previousData: existing, newData: updateData },
+                    dataAccessed: { previousData: existing, newData: { ...personData, ...profileData } },
                     ipAddress: req.ip || req.connection?.remoteAddress,
                     tenantId
                 }
             });
 
+            // P48: Flatten tenantProfile fields for frontend
+            const uProfile = updatedMedico?.tenantProfiles?.[0] || {};
+            const { tenantProfiles: _tp, ...uPersonFields } = updatedMedico || {};
+            const flatUpdated = {
+                ...uPersonFields,
+                email: uProfile.email || null,
+                phone: uProfile.phone || null,
+                pec: uProfile.pec || null,
+                status: uProfile.status || 'PENDING',
+                residenceAddress: uProfile.residenceAddress || null,
+                residenceCity: uProfile.residenceCity || null,
+                province: uProfile.province || null,
+                postalCode: uProfile.postalCode || null,
+                iban: uProfile.iban || null,
+                notes: uProfile.notes || null,
+                specialties: uProfile.specialties || [],
+                registerCode: uProfile.registerCode || null,
+                registerCode2: uProfile.registerCode2 || null,
+                shortDescription: uProfile.shortDescription || null,
+                fullDescription: uProfile.fullDescription || null,
+                preferences: uProfile.preferences || {},
+            };
+
             res.json({
                 success: true,
-                data: updatedMedico,
+                data: flatUpdated,
                 message: 'Medico aggiornato con successo'
             });
         } catch (error) {
             logger.error('Failed to update medico', {
                 component: 'medici-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 medicoId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -718,7 +813,6 @@ router.put('/:id',
             res.status(500).json({
                 success: false,
                 error: 'Errore nell\'aggiornamento del medico',
-                message: error.message
             });
         }
     }
@@ -734,7 +828,7 @@ router.put('/:id',
  * @access Authenticated + DELETE_MEDICI
  */
 router.delete('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('medici', 'delete'),
     clinicalValidators.params.id,
     auditClinico('delete_medico'),
@@ -746,9 +840,9 @@ router.delete('/:id',
             const existing = await prisma.person.findFirst({
                 where: {
                     id,
-                    tenantId,
                     deletedAt: null,
-                    personRoles: { some: { roleType: 'MEDICO', deletedAt: null } }
+                    tenantProfiles: { some: { tenantId, deletedAt: null } },
+                    personRoles: { some: { roleType: 'MEDICO', deletedAt: null, tenantId } }
                 }
             });
 
@@ -765,7 +859,7 @@ router.delete('/:id',
                     data: { deletedAt: new Date() }
                 }),
                 prisma.personRole.updateMany({
-                    where: { personId: id, roleType: 'MEDICO' },
+                    where: { personId: id, roleType: 'MEDICO', tenantId },
                     data: { deletedAt: new Date(), isActive: false }
                 })
             ]);
@@ -789,7 +883,7 @@ router.delete('/:id',
         } catch (error) {
             logger.error('Failed to delete medico', {
                 component: 'medici-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 medicoId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -797,7 +891,6 @@ router.delete('/:id',
             res.status(500).json({
                 success: false,
                 error: 'Errore nell\'eliminazione del medico',
-                message: error.message
             });
         }
     }
@@ -813,7 +906,7 @@ router.delete('/:id',
  * @access Authenticated + VIEW_MEDICI
  */
 router.get('/:id/ambulatori',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('medici', 'read'),
     clinicalValidators.params.id,
     auditClinico('view_medico_ambulatori'),
@@ -824,14 +917,13 @@ router.get('/:id/ambulatori',
         } catch (error) {
             logger.error('Failed to get medico ambulatori', {
                 component: 'medici-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 medicoId: req.params.id
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero degli ambulatori',
-                message: error.message
             });
         }
     }
@@ -847,7 +939,7 @@ router.get('/:id/ambulatori',
  * @access Authenticated + VIEW_MEDICI
  */
 router.get('/:id/disponibilita',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('medici', 'read'),
     clinicalValidators.params.id,
     auditClinico('view_medico_disponibilita'),
@@ -858,14 +950,13 @@ router.get('/:id/disponibilita',
         } catch (error) {
             logger.error('Failed to get medico disponibilita', {
                 component: 'medici-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 medicoId: req.params.id
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero della disponibilità',
-                message: error.message
             });
         }
     }

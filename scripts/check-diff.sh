@@ -15,7 +15,7 @@ NC='\033[0m'
 
 # Configurazione
 SSH_KEY="$HOME/.ssh/id_ed25519"
-SERVER="root@128.140.15.15"
+SERVER="root@178.104.44.177"
 
 # Directory base
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -53,14 +53,14 @@ echo -e "${BLUE}=== BACKEND routes/ ===${NC}"
 ROUTES_DIFF=$(rsync -avzn \
     -e "ssh -i $SSH_KEY" \
     backend/routes/ \
-    $SERVER:/var/www/elementformazione/backend/routes/ 2>/dev/null | grep "\.js$" | wc -l)
+    $SERVER:/var/www/elementsicurezza/backend/routes/ 2>/dev/null | grep "\.js$" | wc -l)
 
 if [ "$ROUTES_DIFF" -gt 0 ]; then
     echo -e "${YELLOW}⚠️  $ROUTES_DIFF file differenti${NC}"
     rsync -avzn \
         -e "ssh -i $SSH_KEY" \
         backend/routes/ \
-        $SERVER:/var/www/elementformazione/backend/routes/ 2>/dev/null | grep "\.js$" | head -10
+        $SERVER:/var/www/elementsicurezza/backend/routes/ 2>/dev/null | grep "\.js$" | head -10
 else
     echo -e "${GREEN}✅ Sincronizzato${NC}"
 fi
@@ -72,14 +72,14 @@ echo -e "${BLUE}=== BACKEND controllers/ ===${NC}"
 CTRL_DIFF=$(rsync -avzn \
     -e "ssh -i $SSH_KEY" \
     backend/controllers/ \
-    $SERVER:/var/www/elementformazione/backend/controllers/ 2>/dev/null | grep "\.js$" | wc -l)
+    $SERVER:/var/www/elementsicurezza/backend/controllers/ 2>/dev/null | grep "\.js$" | wc -l)
 
 if [ "$CTRL_DIFF" -gt 0 ]; then
     echo -e "${YELLOW}⚠️  $CTRL_DIFF file differenti${NC}"
     rsync -avzn \
         -e "ssh -i $SSH_KEY" \
         backend/controllers/ \
-        $SERVER:/var/www/elementformazione/backend/controllers/ 2>/dev/null | grep "\.js$" | head -10
+        $SERVER:/var/www/elementsicurezza/backend/controllers/ 2>/dev/null | grep "\.js$" | head -10
 else
     echo -e "${GREEN}✅ Sincronizzato${NC}"
 fi
@@ -91,14 +91,14 @@ echo -e "${BLUE}=== BACKEND services/ ===${NC}"
 SVC_DIFF=$(rsync -avzn \
     -e "ssh -i $SSH_KEY" \
     backend/services/ \
-    $SERVER:/var/www/elementformazione/backend/services/ 2>/dev/null | grep "\.js$" | wc -l)
+    $SERVER:/var/www/elementsicurezza/backend/services/ 2>/dev/null | grep "\.js$" | wc -l)
 
 if [ "$SVC_DIFF" -gt 0 ]; then
     echo -e "${YELLOW}⚠️  $SVC_DIFF file differenti${NC}"
     rsync -avzn \
         -e "ssh -i $SSH_KEY" \
         backend/services/ \
-        $SERVER:/var/www/elementformazione/backend/services/ 2>/dev/null | grep "\.js$" | head -10
+        $SERVER:/var/www/elementsicurezza/backend/services/ 2>/dev/null | grep "\.js$" | head -10
 else
     echo -e "${GREEN}✅ Sincronizzato${NC}"
 fi

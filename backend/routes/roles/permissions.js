@@ -6,9 +6,8 @@
  */
 
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../../config/prisma-optimization.js';
 const router = express.Router();
-const prisma = new PrismaClient();
 
 // Middleware
 import { authenticate } from '../../middleware/auth.js';
@@ -55,7 +54,7 @@ router.get('/permissions',
   requirePermission('roles:read'),
   async (req, res) => {
     try {
-      console.log('🔍 Getting all available permissions');
+      logger.debug('Getting all available permissions');
 
       // Ottieni tutti i permessi dal database
       const allPermissions = await prisma.permission.findMany({
@@ -108,7 +107,7 @@ router.get('/permissions',
           const rolePermissions = enhancedRoleService.getDefaultPermissions(roleType);
           rolePermissions.forEach(perm => allSystemPermissions.add(perm));
         } catch (error) {
-          console.warn(`Could not get permissions for role ${roleType}:`, error.message);
+          logger.warn('Impossibile ottenere permessi per il ruolo', { roleType, error: error.message });
         }
       });
 
@@ -145,7 +144,7 @@ router.get('/permissions',
         }
       });
 
-      console.log(`✅ Retrieved ${Object.keys(permissionsByResource).length} permission categories`);
+      logger.debug({ categoriesCount: Object.keys(permissionsByResource).length }, 'Retrieved permission categories');
 
       res.json({
         success: true,
@@ -156,17 +155,11 @@ router.get('/permissions',
         }
       });
     } catch (error) {
-      console.error('❌ Error getting all permissions:', error);
-      logger.error('Error getting all permissions', {
-        error: error.message,
-        stack: error.stack,
-        userId: req.person?.id,
-        tenantId: req.tenant?.id
-      });
+      logger.error({ error: 'Operazione non riuscita', userId: req.person?.id }, 'Errore nel recupero di tutti i permessi');
 
       res.status(500).json({
         success: false,
-        error: 'Internal server error while retrieving permissions'
+        error: 'Errore interno del server durante il recupero dei permessi'
       });
     }
   }
@@ -189,8 +182,7 @@ router.get('/:roleType/permissions',
       // Decodifica l'URL encoding per gestire caratteri speciali come &
       roleType = decodeURIComponent(roleType);
 
-      console.log(`🔍 Getting permissions for role: ${roleType}`);
-      console.log(`🔍 Tenant ID: ${tenantId}`);
+      logger.debug({ roleType, tenantId }, 'Getting permissions for role');
 
       // Determina se è un ruolo personalizzato o di sistema
       const isCustomRole = roleType.startsWith('CUSTOM_');
@@ -248,7 +240,7 @@ router.get('/:roleType/permissions',
 
         if (customRoleFromDB) {
           isCustomRoleInDB = true;
-          console.log(`🔍 Found custom role in database: ${roleType} (name: ${customRoleFromDB.name})`);
+          logger.debug({ roleType, roleName: customRoleFromDB.name }, 'Found custom role in database');
         }
       }
 
@@ -265,19 +257,19 @@ router.get('/:roleType/permissions',
           });
 
           if (!existingRole) {
-            console.log(`❌ Role type ${roleType} not found anywhere`);
+            logger.debug({ roleType }, 'Role type not found');
             return res.status(404).json({
               success: false,
-              error: 'Role type not found'
+              error: 'Tipo ruolo non trovato'
             });
           }
         } catch (prismaError) {
           // Se la query Prisma fallisce (probabilmente perché il roleType non è nell'enum),
           // consideriamo il ruolo come non trovato
-          console.log(`❌ Role type ${roleType} not valid in enum and not found in CustomRole`);
+          logger.debug({ roleType }, 'Role type not valid in enum');
           return res.status(404).json({
             success: false,
-            error: 'Role type not found'
+            error: 'Tipo ruolo non trovato'
           });
         }
       }
@@ -325,7 +317,7 @@ router.get('/:roleType/permissions',
         }
       } else {
         // Per ruoli di sistema, carica i permessi effettivi dal database
-        console.log(`🔍 Loading actual permissions for system role: ${roleType}`);
+        logger.debug({ roleType }, 'Loading actual permissions for system role');
 
         // Trova tutti i PersonRole per questo tipo di ruolo nel tenant
         const personRoles = await prisma.personRole.findMany({
@@ -351,7 +343,7 @@ router.get('/:roleType/permissions',
             allPossiblePermissions = enhancedRoleService.getDefaultPermissions(roleType);
           } catch (error) {
             // Se il ruolo non è nell'enum, usa un set di permessi base
-            console.log(`⚠️ Role ${roleType} not in enum, using base permissions`);
+            logger.debug({ roleType }, 'Role not in enum, using base allPossiblePermissions');
             allPossiblePermissions = [
               'VIEW_COMPANIES', 'VIEW_EMPLOYEES', 'VIEW_USERS', 'VIEW_COURSES',
               'VIEW_TRAINERS', 'VIEW_DOCUMENTS', 'VIEW_REPORTS'
@@ -416,13 +408,13 @@ router.get('/:roleType/permissions',
           permissions = Object.values(permissionsMap);
         } else {
           // Se non ci sono PersonRole, usa i permessi di default
-          console.log(`🔍 No PersonRole found, using default permissions for: ${roleType}`);
+          logger.debug({ roleType }, 'No PersonRole found, using default permissions');
           let defaultPermissions = [];
           try {
             defaultPermissions = enhancedRoleService.getDefaultPermissions(roleType);
           } catch (error) {
             // Se il ruolo non è nell'enum, usa un set di permessi base
-            console.log(`⚠️ Role ${roleType} not in enum, using base permissions`);
+            logger.debug({ roleType }, 'Role not in enum, using base defaultPermissions');
             defaultPermissions = [
               'VIEW_COMPANIES', 'VIEW_EMPLOYEES', 'VIEW_USERS', 'VIEW_COURSES',
               'VIEW_TRAINERS', 'VIEW_DOCUMENTS', 'VIEW_REPORTS'
@@ -438,8 +430,7 @@ router.get('/:roleType/permissions',
         }
       }
 
-      console.log(`✅ Permissions retrieved successfully for role: ${roleType}`);
-      console.log(`📊 Found ${permissions.length} permissions`);
+      logger.debug({ roleType, permissionsCount: permissions.length }, 'Permissions retrieved successfully');
 
       res.json({
         success: true,
@@ -451,10 +442,10 @@ router.get('/:roleType/permissions',
         }
       });
     } catch (error) {
-      console.error('[ROLES_API] Error getting role permissions:', error);
+      logger.error({ error: 'Operazione non riuscita', roleType: req.params.roleType }, 'Errore nel recupero dei permessi del ruolo');
       res.status(500).json({
         success: false,
-        error: 'Failed to get role permissions'
+        error: 'Errore nel recupero dei permessi del ruolo'
       });
     }
   }
@@ -493,10 +484,10 @@ router.put('/:roleType/permissions',
 
       // Validazione input
       if (!permissions || !Array.isArray(permissions)) {
-        logger.error('❌ Permissions array is required');
+        logger.warn('Permissions array is required');
         return res.status(400).json({
           success: false,
-          error: 'Permissions array is required'
+          error: 'Array di permessi obbligatorio'
         });
       }
 
@@ -506,11 +497,10 @@ router.put('/:roleType/permissions',
       );
 
       if (invalidPermissions.length > 0) {
-        logger.warn(`Invalid permissionIds found:`, invalidPermissions.map(p => p.permissionId));
+        logger.warn({ invalidCount: invalidPermissions.length }, 'Invalid permissionIds found');
         return res.status(400).json({
           success: false,
-          error: 'Invalid permission data: permissionId must be a non-empty string',
-          invalidPermissions: invalidPermissions.map(p => ({ permissionId: p.permissionId }))
+          error: 'Dati permesso non validi: permissionId deve essere una stringa non vuota'
         });
       }
 
@@ -523,11 +513,10 @@ router.put('/:roleType/permissions',
       );
 
       if (malformedPermissions.length > 0) {
-        logger.warn(`Malformed permissionIds found:`, malformedPermissions.map(p => p.permissionId));
+        logger.warn({ malformedCount: malformedPermissions.length }, 'Malformed permissionIds found');
         return res.status(400).json({
           success: false,
-          error: 'Invalid permission format: permissionId must contain an underscore (e.g., VIEW_COMPANIES)',
-          malformedPermissions: malformedPermissions.map(p => ({ permissionId: p.permissionId }))
+          error: 'Formato permesso non valido: permissionId deve contenere un underscore (es. VIEW_COMPANIES)'
         });
       }
 
@@ -551,10 +540,10 @@ router.put('/:roleType/permissions',
           });
 
           if (!customRole) {
-            logger.error(`❌ Custom role not found: ${customRoleId}`);
+            logger.warn({ customRoleId }, 'Ruolo personalizzato non trovato');
             return res.status(404).json({
               success: false,
-              error: 'Custom role not found'
+              error: 'Ruolo personalizzato non trovato'
             });
           }
 
@@ -774,7 +763,7 @@ router.put('/:roleType/permissions',
 
       res.json({
         success: true,
-        message: 'Role permissions updated successfully',
+        message: 'Permessi del ruolo aggiornati con successo',
         data: {
           roleType,
           permissionsCount: permissions.filter(p => p.granted).length,
@@ -786,7 +775,7 @@ router.put('/:roleType/permissions',
       logger.error('[ROLES_API] Error updating role permissions:', error);
       res.status(500).json({
         success: false,
-        error: 'Failed to update role permissions'
+        error: 'Errore nell\'aggiornamento dei permessi del ruolo'
       });
     }
   }

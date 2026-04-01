@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
+  AlertTriangle,
   Building2,
   Calendar,
   Edit,
@@ -15,7 +16,8 @@ import {
   User,
   Users
 } from 'lucide-react';
-import { apiGet, apiDelete } from '../../services/api';
+import { apiGet, apiDelete, apiPost } from '../../services/api';
+import { useTenantMode } from '../../contexts/TenantModeContext';
 import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
 import { useToast } from '../../hooks/useToast';
 import { DVRManager } from '../managers/DVRManager';
@@ -30,6 +32,7 @@ interface CompanySite {
   indirizzo: string;
   cap: string;
   provincia: string;
+  numeroPAT?: string;
   personaRiferimento?: string;
   telefono?: string;
   mail?: string;
@@ -65,6 +68,8 @@ interface CompanySitesProps {
 }
 
 const CompanySites: React.FC<CompanySitesProps> = ({ companyId, selectedSiteId, onSiteFilterChange }) => {
+  const { getOperateHeaders } = useTenantMode();
+  const operateHeaders = getOperateHeaders();
   const [sites, setSites] = useState<CompanySite[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -81,6 +86,15 @@ const CompanySites: React.FC<CompanySitesProps> = ({ companyId, selectedSiteId, 
     showToastRef.current = showToast;
   }, [showToast]);
 
+  // Migration dialog state
+  const [migrationDialog, setMigrationDialog] = useState<{
+    open: boolean;
+    sourceSiteId: string;
+    sourceSiteName: string;
+    targetSiteId: string;
+    migrating: boolean;
+  }>({ open: false, sourceSiteId: '', sourceSiteName: '', targetSiteId: '', migrating: false });
+
   // Filtra le sedi in base alla selezione
   const filteredSites = selectedSiteId
     ? sites.filter(site => site.id === selectedSiteId)
@@ -92,7 +106,6 @@ const CompanySites: React.FC<CompanySitesProps> = ({ companyId, selectedSiteId, 
       const response = await apiGet(`/api/v1/company-sites/company/${companyId}`) as { sites: CompanySite[] };
       setSites(response.sites || []);
     } catch (error) {
-      console.error('Error fetching company sites:', error);
       showToastRef.current?.({ message: 'Errore nel caricamento delle sedi', type: 'error' });
     } finally {
       setLoading(false);
@@ -113,12 +126,44 @@ const CompanySites: React.FC<CompanySitesProps> = ({ companyId, selectedSiteId, 
     if (!confirmed) return;
 
     try {
-      await apiDelete(`/api/v1/company-sites/${siteId}`);
+      await apiDelete(`/api/v1/company-sites/${siteId}`, { headers: operateHeaders });
       await fetchSites();
       showToast({ message: 'Sede eliminata con successo', type: 'success' });
-    } catch (error) {
-      console.error('Error deleting site:', error);
-      showToast({ message: 'Errore nell\'eliminazione della sede', type: 'error' });
+    } catch (error: unknown) {
+      const err = error as { status?: number; message?: string };
+      if (err.status === 409) {
+        // Employees are assigned to this site — open migration dialog
+        const site = sites.find(s => s.id === siteId);
+        setMigrationDialog({
+          open: true,
+          sourceSiteId: siteId,
+          sourceSiteName: site?.siteName || 'questa sede',
+          targetSiteId: '',
+          migrating: false
+        });
+      } else {
+        showToast({ message: 'Errore nell\'eliminazione della sede', type: 'error' });
+      }
+    }
+  };
+
+  const handleMigrateAndDelete = async () => {
+    if (!migrationDialog.targetSiteId) {
+      showToast({ message: 'Selezionare una sede di destinazione', type: 'error' });
+      return;
+    }
+    setMigrationDialog(prev => ({ ...prev, migrating: true }));
+    try {
+      await apiPost(`/api/v1/company-sites/${migrationDialog.sourceSiteId}/migrate-employees`, {
+        targetSiteId: migrationDialog.targetSiteId,
+        deleteSourceSite: true
+      }, { headers: operateHeaders });
+      await fetchSites();
+      setMigrationDialog({ open: false, sourceSiteId: '', sourceSiteName: '', targetSiteId: '', migrating: false });
+      showToast({ message: 'Dipendenti migrati e sede eliminata con successo', type: 'success' });
+    } catch {
+      showToast({ message: 'Errore nella migrazione dei dipendenti', type: 'error' });
+      setMigrationDialog(prev => ({ ...prev, migrating: false }));
     }
   };
 
@@ -180,8 +225,8 @@ const CompanySites: React.FC<CompanySitesProps> = ({ companyId, selectedSiteId, 
                 type="button"
                 onClick={() => onSiteFilterChange(null)}
                 className={`px-2.5 py-1 text-xs font-medium rounded-full transition-colors duration-200 focus:outline-none focus:ring-1 focus:ring-blue-300 whitespace-nowrap ${selectedSiteId === null
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'bg-transparent text-gray-700 hover:bg-blue-100'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-transparent text-gray-700 hover:bg-blue-100'
                   }`}
               >
                 Tutte ({sites.length})
@@ -192,8 +237,8 @@ const CompanySites: React.FC<CompanySitesProps> = ({ companyId, selectedSiteId, 
                   type="button"
                   onClick={() => onSiteFilterChange(site.id)}
                   className={`px-2.5 py-1 text-xs font-medium rounded-full transition-colors duration-200 focus:outline-none focus:ring-1 focus:ring-blue-300 whitespace-nowrap ${selectedSiteId === site.id
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'bg-transparent text-gray-700 hover:bg-blue-100'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'bg-transparent text-gray-700 hover:bg-blue-100'
                     }`}
                 >
                   {site.siteName}
@@ -285,6 +330,11 @@ const CompanySites: React.FC<CompanySitesProps> = ({ companyId, selectedSiteId, 
                         <div className="text-sm text-gray-600 ml-6">
                           {site.citta}, {site.cap} ({site.provincia})
                         </div>
+                        {site.numeroPAT && (
+                          <div className="text-sm text-gray-600 ml-6">
+                            <span className="font-medium">PAT INAIL:</span> {site.numeroPAT}
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -395,6 +445,11 @@ const CompanySites: React.FC<CompanySitesProps> = ({ companyId, selectedSiteId, 
                             <div className="text-sm text-gray-600">
                               {site.citta}, {site.cap} ({site.provincia})
                             </div>
+                            {site.numeroPAT && (
+                              <div className="text-sm text-gray-600">
+                                <span className="font-medium">PAT:</span> {site.numeroPAT}
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -535,6 +590,7 @@ const CompanySites: React.FC<CompanySitesProps> = ({ companyId, selectedSiteId, 
           site={editingSite}
           onSuccess={handleFormSuccess}
           onClose={handleFormClose}
+          operateHeaders={operateHeaders}
         />
       )}
 
@@ -600,6 +656,71 @@ const CompanySites: React.FC<CompanySitesProps> = ({ companyId, selectedSiteId, 
             </div>
             <div className="p-6">
               <RepartoManager siteId={activeManager.siteId} siteName={activeManager.siteName} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Migration Dialog */}
+      {migrationDialog.open && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full shadow-xl">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <div className="flex items-center gap-3">
+                <div className="flex-shrink-0 w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
+                  <AlertTriangle className="h-5 w-5 text-amber-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Dipendenti assegnati</h3>
+                  <p className="text-sm text-gray-500">
+                    La sede &quot;{migrationDialog.sourceSiteName}&quot; ha dipendenti assegnati.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-700">
+                Per eliminare la sede, migra prima i dipendenti in un&apos;altra sede:
+              </p>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Sede di destinazione
+                </label>
+                <select
+                  value={migrationDialog.targetSiteId}
+                  onChange={(e) => setMigrationDialog(prev => ({ ...prev, targetSiteId: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">Seleziona una sede...</option>
+                  {sites
+                    .filter(s => s.id !== migrationDialog.sourceSiteId)
+                    .map(s => (
+                      <option key={s.id} value={s.id}>
+                        {s.siteName} — {s.citta}
+                      </option>
+                    ))
+                  }
+                </select>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+              <button
+                onClick={() => setMigrationDialog({ open: false, sourceSiteId: '', sourceSiteName: '', targetSiteId: '', migrating: false })}
+                disabled={migrationDialog.migrating}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"
+              >
+                Annulla
+              </button>
+              <button
+                onClick={handleMigrateAndDelete}
+                disabled={!migrationDialog.targetSiteId || migrationDialog.migrating}
+                className="px-4 py-2 text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-full transition-colors flex items-center gap-2"
+              >
+                {migrationDialog.migrating && (
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                )}
+                Migra ed Elimina Sede
+              </button>
             </div>
           </div>
         </div>

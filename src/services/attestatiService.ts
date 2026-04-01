@@ -5,6 +5,14 @@
 
 import api from './api';
 
+/**
+ * P51: Options for API calls supporting multi-tenant operations
+ * Headers are used to pass X-Operate-Tenant-Id for cross-tenant admin operations
+ */
+export interface ApiOptions {
+  headers?: Record<string, string>;
+}
+
 export interface Attestato {
   id: string;
   personId: string;
@@ -19,6 +27,13 @@ export interface Attestato {
   markers?: Record<string, any>;
   generatedBy?: string;
   fileSize?: number;
+  // Firma formatore (P65)
+  firmaFormatore?: string | null;
+  firmaFormatoreAt?: string | null;
+  firmaFormatoreId?: string | null;
+  firmaPartecipante?: string | null;
+  firmaPartecipanteAt?: string | null;
+  signedAt?: string | null;
   tenantId: string;
   createdAt: string;
   updatedAt: string;
@@ -113,7 +128,11 @@ export interface ListAttestatiParams {
 }
 
 class AttestatiService {
-  async list(params?: ListAttestatiParams): Promise<Attestato[]> {
+  /**
+   * List attestati with optional filtering
+   * P51: Supports optional headers for multi-tenant operations
+   */
+  async list(params?: ListAttestatiParams, options?: ApiOptions): Promise<Attestato[]> {
     try {
       const queryParams = new URLSearchParams();
       if (params?.scheduleId) queryParams.append('scheduleId', params.scheduleId);
@@ -121,70 +140,85 @@ class AttestatiService {
       if (params?.year) queryParams.append('year', params.year.toString());
       const queryString = queryParams.toString();
       const url = `/api/v1/attestati${queryString ? `?${queryString}` : ''}`;
-      const response = await api.get<Attestato[]>(url);
+      const response = await api.get<Attestato[]>(url, options);
       return response.data;
     } catch (error) {
-      console.error('Error listing attestati:', error);
       throw error;
     }
   }
 
-  async get(id: string): Promise<Attestato> {
+  /**
+   * Get single attestato by ID
+   * P51: Supports optional headers for multi-tenant operations
+   */
+  async get(id: string, options?: ApiOptions): Promise<Attestato> {
     try {
-      const response = await api.get<Attestato>(`/api/v1/attestati/${id}`);
+      const response = await api.get<Attestato>(`/api/v1/attestati/${id}`, options);
       return response.data;
     } catch (error) {
-      console.error('Error getting attestato:', error);
       throw error;
     }
   }
 
-  async generate(params: GenerateAttestatoParams): Promise<GenerateAttestatoResponse> {
+  /**
+   * Generate single attestato
+   * P51: Supports optional headers for multi-tenant operations
+   */
+  async generate(params: GenerateAttestatoParams, options?: ApiOptions): Promise<GenerateAttestatoResponse> {
     try {
-      const response = await api.post<GenerateAttestatoResponse>('/api/v1/attestati/generate', params);
+      const response = await api.post<GenerateAttestatoResponse>('/api/v1/attestati/generate', params, options);
       return response.data;
     } catch (error) {
-      console.error('Error generating attestato:', error);
       throw error;
     }
   }
 
-  async generateBatch(params: BatchGenerateParams): Promise<BatchGenerateResponse> {
+  /**
+   * Generate batch attestati
+   * P51: Supports optional headers for multi-tenant operations
+   */
+  async generateBatch(params: BatchGenerateParams, options?: ApiOptions): Promise<BatchGenerateResponse> {
     try {
-      const response = await api.post<BatchGenerateResponse>('/api/v1/attestati/generate-batch', params);
+      const response = await api.post<BatchGenerateResponse>('/api/v1/attestati/generate-batch', params, options);
       return response.data;
     } catch (error) {
-      console.error('Error generating batch attestati:', error);
       throw error;
     }
   }
 
-  async delete(id: string): Promise<{ message: string }> {
+  /**
+   * Delete single attestato
+   * P51: Supports optional headers for multi-tenant operations
+   */
+  async delete(id: string, options?: ApiOptions): Promise<{ message: string }> {
     try {
-      const response = await api.delete<{ message: string }>(`/api/v1/attestati/${id}`);
+      const response = await api.delete<{ message: string }>(`/api/v1/attestati/${id}`, options);
       return response.data;
     } catch (error) {
-      console.error('Error deleting attestato:', error);
       throw error;
     }
   }
 
-  async deleteMultipleAttestati(ids: string[]): Promise<{ success: boolean; message: string; failedCount?: number }> {
+  /**
+   * Delete multiple attestati
+   * P51: Supports optional headers for multi-tenant operations
+   */
+  async deleteMultipleAttestati(ids: string[], options?: ApiOptions): Promise<{ success: boolean; message: string; failedCount?: number }> {
     try {
       try {
-        const response = await api.post<{ success: boolean; message: string; deleted?: number }>('/api/v1/attestati/delete-batch', { ids });
+        const response = await api.post<{ success: boolean; message: string; deleted?: number }>('/api/v1/attestati/delete-batch', { ids }, options);
         return {
           success: true,
           message: response.data.message || `${response.data.deleted || ids.length} attestati eliminati`,
           failedCount: 0
         };
-      } catch (batchError: any) {
+      } catch (batchError: unknown) {
         if (batchError.response?.status === 404) {
           // Fallback: sequential delete with delay to avoid rate limiting
           const results: Array<{ status: 'fulfilled' | 'rejected' }> = [];
           for (const id of ids) {
             try {
-              await this.delete(id);
+              await this.delete(id, options);
               results.push({ status: 'fulfilled' });
               // Delay 500ms between requests to avoid 429
               if (ids.indexOf(id) < ids.length - 1) {
@@ -199,19 +233,25 @@ class AttestatiService {
           if (succeeded > 0) {
             return { success: true, message: `Deleted ${succeeded}/${ids.length} attestati`, failedCount: failed };
           }
-          throw new Error('Failed to delete any attestati');
+          throw new Error('Errore nell\'eliminazione degli attestati');
         }
         throw batchError;
       }
     } catch (error) {
-      console.error('Error in deleteMultipleAttestati:', error);
       throw error;
     }
   }
 
-  async download(id: string): Promise<void> {
+  /**
+   * Download attestato PDF
+   * P51: Supports optional headers for multi-tenant operations
+   */
+  async download(id: string, options?: ApiOptions): Promise<void> {
     try {
-      const response = await api.get<Blob>(`/api/v1/attestati/${id}/download`, { responseType: 'blob' });
+      const response = await api.get<Blob>(`/api/v1/attestati/${id}/download`, {
+        responseType: 'blob',
+        ...options
+      });
       const blob = new Blob([response.data as BlobPart], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(blob);
 
@@ -240,7 +280,6 @@ class AttestatiService {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Error downloading attestato:', error);
       throw error;
     }
   }
@@ -249,9 +288,16 @@ class AttestatiService {
     return `/api/v1/attestati/${id}/download`;
   }
 
-  async downloadZipBatch(attestatoIds: string[]): Promise<void> {
+  /**
+   * Download multiple attestati as ZIP
+   * P51: Supports optional headers for multi-tenant operations
+   */
+  async downloadZipBatch(attestatoIds: string[], options?: ApiOptions): Promise<void> {
     try {
-      const response = await api.post<Blob>('/api/v1/attestati/download-zip-batch', { attestatoIds }, { responseType: 'blob' });
+      const response = await api.post<Blob>('/api/v1/attestati/download-zip-batch', { attestatoIds }, {
+        responseType: 'blob',
+        ...options
+      });
       const blob = new Blob([response.data as BlobPart], { type: 'application/zip' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -262,24 +308,30 @@ class AttestatiService {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Error downloading ZIP batch:', error);
       throw error;
     }
   }
 
-  async sendEmail(id: string, params?: SendEmailParams): Promise<{ message: string; recipientEmail: string; attestatoId: string }> {
+  /**
+   * Send attestato via email
+   * P51: Supports optional headers for multi-tenant operations
+   */
+  async sendEmail(id: string, params?: SendEmailParams, options?: ApiOptions): Promise<{ message: string; recipientEmail: string; attestatoId: string }> {
     try {
-      const response = await api.post<{ message: string; recipientEmail: string; attestatoId: string }>(`/api/v1/attestati/${id}/send-email`, params || {});
+      const response = await api.post<{ message: string; recipientEmail: string; attestatoId: string }>(`/api/v1/attestati/${id}/send-email`, params || {}, options);
       return response.data;
     } catch (error) {
-      console.error('Error sending attestato email:', error);
       throw error;
     }
   }
 
-  async getStatistics(scheduleId: string): Promise<{ total: number; generated: number; pending: number; byYear: Record<number, number> }> {
+  /**
+   * Get statistics for a schedule
+   * P51: Supports optional headers for multi-tenant operations
+   */
+  async getStatistics(scheduleId: string, options?: ApiOptions): Promise<{ total: number; generated: number; pending: number; byYear: Record<number, number> }> {
     try {
-      const attestati = await this.list({ scheduleId });
+      const attestati = await this.list({ scheduleId }, options);
       const byYear = attestati.reduce((acc, a) => {
         const year = a.annoProgressivo;
         acc[year] = (acc[year] || 0) + 1;
@@ -287,24 +339,30 @@ class AttestatiService {
       }, {} as Record<number, number>);
       return { total: attestati.length, generated: attestati.length, pending: 0, byYear };
     } catch (error) {
-      console.error('Error getting attestati statistics:', error);
       throw error;
     }
   }
 
-  async exists(scheduleId: string, personId: string): Promise<boolean> {
+  /**
+   * Check if attestato exists for schedule/person combination
+   * P51: Supports optional headers for multi-tenant operations
+   */
+  async exists(scheduleId: string, personId: string, options?: ApiOptions): Promise<boolean> {
     try {
-      const attestati = await this.list({ scheduleId, personId });
+      const attestati = await this.list({ scheduleId, personId }, options);
       return attestati.length > 0;
     } catch (error) {
-      console.error('Error checking attestato existence:', error);
       return false;
     }
   }
 
-  async getForPersons(scheduleId: string, personIds: string[]): Promise<Map<string, Attestato | null>> {
+  /**
+   * Get attestati for multiple persons in a schedule
+   * P51: Supports optional headers for multi-tenant operations
+   */
+  async getForPersons(scheduleId: string, personIds: string[], options?: ApiOptions): Promise<Map<string, Attestato | null>> {
     try {
-      const attestati = await this.list({ scheduleId });
+      const attestati = await this.list({ scheduleId }, options);
       const map = new Map<string, Attestato | null>();
       personIds.forEach((personId) => {
         const attestato = attestati.find((a) => a.personId === personId);
@@ -312,7 +370,6 @@ class AttestatiService {
       });
       return map;
     } catch (error) {
-      console.error('Error getting attestati for persons:', error);
       throw error;
     }
   }

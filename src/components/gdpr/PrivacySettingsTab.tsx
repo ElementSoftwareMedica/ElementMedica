@@ -108,7 +108,6 @@ export const PrivacySettingsTab: React.FC<PrivacySettingsTabProps> = ({ hook }) 
       setSaving(true);
       await updatePrivacySettings(localSettings);
     } catch (error) {
-      console.error('Error saving privacy settings:', error);
     } finally {
       setSaving(false);
     }
@@ -120,7 +119,6 @@ export const PrivacySettingsTab: React.FC<PrivacySettingsTabProps> = ({ hook }) 
       setResetDialog(false);
       // Settings will be updated via the hook
     } catch (error) {
-      console.error('Error resetting privacy settings:', error);
     }
   };
 
@@ -128,7 +126,6 @@ export const PrivacySettingsTab: React.FC<PrivacySettingsTabProps> = ({ hook }) 
     try {
       await updateSingleSetting(key, value);
     } catch (error) {
-      console.error('Error updating setting:', error);
     }
   };
 
@@ -187,13 +184,13 @@ export const PrivacySettingsTab: React.FC<PrivacySettingsTabProps> = ({ hook }) 
             size="small"
           />
 
-          <Tooltip title="Export settings">
+          <Tooltip title="Esporta impostazioni">
             <IconButton onClick={exportSettings} size="small">
               <DownloadIcon />
             </IconButton>
           </Tooltip>
 
-          <Tooltip title="Refresh settings">
+          <Tooltip title="Aggiorna impostazioni">
             <IconButton onClick={refreshSettings} disabled={loading} size="small">
               <RefreshIcon />
             </IconButton>
@@ -282,7 +279,7 @@ export const PrivacySettingsTab: React.FC<PrivacySettingsTabProps> = ({ hook }) 
                       <ListItemSecondaryAction>
                         <Stack direction="row" spacing={1} alignItems="center">
                           {/* Quick toggle for immediate save */}
-                          <Tooltip title="Apply immediately">
+                          <Tooltip title="Applica immediatamente">
                             <IconButton
                               size="small"
                               onClick={() => handleQuickToggle(settingKey, !value)}

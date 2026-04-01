@@ -12,6 +12,7 @@
 
 import { activityService, ActivityType, normalizeResourceName } from '../services/activity/index.js';
 import logger from '../utils/logger.js';
+import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 
 /**
  * Routes da escludere dal tracking automatico
@@ -100,7 +101,7 @@ export const trackActivity = (options = {}) => {
           duration,
           success,
           errorCode: success ? null : String(res.statusCode),
-          tenantId: req.person.tenantId
+          tenantId: getEffectiveTenantId(req)
         });
 
       } catch (error) {
@@ -153,7 +154,7 @@ export const logAction = (action, options = {}) => {
             duration,
             success,
             errorCode: success ? null : String(res.statusCode),
-            tenantId: req.person.tenantId
+            tenantId: getEffectiveTenantId(req)
           });
         } else {
           activityService.log({
@@ -168,7 +169,7 @@ export const logAction = (action, options = {}) => {
             duration,
             success,
             errorCode: success ? null : String(res.statusCode),
-            tenantId: req.person.tenantId
+            tenantId: getEffectiveTenantId(req)
           });
         }
       } catch (error) {

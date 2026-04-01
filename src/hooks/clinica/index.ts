@@ -318,8 +318,8 @@ export function useVisitaMutations() {
         clinicaApi.visite.update(id, data)
     );
 
-    const remove = useMutation((id: string) =>
-        clinicaApi.visite.delete(id)
+    const remove = useMutation(({ id, deletionReason }: { id: string; deletionReason: string }) =>
+        clinicaApi.visite.delete(id, deletionReason)
     );
 
     const inizia = useMutation((id: string) =>
@@ -517,7 +517,6 @@ export function usePazienteSearch() {
             const data = await clinicaApi.pazienti.search(query);
             setResults(data);
         } catch (error) {
-            console.error('Patient search error:', error);
             setResults([]);
         } finally {
             setIsSearching(false);
@@ -633,5 +632,20 @@ export const clinicaHooks = {
     useValidateSconto,
     useApplySconto
 };
+
+// =====================================================
+// QUEUE HOOKS RE-EXPORTS (P53)
+// =====================================================
+
+export {
+    useQueueSessions,
+    useQueueSession,
+    useActiveSessionsToday,
+    useQueueEntries,
+    useQueueDisplay,
+    useQueueMutations,
+    useQueueAudio,
+    useQueueCaller
+} from './useQueue';
 
 export default clinicaHooks;

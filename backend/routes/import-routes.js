@@ -5,14 +5,16 @@
  */
 
 import express from 'express';
-import middleware from '../auth/middleware.js';
+import middleware from '../middleware/auth.js';
+import { auditLog } from '../middleware/audit.js';
 import logger from '../utils/logger.js';
+import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 import CompanyImportService from '../services/import/company/CompanyImportService.js';
 import EmployeeImportService from '../services/import/employee/EmployeeImportService.js';
 import TrainerImportService from '../services/import/trainer/TrainerImportService.js';
 
 const router = express.Router();
-const { authenticate: authenticateToken, authorize: requirePermission, auditLog } = middleware;
+const { authenticate: authenticateToken, requirePermission } = middleware;
 
 // ===== COMPANY IMPORT ROUTES =====
 
@@ -21,13 +23,13 @@ const { authenticate: authenticateToken, authorize: requirePermission, auditLog 
  * Valida aziende da CSV senza importare
  */
 router.post('/companies/validate',
-  authenticateToken(),
+  authenticateToken,
   requirePermission('companies:import'),
   auditLog('VALIDATE_COMPANY_IMPORT'),
   async (req, res) => {
     try {
       const { companies } = req.body;
-      const tenantId = req.person.tenantId;
+      const tenantId = getEffectiveTenantId(req);
 
       if (!companies || !Array.isArray(companies)) {
         return res.status(400).json({
@@ -70,7 +72,7 @@ router.post('/companies/validate',
       res.status(500).json({
         success: false,
         message: 'Errore durante validazione',
-        error: error.message
+        error: 'Errore interno del server'
       });
     }
   }
@@ -81,13 +83,13 @@ router.post('/companies/validate',
  * Import aziende da CSV
  */
 router.post('/companies',
-  authenticateToken(),
+  authenticateToken,
   requirePermission('companies:import'),
   auditLog('IMPORT_COMPANIES'),
   async (req, res) => {
     try {
       const { companies, overwriteIds = [] } = req.body;
-      const tenantId = req.person.tenantId;
+      const tenantId = getEffectiveTenantId(req);
 
       if (!companies || !Array.isArray(companies)) {
         return res.status(400).json({
@@ -126,7 +128,7 @@ router.post('/companies',
       res.status(500).json({
         success: false,
         message: 'Errore durante import',
-        error: error.message
+        error: 'Errore interno del server'
       });
     }
   }
@@ -137,14 +139,14 @@ router.post('/companies',
  * Crea nuova sede per un'azienda
  */
 router.post('/companies/:companyId/sites',
-  authenticateToken(),
+  authenticateToken,
   requirePermission('companies:manage'),
   auditLog('CREATE_COMPANY_SITE'),
   async (req, res) => {
     try {
       const { companyId } = req.params;
       const siteData = req.body;
-      const tenantId = req.person.tenantId;
+      const tenantId = getEffectiveTenantId(req);
 
       const site = await CompanyImportService.createCompanySite(companyId, siteData, tenantId);
 
@@ -164,7 +166,7 @@ router.post('/companies/:companyId/sites',
       res.status(500).json({
         success: false,
         message: 'Errore creazione sede',
-        error: error.message
+        error: 'Errore interno del server'
       });
     }
   }
@@ -177,13 +179,13 @@ router.post('/companies/:companyId/sites',
  * Valida dipendenti da CSV senza importare
  */
 router.post('/employees/validate',
-  authenticateToken(),
+  authenticateToken,
   requirePermission('persons:import'),
   auditLog('VALIDATE_EMPLOYEE_IMPORT'),
   async (req, res) => {
     try {
       const { employees } = req.body;
-      const tenantId = req.person.tenantId;
+      const tenantId = getEffectiveTenantId(req);
 
       if (!employees || !Array.isArray(employees)) {
         return res.status(400).json({
@@ -231,7 +233,7 @@ router.post('/employees/validate',
       res.status(500).json({
         success: false,
         message: 'Errore durante validazione',
-        error: error.message
+        error: 'Errore interno del server'
       });
     }
   }
@@ -242,13 +244,13 @@ router.post('/employees/validate',
  * Import dipendenti da CSV
  */
 router.post('/employees',
-  authenticateToken(),
+  authenticateToken,
   requirePermission('persons:import'),
   auditLog('IMPORT_EMPLOYEES'),
   async (req, res) => {
     try {
-      const { employees, overwriteIds = [], defaultCompanyId = null } = req.body;
-      const tenantId = req.person.tenantId;
+      const { employees, overwriteIds = [], defaultCompanyTenantProfileId = null } = req.body;
+      const tenantId = getEffectiveTenantId(req);
 
       if (!employees || !Array.isArray(employees)) {
         return res.status(400).json({
@@ -272,13 +274,13 @@ router.post('/employees',
       const result = await EmployeeImportService.importEmployees(
         validation.validatedEmployees,
         tenantId,
-        defaultCompanyId,
+        defaultCompanyTenantProfileId,
         overwriteIds
       );
 
       logger.info('[IMPORT_ROUTES] Employee import completed', {
         ...result,
-        defaultCompanyId,
+        defaultCompanyTenantProfileId,
         tenantId,
         userId: req.person.id
       });
@@ -289,7 +291,7 @@ router.post('/employees',
       res.status(500).json({
         success: false,
         message: 'Errore durante import',
-        error: error.message
+        error: 'Errore interno del server'
       });
     }
   }
@@ -300,12 +302,13 @@ router.post('/employees',
  * Assegna multiple persone ad un'azienda
  */
 router.post('/employees/bulk-assign',
-  authenticateToken(),
+  authenticateToken,
   requirePermission('companies:manage'),
   auditLog('BULK_ASSIGN_EMPLOYEES'),
   async (req, res) => {
     try {
       const { personIds, companyId } = req.body;
+      const tenantId = getEffectiveTenantId(req);
 
       if (!personIds || !Array.isArray(personIds) || !companyId) {
         return res.status(400).json({
@@ -314,7 +317,7 @@ router.post('/employees/bulk-assign',
         });
       }
 
-      const result = await EmployeeImportService.bulkAssignToCompany(personIds, companyId);
+      const result = await EmployeeImportService.bulkAssignToCompany(personIds, companyId, tenantId);
 
       logger.info('[IMPORT_ROUTES] Bulk assignment completed', {
         ...result,
@@ -328,7 +331,7 @@ router.post('/employees/bulk-assign',
       res.status(500).json({
         success: false,
         message: 'Errore bulk assignment',
-        error: error.message
+        error: 'Errore interno del server'
       });
     }
   }
@@ -341,13 +344,13 @@ router.post('/employees/bulk-assign',
  * Valida formatori da CSV senza importare
  */
 router.post('/trainers/validate',
-  authenticateToken(),
+  authenticateToken,
   requirePermission('persons:import'),
   auditLog('VALIDATE_TRAINER_IMPORT'),
   async (req, res) => {
     try {
       const { trainers } = req.body;
-      const tenantId = req.person.tenantId;
+      const tenantId = getEffectiveTenantId(req);
 
       if (!trainers || !Array.isArray(trainers)) {
         return res.status(400).json({
@@ -390,7 +393,7 @@ router.post('/trainers/validate',
       res.status(500).json({
         success: false,
         message: 'Errore durante validazione',
-        error: error.message
+        error: 'Errore interno del server'
       });
     }
   }
@@ -401,13 +404,13 @@ router.post('/trainers/validate',
  * Import formatori da CSV con creazione account
  */
 router.post('/trainers',
-  authenticateToken(),
+  authenticateToken,
   requirePermission('persons:import'),
   auditLog('IMPORT_TRAINERS'),
   async (req, res) => {
     try {
       const { trainers, overwriteIds = [], createAccounts = true } = req.body;
-      const tenantId = req.person.tenantId;
+      const tenantId = getEffectiveTenantId(req);
 
       if (!trainers || !Array.isArray(trainers)) {
         return res.status(400).json({
@@ -450,7 +453,7 @@ router.post('/trainers',
       res.status(500).json({
         success: false,
         message: 'Errore durante import',
-        error: error.message
+        error: 'Errore interno del server'
       });
     }
   }
@@ -461,7 +464,7 @@ router.post('/trainers',
  * Genera CSV con credenziali trainers
  */
 router.post('/trainers/credentials-csv',
-  authenticateToken(),
+  authenticateToken,
   requirePermission('persons:import'),
   auditLog('EXPORT_TRAINER_CREDENTIALS'),
   async (req, res) => {
@@ -490,7 +493,7 @@ router.post('/trainers/credentials-csv',
       res.status(500).json({
         success: false,
         message: 'Errore generazione CSV',
-        error: error.message
+        error: 'Errore interno del server'
       });
     }
   }

@@ -16,8 +16,8 @@ NC='\033[0m'
 
 # Configurazione
 SSH_KEY="$HOME/.ssh/id_ed25519"
-SERVER="root@128.140.15.15"
-REMOTE_BASE="/var/www/elementformazione/backend"
+SERVER="root@178.104.44.177"
+REMOTE_BASE="/var/www/elementsicurezza/backend"
 
 # Directory base
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

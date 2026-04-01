@@ -1,8 +1,10 @@
-import { useContext } from 'react';
+import { useContext, useCallback } from 'react';
 import { ToastContext, ToastType } from '../context/ToastContext';
 
 /**
  * Opzioni per la creazione di una notifica toast
+ * 
+ * P52 Session #11c: Aggiunto force per bypassare deduplicazione
  */
 export interface ToastOptions {
   /** Messaggio da mostrare nella notifica */
@@ -13,6 +15,12 @@ export interface ToastOptions {
   type?: ToastType;
   /** Durata in millisecondi (default: 5000) */
   duration?: number;
+  /** 
+   * P52 Session #11c: Se true, bypassa deduplicazione e mostra sempre
+   * Utile per notifiche che devono sempre apparire (es: conferme utente)
+   * @default false
+   */
+  force?: boolean;
 }
 
 /**
@@ -27,25 +35,27 @@ export interface ToastOptions {
  */
 export const useToast = () => {
   const { toast, removeToast, clearToasts, toasts } = useContext(ToastContext);
-  
+
+  const showToast = useCallback((options: ToastOptions) => toast(options), [toast]);
+
   return {
     /**
      * Mostra una notifica toast
      * @param options - Opzioni della notifica
      */
-    showToast: (options: ToastOptions) => toast(options),
-    
+    showToast,
+
     /**
      * Rimuove una notifica specifica
      * @param id - ID della notifica da rimuovere
      */
     removeToast,
-    
+
     /**
      * Rimuove tutte le notifiche
      */
     clearToasts,
-    
+
     /**
      * Array delle notifiche attualmente visualizzate
      */

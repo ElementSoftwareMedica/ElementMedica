@@ -268,6 +268,115 @@ class RelationResolver {
         return ENTITY_TO_PRISMA_MODEL[entityName] ||
             entityName.charAt(0).toLowerCase() + entityName.slice(1);
     }
+
+    /**
+     * P69: Ottiene tutti i tenant accessibili per cross-tenant permissions
+     * @param {string} personId - ID persona
+     * @returns {Promise<string[]>} - Array di tenant IDs
+     */
+    async getAccessibleTenantIds(personId) {
+        try {
+            // Ottieni tutti i PersonTenantAccess attivi
+            const accesses = await prisma.personTenantAccess.findMany({
+                where: {
+                    personId,
+                    isActive: true,
+                    deletedAt: null,
+                    OR: [
+                        { validUntil: null },
+                        { validUntil: { gt: new Date() } }
+                    ]
+                },
+                select: { tenantId: true }
+            });
+
+            // Ottieni anche i tenant da PersonTenantProfile (profilo principale)
+            const profiles = await prisma.personTenantProfile.findMany({
+                where: {
+                    personId,
+                    deletedAt: null
+                },
+                select: { tenantId: true }
+            });
+
+            const tenantIds = new Set([
+                ...accesses.map(a => a.tenantId),
+                ...profiles.map(p => p.tenantId)
+            ]);
+
+            logger.debug('Got accessible tenant IDs for cross-tenant', {
+                personId,
+                tenantCount: tenantIds.size,
+                tenantIds: Array.from(tenantIds)
+            });
+
+            return Array.from(tenantIds);
+        } catch (error) {
+            logger.error('Error getting accessible tenant IDs', {
+                personId,
+                error: error.message
+            });
+            return [];
+        }
+    }
+
+    /**
+     * P69: Costruisce filtro relazionale con supporto cross-tenant
+     * @param {string} personId - ID persona
+     * @param {string} tenantId - ID tenant corrente
+     * @param {object} permission - Permesso con relationType
+     * @param {boolean} allowCrossTenant - Se permettere cross-tenant (default: false)
+     * @returns {Promise<object>}
+     */
+    async buildCrossTenantRelationalFilter(personId, tenantId, permission, allowCrossTenant = false) {
+        const { resource, relationType, allowedFields, deniedFields } = permission;
+        const targetEntity = this.resourceToEntity(resource);
+
+        // Se cross-tenant è abilitato, ottieni tutti i tenant accessibili
+        let tenantIds = [tenantId];
+        if (allowCrossTenant) {
+            tenantIds = await this.getAccessibleTenantIds(personId);
+            if (tenantIds.length === 0) {
+                tenantIds = [tenantId]; // Fallback al tenant corrente
+            }
+        }
+
+        // Risolvi le relazioni per ogni tenant
+        const allRelatedIds = [];
+        for (const tid of tenantIds) {
+            const relatedIds = await this.resolveRelatedIds(
+                personId,
+                relationType,
+                targetEntity,
+                tid
+            );
+            allRelatedIds.push(...relatedIds);
+        }
+
+        // Rimuovi duplicati
+        const uniqueIds = [...new Set(allRelatedIds)];
+
+        logger.debug('Built cross-tenant relational filter', {
+            personId,
+            resource,
+            relationType,
+            tenantCount: tenantIds.length,
+            relatedIdsCount: uniqueIds.length,
+            allowCrossTenant
+        });
+
+        return {
+            allowed: uniqueIds.length > 0,
+            where: {
+                id: { in: uniqueIds },
+                tenantId: { in: tenantIds },
+                deletedAt: null
+            },
+            select: this.buildFieldSelect(allowedFields, deniedFields),
+            crossTenantEnabled: allowCrossTenant,
+            accessibleTenantIds: tenantIds
+        };
+    }
 }
 
 // Singleton instance

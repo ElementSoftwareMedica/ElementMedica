@@ -132,7 +132,6 @@ export default function GenerateLetterDialog({
         setSelectedTemplateId(defaultTemplate.id);
       }
     } catch (err) {
-      console.error('Failed to load templates:', err);
       setError('Impossibile caricare i template disponibili');
     } finally {
       setLoadingTemplates(false);
@@ -244,9 +243,8 @@ export default function GenerateLetterDialog({
         onSuccess?.();
         onOpenChange(false);
       }, 2000);
-    } catch (err: any) {
-      console.error('Failed to generate letters:', err);
-      setError(err.response?.data?.message || 'Errore durante la generazione delle lettere');
+    } catch {
+      setError('Errore durante la generazione delle lettere. Verifica template e dati dei formatori, poi riprova.');
     } finally {
       setLoading(false);
     }
@@ -315,7 +313,7 @@ export default function GenerateLetterDialog({
                   return (
                     <div
                       key={trainer.id}
-                      className={`rounded-lg border p-3 transition-colors ${isSelected ? 'border-blue-300 bg-blue-50/50' : 'border-gray-200'}`}
+                      className={`rounded-lg border p-3 transition-colors ${isSelected ? 'border-blue-300 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-900/30' : 'border-gray-200 dark:border-gray-700'}`}
                     >
                       <div className="flex items-center space-x-2">
                         <Checkbox
@@ -336,12 +334,12 @@ export default function GenerateLetterDialog({
 
                       {/* Compensation fields when selected */}
                       {isSelected && compensation && (
-                        <div className="mt-3 ml-6 space-y-3 pt-3 border-t border-gray-100">
+                        <div className="mt-3 ml-6 space-y-3 pt-3 border-t border-gray-100 dark:border-gray-700">
                           {/* Ore totali (read-only) */}
                           <div className="flex items-center gap-4">
                             <div className="flex-1">
-                              <Label className="text-xs text-gray-500">Ore totali</Label>
-                              <div className="text-sm font-medium text-gray-700 mt-1">
+                              <Label className="text-xs text-gray-500 dark:text-gray-400">Ore totali</Label>
+                              <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mt-1">
                                 {compensation.totalHours} h
                               </div>
                             </div>
@@ -350,7 +348,7 @@ export default function GenerateLetterDialog({
                           {/* Tariffa oraria e Spese */}
                           <div className="grid grid-cols-2 gap-3">
                             <div>
-                              <Label className="text-xs text-gray-500">Tariffa oraria (€/h)</Label>
+                              <Label className="text-xs text-gray-500 dark:text-gray-400">Tariffa oraria (€/h)</Label>
                               <Input
                                 type="number"
                                 step="0.01"
@@ -362,7 +360,7 @@ export default function GenerateLetterDialog({
                               />
                             </div>
                             <div>
-                              <Label className="text-xs text-gray-500">Rimborso spese (€)</Label>
+                              <Label className="text-xs text-gray-500 dark:text-gray-400">Rimborso spese (€)</Label>
                               <Input
                                 type="number"
                                 step="0.01"
@@ -376,9 +374,9 @@ export default function GenerateLetterDialog({
                           </div>
 
                           {/* Totale calcolato */}
-                          <div className="flex items-center justify-between bg-gray-50 rounded p-2">
-                            <span className="text-xs text-gray-500">Compenso totale:</span>
-                            <span className="text-sm font-semibold text-blue-600">
+                          <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-800 rounded p-2">
+                            <span className="text-xs text-gray-500 dark:text-gray-400">Compenso totale:</span>
+                            <span className="text-sm font-semibold text-blue-600 dark:text-blue-400">
                               € {totalComp.toFixed(2).replace('.', ',')}
                             </span>
                           </div>
@@ -386,7 +384,7 @@ export default function GenerateLetterDialog({
                           {/* Email personalizzata se sendEmail è abilitato */}
                           {sendEmail && (
                             <div>
-                              <Label className="text-xs text-gray-500">Email</Label>
+                              <Label className="text-xs text-gray-500 dark:text-gray-400">Email</Label>
                               <Input
                                 type="email"
                                 placeholder={trainer.email || 'Email personalizzata'}

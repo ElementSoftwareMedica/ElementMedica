@@ -1,30 +1,37 @@
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
-import { authenticate, authorize } from '../../auth/middleware.js';
+import prisma from '../../config/prisma-optimization.js';
+import authMiddleware from '../../middleware/auth.js';
+import { requirePermission } from '../../middleware/rbac.js';
+import { getEffectiveTenantId } from '../../utils/tenantHelper.js';
 import logger from '../../utils/logger.js';
 
-const authenticateToken = authenticate;
-const requirePermission = authorize;
+const { authenticate } = authMiddleware;
 const router = express.Router();
-const prisma = new PrismaClient();
 
 /**
  * @route GET /api/v1/users
  * @desc Get all users with their roles and permissions
  * @access Admin only
  */
-router.get('/users', authenticateToken(), requirePermission(['users:read', 'system:manage']), async (req, res) => {
+router.get('/users', authenticate, requirePermission(['users:read', 'system:manage']), async (req, res) => {
   try {
     const users = await prisma.person.findMany({
-      where: { tenantId: req.person.tenantId, },
+      where: {
+        tenantProfiles: {
+          some: { tenantId: getEffectiveTenantId(req), deletedAt: null }
+        }
+      },
       select: {
         id: true,
-        email: true,
         firstName: true,
         lastName: true,
-        isActive: true,
+        tenantProfiles: {
+          where: { tenantId: getEffectiveTenantId(req), deletedAt: null },
+          select: { email: true, status: true },
+          take: 1
+        },
         personRoles: {
-          where: {},
+          where: { tenantId: getEffectiveTenantId(req) },
           select: {
             roleType: true,
             permissions: {
@@ -42,10 +49,10 @@ router.get('/users', authenticateToken(), requirePermission(['users:read', 'syst
 
     const formattedUsers = users.map(user => ({
       id: user.id,
-      email: user.email,
+      email: user.tenantProfiles?.[0]?.email || '',
       firstName: user.firstName,
       lastName: user.lastName,
-      isActive: user.isActive,
+      isActive: user.tenantProfiles?.[0]?.status === 'ACTIVE',
       roles: user.personRoles.map(pr => pr.roleType),
       permissions: [...new Set(user.personRoles.flatMap(pr =>
         pr.permissions.map(p => p.permission)
@@ -55,7 +62,7 @@ router.get('/users', authenticateToken(), requirePermission(['users:read', 'syst
     res.json({ data: formattedUsers });
   } catch (error) {
     logger.error('Error fetching users:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Errore interno del server' });
   }
 });
 
@@ -64,7 +71,7 @@ router.get('/users', authenticateToken(), requirePermission(['users:read', 'syst
  * @desc Get all available permissions
  * @access Admin only
  */
-router.get('/permissions', authenticateToken(), requirePermission(['system:manage']), async (req, res) => {
+router.get('/permissions', authenticate, requirePermission(['system:manage']), async (req, res) => {
   try {
     const permissions = await prisma.permission.findMany({
       select: {
@@ -102,7 +109,7 @@ router.get('/permissions', authenticateToken(), requirePermission(['system:manag
     res.json({ data: categorizedPermissions });
   } catch (error) {
     logger.error('Error fetching permissions:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Errore interno del server' });
   }
 });
 
@@ -111,7 +118,7 @@ router.get('/permissions', authenticateToken(), requirePermission(['system:manag
  * @desc Get all available roles with their permissions
  * @access Admin only
  */
-router.get('/roles', authenticateToken(), requirePermission(['system:manage']), async (req, res) => {
+router.get('/roles', authenticate, requirePermission(['system:manage']), async (req, res) => {
   try {
     // Get all role types from enum
     const roleTypes = ['ADMIN', 'SUPER_ADMIN', 'EMPLOYEE', 'MANAGER', 'TRAINER'];
@@ -120,7 +127,8 @@ router.get('/roles', authenticateToken(), requirePermission(['system:manage']), 
       // Get PersonRoles of this type with their permissions
       const personRoles = await prisma.personRole.findMany({
         where: {
-          roleType: roleType
+          roleType: roleType,
+          tenantId: getEffectiveTenantId(req)
         },
         include: {
           permissions: {
@@ -155,7 +163,7 @@ router.get('/roles', authenticateToken(), requirePermission(['system:manage']), 
     res.json({ data: roles });
   } catch (error) {
     logger.error('Error fetching roles:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Errore interno del server' });
   }
 });
 
@@ -164,13 +172,13 @@ router.get('/roles', authenticateToken(), requirePermission(['system:manage']), 
  * @desc Update user permissions
  * @access Admin only
  */
-router.put('/users/:personId/permissions', authenticateToken(), requirePermission(['system:manage']), async (req, res) => {
+router.put('/users/:personId/permissions', authenticate, requirePermission(['system:manage']), async (req, res) => {
   try {
     const { personId } = req.params;
     const { permissions } = req.body;
 
     if (!Array.isArray(permissions)) {
-      return res.status(400).json({ error: 'Permissions must be an array' });
+      return res.status(400).json({ error: 'I permessi devono essere un array' });
     }
 
     // Verifica che l'utente esista
@@ -184,20 +192,20 @@ router.put('/users/:personId/permissions', authenticateToken(), requirePermissio
     });
 
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      return res.status(404).json({ error: 'Utente non trovato' });
     }
 
     // Per ora, aggiorniamo i permessi tramite i ruoli
     // In futuro si potrebbe implementare un sistema di permessi diretti per utente
 
     res.json({
-      message: 'User permissions updated successfully',
+      message: 'Permessi utente aggiornati con successo',
       personId: personId,
       permissions
     });
   } catch (error) {
     logger.error('Error updating user permissions:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Errore interno del server' });
   }
 });
 
@@ -206,13 +214,13 @@ router.put('/users/:personId/permissions', authenticateToken(), requirePermissio
  * @desc Update role permissions
  * @access Admin only
  */
-router.put('/roles/:id', authenticateToken(), requirePermission(['system:manage']), async (req, res) => {
+router.put('/roles/:id', authenticate, requirePermission(['system:manage']), async (req, res) => {
   try {
     const { id: roleType } = req.params;
     const { permissions } = req.body;
 
     if (!Array.isArray(permissions)) {
-      return res.status(400).json({ error: 'Permissions must be an array' });
+      return res.status(400).json({ error: 'I permessi devono essere un array' });
     }
 
     // Rimuovi tutti i permessi esistenti per questo ruolo
@@ -241,13 +249,149 @@ router.put('/roles/:id', authenticateToken(), requirePermission(['system:manage'
     }
 
     res.json({
-      message: 'Role permissions updated successfully',
+      message: 'Permessi del ruolo aggiornati con successo',
       roleType,
       permissions
     });
   } catch (error) {
     logger.error('Error updating role permissions:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Errore interno del server' });
+  }
+});
+
+/**
+ * @route GET /api/v1/permissions/person/:personId
+ * @desc Get custom/advanced permissions for a specific person
+ * @access Admin only
+ */
+router.get('/permissions/person/:personId', authenticate, requirePermission(['system:manage', 'persons:manage']), async (req, res) => {
+  try {
+    const { personId } = req.params;
+    const tenantId = getEffectiveTenantId(req);
+
+    // Get person's roles for this tenant
+    const personRoles = await prisma.personRole.findMany({
+      where: { personId, tenantId },
+      select: { id: true }
+    });
+
+    if (personRoles.length === 0) {
+      return res.json({ data: [] });
+    }
+
+    const personRoleIds = personRoles.map(pr => pr.id);
+
+    // Get advanced permissions for all of this person's roles
+    const advancedPerms = await prisma.advancedPermission.findMany({
+      where: {
+        personRoleId: { in: personRoleIds },
+        deletedAt: null
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    // Map to frontend format
+    const data = advancedPerms.map(p => ({
+      id: p.id,
+      personId,
+      resource: p.resource,
+      action: p.action,
+      scope: p.scope,
+      granted: true,
+      reason: p.conditions ? JSON.stringify(p.conditions) : undefined,
+      createdAt: p.createdAt.toISOString(),
+    }));
+
+    res.json({ data });
+  } catch (error) {
+    logger.error('Error fetching person permissions:', error);
+    res.status(500).json({ error: 'Errore nel recupero dei permessi' });
+  }
+});
+
+/**
+ * @route POST /api/v1/permissions/person/:personId
+ * @desc Add a custom permission for a specific person
+ * @access Admin only
+ */
+router.post('/permissions/person/:personId', authenticate, requirePermission(['system:manage', 'persons:manage']), async (req, res) => {
+  try {
+    const { personId } = req.params;
+    const tenantId = getEffectiveTenantId(req);
+    const { resource, action, scope, granted, reason } = req.body;
+
+    if (!resource || !action) {
+      return res.status(400).json({ error: 'Risorsa e azione sono obbligatori' });
+    }
+
+    // Find or get first PersonRole for this person + tenant
+    let personRole = await prisma.personRole.findFirst({
+      where: { personId, tenantId }
+    });
+
+    if (!personRole) {
+      return res.status(404).json({ error: 'Nessun ruolo trovato per questa persona nel tenant' });
+    }
+
+    // Create advanced permission
+    const permission = await prisma.advancedPermission.create({
+      data: {
+        personRoleId: personRole.id,
+        resource,
+        action,
+        scope: scope || 'tenant',
+        conditions: reason ? { reason } : undefined,
+      }
+    });
+
+    res.status(201).json({
+      data: {
+        id: permission.id,
+        personId,
+        resource: permission.resource,
+        action: permission.action,
+        scope: permission.scope,
+        granted: granted !== false,
+        reason,
+        createdAt: permission.createdAt.toISOString(),
+      }
+    });
+  } catch (error) {
+    logger.error('Error adding person permission:', error);
+    res.status(500).json({ error: 'Errore nell\'aggiunta del permesso' });
+  }
+});
+
+/**
+ * @route DELETE /api/v1/permissions/person/:personId/:permissionId
+ * @desc Remove a custom permission for a specific person
+ * @access Admin only
+ */
+router.delete('/permissions/person/:personId/:permissionId', authenticate, requirePermission(['system:manage', 'persons:manage']), async (req, res) => {
+  try {
+    const { permissionId } = req.params;
+    const tenantId = getEffectiveTenantId(req);
+
+    // Verify permission exists and belongs to a role in this tenant
+    const permission = await prisma.advancedPermission.findUnique({
+      where: { id: permissionId },
+      include: { personRole: { select: { tenantId: true } } }
+    });
+
+    if (!permission || permission.personRole.tenantId !== tenantId) {
+      return res.status(404).json({ error: 'Permesso non trovato' });
+    }
+
+    // Soft delete
+    await prisma.advancedPermission.update({
+      where: { id: permissionId },
+      data: { deletedAt: new Date() }
+    });
+
+    res.json({ message: 'Permesso rimosso con successo' });
+  } catch (error) {
+    logger.error('Error removing person permission:', error);
+    res.status(500).json({ error: 'Errore nella rimozione del permesso' });
   }
 });
 

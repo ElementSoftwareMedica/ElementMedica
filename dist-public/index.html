@@ -1,19 +1,68 @@
 <!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Occupational Medicine Management System</title>
-    <script type="module" crossorigin src="/assets/index-DEZ6nUh4.js"></script>
-    <link rel="modulepreload" crossorigin href="/assets/vendor-2dSOjWVe.js">
-    <link rel="modulepreload" crossorigin href="/assets/ui-CGZTu-WY.js">
-    <link rel="modulepreload" crossorigin href="/assets/router-CVVZ3hCc.js">
-    <link rel="modulepreload" crossorigin href="/assets/utils-Dn6Z8MP9.js">
-    <link rel="modulepreload" crossorigin href="/assets/icons-D61_ZItN.js">
-    <link rel="stylesheet" crossorigin href="/assets/index-B9rjfWyF.css">
-  </head>
-  <body>
-    <div id="root"></div>
-  </body>
+<html lang="it">
+
+<head>
+  <meta charset="UTF-8" />
+  <!-- Favicons — multi-format for maximum compatibility -->
+  <link rel="shortcut icon" href="/favicon.ico" />
+  <link rel="icon" type="image/svg+xml" href="/assets/logos/element-favicon.svg" />
+  <link rel="icon" type="image/x-icon" sizes="16x16 32x32 48x48 64x64" href="/assets/logos/element-medica-favicon.ico" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/logos/element-medica-apple-touch.png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#ffffff" />
+  <!-- Font preload for performance -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <meta name="description" content="Element Medica: poliambulatorio a Selvazzano Dentro (PD) vicino Padova. Visite specialistiche, medico competente, medicina del lavoro, diagnostica. 25.000+ pazienti. P.IVA 05580640281" />
+  <meta name="author" content="Element srl" />
+  <link rel="canonical" href="https://www.elementmedica.com/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="it_IT" />
+  <meta property="og:site_name" content="Element Medica" />
+  <meta property="og:title" content="Element Medica | Poliambulatorio Selvazzano Dentro | Padova" />
+  <meta property="og:description" content="Poliambulatorio a Selvazzano Dentro (PD). Medico competente, medicina del lavoro, visite specialistiche, diagnostica. Prenota online. Vicino Padova." />
+  <meta property="og:url" content="https://www.elementmedica.com/" />
+  <meta property="og:image" content="https://www.elementmedica.com/assets/logos/element-medica-og-preview.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:type" content="image/png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Element Medica | Poliambulatorio Selvazzano Dentro | Padova" />
+  <meta name="twitter:description" content="Poliambulatorio a Selvazzano Dentro (PD). Medico competente, medicina del lavoro, visite specialistiche, diagnostica. Prenota online. Vicino Padova." />
+  <meta name="twitter:image" content="https://www.elementmedica.com/assets/logos/element-medica-og-preview.png" />
+  <title>Element Medica | Poliambulatorio Selvazzano Dentro Padova | Centro Medico</title>
+  <!-- Prevent flash of wrong theme -->
+  <script>
+    (function () {
+      const STORAGE_KEY = 'element-theme-mode';
+      const stored = localStorage.getItem(STORAGE_KEY);
+      const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+      let theme = 'light';
+      if (stored === 'dark') {
+        theme = 'dark';
+      } else if (stored === 'auto' || !stored) {
+        theme = systemDark ? 'dark' : 'light';
+      }
+
+      document.documentElement.classList.add(theme);
+      document.documentElement.style.colorScheme = theme;
+
+      // Update theme-color meta
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute('content', theme === 'dark' ? '#111827' : '#ffffff');
+    })();
+  </script>
+  <script type="module" crossorigin src="/assets/index-D9Jf9fIY.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/router-BXnj5ov_.js">
+  <link rel="modulepreload" crossorigin href="/assets/ui-ButzUVce.js">
+  <link rel="modulepreload" crossorigin href="/assets/utils-CFPZ-Rks.js">
+  <link rel="modulepreload" crossorigin href="/assets/icons-D8-QuwNL.js">
+  <link rel="stylesheet" crossorigin href="/assets/index-DF7pPMD4.css">
+</head>
+
+<body>
+  <div id="root"></div>
+</body>
+
 </html>

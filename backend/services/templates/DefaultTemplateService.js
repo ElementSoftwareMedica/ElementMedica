@@ -1,0 +1,1768 @@
+/**
+ * DefaultTemplateService
+ * 
+ * Crea template predefiniti per ogni nuovo tenant.
+ * Ogni template usa placeholder (marcatori) che vengono sostituiti
+ * con i dati reali del tenant quando si genera un documento.
+ * 
+ * Placeholder standard supportati (vedi markerResolver.js per lista completa):
+ *   {{tenant.name}}       - Nome del tenant/organizzazione  
+ *   {{tenant.logo}}       - URL del logo
+ *   {{tenant.address}}    - Indirizzo sede
+ *   {{tenant.phone}}      - Telefono
+ *   {{tenant.email}}      - Email
+ *   {{tenant.vatNumber}}  - P.IVA
+ *   {{tenant.pec}}        - PEC
+ *   {{current.date}}      - Data corrente
+ *   {{course.title}}      - Titolo corso
+ *   {{schedule.startDate}} - Data inizio programmazione
+ *   {{trainer.fullName}}  - Nome completo docente
+ *   {{person.fullName}}   - Nome completo persona
+ * 
+ * Sintassi Google Docs (auto-convertita):
+ *   {{CORSO_TITOLO}}      → {{course.title}}
+ *   {{FORMATORE_COMPLETO}} → {{trainer.fullName}}
+ * 
+ * @module DefaultTemplateService
+ */
+
+import prisma from '../../config/prisma-optimization.js';
+import logger from '../../utils/logger.js';
+
+// ============================================================================
+// TEMPLATE CONTENT DEFINITIONS
+// ============================================================================
+
+const COMMON_STYLES = `
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 10pt; line-height: 1.5; color: #333; padding: 40px; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 25px; padding-bottom: 15px; border-bottom: 2px solid var(--brand-color, #0d9488); }
+    .logo-section { flex: 0 0 200px; }
+    .logo-section img { max-width: 180px; max-height: 80px; }
+    .org-info { text-align: right; flex: 1; }
+    .org-name { font-size: 16pt; font-weight: bold; color: var(--brand-color, #0d9488); margin-bottom: 4px; }
+    .org-details { font-size: 9pt; color: #666; line-height: 1.4; }
+    .document-title { text-align: center; font-size: 14pt; font-weight: bold; color: var(--brand-color, #0d9488); margin: 20px 0; padding: 10px; background: var(--brand-bg, #f0fdfa); border-radius: 5px; }
+    .section { margin-bottom: 18px; page-break-inside: avoid; }
+    .section-title { font-size: 11pt; font-weight: bold; color: var(--brand-color, #0d9488); border-bottom: 1px solid var(--brand-light, #99f6e4); padding-bottom: 4px; margin-bottom: 8px; }
+    .content-box { background: #f8fafc; padding: 12px; border-radius: 5px; margin-bottom: 10px; }
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .info-row { display: flex; }
+    .info-label { font-weight: bold; width: 140px; color: #64748b; font-size: 9pt; }
+    .info-value { flex: 1; }
+    .signature-section { display: flex; justify-content: space-between; margin-top: 40px; padding-top: 20px; }
+    .signature-box { text-align: center; width: 45%; }
+    .signature-line { border-top: 1px solid #333; padding-top: 5px; margin-top: 60px; font-size: 9pt; }
+    .footer { margin-top: 30px; padding-top: 10px; border-top: 1px solid #e2e8f0; font-size: 8pt; color: #94a3b8; text-align: center; }
+    table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+    th { background: var(--brand-color, #0d9488); color: white; padding: 8px 10px; text-align: left; font-size: 9pt; }
+    td { padding: 6px 10px; border-bottom: 1px solid #e2e8f0; font-size: 9pt; }
+    tr:nth-child(even) { background: #f8fafc; }
+`;
+
+const makeHeader = () => `
+    <div class="header">
+        <div class="logo-section">
+            <img src="{{tenant.logo}}" alt="Logo" style="max-width:180px; max-height:80px;">
+        </div>
+        <div class="org-info">
+            <div class="org-name">{{tenant.name}}</div>
+            <div class="org-details">
+                {{tenant.address}}<br>
+                Tel: {{tenant.phone}} | Email: {{tenant.email}}<br>
+                P.IVA: {{tenant.vatNumber}} | PEC: {{tenant.pec}}
+            </div>
+        </div>
+    </div>`;
+
+const makeFooter = (docType) => `
+    <div class="footer">
+        Documento generato il {{current.date}} — {{tenant.name}}<br>
+        ${docType} — Questo documento è stato generato elettronicamente.
+    </div>`;
+
+// ============================================================================
+// TEMPLATE: Lettera di Incarico (FORMAZIONE)
+// ============================================================================
+const LETTER_OF_ENGAGEMENT_CONTENT = `<!DOCTYPE html>
+<html lang="it"><head><meta charset="UTF-8"><title>Lettera di Incarico</title>
+<style>${COMMON_STYLES}
+    :root { --brand-color: #2563eb; --brand-bg: #eff6ff; --brand-light: #93c5fd; }
+</style></head><body>
+${makeHeader()}
+<div class="document-title">LETTERA DI INCARICO</div>
+
+<div class="section">
+    <p>Spett.le <strong>{{trainer.firstName}} {{trainer.lastName}}</strong></p>
+    <p style="margin-top:10px;">Con la presente Le confermiamo l'incarico di docenza come di seguito specificato:</p>
+</div>
+
+<div class="section">
+    <div class="section-title">Dati Corso</div>
+    <div class="content-box info-grid">
+        <div class="info-row"><span class="info-label">Corso:</span><span class="info-value">{{course.title}}</span></div>
+        <div class="info-row"><span class="info-label">Codice:</span><span class="info-value">{{course.code}}</span></div>
+        <div class="info-row"><span class="info-label">Data inizio:</span><span class="info-value">{{schedule.startDate}}</span></div>
+        <div class="info-row"><span class="info-label">Data fine:</span><span class="info-value">{{schedule.endDate}}</span></div>
+        <div class="info-row"><span class="info-label">Sede:</span><span class="info-value">{{schedule.location}}</span></div>
+        <div class="info-row"><span class="info-label">Modalità:</span><span class="info-value">{{schedule.deliveryMode}}</span></div>
+        <div class="info-row"><span class="info-label">Ore previste:</span><span class="info-value">{{trainer.totalHours}}</span></div>
+    </div>
+</div>
+
+<div class="section">
+    <div class="section-title">Compenso</div>
+    <div class="content-box">
+        <div class="info-row"><span class="info-label">Tariffa oraria:</span><span class="info-value">{{trainer.hourlyRate}}</span></div>
+        <div class="info-row"><span class="info-label">Ore formatore:</span><span class="info-value">{{trainer.totalHours}}</span></div>
+        <div class="info-row"><span class="info-label">Rimborso spese:</span><span class="info-value">{{trainer.expensesText}}</span></div>
+        <div class="info-row"><span class="info-label"><strong>Compenso totale:</strong></span><span class="info-value"><strong>{{trainer.totalCompensation}}</strong></span></div>
+    </div>
+</div>
+
+<div class="section">
+    <div class="section-title">Condizioni</div>
+    <div class="content-box">
+        <p>Il docente si impegna a:</p>
+        <ul style="padding-left:20px; margin-top:8px;">
+            <li>Svolgere le lezioni secondo il programma concordato</li>
+            <li>Compilare il registro presenze ad ogni sessione</li>
+            <li>Fornire il materiale didattico nei tempi previsti</li>
+            <li>Segnalare tempestivamente eventuali variazioni</li>
+        </ul>
+    </div>
+</div>
+
+<div class="signature-section">
+    <div class="signature-box">
+        <div class="signature-line">Per {{tenant.name}}</div>
+    </div>
+    <div class="signature-box">
+        <div class="signature-line">Il Docente</div>
+    </div>
+</div>
+${makeFooter('Lettera di Incarico')}
+</body></html>`;
+
+// ============================================================================
+// TEMPLATE: Registro Presenze (FORMAZIONE)
+// ============================================================================
+const ATTENDANCE_REGISTER_CONTENT = `<!DOCTYPE html>
+<html lang="it"><head><meta charset="UTF-8"><title>Registro Presenze</title>
+<style>${COMMON_STYLES}
+    :root { --brand-color: #2563eb; --brand-bg: #eff6ff; --brand-light: #93c5fd; }
+    .attendance-table td { height: 30px; }
+    .attendance-table .sign-cell { width: 120px; }
+</style></head><body>
+${makeHeader()}
+<div class="document-title">REGISTRO PRESENZE</div>
+
+<div class="section">
+    <div class="content-box info-grid">
+        <div class="info-row"><span class="info-label">Corso:</span><span class="info-value">{{course.title}}</span></div>
+        <div class="info-row"><span class="info-label">Codice:</span><span class="info-value">{{course.code}}</span></div>
+        <div class="info-row"><span class="info-label">Data:</span><span class="info-value">{{session.date}}</span></div>
+        <div class="info-row"><span class="info-label">Orario:</span><span class="info-value">{{session.startTime}} - {{session.endTime}}</span></div>
+        <div class="info-row"><span class="info-label">Sede:</span><span class="info-value">{{schedule.location}}</span></div>
+        <div class="info-row"><span class="info-label">Docente:</span><span class="info-value">{{trainer.firstName}} {{trainer.lastName}}</span></div>
+    </div>
+</div>
+
+<div class="section">
+    <div class="section-title">Presenze Partecipanti</div>
+{{table.attendanceSession1}}
+</div>
+
+<div class="section" style="margin-top:20px;">
+    <div class="section-title">Note</div>
+    <div class="content-box" style="min-height:60px;">
+        {{note}}
+    </div>
+</div>
+
+<div class="signature-section">
+    <div class="signature-box">
+        <div class="signature-line">Firma Docente</div>
+    </div>
+    <div class="signature-box">
+        <div class="signature-line">Firma Responsabile</div>
+    </div>
+</div>
+${makeFooter('Registro Presenze')}
+</body></html>`;
+
+// ============================================================================
+// TEMPLATE: Attestato/Certificato (BOTH)
+// ============================================================================
+const CERTIFICATE_CONTENT = `<!DOCTYPE html>
+<html lang="it"><head><meta charset="UTF-8"><title>Attestato</title>
+<style>${COMMON_STYLES}
+    :root { --brand-color: #2563eb; --brand-bg: #eff6ff; --brand-light: #93c5fd; }
+    body { text-align: center; }
+    .certificate-border { border: 3px solid var(--brand-color); padding: 40px; margin: 20px; }
+    .recipient-name { font-size: 20pt; font-weight: bold; color: #1e293b; margin: 20px 0; }
+    .certificate-text { font-size: 11pt; line-height: 1.8; margin: 15px 40px; text-align: center; }
+</style></head><body>
+<div class="certificate-border">
+    <div style="margin-bottom:20px;">
+        <img src="{{tenant.logo}}" alt="Logo" style="max-width:200px; max-height:80px;">
+    </div>
+    <div class="org-name" style="font-size:18pt; text-align:center;">{{tenant.name}}</div>
+    <div class="org-details" style="text-align:center; margin-bottom:30px;">{{tenant.address}}</div>
+    
+    <div class="document-title" style="border:none; background:none; font-size:18pt;">ATTESTATO DI FORMAZIONE</div>
+    
+    <div class="certificate-text">Si attesta che</div>
+    <div class="recipient-name">{{person.firstName}} {{person.lastName}}</div>
+    <div class="certificate-text" style="margin-bottom:5px;">nato/a il {{person.birthDate}} — C.F.: {{person.cf}}</div>
+    
+    <div class="certificate-text">in forza presso <strong>{{company.name}}</strong></div>
+    
+    <div class="certificate-text">
+        ha frequentato con esito positivo il corso di formazione
+    </div>
+    
+    <div style="font-size:14pt; font-weight:bold; color: var(--brand-color); margin: 15px 0;">
+        {{course.title}}
+    </div>
+    
+    <div class="certificate-text">
+        della durata di <strong>{{course.duration}} ore</strong><br>
+        svoltosi dal <strong>{{schedule.startDate}}</strong> al <strong>{{schedule.endDate}}</strong><br>
+        presso <strong>{{schedule.location}}</strong>
+    </div>
+    
+    <div class="certificate-text" style="margin-top:15px;">
+        <strong>Validità:</strong> {{course.validityYears}} anni — Scadenza: {{certificate.validUntil}}
+    </div>
+    
+    <div class="certificate-text" style="margin-top:10px;">
+        <strong>N° Attestato:</strong> {{certificate.registrationNumber}}
+    </div>
+
+    <div class="signature-section" style="margin-top:40px;">
+        <div class="signature-box">
+            <div class="signature-line">Data: {{current.date}}</div>
+        </div>
+        <div class="signature-box">
+            <div class="signature-line">Il Responsabile</div>
+        </div>
+    </div>
+</div>
+${makeFooter('Attestato di Formazione')}
+</body></html>`;
+
+// ============================================================================
+// TEMPLATE: Programma Corso (FORMAZIONE)
+// ============================================================================
+const COURSE_PROGRAM_CONTENT = `<!DOCTYPE html>
+<html lang="it"><head><meta charset="UTF-8"><title>Programma Corso</title>
+<style>${COMMON_STYLES}
+    :root { --brand-color: #2563eb; --brand-bg: #eff6ff; --brand-light: #93c5fd; }
+    .module-box { background: #f8fafc; border-left: 3px solid var(--brand-color); padding: 12px 15px; margin-bottom: 10px; border-radius: 0 5px 5px 0; }
+    .module-title { font-weight: bold; color: var(--brand-color); margin-bottom: 4px; }
+    .module-hours { font-size: 9pt; color: #64748b; }
+</style></head><body>
+${makeHeader()}
+<div class="document-title">PROGRAMMA DEL CORSO</div>
+
+<div class="section">
+    <div class="content-box info-grid">
+        <div class="info-row"><span class="info-label">Titolo:</span><span class="info-value"><strong>{{course.title}}</strong></span></div>
+        <div class="info-row"><span class="info-label">Codice:</span><span class="info-value">{{course.code}}</span></div>
+        <div class="info-row"><span class="info-label">Durata totale:</span><span class="info-value">{{course.duration}} ore</span></div>
+        <div class="info-row"><span class="info-label">Livello rischio:</span><span class="info-value">{{course.riskLevel}}</span></div>
+        <div class="info-row"><span class="info-label">Modalità:</span><span class="info-value">{{schedule.deliveryMode}}</span></div>
+        <div class="info-row"><span class="info-label">Riferimento normativo:</span><span class="info-value">{{course.regulation}}</span></div>
+    </div>
+</div>
+
+<div class="section">
+    <div class="section-title">Obiettivi Formativi</div>
+    <div class="content-box">
+        {{course.objectives}}
+    </div>
+</div>
+
+<div class="section">
+    <div class="section-title">Contenuti del Corso</div>
+    <div class="content-box">
+        {{course.topics}}
+    </div>
+</div>
+
+<div class="section">
+    <div class="section-title">Calendario Sessioni</div>
+    {{table.sessionsInfo}}
+</div>
+
+<div class="section">
+    <div class="section-title">Modalità di Verifica</div>
+    <div class="content-box">
+        La verifica dell'apprendimento avverrà mediante test di valutazione finale.
+    </div>
+</div>
+${makeFooter('Programma Corso')}
+</body></html>`;
+
+// ============================================================================
+// TEMPLATE: Preventivo — Compatto A4 (BOTH brands)
+// Design: Element srl — Teal #7FB3AB / Navy #283646
+// Compatible markers: vociHtml, totaliHtml, noteHtml, cliente.dettagliHtml,
+//   tenant.logoHtml, tenant.*, preventivo.*, cliente.*
+// ============================================================================
+const PREVENTIVO_CONTENT = `<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<title>Preventivo {{preventivo.numero}}</title>
+<style>
+  @page { size: A4; margin: 10mm 12mm 10mm 12mm; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-size: 8.5pt; line-height: 1.35; color: #1e293b; background: #fff;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+
+  /* === HEADER === */
+  .hdr {
+    display: flex; align-items: flex-start;
+    padding-bottom: 8px; border-bottom: 3px solid #283646; margin-bottom: 8px;
+    gap: 10px;
+  }
+  .hdr-logo { flex: 0 0 auto; }
+  .hdr-logo img { max-width: 120px; max-height: 46px; object-fit: contain; }
+  .hdr-logo .logo-txt { font-size: 13pt; font-weight: 800; color: #283646; }
+  .hdr-company { flex: 1; }
+  .hdr-company .co-name { font-size: 9.5pt; font-weight: 700; color: #283646; margin-bottom: 2px; }
+  .hdr-company .co-info { font-size: 7pt; color: #64748b; line-height: 1.5; }
+  .hdr-docbox { text-align: right; flex: 0 0 130px; }
+  .hdr-docbox .doc-lbl { font-size: 14pt; font-weight: 800; color: #283646; letter-spacing: -0.5px; }
+  .hdr-docbox .doc-num { font-size: 8.5pt; font-weight: 700; color: #7FB3AB; margin-top: 1px; }
+  .hdr-docbox .doc-date { font-size: 7pt; color: #64748b; margin-top: 2px; }
+  .hdr-docbox .doc-valid {
+    display: inline-block; font-size: 6.5pt; font-weight: 700;
+    color: #fff; background: #7FB3AB; border-radius: 3px; padding: 1px 6px; margin-top: 2px;
+  }
+
+  /* === INFO ROW === */
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-bottom: 8px; }
+  .info-box {
+    background: #f8fafc; border: 1px solid #e2e8f0;
+    border-left: 3px solid #7FB3AB; border-radius: 4px; padding: 6px 8px;
+  }
+  .info-box h4 {
+    font-size: 6.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+    color: #7FB3AB; margin-bottom: 3px;
+  }
+  .info-box .cli-name { font-size: 9pt; font-weight: 700; color: #283646; margin-bottom: 2px; }
+  .info-box .cli-detail { font-size: 7.5pt; color: #475569; margin-bottom: 1px; }
+  .info-box .detail-row { display: flex; gap: 4px; font-size: 7.5pt; }
+  .info-box .detail-row strong { color: #64748b; min-width: 60px; }
+
+  /* === SERVICE BADGE === */
+  .svc-badge {
+    display: inline-block; font-size: 7pt; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    color: #283646; background: #EDF1EE; border: 1px solid #A0C8C1;
+    border-radius: 3px; padding: 2px 8px; margin-bottom: 5px;
+  }
+
+  /* === SERVICE DETAILS GRID (condizionale) === */
+  .svc-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;
+    margin-bottom: 7px; font-size: 7.5pt;
+  }
+  .svc-cell { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 3px; padding: 4px 6px; }
+  .svc-cell strong { display: block; font-size: 6pt; color: #7FB3AB; text-transform: uppercase; margin-bottom: 1px; }
+
+  /* === PRICING TABLE === */
+  .ptable { width: 100%; border-collapse: collapse; margin-bottom: 5px; }
+  .ptable thead tr { background: #283646; color: #fff; }
+  .ptable th { padding: 5px 8px; font-size: 7.5pt; font-weight: 600; text-align: left; }
+  .ptable th.r { text-align: right; }
+  .ptable tbody tr { border-bottom: 1px solid #e2e8f0; }
+  .ptable tbody tr:nth-child(even) { background: #f8fafc; }
+  .ptable td { padding: 5px 8px; font-size: 8pt; }
+  .ptable td.num { width: 22px; color: #94a3b8; font-size: 7pt; }
+  .ptable td.qty { text-align: center; width: 38px; }
+  .ptable td.price { text-align: right; width: 78px; }
+  .ptable td.total { text-align: right; width: 78px; font-weight: 600; color: #283646; }
+
+  /* === TOTALS === */
+  .totals-wrap { display: flex; justify-content: flex-end; margin-bottom: 6px; }
+  .totals-block { min-width: 210px; }
+  .total-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 3px 8px; border-bottom: 1px solid #e2e8f0; font-size: 8pt;
+  }
+  .total-row .label { color: #64748b; }
+  .total-row .value { font-weight: 600; color: #283646; }
+  .total-row.original .label, .total-row.original .value { color: #94a3b8; text-decoration: line-through; font-size: 7.5pt; }
+  .total-row.discount .label, .total-row.discount .value { color: #16a34a; }
+  .total-row.final {
+    background: #283646; border-radius: 0 0 4px 4px; margin-top: 2px;
+    padding: 5px 8px; border-bottom: none;
+  }
+  .total-row.final .label, .total-row.final .value { color: #fff; font-size: 9pt; font-weight: 700; }
+
+  /* === NOTES === */
+  .notes-box {
+    background: #f0f9ff; border-left: 3px solid #7FB3AB;
+    border-radius: 0 4px 4px 0; padding: 5px 8px; margin-bottom: 6px;
+  }
+  .notes-box h4 { font-size: 6.5pt; font-weight: 700; text-transform: uppercase; color: #7FB3AB; margin-bottom: 2px; }
+  .notes-box p { font-size: 7.5pt; color: #334155; white-space: pre-line; }
+
+  /* === CONDITIONS === */
+  .conditions {
+    background: #fffbeb; border-left: 3px solid #f59e0b;
+    border-radius: 0 4px 4px 0; padding: 4px 8px;
+    font-size: 7pt; color: #78350f; margin-bottom: 7px;
+  }
+
+  /* === SIGNATURES === */
+  .sigs { display: flex; gap: 20px; padding-top: 18px; border-top: 1px solid #e2e8f0; margin-top: 4px; }
+  .sig-box { flex: 1; text-align: center; }
+  .sig-line {
+    border-top: 1px solid #334155; margin-top: 28px;
+    padding-top: 4px; font-size: 7.5pt; color: #64748b;
+  }
+
+  /* === FOOTER === */
+  .footer {
+    margin-top: 7px; padding-top: 5px; border-top: 1px solid #e2e8f0;
+    display: flex; justify-content: space-between;
+    font-size: 6.5pt; color: #94a3b8;
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="hdr">
+  <div class="hdr-logo">{{tenant.logoHtml}}</div>
+  <div class="hdr-company">
+    <div class="co-name">{{tenant.name}}</div>
+    <div class="co-info">
+      {{tenant.address}}<br>
+      P.IVA {{tenant.vatNumber}}{{#IF_COMPANY_WEB}} — {{tenant.website}}{{/IF_COMPANY_WEB}}<br>
+      {{tenant.phone}} — {{tenant.email}}
+    </div>
+  </div>
+  <div class="hdr-docbox">
+    <div class="doc-lbl">PREVENTIVO</div>
+    <div class="doc-num">{{preventivo.numero}}</div>
+    <div class="doc-date">Emesso il {{preventivo.dataEmissione}}</div>
+    <div class="doc-valid">Valido fino al {{preventivo.dataValidita}}</div>
+  </div>
+</div>
+
+<!-- CLIENT + DOC INFO -->
+<div class="info-grid">
+  <div class="info-box">
+    <h4>Cliente</h4>
+    <div class="cli-name">{{cliente.nome}}</div>
+    {{cliente.dettagliHtml}}
+    <div class="cli-detail">{{cliente.email}}</div>
+  </div>
+  <div class="info-box">
+    <h4>Documento</h4>
+    <div class="detail-row"><strong>Oggetto:</strong> {{preventivo.titoloServizio}}</div>
+    <div class="detail-row"><strong>Tipo:</strong> {{preventivo.tipoServizio}}</div>
+    {{preventivo.partecipantiHtml}}
+    <div class="detail-row" style="margin-top:3px;"><strong>Pagamento:</strong> {{preventivo.metodoPagamento}}</div>
+  </div>
+</div>
+
+<!-- SERVICE TYPE BADGE -->
+<div class="svc-badge">{{preventivo.tipoServizio}}</div>
+
+<!-- SERVICE DETAILS (condizionali per tipo) -->
+{{#IF_CORSO}}
+<div class="svc-grid">
+  <div class="svc-cell"><strong>Corso</strong>{{corso.title}}</div>
+  <div class="svc-cell"><strong>Durata</strong>{{corso.duration}} ore</div>
+  <div class="svc-cell"><strong>Normativa</strong>{{corso.regulation}}</div>
+</div>
+{{/IF_CORSO}}
+{{#IF_DVR}}
+<div class="svc-grid">
+  <div class="svc-cell"><strong>Servizio</strong>Valutazione Rischi (DVR)</div>
+  <div class="svc-cell"><strong>Dipendenti</strong>{{preventivo.dvrNumDipendenti}}</div>
+  <div class="svc-cell"><strong>Sedi</strong>{{preventivo.dvrNumSedi}} · Consegna: {{preventivo.dvrTempiConsegna}}</div>
+</div>
+{{/IF_DVR}}
+{{#IF_RSPP}}
+<div class="svc-grid">
+  <div class="svc-cell"><strong>Servizio</strong>RSPP Esterno</div>
+  <div class="svc-cell"><strong>Dipendenti</strong>{{preventivo.rsppNumDipendenti}}</div>
+  <div class="svc-cell"><strong>Durata</strong>{{preventivo.rsppDurata}} mesi · Classe {{preventivo.rsppClasseRischio}}</div>
+</div>
+{{/IF_RSPP}}
+{{#IF_MEDICO}}
+<div class="svc-grid">
+  <div class="svc-cell"><strong>Servizio</strong>Medicina del Lavoro</div>
+  <div class="svc-cell"><strong>Dipendenti</strong>{{preventivo.medicoNumDipendenti}}</div>
+  <div class="svc-cell"><strong>Visite</strong>{{preventivo.medicoTipoVisite}} · {{preventivo.medicoFrequenza}}</div>
+</div>
+{{/IF_MEDICO}}
+
+<!-- PRICING TABLE -->
+<table class="ptable">
+  <thead>
+    <tr>
+      <th class="num">#</th>
+      <th>Descrizione</th>
+      <th class="r" style="width:38px;">Qtà</th>
+      <th class="r" style="width:82px;">Prezzo Unit.</th>
+      <th class="r" style="width:82px;">Totale</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{vociHtml}}
+  </tbody>
+</table>
+
+<!-- TOTALS -->
+<div class="totals-wrap">
+  <div class="totals-block">
+    {{totaliHtml}}
+  </div>
+</div>
+
+<!-- NOTES (auto-vuoto se assenti) -->
+{{noteHtml}}
+
+<!-- CONDITIONS -->
+<div class="conditions">
+  <strong>Condizioni di pagamento:</strong> {{preventivo.metodoPagamento}} —
+  Prezzi IVA esclusa salvo diversa indicazione. Il preventivo è valido fino alla data indicata.
+  Accettando il presente preventivo si intendono accettate le condizioni generali di contratto.
+</div>
+
+<!-- SIGNATURES -->
+<div class="sigs">
+  <div class="sig-box">
+    <div class="sig-line">Per accettazione — Firma e timbro Cliente</div>
+  </div>
+  <div class="sig-box">
+    <div class="sig-line">Per {{tenant.name}}</div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+  <span>{{tenant.name}} · P.IVA {{tenant.vatNumber}} · {{tenant.email}}</span>
+  <span>Generato il {{current.date}}</span>
+</div>
+
+</body>
+</html>`;
+
+// ============================================================================
+// TEMPLATE: Visita Medica (MEDICA)
+// ============================================================================
+const VISITA_MEDICA_CONTENT = `<!DOCTYPE html>
+<html lang="it"><head><meta charset="UTF-8"><title>Referto Visita Medica</title>
+<style>
+    @page { size: A4; margin: 0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+        font-family: 'Georgia', 'Times New Roman', serif;
+        font-size: 10pt;
+        line-height: 1.6;
+        color: #1e293b;
+        padding: 0;
+        background: #fff;
+        -webkit-print-color-adjust: exact !important;
+        color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    /* === PAGE WRAPPER === */
+    .page-wrapper {
+        position: relative;
+        min-height: 100vh;
+        padding: 28px 36px 80px 36px;
+    }
+
+    /* === HEADER === */
+    .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        padding-bottom: 14px;
+        border-bottom: 2.5px solid #0d9488;
+        margin-bottom: 6px;
+    }
+    .header-left {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+    }
+    .header-logo {
+        width: 64px;
+        height: 64px;
+        object-fit: contain;
+        border-radius: 6px;
+    }
+    .header-org { line-height: 1.3; }
+    .header-org-name {
+        font-size: 16pt;
+        font-weight: bold;
+        color: #0d9488;
+        letter-spacing: 0.3px;
+    }
+    .header-org-details {
+        font-size: 8pt;
+        color: #64748b;
+        font-family: 'Helvetica Neue', Arial, sans-serif;
+        line-height: 1.4;
+    }
+    .header-right { text-align: right; }
+    .header-doc-type {
+        font-size: 7.5pt;
+        text-transform: uppercase;
+        letter-spacing: 2.5px;
+        color: #0d9488;
+        font-family: 'Helvetica Neue', Arial, sans-serif;
+        font-weight: 700;
+    }
+    .header-date {
+        font-size: 8.5pt;
+        color: #64748b;
+        margin-top: 3px;
+        font-family: 'Helvetica Neue', Arial, sans-serif;
+    }
+    .header-ref {
+        font-size: 7pt;
+        color: #94a3b8;
+        margin-top: 2px;
+        font-family: 'Helvetica Neue', Arial, sans-serif;
+    }
+
+    /* === TITLE BAR === */
+    .title-bar {
+        background: linear-gradient(135deg, #0d9488 0%, #0f766e 60%, #115e59 100%);
+        color: white;
+        text-align: center;
+        padding: 11px 20px;
+        margin: 0 -36px 20px -36px;
+        font-size: 12pt;
+        font-weight: 700;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        font-family: 'Helvetica Neue', Arial, sans-serif;
+    }
+
+    /* === INFO CARDS === */
+    .info-cards {
+        display: flex;
+        gap: 14px;
+        margin-bottom: 20px;
+    }
+    .info-card {
+        flex: 1;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        overflow: hidden;
+        background: #fff;
+    }
+    .info-card-header {
+        background: linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%);
+        padding: 5px 12px;
+        font-size: 7.5pt;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 1.2px;
+        color: #0d9488;
+        border-bottom: 1px solid #99f6e4;
+        font-family: 'Helvetica Neue', Arial, sans-serif;
+    }
+    .info-card-body { padding: 8px 12px; }
+    .info-row {
+        display: flex;
+        align-items: baseline;
+        padding: 1.5px 0;
+        font-size: 9pt;
+    }
+    .info-label {
+        font-weight: 600;
+        color: #475569;
+        width: 105px;
+        flex-shrink: 0;
+        font-family: 'Helvetica Neue', Arial, sans-serif;
+        font-size: 8pt;
+    }
+    .info-value {
+        flex: 1;
+        color: #1e293b;
+    }
+
+    /* === CLINICAL SECTIONS === */
+    .clinical-section {
+        margin-bottom: 16px;
+        page-break-inside: avoid;
+    }
+    .section-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 6px;
+    }
+    .section-indicator {
+        width: 4px;
+        height: 18px;
+        border-radius: 2px;
+    }
+    .section-indicator-teal { background: #0d9488; }
+    .section-indicator-blue { background: #2563eb; }
+    .section-indicator-amber { background: #d97706; }
+    .section-indicator-red { background: #dc2626; }
+    .section-indicator-purple { background: #7c3aed; }
+    .section-indicator-green { background: #059669; }
+    .section-title {
+        font-size: 10pt;
+        font-weight: bold;
+        color: #0f172a;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-family: 'Helvetica Neue', Arial, sans-serif;
+    }
+    .section-content {
+        padding: 10px 14px;
+        background: #f8fafc;
+        border-left: 3px solid #99f6e4;
+        border-radius: 0 6px 6px 0;
+        font-size: 9.5pt;
+        line-height: 1.7;
+        color: #334155;
+    }
+    .section-content p { margin-bottom: 4px; }
+
+    /* === VITALS GRID === */
+    .vitali-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+        padding: 10px;
+        background: #f8fafc;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+    }
+    .vitali-item {
+        text-align: center;
+        padding: 8px 4px;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+    }
+    .vitali-value {
+        font-size: 15pt;
+        font-weight: bold;
+        color: #0d9488;
+        line-height: 1.2;
+    }
+    .vitali-label {
+        font-size: 7pt;
+        color: #64748b;
+        margin-top: 2px;
+        font-family: 'Helvetica Neue', Arial, sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+    }
+    .vitali-unit {
+        font-size: 8pt;
+        color: #94a3b8;
+        font-weight: normal;
+    }
+
+    /* === SIGNATURE SECTION === */
+    .signatures-wrapper {
+        margin-top: 36px;
+        padding-top: 16px;
+        border-top: 1px solid #e2e8f0;
+    }
+    .signatures-label {
+        font-size: 7pt;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        color: #94a3b8;
+        font-family: 'Helvetica Neue', Arial, sans-serif;
+        margin-bottom: 12px;
+    }
+    .signatures-grid {
+        display: flex;
+        justify-content: space-between;
+    }
+    .sig-box {
+        width: 44%;
+        text-align: center;
+    }
+    .sig-image-area {
+        min-height: 60px;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        padding-bottom: 4px;
+    }
+    .sig-image {
+        max-width: 180px;
+        max-height: 60px;
+        width: auto;
+        height: auto;
+        display: block;
+        margin: 0 auto;
+        object-fit: contain;
+    }
+    .sig-placeholder {
+        font-size: 7pt;
+        color: #cbd5e1;
+        font-family: 'Helvetica Neue', Arial, sans-serif;
+        font-style: italic;
+        padding-bottom: 4px;
+    }
+    .sig-line {
+        border-top: 1px solid #334155;
+        margin-top: 4px;
+        padding-top: 5px;
+    }
+    .sig-name {
+        font-size: 9.5pt;
+        font-weight: bold;
+        color: #1e293b;
+    }
+    .sig-detail {
+        font-size: 7.5pt;
+        color: #64748b;
+        font-family: 'Helvetica Neue', Arial, sans-serif;
+        margin-top: 1px;
+    }
+    .sig-role {
+        font-size: 7pt;
+        color: #94a3b8;
+        font-family: 'Helvetica Neue', Arial, sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-top: 2px;
+    }
+
+    /* === FOOTER === */
+    .page-footer {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        padding: 8px 36px;
+        border-top: 2px solid #0d9488;
+        background: #fff;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 7pt;
+        color: #94a3b8;
+        font-family: 'Helvetica Neue', Arial, sans-serif;
+    }
+    .page-footer-left { text-align: left; }
+    .page-footer-center { text-align: center; font-size: 6.5pt; }
+    .page-footer-right { text-align: right; }
+
+    /* === PRINT === */
+    @media print {
+        body { padding: 0; -webkit-print-color-adjust: exact !important; }
+        .page-wrapper { padding: 24px 32px 70px 32px; }
+    }
+</style></head><body>
+<div class="page-wrapper">
+
+    <!-- HEADER -->
+    <div class="header">
+        <div class="header-left">
+            {{#if tenant.logo}}<img src="{{tenant.logo}}" class="header-logo" alt="Logo">{{/if}}
+            <div class="header-org">
+                <div class="header-org-name">{{tenant.nome}}</div>
+                <div class="header-org-details">
+                    {{tenant.indirizzo}}<br>
+                    Tel: {{tenant.telefono}} | Email: {{tenant.email}}<br>
+                    P.IVA: {{tenant.partitaIva}} {{#if tenant.pec}}| PEC: {{tenant.pec}}{{/if}}
+                </div>
+            </div>
+        </div>
+        <div class="header-right">
+            <div class="header-doc-type">Referto medico</div>
+            <div class="header-date">{{visita.data}}</div>
+            <div class="header-ref">Rif. {{visita.id}}</div>
+        </div>
+    </div>
+
+    <!-- TITLE -->
+    <div class="title-bar">Referto Visita Medica</div>
+
+    <!-- PAZIENTE + VISITA CARDS -->
+    <div class="info-cards">
+        <div class="info-card">
+            <div class="info-card-header">Dati Paziente</div>
+            <div class="info-card-body">
+                <div class="info-row"><span class="info-label">Cognome e Nome</span><span class="info-value"><strong>{{paziente.cognome}} {{paziente.nome}}</strong></span></div>
+                <div class="info-row"><span class="info-label">Data di nascita</span><span class="info-value">{{paziente.dataNascita}}</span></div>
+                {{#if paziente.luogoNascita}}<div class="info-row"><span class="info-label">Luogo nascita</span><span class="info-value">{{paziente.luogoNascita}}</span></div>{{/if}}
+                <div class="info-row"><span class="info-label">Codice Fiscale</span><span class="info-value" style="font-family:monospace;font-size:8.5pt;">{{paziente.codiceFiscale}}</span></div>
+                {{#if paziente.telefono}}<div class="info-row"><span class="info-label">Telefono</span><span class="info-value">{{paziente.telefono}}</span></div>{{/if}}
+                {{#if paziente.indirizzo}}<div class="info-row"><span class="info-label">Indirizzo</span><span class="info-value">{{paziente.indirizzo}}, {{paziente.citta}} {{paziente.cap}}</span></div>{{/if}}
+            </div>
+        </div>
+        <div class="info-card">
+            <div class="info-card-header">Dati Visita</div>
+            <div class="info-card-body">
+                <div class="info-row"><span class="info-label">Data e Ora</span><span class="info-value">{{visita.data}} {{visita.ora}}</span></div>
+                <div class="info-row"><span class="info-label">Tipo</span><span class="info-value">{{visita.tipo}}</span></div>
+                <div class="info-row"><span class="info-label">Prestazione</span><span class="info-value">{{visita.prestazione}}</span></div>
+                <div class="info-row"><span class="info-label">Medico</span><span class="info-value"><strong>{{medico.nomeCompleto}}</strong></span></div>
+                {{#if medico.specializzazione}}<div class="info-row"><span class="info-label">Specializzazione</span><span class="info-value">{{medico.specializzazione}}</span></div>{{/if}}
+                {{#if ambulatorio.nome}}<div class="info-row"><span class="info-label">Ambulatorio</span><span class="info-value">{{ambulatorio.nome}}</span></div>{{/if}}
+            </div>
+        </div>
+    </div>
+
+    <!-- CLINICAL SECTIONS -->
+    {{#if anamnesi}}
+    <div class="clinical-section">
+        <div class="section-header"><div class="section-indicator section-indicator-teal"></div><div class="section-title">Anamnesi</div></div>
+        <div class="section-content">{{{anamnesi}}}</div>
+    </div>
+    {{/if}}
+
+    {{#if esameObiettivo}}
+    <div class="clinical-section">
+        <div class="section-header"><div class="section-indicator section-indicator-blue"></div><div class="section-title">Esame Obiettivo</div></div>
+        <div class="section-content">{{{esameObiettivo}}}</div>
+    </div>
+    {{/if}}
+
+    {{#if vitali.hasAny}}
+    <div class="clinical-section">
+        <div class="section-header"><div class="section-indicator section-indicator-green"></div><div class="section-title">Parametri Vitali</div></div>
+        <div class="vitali-grid">
+            {{#if vitali.peso}}<div class="vitali-item"><div class="vitali-value">{{vitali.peso}} <span class="vitali-unit">kg</span></div><div class="vitali-label">Peso</div></div>{{/if}}
+            {{#if vitali.altezza}}<div class="vitali-item"><div class="vitali-value">{{vitali.altezza}} <span class="vitali-unit">cm</span></div><div class="vitali-label">Altezza</div></div>{{/if}}
+            {{#if vitali.bmi}}<div class="vitali-item"><div class="vitali-value">{{vitali.bmi}}</div><div class="vitali-label">BMI</div></div>{{/if}}
+            {{#if vitali.pressioneSistolica}}<div class="vitali-item"><div class="vitali-value">{{vitali.pressioneSistolica}}{{#if vitali.pressioneDiastolica}}/{{vitali.pressioneDiastolica}}{{/if}}</div><div class="vitali-label">Pressione (mmHg)</div></div>{{/if}}
+            {{#if vitali.frequenzaCardiaca}}<div class="vitali-item"><div class="vitali-value">{{vitali.frequenzaCardiaca}}</div><div class="vitali-label">FC (bpm)</div></div>{{/if}}
+            {{#if vitali.temperatura}}<div class="vitali-item"><div class="vitali-value">{{vitali.temperatura}}</div><div class="vitali-label">Temp. (°C)</div></div>{{/if}}
+            {{#if vitali.saturazione}}<div class="vitali-item"><div class="vitali-value">{{vitali.saturazione}}</div><div class="vitali-label">SpO₂ (%)</div></div>{{/if}}
+            {{#if vitali.glicemia}}<div class="vitali-item"><div class="vitali-value">{{vitali.glicemia}}</div><div class="vitali-label">Glicemia (mg/dL)</div></div>{{/if}}
+        </div>
+    </div>
+    {{/if}}
+
+    {{#if diagnosiPrincipale}}
+    <div class="clinical-section">
+        <div class="section-header"><div class="section-indicator section-indicator-red"></div><div class="section-title">Diagnosi</div></div>
+        <div class="section-content">{{{diagnosiPrincipale}}}</div>
+    </div>
+    {{/if}}
+
+    {{#if diagnosiSecondarie}}
+    <div class="clinical-section">
+        <div class="section-header"><div class="section-indicator section-indicator-amber"></div><div class="section-title">Diagnosi Secondarie</div></div>
+        <div class="section-content">{{{diagnosiSecondarie}}}</div>
+    </div>
+    {{/if}}
+
+    {{#if terapia}}
+    <div class="clinical-section">
+        <div class="section-header"><div class="section-indicator section-indicator-purple"></div><div class="section-title">Terapia Prescritta</div></div>
+        <div class="section-content">{{{terapia}}}</div>
+    </div>
+    {{/if}}
+
+    {{#if prescrizioni}}
+    <div class="clinical-section">
+        <div class="section-header"><div class="section-indicator section-indicator-blue"></div><div class="section-title">Prescrizioni</div></div>
+        <div class="section-content">{{{prescrizioni}}}</div>
+    </div>
+    {{/if}}
+
+    {{#if note}}
+    <div class="clinical-section">
+        <div class="section-header"><div class="section-indicator section-indicator-teal"></div><div class="section-title">Note</div></div>
+        <div class="section-content">{{{note}}}</div>
+    </div>
+    {{/if}}
+
+    {{#if noteFollowup}}
+    <div class="clinical-section">
+        <div class="section-header"><div class="section-indicator section-indicator-green"></div><div class="section-title">Follow-up</div></div>
+        <div class="section-content">
+            {{#if prossimoControllo}}<p style="margin-bottom:6px;"><strong>Prossimo controllo:</strong> {{prossimoControllo}}</p>{{/if}}
+            {{{noteFollowup}}}
+        </div>
+    </div>
+    {{/if}}
+
+    <!-- SIGNATURES -->
+    <div class="signatures-wrapper">
+        <div class="signatures-label">Firme</div>
+        <div class="signatures-grid">
+            <div class="sig-box">
+                <div class="sig-image-area">
+                    {{#if firma.paziente}}<img src="{{{firma.paziente}}}" class="sig-image" alt="Firma paziente">{{else}}<div class="sig-placeholder">Firma paziente</div>{{/if}}
+                </div>
+                <div class="sig-line">
+                    <div class="sig-name">{{firma.pazienteNome}}</div>
+                    <div class="sig-role">Paziente</div>
+                </div>
+            </div>
+            <div class="sig-box">
+                <div class="sig-image-area">
+                    {{#if firma.medico}}<img src="{{{firma.medico}}}" class="sig-image" alt="Firma medico">{{else}}<div class="sig-placeholder">Firma medico</div>{{/if}}
+                </div>
+                <div class="sig-line">
+                    <div class="sig-name">{{medico.nomeCompleto}}</div>
+                    {{#if medico.specializzazione}}<div class="sig-detail">Specialista in {{medico.specializzazione}}</div>{{/if}}
+                    {{#if medico.albo}}<div class="sig-detail">OMCeO: {{medico.albo}}</div>{{/if}}
+                    <div class="sig-role">Medico Refertante</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- FOOTER -->
+<div class="page-footer">
+    <div class="page-footer-left">{{tenant.nome}} — P.IVA {{tenant.partitaIva}}</div>
+    <div class="page-footer-center">Documento riservato — Dato personale sanitario ex art. 9 GDPR</div>
+    <div class="page-footer-right">Generato il {{current.date}}</div>
+</div>
+</body></html>`;
+
+// ============================================================================
+// TEMPLATE: Giudizio di Idoneità MDL (MEDICA — Medicina del Lavoro)
+// ============================================================================
+const GIUDIZIO_IDONEITA_MDL_CONTENT = `<!DOCTYPE html>
+<html lang="it"><head><meta charset="UTF-8"><title>Giudizio di Idoneità alla Mansione</title>
+<style>
+    @page { size: A4; margin: 0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+        font-family: 'Georgia', 'Times New Roman', serif;
+        font-size: 10pt;
+        line-height: 1.6;
+        color: #1e293b;
+        padding: 0;
+        background: #fff;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+    .page-wrapper { position: relative; min-height: 100vh; padding: 28px 36px 80px 36px; }
+
+    /* Header istituzionale */
+    .header-wrapper { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #0d9488; padding-bottom: 16px; margin-bottom: 20px; }
+    .header-left { flex: 1; }
+    .header-logo img { max-height: 70px; max-width: 200px; object-fit: contain; }
+    .header-right { text-align: right; font-size: 8.5pt; color: #475569; line-height: 1.5; }
+    .tenant-name { font-size: 13pt; font-weight: bold; color: #0d9488; }
+    .tenant-details { font-size: 8.5pt; color: #64748b; margin-top: 2px; }
+
+    /* Titolo documento */
+    .doc-title-bar {
+        background: #0d9488;
+        color: #fff;
+        text-align: center;
+        font-size: 13pt;
+        font-weight: bold;
+        letter-spacing: 1px;
+        padding: 10px 20px;
+        border-radius: 4px;
+        margin-bottom: 4px;
+        text-transform: uppercase;
+    }
+    .doc-subtitle { text-align: center; font-size: 8pt; color: #64748b; margin-bottom: 18px; }
+
+    /* Info cards affiancate */
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px; }
+    .info-card { border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden; }
+    .info-card-header { background: #f0fdfa; border-bottom: 1px solid #e2e8f0; font-size: 8.5pt; font-weight: bold; color: #0d9488; padding: 6px 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .info-card-body { padding: 10px 12px; }
+    .info-row { display: flex; gap: 6px; margin-bottom: 4px; font-size: 9pt; }
+    .info-label { color: #64748b; min-width: 130px; font-size: 8.5pt; }
+    .info-value { color: #1e293b; font-weight: 500; }
+
+    /* Box giudizio — colore dinamico */
+    .giudizio-box {
+        border: 3px solid #0d9488;
+        border-radius: 8px;
+        padding: 16px 20px;
+        margin-bottom: 18px;
+        text-align: center;
+    }
+    .giudizio-title { font-size: 8pt; font-weight: bold; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+    .giudizio-esito { font-size: 14pt; font-weight: bold; color: #0d9488; }
+    .giudizio-esito.non-idoneo { color: #dc2626; border-color: #dc2626; }
+    .giudizio-esito.temp-non-idoneo { color: #f59e0b; }
+
+    /* Sezioni cliniche */
+    .clinical-section { margin-bottom: 14px; page-break-inside: avoid; }
+    .section-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .section-indicator { width: 4px; height: 18px; border-radius: 2px; flex-shrink: 0; }
+    .section-indicator-teal { background: #0d9488; }
+    .section-indicator-red { background: #dc2626; }
+    .section-indicator-amber { background: #f59e0b; }
+    .section-indicator-blue { background: #3b82f6; }
+    .section-title { font-size: 9.5pt; font-weight: bold; color: #1e40af; letter-spacing: 0.3px; }
+    .section-content { padding: 10px 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; font-size: 9.5pt; line-height: 1.7; white-space: pre-wrap; }
+
+    /* Note normativa */
+    .normativa-note { font-size: 8pt; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 10px; margin-top: 14px; text-align: justify; font-style: italic; }
+
+    /* Firme */
+    .signatures-wrapper { margin-top: 24px; page-break-inside: avoid; }
+    .signatures-label { font-size: 8pt; font-weight: bold; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+    .signatures-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    .sig-box { border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; text-align: center; }
+    .sig-image-area { height: 60px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; }
+    .sig-image { max-height: 55px; max-width: 180px; object-fit: contain; }
+    .sig-placeholder { height: 55px; border-bottom: 1px dashed #94a3b8; width: 80%; margin: 0 auto; }
+    .sig-name { font-weight: bold; font-size: 9.5pt; }
+    .sig-detail { font-size: 8pt; color: #64748b; }
+    .sig-role { font-size: 8pt; color: #0d9488; font-weight: bold; margin-top: 2px; }
+    .sig-date { font-size: 8pt; color: #64748b; margin-top: 4px; }
+
+    /* Footer pagina */
+    .page-footer { position: fixed; bottom: 0; left: 0; right: 0; height: 60px; display: flex; justify-content: space-between; align-items: flex-end; padding: 0 36px 12px; border-top: 1px solid #e2e8f0; font-size: 7.5pt; color: #94a3b8; }
+</style>
+</head>
+<body>
+<div class="page-wrapper">
+
+    <!-- INTESTAZIONE -->
+    <div class="header-wrapper">
+        <div class="header-left">
+            <div class="header-logo">
+                {{{tenant.logoHtml}}}
+            </div>
+        </div>
+        <div class="header-right">
+            <div class="tenant-name">{{tenant.nome}}</div>
+            <div class="tenant-details">{{tenant.indirizzoCompleto}}</div>
+            <div class="tenant-details">Tel. {{tenant.telefono}} | {{tenant.email}}</div>
+            <div class="tenant-details">P.IVA {{tenant.partitaIva}}</div>
+        </div>
+    </div>
+
+    <!-- TITOLO DOCUMENTO -->
+    <div class="doc-title-bar">Giudizio di Idoneità alla Mansione Specifica</div>
+    <div class="doc-subtitle">ai sensi del D.Lgs. 9 aprile 2008 n. 81, art. 41 comma 6 e s.m.i.</div>
+
+    <!-- DATI PAZIENTE + VISITA -->
+    <div class="info-grid">
+        <div class="info-card">
+            <div class="info-card-header">Dati Lavoratore</div>
+            <div class="info-card-body">
+                <div class="info-row"><span class="info-label">Cognome e Nome</span><span class="info-value"><strong>{{paziente.cognome}} {{paziente.nome}}</strong></span></div>
+                <div class="info-row"><span class="info-label">Data di nascita</span><span class="info-value">{{paziente.dataNascita}}</span></div>
+                <div class="info-row"><span class="info-label">Codice Fiscale</span><span class="info-value" style="font-family:monospace;">{{paziente.codiceFiscale}}</span></div>
+                {{#if paziente.indirizzo}}<div class="info-row"><span class="info-label">Residenza</span><span class="info-value">{{paziente.indirizzo}}, {{paziente.citta}}</span></div>{{/if}}
+            </div>
+        </div>
+        <div class="info-card">
+            <div class="info-card-header">Dati Visita</div>
+            <div class="info-card-body">
+                <div class="info-row"><span class="info-label">Data visita</span><span class="info-value">{{visita.data}}</span></div>
+                <div class="info-row"><span class="info-label">Tipo visita</span><span class="info-value">{{visita.tipo}}</span></div>
+                <div class="info-row"><span class="info-label">Medico Competente</span><span class="info-value"><strong>{{medico.nomeCompleto}}</strong></span></div>
+                {{#if medico.albo}}<div class="info-row"><span class="info-label">N° Iscrizione OMCeO</span><span class="info-value">{{medico.albo}}</span></div>{{/if}}
+                {{#if ambulatorio.nome}}<div class="info-row"><span class="info-label">Ambulatorio</span><span class="info-value">{{ambulatorio.nome}}</span></div>{{/if}}
+            </div>
+        </div>
+    </div>
+
+    <!-- GIUDIZIO DI IDONEITÀ -->
+    {{#if mdl.giudizioLabel}}
+    <div class="giudizio-box" style="{{#if mdl.isNonIdoneo}}border-color:#dc2626;{{/if}}{{#if mdl.isTemporaneamenteNonIdoneo}}border-color:#f59e0b;{{/if}}">
+        <div class="giudizio-title">Il Medico Competente esprime il seguente giudizio:</div>
+        <div class="giudizio-esito {{#if mdl.isNonIdoneo}}non-idoneo{{/if}} {{#if mdl.isTemporaneamenteNonIdoneo}}temp-non-idoneo{{/if}}" style="{{#if mdl.isNonIdoneo}}color:#dc2626;{{/if}}{{#if mdl.isTemporaneamenteNonIdoneo}}color:#f59e0b;{{/if}}">
+            {{mdl.giudizioLabel}}
+        </div>
+    </div>
+    {{/if}}
+
+    <!-- PRESCRIZIONI DALLA NORMATIVA -->
+    {{#if mdl.prescrizioniIdoneita}}
+    <div class="clinical-section">
+        <div class="section-header">
+            <div class="section-indicator section-indicator-red"></div>
+            <div class="section-title">Prescrizioni ai sensi della Normativa (art. 41 c. 5 D.Lgs 81/08)</div>
+        </div>
+        <div class="section-content">{{mdl.prescrizioniIdoneita}}</div>
+    </div>
+    {{/if}}
+
+    <!-- LIMITAZIONI ALLA MANSIONE -->
+    {{#if mdl.limitazioni}}
+    <div class="clinical-section">
+        <div class="section-header">
+            <div class="section-indicator section-indicator-amber"></div>
+            <div class="section-title">Limitazioni alla Mansione Specifica</div>
+        </div>
+        <div class="section-content">{{mdl.limitazioni}}</div>
+    </div>
+    {{/if}}
+
+    <!-- ESAMI PROGRAMMATI PROSSIMA VISITA -->
+    {{#if mdl.esamiProssimaVisita}}
+    <div class="clinical-section">
+        <div class="section-header">
+            <div class="section-indicator section-indicator-blue"></div>
+            <div class="section-title">Accertamenti da eseguire alla prossima visita</div>
+        </div>
+        <div class="section-content">{{mdl.esamiProssimaVisita}}</div>
+    </div>
+    {{/if}}
+
+    <!-- PERIODICITÀ SORVEGLIANZA -->
+    {{#if mdl.periodicitaLabel}}
+    <div class="info-card" style="margin-bottom:14px;">
+        <div class="info-card-header">Periodicità Sorveglianza Sanitaria</div>
+        <div class="info-card-body">
+            <div class="info-row">
+                <span class="info-label">Frequenza visite</span>
+                <span class="info-value"><strong>Visita {{mdl.periodicitaLabel}}</strong></span>
+            </div>
+            {{#if mdl.prossimoControllo}}
+            <div class="info-row">
+                <span class="info-label">Prossimo controllo</span>
+                <span class="info-value"><strong>{{mdl.prossimoControllo}}</strong></span>
+            </div>
+            {{/if}}
+        </div>
+    </div>
+    {{/if}}
+
+    <!-- PRESCRIZIONI GENERALI / NOTE FOLLOW-UP -->
+    {{#if noteFollowup}}
+    <div class="clinical-section">
+        <div class="section-header">
+            <div class="section-indicator section-indicator-teal"></div>
+            <div class="section-title">Note e Indicazioni Aggiuntive</div>
+        </div>
+        <div class="section-content">{{{noteFollowup}}}</div>
+    </div>
+    {{/if}}
+
+    <!-- NOTE NORMATIVA -->
+    <div class="normativa-note">
+        Il presente giudizio è emesso ai sensi dell'art. 41, comma 6, del D.Lgs. 81/2008 e successive modificazioni ed integrazioni.
+        Il lavoratore e il datore di lavoro possono ricorrere avverso il giudizio, entro trenta giorni dalla data di comunicazione,
+        all'organo di vigilanza territorialmente competente che dispone, dopo opportuni accertamenti, la conferma, la modifica o
+        la revoca del giudizio stesso (art. 41, comma 9, D.Lgs. 81/2008).
+        Documento riservato — Dato personale sanitario ai sensi dell'art. 9 GDPR 2016/679.
+    </div>
+
+    <!-- FIRME -->
+    <div class="signatures-wrapper">
+        <div class="signatures-label">Firme</div>
+        <div class="signatures-grid">
+            <div class="sig-box">
+                <div class="sig-image-area">
+                    {{#if firma.paziente}}<img src="{{{firma.paziente}}}" class="sig-image" alt="Firma lavoratore">{{else}}<div class="sig-placeholder"></div>{{/if}}
+                </div>
+                <div class="sig-name">{{firma.pazienteNome}}</div>
+                <div class="sig-role">Firma del Lavoratore</div>
+                <div class="sig-detail">per presa visione del giudizio</div>
+                <div class="sig-date">Data: {{visita.data}}</div>
+            </div>
+            <div class="sig-box">
+                <div class="sig-image-area">
+                    {{#if firma.medico}}<img src="{{{firma.medico}}}" class="sig-image" alt="Firma medico competente">{{else}}<div class="sig-placeholder"></div>{{/if}}
+                </div>
+                <div class="sig-name">{{medico.nomeCompleto}}</div>
+                <div class="sig-detail">Medico Competente</div>
+                {{#if medico.albo}}<div class="sig-detail">OMCeO n° {{medico.albo}}</div>{{/if}}
+                <div class="sig-role">Firma e Timbro</div>
+                <div class="sig-date">Data: {{visita.data}}</div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- FOOTER PAGINA -->
+<div class="page-footer">
+    <div>{{tenant.nome}} — P.IVA {{tenant.partitaIva}}</div>
+    <div>Giudizio di Idoneità — Documento riservato — art. 9 GDPR</div>
+    <div>Generato il {{current.date}}</div>
+</div>
+</body></html>`;
+
+// ============================================================================
+// TEMPLATE: Fattura (BOTH)
+// ============================================================================
+const INVOICE_CONTENT = `<!DOCTYPE html>
+<html lang="it"><head><meta charset="UTF-8"><title>Fattura</title>
+<style>${COMMON_STYLES}
+    :root { --brand-color: #7c3aed; --brand-bg: #f5f3ff; --brand-light: #c4b5fd; }
+    .totals-table { width: auto; margin-left: auto; margin-top: 15px; }
+    .totals-table td { padding: 5px 15px; text-align: right; }
+    .totals-table .total-row { font-weight: bold; font-size: 12pt; color: var(--brand-color); border-top: 2px solid var(--brand-color); }
+</style></head><body>
+${makeHeader()}
+<div class="document-title">FATTURA N° {{documento.numero}} del {{documento.data}}</div>
+
+<div class="section">
+    <div class="info-grid">
+        <div>
+            <div class="section-title">Destinatario</div>
+            <div class="content-box">
+                <strong>{{company.name}}</strong><br>
+                {{company.address}}<br>
+                P.IVA: {{company.vatNumber}}<br>
+                C.F.: {{company.fiscalCode}}<br>
+                {{#if company.pec}}PEC: {{company.pec}}<br>{{/if}}
+                {{#if company.sdi}}SDI: {{company.sdi}}{{/if}}
+            </div>
+        </div>
+        <div>
+            <div class="section-title">Dati Fattura</div>
+            <div class="content-box">
+                <div class="info-row"><span class="info-label">Numero:</span><span class="info-value">{{documento.numero}}</span></div>
+                <div class="info-row"><span class="info-label">Data:</span><span class="info-value">{{documento.data}}</span></div>
+                <div class="info-row"><span class="info-label">Scadenza:</span><span class="info-value">{{documento.scadenza}}</span></div>
+                <div class="info-row"><span class="info-label">Pagamento:</span><span class="info-value">{{documento.metodoPagamento}}</span></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="section">
+    <div class="section-title">Dettaglio</div>
+    <table>
+        <thead>
+            <tr><th>#</th><th>Descrizione</th><th>Qtà</th><th>Prezzo Unit.</th><th>IVA</th><th>Totale</th></tr>
+        </thead>
+        <tbody>
+            {{#each vociFattura}}
+            <tr>
+                <td>{{@index}}</td>
+                <td>{{this.descrizione}}</td>
+                <td>{{this.quantita}}</td>
+                <td style="text-align:right;">€ {{this.prezzoUnitario}}</td>
+                <td>{{this.aliquotaIva}}%</td>
+                <td style="text-align:right;">€ {{this.totale}}</td>
+            </tr>
+            {{/each}}
+        </tbody>
+    </table>
+
+    <table class="totals-table">
+        <tr><td>Imponibile:</td><td>€ {{fattura.imponibile}}</td></tr>
+        <tr><td>IVA:</td><td>€ {{fattura.iva}}</td></tr>
+        {{#if fattura.bollo}}<tr><td>Bollo:</td><td>€ {{fattura.bollo}}</td></tr>{{/if}}
+        <tr class="total-row"><td>TOTALE:</td><td>€ {{fattura.totale}}</td></tr>
+    </table>
+</div>
+
+<div class="section">
+    <div class="content-box" style="font-size:8pt; color:#64748b;">
+        Contributo INPS: ove applicabile. Operazione in regime forfettario ex art. 1, commi 54-89, Legge 190/2014 — non soggetta a ritenuta d'acconto.
+    </div>
+</div>
+${makeFooter('Fattura')}
+</body></html>`;
+
+// ============================================================================
+// DEFAULT TEMPLATES DEFINITION
+// ============================================================================
+
+const DEFAULT_TEMPLATES = [
+    // === FORMAZIONE (ElementSicurezza) ===
+    {
+        name: 'Lettera di Incarico — Standard',
+        type: 'LETTER_OF_ENGAGEMENT',
+        content: LETTER_OF_ENGAGEMENT_CONTENT,
+        description: 'Template predefinito per lettere di incarico docente. Usa placeholder per dati corso, docente e organizzazione.',
+        isDefault: true,
+        fileFormat: 'HTML',
+        category: 'formazione',
+        tags: ['formazione', 'incarico', 'docente', 'predefinito']
+    },
+    {
+        name: 'Registro Presenze — Standard',
+        type: 'ATTENDANCE_REGISTER',
+        content: ATTENDANCE_REGISTER_CONTENT,
+        description: 'Template predefinito per registro presenze. Include tabella partecipanti con firma ingresso/uscita.',
+        isDefault: true,
+        fileFormat: 'HTML',
+        category: 'formazione',
+        tags: ['formazione', 'presenze', 'registro', 'predefinito']
+    },
+    {
+        name: 'Programma Corso — Standard',
+        type: 'COURSE_PROGRAM',
+        content: COURSE_PROGRAM_CONTENT,
+        description: 'Template predefinito per programma corso. Include moduli, calendario sessioni e obiettivi formativi.',
+        isDefault: true,
+        fileFormat: 'HTML',
+        category: 'formazione',
+        tags: ['formazione', 'programma', 'corso', 'predefinito']
+    },
+    // === CLINICA (ElementMedica) ===
+    {
+        name: 'Referto Visita Medica — Standard',
+        type: 'VISITA_MEDICA',
+        content: VISITA_MEDICA_CONTENT,
+        description: 'Template predefinito per referto visita medica. Include sezioni anamnesi, esame obiettivo, diagnosi, terapia e follow-up.',
+        isDefault: true,
+        fileFormat: 'HTML',
+        category: 'clinica',
+        tags: ['clinica', 'visita', 'referto', 'medica', 'predefinito']
+    },
+    {
+        name: 'Giudizio di Idoneità MDL — Standard',
+        type: 'GIUDIZIO_IDONEITA',
+        content: GIUDIZIO_IDONEITA_MDL_CONTENT,
+        description: 'Template predefinito per giudizio di idoneità alla mansione specifica (Medicina del Lavoro). Conforme D.Lgs. 81/08 art. 41 c.6. Include sezioni: giudizio, prescrizioni, limitazioni, periodicità sorveglianza, firme medico competente e lavoratore.',
+        isDefault: true,
+        fileFormat: 'HTML',
+        category: 'clinica',
+        tags: ['clinica', 'mdl', 'medicina del lavoro', 'giudizio', 'idoneità', 'predefinito']
+    },
+    // === BOTH ===
+    {
+        name: 'Attestato di Formazione — Standard',
+        type: 'CERTIFICATE',
+        content: CERTIFICATE_CONTENT,
+        description: 'Template predefinito per attestati e certificati. Layout formale con bordo decorativo.',
+        isDefault: true,
+        fileFormat: 'HTML',
+        category: 'entrambi',
+        tags: ['attestato', 'certificato', 'formazione', 'predefinito']
+    },
+    {
+        name: 'Preventivo — Standard',
+        type: 'PREVENTIVO',
+        content: PREVENTIVO_CONTENT,
+        description: 'Template predefinito per preventivi. Include tabella servizi, totali e condizioni.',
+        isDefault: true,
+        fileFormat: 'HTML',
+        category: 'entrambi',
+        tags: ['preventivo', 'offerta', 'predefinito']
+    },
+    {
+        name: 'Fattura — Standard',
+        type: 'INVOICE',
+        content: INVOICE_CONTENT,
+        description: 'Template predefinito per fatture. Include dettaglio voci, IVA e totali.',
+        isDefault: true,
+        fileFormat: 'HTML',
+        category: 'entrambi',
+        tags: ['fattura', 'invoice', 'contabilità', 'predefinito']
+    }
+];
+
+// ============================================================================
+// SERVICE CLASS
+// ============================================================================
+
+class DefaultTemplateService {
+
+    /**
+     * Crea tutti i template predefiniti per un nuovo tenant.
+     * Chiamato da TenantService.createTenant() dopo la creazione del tenant.
+     * 
+     * @param {string} tenantId - ID del tenant appena creato
+     * @returns {Promise<Object>} Risultato con numero template creati
+     */
+    static async createDefaultTemplates(tenantId) {
+        const results = { created: 0, skipped: 0, errors: [] };
+
+        try {
+            logger.info({ tenantId }, 'Creazione template predefiniti per nuovo tenant');
+
+            for (const templateDef of DEFAULT_TEMPLATES) {
+                try {
+                    // Verifica se esiste già un template dello stesso tipo (idempotente)
+                    const existing = await prisma.templateLink.findFirst({
+                        where: {
+                            tenantId,
+                            type: templateDef.type,
+                            isDefault: true,
+                            deletedAt: null
+                        }
+                    });
+
+                    if (existing) {
+                        results.skipped++;
+                        continue;
+                    }
+
+                    await prisma.templateLink.create({
+                        data: {
+                            name: templateDef.name,
+                            type: templateDef.type,
+                            url: '',
+                            content: templateDef.content,
+                            description: templateDef.description,
+                            isDefault: templateDef.isDefault,
+                            isActive: true,
+                            fileFormat: templateDef.fileFormat,
+                            category: templateDef.category,
+                            tags: templateDef.tags,
+                            tenantId,
+                            version: 1
+                        }
+                    });
+
+                    results.created++;
+                } catch (templateError) {
+                    results.errors.push({
+                        type: templateDef.type,
+                        error: templateError.message
+                    });
+                    logger.error({
+                        tenantId,
+                        templateType: templateDef.type,
+                        error: templateError.message
+                    }, 'Errore creazione template predefinito');
+                }
+            }
+
+            logger.info({
+                tenantId,
+                created: results.created,
+                skipped: results.skipped,
+                errors: results.errors.length
+            }, 'Template predefiniti creati');
+
+            return results;
+        } catch (error) {
+            logger.error({ tenantId, error: error.message }, 'Errore creazione template predefiniti');
+            throw error;
+        }
+    }
+
+    /**
+     * Crea template predefiniti per un tenant esistente (se mancanti).
+     * Utile per migrazioni e per aggiungere template a tenant già esistenti.
+     * 
+     * @param {string} tenantId - ID del tenant
+     * @returns {Promise<Object>} Risultato con numero template creati/skippati
+     */
+    static async ensureDefaultTemplates(tenantId) {
+        return this.createDefaultTemplates(tenantId);
+    }
+
+    /**
+     * Crea template predefiniti per TUTTI i tenant attivi.
+     * Utile per migrazioni batch.
+     * 
+     * @returns {Promise<Object>} Risultato aggregato
+     */
+    static async seedAllTenants() {
+        const tenants = await prisma.tenant.findMany({
+            where: { isActive: true, deletedAt: null },
+            select: { id: true, name: true }
+        });
+
+        const results = { tenants: 0, totalCreated: 0, totalSkipped: 0, errors: [] };
+
+        for (const tenant of tenants) {
+            try {
+                const result = await this.createDefaultTemplates(tenant.id);
+                results.tenants++;
+                results.totalCreated += result.created;
+                results.totalSkipped += result.skipped;
+                if (result.errors.length > 0) {
+                    results.errors.push({ tenantId: tenant.id, tenantName: tenant.name, errors: result.errors });
+                }
+            } catch (error) {
+                results.errors.push({ tenantId: tenant.id, tenantName: tenant.name, error: error.message });
+            }
+        }
+
+        logger.info(results, 'Seed template predefiniti completato per tutti i tenant');
+        return results;
+    }
+
+    /**
+     * Aggiorna i template predefiniti di un tenant con il contenuto più recente.
+     * Aggiorna SOLO i template con isDefault=true per non sovrascrivere personalizzazioni.
+     * Incrementa la versione ad ogni aggiornamento.
+     *
+     * @param {string} tenantId - ID del tenant
+     * @returns {Promise<Object>} Risultato con numero template aggiornati
+     */
+    static async updateDefaultTemplates(tenantId) {
+        const results = { updated: 0, skipped: 0, errors: [] };
+
+        try {
+            logger.info({ tenantId }, 'Aggiornamento template predefiniti');
+
+            for (const templateDef of DEFAULT_TEMPLATES) {
+                try {
+                    const existing = await prisma.templateLink.findFirst({
+                        where: {
+                            tenantId,
+                            type: templateDef.type,
+                            isDefault: true,
+                            deletedAt: null
+                        }
+                    });
+
+                    if (!existing) {
+                        // Non esiste: crealo
+                        await prisma.templateLink.create({
+                            data: {
+                                name: templateDef.name,
+                                type: templateDef.type,
+                                url: '',
+                                content: templateDef.content,
+                                description: templateDef.description,
+                                isDefault: templateDef.isDefault,
+                                isActive: true,
+                                fileFormat: templateDef.fileFormat,
+                                category: templateDef.category,
+                                tags: templateDef.tags,
+                                tenantId,
+                                version: 1
+                            }
+                        });
+                        results.updated++;
+                        continue;
+                    }
+
+                    // Rispetta contenuti personalizzati (canvas/slide, htmlEditor)
+                    // Se il contenuto è JSON custom, non sovrascrivere con HTML hardcoded
+                    const trimmedContent = (existing.content || '').trim();
+                    const isCustomFormat = trimmedContent.startsWith('{') || trimmedContent.startsWith('[');
+                    if (isCustomFormat) {
+                        results.skipped++;
+                        logger.debug({ tenantId, type: templateDef.type }, 'Template con formato personalizzato, skip aggiornamento');
+                        continue;
+                    }
+
+                    // Aggiorna solo se il contenuto HTML è diverso dal default attuale
+                    if (existing.content === templateDef.content) {
+                        results.skipped++;
+                        continue;
+                    }
+
+                    await prisma.templateLink.update({
+                        where: { id: existing.id },
+                        data: {
+                            content: templateDef.content,
+                            version: (existing.version || 1) + 1,
+                            updatedAt: new Date()
+                        }
+                    });
+
+                    results.updated++;
+                } catch (templateError) {
+                    results.errors.push({
+                        type: templateDef.type,
+                        error: templateError.message
+                    });
+                    logger.error({
+                        tenantId,
+                        templateType: templateDef.type,
+                        error: templateError.message
+                    }, 'Errore aggiornamento template predefinito');
+                }
+            }
+
+            logger.info({
+                tenantId,
+                updated: results.updated,
+                skipped: results.skipped,
+                errors: results.errors.length
+            }, 'Template predefiniti aggiornati');
+
+            return results;
+        } catch (error) {
+            logger.error({ tenantId, error: error.message }, 'Errore aggiornamento template predefiniti');
+            throw error;
+        }
+    }
+
+    /**
+     * Verifica e crea template predefiniti mancanti per TUTTI i tenant attivi.
+     * NON sovrascrive template esistenti (sicuro per custom content).
+     * Chiamato all'avvio del server.
+     *
+     * @returns {Promise<Object>} Risultato aggregato
+     */
+    static async ensureAllTenants() {
+        const tenants = await prisma.tenant.findMany({
+            where: { isActive: true, deletedAt: null },
+            select: { id: true, name: true }
+        });
+
+        const results = { tenants: 0, totalCreated: 0, totalSkipped: 0, errors: [] };
+
+        for (const tenant of tenants) {
+            try {
+                const result = await this.ensureDefaultTemplates(tenant.id);
+                results.tenants++;
+                results.totalCreated += result.created;
+                results.totalSkipped += result.skipped;
+            } catch (error) {
+                results.errors.push({ tenantId: tenant.id, tenantName: tenant.name, error: error.message });
+            }
+        }
+
+        logger.info(results, 'Verifica template predefiniti completata per tutti i tenant');
+        return results;
+    }
+
+    /**
+     * Aggiorna template predefiniti per TUTTI i tenant attivi.
+     * Da usare MANUALMENTE dopo aggiornamenti al codice dei template.
+     * Rispetta contenuti personalizzati (canvas/slide, htmlEditor).
+     *
+     * @returns {Promise<Object>} Risultato aggregato
+     */
+    static async updateAllTenants() {
+        const tenants = await prisma.tenant.findMany({
+            where: { isActive: true, deletedAt: null },
+            select: { id: true, name: true }
+        });
+
+        const results = { tenants: 0, totalUpdated: 0, totalSkipped: 0, errors: [] };
+
+        for (const tenant of tenants) {
+            try {
+                const result = await this.updateDefaultTemplates(tenant.id);
+                results.tenants++;
+                results.totalUpdated += result.updated;
+                results.totalSkipped += result.skipped;
+                if (result.errors.length > 0) {
+                    results.errors.push({ tenantId: tenant.id, tenantName: tenant.name, errors: result.errors });
+                }
+            } catch (error) {
+                results.errors.push({ tenantId: tenant.id, tenantName: tenant.name, error: error.message });
+            }
+        }
+
+        logger.info(results, 'Aggiornamento template predefiniti completato per tutti i tenant');
+        return results;
+    }
+
+    /**
+     * Restituisce la definizione dei template predefiniti (senza contenuto).
+     * Utile per UI di gestione.
+     */
+    static getTemplateDefinitions() {
+        return DEFAULT_TEMPLATES.map(t => ({
+            name: t.name,
+            type: t.type,
+            description: t.description,
+            category: t.category,
+            tags: t.tags
+        }));
+    }
+}
+
+export default DefaultTemplateService;

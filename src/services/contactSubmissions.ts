@@ -28,15 +28,12 @@ export interface ContactSubmissionResponse {
  */
 export const submitContactForm = async (data: ContactSubmissionData): Promise<ContactSubmissionResponse> => {
   try {
-    console.log('📤 Invio contact form:', data);
-
     // Usa l'endpoint pubblico per le submissions dai form pubblici
     const response = await apiPost<ContactSubmissionResponse>('/api/public/contact-submissions', {
       requestType: 'info', // Default type
       ...data
     });
 
-    console.log('✅ Contact form inviato con successo:', response);
     return response;
   } catch (error: unknown) {
     console.error('❌ Errore invio contact form:', error);
@@ -54,7 +51,7 @@ export const submitContactForm = async (data: ContactSubmissionData): Promise<Co
 
       // Gestione per errori di validazione
       if (error.response?.status === 400) {
-        const errorMessage = error.response?.data?.message || 'Dati non validi';
+        const errorMessage = 'Dati non validi';
         throw new Error(errorMessage);
       }
 

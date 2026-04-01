@@ -83,7 +83,7 @@ export function validateField(
           });
         }
       } catch (e) {
-        console.error('Invalid regex pattern:', validation.pattern);
+        if (import.meta.env.DEV) console.error('Invalid regex pattern:', validation.pattern);
       }
     }
   }
@@ -91,7 +91,7 @@ export function validateField(
   // Numeric validations
   if (fieldType === 'number' || fieldType === 'NUMBER') {
     const numValue = Number(value);
-    
+
     if (isNaN(numValue)) {
       errors.push({
         field: fieldName,
@@ -122,7 +122,7 @@ export function validateField(
   // Date validations
   if (fieldType === 'date' || fieldType === 'DATE') {
     const dateValue = new Date(value);
-    
+
     if (isNaN(dateValue.getTime())) {
       errors.push({
         field: fieldName,
@@ -227,20 +227,20 @@ export function validateField(
     }
   }
 
-  // Custom validation function (if provided)
+  // Custom validation pattern (R26: sostituito new Function() con regex sicura)
+  // customValidation è un pattern regex — MAI codice JS arbitrario
   if (validation.customValidation) {
     try {
-      const customFn = new Function('value', validation.customValidation);
-      const result = customFn(value);
-      if (result !== true && typeof result === 'string') {
+      const regex = new RegExp(validation.customValidation);
+      if (!regex.test(String(value))) {
         errors.push({
           field: fieldName,
-          message: result,
+          message: validation.patternMessage ?? `${fieldLabel} non è nel formato corretto`,
           rule: 'custom'
         });
       }
     } catch (e) {
-      console.error('Custom validation error:', e);
+      // Regex non valida nel template — skip silenzioso
     }
   }
 
@@ -288,19 +288,19 @@ function isValueEmpty(value: any): boolean {
   if (value === null || value === undefined) {
     return true;
   }
-  
+
   if (typeof value === 'string') {
     return value.trim() === '';
   }
-  
+
   if (Array.isArray(value)) {
     return value.length === 0;
   }
-  
+
   if (typeof value === 'object') {
     return Object.keys(value).length === 0;
   }
-  
+
   return false;
 }
 

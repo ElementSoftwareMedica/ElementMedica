@@ -1,11 +1,12 @@
 import express from 'express';
 const router = express.Router();
 import logger from '../utils/logger.js';
+import prisma from '../config/prisma-optimization.js';
 import tenantService from '../services/tenantService.js';
 import enhancedRoleService from '../services/enhancedRoleService.js';
-import { tenantMiddleware, validateUserTenant, requireSuperAdmin } from '../middleware/tenant.js';
-import middleware from '../auth/middleware.js';
-const { authenticate: authenticateToken } = middleware;
+import { tenantMiddleware, validateUserTenant, requireSuperAdmin, isAdminOrSuperAdmin } from '../middleware/tenant.js';
+import { authenticate } from '../middleware/auth.js';
+const authenticateToken = authenticate;
 
 /**
  * Routes per la gestione dei tenant
@@ -13,7 +14,7 @@ const { authenticate: authenticateToken } = middleware;
  */
 
 // Middleware di autenticazione per tutte le routes
-router.use(authenticateToken());
+router.use(authenticateToken);
 
 /**
  * @route GET /api/tenants
@@ -44,8 +45,8 @@ router.get('/', requireSuperAdmin, async (req, res) => {
     logger.error({ component: 'tenants', error: error.message }, 'Error listing tenants');
     res.status(500).json({
       success: false,
-      error: 'Failed to list tenants',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      error: 'Errore nel recupero dei tenant',
+
     });
   }
 });
@@ -57,13 +58,13 @@ router.get('/', requireSuperAdmin, async (req, res) => {
  */
 router.post('/', requireSuperAdmin, async (req, res) => {
   try {
-    const { name, slug, domain, settings, billingPlan, enabledFeatures } = req.body;
+    const { name, slug, domain, settings, billingPlan, enabledFeatures, companyData, adminData, secretaryAccounts } = req.body;
 
     // Validazione input
     if (!name || !slug) {
       return res.status(400).json({
         success: false,
-        error: 'Name and slug are required'
+        error: 'Nome e slug sono obbligatori'
       });
     }
 
@@ -72,8 +73,83 @@ router.post('/', requireSuperAdmin, async (req, res) => {
     if (!slugRegex.test(slug)) {
       return res.status(400).json({
         success: false,
-        error: 'Slug must contain only lowercase letters, numbers, and hyphens'
+        error: 'Lo slug può contenere solo lettere minuscole, numeri e trattini'
       });
+    }
+
+    // Validazione adminData se fornito
+    if (adminData) {
+      if (!adminData.firstName || !adminData.lastName || !adminData.email || !adminData.password) {
+        return res.status(400).json({
+          success: false,
+          error: 'I dati amministratore richiedono: firstName, lastName, email, password'
+        });
+      }
+      // Password complexity: min 8 chars, almeno 1 maiuscola, 1 minuscola, 1 numero
+      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+      if (!passwordRegex.test(adminData.password)) {
+        return res.status(400).json({
+          success: false,
+          error: 'La password deve avere almeno 8 caratteri, una maiuscola, una minuscola e un numero'
+        });
+      }
+      // Email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(adminData.email)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Formato email amministratore non valido'
+        });
+      }
+      // TaxCode validation if provided
+      if (adminData.taxCode && !/^[A-Z0-9]{16}$/i.test(adminData.taxCode)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Formato Codice Fiscale amministratore non valido'
+        });
+      }
+    }
+
+    // Validazione secretaryAccounts se forniti
+    if (secretaryAccounts && Array.isArray(secretaryAccounts)) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+      for (const secretary of secretaryAccounts) {
+        if (!secretary.firstName || !secretary.lastName || !secretary.email || !secretary.password) {
+          return res.status(400).json({
+            success: false,
+            error: 'Ogni account segreteria richiede: firstName, lastName, email, password'
+          });
+        }
+        if (!emailRegex.test(secretary.email)) {
+          return res.status(400).json({
+            success: false,
+            error: 'Formato email account segreteria non valido'
+          });
+        }
+        if (!passwordRegex.test(secretary.password)) {
+          return res.status(400).json({
+            success: false,
+            error: 'La password segreteria deve avere almeno 8 caratteri, una maiuscola, una minuscola e un numero'
+          });
+        }
+      }
+    }
+
+    // Validazione companyData se fornito
+    if (companyData) {
+      if (companyData.piva && !/^[0-9]{11}$/.test(companyData.piva)) {
+        return res.status(400).json({ success: false, error: 'La Partita IVA deve essere di 11 cifre' });
+      }
+      if (companyData.codiceFiscale && !/^[A-Z0-9]{11,16}$/i.test(companyData.codiceFiscale)) {
+        return res.status(400).json({ success: false, error: 'Formato Codice Fiscale azienda non valido' });
+      }
+      if (companyData.sedeLegaleCap && !/^[0-9]{5}$/.test(companyData.sedeLegaleCap)) {
+        return res.status(400).json({ success: false, error: 'Il CAP deve essere di 5 cifre' });
+      }
+      if (companyData.sdi && !/^[A-Z0-9]{7}$/i.test(companyData.sdi)) {
+        return res.status(400).json({ success: false, error: 'Il codice SDI deve essere di 7 caratteri' });
+      }
     }
 
     const tenant = await tenantService.createTenant({
@@ -82,7 +158,10 @@ router.post('/', requireSuperAdmin, async (req, res) => {
       domain,
       settings,
       billingPlan,
-      enabledFeatures
+      enabledFeatures,
+      companyData,
+      adminData,
+      secretaryAccounts: secretaryAccounts || []
     });
 
     res.status(201).json({
@@ -91,19 +170,11 @@ router.post('/', requireSuperAdmin, async (req, res) => {
       message: 'Tenant created successfully'
     });
   } catch (error) {
-    logger.error({ component: 'tenants', error: error.message }, 'Error creating tenant');
-
-    if (error.message.includes('already exists')) {
-      return res.status(409).json({
-        success: false,
-        error: error.message
-      });
-    }
+    logger.error({ component: 'tenants', action: 'createTenant', userId: req.person?.id, error: error.message }, 'Error creating tenant');
 
     res.status(500).json({
       success: false,
-      error: 'Failed to create tenant',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      error: 'Errore nella creazione del tenant'
     });
   }
 });
@@ -156,10 +227,10 @@ router.get('/current', tenantMiddleware, validateUserTenant, async (req, res) =>
       }
     });
   } catch (error) {
-    logger.error({ component: 'tenants', error: error.message, stack: error.stack }, 'Error getting current tenant');
+    logger.error({ component: 'tenants', error: 'Operazione non riuscita', stack: error.stack }, 'Error getting current tenant');
     res.status(500).json({
       success: false,
-      error: 'Failed to get tenant information'
+      error: 'Errore nel recupero delle informazioni tenant'
     });
   }
 });
@@ -174,11 +245,11 @@ router.get('/:id', async (req, res) => {
     const { id } = req.params;
     const user = req.person;
 
-    // Verifica permessi
-    if (user.globalRole !== 'SUPER_ADMIN' && user.companyId !== id) {
+    // Verifica permessi — ADMIN e SUPER_ADMIN possono accedere a tutti i tenant
+    if (!isAdminOrSuperAdmin(user) && user.tenantId !== id) {
       return res.status(403).json({
         success: false,
-        error: 'Access denied'
+        error: 'Accesso negato'
       });
     }
 
@@ -187,13 +258,13 @@ router.get('/:id', async (req, res) => {
     if (!tenant) {
       return res.status(404).json({
         success: false,
-        error: 'Tenant not found'
+        error: 'Tenant non trovato'
       });
     }
 
     // Ottieni statistiche se autorizzato
     let stats = null;
-    if (user.globalRole === 'SUPER_ADMIN' || user.companyId === id) {
+    if (isAdminOrSuperAdmin(user) || user.tenantId === id) {
       stats = await tenantService.getTenantStats(id);
     }
 
@@ -208,7 +279,7 @@ router.get('/:id', async (req, res) => {
     logger.error({ component: 'tenants', error: error.message }, 'Error getting tenant');
     res.status(500).json({
       success: false,
-      error: 'Failed to get tenant'
+      error: 'Errore nel recupero del tenant'
     });
   }
 });
@@ -222,22 +293,23 @@ router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const user = req.person;
-    const updateData = req.body;
+    let updateData = req.body;
 
     // Verifica permessi
-    const isSuperAdmin = user.globalRole === 'SUPER_ADMIN';
-    const isTenantAdmin = user.companyId === id &&
-      await enhancedRoleService.hasPermission(user.id, 'companies.update', { tenantId: id });
+    const isAdmin = isAdminOrSuperAdmin(user);
+    // Short-circuit: skip hasPermission call when user is already a global admin
+    const isTenantAdmin = !isAdmin && user.tenantId === id &&
+      await enhancedRoleService.hasPermission(user.id, 'tenants:update', { tenantId: id });
 
-    if (!isSuperAdmin && !isTenantAdmin) {
+    if (!isAdmin && !isTenantAdmin) {
       return res.status(403).json({
         success: false,
-        error: 'Access denied'
+        error: 'Accesso negato'
       });
     }
 
     // Limita i campi che possono essere modificati da tenant admin
-    if (!isSuperAdmin) {
+    if (!isAdmin) {
       const allowedFields = ['name', 'settings'];
       const filteredData = {};
       allowedFields.forEach(field => {
@@ -253,21 +325,36 @@ router.put('/:id', async (req, res) => {
     res.json({
       success: true,
       data: updatedTenant,
-      message: 'Tenant updated successfully'
+      message: 'Tenant aggiornato con successo'
     });
   } catch (error) {
-    logger.error({ component: 'tenants', error: error.message }, 'Error updating tenant');
+    logger.error({ component: 'tenants', action: 'updateTenant', tenantId: req.params.id, userId: req.person?.id, error: error.message, stack: error.stack }, 'Error updating tenant');
 
     if (error.message.includes('already exists')) {
       return res.status(409).json({
         success: false,
-        error: error.message
+        error: 'Errore interno del server'
+      });
+    }
+
+    // Prisma P2025: record non trovato
+    if (error.code === 'P2025' || error.message?.includes('Record to update not found')) {
+      return res.status(404).json({
+        success: false,
+        error: 'Tenant non trovato'
+      });
+    }
+
+    if (error.message === 'Nessun campo da aggiornare fornito') {
+      return res.status(400).json({
+        success: false,
+        error: 'Nessun campo da aggiornare'
       });
     }
 
     res.status(500).json({
       success: false,
-      error: 'Failed to update tenant'
+      error: 'Errore nell\'aggiornamento del tenant'
     });
   }
 });
@@ -291,7 +378,7 @@ router.delete('/:id', requireSuperAdmin, async (req, res) => {
     logger.error({ component: 'tenants', error: error.message }, 'Error deleting tenant');
     res.status(500).json({
       success: false,
-      error: 'Failed to delete tenant'
+      error: 'Errore nell\'eliminazione del tenant'
     });
   }
 });
@@ -307,10 +394,10 @@ router.get('/:id/stats', async (req, res) => {
     const user = req.person;
 
     // Verifica permessi
-    if (user.globalRole !== 'SUPER_ADMIN' && user.companyId !== id) {
+    if (!isAdminOrSuperAdmin(user) && user.tenantId !== id) {
       return res.status(403).json({
         success: false,
-        error: 'Access denied'
+        error: 'Accesso negato'
       });
     }
 
@@ -332,8 +419,75 @@ router.get('/:id/stats', async (req, res) => {
     logger.error({ component: 'tenants', error: error.message }, 'Error getting tenant stats');
     res.status(500).json({
       success: false,
-      error: 'Failed to get tenant statistics'
+      error: 'Errore nel recupero delle statistiche del tenant'
     });
+  }
+});
+
+/**
+ * @route GET /api/tenants/:id/features
+ * @desc Ottiene le feature flags di un tenant
+ * @access Super Admin or Tenant Admin
+ */
+router.get('/:id/features', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = req.person;
+
+    if (!isAdminOrSuperAdmin(user) && user.tenantId !== id) {
+      return res.status(403).json({ success: false, error: 'Accesso negato' });
+    }
+
+    const features = await prisma.tenantFeature.findMany({
+      where: { tenantId: id, deletedAt: null },
+      orderBy: { featureKey: 'asc' }
+    });
+
+    res.json({ success: true, data: features });
+  } catch (error) {
+    logger.error({ component: 'tenants', error: error.message }, 'Errore recupero features tenant');
+    res.status(500).json({ success: false, error: 'Errore nel recupero delle features' });
+  }
+});
+
+/**
+ * @route PUT /api/tenants/:id/features/:featureKey
+ * @desc Abilita/disabilita una feature per un tenant
+ * @access Super Admin only
+ */
+router.put('/:id/features/:featureKey', requireSuperAdmin, async (req, res) => {
+  try {
+    const { id, featureKey } = req.params;
+    const { isEnabled, config, validUntil, usageLimit, notes } = req.body;
+
+    const feature = await prisma.tenantFeature.upsert({
+      where: { tenantId_featureKey: { tenantId: id, featureKey } },
+      update: {
+        isEnabled: isEnabled ?? true,
+        ...(config !== undefined && { config }),
+        ...(validUntil !== undefined && { validUntil: validUntil ? new Date(validUntil) : null }),
+        ...(usageLimit !== undefined && { usageLimit }),
+        ...(notes !== undefined && { notes }),
+        enabledBy: req.person.id,
+        enabledAt: new Date(),
+      },
+      create: {
+        tenantId: id,
+        featureKey,
+        isEnabled: isEnabled ?? true,
+        config: config || null,
+        validUntil: validUntil ? new Date(validUntil) : null,
+        usageLimit: usageLimit || null,
+        notes: notes || null,
+        enabledBy: req.person.id,
+        enabledAt: new Date(),
+      }
+    });
+
+    res.json({ success: true, data: feature });
+  } catch (error) {
+    logger.error({ component: 'tenants', error: error.message }, 'Errore aggiornamento feature tenant');
+    res.status(500).json({ success: false, error: 'Errore nell\'aggiornamento della feature' });
   }
 });
 
@@ -373,7 +527,7 @@ router.post('/:id/users/:personId/roles',
       logger.error({ component: 'tenants', error: error.message }, 'Error assigning role');
       res.status(500).json({
         success: false,
-        error: 'Failed to assign role'
+        error: 'Errore nell\'assegnazione del ruolo'
       });
     }
   }
@@ -413,7 +567,7 @@ router.delete('/:id/users/:personId/roles/:roleType',
       logger.error({ component: 'tenants', error: error.message }, 'Error removing role');
       res.status(500).json({
         success: false,
-        error: 'Failed to remove role'
+        error: 'Errore nell\'eliminazione del ruolo'
       });
     }
   }
@@ -436,7 +590,7 @@ router.get('/:id/users/:personId/roles', async (req, res) => {
     if (!canView) {
       return res.status(403).json({
         success: false,
-        error: 'Access denied'
+        error: 'Accesso negato'
       });
     }
 
@@ -454,7 +608,7 @@ router.get('/:id/users/:personId/roles', async (req, res) => {
     logger.error({ component: 'tenants', error: error.message }, 'Error getting user roles');
     res.status(500).json({
       success: false,
-      error: 'Failed to get user roles'
+      error: 'Errore nel recupero dei ruoli utente'
     });
   }
 });

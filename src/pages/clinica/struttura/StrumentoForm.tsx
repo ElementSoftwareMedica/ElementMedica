@@ -42,6 +42,8 @@ import {
 import { strumentiApi, ambulatoriApi } from '../../../services/clinicaApi';
 import type { Strumento, Ambulatorio } from '../../../services/clinicaApi';
 import { useToast } from '../../../hooks/useToast';
+import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
+import { DatePickerElegante } from '../../../components/ui/DatePickerElegante';
 
 // Import Element Medica theme
 import '../../../styles/clinica-theme.css';
@@ -132,6 +134,7 @@ const StrumentoForm: React.FC = () => {
     const [searchParams] = useSearchParams();
     const queryClient = useQueryClient();
     const { showToast } = useToast();
+    const { confirmWarning } = useConfirmDialog();
     const isEditing = Boolean(id);
 
     // Get ambulatorioId from URL params if present
@@ -211,7 +214,7 @@ const StrumentoForm: React.FC = () => {
             navigate('/poliambulatorio/strumenti');
         },
         onError: (error: Error) => {
-            showToast({ type: 'error', message: error.message || 'Errore durante la creazione' });
+            showToast({ type: 'error', message: 'Errore durante la creazione' });
         }
     });
 
@@ -224,7 +227,7 @@ const StrumentoForm: React.FC = () => {
             navigate('/poliambulatorio/strumenti');
         },
         onError: (error: Error) => {
-            showToast({ type: 'error', message: error.message || 'Errore durante l\'aggiornamento' });
+            showToast({ type: 'error', message: 'Errore durante l\'aggiornamento' });
         }
     });
 
@@ -327,8 +330,8 @@ const StrumentoForm: React.FC = () => {
         }
     };
 
-    const handleCancel = () => {
-        if (isDirty && !confirm('Hai modifiche non salvate. Sei sicuro di voler uscire?')) {
+    const handleCancel = async () => {
+        if (isDirty && !(await confirmWarning('Modifiche non salvate', 'Hai modifiche non salvate. Sei sicuro di voler uscire?'))) {
             return;
         }
         navigate('/poliambulatorio/strumenti');
@@ -570,12 +573,10 @@ const StrumentoForm: React.FC = () => {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                             <label className="label-clinica">Data Acquisto</label>
-                            <input
-                                type="date"
-                                name="dataAcquisto"
+                            <DatePickerElegante
                                 value={formData.dataAcquisto}
-                                onChange={handleChange}
-                                className={`input-clinica ${errors.dataAcquisto ? 'border-red-500' : ''}`}
+                                onChange={(date) => handleChange({ target: { name: 'dataAcquisto', value: date ? date.toISOString().split('T')[0] : '' } } as React.ChangeEvent<HTMLInputElement>)}
+                                theme="teal"
                             />
                             {errors.dataAcquisto && <p className="text-red-500 text-sm mt-1">{errors.dataAcquisto}</p>}
                         </div>
@@ -597,12 +598,10 @@ const StrumentoForm: React.FC = () => {
 
                         <div>
                             <label className="label-clinica">Fine Ammortamento</label>
-                            <input
-                                type="date"
-                                name="dataFineAmmortamento"
+                            <DatePickerElegante
                                 value={formData.dataFineAmmortamento}
-                                onChange={handleChange}
-                                className="input-clinica"
+                                onChange={(date) => handleChange({ target: { name: 'dataFineAmmortamento', value: date ? date.toISOString().split('T')[0] : '' } } as React.ChangeEvent<HTMLInputElement>)}
+                                theme="teal"
                             />
                         </div>
                     </div>
@@ -618,24 +617,20 @@ const StrumentoForm: React.FC = () => {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                             <label className="label-clinica">Ultima Manutenzione</label>
-                            <input
-                                type="date"
-                                name="ultimaManutenzione"
+                            <DatePickerElegante
                                 value={formData.ultimaManutenzione}
-                                onChange={handleChange}
-                                className={`input-clinica ${errors.ultimaManutenzione ? 'border-red-500' : ''}`}
+                                onChange={(date) => handleChange({ target: { name: 'ultimaManutenzione', value: date ? date.toISOString().split('T')[0] : '' } } as React.ChangeEvent<HTMLInputElement>)}
+                                theme="teal"
                             />
                             {errors.ultimaManutenzione && <p className="text-red-500 text-sm mt-1">{errors.ultimaManutenzione}</p>}
                         </div>
 
                         <div>
                             <label className="label-clinica">Prossima Manutenzione</label>
-                            <input
-                                type="date"
-                                name="prossimaManutenzione"
+                            <DatePickerElegante
                                 value={formData.prossimaManutenzione}
-                                onChange={handleChange}
-                                className="input-clinica"
+                                onChange={(date) => handleChange({ target: { name: 'prossimaManutenzione', value: date ? date.toISOString().split('T')[0] : '' } } as React.ChangeEvent<HTMLInputElement>)}
+                                theme="teal"
                             />
                             <p className="text-gray-500 text-xs mt-1">
                                 Alert automatico 30 giorni prima
@@ -668,23 +663,19 @@ const StrumentoForm: React.FC = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label className="label-clinica">Ultima Taratura</label>
-                            <input
-                                type="date"
-                                name="ultimaTaratura"
+                            <DatePickerElegante
                                 value={formData.ultimaTaratura}
-                                onChange={handleChange}
-                                className="input-clinica"
+                                onChange={(date) => handleChange({ target: { name: 'ultimaTaratura', value: date ? date.toISOString().split('T')[0] : '' } } as React.ChangeEvent<HTMLInputElement>)}
+                                theme="teal"
                             />
                         </div>
 
                         <div>
                             <label className="label-clinica">Prossima Taratura</label>
-                            <input
-                                type="date"
-                                name="prossimaTaratura"
+                            <DatePickerElegante
                                 value={formData.prossimaTaratura}
-                                onChange={handleChange}
-                                className="input-clinica"
+                                onChange={(date) => handleChange({ target: { name: 'prossimaTaratura', value: date ? date.toISOString().split('T')[0] : '' } } as React.ChangeEvent<HTMLInputElement>)}
+                                theme="teal"
                             />
                         </div>
                     </div>

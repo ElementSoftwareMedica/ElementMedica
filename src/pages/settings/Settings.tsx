@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import UsersTab from './UsersTab';
-import ActivityLogsTab from './ActivityLogsTab';
 import UserPreferences from './UserPreferences';
 import { useAuth } from '../../context/AuthContext';
 import { Settings as SettingsIcon } from 'lucide-react';
@@ -18,16 +17,19 @@ const Settings: React.FC = () => {
   // Determina quale tab è attivo dalla URL o usa il default
   const getActiveTab = () => {
     if (location.pathname.endsWith('/users')) return 'users';
-    if (location.pathname.endsWith('/logs')) return 'logs';
     return 'general';
   };
 
   const [activeTab, setActiveTab] = useState(getActiveTab());
 
   // Redirect da /settings a /settings/users se non c'è tab selezionato
+  // Redirect /settings/logs → /management/logs (tab rimosso, i log sono in Management)
   useEffect(() => {
     if (location.pathname === '/settings' || location.pathname === '/settings/') {
       navigate('/settings/users', { replace: true });
+    }
+    if (location.pathname.endsWith('/logs')) {
+      navigate('/management/logs', { replace: true });
     }
   }, [location.pathname, navigate]);
 
@@ -45,10 +47,7 @@ const Settings: React.FC = () => {
   if (hasPermission('users', 'read')) {
     tabs.push({ id: 'users', label: 'Utenti' });
   }
-
-  if (hasPermission('logs', 'read')) {
-    tabs.push({ id: 'logs', label: 'Log Attività' });
-  }
+  // Nota: il tab "Log Attività" è stato rimosso — i log si trovano in Management → Log Attività
 
   return (
     <div className="container px-4 mx-auto py-6">
@@ -72,8 +71,6 @@ const Settings: React.FC = () => {
           {activeTab === 'general' && <UserPreferences />}
 
           {activeTab === 'users' && hasPermission('users', 'read') && <UsersTab />}
-
-          {activeTab === 'logs' && hasPermission('logs', 'read') && <ActivityLogsTab />}
         </div>
       </div>
     </div>

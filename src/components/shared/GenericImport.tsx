@@ -113,19 +113,7 @@ export default function GenericImport<T extends Record<string, any>>({
    * Sync preview data with initialPreviewData prop
    */
   useEffect(() => {
-    console.log('🔄 GenericImport useEffect triggered - initialPreviewData:', initialPreviewData?.length || 0, 'elementi');
-    
     if (initialPreviewData !== undefined) {
-      console.log('🔄 GenericImport: Aggiornamento previewData da initialPreviewData:', initialPreviewData.length, 'elementi');
-      console.log('📊 GenericImport: Primo elemento:', initialPreviewData[0]);
-      console.log('🏢 GenericImport: Aziende assegnate:', initialPreviewData.filter((item: any) => item.companyId || item.company_name).length);
-      console.log('🔍 GenericImport: Dettaglio aziende:', initialPreviewData.slice(0, 3).map((item: any) => ({ 
-        nome: item.nome, 
-        cognome: item.cognome, 
-        company_name: item.company_name, 
-        companyId: item.companyId,
-        _assignedCompany: item._assignedCompany 
-      })));
       setPreviewData([...initialPreviewData]); // Force re-render with new copy
     }
   }, [initialPreviewData, setPreviewData]);
@@ -139,46 +127,43 @@ export default function GenericImport<T extends Record<string, any>>({
       setImporting(false);
       return;
     }
-    
+
     // Pass all data - let custom function handle filtering
     const selectedEntities = entities;
-    
+
     // Verify rows are selected for import
     if (selectedRowsForImport.size === 0) {
       setError('Nessuna riga selezionata per l\'importazione');
       setImporting(false);
       return;
     }
-    
+
     setImporting(true);
     setError('');
-    
+
     try {
       const dataToProcess = [...selectedEntities];
       const idsToOverwrite = overwriteIds || [];
-      
+
       // Process and classify import data
       const { finalPayload } = processImportData(dataToProcess, idsToOverwrite);
-        
+
       try {
         // Pass selection info to custom function for flexible handling
         await onImport(finalPayload as T[], idsToOverwrite, selectedRowsForImport);
-      
+
         // Don't show success toast automatically - let parent component decide
         // This allows components to handle conflict modals or other interactions
-        
+
         // Don't close modal automatically - let parent component decide
         // This allows components to handle conflict modals or other interactions
-      } catch (error: any) {
-        let errorMessage = error?.message || "Errore durante l'importazione";
-        if (error?.response?.data?.message) {
-          errorMessage = error.response.data.message;
-        }
-        setError(`Errore durante l'importazione: ${errorMessage}`);
+      } catch (error: unknown) {
+        const errorMessage = "Errore durante l'importazione";
+        setError(errorMessage);
         toast.error(errorMessage);
       }
-    } catch (error: any) {
-      setError(`Errore imprevisto: ${error?.message || "Errore sconosciuto"}`);
+    } catch (error: unknown) {
+      setError("Errore imprevisto durante l'importazione");
     } finally {
       setImporting(false);
     }

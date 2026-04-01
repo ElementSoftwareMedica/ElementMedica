@@ -1,0 +1,285 @@
+// ============================================
+// PROGETTO 48 - NUOVI MODELLI PERSON
+// ============================================
+// Questo file contiene le nuove definizioni da sostituire
+// al modello Person esistente nello schema principale
+// ============================================
+
+// ============================================
+// 1. PersonCore - Identità Globale Immutabile
+// ============================================
+// Sostituisce Person per dati anagrafici statici e autenticazione
+// Mantiene lo stesso ID per preservare le relazioni FK
+
+model PersonCore {
+  id              String    @id @default(uuid())
+  
+  // === ANAGRAFICA IMMUTABILE ===
+  firstName       String    @db.VarChar(100)
+  lastName        String    @db.VarChar(100)
+  birthDate       DateTime? @db.Date
+  birthPlace      String?   @db.VarChar(100) // Comune di nascita (nuovo)
+  birthProvince   String?   @db.VarChar(2)   // Provincia nascita (nuovo)
+  gender          Gender?
+  
+  // === IDENTIFICATORI UNIVOCI GLOBALI ===
+  taxCode         String?   @unique @db.VarChar(16) // Codice Fiscale
+  vatNumber       String?   @unique @db.VarChar(11) // Partita IVA
+  
+  // === AUTENTICAZIONE (GLOBALE) ===
+  username        String?   @unique @db.VarChar(50)
+  password        String?   @db.VarChar(255)
+  lastLogin       DateTime? @db.Timestamp(6)
+  failedAttempts  Int       @default(0) @db.SmallInt
+  lockedUntil     DateTime? @db.Timestamp(6)
+  
+  // === GDPR GLOBALE ===
+  gdprConsentDate    DateTime? @db.Timestamp(6)
+  gdprConsentVersion String?   @db.VarChar(10)
+  dataRetentionUntil DateTime? @db.Date
+  
+  // === IMMAGINE PROFILO (opzionale: globale o per tenant) ===
+  profileImage    String?   @db.VarChar(500)
+  
+  // === METADATA ===
+  createdAt       DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt       DateTime  @updatedAt @db.Timestamp(6)
+  deletedAt       DateTime? @db.Timestamp(6) // Soft delete globale
+  
+  // === RELAZIONI ===
+  // Profili per tenant
+  tenantProfiles  PersonTenantProfile[]
+  
+  // Consensi condivisione cross-tenant
+  dataShareConsents PersonDataShareConsent[]
+  
+  // Relazioni esistenti (tutte quelle che avevano Person)
+  sitesAsMedicoCompetente              CompanySite[]                  @relation("SiteMedicoCompetente")
+  sitesAsRSPP                          CompanySite[]                  @relation("SiteRSPP")
+  consentRecords                       ConsentRecord[]
+  schedules                            CourseSchedule[]               @relation("ScheduleTrainer")
+  sessionsAsCoTrainer                  CourseSession[]                @relation("SessionCoTrainer")
+  sessionsAsTrainer                    CourseSession[]                @relation("SessionTrainer")
+  gdprAuditLogs                        GdprAuditLog[]
+  generatedDocuments                   GeneratedDocument[]            @relation("DocumentGenerator")
+  googleTokens                         GoogleTokens[]                 @relation("GoogleTokensUser")
+  repartiResponsabile                  Reparto[]                      @relation("RepartoResponsabile")
+  sopralluogiEseguiti                  Sopralluogo[]                  @relation("SopralluogoEsecutore")
+  createdTemplates                     TemplateLink[]                 @relation("TemplateCreator")
+  createdVersions                      TemplateVersion[]              @relation("VersionCreator")
+  activityLogs                         ActivityLog[]                  @relation("ActivityLog_Person")
+  attestati                            Attestato[]                    @relation("Attestato_Person")
+  codiciSconto                         CodicePersona[]                @relation("CodicePersona_Person")
+  assignedContactSubmissions           ContactSubmission[]
+  persons_contact_submissions_createdPersonIdTopersons ContactSubmission[] @relation("contact_submissions_createdPersonIdTopersons")
+  persons_contact_submissions_relatedPersonIdTopersons ContactSubmission[] @relation("contact_submissions_relatedPersonIdTopersons")
+  courseEnrollments                    CourseEnrollment[]             @relation("CourseEnrollment_Person")
+  createdCustomRoles                   CustomRole[]                   @relation("CustomRole_CreatedBy")
+  formTemplates                        FormTemplate[]
+  lettereIncarico                      LetteraIncarico[]              @relation("LetteraIncaricoTrainer")
+  assignedRoles                        PersonRole[]                   @relation("AssignedRoles")
+  personRoles                          PersonRole[]
+  personSessions                       PersonSession[]                @relation("PersonSessions")
+  refreshTokens                        RefreshToken[]
+  registriPresenze                     RegistroPresenze[]             @relation("RegistroFormatore")
+  registroPresenzePartecipanti         RegistroPresenzePartecipante[] @relation("RegistroPresenzePartecipante_Person")
+  grantedPermissions                   RolePermission[]               @relation("GrantedPermissions")
+  preventivi                           Preventivo[]
+  courseTestResults                    CourseTestResult[]             @relation("CourseTestResult_Person")
+  sediDirettoreSanitario               SedePoliambulatorio[]          @relation("SedeDirettoreSanitario")
+  visiteComePaziente                   Visita[]                       @relation("VisitaPaziente")
+  visiteComeMedico                     Visita[]                       @relation("VisitaMedico")
+  fattureSanitarie                     FatturaSanitaria[]             @relation("FatturaPaziente")
+  listiniMedico                        ListinoPrezzo[]                @relation("ListinoMedico")
+  tariffariMedico                      TariffarioMedico[]             @relation("TariffarioMedico")
+  abilitazioni                         MedicoAbilitato[]              @relation("MedicoAbilitazioni")
+  documents                            PersonDocument[]               @relation("PersonDocuments")
+  uploadedDocuments                    PersonDocument[]               @relation("DocumentUploader")
+  tenantAccesses                       PersonTenantAccess[]           @relation("PersonTenantAccesses")
+  grantedTenantAccesses                PersonTenantAccess[]           @relation("GrantedTenantAccesses")
+  riconoscimentiRicevuti               RiconoscimentoErogato[]        @relation("RiconoscimentiPaziente")
+  slotDisponibilita                    SlotDisponibilita[]            @relation("SlotMedico")
+  receivedNotifications                Notification[]                 @relation("ReceivedNotifications")
+  notificationLogs                     NotificationLog[]              @relation("NotificationLogs")
+  notificationPreference               NotificationPreference?        @relation("NotificationPreferences")
+  notificationGroupMemberships         NotificationGroupMember[]      @relation("NotificationGroupMemberships")
+  createdNotificationRules             NotificationRule[]             @relation("CreatedNotificationRules")
+  escalationsReceived                  NotificationEscalation[]       @relation("EscalationsReceived")
+
+  @@index([taxCode])
+  @@index([username])
+  @@index([firstName, lastName])
+  @@index([deletedAt])
+  @@index([createdAt])
+  @@map("person_cores")
+}
+
+// ============================================
+// 2. PersonTenantProfile - Dati Per Tenant
+// ============================================
+// Contiene tutti i dati che possono variare tra tenant
+// Una PersonCore può avere N PersonTenantProfile (uno per tenant)
+
+model PersonTenantProfile {
+  id              String    @id @default(uuid())
+  personCoreId    String
+  tenantId        String
+  
+  // === CONTATTI (possono variare per tenant) ===
+  email           String?   @db.VarChar(255)
+  phone           String?   @db.VarChar(20)
+  pec             String?   @db.VarChar(255)
+  
+  // === RESIDENZA/DOMICILIO (può variare) ===
+  residenceAddress String?  @db.VarChar(255)
+  residenceCity    String?  @db.VarChar(100)
+  postalCode       String?  @db.VarChar(10)
+  province         String?  @db.VarChar(2)
+  
+  // === STATUS E RUOLO NEL TENANT ===
+  status          PersonStatus @default(PENDING)
+  title           String?      @db.VarChar(100) // Qualifica in questo tenant
+  
+  // === DATI LAVORATIVI (specifici per tenant) ===
+  hiredDate       DateTime?    @db.Date    // Data inizio collaborazione
+  endDate         DateTime?    @db.Date    // Data fine (se terminata)
+  hourlyRate      Decimal?     @db.Decimal(10, 2) // Tariffa oraria
+  monthlyRate     Decimal?     @db.Decimal(10, 2) // Tariffa mensile (alternativa)
+  iban            String?      @db.VarChar(34)    // IBAN per pagamenti
+  
+  // === PROFESSIONALE ===
+  registerCode    String?      @db.VarChar(50)  // Albo professionale
+  registerCode2   String?      @db.VarChar(50)  // Secondo albo
+  specialties     String[]     // Specializzazioni attive
+  certifications  String[]     // Certificazioni rilevanti
+  
+  // === ORGANIZZAZIONE ===
+  companyId       String?      // Azienda (se ElementSicurezza)
+  siteId          String?      // Sede/Sito
+  repartoId       String?      // Reparto
+  
+  // === DESCRIZIONI E NOTE (tenant-specific) ===
+  shortDescription String?     @db.VarChar(500)
+  fullDescription  String?
+  notes            String?
+  
+  // === PREFERENZE ===
+  preferences     Json?        @default("{}")
+  
+  // === CONDIVISIONE DATI ===
+  dataShareConsent Boolean     @default(false) // Consenso base condivisione
+  
+  // === FLAGS ===
+  isActive        Boolean      @default(true)
+  isPrimary       Boolean      @default(false) // Tenant principale della persona
+  
+  // === METADATA ===
+  createdAt       DateTime     @default(now()) @db.Timestamp(6)
+  updatedAt       DateTime     @updatedAt @db.Timestamp(6)
+  deletedAt       DateTime?    @db.Timestamp(6)
+  
+  // === RELAZIONI ===
+  personCore      PersonCore   @relation(fields: [personCoreId], references: [id], onDelete: Cascade)
+  tenant          Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  company         Company?     @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  site            CompanySite? @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  reparto         Reparto?     @relation(fields: [repartoId], references: [id], onDelete: SetNull)
+  
+  // Una persona può avere un solo profilo per tenant
+  @@unique([personCoreId, tenantId])
+  
+  // Indici per performance
+  @@index([personCoreId])
+  @@index([tenantId])
+  @@index([status])
+  @@index([email])
+  @@index([companyId])
+  @@index([siteId])
+  @@index([repartoId])
+  @@index([tenantId, status])
+  @@index([tenantId, companyId])
+  @@index([deletedAt])
+  @@map("person_tenant_profiles")
+}
+
+// ============================================
+// 3. PersonDataShareConsent - Consensi Cross-Tenant
+// ============================================
+// Traccia esplicitamente cosa una persona consente di condividere
+// tra un tenant origine e un tenant destinazione
+
+model PersonDataShareConsent {
+  id               String    @id @default(uuid())
+  personCoreId     String
+  
+  // === TENANT COINVOLTI ===
+  sourceTenantId   String    // Tenant che possiede i dati originali
+  targetTenantId   String    // Tenant che può accedere ai dati
+  
+  // === COSA È CONDIVISO ===
+  sharedDataTypes  String[]  // ["anagrafica", "contatti", "clinica", "formazione", "lavorativo"]
+  excludedFields   String[]  // Campi esplicitamente esclusi (es. ["iban", "phone"])
+  
+  // === CONSENSO ===
+  consentGiven     Boolean   @default(false)
+  consentDate      DateTime? @db.Timestamp(6)
+  consentMethod    String?   @db.VarChar(50)  // "explicit", "implicit", "legal_basis"
+  consentProof     String?   @db.VarChar(500) // URL documento firmato
+  legalBasis       String?   @db.VarChar(100) // Base legale se non consenso
+  
+  // === VALIDITÀ ===
+  validFrom        DateTime  @default(now()) @db.Timestamp(6)
+  validUntil       DateTime? @db.Timestamp(6)
+  
+  // === REVOCA ===
+  isRevoked        Boolean   @default(false)
+  revokedAt        DateTime? @db.Timestamp(6)
+  revokedReason    String?   @db.VarChar(255)
+  revokedBy        String?   // PersonCore ID di chi ha revocato
+  
+  // === METADATA ===
+  createdAt        DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt        DateTime  @updatedAt @db.Timestamp(6)
+  
+  // === RELAZIONI ===
+  personCore       PersonCore @relation(fields: [personCoreId], references: [id], onDelete: Cascade)
+  sourceTenant     Tenant     @relation("SourceTenantConsent", fields: [sourceTenantId], references: [id], onDelete: Cascade)
+  targetTenant     Tenant     @relation("TargetTenantConsent", fields: [targetTenantId], references: [id], onDelete: Cascade)
+  
+  // Una sola entry per combinazione persona-source-target
+  @@unique([personCoreId, sourceTenantId, targetTenantId])
+  
+  @@index([personCoreId])
+  @@index([sourceTenantId])
+  @@index([targetTenantId])
+  @@index([isRevoked])
+  @@index([validUntil])
+  @@map("person_data_share_consents")
+}
+
+// ============================================
+// NOTA: MODIFICHE RICHIESTE AD ALTRI MODELLI
+// ============================================
+// 
+// 1. Tenant - Aggiungere relazioni inverse:
+//    tenantProfiles       PersonTenantProfile[]
+//    sourceConsents       PersonDataShareConsent[] @relation("SourceTenantConsent")
+//    targetConsents       PersonDataShareConsent[] @relation("TargetTenantConsent")
+//
+// 2. Company - Modificare relazione:
+//    persons              PersonCore[]  (era Person[])
+//    tenantProfiles       PersonTenantProfile[]
+//
+// 3. CompanySite - Modificare relazioni:
+//    persons              PersonCore[]  (era Person[])
+//    tenantProfiles       PersonTenantProfile[]
+//
+// 4. PersonRole - Modificare FK:
+//    personId -> personCoreId
+//    person   PersonCore (era Person)
+//
+// 5. Reparto - Modificare relazione:
+//    dipendenti           PersonTenantProfile[] (era Person[])
+//
+// E così via per tutte le altre relazioni...
+// ============================================

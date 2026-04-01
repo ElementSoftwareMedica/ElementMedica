@@ -91,8 +91,7 @@ export function ScheduleCertificatesCard({ schedule }: ScheduleCertificatesCardP
       setError(null);
       const data = await attestatiService.list({ scheduleId: schedule.id });
       setAttestati(data);
-    } catch (err: any) {
-      console.error('Error loading attestati:', err);
+    } catch (err: unknown) {
       setError('Errore nel caricamento degli attestati');
     } finally {
       setLoading(false);
@@ -126,8 +125,7 @@ export function ScheduleCertificatesCard({ schedule }: ScheduleCertificatesCardP
       await attestatiService.delete(id);
       await loadAttestati();
       setSelectedIds(new Set());
-    } catch (err: any) {
-      console.error('Error deleting attestato:', err);
+    } catch (err: unknown) {
       setError('Errore durante l\'eliminazione dell\'attestato');
     }
   };
@@ -139,8 +137,7 @@ export function ScheduleCertificatesCard({ schedule }: ScheduleCertificatesCardP
       await loadAttestati();
       setSelectedIds(new Set());
       setDeleteConfirmOpen(false);
-    } catch (err: any) {
-      console.error('Error deleting multiple attestati:', err);
+    } catch (err: unknown) {
       setError('Errore durante l\'eliminazione degli attestati');
     }
   };
@@ -149,8 +146,7 @@ export function ScheduleCertificatesCard({ schedule }: ScheduleCertificatesCardP
     try {
       const ids = Array.from(selectedIds);
       await attestatiService.downloadZipBatch(ids);
-    } catch (err: any) {
-      console.error('Error downloading ZIP:', err);
+    } catch (err: unknown) {
       setError('Errore durante il download dello ZIP');
     }
   };

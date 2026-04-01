@@ -1,0 +1,18 @@
+# robots.txt - Element Medica (www.elementmedica.com)
+# Poliambulatorio e Medicina del Lavoro - Selvazzano Dentro (PD)
+
+User-agent: *
+Allow: /
+Disallow: /login
+Disallow: /dashboard
+Disallow: /admin
+Disallow: /api/
+Disallow: /ws/
+
+# Sitemap
+Sitemap: https://www.elementmedica.com/sitemap.xml
+
+# Contact
+# Element Medica - Element srl
+# Via Bracciano 34, 35030 Selvazzano Dentro (PD)
+# P.IVA 05580640281

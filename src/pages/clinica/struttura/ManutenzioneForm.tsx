@@ -29,6 +29,7 @@ import {
 import { manutenzioniApi, strumentiApi } from '../../../services/clinicaApi';
 import type { ManutenzioneStrumento, Strumento } from '../../../services/clinicaApi';
 import { useToast } from '../../../hooks/useToast';
+import { DatePickerElegante } from '../../../components/ui/DatePickerElegante';
 
 // Import Element Medica theme
 import '../../../styles/clinica-theme.css';
@@ -157,7 +158,7 @@ const ManutenzioneForm: React.FC = () => {
             navigate(-1);
         },
         onError: (error: Error) => {
-            showToast({ type: 'error', message: error.message || 'Errore nella creazione' });
+            showToast({ type: 'error', message: 'Errore nella creazione' });
         }
     });
 
@@ -171,7 +172,7 @@ const ManutenzioneForm: React.FC = () => {
             navigate(-1);
         },
         onError: (error: Error) => {
-            showToast({ type: 'error', message: error.message || 'Errore nell\'aggiornamento' });
+            showToast({ type: 'error', message: 'Errore nell\'aggiornamento' });
         }
     });
 
@@ -399,11 +400,10 @@ const ManutenzioneForm: React.FC = () => {
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Data Programmata {formData.stato === 'PROGRAMMATA' && <span className="text-red-500">*</span>}
                             </label>
-                            <input
-                                type="date"
+                            <DatePickerElegante
                                 value={formData.dataProgrammata}
-                                onChange={(e) => handleChange('dataProgrammata', e.target.value)}
-                                className={`input-clinica w-full ${errors.dataProgrammata ? 'border-red-300' : ''}`}
+                                onChange={(date) => handleChange('dataProgrammata', date ? date.toISOString().split('T')[0] : '')}
+                                theme="teal"
                             />
                             {errors.dataProgrammata && (
                                 <p className="text-red-500 text-sm mt-1">{errors.dataProgrammata}</p>
@@ -415,11 +415,10 @@ const ManutenzioneForm: React.FC = () => {
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Data Esecuzione
                             </label>
-                            <input
-                                type="date"
+                            <DatePickerElegante
                                 value={formData.dataEsecuzione}
-                                onChange={(e) => handleChange('dataEsecuzione', e.target.value)}
-                                className="input-clinica w-full"
+                                onChange={(date) => handleChange('dataEsecuzione', date ? date.toISOString().split('T')[0] : '')}
+                                theme="teal"
                             />
                         </div>
 
@@ -450,11 +449,10 @@ const ManutenzioneForm: React.FC = () => {
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Prossima Manutenzione
                             </label>
-                            <input
-                                type="date"
+                            <DatePickerElegante
                                 value={formData.prossimaScadenza}
-                                onChange={(e) => handleChange('prossimaScadenza', e.target.value)}
-                                className="input-clinica w-full"
+                                onChange={(date) => handleChange('prossimaScadenza', date ? date.toISOString().split('T')[0] : '')}
+                                theme="teal"
                             />
                             <p className="text-xs text-gray-500 mt-1">
                                 Data suggerita per la prossima manutenzione

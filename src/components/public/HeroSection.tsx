@@ -1,7 +1,6 @@
 import React from 'react';
 import { ArrowRight } from 'lucide-react';
 import { PublicButton } from './PublicButton';
-// import { useNavigate } from 'react-router-dom';
 import { trackCtaEvent } from '../../services/logs';
 
 interface HeroSectionProps {
@@ -18,7 +17,7 @@ interface HeroSectionProps {
   secondaryButton?: {
     text: string;
     href: string;
-    variant?: 'outline' | 'ghost';
+    variant?: 'outline' | 'outline-light' | 'ghost';
   };
   stats?: Array<{
     value: string;
@@ -29,7 +28,7 @@ interface HeroSectionProps {
   }>;
   showContactForm?: boolean;
   showTrustBadges?: boolean;
-  backgroundVariant?: 'gradient' | 'solid' | 'image' | 'medical-gradient';
+  backgroundVariant?: 'gradient' | 'gradient-cta' | 'solid' | 'image' | 'medical-gradient' | 'medical-teal' | 'medical-blue' | 'medical-purple' | 'medical-light';
   backgroundPattern?: 'none' | 'diagonal-lines' | 'medical-grid' | 'dots';
   backgroundImage?: string;
   backgroundOverlay?: 'none' | 'light' | 'dark' | 'gradient';
@@ -64,22 +63,54 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
       return 'bg-cover bg-center bg-no-repeat';
     }
 
-    // Variant-based backgrounds
+    // Solid variants that don't need gradients
+    switch (backgroundVariant) {
+      case 'solid':
+        return 'bg-primary-700';
+      case 'image':
+        return 'bg-primary-800 bg-cover bg-center';
+      default:
+        return '';
+    }
+  };
+
+  /**
+   * Returns inline backgroundImage style for gradient variants.
+   * Uses direct CSS linear-gradient() with CSS variables instead of Tailwind
+   * from/via/to utilities, which can fail to render with CSS variable colors.
+   * 
+   * Gradients use PRIMARY brand colors for a calming, branded feel.
+   * Avoids dark secondary/navy tones for lighter, more elegant aesthetics.
+   */
+  const getBackgroundStyle = (): React.CSSProperties => {
+    if (backgroundImage) {
+      return { backgroundImage: `url(${backgroundImage})` };
+    }
+
     if (variant === 'medical') {
-      return 'bg-gradient-medical';
+      return { backgroundImage: 'linear-gradient(135deg, var(--color-primary-800) 0%, var(--color-primary-700) 40%, var(--color-primary-600) 100%)' };
     }
 
     switch (backgroundVariant) {
       case 'medical-gradient':
-        return 'bg-gradient-medical';
+        return { backgroundImage: 'linear-gradient(135deg, var(--color-primary-800) 0%, var(--color-primary-700) 40%, var(--color-primary-600) 100%)' };
+      case 'medical-teal':
+        return { backgroundImage: 'linear-gradient(to bottom right, var(--color-primary-700), var(--color-primary-600), var(--color-primary-500))' };
+      case 'medical-blue':
+        return { backgroundImage: 'linear-gradient(to bottom right, var(--color-secondary-500), var(--color-secondary-400), var(--color-secondary-300))' };
+      case 'medical-purple':
+        return { backgroundImage: 'linear-gradient(to bottom right, var(--color-secondary-500), var(--color-secondary-400), var(--color-primary-600))' };
+      case 'medical-light':
+        return { backgroundImage: 'linear-gradient(to bottom right, var(--color-primary-400), var(--color-primary-500), var(--color-primary-600))' };
       case 'gradient':
-        return 'bg-gradient-to-br from-primary-600 via-primary-700 to-primary-800';
+        return { backgroundImage: 'linear-gradient(135deg, var(--color-primary-800) 0%, var(--color-primary-700) 40%, var(--color-primary-600) 100%)' };
+      case 'gradient-cta':
+        return { backgroundImage: 'linear-gradient(135deg, var(--color-primary-700) 0%, var(--color-primary-600) 50%, var(--color-primary-500) 100%)' };
       case 'solid':
-        return 'bg-primary-600';
       case 'image':
-        return 'bg-primary-600 bg-cover bg-center';
+        return {};
       default:
-        return 'bg-gradient-to-br from-primary-600 via-primary-700 to-primary-800';
+        return { backgroundImage: 'linear-gradient(135deg, var(--color-primary-800) 0%, var(--color-primary-700) 40%, var(--color-primary-600) 100%)' };
     }
   };
 
@@ -89,11 +120,22 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
       case 'light':
         return 'bg-white/30';
       case 'dark':
-        return 'bg-gradient-to-br from-blue-900/80 via-indigo-900/70 to-slate-900/80';
       case 'gradient':
-        return 'bg-gradient-to-r from-primary-900/90 to-primary-800/70';
+        return ''; // handled by getOverlayStyle
       default:
         return '';
+    }
+  };
+
+  const getOverlayStyle = (): React.CSSProperties => {
+    if (!backgroundImage) return {};
+    switch (backgroundOverlay) {
+      case 'dark':
+        return { backgroundImage: 'linear-gradient(to bottom right, color-mix(in srgb, var(--color-primary-800) 80%, transparent), color-mix(in srgb, var(--color-primary-700) 70%, transparent), color-mix(in srgb, var(--color-primary-800) 80%, transparent))' };
+      case 'gradient':
+        return { backgroundImage: 'linear-gradient(to right, color-mix(in srgb, var(--color-primary-700) 85%, transparent), color-mix(in srgb, var(--color-primary-600) 65%, transparent))' };
+      default:
+        return {};
     }
   };
 
@@ -110,7 +152,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
     }
   };
 
-  const backgroundStyle = backgroundImage ? { backgroundImage: `url(${backgroundImage})` } : {};
+  const backgroundStyle = getBackgroundStyle();
 
   const handleButtonClick = (href: string, label: string, kind: 'primary' | 'secondary') => {
     // Traccia CTA in modo non bloccante
@@ -134,25 +176,31 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
     >
       {/* Overlay for background image */}
       {backgroundImage && backgroundOverlay !== 'none' && (
-        <div className={`absolute inset-0 ${getOverlayClasses()}`} />
+        <div className={`absolute inset-0 ${getOverlayClasses()}`} style={getOverlayStyle()} />
       )}
+
+      {/* Floating ambient orbs for depth */}
+      <div className="absolute top-20 right-10 w-72 h-72 bg-white/5 rounded-full blur-3xl animate-float pointer-events-none" />
+      <div className="absolute bottom-10 left-10 w-96 h-96 bg-white/3 rounded-full blur-3xl animate-float pointer-events-none" style={{ animationDelay: '3s' }} />
+      <div className="absolute top-1/2 right-1/4 w-48 h-48 bg-white/5 rounded-full blur-2xl animate-float pointer-events-none" style={{ animationDelay: '6s' }} />
+
       <div className="container mx-auto px-4 py-20 relative z-10">
         <div className={`grid grid-cols-1 ${showContactForm ? 'lg:grid-cols-2' : ''} gap-12 items-center`}>
           <div className="space-y-8">
             <div className="space-y-4">
-              <h1 className="text-4xl lg:text-6xl font-bold leading-tight">
+              <h1 className="text-4xl lg:text-6xl font-bold leading-tight animate-[fadeInUp_0.6s_ease-out_forwards]">
                 {title}
                 {subtitle && (
                   <span className="block text-white/90 mt-2">{subtitle}</span>
                 )}
               </h1>
-              <p className="text-xl text-white/90 leading-relaxed">
+              <p className="text-xl text-white/90 leading-relaxed animate-[fadeInUp_0.6s_ease-out_0.15s_forwards] opacity-0">
                 {description}
               </p>
             </div>
 
             {(primaryButton || secondaryButton) && (
-              <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex flex-col sm:flex-row gap-5 animate-[fadeInUp_0.6s_ease-out_0.3s_forwards] opacity-0">
                 {primaryButton && (
                   <PublicButton
                     variant={primaryButton.variant || 'secondary'}
@@ -167,7 +215,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 )}
                 {secondaryButton && (
                   <PublicButton
-                    variant={secondaryButton.variant || 'outline'}
+                    variant="outline-light"
                     size="lg"
                     to={secondaryButton.href}
                     onClick={() => handleButtonClick(secondaryButton.href, secondaryButton.text, 'secondary')}
@@ -180,11 +228,11 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
 
             {/* Quick Stats */}
             {stats && stats.length > 0 && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-6 pt-8 border-t border-white/20">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6 pt-8 border-t border-white/30 animate-[fadeInUp_0.6s_ease-out_0.45s_forwards] opacity-0">
                 {stats.map((stat, index) => (
                   <div
                     key={index}
-                    className={stat.highlight ? 'bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/20' : ''}
+                    className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20 hover:bg-white/15 transition-all duration-300"
                   >
                     <div className="flex items-center gap-2 mb-1">
                       {stat.icon && <span className="text-xl">{stat.icon}</span>}
@@ -192,7 +240,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                         {stat.value}
                       </div>
                     </div>
-                    <div className="text-sm text-white/80">{stat.label}</div>
+                    <div className="text-sm text-white/90">{stat.label}</div>
                   </div>
                 ))}
               </div>

@@ -33,6 +33,8 @@ import {
 
 import { useTenantFilter } from '../../../context/TenantFilterContext';
 import { useToast } from '../../../hooks/useToast';
+import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
+import { CRUDButton } from '../../../components/shared/CRUDButton';
 import {
     tariffarioMedicoApi,
     mediciApi,
@@ -90,8 +92,8 @@ const BRANCHE_SPECIALISTICHE = [
 const StatusBadge: React.FC<{ isActive: boolean }> = ({ isActive }) => (
     <span
         className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${isActive
-                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+            : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
             }`}
     >
         <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-green-500' : 'bg-gray-400'}`} />
@@ -286,8 +288,8 @@ const TariffarioFormModal: React.FC<TariffarioFormModalProps> = ({
                                         compensoMedicoMassimo: option.value !== 'MINIMO_MASSIMO' ? undefined : prev.compensoMedicoMassimo
                                     }))}
                                     className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 transition-colors ${formData.compensoMedicoTipo === option.value
-                                            ? 'border-teal-500 bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-400'
-                                            : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 text-gray-600 dark:text-gray-400'
+                                        ? 'border-teal-500 bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-400'
+                                        : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 text-gray-600 dark:text-gray-400'
                                         }`}
                                 >
                                     {option.icon}
@@ -449,6 +451,7 @@ const TariffarioFormModal: React.FC<TariffarioFormModalProps> = ({
 export const TariffarioMedicoPage: React.FC = () => {
     const queryClient = useQueryClient();
     const { getTenantFilterParams, tenantFilterKey, isReady } = useTenantFilter();
+    const { confirmDelete } = useConfirmDialog();
 
     // State
     const [page, setPage] = useState(1);
@@ -473,7 +476,7 @@ export const TariffarioMedicoPage: React.FC = () => {
             ...(tenantParams.tenantIds && { tenantIds: tenantParams.tenantIds.join(',') }),
             ...(tenantParams.allTenants && { allTenants: 'true' })
         };
-    }, [page, filters, getTenantFilterParams]);
+    }, [page, filters, getTenantFilterParams, tenantFilterKey]);
 
     // Queries
     const {
@@ -547,11 +550,11 @@ export const TariffarioMedicoPage: React.FC = () => {
         setIsModalOpen(true);
     }, []);
 
-    const handleDelete = useCallback((id: string, medico: string) => {
-        if (window.confirm(`Sei sicuro di voler eliminare il tariffario per "${medico}"?`)) {
+    const handleDelete = useCallback(async (id: string, medico: string) => {
+        if (await confirmDelete(medico)) {
             deleteMutation.mutate(id);
         }
-    }, [deleteMutation]);
+    }, [deleteMutation, confirmDelete]);
 
     const handleSubmit = useCallback((data: TariffarioMedicoInput) => {
         if (editingTariffario) {
@@ -591,13 +594,14 @@ export const TariffarioMedicoPage: React.FC = () => {
                     >
                         <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
                     </button>
-                    <button
+                    <CRUDButton
+                        operation="create"
                         onClick={handleCreate}
                         className="clinica-button-primary flex items-center gap-2"
                     >
                         <Plus className="w-4 h-4" />
                         Nuovo Tariffario
-                    </button>
+                    </CRUDButton>
                 </div>
             </div>
 
@@ -674,10 +678,10 @@ export const TariffarioMedicoPage: React.FC = () => {
                             : 'Inizia creando il primo tariffario per medico'}
                     </p>
                     {!filters.search && !filters.medicoId && filters.status === 'all' && (
-                        <button onClick={handleCreate} className="clinica-button-primary">
+                        <CRUDButton operation="create" onClick={handleCreate} className="clinica-button-primary">
                             <Plus className="w-4 h-4 mr-2" />
                             Crea primo tariffario
-                        </button>
+                        </CRUDButton>
                     )}
                 </div>
             ) : (

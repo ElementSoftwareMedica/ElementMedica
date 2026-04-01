@@ -1,4 +1,4 @@
-import bcryptjs from 'bcryptjs';
+import bcrypt from 'bcrypt';
 import dotenv from 'dotenv';
 import { PrismaClient } from '@prisma/client';
 
@@ -22,10 +22,10 @@ beforeAll(async () => {
   try {
     // Connect to database
     await prisma.$connect();
-    
+
     // Verify database connection
     await prisma.$queryRaw`SELECT 1`;
-    
+
     console.log('✅ Test database connected successfully');
   } catch (error) {
     console.error('❌ Failed to connect to test database:', error);
@@ -39,7 +39,7 @@ afterAll(async () => {
     // Only disconnect from database, don't clean up data aggressively
     // Individual tests should handle their own cleanup
     await prisma.$disconnect();
-    
+
     console.log('✅ Test database disconnected successfully');
   } catch (error) {
     console.error('❌ Failed to disconnect from test database:', error);
@@ -57,7 +57,7 @@ async function cleanupTestData() {
     await prisma.course.deleteMany({});
     // Users are now handled by Person model
     await prisma.company.deleteMany({});
-    
+
     console.log('✅ Test data cleaned up successfully');
   } catch (error) {
     console.error('❌ Failed to clean up test data:', error);
@@ -77,21 +77,21 @@ async function cleanupTestDataSafe(companyId, personIds = []) {
           }
         }
       });
-      await prisma.personRole.deleteMany({ 
-        where: { personId: { in: personIds } } 
+      await prisma.personRole.deleteMany({
+        where: { personId: { in: personIds } }
       });
-      await prisma.person.deleteMany({ 
-        where: { id: { in: personIds } } 
+      await prisma.person.deleteMany({
+        where: { id: { in: personIds } }
       });
     }
-    
+
     // Delete specific company if provided
     if (companyId) {
-      await prisma.company.deleteMany({ 
-        where: { id: companyId } 
+      await prisma.company.deleteMany({
+        where: { id: companyId }
       });
     }
-    
+
     console.log('✅ Specific test data cleaned up successfully');
   } catch (error) {
     console.error('❌ Failed to clean up specific test data:', error);
@@ -126,39 +126,45 @@ async function createTestCompany(data = {}) {
   const randomSuffix = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
   const uniqueId = `${timestamp}${randomSuffix}`.slice(-11); // Keep last 11 digits for piva
 
-  const companyData = {
-    ragioneSociale: `Test Company ${timestamp}`,
-    mail: `test${timestamp}@company.com`,
-    telefono: '1234567890',
-    sedeAzienda: 'Test Address',
-    citta: 'Test City',
-    provincia: 'Test Province',
-    cap: '12345',
-    piva: uniqueId,
-    codiceFiscale: `TST${uniqueId.slice(-8)}`,
-    isActive: true,
-    tenantId: defaultTenant.id,
-    ...data
-  };
-
-  return await prisma.company.create({
-    data: companyData
+  // P48: Company è globale, senza tenantId. I campi tenant-specific sono in CompanyTenantProfile.
+  const company = await prisma.company.create({
+    data: {
+      ragioneSociale: `Test Company ${timestamp}`,
+      piva: uniqueId,
+      codiceFiscale: `TST${uniqueId.slice(-8)}`,
+      ...data
+    }
   });
+
+  // Crea anche il CompanyTenantProfile per il tenant di default
+  await prisma.companyTenantProfile.create({
+    data: {
+      companyId: company.id,
+      tenantId: defaultTenant.id,
+      emailGenerale: `test${timestamp}@company.com`,
+      telefonoGenerale: '1234567890',
+      status: 'ACTIVE',
+      isActive: true,
+      isPrimary: true
+    }
+  });
+
+  return company;
 }
 
 // Helper function to create test person (admin)
 async function createTestUser(companyId, data = {}) {
-  const hashedPassword = await bcryptjs.hash('Admin123!', 12);
-  
+  const hashedPassword = await bcrypt.hash('Admin123!', 12);
+
   // Verify company exists
   const company = await prisma.company.findUnique({
     where: { id: companyId }
   });
-  
+
   if (!company) {
     throw new Error(`Company with id ${companyId} not found`);
   }
-  
+
   // Get default tenant
   const defaultTenant = await prisma.tenant.findUnique({
     where: { slug: 'default-company' }
@@ -167,11 +173,21 @@ async function createTestUser(companyId, data = {}) {
   const email = data.email || 'admin@example.com';
   const username = data.username || 'admin';
 
-  // Check if a person with this email already exists (soft-deleted rows also block unique)
-  const existing = await prisma.person.findUnique({ where: { email } });
+  // P48: Cerca persona per username (campo globale) o per email nel profilo tenant
+  const existingByUsername = username ? await prisma.person.findUnique({ where: { username } }) : null;
+  const existingByEmail = !existingByUsername ? await prisma.personTenantProfile.findFirst({
+    where: { email, tenantId: defaultTenant.id, deletedAt: null },
+    include: { person: true }
+  }) : null;
+  const existing = existingByUsername || existingByEmail?.person;
+
+  // Get CompanyTenantProfile for assignments
+  const companyProfile = await prisma.companyTenantProfile.findFirst({
+    where: { companyId, tenantId: defaultTenant.id, deletedAt: null }
+  });
 
   if (existing) {
-    // Ensure it's active and belongs to the provided company/tenant, and has ADMIN role with permissions
+    // Ensure person is updated with correct global fields
     const updated = await prisma.person.update({
       where: { id: existing.id },
       data: {
@@ -179,16 +195,27 @@ async function createTestUser(companyId, data = {}) {
         password: hashedPassword,
         firstName: data.firstName || existing.firstName || 'Admin',
         lastName: data.lastName || existing.lastName || 'User',
-        status: 'ACTIVE',
-        companyId,
-        tenantId: defaultTenant.id,
         deletedAt: null
       }
     });
 
-    // Ensure ADMIN role exists for this person in this company/tenant
+    // Ensure PersonTenantProfile exists
+    await prisma.personTenantProfile.upsert({
+      where: { personId_tenantId: { personId: updated.id, tenantId: defaultTenant.id } },
+      update: { email, status: 'ACTIVE', deletedAt: null, companyTenantProfileId: companyProfile?.id },
+      create: {
+        personId: updated.id,
+        tenantId: defaultTenant.id,
+        email,
+        status: 'ACTIVE',
+        isPrimary: true,
+        companyTenantProfileId: companyProfile?.id
+      }
+    });
+
+    // Ensure ADMIN role exists for this person in this tenant
     let adminRole = await prisma.personRole.findFirst({
-      where: { personId: updated.id, roleType: 'ADMIN', companyId, tenantId: defaultTenant.id }
+      where: { personId: updated.id, roleType: 'ADMIN', tenantId: defaultTenant.id }
     });
 
     if (!adminRole) {
@@ -196,8 +223,8 @@ async function createTestUser(companyId, data = {}) {
         data: {
           roleType: 'ADMIN',
           personId: updated.id,
-          companyId,
-          tenantId: defaultTenant.id
+          tenantId: defaultTenant.id,
+          companyTenantProfileId: companyProfile?.id
         }
       });
     }
@@ -218,23 +245,28 @@ async function createTestUser(companyId, data = {}) {
 
     return updated;
   }
-  
-  // Create a fresh admin user for tests
-  return await prisma.person.create({
+
+  // P48: Create fresh admin user with PersonTenantProfile + PersonRole
+  const newPerson = await prisma.person.create({
     data: {
       username,
-      email,
       password: hashedPassword,
       firstName: data.firstName || 'Admin',
       lastName: data.lastName || 'User',
-      status: 'ACTIVE',
-      companyId,
-      tenantId: defaultTenant.id,
+      tenantProfiles: {
+        create: {
+          tenantId: defaultTenant.id,
+          email,
+          status: 'ACTIVE',
+          isPrimary: true,
+          companyTenantProfileId: companyProfile?.id
+        }
+      },
       personRoles: {
         create: {
           roleType: 'ADMIN',
-          companyId,
           tenantId: defaultTenant.id,
+          companyTenantProfileId: companyProfile?.id,
           permissions: {
             create: [
               { permission: 'VIEW_EMPLOYEES' },
@@ -244,10 +276,11 @@ async function createTestUser(companyId, data = {}) {
             ]
           }
         }
-      },
-      ...data
+      }
     }
   });
+
+  return newPerson;
 }
 
 // Helper function to create test employee
@@ -259,32 +292,42 @@ async function createTestEmployee(companyId, data = {}) {
 
   // Generate unique values to avoid constraint violations
   const timestamp = Date.now();
-  const randomSuffix = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
 
+  // Get CompanyTenantProfile for assignments
+  const companyProfile = await prisma.companyTenantProfile.findFirst({
+    where: { companyId, tenantId: defaultTenant.id, deletedAt: null }
+  });
+
+  // P48: Create Person with global fields only, profile in PersonTenantProfile
   return await prisma.person.create({
     data: {
       firstName: 'Test',
       lastName: 'Employee',
-      email: `employee${timestamp}@test.com`,
-      phone: '1234567890',
       taxCode: `TSTMPL${timestamp.toString().slice(-8)}`,
       birthDate: new Date('1990-01-01'),
-      residenceAddress: 'Test Address',
-      residenceCity: 'Test City',
-      province: 'TP',
-      postalCode: '12345',
-      status: 'ACTIVE',
-      companyId,
-      tenantId: defaultTenant.id,
+      tenantProfiles: {
+        create: {
+          tenantId: defaultTenant.id,
+          email: `employee${timestamp}@test.com`,
+          phone: '1234567890',
+          residenceAddress: 'Test Address',
+          residenceCity: 'Test City',
+          province: 'TP',
+          postalCode: '12345',
+          status: 'ACTIVE',
+          isPrimary: true,
+          companyTenantProfileId: companyProfile?.id
+        }
+      },
       personRoles: {
         create: {
           roleType: 'EMPLOYEE',
-          companyId,
           tenantId: defaultTenant.id,
+          companyTenantProfileId: companyProfile?.id,
           permissions: {
             create: [
               { permission: 'VIEW_EMPLOYEES' },
-                { permission: 'VIEW_COURSES' }
+              { permission: 'VIEW_COURSES' }
             ]
           }
         }
@@ -327,7 +370,7 @@ export {
 
 // Mock console methods to reduce test noise
 if (process.env.NODE_ENV === 'test') {
-  const mockFn = () => {};
+  const mockFn = () => { };
   global.console = {
     ...console,
     log: mockFn,

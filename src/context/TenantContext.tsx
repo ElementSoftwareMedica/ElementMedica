@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useRef } from 'react';
 import { Company, Permission } from '../types';
 import { getCurrentTenant } from '../services/tenants';
-import { getUserPermissions } from '../services/auth';
+import { getUserPermissions, UserPermissions } from '../services/auth';
 import { useAuth } from './AuthContext';
 import { logGdprAction } from '../utils/gdpr';
 import { recordApiCall, startTimer } from '../utils/metrics';
@@ -37,89 +37,64 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   const { user, isAuthenticated, hasPermission: authHasPermission } = useAuth();
-  
+
   // Log per verificare se AuthContext ha già il ruolo corretto
   useEffect(() => {
     if (user && user.role) {
-      console.log('🎭 TenantContext: AuthContext already has user role:', {
-        userRole: user.role,
-        userRoles: user.roles,
-        shouldUseAuthRole: user.role !== 'Employee',
-        authContextComplete: !!user.role
-      });
     }
   }, [user?.role, user?.roles]);
-  
+
   // Log ogni volta che user cambia
   useEffect(() => {
-    console.log('🔄 TenantContext: User object changed:', {
-      hasUser: !!user,
-      userId: user?.id,
-      userEmail: user?.email,
-      userRole: user?.role,
-      isAuthenticated,
-      timestamp: new Date().toISOString()
-    });
   }, [user, isAuthenticated]);
-  
+
   // Refs per deduplication e controllo mount
   const requestRef = useRef<Promise<Company> | null>(null);
   const initializedRef = useRef(false);
-  const mountedRef = useRef(true);
+  const mountedRef = useRef(false);
   const lastFetchRef = useRef<number>(0);
   const CACHE_TTL = 5 * 60 * 1000; // 5 minuti cache
+
+  // Set mounted to true on mount
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   // Funzione per verificare i permessi
   const hasPermission = useCallback((resource: string, action: string): boolean => {
     if (!isAuthenticated || !user) {
-      console.log('🔐 TenantContext hasPermission: Not authenticated or no user');
       return false;
     }
 
     // Se AuthContext ha una funzione hasPermission valida, usala
     if (authHasPermission && typeof authHasPermission === 'function') {
-      console.log('🔐 TenantContext hasPermission: Using AuthContext hasPermission for', { resource, action });
       return authHasPermission(resource, action);
     }
 
     // Fallback: usa la logica locale del TenantContext
     // Admin, Super Admin e Company Admin hanno tutti i permessi
     if (userRole === 'Admin' || userRole === 'Super Admin' || userRole === 'Company Admin') {
-      console.log('🔑 TenantContext: Admin access granted for:', { resource, action, userRole });
       return true;
     }
-    
+
     if (!permissions || permissions.length === 0) {
-      console.log('🚫 TenantContext: No permissions found for:', { resource, action, userRole, permissionsCount: 0 });
       return false;
     }
-    
+
     // Verifica permesso specifico
-    const hasSpecificPermission = permissions.some(p => 
-      p.resource === resource && 
+    const hasSpecificPermission = permissions.some(p =>
+      p.resource === resource &&
       (p.action === action || p.action === '*')
     );
-    
-    console.log('🔍 TenantContext: Permission check (fallback):', {
-      resource,
-      action,
-      userRole,
-      permissionsCount: permissions.length,
-      hasSpecificPermission,
-      permissions: permissions.map(p => `${p.resource}:${p.action}`)
-    });
-    
+
+
     return hasSpecificPermission;
   }, [isAuthenticated, user, userRole, permissions, authHasPermission]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
 
   // Funzione per caricare il contesto tenant con deduplication
   const loadTenantContext = useCallback(async (forceRefresh = false): Promise<Company | null> => {
@@ -133,10 +108,9 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     // Check cache TTL
     const now = Date.now();
     const cacheValid = (now - lastFetchRef.current) < CACHE_TTL;
-    
+
     // Se abbiamo dati cached validi e non è un refresh forzato, restituisci i dati
     if (tenant && cacheValid && !forceRefresh && !error) {
-      console.log('📦 Using cached tenant data');
       await logGdprAction({
         action: 'TENANT_FETCH_CACHED',
         timestamp: new Date().toISOString(),
@@ -149,7 +123,6 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
     // Deduplication: se c'è già una richiesta in corso, restituisci quella
     if (requestRef.current) {
-      console.log('🔄 Deduplicating tenant request - using existing promise');
       await logGdprAction({
         action: 'TENANT_FETCH_DEDUPLICATED',
         timestamp: new Date().toISOString(),
@@ -158,9 +131,8 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       return requestRef.current;
     }
 
-    console.log('🚀 Fetching tenant data...');
     const timer = startTimer();
-    
+
     if (mountedRef.current) {
       setIsLoading(true);
       setError(null);
@@ -171,26 +143,14 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       try {
         // Carica tenant corrente
         const tenantData = await getCurrentTenant();
-        
+
         // Carica permessi utente
-        let userPermissions: any = { permissions: [], role: 'EMPLOYEE' };
-        console.log('🔍 TenantContext: User state check:', {
-          hasUser: !!user,
-          userId: user?.id,
-          userEmail: user?.email,
-          userRole: user?.role,
-          userObject: user
-        });
-        
+        let userPermissions: UserPermissions = { permissions: [], role: 'EMPLOYEE' };
+
         if (user.id) {
           // Se AuthContext ha già un ruolo valido (non Employee), usalo direttamente
           if (user.role && user.role !== 'Employee') {
-            console.log('✅ TenantContext: Using role from AuthContext directly:', {
-              authRole: user.role,
-              authRoles: user.roles,
-              skipApiCall: true
-            });
-            
+
             // Crea un oggetto permissions compatibile usando il ruolo dall'AuthContext
             userPermissions = {
               role: user.role,
@@ -198,54 +158,30 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             };
           } else {
             // Fallback: chiama l'API solo se AuthContext non ha un ruolo valido
-            console.log('🔍 TenantContext: AuthContext role not available, calling getUserPermissions API');
-            console.log('🔍 TenantContext: User object details:', {
-              id: user.id,
-              email: user.email,
-              role: user.role,
-              roles: user.roles,
-              fullUser: user
-            });
             try {
               userPermissions = await getUserPermissions(user.id);
-              console.log('🔍 TenantContext: getUserPermissions SUCCESS response:', {
-                role: userPermissions.role,
-                permissionsCount: userPermissions.permissions?.length || 0,
-                permissions: userPermissions.permissions,
-                fullResponse: userPermissions
-              });
             } catch (error) {
               const err = error as Error & { response?: { status?: number; statusText?: string; data?: unknown } };
-              console.error('❌ TenantContext: Error getting user permissions:', {
-                error: err.message,
-                status: err.response?.status,
-                statusText: err.response?.statusText,
-                responseData: err.response?.data,
-                stack: err.stack,
-                userId: user.id,
-                fullError: error
-              });
-              console.error('❌ TenantContext: Will use default EMPLOYEE role due to error');
-              
-              // Se l'errore è 403, potrebbe essere un problema di autorizzazione
-              if (err.response?.status === 403) {
-                console.error('🚫 TenantContext: 403 Forbidden - User ID mismatch or authorization issue');
-                console.error('🚫 TenantContext: Check if user.id matches authenticated user ID');
+              if (import.meta.env.DEV) {
+                console.error('❌ TenantContext: Error getting user permissions:', {
+                  status: err.response?.status,
+                  statusText: err.response?.statusText,
+                });
+                if (err.response?.status === 403) {
+                  console.error('🚫 TenantContext: 403 Forbidden - User ID mismatch or authorization issue');
+                }
               }
             }
           }
         } else {
-          console.warn('⚠️ TenantContext: No user.id available, skipping getUserPermissions call');
-          console.warn('⚠️ TenantContext: User object state:', {
-            user,
-            hasUser: !!user,
-            userKeys: user ? Object.keys(user) : 'no user'
-          });
+          if (import.meta.env.DEV) {
+            console.warn('⚠️ TenantContext: No user.id available, skipping getUserPermissions call');
+          }
         }
 
         const duration = timer();
         recordApiCall('/tenants/current', 'GET', duration, 200, { cached: false, deduplicated: false });
-        
+
         // Log GDPR action per audit trail
         await logGdprAction({
           action: 'TENANT_FETCH_SUCCESS',
@@ -265,17 +201,21 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           'ADMIN': 'Admin',
           'SUPER_ADMIN': 'Super Admin',
           'COMPANY_ADMIN': 'Company Admin',
-          'EMPLOYEE': 'Employee'
+          'EMPLOYEE': 'Employee',
+          // P52: Clinical roles mapping
+          'MEDICO': 'Medico',
+          'PAZIENTE': 'Paziente',
+          'INFERMIERE': 'Infermiere',
+          'PERSONALE_SEGRETERIA': 'Segreteria'
         };
-        
-        const mappedRole = roleMapping[userPermissions.role] || 'Employee';
-        
-        console.log('🎭 TenantContext: Role mapping:', {
-          backendRole: userPermissions.role,
-          mappedRole: mappedRole,
-          permissionsCount: userPermissions.permissions?.length || 0,
-          roleMapping
-        });
+
+        // P52 Fix: Check if role is already mapped (e.g., 'Medico' from AuthContext)
+        // or if it needs to be mapped from backend format (e.g., 'MEDICO')
+        const alreadyMappedRoles = Object.values(roleMapping);
+        const mappedRole = alreadyMappedRoles.includes(userPermissions.role)
+          ? userPermissions.role  // Already mapped by AuthContext
+          : (roleMapping[userPermissions.role] || 'Employee'); // Map from backend format
+
 
         // Aggiorna stato solo se componente ancora montato
         if (mountedRef.current) {
@@ -283,20 +223,20 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           setPermissions(userPermissions.permissions || []);
           setUserRole(mappedRole);
           lastFetchRef.current = Date.now();
-          console.log('✅ Tenant data loaded successfully:', tenantData.name);
         }
-        
+
         return tenantData;
-      } catch (err: any) {
+      } catch (err: unknown) {
         const duration = timer();
-        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-        
-        recordApiCall('/tenants/current', 'GET', duration, err.status || 500, { 
-          cached: false, 
-          deduplicated: false, 
-          error: errorMessage 
+        const errorMessage = 'Unknown error';
+        const axiosErr = err as { status?: number };
+
+        recordApiCall('/tenants/current', 'GET', duration, axiosErr.status || 500, {
+          cached: false,
+          deduplicated: false,
+          error: errorMessage
         });
-        
+
         // Log GDPR error per audit trail
         await logGdprAction({
           action: 'TENANT_FETCH_ERROR',
@@ -308,13 +248,13 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             errorType: err instanceof Error ? err.constructor.name : 'UnknownError'
           }
         });
-        
+
         // Aggiorna stato solo se componente ancora montato
         if (mountedRef.current) {
           setError(errorMessage);
-          console.error('❌ Failed to fetch tenant:', errorMessage);
+          if (import.meta.env.DEV) console.error('❌ Failed to fetch tenant:', errorMessage);
         }
-        
+
         throw err;
       }
     })();
@@ -335,75 +275,42 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   // Funzione per aggiornare il tenant
   const refreshTenant = useCallback(async () => {
-    console.log('🔄 Refreshing tenant data...');
     setTenant(null);
     setError(null);
     lastFetchRef.current = 0; // Invalida cache
-    
+
     try {
       await loadTenantContext(true); // Force refresh
     } catch (error) {
       // Error già gestito in loadTenantContext
-      console.error('Failed to refresh tenant:', error);
+      if (import.meta.env.DEV) console.error('Failed to refresh tenant:', error);
     }
   }, [loadTenantContext]);
 
   // Inizializzazione automatica una sola volta
   useEffect(() => {
-    console.log('🔍 TenantContext useEffect triggered:', {
-      initializedRef: initializedRef.current,
-      mountedRef: mountedRef.current,
-      isAuthenticated,
-      hasUserId: !!user?.id,
-      userId: user?.id,
-      userEmail: user?.email,
-      userObject: user,
-      userRole: user?.role,
-      timestamp: new Date().toISOString()
-    });
-    
+
     if (!initializedRef.current && mountedRef.current && isAuthenticated && user?.id) {
       initializedRef.current = true;
-      console.log('🎯 Initializing TenantContext for user:', user.id);
-      console.log('🎯 TenantContext: Adding small delay to ensure token propagation...');
-      
+
       // Piccolo delay per permettere al token di essere propagato negli interceptor Axios
       setTimeout(() => {
         if (mountedRef.current) {
-          console.log('🎯 TenantContext: Starting loadTenantContext after delay...');
           loadTenantContext().then(() => {
-            console.log('✅ TenantContext: loadTenantContext completed successfully');
           }).catch((error) => {
-            console.error('❌ TenantContext: loadTenantContext failed:', error);
+            if (import.meta.env.DEV) console.error('❌ TenantContext: loadTenantContext failed:', error);
             // Error già gestito in loadTenantContext
           });
         }
       }, 100); // 100ms delay per permettere la propagazione del token
     } else {
-      console.log('🚫 TenantContext: Skipping initialization:', {
-        initializedRef: initializedRef.current,
-        mountedRef: mountedRef.current,
-        isAuthenticated,
-        hasUserId: !!user?.id,
-        reason: !initializedRef.current ? 'not initialized' : 
-                !mountedRef.current ? 'not mounted' :
-                !isAuthenticated ? 'not authenticated' :
-                !user?.id ? 'no user id' : 'unknown'
-      });
     }
   }, [isAuthenticated, user?.id, loadTenantContext]);
 
   // Reset quando l'utente cambia o si disconnette
   useEffect(() => {
-    console.log('🔍 TenantContext reset useEffect triggered:', {
-      isAuthenticated,
-      hasUserId: !!user?.id,
-      userId: user?.id,
-      shouldReset: !isAuthenticated || !user?.id
-    });
-    
+
     if (!isAuthenticated || !user?.id) {
-      console.log('🔄 User changed or logged out, resetting tenant context');
       setTenant(null);
       setPermissions([]);
       setUserRole('Employee');

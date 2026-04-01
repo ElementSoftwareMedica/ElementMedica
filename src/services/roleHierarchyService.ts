@@ -3,6 +3,8 @@
  * Implementa i filtri per employees e trainers secondo le regole del progetto
  */
 
+import type { PersonTenantProfile } from '../types/personMultiTenant';
+
 export interface PersonRole {
   id: string;
   roleType: string;
@@ -17,6 +19,10 @@ export interface PersonRole {
   assignedAt: string;
 }
 
+/**
+ * Person - Interfaccia unificata che supporta sia il modello legacy che il nuovo modello multi-tenant
+ * Progetto 48: Aggiunto supporto per tenantProfiles e currentProfile
+ */
 export interface Person {
   id: string;
   firstName: string;
@@ -30,18 +36,37 @@ export interface Person {
     id: string;
     ragioneSociale: string;
   };
-  status: 'ACTIVE' | 'INACTIVE' | 'PENDING';
+  status: 'ACTIVE' | 'INACTIVE' | 'PENDING' | 'SUSPENDED' | 'TERMINATED';
   deletedAt?: string;
   createdAt: string;
   updatedAt: string;
   // Campi opzionali estesi per la UI
   title?: string;
   birthDate?: string;
-  site?: { id: string; name: string };
+  birthPlace?: string;      // Progetto 48
+  birthProvince?: string;   // Progetto 48
+  site?: { id: string; name?: string; siteName?: string; citta?: string };
   hiredDate?: string;
-  certifications?: Array<{ id: string; name: string; expiresAt?: string }>;
+  certifications?: Array<{ id: string; name: string; expiresAt?: string }> | string[];
+  specialties?: string[];   // Progetto 48
   residenceCity?: string;
-  hourlyRate?: number;
+  hourlyRate?: number | string;
+  iban?: string;            // Progetto 48
+  // Progetto 48: Nuovi campi per multi-tenant
+  tenantId?: string;
+  tenantProfiles?: PersonTenantProfile[];
+  currentProfile?: PersonTenantProfile;
+  companyId?: string;
+  siteId?: string;
+  repartoId?: string;
+  // Mansioni attive del lavoratore
+  mansioni?: Array<{
+    id: string;
+    mansioneId: string;
+    denominazione?: string;
+    codice?: string;
+    isPrimaria?: boolean;
+  }>;
 }
 
 export interface FilterConfig {
@@ -243,12 +268,15 @@ export const hasActiveRole = (person: Person, roleType: string): boolean => {
 
 /**
  * Ottiene tutti i ruoli attivi di una persona
+ * Supporta sia il campo `roles` (dopo mapAliases) che `personRoles` (risposta API diretta)
  */
 export const getActiveRoles = (person: Person): PersonRole[] => {
-  if (!person.roles || !Array.isArray(person.roles)) {
+  // Fallback su personRoles quando roles è assente/vuoto (es. dati da GDPREntityTemplate senza mapAliases)
+  const source = (person.roles?.length ? person.roles : person.personRoles) ?? [];
+  if (!Array.isArray(source)) {
     return [];
   }
-  return person.roles.filter(role => role.isActive);
+  return source.filter(role => role.isActive);
 };
 
 /**

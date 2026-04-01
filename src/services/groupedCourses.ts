@@ -45,7 +45,6 @@ export class GroupedCoursesService {
       // Se l'endpoint risponde ma non fornisce dati utili, eseguiamo fallback locale
       throw new Error('Empty titles list response');
     } catch (error) {
-      console.error('Error fetching course titles, using local fallback:', error);
       // Fallback: ricava i titoli dal catalogo pubblico
       try {
         const grouped = await this.getGroupedCourses();
@@ -57,7 +56,6 @@ export class GroupedCoursesService {
           variantCount: g.variants.length,
         })).sort((a, b) => a.title.localeCompare(b.title, 'it', { sensitivity: 'base' }));
       } catch (e) {
-        console.error('Fallback failed while building course titles:', e);
         return [];
       }
     }
@@ -82,7 +80,6 @@ export class GroupedCoursesService {
       const courses = extractCourses(resp);
       return this.groupCoursesByTitle(courses);
     } catch (error) {
-      console.error('Error fetching grouped courses:', error);
       return [];
     }
   }
@@ -322,10 +319,9 @@ export class GroupedCoursesService {
             return await tryFetch(bestTitle);
           }
         }
-      } catch (e: any) {
+      } catch (e: unknown) {
         // Ignora 400 (bad request per query troppo corta/parametri mancanti), logga il resto a livello debug
         if (e?.response?.status && e.response.status !== 400) {
-          console.debug('Public course search fallback error:', e?.message || e);
         }
         // Ignora, gestito nel fallback successivo
       }
@@ -370,7 +366,6 @@ export class GroupedCoursesService {
         // Ignora, segnaleremo l'assenza sotto
       }
 
-      console.error('Unified course not found for title:', courseTitle);
       return null;
     }
   }

@@ -76,10 +76,10 @@ export const BRANCH_CONFIG = {
     versioneReferto: { branch: 'MEDICA', shared: false, inherit: 'referto' },
     firmaDigitale: { branch: 'MEDICA', shared: false, inherit: 'referto' },
     allegatoReferto: { branch: 'MEDICA', shared: false, inherit: 'referto' },
-    templateCampoVisita: { branch: 'MEDICA', shared: false },
+    // P65.7: templateCampoVisita RIMOSSO - consolidato in visitTemplate con scope=CATALOGO
+    visitTemplate: { branch: 'MEDICA', shared: false },
     valoreCampoVisita: { branch: 'MEDICA', shared: false, inherit: 'visita' },
     documentoClinico: { branch: 'MEDICA', shared: false, inherit: 'visita' },
-    fatturaSanitaria: { branch: 'MEDICA', shared: false, inherit: 'visita' },
     auditClinico: { branch: 'MEDICA', shared: false },
     disponibilitaMedico: { branch: 'MEDICA', shared: false },
     ferieAssenza: { branch: 'MEDICA', shared: false },
@@ -167,9 +167,9 @@ export const BRANCH_CONFIG = {
 
 const FRONTEND_BRANCH_MAP = {
     'element-medica': 'MEDICA',
-    'element-formazione': 'FORMAZIONE',
+    'element-sicurezza': 'FORMAZIONE',
     'elementmedica': 'MEDICA',
-    'elementformazione': 'FORMAZIONE',
+    'elementsicurezza': 'FORMAZIONE',
 };
 
 // ============================================
@@ -464,9 +464,9 @@ export function requireBranchAccess(requiredBranch = null) {
             }, 'Branch access denied');
 
             return res.status(403).json({
-                error: 'Branch access denied',
+                error: 'Accesso branch negato',
                 code: 'BRANCH_ACCESS_DENIED',
-                message: `You do not have access to branch: ${branch}`,
+                message: `Non hai accesso al branch: ${branch}`,
                 required: branch,
                 available: getAccessibleBranches(req),
             });

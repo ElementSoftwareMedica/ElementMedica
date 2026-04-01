@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { apiClient } from '../services';
+import { apiGet, apiPost, apiPatch } from '../services/api';
 import {
   DeletionRequest,
   DeletionStatus,
@@ -30,31 +30,29 @@ export const useDeletionRequest = (): UseDeletionRequestReturn => {
       setLoading(true);
       setError(null);
 
-      const response = await apiClient.get<GDPRApiResponse<{ requests: DeletionRequest[] }>>(
+      const data = await apiGet<GDPRApiResponse<{ requests: DeletionRequest[] }>>(
         '/api/v1/gdpr/data-deletion/requests'
       );
 
       // Handle both wrapped and direct response formats
-      if (response.data.success && response.data.data) {
-        setDeletionRequests(response.data.data.requests);
-      } else if ('requests' in response.data) {
-        setDeletionRequests((response.data as unknown as { requests: DeletionRequest[] }).requests);
-      } else if (Array.isArray(response.data)) {
-        setDeletionRequests(response.data);
+      if (data.success && data.data) {
+        setDeletionRequests(data.data.requests);
+      } else if ('requests' in data) {
+        setDeletionRequests((data as unknown as { requests: DeletionRequest[] }).requests);
+      } else if (Array.isArray(data)) {
+        setDeletionRequests(data as unknown as DeletionRequest[]);
       } else {
         // No requests found or endpoint not available
         setDeletionRequests([]);
       }
     } catch (err) {
       // Non mostrare errori se l'endpoint non esiste o accesso negato
-      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch deletion requests';
+      const errorMessage = 'Errore nel recupero delle richieste di cancellazione';
       if (!errorMessage.includes('404') && !errorMessage.includes('403') && !errorMessage.includes('500')) {
         setError(errorMessage);
-        console.error('Error fetching deletion requests:', err);
       } else {
         // Endpoint non disponibile o non autorizzato - set array vuoto
         setDeletionRequests([]);
-        console.warn('GDPR deletion requests endpoint not available or forbidden, using empty state');
       }
     } finally {
       setLoading(false);
@@ -64,31 +62,31 @@ export const useDeletionRequest = (): UseDeletionRequestReturn => {
   /**
    * Submit a new deletion request
    */
-  const submitDeletionRequest = useCallback(async (data: DeletionRequestFormData) => {
+  const submitDeletionRequest = useCallback(async (formData: DeletionRequestFormData) => {
     try {
       setLoading(true);
       setError(null);
 
       // Validate required fields
-      if (!data.reason || data.reason.trim().length < 10) {
+      if (!formData.reason || formData.reason.trim().length < 10) {
         throw new Error('Please provide a detailed reason (minimum 10 characters)');
       }
 
-      if (!data.confirmEmail || data.confirmEmail !== user?.email) {
+      if (!formData.confirmEmail || formData.confirmEmail !== user?.email) {
         throw new Error('Email confirmation does not match your account email');
       }
 
-      const response = await apiClient.post<GDPRApiResponse<{ request: DeletionRequest }>>(
+      const response = await apiPost<GDPRApiResponse<{ request: DeletionRequest }>>(
         '/api/v1/gdpr/data-deletion/request',
         {
-          reason: data.reason.trim(),
-          confirmEmail: data.confirmEmail,
-          additionalInfo: data.additionalInfo?.trim() || null
+          reason: formData.reason.trim(),
+          confirmEmail: formData.confirmEmail,
+          additionalInfo: formData.additionalInfo?.trim() || null
         }
       );
 
-      if (response.data.success && response.data.data) {
-        const newRequest = response.data.data.request;
+      if (response.success && response.data) {
+        const newRequest = response.data.request;
 
         // Add to local state
         setDeletionRequests(prev => [newRequest, ...prev]);
@@ -97,12 +95,11 @@ export const useDeletionRequest = (): UseDeletionRequestReturn => {
 
         return newRequest;
       } else {
-        throw new Error(response.data.error || 'Failed to submit deletion request');
+        throw new Error((response as { error?: string }).error || 'Errore nell\'invio della richiesta di cancellazione');
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to submit deletion request';
+      const errorMessage = 'Errore nell\'invio della richiesta di cancellazione';
       setError(errorMessage);
-      console.error('Error submitting deletion request:', err);
       // Toast handled by calling component
       throw err;
     } finally {
@@ -126,11 +123,11 @@ export const useDeletionRequest = (): UseDeletionRequestReturn => {
         throw new Error('Only pending requests can be cancelled');
       }
 
-      const response = await apiClient.patch<GDPRApiResponse>(
+      const response = await apiPatch<GDPRApiResponse>(
         `/api/v1/gdpr/data-deletion/request/${requestId}/cancel`
       );
 
-      if (response.data.success) {
+      if (response.success) {
         // Update local state
         setDeletionRequests(prev =>
           prev.map(req =>
@@ -142,11 +139,10 @@ export const useDeletionRequest = (): UseDeletionRequestReturn => {
 
         // Toast handled by calling component
       } else {
-        throw new Error(response.data.error || 'Failed to cancel deletion request');
+        throw new Error((response as { error?: string }).error || 'Errore nell\'annullamento della richiesta di cancellazione');
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to cancel deletion request';
-      console.error('Error cancelling deletion request:', err);
+      const errorMessage = 'Errore nell\'annullamento della richiesta di cancellazione';
       // Toast handled by calling component
       throw err;
     } finally {

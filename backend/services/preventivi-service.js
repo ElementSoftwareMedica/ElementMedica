@@ -10,9 +10,92 @@
  * @module services/preventivi-service
  */
 
+import { readFileSync, existsSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+import sharp from 'sharp';
 import prisma from '../config/prisma-optimization.js';
 import logger from '../utils/logger.js';
 import { Decimal } from '@prisma/client/runtime/library';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+// Percorso root del backend (backend/services/ → backend/)
+const BACKEND_DIR = join(__dirname, '..');
+
+/**
+ * Converte un path relativo/assoluto del logo in data-URL base64.
+ * Usa sharp per ridimensionare l'immagine a max 440x160px prima della codifica,
+ * evitando embedding di PNG da centinaia di KB/MB nel template HTML.
+ *
+ * @param {string} logoPath - Path relativo (es. /uploads/cms/tenant/logo.png) o URL assoluto
+ * @returns {Promise<string>} - data-URL base64 ottimizzato oppure il path/URL originale
+ */
+async function logoToDataUrl(logoPath) {
+  if (!logoPath) return '';
+  if (logoPath.startsWith('data:')) return logoPath;
+
+  let effectivePath = logoPath;
+  if (logoPath.startsWith('http://') || logoPath.startsWith('https://')) {
+    try {
+      const url = new URL(logoPath);
+      const isLocal = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '0.0.0.0';
+      if (isLocal) {
+        effectivePath = url.pathname;
+      } else {
+        return logoPath;
+      }
+    } catch { return logoPath; }
+  }
+
+  const cleanPath = effectivePath.startsWith('/') ? effectivePath.slice(1) : effectivePath;
+  const PROJECT_ROOT = join(BACKEND_DIR, '..');
+  const tryPaths = [join(BACKEND_DIR, cleanPath), join(BACKEND_DIR, 'public', cleanPath), join(PROJECT_ROOT, 'public', cleanPath), join(PROJECT_ROOT, cleanPath)];
+  let resolvedPath = null;
+  for (const p of tryPaths) {
+    if (existsSync(p)) { resolvedPath = p; break; }
+  }
+
+  if (!resolvedPath) {
+    logger.warn('[preventivi-service] Logo file non trovato nel filesystem', { logoPath, tried: tryPaths });
+    return logoPath;
+  }
+  try {
+    const ext = resolvedPath.split('.').pop().toLowerCase();
+    const mime = ext === 'png' ? 'image/png'
+      : (ext === 'jpg' || ext === 'jpeg') ? 'image/jpeg'
+        : ext === 'svg' ? 'image/svg+xml'
+          : 'image/png';
+
+    let data;
+    if (ext === 'svg') {
+      data = readFileSync(resolvedPath);
+    } else {
+      const originalSize = readFileSync(resolvedPath).length;
+      data = await sharp(resolvedPath)
+        .resize(440, 160, { fit: 'inside', withoutEnlargement: true })
+        .png({ compressionLevel: 8, quality: 85 })
+        .toBuffer();
+      logger.debug('[preventivi-service] Logo ottimizzato', {
+        logoPath,
+        originalSize,
+        optimizedSize: data.length,
+        reduction: `${Math.round((1 - data.length / originalSize) * 100)}%`
+      });
+    }
+    return `data:${mime};base64,${data.toString('base64')}`;
+  } catch (err) {
+    logger.warn('[preventivi-service] Errore ottimizzazione logo, fallback a lettura diretta', { logoPath, error: err.message });
+    try {
+      const data = readFileSync(filePath);
+      const ext = filePath.split('.').pop().toLowerCase();
+      const mime = ext === 'png' ? 'image/png' : ext === 'svg' ? 'image/svg+xml' : 'image/jpeg';
+      return `data:${mime};base64,${data.toString('base64')}`;
+    } catch {
+      return logoPath;
+    }
+  }
+}
 
 /**
  * Aliquote IVA standard per tipo servizio
@@ -164,7 +247,7 @@ export async function applyDiscount(preventivoId, codiceId, options = {}) {
   try {
     // Recupera preventivo corrente
     const preventivo = await client.preventivo.findUnique({
-      where: { id: preventivoId },
+      where: { id: preventivoId, deletedAt: null },
       include: {
         sconti: {
           where: { deletedAt: null },
@@ -179,7 +262,7 @@ export async function applyDiscount(preventivoId, codiceId, options = {}) {
 
     // Recupera codice sconto
     const codice = await client.codiceSconto.findUnique({
-      where: { id: codiceId }
+      where: { id: codiceId, deletedAt: null }
     });
 
     if (!codice) {
@@ -232,7 +315,7 @@ export async function applyDiscount(preventivoId, codiceId, options = {}) {
 
     // Incrementa contatore utilizzo codice
     await client.codiceSconto.update({
-      where: { id: codiceId },
+      where: { id: codiceId, deletedAt: null },
       data: { utilizzoCorrente: { increment: 1 } }
     });
 
@@ -246,7 +329,7 @@ export async function applyDiscount(preventivoId, codiceId, options = {}) {
 
     // Aggiorna preventivo
     const preventivoAggiornato = await client.preventivo.update({
-      where: { id: preventivoId },
+      where: { id: preventivoId, deletedAt: null },
       data: {
         scontoTotale: totali.scontoTotale,
         imponibile: totali.imponibile,
@@ -310,7 +393,7 @@ export async function removeDiscount(preventivoId, scontoId, options = {}) {
   try {
     // Recupera preventivo e sconto
     const preventivo = await client.preventivo.findUnique({
-      where: { id: preventivoId },
+      where: { id: preventivoId, deletedAt: null },
       include: {
         sconti: {
           where: { deletedAt: null }
@@ -337,7 +420,7 @@ export async function removeDiscount(preventivoId, scontoId, options = {}) {
     // Soft delete sconto
     const now = new Date();
     await client.preventivoSconto.update({
-      where: { id: scontoId },
+      where: { id: scontoId, deletedAt: null },
       data: {
         deletedAt: now,
         deletedBy: options.userId || null
@@ -346,13 +429,13 @@ export async function removeDiscount(preventivoId, scontoId, options = {}) {
 
     // Decrementa contatore utilizzo codice
     const codice = await client.codiceSconto.findUnique({
-      where: { id: sconto.codiceId },
+      where: { id: sconto.codiceId, deletedAt: null },
       select: { utilizzoCorrente: true }
     });
 
     if (codice && codice.utilizzoCorrente > 0) {
       await client.codiceSconto.update({
-        where: { id: sconto.codiceId },
+        where: { id: sconto.codiceId, deletedAt: null },
         data: { utilizzoCorrente: { decrement: 1 } }
       });
     }
@@ -367,7 +450,7 @@ export async function removeDiscount(preventivoId, scontoId, options = {}) {
 
     // Aggiorna preventivo
     const preventivoAggiornato = await client.preventivo.update({
-      where: { id: preventivoId },
+      where: { id: preventivoId, deletedAt: null },
       data: {
         scontoTotale: totali.scontoTotale,
         imponibile: totali.imponibile,
@@ -450,6 +533,7 @@ export async function generateNumeroPreventivo(tenantId, anno = null) {
     const lastPreventivo = await prisma.preventivo.findFirst({
       where: {
         tenantId,
+        deletedAt: null,
         numero: {
           startsWith: `PREV-${targetYear}-`
         }
@@ -507,7 +591,7 @@ export async function generateNumeroPreventivo(tenantId, anno = null) {
 export async function getPreventivoStats(preventivoId) {
   try {
     const preventivo = await prisma.preventivo.findUnique({
-      where: { id: preventivoId },
+      where: { id: preventivoId, deletedAt: null },
       include: {
         sconti: {
           where: { deletedAt: null }
@@ -594,27 +678,49 @@ async function generatePDF({ preventivoId, userId, tenantId }) {
       throw new Error('Preventivo non trovato');
     }
 
-    // 1b. Carica azienda se presente
+    // 1b. Carica companyTenantProfile se presente (con company e referente)
     let azienda = null;
-    if (preventivo.aziendaId) {
-      azienda = await prisma.company.findUnique({
-        where: { id: preventivo.aziendaId }
+    if (preventivo.companyTenantProfileId) {
+      const companyProfile = await prisma.companyTenantProfile.findFirst({
+        where: { id: preventivo.companyTenantProfileId, deletedAt: null },
+        include: {
+          company: true,
+          referente: true
+        }
       });
+      // Map to legacy azienda format for template compatibility
+      if (companyProfile?.company) {
+        azienda = {
+          id: companyProfile.id,
+          ragioneSociale: companyProfile.company.ragioneSociale,
+          partitaIva: companyProfile.company.piva,
+          codiceFiscale: companyProfile.company.codiceFiscale,
+          indirizzo: companyProfile.company.sedeLegaleIndirizzo,
+          citta: companyProfile.company.sedeLegaleCitta,
+          cap: companyProfile.company.sedeLegaleCap,
+          provincia: companyProfile.company.sedeLegaleProvincia,
+          email: companyProfile.emailGenerale,
+          telefono: companyProfile.telefonoGenerale,
+          rappresentanteLegale: companyProfile.referente
+            ? `${companyProfile.referente.firstName || ''} ${companyProfile.referente.lastName || ''}`.trim()
+            : null
+        };
+      }
     }
 
     // 1c. Carica persona se presente
     let persona = null;
     if (preventivo.personaId) {
-      persona = await prisma.person.findUnique({
-        where: { id: preventivo.personaId }
+      persona = await prisma.person.findFirst({ // F246: findFirst+deletedAt
+        where: { id: preventivo.personaId, deletedAt: null }
       });
     }
 
     // 1d. Carica corso se presente
     let corso = null;
     if (preventivo.corsoId) {
-      corso = await prisma.course.findUnique({
-        where: { id: preventivo.corsoId }
+      corso = await prisma.course.findFirst({
+        where: { id: preventivo.corsoId, deletedAt: null }
       });
     } else if (preventivo.schedule?.course) {
       corso = preventivo.schedule.course;
@@ -626,21 +732,34 @@ async function generatePDF({ preventivoId, userId, tenantId }) {
     preventivo.corso = corso;
 
     // 1e. Carica tenant per header/footer template
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: tenantId }
+    const tenant = await prisma.tenant.findFirst({
+      where: { id: tenantId, deletedAt: null }
     });
 
-    // 2. Trova template "Preventivo"
-    const template = await prisma.templateLink.findFirst({
+    // 2. Trova template "Preventivo" - preferisce isDefault, fallback al più recente
+    let template = await prisma.templateLink.findFirst({
       where: {
         tenantId,
         type: 'PREVENTIVO',
-        isActive: true
-      },
-      orderBy: {
-        version: 'desc'
+        isDefault: true,
+        isActive: true,
+        deletedAt: null
       }
     });
+
+    if (!template) {
+      template = await prisma.templateLink.findFirst({
+        where: {
+          tenantId,
+          type: 'PREVENTIVO',
+          isActive: true,
+          deletedAt: null
+        },
+        orderBy: {
+          version: 'desc'
+        }
+      });
+    }
 
     if (!template) {
       logger.error('Template PREVENTIVO non trovato', {
@@ -664,19 +783,33 @@ async function generatePDF({ preventivoId, userId, tenantId }) {
     // 3. Build marker data
     const markerData = _buildMarkerData(preventivo);
 
-    // 3b. Aggiungi dati tenant per header/footer
+    // 3b. Aggiungi dati tenant per header/footer (fornitore = nostra azienda)
+    // NOTA: I dati estesi (address, vatNumber, etc.) sono in tenant.settings (JSON)
+    const tenantSettings = tenant?.settings || {};
+    const tenantLogoUrl = tenantSettings.branches?.MEDICA?.logo || tenantSettings.logoUrl || '';
+
+    // Converte il path relativo in data-URL base64 ottimizzato per Puppeteer
+    // (Puppeteer non ha accesso diretto al file system tramite path HTTP relativi)
+    const tenantLogoEmbedded = await logoToDataUrl(tenantLogoUrl);
+
     markerData.tenant = {
-      name: tenant?.name || 'Element Medica S.r.l.',
-      address: tenant?.address || 'Via Roma 123',
-      city: tenant?.city || '20100 Milano (MI)',
-      vatNumber: tenant?.vatNumber || tenant?.piva || '12345678901',
-      phone: tenant?.phone || '',
-      email: tenant?.email || '',
-      website: tenant?.website || '',
-      // Logo HTML condizionale
-      logoHtml: tenant?.logoUrl
-        ? `<img src="${tenant.logoUrl}" alt="${tenant.name}">`
-        : `<span style="font-size: 14pt; font-weight: 700; color: #1e40af;">${tenant?.name || 'Element Medica S.r.l.'}</span>`
+      name: tenant?.name || 'Element srl',
+      address: tenantSettings.address || '',
+      cap: tenantSettings.cap || tenantSettings.postalCode || '',
+      city: tenantSettings.city || '',
+      provincia: tenantSettings.provincia || tenantSettings.province || '',
+      vatNumber: tenantSettings.vatNumber || tenantSettings.piva || '',
+      fiscalCode: tenantSettings.fiscalCode || tenantSettings.cf || tenantSettings.vatNumber || '',
+      phone: tenantSettings.phone || '',
+      email: tenantSettings.email || '',
+      pec: tenantSettings.pec || '',
+      website: tenantSettings.website || '',
+      logoUrl: tenantLogoEmbedded || tenantLogoUrl,
+      branchLogo: await logoToDataUrl(tenantSettings.branches?.MEDICA?.logo || tenantSettings.branches?.FORMAZIONE?.logo || ''),
+      // Logo HTML: usa data-URL base64 per garantire la visualizzazione in Puppeteer
+      logoHtml: tenantLogoEmbedded
+        ? `<img src="${tenantLogoEmbedded}" alt="${tenant?.name || 'Tenant'}" style="max-height:80px;max-width:220px;object-fit:contain;">`
+        : `<span style="font-size: 14pt; font-weight: 700; color: #1e40af;">${tenant?.name || 'Element srl'}</span>`
     };
 
     // 3c. Template v12 non ha più bisogno di rimuovere riga sconto 
@@ -704,7 +837,7 @@ async function generatePDF({ preventivoId, userId, tenantId }) {
     // 5. Aggiorna stato preventivo se era in BOZZA
     if (preventivo.stato === 'BOZZA') {
       await prisma.preventivo.update({
-        where: { id: preventivoId },
+        where: { id: preventivoId, deletedAt: null },
         data: {
           stato: 'INVIATO',
           dataInvio: new Date()
@@ -743,6 +876,15 @@ async function generatePDF({ preventivoId, userId, tenantId }) {
       const dd = String(dateToUse.getDate()).padStart(2, '0');
       const dateFormatted = `${yyyy}.${mm}.${dd}`;
       customFilename = `${dateFormatted} - Preventivo ${personName}.pdf`;
+    } else {
+      // Fallback to preventivo numero when no company or persona is linked
+      const dateToUse = preventivo.dataEmissione ? new Date(preventivo.dataEmissione) : new Date();
+      const yyyy = dateToUse.getFullYear();
+      const mm = String(dateToUse.getMonth() + 1).padStart(2, '0');
+      const dd = String(dateToUse.getDate()).padStart(2, '0');
+      const dateFormatted = `${yyyy}.${mm}.${dd}`;
+      const identifier = preventivo.numero || `PRV-${preventivo.id.substring(0, 8)}`;
+      customFilename = `${dateFormatted} - Preventivo ${identifier}.pdf`;
     }
 
     logger.info('PDF generated successfully', {
@@ -859,7 +1001,40 @@ function _buildMarkerData(preventivo) {
       linkAccettazione: dettagli.linkAccettazione || '',
       numPartecipanti: preventivo.quantita || dettagli.numPartecipanti || 0,
       partecipanti: preventivo.quantita || dettagli.numPartecipanti || '',
-      metodoPagamento: dettagli.metodoPagamento || '30gg data fattura'
+      metodoPagamento: dettagli.metodoPagamento || '30gg data fattura',
+
+      // Campi DVR (quando tipoServizio = DVR)
+      dvrNumDipendenti: dettagli.numDipendenti || dettagli.dvrNumDipendenti || '',
+      dvrSettore: dettagli.settore || dettagli.dvrSettore || '',
+      dvrNumSedi: dettagli.numSedi || dettagli.dvrNumSedi || '1',
+      dvrTempiConsegna: dettagli.tempiConsegna || dettagli.dvrTempiConsegna || '30 giorni lavorativi',
+
+      // Campi RSPP (quando tipoServizio = RSPP)
+      rsppNumDipendenti: dettagli.numDipendenti || dettagli.rsppNumDipendenti || '',
+      rsppClasseRischio: dettagli.classeRischio || dettagli.rsppClasseRischio || 'Medio',
+      rsppDurata: dettagli.durataMesi || dettagli.rsppDurata || '12',
+      rsppPeriodicitaVisite: dettagli.periodicitaVisite || dettagli.rsppPeriodicitaVisite || 'Mensile',
+
+      // Campi Medico Competente (quando tipoServizio = MEDICO_COMPETENTE)
+      medicoNumDipendenti: dettagli.numDipendenti || dettagli.medicoNumDipendenti || '',
+      medicoTipoVisite: dettagli.tipoVisite || dettagli.medicoTipoVisite || 'Preventive e periodiche',
+      medicoFrequenza: dettagli.frequenzaVisite || dettagli.medicoFrequenza || 'Annuale',
+      medicoSede: dettagli.sedeVisite || dettagli.medicoSede || 'Presso sede cliente',
+
+      // Campi ALTRO servizio
+      altroDescrizione: dettagli.descrizione || preventivo.note || '',
+      altroQuantita: dettagli.quantita || preventivo.quantita || '1',
+
+      // Sconti individuali (fino a 3)
+      sconto1Codice: preventivo.sconti?.[0]?.codiceTesto || preventivo.sconti?.[0]?.codice?.codice || '',
+      sconto1Descrizione: preventivo.sconti?.[0]?.codice?.descrizione || preventivo.sconti?.[0]?.descrizione || '',
+      sconto1Importo: Number(preventivo.sconti?.[0]?.importo || 0).toFixed(2),
+      sconto2Codice: preventivo.sconti?.[1]?.codiceTesto || preventivo.sconti?.[1]?.codice?.codice || '',
+      sconto2Descrizione: preventivo.sconti?.[1]?.codice?.descrizione || preventivo.sconti?.[1]?.descrizione || '',
+      sconto2Importo: Number(preventivo.sconti?.[1]?.importo || 0).toFixed(2),
+      sconto3Codice: preventivo.sconti?.[2]?.codiceTesto || preventivo.sconti?.[2]?.codice?.codice || '',
+      sconto3Descrizione: preventivo.sconti?.[2]?.codice?.descrizione || preventivo.sconti?.[2]?.descrizione || '',
+      sconto3Importo: Number(preventivo.sconti?.[2]?.importo || 0).toFixed(2)
     },
 
     // Alias cliente per compatibilità template (popolato dopo)

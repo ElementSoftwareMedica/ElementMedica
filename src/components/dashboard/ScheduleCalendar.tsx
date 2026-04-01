@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
+import { sanitizeHtml } from '../../utils/sanitize';
 // @ts-ignore
 import { Calendar, dateFnsLocalizer, Views } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay } from 'date-fns';
@@ -37,6 +38,7 @@ interface ScheduleCalendarProps {
   onSelectEvent?: (event: ScheduleEvent) => void;
   view?: string;
   onView?: (view: string) => void;
+  onNavigate?: (date: Date) => void;
 }
 
 
@@ -91,7 +93,7 @@ function CustomEvent({ event }: { event: ScheduleEvent }) {
   );
 }
 
-const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({ events, onSelectSlot, onSelectEvent, view, onView }) => {
+const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({ events, onSelectSlot, onSelectEvent, view, onView, onNavigate }) => {
   const [currentView, setCurrentView] = useState(view || 'month');
 
   useEffect(() => {
@@ -190,7 +192,7 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({ events, onSelectSlo
         })()}
         {/* Sessioni HTML */}
         {event.sessioniTooltipHtml && (
-          <div style={{ marginTop: 6 }} dangerouslySetInnerHTML={{ __html: event.sessioniTooltipHtml }} />
+          <div style={{ marginTop: 6 }} dangerouslySetInnerHTML={{ __html: sanitizeHtml(event.sessioniTooltipHtml) }} />
         )}
       </div>,
       document.body
@@ -257,6 +259,10 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({ events, onSelectSlo
           setCurrentView(v);
           if (onView) onView(v);
         }}
+        onNavigate={(date: Date) => {
+          if (onNavigate) onNavigate(date);
+        }}
+        dayMaxEvents={3}
         messages={{
           month: 'Mese',
           week: 'Settimana',

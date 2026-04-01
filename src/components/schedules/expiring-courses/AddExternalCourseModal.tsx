@@ -16,14 +16,22 @@ import { apiGet, apiPost } from '../../../services/api';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import type { Company, CourseOption, PersonOption, ImportResults } from './types';
+import { DatePickerElegante } from '../../ui/DatePickerElegante';
 
 interface AddExternalCourseModalProps {
     companies: Company[];
     onClose: () => void;
     onAdded: () => void;
+    /** Multi-tenant operation headers (X-Operate-Tenant-Id) */
+    operateHeaders?: Record<string, string>;
 }
 
-export const AddExternalCourseModal: React.FC<AddExternalCourseModalProps> = ({ companies, onClose, onAdded }) => {
+export const AddExternalCourseModal: React.FC<AddExternalCourseModalProps> = ({
+    companies,
+    onClose,
+    onAdded,
+    operateHeaders = {}
+}) => {
     const [loading, setLoading] = useState(false);
     const [courses, setCourses] = useState<CourseOption[]>([]);
     const [persons, setPersons] = useState<PersonOption[]>([]);
@@ -60,7 +68,6 @@ export const AddExternalCourseModal: React.FC<AddExternalCourseModalProps> = ({ 
                 const response = await apiGet<CourseOption[]>('/api/v1/courses');
                 setCourses(Array.isArray(response) ? response : []);
             } catch (err) {
-                console.error('Error fetching courses:', err);
             }
         };
         fetchCourses();
@@ -81,7 +88,6 @@ export const AddExternalCourseModal: React.FC<AddExternalCourseModalProps> = ({ 
                 }));
                 setPersons(enrichedPersons);
             } catch (err) {
-                console.error('Error fetching persons:', err);
             }
         };
         fetchPersons();
@@ -118,33 +124,33 @@ export const AddExternalCourseModal: React.FC<AddExternalCourseModalProps> = ({ 
         setResult(null);
 
         try {
-            // Use apiPost for authenticated request
+            // Use apiPost for authenticated request with multi-tenant headers
             const response = await apiPost<{ results: ImportResults }>(
                 '/api/v1/schedules/import-expiring-courses',
                 {
                     records: [{
                         taxCode: selectedPerson.taxCode,
-                        courseName: selectedCourse?.title,
-                        riskLevel: selectedCourse?.riskLevel,
-                        courseType: selectedCourse?.courseType,
+                        courseId: selectedCourse?.id,      // Bypass lookup testuale: uso diretto dell'ID
+                        courseName: selectedCourse?.title, // Fallback per retrocompatibilità logging
                         completedDate,
                         notes
                     }]
-                }
+                },
+                { headers: operateHeaders }
             );
 
             if (response.results?.imported?.length > 0) {
                 setResult({ success: true, message: 'Corso esterno aggiunto con successo!' });
                 setTimeout(onAdded, 1500);
             } else if (response.results?.skipped?.length > 0) {
-                setResult({ success: false, message: 'Questo corso è già stato registrato per questo dipendente' });
+                const skipped = response.results.skipped[0];
+                setResult({ success: false, message: `Questo corso è già stato registrato per questo dipendente in data ${skipped.existingDate ? new Date(skipped.existingDate).toLocaleDateString('it-IT') : completedDate}` });
             } else if (response.results?.errors?.length > 0) {
                 setResult({ success: false, message: response.results.errors[0].error || 'Errore durante il salvataggio' });
             } else {
                 setResult({ success: false, message: 'Errore sconosciuto' });
             }
         } catch (err) {
-            console.error('Error adding external course:', err);
             setResult({ success: false, message: 'Errore durante il salvataggio' });
         } finally {
             setLoading(false);
@@ -153,15 +159,15 @@ export const AddExternalCourseModal: React.FC<AddExternalCourseModalProps> = ({ 
 
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl shadow-xl max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
-                <div className="p-4 border-b border-gray-200 sticky top-0 bg-white">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
+                <div className="p-4 border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800">
                     <div className="flex items-center gap-2">
-                        <div className="p-2 bg-purple-100 rounded-lg">
-                            <ExternalLink className="h-5 w-5 text-purple-600" />
+                        <div className="p-2 bg-purple-100 dark:bg-purple-900/40 rounded-lg">
+                            <ExternalLink className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                         </div>
                         <div>
-                            <h3 className="text-lg font-semibold">Aggiungi Corso Esterno</h3>
-                            <p className="text-sm text-gray-500">Registra un corso completato presso ente esterno</p>
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Aggiungi Corso Esterno</h3>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Registra un corso completato presso ente esterno</p>
                         </div>
                     </div>
                 </div>
@@ -169,11 +175,11 @@ export const AddExternalCourseModal: React.FC<AddExternalCourseModalProps> = ({ 
                 <div className="p-4 space-y-4">
                     {/* Person Search with Autocomplete */}
                     <div ref={personSearchRef} className="relative">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                             Cerca Dipendente *
                         </label>
                         <div className="relative">
-                            <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                            <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
                             <input
                                 type="text"
                                 placeholder="Cerca per nome, cognome o codice fiscale..."
@@ -186,29 +192,29 @@ export const AddExternalCourseModal: React.FC<AddExternalCourseModalProps> = ({ 
                                     }
                                 }}
                                 onFocus={() => setShowPersonDropdown(true)}
-                                className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                                className="w-full pl-10 pr-3 py-2.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 dark:placeholder-gray-400"
                             />
                         </div>
 
                         {/* Autocomplete dropdown */}
                         {showPersonDropdown && personSearch.length >= 2 && (
-                            <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                            <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-64 overflow-y-auto">
                                 {filteredPersons.length > 0 ? (
                                     filteredPersons.map(person => (
                                         <button
                                             key={person.id}
                                             onClick={() => handlePersonSelect(person)}
-                                            className="w-full px-3 py-2.5 text-left hover:bg-purple-50 border-b border-gray-100 last:border-0 transition-colors"
+                                            className="w-full px-3 py-2.5 text-left hover:bg-purple-50 dark:hover:bg-purple-900/30 border-b border-gray-100 dark:border-gray-700 last:border-0 transition-colors"
                                         >
                                             <div className="flex items-center gap-3">
-                                                <div className="flex-shrink-0 w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
-                                                    <User className="h-5 w-5 text-purple-600" />
+                                                <div className="flex-shrink-0 w-10 h-10 bg-purple-100 dark:bg-purple-900/40 rounded-full flex items-center justify-center">
+                                                    <User className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                                                 </div>
                                                 <div className="flex-1 min-w-0">
-                                                    <div className="font-medium text-gray-900">
+                                                    <div className="font-medium text-gray-900 dark:text-gray-100">
                                                         {person.firstName} {person.lastName}
                                                     </div>
-                                                    <div className="text-xs text-gray-500 flex items-center gap-2">
+                                                    <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
                                                         <span className="font-mono">{person.taxCode || 'N/D'}</span>
                                                         {person.company && (
                                                             <>
@@ -225,7 +231,7 @@ export const AddExternalCourseModal: React.FC<AddExternalCourseModalProps> = ({ 
                                         </button>
                                     ))
                                 ) : (
-                                    <div className="px-3 py-4 text-sm text-gray-500 text-center">
+                                    <div className="px-3 py-4 text-sm text-gray-500 dark:text-gray-400 text-center">
                                         Nessun dipendente trovato
                                     </div>
                                 )}
@@ -234,20 +240,20 @@ export const AddExternalCourseModal: React.FC<AddExternalCourseModalProps> = ({ 
 
                         {/* Selected person info card */}
                         {selectedPerson && (
-                            <div className="mt-2 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                            <div className="mt-2 p-3 bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-700 rounded-lg">
                                 <div className="flex items-center gap-3">
-                                    <div className="flex-shrink-0 w-12 h-12 bg-purple-200 rounded-full flex items-center justify-center">
-                                        <User className="h-6 w-6 text-purple-700" />
+                                    <div className="flex-shrink-0 w-12 h-12 bg-purple-200 dark:bg-purple-800 rounded-full flex items-center justify-center">
+                                        <User className="h-6 w-6 text-purple-700 dark:text-purple-300" />
                                     </div>
                                     <div className="flex-1">
-                                        <div className="font-semibold text-purple-900">
+                                        <div className="font-semibold text-purple-900 dark:text-purple-200">
                                             {selectedPerson.firstName} {selectedPerson.lastName}
                                         </div>
-                                        <div className="text-sm text-purple-700 font-mono">
+                                        <div className="text-sm text-purple-700 dark:text-purple-300 font-mono">
                                             CF: {selectedPerson.taxCode || 'Non specificato'}
                                         </div>
                                         {selectedPerson.company && (
-                                            <div className="text-sm text-purple-600 flex items-center gap-1 mt-0.5">
+                                            <div className="text-sm text-purple-600 dark:text-purple-400 flex items-center gap-1 mt-0.5">
                                                 <Building2 className="h-3.5 w-3.5" />
                                                 {selectedPerson.company.ragioneSociale}
                                             </div>
@@ -258,7 +264,7 @@ export const AddExternalCourseModal: React.FC<AddExternalCourseModalProps> = ({ 
                                             setSelectedPerson(null);
                                             setPersonSearch('');
                                         }}
-                                        className="text-purple-500 hover:text-purple-700 p-1"
+                                        className="text-purple-500 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 p-1"
                                     >
                                         <X className="h-4 w-4" />
                                     </button>
@@ -269,13 +275,13 @@ export const AddExternalCourseModal: React.FC<AddExternalCourseModalProps> = ({ 
 
                     {/* Course Selection */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                             Corso Completato *
                         </label>
                         <select
                             value={selectedCourseId}
                             onChange={(e) => setSelectedCourseId(e.target.value)}
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500"
+                            className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500"
                         >
                             <option value="">Seleziona corso...</option>
                             {courses.map(c => (
@@ -294,7 +300,7 @@ export const AddExternalCourseModal: React.FC<AddExternalCourseModalProps> = ({ 
                                     dateObj.getDate()
                                 );
                                 return (
-                                    <p className="text-xs text-gray-500 mt-1">
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                         Validità: {selectedCourse.validityYears} anni •
                                         Scadenza calcolata: {format(expirationDate, 'dd/MM/yyyy', { locale: it })}
                                     </p>
@@ -307,21 +313,19 @@ export const AddExternalCourseModal: React.FC<AddExternalCourseModalProps> = ({ 
 
                     {/* Completion Date */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                             Data Completamento *
                         </label>
-                        <input
-                            type="date"
+                        <DatePickerElegante
                             value={completedDate}
-                            onChange={(e) => setCompletedDate(e.target.value)}
-                            max={new Date().toISOString().split('T')[0]}
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500"
+                            onChange={(date) => setCompletedDate(date ? date.toISOString().split('T')[0] : '')}
+                            theme="teal"
                         />
                     </div>
 
                     {/* Notes */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                             Note (opzionale)
                         </label>
                         <textarea
@@ -329,19 +333,19 @@ export const AddExternalCourseModal: React.FC<AddExternalCourseModalProps> = ({ 
                             onChange={(e) => setNotes(e.target.value)}
                             placeholder="Es: Ente erogatore, numero attestato..."
                             rows={2}
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500"
+                            className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500 dark:placeholder-gray-400"
                         />
                     </div>
 
                     {/* Result message */}
                     {result && (
-                        <div className={`p-3 rounded-lg ${result.success ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                        <div className={`p-3 rounded-lg ${result.success ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300' : 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300'}`}>
                             {result.success ? '✓' : '✗'} {result.message}
                         </div>
                     )}
                 </div>
 
-                <div className="p-4 border-t border-gray-200 flex justify-end gap-2 sticky bottom-0 bg-white">
+                <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2 sticky bottom-0 bg-white dark:bg-gray-800">
                     <Button variant="outline" onClick={onClose}>
                         Annulla
                     </Button>

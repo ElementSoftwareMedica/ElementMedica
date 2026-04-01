@@ -20,6 +20,7 @@ import { param, query, validationResult } from 'express-validator';
 import { requireAuth, requirePermission } from '../middleware/auth.js';
 import CalendarService from '../services/calendarService.js';
 import logger from '../utils/logger.js';
+import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 
 const router = express.Router();
 
@@ -66,7 +67,7 @@ router.get('/appointment/:id/ics',
     async (req, res) => {
         try {
             const { id } = req.params;
-            const tenantId = req.person.tenantId;
+            const tenantId = getEffectiveTenantId(req);
 
             const result = await CalendarService.generateAppointmentICS(id, tenantId);
 
@@ -86,12 +87,12 @@ router.get('/appointment/:id/ics',
                 component: 'CalendarRoutes',
                 action: 'downloadICS',
                 appointmentId: req.params.id,
-                error: error.message
+                error: 'Operazione non riuscita'
             });
 
-            res.status(error.message === 'Appointment not found' ? 404 : 500).json({
+            res.status(error.message === 'Appuntamento non trovato' ? 404 : 500).json({
                 success: false,
-                error: error.message
+                error: 'Errore interno del server'
             });
         }
     }
@@ -117,7 +118,7 @@ router.get('/doctor/:id/feed',
         try {
             const { id } = req.params;
             const { startDate, endDate } = req.query;
-            const tenantId = req.person.tenantId;
+            const tenantId = getEffectiveTenantId(req);
 
             const result = await CalendarService.generateDoctorCalendarFeed(
                 id,
@@ -131,7 +132,7 @@ router.get('/doctor/:id/feed',
         } catch (error) {
             res.status(500).json({
                 success: false,
-                error: error.message
+                error: 'Errore interno del server'
             });
         }
     }
@@ -157,7 +158,7 @@ router.get('/patient/:id/feed',
         try {
             const { id } = req.params;
             const { startDate, endDate } = req.query;
-            const tenantId = req.person.tenantId;
+            const tenantId = getEffectiveTenantId(req);
 
             const result = await CalendarService.generatePatientCalendarFeed(
                 id,
@@ -171,7 +172,7 @@ router.get('/patient/:id/feed',
         } catch (error) {
             res.status(500).json({
                 success: false,
-                error: error.message
+                error: 'Errore interno del server'
             });
         }
     }
@@ -194,7 +195,7 @@ router.get('/my-appointments',
     async (req, res) => {
         try {
             const { startDate, endDate } = req.query;
-            const tenantId = req.person.tenantId;
+            const tenantId = getEffectiveTenantId(req);
             const userId = req.person.id;
 
             // If user is a doctor, get their doctor appointments
@@ -212,7 +213,7 @@ router.get('/my-appointments',
         } catch (error) {
             res.status(500).json({
                 success: false,
-                error: error.message
+                error: 'Errore interno del server'
             });
         }
     }
@@ -235,7 +236,7 @@ router.get('/google/calendars',
         try {
             const calendars = await CalendarService.getGoogleCalendars(
                 req.person.id,
-                req.person.tenantId
+                getEffectiveTenantId(req)
             );
 
             res.json({
@@ -246,7 +247,7 @@ router.get('/google/calendars',
             const statusCode = error.message === 'Google account not connected' ? 400 : 500;
             res.status(statusCode).json({
                 success: false,
-                error: error.message
+                error: 'Errore interno del server'
             });
         }
     }
@@ -276,7 +277,7 @@ router.post('/google/sync',
             const result = await CalendarService.syncToGoogleCalendar(
                 appointmentId,
                 req.person.id,
-                req.person.tenantId
+                getEffectiveTenantId(req)
             );
 
             logger.info('Appointment synced to Google Calendar', {
@@ -294,7 +295,7 @@ router.post('/google/sync',
         } catch (error) {
             res.status(500).json({
                 success: false,
-                error: error.message
+                error: 'Errore interno del server'
             });
         }
     }
@@ -321,7 +322,7 @@ router.delete('/google/sync/:appointmentId',
             const result = await CalendarService.removeFromGoogleCalendar(
                 appointmentId,
                 req.person.id,
-                req.person.tenantId
+                getEffectiveTenantId(req)
             );
 
             res.json({
@@ -331,7 +332,7 @@ router.delete('/google/sync/:appointmentId',
         } catch (error) {
             res.status(500).json({
                 success: false,
-                error: error.message
+                error: 'Errore interno del server'
             });
         }
     }

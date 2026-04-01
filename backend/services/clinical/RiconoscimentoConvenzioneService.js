@@ -39,7 +39,7 @@ export class RiconoscimentoConvenzioneService {
             }
 
             // Verify company exists
-            const azienda = await prisma.company.findFirst({
+            const azienda = await prisma.companyTenantProfile.findFirst({
                 where: { id: aziendaId, tenantId, deletedAt: null }
             });
 
@@ -49,7 +49,7 @@ export class RiconoscimentoConvenzioneService {
 
             // Check if already associated
             const existing = await prisma.convenzioneAzienda.findFirst({
-                where: { convenzioneId, aziendaId, deletedAt: null }
+                where: { convenzioneId, companyTenantProfileId: aziendaId, deletedAt: null }
             });
 
             if (existing) {
@@ -59,7 +59,7 @@ export class RiconoscimentoConvenzioneService {
             const association = await prisma.convenzioneAzienda.create({
                 data: {
                     convenzioneId,
-                    aziendaId,
+                    companyTenantProfileId: aziendaId,
                     tenantId,
                     createdBy: userId,
                     referenteAziendale: options.referenteAziendale || null,
@@ -72,7 +72,7 @@ export class RiconoscimentoConvenzioneService {
                 },
                 include: {
                     convenzione: { select: { id: true, codice: true, nome: true } },
-                    azienda: { select: { id: true, ragioneSociale: true, piva: true } }
+                    companyTenantProfile: { select: { id: true, ragioneSociale: true, piva: true } }
                 }
             });
 
@@ -147,19 +147,25 @@ export class RiconoscimentoConvenzioneService {
      */
     static async getAziendeByConvenzione(convenzioneId, tenantId) {
         try {
+            // P49: CompanyTenantProfile → Company (nested pattern)
             const aziende = await prisma.convenzioneAzienda.findMany({
                 where: { convenzioneId, tenantId, deletedAt: null },
                 include: {
-                    azienda: {
+                    companyTenantProfile: {
                         select: {
                             id: true,
-                            ragioneSociale: true,
-                            piva: true,
-                            codiceFiscale: true,
-                            mail: true,
-                            telefono: true,
-                            citta: true,
-                            sedeAzienda: true
+                            emailGenerale: true,
+                            telefonoGenerale: true,
+                            company: {
+                                select: {
+                                    id: true,
+                                    ragioneSociale: true,
+                                    piva: true,
+                                    codiceFiscale: true,
+                                    sedeLegaleCitta: true,
+                                    sedeLegaleIndirizzo: true
+                                }
+                            }
                         }
                     },
                     riconoscimenti: {
@@ -170,10 +176,26 @@ export class RiconoscimentoConvenzioneService {
                         }
                     }
                 },
-                orderBy: { azienda: { ragioneSociale: 'asc' } }
+                orderBy: { createdAt: 'desc' } // Safe ordering, avoid nullable relation fields
             });
 
-            return aziende;
+            // Flatten P49 structure to match frontend expectations
+            const flattened = aziende.map(a => ({
+                ...a,
+                aziendaId: a.companyTenantProfile?.company?.id || a.companyTenantProfileId,
+                azienda: a.companyTenantProfile ? {
+                    id: a.companyTenantProfile.company?.id || '',
+                    ragioneSociale: a.companyTenantProfile.company?.ragioneSociale || '',
+                    piva: a.companyTenantProfile.company?.piva || '',
+                    codiceFiscale: a.companyTenantProfile.company?.codiceFiscale || '',
+                    mail: a.companyTenantProfile.emailGenerale || '',
+                    telefono: a.companyTenantProfile.telefonoGenerale || '',
+                    citta: a.companyTenantProfile.company?.sedeLegaleCitta || '',
+                    indirizzo: a.companyTenantProfile.company?.sedeLegaleIndirizzo || ''
+                } : null
+            }));
+
+            return flattened;
         } catch (error) {
             logger.error('Failed to get aziende by convenzione', {
                 component: 'riconoscimento-service',
@@ -215,7 +237,7 @@ export class RiconoscimentoConvenzioneService {
                 },
                 include: {
                     convenzione: { select: { id: true, codice: true, nome: true } },
-                    azienda: { select: { id: true, ragioneSociale: true, piva: true } }
+                    companyTenantProfile: { select: { id: true, ragioneSociale: true, piva: true } }
                 }
             });
 
@@ -312,7 +334,7 @@ export class RiconoscimentoConvenzioneService {
                     convenzioneAzienda: {
                         include: {
                             convenzione: { select: { id: true, codice: true, nome: true } },
-                            azienda: { select: { id: true, ragioneSociale: true } }
+                            companyTenantProfile: { select: { id: true, ragioneSociale: true } }
                         }
                     },
                     bundle: { select: { id: true, codice: true, nome: true, prezzoBundle: true } },
@@ -386,7 +408,7 @@ export class RiconoscimentoConvenzioneService {
                     convenzioneAzienda: {
                         include: {
                             convenzione: { select: { id: true, codice: true, nome: true } },
-                            azienda: { select: { id: true, ragioneSociale: true } }
+                            companyTenantProfile: { select: { id: true, ragioneSociale: true } }
                         }
                     },
                     bundle: { select: { id: true, codice: true, nome: true, prezzoBundle: true } },
@@ -545,7 +567,7 @@ export class RiconoscimentoConvenzioneService {
                         include: {
                             convenzioneAzienda: {
                                 include: {
-                                    azienda: { select: { id: true, ragioneSociale: true } }
+                                    companyTenantProfile: { select: { id: true, ragioneSociale: true } }
                                 }
                             }
                         }
@@ -639,7 +661,7 @@ export class RiconoscimentoConvenzioneService {
                 tenantId,
                 deletedAt: null,
                 riconoscimentoConvenzione: {
-                    convenzioneAzienda: { aziendaId }
+                    convenzioneAzienda: { companyTenantProfileId: aziendaId }
                 }
             };
 
@@ -708,9 +730,9 @@ export class RiconoscimentoConvenzioneService {
         try {
             const where = { tenantId, deletedAt: null };
 
-            if (filters.aziendaId) {
+            if (filters.companyTenantProfileId) {
                 where.riconoscimentoConvenzione = {
-                    convenzioneAzienda: { aziendaId: filters.aziendaId }
+                    convenzioneAzienda: { companyTenantProfileId: filters.companyTenantProfileId }
                 };
             }
 
@@ -783,17 +805,24 @@ export class RiconoscimentoConvenzioneService {
             const { pazienteId, bundleId, prestazioneId } = params;
             const today = new Date();
 
-            // Get paziente to find their company
+            // Get paziente to find their company (P49: via tenantProfiles)
             const paziente = await prisma.person.findFirst({
-                where: { id: pazienteId, tenantId, deletedAt: null },
-                select: { companyId: true }
+                where: { id: pazienteId, deletedAt: null },
+                include: {
+                    tenantProfiles: {
+                        where: { tenantId, deletedAt: null, isActive: true },
+                        select: { companyTenantProfileId: true },
+                        take: 1
+                    }
+                }
             });
 
-            if (!paziente?.companyId) {
+            const companyTenantProfileId = paziente?.tenantProfiles?.[0]?.companyTenantProfileId;
+            if (!companyTenantProfileId) {
                 return []; // No company, no riconoscimenti
             }
 
-            // Find active convenzioni for paziente's company
+            // Find active convenzioni for paziente's company (P49: via companyTenantProfileId)
             const riconoscimenti = await prisma.riconoscimentoConvenzione.findMany({
                 where: {
                     tenantId,
@@ -805,7 +834,7 @@ export class RiconoscimentoConvenzioneService {
                         { dataFine: { gte: today } }
                     ],
                     convenzioneAzienda: {
-                        aziendaId: paziente.companyId,
+                        companyTenantProfileId: companyTenantProfileId,
                         attiva: true,
                         deletedAt: null,
                         convenzione: {
@@ -827,7 +856,7 @@ export class RiconoscimentoConvenzioneService {
                     convenzioneAzienda: {
                         include: {
                             convenzione: { select: { id: true, codice: true, nome: true } },
-                            azienda: { select: { id: true, ragioneSociale: true } }
+                            companyTenantProfile: { select: { id: true, ragioneSociale: true } }
                         }
                     }
                 }

@@ -20,7 +20,7 @@ import { type ClassValue, clsx } from "clsx"
  */
 export function formatCurrency(value: number, decimals = 2): string {
   if (value === undefined || value === null) return '';
-  
+
   return new Intl.NumberFormat('it-IT', {
     style: 'currency',
     currency: 'EUR',
@@ -36,7 +36,7 @@ export function formatCurrency(value: number, decimals = 2): string {
  */
 export function formatCodiceFiscale(cf: string | null | undefined): string {
   if (!cf || typeof cf !== 'string' || cf.length !== 16) return cf || '';
-  
+
   return `${cf.substring(0, 3)} ${cf.substring(3, 6)} ${cf.substring(6, 8)}${cf.substring(8, 10)} ${cf.substring(10, 15)}${cf.substring(15)}`.toUpperCase();
 }
 
@@ -48,32 +48,100 @@ export function formatCodiceFiscale(cf: string | null | undefined): string {
  */
 export function isValidCodiceFiscale(cf: string | null | undefined, checkChecksum = true): boolean {
   if (!cf || typeof cf !== 'string') return false;
-  
+
   const normalizedCf = cf.toUpperCase().trim();
-  
+
   // Verifica lunghezza
   if (normalizedCf.length !== 16) return false;
-  
+
   // Regex corretto per il codice fiscale italiano
   // Considera i caratteri validi per il mese: A,B,C,D,E,H,L,M,P,R,S,T
   const regex = /^[A-Z]{6}[0-9]{2}[ABCDEHLMPRST][0-9]{2}[A-Z][0-9]{3}[A-Z]$/;
-  
+
   if (!regex.test(normalizedCf)) return false;
-  
+
   // Verifica carattere di controllo se richiesto
   if (checkChecksum) {
     return isValidTaxCodeChecksum(normalizedCf);
   }
-  
+
   return true;
 }
 
 /**
- * Verifica il carattere di controllo del codice fiscale
- * @param taxCode - Codice fiscale normalizzato (16 caratteri maiuscoli)
- * @returns True se il carattere di controllo è corretto
+ * Risultato dettagliato della validazione del codice fiscale
  */
-function isValidTaxCodeChecksum(taxCode: string): boolean {
+export interface CodiceFiscaleValidationResult {
+  isValid: boolean;
+  error?: string;
+  errorType?: 'empty' | 'length' | 'format' | 'checksum' | 'month';
+  normalized?: string;
+}
+
+/**
+ * Valida il codice fiscale e restituisce un risultato dettagliato
+ * @param cf - Codice fiscale da validare
+ * @param checkChecksum - Se true, verifica anche il carattere di controllo
+ * @returns Oggetto con isValid, error e errorType
+ */
+export function validateCodiceFiscale(cf: string | null | undefined, checkChecksum = true): CodiceFiscaleValidationResult {
+  if (!cf || typeof cf !== 'string' || !cf.trim()) {
+    return { isValid: false, error: 'Codice Fiscale è obbligatorio', errorType: 'empty' };
+  }
+
+  const normalizedCf = cf.toUpperCase().trim();
+
+  // Verifica lunghezza
+  if (normalizedCf.length !== 16) {
+    return {
+      isValid: false,
+      error: `Codice Fiscale deve essere di 16 caratteri (inseriti: ${normalizedCf.length})`,
+      errorType: 'length',
+      normalized: normalizedCf
+    };
+  }
+
+  // Regex base senza controllo mese (per messaggi più specifici)
+  const baseRegex = /^[A-Z]{6}[0-9]{2}[A-Z][0-9]{2}[A-Z][0-9]{3}[A-Z]$/;
+  if (!baseRegex.test(normalizedCf)) {
+    return {
+      isValid: false,
+      error: 'Formato Codice Fiscale non valido (verifica lettere e numeri)',
+      errorType: 'format',
+      normalized: normalizedCf
+    };
+  }
+
+  // Verifica lettera mese valida
+  const monthChar = normalizedCf[8];
+  const validMonths = 'ABCDEHLMPRST';
+  if (!validMonths.includes(monthChar)) {
+    return {
+      isValid: false,
+      error: `Lettera mese non valida: "${monthChar}" (valide: A,B,C,D,E,H,L,M,P,R,S,T)`,
+      errorType: 'month',
+      normalized: normalizedCf
+    };
+  }
+
+  // Verifica carattere di controllo se richiesto
+  if (checkChecksum && !isValidTaxCodeChecksum(normalizedCf)) {
+    const expectedChar = calculateExpectedChecksum(normalizedCf);
+    return {
+      isValid: false,
+      error: `Carattere di controllo errato: dovrebbe essere "${expectedChar}" invece di "${normalizedCf[15]}"`,
+      errorType: 'checksum',
+      normalized: normalizedCf
+    };
+  }
+
+  return { isValid: true, normalized: normalizedCf };
+}
+
+/**
+ * Calcola il carattere di controllo atteso per un codice fiscale
+ */
+function calculateExpectedChecksum(taxCode: string): string {
   const oddMap: { [key: string]: number } = {
     '0': 1, '1': 0, '2': 5, '3': 7, '4': 9, '5': 13, '6': 15, '7': 17, '8': 19, '9': 21,
     'A': 1, 'B': 0, 'C': 5, 'D': 7, 'E': 9, 'F': 13, 'G': 15, 'H': 17, 'I': 19, 'J': 21,
@@ -100,8 +168,16 @@ function isValidTaxCodeChecksum(taxCode: string): boolean {
     }
   }
 
-  const expectedCheck = checkMap[sum % 26];
-  return taxCode[15] === expectedCheck;
+  return checkMap[sum % 26];
+}
+
+/**
+ * Verifica il carattere di controllo del codice fiscale
+ * @param taxCode - Codice fiscale normalizzato (16 caratteri maiuscoli)
+ * @returns True se il carattere di controllo è corretto
+ */
+function isValidTaxCodeChecksum(taxCode: string): boolean {
+  return taxCode[15] === calculateExpectedChecksum(taxCode);
 }
 
 /**
@@ -119,10 +195,10 @@ export function generateUniqueId(): string {
  */
 export function classNames(...classes: (string | Record<string, boolean> | undefined)[]): string {
   const result: string[] = [];
-  
+
   classes.forEach(cls => {
     if (!cls) return;
-    
+
     if (typeof cls === 'string') {
       result.push(cls);
     } else {
@@ -133,7 +209,7 @@ export function classNames(...classes: (string | Record<string, boolean> | undef
       });
     }
   });
-  
+
   return result.join(' ');
 }
 
@@ -146,7 +222,7 @@ export function classNames(...classes: (string | Record<string, boolean> | undef
  */
 export function truncateText(text: string, maxLength: number, suffix = '...'): string {
   if (!text || text.length <= maxLength) return text || '';
-  
+
   return text.substring(0, maxLength) + suffix;
 }
 
@@ -158,7 +234,7 @@ export function truncateText(text: string, maxLength: number, suffix = '...'): s
  */
 export function formatFullName(firstName: string, lastName: string): string {
   if (!firstName && !lastName) return '';
-  
+
   return [firstName, lastName].filter(Boolean).join(' ');
 }
 
@@ -169,15 +245,15 @@ export function formatFullName(firstName: string, lastName: string): string {
  */
 export function formatPhoneNumber(phoneNumber: string): string {
   if (!phoneNumber) return '';
-  
+
   // Rimuove tutti i caratteri non numerici
   const cleaned = phoneNumber.replace(/\D/g, '');
-  
+
   // Formatta in base alla lunghezza
   if (cleaned.length === 10) {
     return `${cleaned.substring(0, 3)} ${cleaned.substring(3, 6)} ${cleaned.substring(6)}`;
   }
-  
+
   return phoneNumber;
 }
 
@@ -190,7 +266,7 @@ export function formatPhoneNumber(phoneNumber: string): string {
 export function daysBetweenDates(startDate: Date | string, endDate: Date | string): number {
   const start = new Date(startDate);
   const end = new Date(endDate);
-  
+
   // Calcola la differenza in millisecondi e converte in giorni
   const diffTime = Math.abs(end.getTime() - start.getTime());
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -206,7 +282,7 @@ export function isEmpty(value: unknown): boolean {
   if (typeof value === 'string') return value.trim() === '';
   if (Array.isArray(value)) return value.length === 0;
   if (typeof value === 'object') return Object.keys(value).length === 0;
-  
+
   return false;
 }
 
@@ -223,14 +299,14 @@ export function filterItemsBySearchTerm<T>(
   searchFields: (keyof T)[]
 ): T[] {
   if (!searchTerm || !searchFields.length) return items;
-  
+
   const normalizedSearchTerm = searchTerm.toLowerCase().trim();
-  
+
   return items.filter(item => {
     return searchFields.some(field => {
       const value = item[field];
       if (value === null || value === undefined) return false;
-      
+
       return String(value).toLowerCase().includes(normalizedSearchTerm);
     });
   });
@@ -243,18 +319,18 @@ export function filterItemsBySearchTerm<T>(
  */
 export function formatDuration(durationInMinutes: number): string {
   if (!durationInMinutes && durationInMinutes !== 0) return '';
-  
+
   const hours = Math.floor(durationInMinutes / 60);
   const minutes = durationInMinutes % 60;
-  
+
   if (hours === 0) {
     return `${minutes}m`;
   }
-  
+
   if (minutes === 0) {
     return `${hours}h`;
   }
-  
+
   return `${hours}h ${minutes}m`;
 }
 
@@ -267,11 +343,11 @@ export function formatDuration(durationInMinutes: number): string {
 export function groupBy<T>(items: T[], key: keyof T): Record<string, T[]> {
   return items.reduce((result, item) => {
     const groupKey = String(item[key]);
-    
+
     if (!result[groupKey]) {
       result[groupKey] = [];
     }
-    
+
     result[groupKey].push(item);
     return result;
   }, {} as Record<string, T[]>);
@@ -286,7 +362,7 @@ export function deepClone<T>(obj: T): T {
   if (obj === null || typeof obj !== 'object') {
     return obj;
   }
-  
+
   return JSON.parse(JSON.stringify(obj));
 }
 
@@ -295,6 +371,7 @@ export default {
   formatCurrency,
   formatCodiceFiscale,
   isValidCodiceFiscale,
+  validateCodiceFiscale,
   generateUniqueId,
   classNames,
   truncateText,

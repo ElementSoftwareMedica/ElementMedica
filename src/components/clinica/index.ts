@@ -55,6 +55,13 @@ export {
 export { default as PriceCalculator } from './PriceCalculator';
 export type { } from './PriceCalculator';
 
+// R20: Profilo Salute & Allegato QuickLook/Editor
+export { ProfiloSaluteCard } from './ProfiloSaluteCard';
+export { AllegatoQuickLookModal } from './AllegatoQuickLookModal';
+export type { AllegatoQuickLookItem } from './AllegatoQuickLookModal';
+export { AllegatoEditorModal } from './AllegatoEditorModal';
+export type { AllegatoEditorModalProps } from './AllegatoEditorModal';
+
 // Re-export types from services
 export type {
     Paziente,

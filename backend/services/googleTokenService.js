@@ -3,11 +3,10 @@
  * Handles token storage, retrieval, refresh, and revocation
  */
 
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/prisma-optimization.js';
 import { google } from 'googleapis';
 import logger from '../utils/logger.js';
 
-const prisma = new PrismaClient();
 
 /**
  * Initialize OAuth2 client
@@ -18,7 +17,7 @@ export function getOAuth2Client() {
     process.env.GOOGLE_CLIENT_SECRET,
     process.env.GOOGLE_REDIRECT_URI
   );
-  
+
   return oauth2Client;
 }
 
@@ -32,15 +31,15 @@ export function getOAuth2Client() {
 export async function saveTokens(userId, tenantId, tokens) {
   try {
     const expiryDate = tokens.expiry_date || Date.now() + 3600 * 1000; // Default 1 hour
-    
+
     // Parse scope from tokens or use default
-    const scope = tokens.scope 
+    const scope = tokens.scope
       ? (typeof tokens.scope === 'string' ? tokens.scope.split(' ') : tokens.scope)
       : [
-          'https://www.googleapis.com/auth/documents.readonly',
-          'https://www.googleapis.com/auth/presentations.readonly',
-          'https://www.googleapis.com/auth/drive.readonly'
-        ];
+        'https://www.googleapis.com/auth/documents.readonly',
+        'https://www.googleapis.com/auth/presentations.readonly',
+        'https://www.googleapis.com/auth/drive.readonly'
+      ];
 
     const tokenData = {
       userId,
@@ -140,10 +139,10 @@ export async function getTokens(userId, tenantId) {
  */
 export function isTokenExpired(tokens) {
   if (!tokens || !tokens.expiryDate) return true;
-  
+
   const now = Date.now();
   const expiry = Number(tokens.expiryDate);
-  
+
   // Consider expired if less than 5 minutes remaining (buffer)
   return expiry - now < 5 * 60 * 1000;
 }
@@ -157,7 +156,7 @@ export function isTokenExpired(tokens) {
 export async function refreshAccessToken(userId, tenantId) {
   try {
     const tokens = await getTokens(userId, tenantId);
-    
+
     if (!tokens) {
       throw new Error('No tokens found for user');
     }
@@ -173,7 +172,7 @@ export async function refreshAccessToken(userId, tenantId) {
 
     // Request new access token
     const { credentials } = await oauth2Client.refreshAccessToken();
-    
+
     // Update stored tokens with new access token
     const updatedTokens = await saveTokens(userId, tenantId, {
       access_token: credentials.access_token,
@@ -212,7 +211,7 @@ export async function refreshAccessToken(userId, tenantId) {
 export async function getValidAccessToken(userId, tenantId) {
   try {
     let tokens = await getTokens(userId, tenantId);
-    
+
     if (!tokens) {
       throw new Error('User not connected to Google');
     }
@@ -225,7 +224,7 @@ export async function getValidAccessToken(userId, tenantId) {
         userId,
         tenantId
       });
-      
+
       tokens = await refreshAccessToken(userId, tenantId);
     }
 
@@ -251,7 +250,7 @@ export async function getValidAccessToken(userId, tenantId) {
 export async function revokeTokens(userId, tenantId) {
   try {
     const tokens = await getTokens(userId, tenantId);
-    
+
     if (!tokens) {
       logger.warn('No tokens to revoke', {
         component: 'googleTokenService',
@@ -284,6 +283,21 @@ export async function revokeTokens(userId, tenantId) {
         });
       }
     }
+
+    // GDPR: Audit log for token disconnection (security event)
+    await prisma.gdprAuditLog.create({
+      data: {
+        personId: userId,
+        action: 'OAUTH_DISCONNECT',
+        resourceType: 'GoogleTokens',
+        resourceId: tokens.id || `${userId}_${tenantId}`,
+        dataAccessed: {
+          scope: tokens.scope || [],
+          revokedAt: new Date().toISOString()
+        },
+        tenantId
+      }
+    });
 
     // Delete from database
     await prisma.googleTokens.delete({
@@ -346,7 +360,7 @@ export async function isConnected(userId, tenantId) {
 export async function getConnectionStatus(userId, tenantId) {
   try {
     const tokens = await getTokens(userId, tenantId);
-    
+
     if (!tokens) {
       return {
         connected: false,

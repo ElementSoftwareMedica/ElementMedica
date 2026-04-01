@@ -7,6 +7,7 @@
 import { z } from 'zod';
 import logger from '../utils/logger.js';
 import formsService from '../services/formsService.js';
+import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 import {
   createTemplateSchema,
   updateTemplateSchema,
@@ -30,8 +31,8 @@ import {
  */
 export const listTemplates = async (req, res) => {
   try {
-    const { tenantId } = req.person;
-    
+    const tenantId = getEffectiveTenantId(req);
+
     // Valida query params
     const validated = templateFiltersSchema.parse(req.query);
     const { type, isActive, search, page, limit } = validated;
@@ -59,13 +60,13 @@ export const listTemplates = async (req, res) => {
     logger.error('Failed to list templates', {
       component: 'formsController',
       action: 'listTemplates',
-      error: error.message
+      error: 'Errore interno del server'
     });
-    
+
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
-      error: error.message
+      error: 'Errore interno del server'
     });
   }
 };
@@ -77,11 +78,11 @@ export const listTemplates = async (req, res) => {
 export const getTemplate = async (req, res) => {
   try {
     const { id } = req.params;
-    const { tenantId } = req.person;
+    const tenantId = getEffectiveTenantId(req);
 
-    const template = await formsService.getTemplateById({ 
-      tenantId, 
-      templateId: id 
+    const template = await formsService.getTemplateById({
+      tenantId,
+      templateId: id
     });
 
     if (!template) {
@@ -100,13 +101,13 @@ export const getTemplate = async (req, res) => {
       component: 'formsController',
       action: 'getTemplate',
       templateId: req.params.id,
-      error: error.message
+      error: 'Errore interno del server'
     });
-    
+
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
-      error: error.message
+      error: 'Errore interno del server'
     });
   }
 };
@@ -119,8 +120,8 @@ export const getPublicTemplate = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const template = await formsService.getPublicTemplate({ 
-      templateId: id 
+    const template = await formsService.getPublicTemplate({
+      templateId: id
     });
 
     if (!template) {
@@ -139,13 +140,13 @@ export const getPublicTemplate = async (req, res) => {
       component: 'formsController',
       action: 'getPublicTemplate',
       templateId: req.params.id,
-      error: error.message
+      error: 'Errore interno del server'
     });
-    
+
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
-      error: error.message
+      error: 'Errore interno del server'
     });
   }
 };
@@ -156,10 +157,11 @@ export const getPublicTemplate = async (req, res) => {
  */
 export const createTemplate = async (req, res) => {
   try {
-    const { tenantId, id: userId } = req.person;
-    
+    const tenantId = getEffectiveTenantId(req);
+    const { id: userId } = req.person;
+
     logger.debug({ body: req.body }, '[CREATE TEMPLATE] Request body');
-    
+
     // Valida input
     const validated = createTemplateSchema.parse(req.body);
     const { fields, ...templateData } = validated;
@@ -192,7 +194,7 @@ export const createTemplate = async (req, res) => {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      console.error('❌ [CREATE TEMPLATE] Validation errors:', JSON.stringify(error.errors, null, 2));
+      logger.error('❌ [CREATE TEMPLATE] Validation errors:', JSON.stringify(error.errors, null, 2));
       return res.status(400).json({
         success: false,
         message: 'Dati non validi',
@@ -200,18 +202,18 @@ export const createTemplate = async (req, res) => {
       });
     }
 
-    console.error('❌ [CREATE TEMPLATE] Server error:', error);
+    logger.error('❌ [CREATE TEMPLATE] Server error:', error);
     logger.error('Failed to create template', {
       component: 'formsController',
       action: 'createTemplate',
-      error: error.message,
+      error: 'Errore interno del server',
       stack: error.stack
     });
-    
+
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
-      error: error.message
+      error: 'Errore interno del server'
     });
   }
 };
@@ -223,18 +225,18 @@ export const createTemplate = async (req, res) => {
 export const updateTemplate = async (req, res) => {
   try {
     const { id } = req.params;
-    const { tenantId } = req.person;
-    
+    const tenantId = getEffectiveTenantId(req);
+
     logger.debug({ templateId: id, body: req.body }, '[UPDATE TEMPLATE] Request body');
-    
+
     // Valida input
     const validated = updateTemplateSchema.parse(req.body);
     const { fields, ...templateData } = validated;
 
     // Verifica esistenza
-    const existing = await formsService.getTemplateById({ 
-      tenantId, 
-      templateId: id 
+    const existing = await formsService.getTemplateById({
+      tenantId,
+      templateId: id
     });
 
     if (!existing) {
@@ -275,7 +277,7 @@ export const updateTemplate = async (req, res) => {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      console.error('❌ [UPDATE TEMPLATE] Validation errors:', JSON.stringify(error.errors, null, 2));
+      logger.error('❌ [UPDATE TEMPLATE] Validation errors:', JSON.stringify(error.errors, null, 2));
       return res.status(400).json({
         success: false,
         message: 'Dati non validi',
@@ -283,8 +285,8 @@ export const updateTemplate = async (req, res) => {
       });
     }
 
-    console.error('❌ [UPDATE TEMPLATE] Server error:', {
-      message: error.message,
+    logger.error('❌ [UPDATE TEMPLATE] Server error:', {
+      message: 'Errore interno del server',
       stack: error.stack,
       fullError: error
     });
@@ -292,14 +294,14 @@ export const updateTemplate = async (req, res) => {
       component: 'formsController',
       action: 'updateTemplate',
       templateId: req.params.id,
-      error: error.message,
+      error: 'Errore interno del server',
       stack: error.stack
     });
-    
+
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
-      error: error.message
+      error: 'Errore interno del server'
     });
   }
 };
@@ -311,12 +313,12 @@ export const updateTemplate = async (req, res) => {
 export const deleteTemplate = async (req, res) => {
   try {
     const { id } = req.params;
-    const { tenantId } = req.person;
+    const tenantId = getEffectiveTenantId(req);
 
     // Verifica esistenza
-    const existing = await formsService.getTemplateById({ 
-      tenantId, 
-      templateId: id 
+    const existing = await formsService.getTemplateById({
+      tenantId,
+      templateId: id
     });
 
     if (!existing) {
@@ -327,9 +329,9 @@ export const deleteTemplate = async (req, res) => {
     }
 
     // Soft delete
-    await formsService.deleteTemplate({ 
-      tenantId, 
-      templateId: id 
+    await formsService.deleteTemplate({
+      tenantId,
+      templateId: id
     });
 
     res.json({
@@ -341,13 +343,13 @@ export const deleteTemplate = async (req, res) => {
       component: 'formsController',
       action: 'deleteTemplate',
       templateId: req.params.id,
-      error: error.message
+      error: 'Errore interno del server'
     });
-    
+
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
-      error: error.message
+      error: 'Errore interno del server'
     });
   }
 };
@@ -359,15 +361,16 @@ export const deleteTemplate = async (req, res) => {
 export const duplicateTemplate = async (req, res) => {
   try {
     const { id } = req.params;
-    const { tenantId, id: userId } = req.person;
-    
+    const tenantId = getEffectiveTenantId(req);
+    const { id: userId } = req.person;
+
     // Valida input
     const { name } = duplicateTemplateSchema.parse(req.body);
 
     // Verifica esistenza originale
-    const existing = await formsService.getTemplateById({ 
-      tenantId, 
-      templateId: id 
+    const existing = await formsService.getTemplateById({
+      tenantId,
+      templateId: id
     });
 
     if (!existing) {
@@ -416,13 +419,13 @@ export const duplicateTemplate = async (req, res) => {
       component: 'formsController',
       action: 'duplicateTemplate',
       templateId: req.params.id,
-      error: error.message
+      error: 'Errore interno del server'
     });
-    
+
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
-      error: error.message
+      error: 'Errore interno del server'
     });
   }
 };
@@ -439,8 +442,8 @@ export const duplicateTemplate = async (req, res) => {
  */
 export const listSubmissions = async (req, res) => {
   try {
-    const { tenantId } = req.person;
-    
+    const tenantId = getEffectiveTenantId(req);
+
     // Valida query params
     const validated = submissionFiltersSchema.parse(req.query);
     const { page, limit, ...filters } = validated;
@@ -468,13 +471,13 @@ export const listSubmissions = async (req, res) => {
     logger.error('Failed to list submissions', {
       component: 'formsController',
       action: 'listSubmissions',
-      error: error.message
+      error: 'Errore interno del server'
     });
-    
+
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
-      error: error.message
+      error: 'Errore interno del server'
     });
   }
 };
@@ -486,11 +489,11 @@ export const listSubmissions = async (req, res) => {
 export const getSubmission = async (req, res) => {
   try {
     const { id } = req.params;
-    const { tenantId } = req.person;
+    const tenantId = getEffectiveTenantId(req);
 
-    const submission = await formsService.getSubmissionById({ 
-      tenantId, 
-      submissionId: id 
+    const submission = await formsService.getSubmissionById({
+      tenantId,
+      submissionId: id
     });
 
     if (!submission) {
@@ -509,13 +512,13 @@ export const getSubmission = async (req, res) => {
       component: 'formsController',
       action: 'getSubmission',
       submissionId: req.params.id,
-      error: error.message
+      error: 'Errore interno del server'
     });
-    
+
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
-      error: error.message
+      error: 'Errore interno del server'
     });
   }
 };
@@ -528,7 +531,7 @@ export const createSubmission = async (req, res) => {
   try {
     // Tenant ID può venire da req.person (se autenticato) o req.body (se pubblico)
     const tenantId = req.person?.tenantId || req.body.tenantId;
-    
+
     if (!tenantId) {
       return res.status(400).json({
         success: false,
@@ -570,7 +573,7 @@ export const createSubmission = async (req, res) => {
     if (error.statusCode === 400 && error.validationErrors) {
       return res.status(400).json({
         success: false,
-        message: error.message,
+        message: 'Errore interno del server',
         validationErrors: error.validationErrors
       });
     }
@@ -578,18 +581,14 @@ export const createSubmission = async (req, res) => {
     logger.error('Failed to create submission', {
       component: 'formsController',
       action: 'createSubmission',
-      error: error.message,
+      error: 'Errore interno del server',
       stack: error.stack
     });
-    
+
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
-      error: error.message,
-      ...(process.env.NODE_ENV === 'development' && { 
-        stack: error.stack,
-        details: error 
-      })
+      error: 'Errore interno del server'
     });
   }
 };
@@ -601,15 +600,15 @@ export const createSubmission = async (req, res) => {
 export const updateSubmission = async (req, res) => {
   try {
     const { id } = req.params;
-    const { tenantId } = req.person;
-    
+    const tenantId = getEffectiveTenantId(req);
+
     // Valida input
     const validated = updateSubmissionSchema.parse(req.body);
 
     // Verifica esistenza
-    const existing = await formsService.getSubmissionById({ 
-      tenantId, 
-      submissionId: id 
+    const existing = await formsService.getSubmissionById({
+      tenantId,
+      submissionId: id
     });
 
     if (!existing) {
@@ -644,13 +643,13 @@ export const updateSubmission = async (req, res) => {
       component: 'formsController',
       action: 'updateSubmission',
       submissionId: req.params.id,
-      error: error.message
+      error: 'Errore interno del server'
     });
-    
+
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
-      error: error.message
+      error: 'Errore interno del server'
     });
   }
 };
@@ -662,12 +661,12 @@ export const updateSubmission = async (req, res) => {
 export const deleteSubmission = async (req, res) => {
   try {
     const { id } = req.params;
-    const { tenantId } = req.person;
+    const tenantId = getEffectiveTenantId(req);
 
     // Verifica esistenza
-    const existing = await formsService.getSubmissionById({ 
-      tenantId, 
-      submissionId: id 
+    const existing = await formsService.getSubmissionById({
+      tenantId,
+      submissionId: id
     });
 
     if (!existing) {
@@ -678,9 +677,9 @@ export const deleteSubmission = async (req, res) => {
     }
 
     // Soft delete (archived status)
-    await formsService.deleteSubmission({ 
-      tenantId, 
-      submissionId: id 
+    await formsService.deleteSubmission({
+      tenantId,
+      submissionId: id
     });
 
     res.json({
@@ -692,13 +691,13 @@ export const deleteSubmission = async (req, res) => {
       component: 'formsController',
       action: 'deleteSubmission',
       submissionId: req.params.id,
-      error: error.message
+      error: 'Errore interno del server'
     });
-    
+
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
-      error: error.message
+      error: 'Errore interno del server'
     });
   }
 };
@@ -709,7 +708,7 @@ export const deleteSubmission = async (req, res) => {
  */
 export const getSubmissionsStats = async (req, res) => {
   try {
-    const { tenantId } = req.person;
+    const tenantId = getEffectiveTenantId(req);
     const { dateFrom, dateTo, courseScheduleId } = req.query;
 
     const stats = await formsService.getSubmissionsStats({
@@ -725,13 +724,13 @@ export const getSubmissionsStats = async (req, res) => {
     logger.error('Failed to get submissions stats', {
       component: 'formsController',
       action: 'getSubmissionsStats',
-      error: error.message
+      error: 'Errore interno del server'
     });
-    
+
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
-      error: error.message
+      error: 'Errore interno del server'
     });
   }
 };
@@ -742,8 +741,8 @@ export const getSubmissionsStats = async (req, res) => {
  */
 export const bulkActionSubmissions = async (req, res) => {
   try {
-    const { tenantId } = req.person;
-    
+    const tenantId = getEffectiveTenantId(req);
+
     // Valida input
     const validated = bulkActionSchema.parse(req.body);
     const { submissionIds, action, data } = validated;
@@ -772,13 +771,13 @@ export const bulkActionSubmissions = async (req, res) => {
     logger.error('Failed bulk action', {
       component: 'formsController',
       action: 'bulkActionSubmissions',
-      error: error.message
+      error: 'Errore interno del server'
     });
-    
+
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
-      error: error.message
+      error: 'Errore interno del server'
     });
   }
 };
@@ -792,7 +791,7 @@ export default {
   updateTemplate,
   deleteTemplate,
   duplicateTemplate,
-  
+
   // Submissions
   listSubmissions,
   getSubmission,

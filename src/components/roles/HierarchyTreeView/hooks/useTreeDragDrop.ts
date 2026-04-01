@@ -35,9 +35,9 @@ export const useTreeDragDrop = ({
 
   const handleDrop = async (e: React.DragEvent, targetNodeId: string | null) => {
     e.preventDefault();
-    
-    if (!draggedNode || !hasPermission('EDIT_HIERARCHY')) return;
-    
+
+    if (!draggedNode || !hasPermission('hierarchy:update')) return;
+
     try {
       if (callbacks?.onMove) {
         await callbacks.onMove(draggedNode, targetNodeId);
@@ -46,7 +46,6 @@ export const useTreeDragDrop = ({
         await onReload();
       }
     } catch (error) {
-      console.error('Error moving role:', error);
     } finally {
       setDraggedNode(null);
     }

@@ -1,12 +1,12 @@
 import React from 'react';
-import { 
+import {
   Database,
   Lock,
   Settings,
   Shield
 } from 'lucide-react';
 import { Role } from '../../../hooks/useRoles';
-import { EntityDefinition } from '../../../services/advancedPermissions';
+import { EntityDefinition } from '../../../services/advanced-permissions';
 
 interface PermissionManagerHeaderProps {
   role: Role;
@@ -36,7 +36,7 @@ const PermissionManagerHeader: React.FC<PermissionManagerHeaderProps> = ({
             </div>
           </div>
         </div>
-        
+
         {/* Header Entità */}
         <div className="flex items-center px-4 border-r border-gray-200">
           <div className="flex items-center space-x-2">
@@ -47,7 +47,7 @@ const PermissionManagerHeader: React.FC<PermissionManagerHeaderProps> = ({
             </div>
           </div>
         </div>
-        
+
         {/* Header Permessi */}
         <div className="flex items-center justify-between px-4 border-r border-gray-200">
           <div className="flex items-center space-x-2">
@@ -63,17 +63,16 @@ const PermissionManagerHeader: React.FC<PermissionManagerHeaderProps> = ({
             <button
               type="button"
               onClick={onBulkModeToggle}
-              className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                bulkMode 
-                  ? 'bg-orange-100 text-orange-700 border border-orange-300' 
+              className={`px-2 py-1 rounded text-xs font-medium transition-colors ${bulkMode
+                  ? 'bg-orange-100 text-orange-700 border border-orange-300'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
+                }`}
             >
               {bulkMode ? 'Singolo' : 'Multiplo'}
             </button>
           )}
         </div>
-        
+
         {/* Header Campi */}
         <div className="flex items-center px-4">
           <div className="flex items-center space-x-2">

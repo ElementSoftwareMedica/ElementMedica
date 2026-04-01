@@ -8,6 +8,7 @@
 import { permissionInheritanceService } from '../services/permission-inheritance.js';
 import { relationResolver } from '../services/relation-resolver.js';
 import logger from '../utils/logger.js';
+import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 
 /**
  * Estrae il nome della risorsa dal path della richiesta
@@ -85,6 +86,16 @@ async function buildDataFilter(personId, tenantId, permission) {
                     where: baseFilter
                 };
             }
+            // P69: Supporto cross-tenant per permessi relazionali
+            // Se il permesso ha allowCrossTenant: true, usa il nuovo metodo
+            if (permission.allowCrossTenant) {
+                return await relationResolver.buildCrossTenantRelationalFilter(
+                    personId,
+                    tenantId,
+                    permission,
+                    true
+                );
+            }
             return await relationResolver.buildRelationalFilter(
                 personId,
                 tenantId,
@@ -147,8 +158,9 @@ function removeFields(data, fieldsToRemove) {
  */
 export const roleDataFilter = async (req, res, next) => {
     try {
-        // Salta se non autenticato o manca info
-        if (!req.person || !req.person.tenantId) {
+        // Salta se non autenticato
+        const tenantId = getEffectiveTenantId(req);
+        if (!req.person || !tenantId) {
             req.dataFilter = null;
             return next();
         }
@@ -164,7 +176,7 @@ export const roleDataFilter = async (req, res, next) => {
         // Risolvi permessi effettivi e verifica accesso
         const accessCheck = await permissionInheritanceService.canAccessResource(
             req.person.id,
-            req.person.tenantId,
+            tenantId,
             resource,
             action
         );
@@ -188,7 +200,7 @@ export const roleDataFilter = async (req, res, next) => {
         const permission = accessCheck.permission;
 
         // Costruisci filtro in base allo scope
-        req.dataFilter = await buildDataFilter(req.person.id, req.person.tenantId, permission);
+        req.dataFilter = await buildDataFilter(req.person.id, tenantId, permission);
         req.allowedFields = permission.allowedFields || null;
         req.deniedFields = permission.deniedFields || null;
 
@@ -240,8 +252,8 @@ export const enforceDataFilter = (req, res, next) => {
     if (req.dataFilter && req.dataFilter.allowed === false) {
         return res.status(403).json({
             success: false,
-            error: 'Access denied',
-            reason: req.dataFilter.reason || 'Insufficient permissions'
+            error: 'Accesso negato',
+            reason: req.dataFilter.reason || 'Permessi insufficienti'
         });
     }
     next();

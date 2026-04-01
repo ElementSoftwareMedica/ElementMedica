@@ -33,12 +33,12 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({
 
   const getCardClasses = () => {
     const baseClasses = 'rounded-2xl transition-all duration-300';
-    
+
     switch (variant) {
       case 'featured':
-        return `${baseClasses} bg-gradient-to-br from-blue-600 to-blue-700 text-white p-8 hover:shadow-2xl hover:scale-105`;
+        return `${baseClasses} text-white p-8 hover:shadow-2xl hover:scale-105`;
       case 'compact':
-        return `${baseClasses} bg-white border border-gray-200 p-6 hover:shadow-lg hover:border-blue-300`;
+        return `${baseClasses} bg-white border border-gray-200 p-6 hover:shadow-lg hover:border-primary-300`;
       default:
         return `${baseClasses} bg-gray-50 p-8 hover:shadow-lg hover:bg-white`;
     }
@@ -100,26 +100,33 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({
   const getCheckIconColor = () => {
     switch (variant) {
       case 'featured':
-        return 'text-green-300';
+        return 'text-primary-300';
       default:
-        return 'text-green-500';
+        return 'text-primary-500';
     }
   };
 
+  const getCardStyle = (): React.CSSProperties => {
+    if (variant === 'featured') {
+      return { backgroundImage: 'linear-gradient(to bottom right, var(--color-primary-600), var(--color-primary-700))' };
+    }
+    return {};
+  };
+
   return (
-    <div className={`${getCardClasses()} ${className}`}>
+    <div className={`${getCardClasses()} ${className}`} style={getCardStyle()}>
       <div className={getIconClasses()}>
         <IconComponent className={`w-8 h-8 ${getIconColor()}`} />
       </div>
-      
+
       <h3 className={getTitleClasses()}>
         {title}
       </h3>
-      
+
       <p className={getDescriptionClasses()}>
         {description}
       </p>
-      
+
       {features.length > 0 && (
         <ul className={`space-y-2 ${variant === 'compact' ? 'mb-4' : 'mb-6'}`}>
           {features.map((feature, index) => (
@@ -130,11 +137,11 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({
           ))}
         </ul>
       )}
-      
+
       {buttonHref && (
-        <PublicButton 
-          variant={variant === 'featured' ? 'secondary' : 'outline'} 
-          size={variant === 'compact' ? 'sm' : 'sm'} 
+        <PublicButton
+          variant={variant === 'featured' ? 'secondary' : 'outline'}
+          size={variant === 'compact' ? 'sm' : 'sm'}
           className="w-full"
           to={buttonHref}
           onClick={() =>

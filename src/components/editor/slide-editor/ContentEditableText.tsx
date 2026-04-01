@@ -4,6 +4,7 @@
  */
 
 import React, { useRef, useCallback, useEffect, memo } from 'react';
+import { sanitizeRichHtml } from '@/utils/sanitize';
 
 interface ContentEditableTextProps {
     elementId: string;
@@ -32,7 +33,7 @@ const ContentEditableText = memo(({
     // Initialize content only once when component mounts
     useEffect(() => {
         if (divRef.current && divRef.current.innerHTML !== initialContent) {
-            divRef.current.innerHTML = initialContent;
+            divRef.current.innerHTML = sanitizeRichHtml(initialContent);
         }
         // Focus after mount
         divRef.current?.focus();

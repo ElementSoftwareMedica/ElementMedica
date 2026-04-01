@@ -6,7 +6,7 @@
  * @module pages/poliambulatorio/agenda/AgendaDashboard
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, lazy, Suspense } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -25,11 +25,22 @@ import {
     TrendingUp,
     Stethoscope,
     Building2,
-    RefreshCw
+    RefreshCw,
+    Receipt,
+    RotateCcw
 } from 'lucide-react';
 import { appuntamentiApi, StatoAppuntamento } from '../../../services/clinicaApi';
 import { formatDate, formatTime } from '../../../utils/dateUtils';
 import { getDoctorTitle } from '../../../utils/codiceFiscale';
+import { getPersonDisplayName } from '../../../utils/personDisplayUtils';
+import { AgendaFilters } from '../../../components/filters';
+import { useDateFilter } from '../../../hooks/useDateFilter';
+import { useTenantFilter } from '../../../context/TenantFilterContext';
+import { useAuth } from '../../../context/AuthContext';
+
+const MedicoDashboardLazy = lazy(() =>
+    import('../clinica/MedicoDashboard').then(m => ({ default: m.default }))
+);
 
 // ============================================
 // TYPES
@@ -54,6 +65,8 @@ interface DashboardStats {
 // CONSTANTS
 // ============================================
 
+const STORAGE_KEY_DATE = 'agenda-selected-date';
+
 const STATO_CONFIG: Record<StatoAppuntamento, {
     label: string;
     color: string;
@@ -66,7 +79,9 @@ const STATO_CONFIG: Record<StatoAppuntamento, {
     IN_CORSO: { label: 'In Corso', color: 'text-purple-700', bgColor: 'bg-purple-100', icon: Timer },
     COMPLETATO: { label: 'Completato', color: 'text-gray-700', bgColor: 'bg-gray-100', icon: CheckCircle },
     ANNULLATO: { label: 'Annullato', color: 'text-red-700', bgColor: 'bg-red-100', icon: XCircle },
-    NO_SHOW: { label: 'No Show', color: 'text-orange-700', bgColor: 'bg-orange-100', icon: AlertCircle }
+    NO_SHOW: { label: 'No Show', color: 'text-orange-700', bgColor: 'bg-orange-100', icon: AlertCircle },
+    FATTURATO: { label: 'Fatturato', color: 'text-purple-700', bgColor: 'bg-purple-100', icon: Receipt },
+    RINVIATO: { label: 'Rinviato', color: 'text-orange-700', bgColor: 'bg-orange-100', icon: RotateCcw }
 };
 
 // ============================================
@@ -113,8 +128,10 @@ const AppuntamentoCard: React.FC<{
         dataOra: string;
         durataPrevista: number;
         stato: StatoAppuntamento;
-        paziente?: { nome: string; cognome: string };
-        medico?: { nome: string; cognome: string };
+        oraInizio?: string;
+        oraFine?: string;
+        paziente?: { firstName: string; lastName: string };
+        medico?: { firstName: string; lastName: string };
         prestazione?: { nome: string };
         ambulatorio?: { nome: string };
     };
@@ -123,8 +140,12 @@ const AppuntamentoCard: React.FC<{
     const statoConfig = STATO_CONFIG[appuntamento.stato];
     const Icon = statoConfig.icon;
 
-    const dataOra = new Date(appuntamento.dataOra);
-    const oraFine = new Date(dataOra.getTime() + appuntamento.durataPrevista * 60000);
+    // Use actual visit times when available (completed visits)
+    const bookingTime = new Date(appuntamento.dataOra);
+    const dataOra = appuntamento.oraInizio ? new Date(appuntamento.oraInizio) : bookingTime;
+    const oraFine = appuntamento.oraFine
+        ? new Date(appuntamento.oraFine)
+        : new Date(bookingTime.getTime() + appuntamento.durataPrevista * 60000);
 
     return (
         <div
@@ -133,6 +154,15 @@ const AppuntamentoCard: React.FC<{
         >
             {/* Time Column */}
             <div className="text-center min-w-[60px]">
+                {/* Show date if appointment is on a different day */}
+                {(() => {
+                    const today = new Date();
+                    const appDate = new Date(appuntamento.dataOra);
+                    if (appDate.toDateString() !== today.toDateString()) {
+                        return <p className="text-[10px] text-teal-600 font-medium">{appDate.toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })}</p>;
+                    }
+                    return null;
+                })()}
                 <p className="text-lg font-bold text-gray-900">{formatTime(dataOra)}</p>
                 <p className="text-xs text-gray-500">{formatTime(oraFine)}</p>
             </div>
@@ -144,9 +174,7 @@ const AppuntamentoCard: React.FC<{
             <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                     <p className="font-medium text-gray-900 truncate">
-                        {appuntamento.paziente
-                            ? `${appuntamento.paziente.cognome} ${appuntamento.paziente.nome}`
-                            : 'Paziente'}
+                        {getPersonDisplayName(appuntamento.paziente, 'Paziente')}
                     </p>
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs ${statoConfig.bgColor} ${statoConfig.color}`}>
                         <Icon className="h-3 w-3" />
@@ -163,7 +191,7 @@ const AppuntamentoCard: React.FC<{
                     {appuntamento.medico && (
                         <span className="flex items-center gap-1">
                             <Users className="h-3.5 w-3.5" />
-                            {getDoctorTitle((appuntamento.medico as any).taxCode, (appuntamento.medico as any).gender)} {appuntamento.medico.cognome}
+                            {getDoctorTitle((appuntamento.medico as any).taxCode, (appuntamento.medico as any).gender)} {getPersonDisplayName(appuntamento.medico)}
                         </span>
                     )}
                     {appuntamento.ambulatorio && (
@@ -204,68 +232,163 @@ const QuickAction: React.FC<{
 );
 
 // ============================================
+// HELPER FUNCTIONS
+// ============================================
+
+/**
+ * Format date to YYYY-MM-DD for API calls
+ */
+const formatDateForApi = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
+/**
+ * Check if two dates are the same day
+ */
+const isSameDay = (date1: Date, date2: Date): boolean => {
+    return date1.getFullYear() === date2.getFullYear() &&
+        date1.getMonth() === date2.getMonth() &&
+        date1.getDate() === date2.getDate();
+};
+
+// ============================================
 // MAIN COMPONENT
 // ============================================
 
-export const AgendaDashboard: React.FC = () => {
+const AgendaDashboardContent: React.FC = () => {
     const navigate = useNavigate();
 
-    // Query: Today's appointments
-    const { data: todayAppuntamenti, isLoading } = useQuery({
-        queryKey: ['appuntamenti-today'],
-        queryFn: () => appuntamentiApi.getToday()
+    // Tenant filter for multi-tenant support
+    const { getTenantFilterParams, tenantFilterKey, isReady } = useTenantFilter();
+
+    // Date filter with daily reset - resets to today on first access of the day
+    const dateFilter = useDateFilter({
+        storageKey: 'agenda-dashboard-date-filter',
+        mode: 'single',
+        defaultDate: new Date()
     });
 
-    // Query: All appointments for stats
-    const { data: allAppuntamenti } = useQuery({
-        queryKey: ['appuntamenti', { limit: 100 }],
-        queryFn: () => appuntamentiApi.getAll({ limit: 100 })
+    // State for selected date using dateFilter hook
+    const selectedDate = dateFilter.selectedDate;
+    const isToday = dateFilter.isToday;
+    const selectedDateStr = formatDateForApi(selectedDate);
+
+    // Handle date changes
+    const handleDateChange = (newDate: Date) => {
+        dateFilter.setDate(newDate);
+    };
+
+    // Build tenant-aware query params
+    const tenantParams = useMemo(() => {
+        const params = getTenantFilterParams();
+        return {
+            ...(params.tenantIds && { tenantIds: params.tenantIds.join(',') }),
+            ...(params.allTenants && { allTenants: 'true' })
+        };
+    }, [getTenantFilterParams, tenantFilterKey]);
+
+    // Query: Appointments for selected date (tenant-filtered)
+    const { data: dayAppuntamenti, isLoading, refetch } = useQuery({
+        queryKey: ['appuntamenti-day', selectedDateStr, tenantFilterKey],
+        queryFn: () => isToday
+            ? appuntamentiApi.getToday()
+            : appuntamentiApi.getByDate(selectedDateStr).then(res => res.data),
+        enabled: isReady
     });
 
-    // Calculate stats
-    const stats: DashboardStats = useMemo(() => {
-        const today = todayAppuntamenti || [];
-        const all = allAppuntamenti?.data || [];
-
-        const now = new Date();
-        const weekStart = new Date(now);
-        weekStart.setDate(now.getDate() - now.getDay());
+    // Query: Week appointments for stats (tenant-filtered, date-scoped)
+    const weekRange = useMemo(() => {
+        const weekStart = new Date(selectedDate);
+        weekStart.setDate(selectedDate.getDate() - selectedDate.getDay());
+        weekStart.setHours(0, 0, 0, 0);
         const weekEnd = new Date(weekStart);
-        weekEnd.setDate(weekStart.getDate() + 7);
+        weekEnd.setDate(weekStart.getDate() + 6);
+        return {
+            start: formatDateForApi(weekStart),
+            end: formatDateForApi(weekEnd)
+        };
+    }, [selectedDate]);
 
-        const thisWeek = all.filter(a => {
-            const d = new Date(a.dataOra);
-            return d >= weekStart && d < weekEnd;
-        });
+    const { data: weekAppuntamenti } = useQuery({
+        queryKey: ['appuntamenti-week', weekRange.start, weekRange.end, tenantFilterKey],
+        queryFn: () => appuntamentiApi.getAll({
+            ...tenantParams,
+            dataInizio: weekRange.start,
+            dataFine: weekRange.end,
+            limit: 500
+        }),
+        enabled: isReady
+    });
+
+    // Query: Upcoming appointments (next 5 from now)
+    const { data: upcomingData } = useQuery({
+        queryKey: ['appuntamenti-upcoming', tenantFilterKey],
+        queryFn: () => appuntamentiApi.getAll({
+            ...tenantParams,
+            dataInizio: formatDateForApi(new Date()),
+            limit: 50
+        }),
+        enabled: isReady
+    });
+
+    // Calculate stats - based on selected date data and week data
+    const stats: DashboardStats = useMemo(() => {
+        const dayData = dayAppuntamenti || [];
+        const weekData = weekAppuntamenti?.data || [];
+
+        // Week totals from dedicated week query
+        const weekConfermati = weekData.filter(a => a.stato === 'CONFERMATO').length;
+
+        // "Prossimi" from selected date perspective
+        const selectedDateStart = new Date(selectedDate);
+        selectedDateStart.setHours(0, 0, 0, 0);
+
+        const prossimi = weekData.filter(a =>
+            new Date(a.dataOra) > selectedDateStart &&
+            ['PRENOTATO', 'CONFERMATO'].includes(a.stato)
+        ).length;
 
         return {
             oggi: {
-                totale: today.length,
-                confermati: today.filter(a => a.stato === 'CONFERMATO' || a.stato === 'IN_ATTESA').length,
-                inAttesa: today.filter(a => a.stato === 'IN_ATTESA').length,
-                completati: today.filter(a => a.stato === 'COMPLETATO').length,
-                noShow: today.filter(a => a.stato === 'NO_SHOW').length
+                totale: dayData.length,
+                confermati: dayData.filter(a => a.stato === 'CONFERMATO' || a.stato === 'IN_ATTESA').length,
+                inAttesa: dayData.filter(a => a.stato === 'IN_ATTESA').length,
+                completati: dayData.filter(a => a.stato === 'COMPLETATO').length,
+                noShow: dayData.filter(a => a.stato === 'NO_SHOW').length
             },
             settimana: {
-                totale: thisWeek.length,
-                confermati: thisWeek.filter(a => a.stato === 'CONFERMATO').length
+                totale: weekData.length,
+                confermati: weekConfermati
             },
-            prossimi: all.filter(a =>
-                new Date(a.dataOra) > now &&
-                ['PRENOTATO', 'CONFERMATO'].includes(a.stato)
-            ).length
+            prossimi
         };
-    }, [todayAppuntamenti, allAppuntamenti]);
+    }, [dayAppuntamenti, weekAppuntamenti, selectedDate]);
 
-    // Upcoming appointments (next 5)
+    // All appointments for the day, sorted chronologically
+    const dayAppuntamentiSorted = useMemo(() => {
+        const dayData = dayAppuntamenti || [];
+        return [...dayData].sort((a, b) =>
+            new Date(a.dataOra).getTime() - new Date(b.dataOra).getTime()
+        );
+    }, [dayAppuntamenti]);
+
+    // Upcoming appointments (next 5 from now, across all dates)
     const upcomingAppuntamenti = useMemo(() => {
-        const today = todayAppuntamenti || [];
         const now = new Date();
-        return today
-            .filter(a => new Date(a.dataOra) > now && ['PRENOTATO', 'CONFERMATO', 'IN_ATTESA'].includes(a.stato))
+        const all = upcomingData?.data || [];
+
+        // From upcoming appointments, find next 5 future ones (PRENOTATO/CONFERMATO/IN_ATTESA)
+        return [...all]
+            .filter(a =>
+                new Date(a.dataOra) > now &&
+                ['PRENOTATO', 'CONFERMATO', 'IN_ATTESA'].includes(a.stato)
+            )
             .sort((a, b) => new Date(a.dataOra).getTime() - new Date(b.dataOra).getTime())
             .slice(0, 5);
-    }, [todayAppuntamenti]);
+    }, [upcomingData]);
 
     // Loading state
     if (isLoading) {
@@ -280,26 +403,38 @@ export const AgendaDashboard: React.FC = () => {
         <div className="min-h-screen bg-gray-50 p-6">
             <div className="max-w-7xl mx-auto space-y-6">
                 {/* Header */}
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900">Agenda</h1>
-                        <p className="text-gray-500 mt-1">
-                            {formatDate(new Date(), 'full')}
+                        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                            <Calendar className="h-7 w-7 text-teal-600" />
+                            Dashboard Agenda
+                        </h1>
+                        <p className="text-gray-500 text-sm mt-1">
+                            Panoramica appuntamenti e attività del giorno
                         </p>
                     </div>
+
                     <Link
-                        to="/poliambulatorio/agenda/nuovo"
-                        className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+                        to="/poliambulatorio/calendario"
+                        className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-teal-600 to-teal-700 text-white rounded-xl hover:from-teal-700 hover:to-teal-800 transition-all shadow-md hover:shadow-lg font-medium"
                     >
                         <Plus className="h-5 w-5" />
                         Nuovo Appuntamento
                     </Link>
                 </div>
 
+                {/* Date Filters with elegant calendar */}
+                <AgendaFilters
+                    selectedDate={selectedDate}
+                    onDateChange={handleDateChange}
+                    onRefresh={() => refetch()}
+                    isLoading={isLoading}
+                />
+
                 {/* Stats Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <StatCard
-                        title="Appuntamenti Oggi"
+                        title={isToday ? "Appuntamenti Oggi" : "Appuntamenti del Giorno"}
                         value={stats.oggi.totale}
                         subtitle={`${stats.oggi.completati} completati`}
                         icon={CalendarDays}
@@ -358,7 +493,7 @@ export const AgendaDashboard: React.FC = () => {
                                 <div className="text-center py-8 text-gray-500">
                                     <Calendar className="h-12 w-12 mx-auto mb-3 text-gray-300" />
                                     <p className="font-medium">Nessun appuntamento in programma</p>
-                                    <p className="text-sm mt-1">Gli appuntamenti di oggi appariranno qui</p>
+                                    <p className="text-sm mt-1">I prossimi appuntamenti appariranno qui</p>
                                 </div>
                             )}
                         </div>
@@ -399,13 +534,13 @@ export const AgendaDashboard: React.FC = () => {
                     <div className="p-4 border-b border-gray-100">
                         <h2 className="font-semibold text-gray-900 flex items-center gap-2">
                             <TrendingUp className="h-5 w-5 text-teal-600" />
-                            Riepilogo Giornaliero
+                            Riepilogo {isToday ? 'Giornaliero' : `del ${formatDate(selectedDate, 'short')}`}
                         </h2>
                     </div>
                     <div className="p-4">
                         <div className="flex flex-wrap gap-4">
                             {Object.entries(STATO_CONFIG).map(([stato, config]) => {
-                                const count = (todayAppuntamenti || []).filter(a => a.stato === stato).length;
+                                const count = (dayAppuntamenti || []).filter(a => a.stato === stato).length;
                                 if (count === 0) return null;
                                 const Icon = config.icon;
                                 return (
@@ -420,8 +555,8 @@ export const AgendaDashboard: React.FC = () => {
                                     </div>
                                 );
                             })}
-                            {(todayAppuntamenti || []).length === 0 && (
-                                <p className="text-gray-500 text-sm">Nessun appuntamento per oggi</p>
+                            {(dayAppuntamenti || []).length === 0 && (
+                                <p className="text-gray-500 text-sm">Nessun appuntamento per {isToday ? 'oggi' : 'questo giorno'}</p>
                             )}
                         </div>
                     </div>
@@ -480,6 +615,30 @@ export const AgendaDashboard: React.FC = () => {
             </div>
         </div>
     );
+};
+
+/**
+ * AgendaDashboard - Role-based wrapper
+ * - MEDICO role → renders MedicoDashboard (doctor's personal agenda view)
+ * - Other roles → renders full agenda dashboard (admin/receptionist view)
+ */
+export const AgendaDashboard: React.FC = () => {
+    const { user } = useAuth();
+    const isMedico = user?.roles?.includes('MEDICO') ?? false;
+
+    if (isMedico) {
+        return (
+            <Suspense fallback={
+                <div className="flex items-center justify-center py-12">
+                    <RefreshCw className="h-8 w-8 text-teal-600 animate-spin" />
+                </div>
+            }>
+                <MedicoDashboardLazy />
+            </Suspense>
+        );
+    }
+
+    return <AgendaDashboardContent />;
 };
 
 export default AgendaDashboard;

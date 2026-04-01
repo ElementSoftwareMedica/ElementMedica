@@ -1,0 +1,485 @@
+2026-02-14 20:35:32:3532 [32minfo[39m: [32mHealth check registered[39m
+2026-02-14 20:35:32:3532 [32minfo[39m: [32mHealth check registered[39m
+2026-02-14 20:35:32:3532 [32minfo[39m: [32mHealth check registered[39m
+2026-02-14 20:35:32:3532 [32minfo[39m: [32mHealth check registered[39m
+2026-02-14 20:35:32:3532 [32minfo[39m: [32mHealth Check Manager initialized[39m
+2026-02-14 20:35:32:3532 [32minfo[39m: [32mService Lifecycle Manager initialized[39m
+2026-02-14 20:35:34:3534 [32minfo[39m: [32mActivityService initialized[39m
+2026-02-14 20:35:34:3534 [37mdebug[39m: [37mCreating new browser instance[39m
+2026-02-14 20:35:34:3534 [37mdebug[39m: [37mCreating new browser instance[39m
+2026-02-14 20:35:34:3534 [32minfo[39m: [32mBrowser pool initialized[39m
+2026-02-14 20:35:34:3534 [32minfo[39m: [32mEventBus: Instance created[39m
+2026-02-14 20:35:34:3534 [32minfo[39m: [32mEventBus: Initialized successfully[39m
+2026-02-14 20:35:34:3534 [32minfo[39m: [32mPersonService: Using optimized modular implementation[39m
+2026-02-14 20:35:34:3534 [32minfo[39m: [32mGDPR Modular Router loaded successfully[39m
+2026-02-14 20:35:34:3534 [32minfo[39m: [32m[ENHANCED_ROLE_SERVICE] Service initialized with modular architecture[39m
+2026-02-14 20:35:34:3534 [32minfo[39m: [32m[ENHANCED_ROLE_SERVICE] Using modular implementation - Migration completed[39m
+2026-02-14 20:35:34:3534 [32minfo[39m: [32mDatabase middleware initialized successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mService Lifecycle Manager initialized[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ appInstance: true, environment: 'development' }[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m🚀 [MIDDLEWARE MANAGER] Constructor completed[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mAPI version router initialized[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mAPI version router initialized[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mAPI Version Manager initialized[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mAPI Server instance created[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mStarting API Server...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mInitializing configurations...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mInitializing configurations...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mInitializing security middleware[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mConfigurations initialized successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mInitializing services...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mInitializing services...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mServices initialization skipped for debug[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mServices initialized successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mInitializing lifecycle manager services...[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37mLifecycle manager - services registered:[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37mLifecycle manager - service names:[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mStarting service initialization[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mAll services initialized successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mLifecycle manager services initialized successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mConfiguring middleware...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mConfiguring middleware...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32m📁 Static files configured: /uploads -> /Users/matteo.michielon/project 2.0/backend/uploads[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32m🔍 SEO routes mounted at root: /sitemap.xml, /robots.txt[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ name: 'security', options: { priority: 10 } }[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ name: 'security', totalMiddlewares: 1 }[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mMiddleware 'security' registered[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ name: 'cors', options: { priority: 20 } }[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ name: 'cors', totalMiddlewares: 2 }[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mMiddleware 'cors' registered[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ name: 'cookies', options: { priority: 21 } }[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ name: 'cookies', totalMiddlewares: 3 }[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mMiddleware 'cookies' registered[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{[39m
+[37m  name: 'bodyParserJson',[39m
+[37m  options: {[39m
+[37m    priority: 25,[39m
+[37m    enabled: true,[39m
+[37m    environment: [ 'development', 'production', 'test' ][39m
+[37m  }[39m
+[37m}[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ name: 'bodyParserJson', totalMiddlewares: 4 }[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mMiddleware 'bodyParserJson' registered[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{[39m
+[37m  name: 'bodyParserUrlencoded',[39m
+[37m  options: {[39m
+[37m    priority: 26,[39m
+[37m    enabled: true,[39m
+[37m    environment: [ 'development', 'production', 'test' ][39m
+[37m  }[39m
+[37m}[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ name: 'bodyParserUrlencoded', totalMiddlewares: 5 }[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mMiddleware 'bodyParserUrlencoded' registered[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{[39m
+[37m  name: 'debugBody',[39m
+[37m  options: { enabled: false, priority: 27, environment: [ 'development' ] }[39m
+[37m}[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ name: 'debugBody', totalMiddlewares: 6 }[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mMiddleware 'debugBody' registered[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ name: 'rateLimitGlobal', options: { priority: 30 } }[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ name: 'rateLimitGlobal', totalMiddlewares: 7 }[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mMiddleware 'rateLimitGlobal' registered[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ name: 'auth', options: { priority: 70 } }[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ name: 'auth', totalMiddlewares: 8 }[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mMiddleware 'auth' registered[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ name: 'tenant', options: { priority: 80 } }[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ name: 'tenant', totalMiddlewares: 9 }[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mMiddleware 'tenant' registered[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ name: 'rbac', options: { priority: 90 } }[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ name: 'rbac', totalMiddlewares: 10 }[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mMiddleware 'rbac' registered[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{[39m
+[37m  environment: 'development',[39m
+[37m  registeredMiddlewares: [[39m
+[37m    'security',[39m
+[37m    'cors',[39m
+[37m    'cookies',[39m
+[37m    'bodyParserJson',[39m
+[37m    'bodyParserUrlencoded',[39m
+[37m    'debugBody',[39m
+[37m    'rateLimitGlobal',[39m
+[37m    'auth',[39m
+[37m    'tenant',[39m
+[37m    'rbac'[39m
+[37m  ][39m
+[37m}[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{[39m
+[37m  middlewareNames: [[39m
+[37m    'security',[39m
+[37m    'cors',[39m
+[37m    'cookies',[39m
+[37m    'bodyParserJson',[39m
+[37m    'bodyParserUrlencoded',[39m
+[37m    'debugBody',[39m
+[37m    'rateLimitGlobal',[39m
+[37m    'auth',[39m
+[37m    'tenant',[39m
+[37m    'rbac'[39m
+[37m  ][39m
+[37m}[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{[39m
+[37m  middlewaresAfterSorting: [[39m
+[37m    { name: 'security', priority: 10, enabled: true },[39m
+[37m    { name: 'cors', priority: 20, enabled: true },[39m
+[37m    { name: 'cookies', priority: 21, enabled: true },[39m
+[37m    { name: 'bodyParserJson', priority: 25, enabled: true },[39m
+[37m    { name: 'bodyParserUrlencoded', priority: 26, enabled: true },[39m
+[37m    { name: 'debugBody', priority: 27, enabled: false },[39m
+[37m    { name: 'rateLimitGlobal', priority: 30, enabled: true },[39m
+[37m    { name: 'auth', priority: 70, enabled: true },[39m
+[37m    { name: 'tenant', priority: 80, enabled: true },[39m
+[37m    { name: 'rbac', priority: 90, enabled: true }[39m
+[37m  ][39m
+[37m}[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{[39m
+[37m  name: 'security',[39m
+[37m  enabled: true,[39m
+[37m  environment: [ 'development', 'production', 'test' ],[39m
+[37m  currentEnv: 'development',[39m
+[37m  alreadyApplied: false[39m
+[37m}[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ name: 'security' }[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mMiddleware 'security' applied[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{[39m
+[37m  name: 'cors',[39m
+[37m  enabled: true,[39m
+[37m  environment: [ 'development', 'production', 'test' ],[39m
+[37m  currentEnv: 'development',[39m
+[37m  alreadyApplied: false[39m
+[37m}[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ name: 'cors' }[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mMiddleware 'cors' applied[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{[39m
+[37m  name: 'cookies',[39m
+[37m  enabled: true,[39m
+[37m  environment: [ 'development', 'production', 'test' ],[39m
+[37m  currentEnv: 'development',[39m
+[37m  alreadyApplied: false[39m
+[37m}[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ name: 'cookies' }[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mMiddleware 'cookies' applied[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{[39m
+[37m  name: 'bodyParserJson',[39m
+[37m  enabled: true,[39m
+[37m  environment: [ 'development', 'production', 'test' ],[39m
+[37m  currentEnv: 'development',[39m
+[37m  alreadyApplied: false[39m
+[37m}[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ name: 'bodyParserJson' }[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mMiddleware 'bodyParserJson' applied[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{[39m
+[37m  name: 'bodyParserUrlencoded',[39m
+[37m  enabled: true,[39m
+[37m  environment: [ 'development', 'production', 'test' ],[39m
+[37m  currentEnv: 'development',[39m
+[37m  alreadyApplied: false[39m
+[37m}[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ name: 'bodyParserUrlencoded' }[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mMiddleware 'bodyParserUrlencoded' applied[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{[39m
+[37m  name: 'debugBody',[39m
+[37m  enabled: false,[39m
+[37m  environment: [ 'development' ],[39m
+[37m  currentEnv: 'development',[39m
+[37m  alreadyApplied: false[39m
+[37m}[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37mMiddleware 'debugBody' disabled[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ name: 'debugBody' }[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{[39m
+[37m  name: 'rateLimitGlobal',[39m
+[37m  enabled: true,[39m
+[37m  environment: [ 'development', 'production', 'test' ],[39m
+[37m  currentEnv: 'development',[39m
+[37m  alreadyApplied: false[39m
+[37m}[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ name: 'rateLimitGlobal' }[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mMiddleware 'rateLimitGlobal' applied[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{[39m
+[37m  name: 'auth',[39m
+[37m  enabled: true,[39m
+[37m  environment: [ 'development', 'production', 'test' ],[39m
+[37m  currentEnv: 'development',[39m
+[37m  alreadyApplied: false[39m
+[37m}[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ name: 'auth' }[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mMiddleware 'auth' applied[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{[39m
+[37m  name: 'tenant',[39m
+[37m  enabled: true,[39m
+[37m  environment: [ 'development', 'production', 'test' ],[39m
+[37m  currentEnv: 'development',[39m
+[37m  alreadyApplied: false[39m
+[37m}[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ name: 'tenant' }[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mMiddleware 'tenant' applied[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{[39m
+[37m  name: 'rbac',[39m
+[37m  enabled: true,[39m
+[37m  environment: [ 'development', 'production', 'test' ],[39m
+[37m  currentEnv: 'development',[39m
+[37m  alreadyApplied: false[39m
+[37m}[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ name: 'rbac' }[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mMiddleware 'rbac' applied[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{[39m
+[37m  appliedMiddlewares: [[39m
+[37m    'security',[39m
+[37m    'cors',[39m
+[37m    'cookies',[39m
+[37m    'bodyParserJson',[39m
+[37m    'bodyParserUrlencoded',[39m
+[37m    'rateLimitGlobal',[39m
+[37m    'auth',[39m
+[37m    'tenant',[39m
+[37m    'rbac'[39m
+[37m  ][39m
+[37m}[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mMiddleware configuration completed successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mMiddleware configured successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mConfiguring routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mConfiguring routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mSetting up health check route...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mHealth check routes configured successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mGetting version routers...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mVersion routers obtained successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mApplying middleware to version routers...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mMiddleware applied to version routers successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mApplying brand detection middleware...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mBrand detection middleware applied successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering auth routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mAuth routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering courses routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mCourses routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering companies routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mCompanies routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering company sites routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mCompany sites routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering DVR routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mDVR routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering sopralluogo routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mSopralluogo routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering reparto routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mReparto routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering employees routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mEmployees routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering trainers routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mTrainers routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering virtual entities routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mVirtual entities routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering users routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mUsers routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering persons routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mPersons routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering credentials routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mCredentials routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering messaging routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mMessaging routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering gdpr routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mGDPR routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering advanced-permissions routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mAdvanced-permissions routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering dashboard routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mDashboard routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering settings routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mSettings routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering schedules routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mSchedules routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering CMS routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mCMS routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering CMS Multi-Brand routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mCMS Multi-Brand routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering CMS Media routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mCMS Media routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering CMS Analytics routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mCMS Analytics routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering advanced-submissions routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mAdvanced-submissions routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering submissions routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mSubmissions routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering form-templates routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mForm-templates routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering unified forms routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mUnified forms routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering SEO routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mSEO routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering sitemap routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mSitemap routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering activity-logs routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mActivity-logs routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering activity routes (GDPR compliant)...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mActivity routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering template routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mTemplate routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering Google OAuth2 routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mGoogle OAuth2 routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering document routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mDocument routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering lettere incarico routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mLettere incarico routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering registri presenze routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistri presenze routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering attestati routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mAttestati routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering preventivi routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mPreventivi routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering course-tests routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mCourse-tests routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering codici sconto routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mCodici sconto routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering import routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mImport routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering backup routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mBackup routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering clinica routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mClinica routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering sicurezza routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mSicurezza routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering tariffario aziendale routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mTariffario aziendale routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering movimenti contabili routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mMovimenti contabili routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering person-tenant-access routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mPerson-tenant-access routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering person-profiles routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mPerson-profiles routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering person-consents routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mPerson-consents routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering cross-tenant approval routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mCross-tenant approval routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering signature routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mSignature routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering consent-fse routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mConsent-fse routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering CDA routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mCDA routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering scadenze routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mScadenze routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering HR routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mHR routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering system routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mSystem routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering advanced notification routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mAdvanced notification routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering calendar integration routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mCalendar integration routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering public courses routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mPublic courses routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering public forms routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mPublic forms routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering public contact submissions routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mPublic contact submissions routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering public verify routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mPublic verify routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering public queue routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mPublic queue routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRegistering public booking routes...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mPublic booking routes registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mSetting up rate limiting...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRate limiting configured successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mSetting up counters endpoint...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mCounters endpoint configured successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mSetting up 404 handler...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32m404 handler configured successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRoutes configuration completed successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mRoutes configured successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mConfiguring error handling...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mConfiguring error handling...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mError handling configured successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mError handling configured successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mStarting HTTP server...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mHTTP server listener created successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mSetting up graceful shutdown...[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mGraceful shutdown configured successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mAPI Server startup completed successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mAPI Server started successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mNotificationSocketService initialized[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mWebSocket notification service initialized[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mNotificationEventHandler: Registering handlers...[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ eventType: 'APPOINTMENT_CREATED' }[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ eventType: 'APPOINTMENT_CANCELLED' }[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ eventType: 'APPOINTMENT_CONFLICT_DETECTED' }[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ eventType: 'APPOINTMENT_REMINDER_24H' }[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ eventType: 'VISITA_RESULT_AVAILABLE' }[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ eventType: 'VISITA_EXPIRING' }[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ eventType: 'VISITA_COMPLETED' }[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ eventType: 'INVOICE_OVERDUE' }[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ eventType: 'INVOICE_PAID' }[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ eventType: 'INVOICE_PAYMENT_REMINDER' }[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ eventType: 'DOCUMENT_SIGNATURE_REQUESTED' }[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ eventType: 'DOCUMENT_EXPIRING' }[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ eventType: 'DOCUMENT_SIGNED' }[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ eventType: 'COURSE_ENROLLMENT' }[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ eventType: 'COURSE_CERTIFICATE_EXPIRING' }[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ eventType: 'COURSE_CERTIFICATE_ISSUED' }[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ eventType: 'SCHEDULE_STARTING_SOON' }[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ eventType: 'PERSON_CREATED' }[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ eventType: 'PERSON_PASSWORD_CHANGED' }[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ eventType: 'PERSON_ROLE_ASSIGNED' }[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ eventType: 'COMPANY_CONVENTION_EXPIRED' }[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ eventType: 'SYSTEM_ERROR_CRITICAL' }[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ eventType: 'SYSTEM_MAINTENANCE_SCHEDULED' }[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ eventType: 'SYSTEM_SECURITY_ALERT' }[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mNotificationEventHandler: All handlers registered successfully[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mEventBus initialized with NotificationEventHandler[39m
+2026-02-14 20:35:35:3535 [37mdebug[39m: [37m{ eventType: '*' }[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mNotificationRuleEngine initialized[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mNotificationRuleEngine initialized[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mEscalation cron job scheduled (every 5 minutes)[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mP68: Slot auto-generation cron job scheduled (every Monday 2 AM)[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mP68: Daily slot catch-up cron scheduled (6 AM)[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mNotificationCacheService: Redis connected[39m
+2026-02-14 20:35:35:3535 [32minfo[39m: [32mLocal storage directories initialized[39m
+2026-02-14 20:35:36:3536 [37mdebug[39m: [37mSocket authenticated[39m
+2026-02-14 20:35:36:3536 [32minfo[39m: [32mSocket connected[39m
+2026-02-14 20:35:36:3536 [37mdebug[39m: [37m{[39m
+[37m  personId: 'a10b572f-fbe3-4eb1-82c4-d84b48f31492',[39m
+[37m  tenantId: '3b534ec0-95ed-487f-9763-d660ecfdf45d'[39m
+[37m}[39m
+2026-02-14 20:35:36:3536 [37mdebug[39m: [37m{[39m
+[37m  personId: 'a10b572f-fbe3-4eb1-82c4-d84b48f31492',[39m
+[37m  tenantId: '3b534ec0-95ed-487f-9763-d660ecfdf45d',[39m
+[37m  count: 0[39m
+[37m}[39m
+2026-02-14 20:35:36:3536 [37mdebug[39m: [37mSent unread notifications on connect[39m
+2026-02-14 20:35:36:3536 [32minfo[39m: [32mBrowser instance created[39m
+2026-02-14 20:35:36:3536 [32minfo[39m: [32mBrowser instance created[39m
+2026-02-14 20:35:40:3540 [32minfo[39m: [32m[DEBUG] tenantMiddleware - START - Method:[39m
+2026-02-14 20:35:40:3540 [32minfo[39m: [32m[DEBUG] tenantMiddleware - SKIPPING public route:[39m
+2026-02-14 20:35:45:3545 [32minfo[39m: [32mP68: Running startup slot auto-generation[39m
+2026-02-14 20:35:45:3545 [32minfo[39m: [32mSlots generated from disponibilita patterns[39m
+2026-02-14 20:35:45:3545 [32minfo[39m: [32mP68: Auto-generation completed[39m
+2026-02-14 20:35:45:3545 [32minfo[39m: [32mP68: Startup slot auto-generation completed[39m
+2026-02-14 20:35:50:3550 [32minfo[39m: [32mRunning startup template auto-update[39m
+2026-02-14 20:35:50:3550 [32minfo[39m: [32m{ tenantId: '3b534ec0-95ed-487f-9763-d660ecfdf45d' }[39m
+2026-02-14 20:35:50:3550 [32minfo[39m: [32m{[39m
+[32m  tenantId: '3b534ec0-95ed-487f-9763-d660ecfdf45d',[39m
+[32m  updated: 0,[39m
+[32m  skipped: 7,[39m
+[32m  errors: 0[39m
+[32m}[39m
+2026-02-14 20:35:50:3550 [32minfo[39m: [32m{ tenantId: 'c6130b[REDACTED_PHONE]-4f15-b8d7-55b90b2f6663' }[39m
+2026-02-14 20:35:50:3550 [32minfo[39m: [32m{[39m
+[32m  tenantId: 'c6130b[REDACTED_PHONE]-4f15-b8d7-55b90b2f6663',[39m
+[32m  updated: 0,[39m
+[32m  skipped: 7,[39m
+[32m  errors: 0[39m
+[32m}[39m
+2026-02-14 20:35:50:3550 [32minfo[39m: [32m{ tenantId: '74b473a0-74a4-4eba-a31f-62b0fc7bf29e' }[39m
+2026-02-14 20:35:50:3550 [32minfo[39m: [32m{[39m
+[32m  tenantId: '74b473a0-74a4-4eba-a31f-62b0fc7bf29e',[39m
+[32m  updated: 0,[39m
+[32m  skipped: 7,[39m
+[32m  errors: 0[39m
+[32m}[39m
+2026-02-14 20:35:50:3550 [32minfo[39m: [32m{ tenantId: '55afca4f-1d59-4f5c-[REDACTED_PHONE]dcbec10da' }[39m
+2026-02-14 20:35:50:3550 [32minfo[39m: [32m{[39m
+[32m  tenantId: '55afca4f-1d59-4f5c-[REDACTED_PHONE]dcbec10da',[39m
+[32m  updated: 0,[39m
+[32m  skipped: 7,[39m
+[32m  errors: 0[39m
+[32m}[39m
+2026-02-14 20:35:50:3550 [32minfo[39m: [32m{ tenants: 4, totalUpdated: 0, totalSkipped: 28, errors: [] }[39m
+2026-02-14 20:35:50:3550 [32minfo[39m: [32mStartup template auto-update completed[39m
+2026-02-14 20:40:00:400 [32minfo[39m: [32mProcessing notification escalations...[39m
+2026-02-14 20:40:00:400 [32minfo[39m: [32mFound 0 notifications pending escalation[39m
+2026-02-14 20:40:00:400 [32minfo[39m: [32m{ processed: 0, errors: 0, component: 'NotificationEscalationService' }[39m

@@ -78,7 +78,6 @@ export function useAsyncValidation({
       }
       
       // In caso di errore di rete, considera valido per non bloccare l'utente
-      console.error('Async validation error:', err);
       setError('');
       setIsValid(true);
     } finally {

@@ -81,9 +81,8 @@ export function useUploadMedia() {
 
       // Toast handled by calling component
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
       // Toast handled by calling component
-      console.error('Error uploading media:', error);
     },
   });
 }
@@ -125,7 +124,6 @@ export function useUpdateMedia() {
         );
       }
       // Toast handled by calling component
-      console.error('Error updating media:', error);
     },
     onSuccess: (data, variables) => {
       // Invalida cache
@@ -152,9 +150,8 @@ export function useDeleteMedia() {
       queryClient.invalidateQueries({ queryKey: ['cms-media'] });
       // Toast handled by calling component
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
       // Toast handled by calling component
-      console.error('Error deleting media:', error);
     },
   });
 }
@@ -183,9 +180,8 @@ export function useCreateFolder() {
       queryClient.invalidateQueries({ queryKey: ['cms-folders'] });
       // Toast handled by calling component
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
       // Toast handled by calling component
-      console.error('Error creating folder:', error);
     },
   });
 }
@@ -203,9 +199,8 @@ export function useDeleteFolder() {
       queryClient.invalidateQueries({ queryKey: ['cms-folders'] });
       // Toast handled by calling component
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
       // Toast handled by calling component
-      console.error('Error deleting folder:', error);
     },
   });
 }

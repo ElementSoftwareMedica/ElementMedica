@@ -18,6 +18,65 @@ export const ClinicaDashboardLazy = lazy(() =>
 );
 
 // ============================================
+// MDL - MEDICINA DEL LAVORO MODULE (Progetto 56)
+// ============================================
+
+// Mansioni
+export const MansioniPageLazy = lazy(() =>
+    import('./mdl/MansioniPage').then(module => ({ default: module.default }))
+);
+
+// Mansione Detail
+export const MansioneDetailPageLazy = lazy(() =>
+    import('./mdl/MansioneDetailPage').then(module => ({ default: module.default }))
+);
+
+// Giudizi Idoneità
+export const GiudiziIdoneitaPageLazy = lazy(() =>
+    import('./mdl/GiudiziIdoneitaPage').then(module => ({ default: module.default }))
+);
+
+// Rischio-Prestazioni
+export const RischioPrestazioniPageLazy = lazy(() =>
+    import('./mdl/RischioPrestazioniPage').then(module => ({ default: module.default }))
+);
+
+// Protocolli Sanitari (FASE 2)
+export const ProtocolliSanitariPageLazy = lazy(() =>
+    import('./mdl/ProtocolliSanitariPage').then(module => ({ default: module.default }))
+);
+
+// Protocollo Sanitario Detail
+export const ProtocolloSanitarioDetailPageLazy = lazy(() =>
+    import('./mdl/ProtocolloSanitarioDetailPage').then(module => ({ default: module.default }))
+);
+
+// Nomine Ruolo - Figure Sicurezza (FASE 3)
+export const NomineRuoloPageLazy = lazy(() =>
+    import('./mdl/NomineRuoloPage').then(module => ({ default: module.default }))
+);
+
+// Dashboard Scadenze MDL (FASE 7)
+export const ScadenzeMDLPageLazy = lazy(() =>
+    import('./mdl/ScadenzeMDLPage').then(module => ({ default: module.default }))
+);
+
+// Allegato 3A - Cartella Sanitaria (FASE 5)
+export const Allegato3APageLazy = lazy(() =>
+    import('./mdl/Allegato3APage').then(module => ({ default: module.default }))
+);
+
+// Allegato 3B - Relazione Annuale INAIL (FASE 6)
+export const Allegato3BPageLazy = lazy(() =>
+    import('./mdl/Allegato3BPage').then(module => ({ default: module.default }))
+);
+
+// Relazione Sanitaria Annuale - Dashboard Aggregata (FASE 7)
+export const RelazioneSanitariaAnnualePageLazy = lazy(() =>
+    import('./mdl/RelazioneSanitariaAnnualePage').then(module => ({ default: module.default }))
+);
+
+// ============================================
 // STRUTTURA MODULE
 // ============================================
 
@@ -141,9 +200,9 @@ export const AgendaDashboardLazy = lazy(() =>
     import('./agenda/AgendaDashboard').then(module => ({ default: module.default }))
 );
 
-// Calendario
-export const AgendaCalendarLazy = lazy(() =>
-    import('./agenda/AgendaCalendar').then(module => ({ default: module.default }))
+// Calendario Avanzato (con drag & drop disponibilità)
+export const CalendarioPageLazy = lazy(() =>
+    import('./agenda/CalendarioPage').then(module => ({ default: module.default }))
 );
 
 // Appuntamenti
@@ -155,14 +214,13 @@ export const AppuntamentoFormLazy = lazy(() =>
     import('./agenda/AppuntamentoForm').then(module => ({ default: module.default }))
 );
 
-// Accettazione
-export const AccettazionePageLazy = lazy(() =>
-    import('./agenda/AccettazionePage').then(module => ({ default: module.default }))
+export const AppuntamentoDetailPageLazy = lazy(() =>
+    import('./agenda/AppuntamentoDetailPage').then(module => ({ default: module.default }))
 );
 
 // Disponibilità
 export const DisponibilitaPageLazy = lazy(() =>
-    import('./agenda/DisponibilitaPage').then(module => ({ default: module.default }))
+    import('./agenda/disponibilita').then(module => ({ default: module.DisponibilitaPage }))
 );
 
 // ============================================
@@ -189,19 +247,14 @@ export const VisitaPageLazy = lazy(() =>
     import('./clinica/VisitaPage').then(module => ({ default: module.default }))
 );
 
-// Referti List
-export const RefertiListPageLazy = lazy(() =>
-    import('./clinica/RefertiListPage').then(module => ({ default: module.default }))
-);
-
-// Referto Editor
-export const RefertoEditorLazy = lazy(() =>
-    import('./clinica/RefertoEditor').then(module => ({ default: module.default }))
-);
-
 // Cartella Paziente
 export const CartellaPazienteLazy = lazy(() =>
     import('./clinica/CartellaPaziente').then(module => ({ default: module.default }))
+);
+
+// Paziente Form (edit)
+export const PazienteFormPageLazy = lazy(() =>
+    import('./clinica/PazienteFormPage').then(module => ({ default: module.default }))
 );
 
 // ============================================
@@ -224,29 +277,6 @@ export const MedicoDetailPageLazy = lazy(() =>
 );
 
 // ============================================
-// FATTURAZIONE MODULE (Billing)
-// ============================================
-
-// Fatturazione Dashboard
-export const FatturazioneDashboardLazy = lazy(() =>
-    import('./fatturazione/FatturazioneDashboard').then(module => ({ default: module.default }))
-);
-
-// Fatture Page
-export const FatturePageLazy = lazy(() =>
-    import('./fatturazione/FatturePage').then(module => ({ default: module.default }))
-);
-
-// Fattura Form
-export const FatturaFormLazy = lazy(() =>
-    import('./fatturazione/FatturaForm').then(module => ({ default: module.default }))
-);
-
-// Report Finanziari
-export const ReportFinanziariLazy = lazy(() =>
-    import('./fatturazione/ReportFinanziari').then(module => ({ default: module.default }))
-);
-
 // ============================================
 // IMPOSTAZIONI MODULE
 // ============================================
@@ -254,4 +284,91 @@ export const ReportFinanziariLazy = lazy(() =>
 // Clinica Settings Page
 export const ClinicaSettingsPageLazy = lazy(() =>
     import('./impostazioni/ClinicaSettingsPage').then(module => ({ default: module.default }))
+);
+
+// Visit Templates Page (P52 - Clinical Visit Template System)
+export const VisitTemplatesPageLazy = lazy(() =>
+    import('./impostazioni/visit-templates').then(module => ({ default: module.default }))
+);
+
+// Visit Template Detail Page (P52 - Session #35)
+export const VisitTemplateDetailPageLazy = lazy(() =>
+    import('./impostazioni/visit-templates/VisitTemplateDetailPage').then(module => ({ default: module.default }))
+);
+
+// Modulistica Page (P53 - Session #13)
+export const ModulisticaPageLazy = lazy(() =>
+    import('./impostazioni/modulistica').then(module => ({ default: module.default }))
+);
+
+// Modulistica Detail Page (P53 - Session #23)
+export const ModulisticaDetailPageLazy = lazy(() =>
+    import('./impostazioni/modulistica/ModulisticaDetailPage').then(module => ({ default: module.default }))
+);
+
+// Firma Settings Page (P65 - Firma Digitale Management)
+export const FirmaSettingsPageLazy = lazy(() =>
+    import('./impostazioni/firma/FirmaSettingsPage').then(module => ({ default: module.default }))
+);
+
+// Bridge Settings Page (Medical Device Bridge Configuration)
+export const BridgeSettingsPageLazy = lazy(() =>
+    import('./impostazioni/BridgeSettingsPage').then(module => ({ default: module.default }))
+);
+
+// Email Template Settings Page (P74 - Email Template Management)
+export const EmailTemplateSettingsPageLazy = lazy(() =>
+    import('./impostazioni/email-template/EmailTemplateSettingsPage').then(module => ({ default: module.default }))
+);
+
+// Consensi Firma Tablet Page — Gestione moduli consenso per tenant
+export const ConsensiPageLazy = lazy(() =>
+    import('./impostazioni/ConsensiPage').then(module => ({ default: module.default }))
+);
+
+// ============================================
+// CODA MODULE (P53 - Queue Calling System)
+// ============================================
+
+// Queue Management Page - Main dashboard for managing patient queues
+export const QueueManagementPageLazy = lazy(() =>
+    import('./coda/QueueManagementPage').then(module => ({ default: module.default }))
+);
+
+// Queue Display Page - Fullscreen display for waiting room monitors
+export const QueueDisplayPageLazy = lazy(() =>
+    import('./coda/QueueDisplayPage').then(module => ({ default: module.default }))
+);
+
+// Create Session Page - Form to create new queue sessions
+export const CreateSessionPageLazy = lazy(() =>
+    import('./coda/CreateSessionPage').then(module => ({ default: module.default }))
+);
+
+// Mobile Queue Landing - Patient check-in page via QR code (P53.1)
+export const MobileQueueLandingLazy = lazy(() =>
+    import('./coda/MobileQueueLanding').then(module => ({ default: module.default }))
+);
+
+// Mobile Queue Status - Patient waiting status page (P53.1)
+export const MobileQueueStatusLazy = lazy(() =>
+    import('./coda/MobileQueueStatus').then(module => ({ default: module.default }))
+);
+
+// Queue Monitors Page - Multi-monitor configuration (P53.3)
+export const QueueMonitorsPageLazy = lazy(() =>
+    import('./coda/QueueMonitorsPage').then(module => ({ default: module.default }))
+);
+
+// Queue Monitor Display Page - Public display for specific monitor (P53.3)
+export const QueueMonitorDisplayPageLazy = lazy(() =>
+    import('./coda/QueueMonitorDisplayPage').then(module => ({ default: module.default }))
+);
+
+// ============================================
+// P66 - SCADENZE CENTRALIZZATE (Deadlines & Farmaci)
+// ============================================
+
+export const ScadenzePageLazy = lazy(() =>
+    import('./scadenze/ScadenzePage').then(module => ({ default: module.default }))
 );

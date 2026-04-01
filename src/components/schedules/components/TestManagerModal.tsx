@@ -128,7 +128,6 @@ export const TestManagerModal: React.FC<TestManagerModalProps> = ({
             setTests(testsWithResults);
             setStats(statsData);
         } catch (err) {
-            console.error('[TestManagerModal] Error loading tests:', err);
             setError('Errore nel caricamento dei test');
         } finally {
             setLoading(false);
@@ -180,8 +179,8 @@ export const TestManagerModal: React.FC<TestManagerModalProps> = ({
     if (!isOpen) return null;
 
     return ReactDOM.createPortal(
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[85vh] overflow-hidden">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[1050] p-4">
+            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-3xl max-h-[85vh] overflow-hidden">
                 {/* Header */}
                 <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-indigo-500 to-purple-600">
                     <div>
@@ -190,7 +189,7 @@ export const TestManagerModal: React.FC<TestManagerModalProps> = ({
                             Test e Questionari
                         </h2>
                         {courseName && (
-                            <p className="text-indigo-100 text-sm mt-1">{courseName}</p>
+                            <p className="text-indigo-100 dark:text-indigo-200 text-sm mt-1">{courseName}</p>
                         )}
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-lg transition-colors">
@@ -203,16 +202,16 @@ export const TestManagerModal: React.FC<TestManagerModalProps> = ({
                     {/* Info badges */}
                     <div className="flex flex-wrap gap-2 mb-6">
                         {riskLevel && (
-                            <span className="inline-flex items-center px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-sm">
+                            <span className="inline-flex items-center px-3 py-1 bg-orange-100 dark:bg-orange-900/50 text-orange-700 dark:text-orange-400 rounded-full text-sm">
                                 Rischio: {riskLevelLabels[riskLevel] || riskLevel}
                             </span>
                         )}
                         {courseType && (
-                            <span className="inline-flex items-center px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
+                            <span className="inline-flex items-center px-3 py-1 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-400 rounded-full text-sm">
                                 {courseTypeLabels[courseType] || courseType}
                             </span>
                         )}
-                        <span className="inline-flex items-center px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm">
+                        <span className="inline-flex items-center px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-full text-sm">
                             <Users className="h-4 w-4 mr-1" />
                             {persons.length} partecipanti
                         </span>
@@ -227,8 +226,8 @@ export const TestManagerModal: React.FC<TestManagerModalProps> = ({
 
                     {/* Error */}
                     {error && (
-                        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
-                            <div className="flex items-center gap-2 text-red-700">
+                        <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-4">
+                            <div className="flex items-center gap-2 text-red-700 dark:text-red-400">
                                 <AlertCircle className="h-5 w-5" />
                                 <span>{error}</span>
                             </div>
@@ -237,30 +236,30 @@ export const TestManagerModal: React.FC<TestManagerModalProps> = ({
 
                     {/* No course ID warning */}
                     {!courseId && !loading && (
-                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 text-center">
-                            <AlertCircle className="h-8 w-8 text-amber-500 mx-auto mb-3" />
-                            <p className="text-amber-700">Seleziona un corso per visualizzare i test disponibili.</p>
+                        <div className="bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-lg p-6 text-center">
+                            <AlertCircle className="h-8 w-8 text-amber-500 dark:text-amber-400 mx-auto mb-3" />
+                            <p className="text-amber-700 dark:text-amber-300">Seleziona un corso per visualizzare i test disponibili.</p>
                         </div>
                     )}
 
                     {/* No schedule ID warning */}
                     {courseId && !scheduleId && !loading && (
-                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 text-center mb-4">
-                            <AlertCircle className="h-8 w-8 text-amber-500 mx-auto mb-3" />
-                            <p className="text-amber-700 mb-2">Salva il corso per abilitare la gestione dei test.</p>
-                            <p className="text-amber-600 text-sm">I test verranno associati allo schedule dopo il salvataggio.</p>
+                        <div className="bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-lg p-6 text-center mb-4">
+                            <AlertCircle className="h-8 w-8 text-amber-500 dark:text-amber-400 mx-auto mb-3" />
+                            <p className="text-amber-700 dark:text-amber-300 mb-2">Salva il corso per abilitare la gestione dei test.</p>
+                            <p className="text-amber-600 dark:text-amber-400 text-sm">I test verranno associati allo schedule dopo il salvataggio.</p>
                         </div>
                     )}
 
                     {/* No tests */}
                     {!loading && !error && courseId && tests.length === 0 && (
-                        <div className="bg-gray-50 border border-gray-200 rounded-lg p-8 text-center">
-                            <FileQuestion className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                            <h3 className="text-lg font-medium text-gray-900 mb-2">Nessun test disponibile</h3>
-                            <p className="text-gray-600 mb-4">
+                        <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-8 text-center">
+                            <FileQuestion className="h-12 w-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+                            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">Nessun test disponibile</h3>
+                            <p className="text-gray-600 dark:text-gray-400 mb-4">
                                 Non ci sono test configurati per questo corso{riskLevel ? ` con rischio ${riskLevelLabels[riskLevel] || riskLevel}` : ''}.
                             </p>
-                            <p className="text-sm text-gray-500">
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
                                 I test possono essere configurati dall'amministratore in Impostazioni → Form Templates.
                             </p>
                         </div>
@@ -272,30 +271,30 @@ export const TestManagerModal: React.FC<TestManagerModalProps> = ({
                             {tests.map(test => (
                                 <div
                                     key={test.id}
-                                    className="border border-gray-200 rounded-lg overflow-hidden hover:border-indigo-300 transition-colors"
+                                    className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden hover:border-indigo-300 dark:hover:border-indigo-600 transition-colors"
                                 >
                                     {/* Test Header */}
                                     <div
-                                        className="flex items-center justify-between p-4 bg-gray-50 cursor-pointer"
+                                        className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 cursor-pointer"
                                         onClick={() => toggleTest(test.id)}
                                     >
                                         <div className="flex items-center gap-3">
                                             {getStatusIcon(test)}
                                             <div>
-                                                <div className="font-medium text-gray-900">
+                                                <div className="font-medium text-gray-900 dark:text-gray-100">
                                                     {test.formTemplate?.name || testTypeLabels[test.testType] || 'Test'}
                                                 </div>
-                                                <div className="text-sm text-gray-500 flex items-center gap-2">
-                                                    <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded text-xs">
+                                                <div className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">
+                                                    <span className="px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-400 rounded text-xs">
                                                         {testTypeLabels[test.testType]}
                                                     </span>
                                                     {test.isRequired && (
-                                                        <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs">
+                                                        <span className="px-2 py-0.5 bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-400 rounded text-xs">
                                                             Obbligatorio
                                                         </span>
                                                     )}
                                                     {test.passingScore && (
-                                                        <span className="text-xs text-gray-500">
+                                                        <span className="text-xs text-gray-500 dark:text-gray-400">
                                                             Soglia: {test.passingScore}%
                                                         </span>
                                                     )}
@@ -306,17 +305,17 @@ export const TestManagerModal: React.FC<TestManagerModalProps> = ({
                                         <div className="flex items-center gap-4">
                                             {/* Progress */}
                                             <div className="text-right">
-                                                <div className="text-sm font-medium text-gray-900">
+                                                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
                                                     {test.stats.completed}/{test.stats.total}
                                                 </div>
-                                                <div className="text-xs text-gray-500">{getStatusText(test)}</div>
+                                                <div className="text-xs text-gray-500 dark:text-gray-400">{getStatusText(test)}</div>
                                             </div>
 
                                             {/* Progress bar */}
-                                            <div className="w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                            <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                                                 <div
                                                     className={`h-full transition-all ${test.stats.failed > 0 ? 'bg-red-500' :
-                                                            test.stats.completed === test.stats.total ? 'bg-green-500' : 'bg-indigo-500'
+                                                        test.stats.completed === test.stats.total ? 'bg-green-500' : 'bg-indigo-500'
                                                         }`}
                                                     style={{ width: `${(test.stats.completed / test.stats.total) * 100}%` }}
                                                 />
@@ -332,27 +331,27 @@ export const TestManagerModal: React.FC<TestManagerModalProps> = ({
 
                                     {/* Test Details (expanded) */}
                                     {expandedTests.has(test.id) && (
-                                        <div className="p-4 border-t border-gray-100 bg-white">
+                                        <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800/50">
                                             {/* Stats */}
                                             {test.stats.avgScore !== null && (
                                                 <div className="mb-4 flex items-center gap-4">
                                                     <div className="flex items-center gap-2 text-sm">
-                                                        <BarChart3 className="h-4 w-4 text-indigo-500" />
-                                                        <span className="text-gray-600">Punteggio medio:</span>
-                                                        <span className="font-medium">{test.stats.avgScore.toFixed(1)}%</span>
+                                                        <BarChart3 className="h-4 w-4 text-indigo-500 dark:text-indigo-400" />
+                                                        <span className="text-gray-600 dark:text-gray-400">Punteggio medio:</span>
+                                                        <span className="font-medium dark:text-gray-200">{test.stats.avgScore.toFixed(1)}%</span>
                                                     </div>
                                                 </div>
                                             )}
 
                                             {/* Participants */}
                                             <div className="space-y-2">
-                                                <h4 className="text-sm font-medium text-gray-700 mb-2">Partecipanti</h4>
+                                                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Partecipanti</h4>
                                                 {persons.map(person => {
                                                     const result = test.results.find(r => String(r.personId) === String(person.id));
                                                     return (
                                                         <div
                                                             key={person.id}
-                                                            className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg"
+                                                            className="flex items-center justify-between py-2 px-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
                                                         >
                                                             <div className="flex items-center gap-2">
                                                                 {result ? (
@@ -366,7 +365,7 @@ export const TestManagerModal: React.FC<TestManagerModalProps> = ({
                                                                 ) : (
                                                                     <Clock className="h-4 w-4 text-gray-400" />
                                                                 )}
-                                                                <span className="text-sm font-medium text-gray-900">
+                                                                <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
                                                                     {person.firstName} {person.lastName}
                                                                 </span>
                                                             </div>
@@ -400,7 +399,7 @@ export const TestManagerModal: React.FC<TestManagerModalProps> = ({
 
                                             {/* Actions */}
                                             {scheduleId && (
-                                                <div className="mt-4 pt-4 border-t border-gray-100 flex justify-end gap-2">
+                                                <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-2">
                                                     <Button variant="outline" size="sm">
                                                         <ExternalLink className="h-4 w-4 mr-1" />
                                                         Anteprima Test
@@ -420,10 +419,10 @@ export const TestManagerModal: React.FC<TestManagerModalProps> = ({
                 </div>
 
                 {/* Footer */}
-                <div className="px-6 py-4 border-t border-gray-200 flex justify-between items-center bg-gray-50">
+                <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-800">
                     <button
                         onClick={loadTestsAndResults}
-                        className="text-sm flex items-center gap-1 text-gray-600 hover:text-gray-800"
+                        className="text-sm flex items-center gap-1 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
                         disabled={loading}
                     >
                         <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />

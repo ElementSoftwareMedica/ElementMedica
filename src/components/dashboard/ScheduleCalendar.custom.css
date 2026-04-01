@@ -4,16 +4,21 @@
   border-radius: 1rem;
   border: none;
 }
+
 .rbc-toolbar {
   background: transparent;
   border: none;
   margin-bottom: 0;
 }
-.rbc-month-view, .rbc-time-view, .rbc-agenda-view {
+
+.rbc-month-view,
+.rbc-time-view,
+.rbc-agenda-view {
   background: transparent;
   border-radius: 1rem;
   border: none;
 }
+
 .rbc-header {
   background: #f9fafb;
   color: #374151;
@@ -21,25 +26,88 @@
   border: none;
   padding: 0.5rem 0;
 }
+
 .rbc-today {
   background: #dbeafe !important;
 }
+
 .rbc-event {
   transition: box-shadow 0.2s, background 0.2s;
 }
+
 .rbc-event:hover {
-  box-shadow: 0 4px 16px rgba(37,99,235,0.15);
-  /* background: #1d4ed8 !important; */
+  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.15);
 }
+
 .rbc-selected {
   background: #1d4ed8 !important;
 }
-.rbc-row-segment, .rbc-event-content {
+
+.rbc-row-segment,
+.rbc-event-content {
   border-radius: 0.5rem;
 }
+
 .rbc-off-range-bg {
   background: #f3f4f6;
 }
+
 .rbc-date-cell {
   color: #64748b;
-} 
+}
+
+/* Dark mode support */
+:is(.dark) .rbc-header {
+  background: #374151;
+  color: #e5e7eb;
+}
+
+:is(.dark) .rbc-today {
+  background: #1e3a5f !important;
+}
+
+:is(.dark) .rbc-off-range-bg {
+  background: #1f2937;
+}
+
+:is(.dark) .rbc-date-cell {
+  color: #9ca3af;
+}
+
+:is(.dark) .rbc-toolbar button {
+  color: #e5e7eb;
+  background: #374151;
+  border-color: #4b5563;
+}
+
+:is(.dark) .rbc-toolbar button:hover {
+  background: #4b5563;
+}
+
+:is(.dark) .rbc-toolbar button.rbc-active {
+  background: #2563eb;
+  color: white;
+}
+
+:is(.dark) .rbc-time-content,
+:is(.dark) .rbc-time-header,
+:is(.dark) .rbc-time-gutter {
+  background: #1f2937;
+}
+
+:is(.dark) .rbc-time-slot {
+  border-color: #374151;
+}
+
+:is(.dark) .rbc-timeslot-group {
+  border-color: #374151;
+}
+
+:is(.dark) .rbc-day-bg+.rbc-day-bg,
+:is(.dark) .rbc-month-row+.rbc-month-row {
+  border-color: #374151;
+}
+
+:is(.dark) .rbc-event:hover {
+  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.25);
+}

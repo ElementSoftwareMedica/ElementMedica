@@ -137,9 +137,6 @@ export const TenantSelector: React.FC<TenantSelectorProps> = ({
     if (success) {
       setIsOpen(false);
       onTenantChange?.(tenant);
-      
-      // Ricarica la pagina per aggiornare tutti i dati con il nuovo tenant
-      window.location.reload();
     }
   };
   

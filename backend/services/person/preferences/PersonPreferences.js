@@ -28,48 +28,87 @@ class PersonPreferences {
   };
 
   /**
-   * Ottiene le preferenze di una persona
+   * Ottiene le preferenze di una persona per il tenant corrente
    * @param {string} personId - ID della persona
+   * @param {string} tenantId - ID del tenant (opzionale, usa il primo profilo attivo)
    * @returns {Promise<Object>} Le preferenze della persona
    */
-  static async getPreferences(personId) {
+  static async getPreferences(personId, tenantId = null) {
     try {
-      const person = await prisma.person.findUnique({
-        where: { id: personId },
+      // P48: preferences è in PersonTenantProfile
+      const where = {
+        personId,
+        deletedAt: null,
+        isActive: true
+      };
+      if (tenantId) {
+        where.tenantId = tenantId;
+      }
+
+      const profile = await prisma.personTenantProfile.findFirst({
+        where,
+        orderBy: [
+          { isPrimary: 'desc' },
+          { createdAt: 'desc' }
+        ],
         select: { preferences: true }
       });
-      
-      return person?.preferences || this.DEFAULT_PREFERENCES;
+
+      return profile?.preferences || this.DEFAULT_PREFERENCES;
     } catch (error) {
-      logger.error('Error getting person preferences:', { error: error.message, personId });
+      logger.error('Error getting person preferences:', { error: error.message, personId, tenantId });
       throw error;
     }
   }
 
   /**
-   * Aggiorna le preferenze di una persona
+   * Aggiorna le preferenze di una persona per il tenant corrente
    * @param {string} personId - ID della persona
    * @param {Object} preferences - Nuove preferenze
+   * @param {string} tenantId - ID del tenant (opzionale)
    * @returns {Promise<Object>} Le preferenze aggiornate
    */
-  static async updatePreferences(personId, preferences) {
+  static async updatePreferences(personId, preferences, tenantId = null) {
     try {
+      // P48: preferences è in PersonTenantProfile
+      // Trova il profilo tenant corrente
+      const where = {
+        personId,
+        deletedAt: null,
+        isActive: true
+      };
+      if (tenantId) {
+        where.tenantId = tenantId;
+      }
+
+      const profile = await prisma.personTenantProfile.findFirst({
+        where,
+        orderBy: [
+          { isPrimary: 'desc' },
+          { createdAt: 'desc' }
+        ]
+      });
+
+      if (!profile) {
+        throw new Error('PersonTenantProfile not found for person');
+      }
+
       // Merge con le preferenze esistenti per evitare di perdere dati
-      const currentPreferences = await this.getPreferences(personId);
+      const currentPreferences = profile?.preferences || this.DEFAULT_PREFERENCES;
       const mergedPreferences = this.mergePreferences(currentPreferences, preferences);
 
-      const updatedPerson = await prisma.person.update({
-        where: { id: personId },
+      const updatedProfile = await prisma.personTenantProfile.update({
+        where: { id: profile.id },
         data: {
           preferences: mergedPreferences,
           updatedAt: new Date()
         },
         select: { preferences: true }
       });
-      
-      return updatedPerson.preferences;
+
+      return updatedProfile.preferences;
     } catch (error) {
-      logger.error('Error updating person preferences:', { error: error.message, personId });
+      logger.error('Error updating person preferences:', { error: error.message, personId, tenantId });
       throw error;
     }
   }
@@ -77,22 +116,45 @@ class PersonPreferences {
   /**
    * Reset delle preferenze ai valori predefiniti
    * @param {string} personId - ID della persona
+   * @param {string} tenantId - ID del tenant (opzionale)
    * @returns {Promise<Object>} Le preferenze resettate
    */
-  static async resetPreferences(personId) {
+  static async resetPreferences(personId, tenantId = null) {
     try {
-      const updatedPerson = await prisma.person.update({
-        where: { id: personId },
+      // P48: preferences è in PersonTenantProfile
+      const where = {
+        personId,
+        deletedAt: null,
+        isActive: true
+      };
+      if (tenantId) {
+        where.tenantId = tenantId;
+      }
+
+      const profile = await prisma.personTenantProfile.findFirst({
+        where,
+        orderBy: [
+          { isPrimary: 'desc' },
+          { createdAt: 'desc' }
+        ]
+      });
+
+      if (!profile) {
+        throw new Error('PersonTenantProfile not found for person');
+      }
+
+      const updatedProfile = await prisma.personTenantProfile.update({
+        where: { id: profile.id },
         data: {
           preferences: this.DEFAULT_PREFERENCES,
           updatedAt: new Date()
         },
         select: { preferences: true }
       });
-      
-      return updatedPerson.preferences;
+
+      return updatedProfile.preferences;
     } catch (error) {
-      logger.error('Error resetting person preferences:', { error: error.message, personId });
+      logger.error('Error resetting person preferences:', { error: error.message, personId, tenantId });
       throw error;
     }
   }
@@ -117,10 +179,10 @@ class PersonPreferences {
 
       return await this.updatePreferences(personId, updatedPreferences);
     } catch (error) {
-      logger.error('Error updating preference section:', { 
-        error: error.message, 
-        personId, 
-        section 
+      logger.error('Error updating preference section:', {
+        error: error.message,
+        personId,
+        section
       });
       throw error;
     }

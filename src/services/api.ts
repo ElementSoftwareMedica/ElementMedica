@@ -38,6 +38,7 @@ interface ExtendedAxiosConfig {
   withCredentials?: boolean;
   params?: Record<string, unknown>;
   timeout?: number;
+  responseType?: 'json' | 'blob' | 'arraybuffer' | 'text' | 'stream';
 }
 
 // Cache per le risposte API
@@ -66,12 +67,15 @@ const pendingRequests = {
 const activeRequests = new Map<string, Promise<unknown>>();
 
 // Utility per generare chiavi di cache
+// CRITICAL FIX P57: Include brandId nella cache key per separare risposte per tenant diversi
 const getCacheKey = (method: string, url: string, data?: unknown): string => {
   // PROTEZIONE ULTRA-ROBUSTA per i metodi HTTP undefined/null/vuoti
   const safeMethod = (method && typeof method === 'string' && method.trim().length > 0 && /^[A-Za-z]+$/.test(method.trim())) ? method.trim().toUpperCase() : 'GET';
 
+  // Include brandId per evitare che risposte cached da un tenant vengano usate per un altro
+  const brandId = import.meta.env.VITE_BRAND_ID || 'element-sicurezza';
   const dataHash = data ? JSON.stringify(data) : '';
-  return `${safeMethod}:${url}:${dataHash}`;
+  return `${safeMethod}:${brandId}:${url}:${dataHash}`;
 };
 
 // Utility per validare JSON
@@ -80,7 +84,7 @@ const validateJsonResponse = (data: unknown, url: string): unknown => {
     try {
       return JSON.parse(data);
     } catch (error) {
-      console.error(`❌ Invalid JSON response from ${url}:`, data);
+      if (import.meta.env.DEV) console.error(`❌ Invalid JSON response from ${url}:`, data);
       throw new Error(`Invalid JSON response from ${url}`);
     }
   }
@@ -101,7 +105,9 @@ const getCacheTtl = (url: string): number => {
 const apiClient = axios.create({
   baseURL: '', // Empty string - URLs are already complete with /api/v1/... from services
   headers: {
-    'Content-Type': 'application/json',
+    // NO Content-Type default! 
+    // - Per JSON: verrà impostato dall'interceptor
+    // - Per FormData: axios lo gestisce automaticamente con boundary
   },
   // Abilita withCredentials per supportare CORS con credenziali
   withCredentials: true,
@@ -117,7 +123,7 @@ apiClient.interceptors.request.use(
     try {
       if (!config.method || typeof config.method !== 'string' || config.method.trim() === '') {
         config.method = 'GET';
-        console.warn('🔧 [API INTERCEPTOR] Method was invalid, forcing to GET');
+        if (import.meta.env.DEV) console.warn('🔧 [API INTERCEPTOR] Method was invalid, forcing to GET');
       } else {
         // Extra safety: verify it's still a string before calling toUpperCase
         const methodValue = config.method;
@@ -126,17 +132,14 @@ apiClient.interceptors.request.use(
           : 'GET';
       }
     } catch (methodError) {
-      console.error('🔧 [API INTERCEPTOR] Error processing method, defaulting to GET:', methodError);
+      if (import.meta.env.DEV) console.error('\ud83d\udd27 [API INTERCEPTOR] Error processing method, defaulting to GET:', methodError);
       config.method = 'GET';
     }
 
     // MULTI-BRAND: Inject X-Frontend-Id header for ALL requests
-    const brandId = import.meta.env.VITE_BRAND_ID || 'element-formazione';
+    const brandId = import.meta.env.VITE_BRAND_ID || 'element-sicurezza';
     if (!config.headers) config.headers = {};
     (config.headers as Record<string, any>)['X-Frontend-Id'] = brandId;
-
-    // NOTE: Legacy URL rewriting removed - all services now use /api/v1/ directly
-    // See: Project 46 E2E optimization (2025-01-14)
 
     // SOLUZIONE ULTRA-SEMPLIFICATA: Per chiamate apiGet, fai il minimo indispensabile
     if (config._isApiGetCall) {
@@ -163,6 +166,19 @@ apiClient.interceptors.request.use(
         if (tenantId && tenantId !== 'default-company') {
           if (!config.headers) config.headers = {};
           (config.headers as Record<string, any>)['X-Tenant-ID'] = tenantId;
+        }
+
+        // === TenantMode Integration for ALL operations ===
+        const existingOperateHeader = (config.headers as Record<string, any>)['X-Operate-Tenant-Id'];
+        if (!existingOperateHeader) {
+          const operateTenantId = typeof localStorage !== 'undefined'
+            ? localStorage.getItem('tenantMode.operateTenantId')
+            : null;
+          if (operateTenantId) {
+            (config.headers as Record<string, any>)['X-Operate-Tenant-Id'] = operateTenantId;
+          } else if (tenantId) {
+            (config.headers as Record<string, any>)['X-Operate-Tenant-Id'] = tenantId;
+          }
         }
       } catch (e) {
         // safe noop
@@ -208,7 +224,9 @@ apiClient.interceptors.request.use(
     }
 
     // PROTEZIONE AGGIUNTIVA: Assicurati che Content-Type sia sempre definito per evitare undefined
-    if (!(config.headers as Record<string, any>)['Content-Type'] && !(config.headers as Record<string, any>)['content-type']) {
+    // MA NON per FormData: axios deve gestire automaticamente Content-Type con boundary
+    const isFormData = config.data instanceof FormData;
+    if (!isFormData && !(config.headers as Record<string, any>)['Content-Type'] && !(config.headers as Record<string, any>)['content-type']) {
       (config.headers as Record<string, any>)['Content-Type'] = 'application/json';
     }
 
@@ -219,10 +237,6 @@ apiClient.interceptors.request.use(
     ) {
       config.url = config.url.replace(/^\/api\//, '/');
     }
-
-    // NOTE: Legacy URL rewriting removed - all services now use /api/v1/ directly
-    // See: Project 46 E2E optimization (2025-01-14)
-    // Removed legacy rewriting for: /trainers, /companies, /schedules, /courses
 
     // Normalizzazione URL: se comincia con '/' ma non con '/api', prefissa '/api'
     if (
@@ -249,37 +263,11 @@ apiClient.interceptors.request.use(
     // Usa il metodo sicuro per getCacheKey
     const requestKey = getCacheKey(safeMethodForLogging, config.url || '', config.data);
 
-    // Debug: Log della configurazione axios
-    console.log('🔍 [AXIOS DEBUG] Request config:', {
-      url: config.url,
-      baseURL: config.baseURL,
-      fullURL: (config.baseURL || '') + (config.url || ''),
-      method: config.method,
-      isApiGetCall: config._isApiGetCall,
-      contentType: (config.headers as Record<string, any>)['Content-Type']
-    });
-
     // Add auth token if available
     const token = getToken();
     const isAuthUrl = config.url?.includes('/auth/');
     if (token && !isAuthUrl) {
       (config.headers as Record<string, any>)['Authorization'] = `Bearer ${token}`;
-      // Debug per getCurrentTenant
-      if (config.url?.includes('/tenants/current')) {
-        console.log('🔐 Adding token to /tenants/current request:', {
-          hasToken: !!token,
-          // tokenStart rimosso per evitare esposizione di parti del token
-          url: config.url,
-          fullURL: (config.baseURL || '') + (config.url || ''),
-          timestamp: new Date().toISOString()
-        });
-      }
-    } else if (!token && config.url?.includes('/tenants/current')) {
-      console.warn('⚠️ No token available for /tenants/current request:', {
-        url: config.url,
-        fullURL: (config.baseURL || '') + (config.url || ''),
-        timestamp: new Date().toISOString()
-      });
     }
 
     // Imposta l'header X-Tenant-ID solo se presente in localStorage (senza fallback o gating host)
@@ -287,6 +275,26 @@ apiClient.interceptors.request.use(
       const tenantId = typeof localStorage !== 'undefined' ? localStorage.getItem('tenantId') : null;
       if (tenantId && tenantId !== 'default-company') {
         (config.headers as Record<string, any>)['X-Tenant-ID'] = tenantId;
+      }
+
+      // === TenantMode Integration ===
+      // Per TUTTE le operazioni, aggiungi X-Operate-Tenant-Id
+      // per assicurare che le entità vengano lette/scritte nel tenant corretto
+      // Priorità:
+      // 1. Header già presente nella richiesta (da useTenantModeData.getOperateHeaders())
+      // 2. Valore da localStorage (tenantMode.operateTenantId)
+      // 3. Fallback: tenantId dell'utente
+      const existingOperateHeader = (config.headers as Record<string, any>)['X-Operate-Tenant-Id'];
+      if (!existingOperateHeader) {
+        const operateTenantId = typeof localStorage !== 'undefined'
+          ? localStorage.getItem('tenantMode.operateTenantId')
+          : null;
+        if (operateTenantId) {
+          (config.headers as Record<string, any>)['X-Operate-Tenant-Id'] = operateTenantId;
+        } else if (tenantId) {
+          // Fallback al tenant dell'utente
+          (config.headers as Record<string, any>)['X-Operate-Tenant-Id'] = tenantId;
+        }
       }
     } catch (e) {
       // safe noop
@@ -315,15 +323,19 @@ apiClient.interceptors.request.use(
         }
       }).catch(error => {
         // Log errore ma continua (fallback graceful)
-        console.warn('GDPR consent check failed, continuing:', error);
+        if (import.meta.env.DEV) console.warn('GDPR consent check failed, continuing:', error);
       });
     }
 
     // Check cache per richieste GET
-    if (safeMethodForLogging.toLowerCase() === 'get' && !config._skipDeduplication) {
+    // CRITICAL FIX: Use adapter pattern instead of returning response from request interceptor
+    // axios request interceptors MUST return config, returning anything else causes method corruption
+    // NOTE: Skip cache for blob/arraybuffer responses (PDF downloads etc.) — cached blobs lose
+    //       important headers like content-disposition which are needed for filename extraction
+    const isNonJsonResponse = config.responseType === 'blob' || config.responseType === 'arraybuffer';
+    if (safeMethodForLogging.toLowerCase() === 'get' && !config._skipDeduplication && !isNonJsonResponse) {
       const cached = responseCache.get(requestKey);
       if (cached && (Date.now() - cached.timestamp) < cached.ttl) {
-        console.log(`📦 Cache hit for ${config.url}`);
 
         // Log GDPR action per cache hit (non-blocking)
         if (!config._skipGdprCheck) {
@@ -339,51 +351,35 @@ apiClient.interceptors.request.use(
           );
         }
 
-        // CRITICAL FIX: Create a completely clean config object for cached response
-        // This prevents method corruption issues when axios processes the cached response
-        const cleanConfig = {
-          url: config.url || '',
-          method: 'get', // Lowercase 'get' is the correct format for axios
-          baseURL: config.baseURL || '',
-          headers: {
-            ...(config.headers || {}),
-            'X-Cached-Response': 'true'
-          },
-          params: config.params,
-          timeout: config.timeout || 30000,
-          _cached: true,
-          _skipDeduplication: true, // Don't process cached responses again
-          _skipGdprCheck: true
-        };
-
-        // Return a properly formatted axios response object
-        const response = {
-          data: cached.data,
-          status: 200,
-          statusText: 'OK (Cached)',
-          headers: {
-            'content-type': 'application/json',
-            'cache-control': 'private, max-age=0',
-            'x-cache': 'HIT'
-          },
-          config: cleanConfig,
-          request: {},
-          // Ensure axios recognizes this as a valid response
-          [Symbol.toStringTag]: 'AxiosResponse'
-        };
-
         recordApiCall(config.url || '', safeMethodForLogging, timer(), 200, {
           cached: true,
           deduplicated: false
         });
 
-        return Promise.resolve(response);
+        // Use a custom adapter that returns cached data without making XHR request
+        // This is the correct pattern for axios - override adapter per-request
+        config.adapter = () => {
+          return Promise.resolve({
+            data: cached.data,
+            status: 200,
+            statusText: 'OK (Cached)',
+            headers: {
+              'content-type': 'application/json',
+              'cache-control': 'private, max-age=0',
+              'x-cache': 'HIT'
+            },
+            config: config,
+            request: {}
+          });
+        };
+
+        // Continue with the config - the adapter will return cached data
+        return config;
       }
     }
 
     // Deduplication per richieste identiche in corso
     if (!config._skipDeduplication && activeRequests.has(requestKey)) {
-      console.log(`🔄 Deduplicating request: ${safeMethodForLogging} ${config.url}`);
 
       // Log GDPR action per deduplication (non-blocking)
       if (!config._skipGdprCheck) {
@@ -416,7 +412,7 @@ apiClient.interceptors.request.use(
     }
 
     if (pendingRequests.urls.has(url)) {
-      console.warn(`Richiesta duplicata per ${url} - ottimizzando`);
+      if (import.meta.env.DEV) console.warn(`Richiesta duplicata per ${url} - ottimizzando`);
     } else {
       pendingRequests.count++;
       pendingRequests.urls.add(url);
@@ -523,7 +519,7 @@ apiClient.interceptors.response.use(
       try {
         response.data = validateJsonResponse(response.data, config._requestUrl || 'unknown');
       } catch (jsonError) {
-        console.error('JSON validation failed:', jsonError);
+        if (import.meta.env.DEV) console.error('JSON validation failed:', jsonError);
 
         // Log GDPR action per errore JSON (non-blocking)
         if (!config?._skipGdprCheck) {
@@ -551,12 +547,14 @@ apiClient.interceptors.response.use(
       }
     } else {
       // Per status code senza body, assicurati che response.data sia null o undefined
-      console.log(`✅ Skipping JSON validation for status ${response.status} (No Content expected)`);
       response.data = null;
     }
 
     // Cache delle risposte GET successful
-    if (config.method?.toLowerCase() === 'get' && response.status === 200 && config._cacheKey) {
+    // NOTE: Do NOT cache blob/arraybuffer responses — they lose headers (content-disposition)
+    //       needed for download filename extraction and would waste memory
+    const isNonJsonResponseToCache = config.responseType === 'blob' || config.responseType === 'arraybuffer';
+    if (config.method?.toLowerCase() === 'get' && response.status === 200 && config._cacheKey && !isNonJsonResponseToCache) {
       const ttl = getCacheTtl(config._requestUrl || '');
       responseCache.set(config._cacheKey, {
         data: response.data,
@@ -602,7 +600,6 @@ apiClient.interceptors.response.use(
           responseCache.forEach((_, key) => {
             if (key.includes(basePath)) {
               responseCache.delete(key);
-              console.log(`🗑️ Auto-invalidated cache for: ${key} (due to ${method?.toUpperCase() || 'UNKNOWN'} ${url})`);
             }
           });
         }
@@ -632,7 +629,7 @@ apiClient.interceptors.response.use(
       activeRequests.delete(config._cacheKey);
     }
 
-    const errorMessage = error.message || 'Unknown API error';
+    const errorMessage = 'Unknown API error';
     const status = error.response?.status || 0;
 
     // Skip GDPR logging for common non-critical errors:
@@ -671,28 +668,44 @@ apiClient.interceptors.response.use(
       console.debug(`API Error [${error.config?.url}]: ${error.code || error.name || 'Unknown error'}`);
     }
 
+    // Intercetta errori di abbonamento (403 con codici subscription)
+    // Emette un evento globale che AuthContext intercetta per forzare il logout
+    if (status === 403) {
+      const subscriptionCodes = ['TENANT_INACTIVE', 'SUBSCRIPTION_CANCELLED', 'SUBSCRIPTION_SUSPENDED', 'SUBSCRIPTION_EXPIRED', 'TRIAL_EXPIRED'];
+      const errorCode = error.response?.data?.code;
+      if (errorCode && subscriptionCodes.includes(errorCode)) {
+        const message = error.response?.data?.message || 'Abbonamento non attivo';
+        window.dispatchEvent(new CustomEvent('subscription-error', { detail: { code: errorCode, message } }));
+      }
+    }
+
     // Evita side effects su auth per errori generici
     return Promise.reject(error);
   }
 );
 
 // API utility functions with type assertions for safety
-export const apiGet = async <T>(url: string, params = {}): Promise<T> => {
+export const apiGet = async <T>(url: string, params = {}, options?: { headers?: Record<string, string> }): Promise<T> => {
   // Usa il throttling per prevenire ERR_INSUFFICIENT_RESOURCES
   return throttledApiCall(url, async () => {
     try {
       // Configurazione speciale per endpoint di autenticazione per evitare cache browser
       const isAuthEndpoint = url.includes('/auth/');
+      // P57: check-existing endpoints NEVER should be cached - they are tenant-specific
+      const isCheckExistingEndpoint = url.includes('/check-existing');
 
       // SOLUZIONE DEFINITIVA: Usa direttamente apiClient.get() per evitare problemi interni di Axios
       const config: ExtendedAxiosConfig = {
         params: {
           ...params,
-          // Cache-busting per endpoint auth
-          ...(isAuthEndpoint && { _t: Date.now() })
+          // Cache-busting per endpoint auth e check-existing
+          ...((isAuthEndpoint || isCheckExistingEndpoint) && { _t: Date.now() })
         },
         timeout: 20000, // Timeout ridotto
-        headers: {}
+        headers: {
+          // Merge degli headers personalizzati passati come opzione
+          ...(options?.headers || {})
+        }
       };
 
       // Propaga _skipGdprCheck a livello config e rimuovilo dalla querystring
@@ -705,12 +718,14 @@ export const apiGet = async <T>(url: string, params = {}): Promise<T> => {
         }
       }
 
-      // Headers no-cache per endpoint di autenticazione
-      if (isAuthEndpoint) {
+      // Headers no-cache per endpoint di autenticazione e check-existing
+      if (isAuthEndpoint || isCheckExistingEndpoint) {
         config.headers!['Cache-Control'] = 'no-cache, no-store, must-revalidate';
         config.headers!['Pragma'] = 'no-cache';
         config.headers!['Expires'] = '0';
-        console.log('🚫 [CACHE BYPASS] Adding no-cache headers for auth endpoint:', url);
+        if (isCheckExistingEndpoint) {
+          // no-cache headers already added above
+        }
       }
 
       // Aggiungi il flag personalizzato per l'interceptor
@@ -723,14 +738,14 @@ export const apiGet = async <T>(url: string, params = {}): Promise<T> => {
     } catch (error: unknown) {
       // Errore più descrittivo per ERR_INSUFFICIENT_RESOURCES
       if (error && typeof error === 'object' && 'code' in error && (error as any).code === 'ERR_INSUFFICIENT_RESOURCES') {
-        console.error('Browser resource limit reached - try again in a moment');
+        if (import.meta.env.DEV) console.error('Browser resource limit reached - try again in a moment');
       }
       // Non loggare dettagli se la chiamata ha _skipGdprCheck
       const cfg = (error && typeof error === 'object' && 'config' in error) ? (error as any).config as ExtendedAxiosConfig : undefined;
       if (!cfg?._skipGdprCheck) {
-        console.error('🚨 [API GET] Error details:', {
+        if (import.meta.env.DEV) console.error('🚨 [API GET] Error details:', {
           url,
-          error: error instanceof Error ? error.message : 'Unknown error',
+          error: 'Unknown error',
           code: error && typeof error === 'object' && 'code' in error ? (error as any).code : 'Unknown',
           config: error && typeof error === 'object' && 'config' in error ? (error as any).config : 'Unknown'
         });
@@ -883,12 +898,7 @@ export async function apiPost<T = unknown>(
 
       // Debug log per le chiamate di autenticazione
       if (url.includes('/auth/')) {
-        console.log('🔐 Auth API Call Debug:', {
-          url,
-          timeout: timeoutValue,
-          withCredentials: withCredentialsValue,
-          baseURL: API_BASE_URL
-        });
+        // Auth request — withCredentials enabled
       }
 
       const enhancedConfig: Record<string, unknown> = {
@@ -927,7 +937,8 @@ export async function apiPost<T = unknown>(
   }, 1); // Priorità media per le POST
 }
 
-export const apiPut = async <T>(url: string, data = {}): Promise<T> => {
+// P59: Aggiunto supporto per headers opzionali (es. X-Operate-Tenant-Id per cross-tenant operations)
+export const apiPut = async <T>(url: string, data = {}, options?: { headers?: Record<string, string> }): Promise<T> => {
   // Determina il timeout in base al tipo di operazione
   const getTimeoutForUrl = (url: string): number => {
     // Timeout ridotto per operazioni di autenticazione (10 secondi)
@@ -945,7 +956,9 @@ export const apiPut = async <T>(url: string, data = {}): Promise<T> => {
   try {
     const response = await apiClient.put(url, data, {
       timeout: getTimeoutForUrl(url),
-      withCredentials: true
+      withCredentials: true,
+      // P59: Merge headers personalizzati
+      headers: options?.headers || {}
     });
     return response.data as T;
   } catch (error: unknown) {
@@ -969,7 +982,7 @@ export const apiPut = async <T>(url: string, data = {}): Promise<T> => {
   }
 };
 
-export const apiPatch = async <T>(url: string, data = {}): Promise<T> => {
+export const apiPatch = async <T>(url: string, data = {}, config?: { headers?: Record<string, string> }): Promise<T> => {
   const getTimeoutForUrl = (url: string): number => {
     if (url.includes('/auth/')) return 10000;
     return 30000;
@@ -978,7 +991,8 @@ export const apiPatch = async <T>(url: string, data = {}): Promise<T> => {
   try {
     const response = await apiClient.patch(url, data, {
       timeout: getTimeoutForUrl(url),
-      withCredentials: true
+      withCredentials: true,
+      ...(config?.headers ? { headers: config.headers } : {})
     });
     return response.data as T;
   } catch (error: unknown) {
@@ -986,7 +1000,8 @@ export const apiPatch = async <T>(url: string, data = {}): Promise<T> => {
   }
 };
 
-export const apiDelete = async <T>(url: string): Promise<T> => {
+// P59: Aggiunto supporto per headers opzionali (es. X-Operate-Tenant-Id per cross-tenant operations)
+export const apiDelete = async <T>(url: string, options?: { headers?: Record<string, string> }): Promise<T> => {
   try {
     // Determina il timeout in base al tipo di operazione
     const getTimeoutForUrl = (url: string): number => {
@@ -1007,21 +1022,17 @@ export const apiDelete = async <T>(url: string): Promise<T> => {
 
     // Debug log per le chiamate di autenticazione
     if (url.includes('/auth/')) {
-      console.log('🔐 Auth DELETE API Call Debug:', {
-        url,
-        timeout: timeoutValue,
-        withCredentials: withCredentialsValue,
-        baseURL: API_BASE_URL
-      });
+      // Auth DELETE request — withCredentials enabled
     }
 
     const response = await apiClient.delete(url, {
       timeout: timeoutValue,
       // Abilita withCredentials per le chiamate di autenticazione
       withCredentials: withCredentialsValue,
-      // Assicurati che gli headers siano corretti
+      // P59: Merge headers personalizzati con Content-Type
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        ...(options?.headers || {})
       }
     });
     return response.data as T;
@@ -1031,14 +1042,15 @@ export const apiDelete = async <T>(url: string): Promise<T> => {
 };
 
 // For DELETE requests with payload
-export const apiDeleteWithPayload = async <T>(url: string, data = {}): Promise<T> => {
-  const config = {
+export const apiDeleteWithPayload = async <T>(url: string, data = {}, config?: { headers?: Record<string, string> }): Promise<T> => {
+  const axiosConfig = {
     method: 'DELETE',
     url,
     data,
-    timeout: 30000 // Timeout esteso anche per DELETE with payload
+    timeout: 30000, // Timeout esteso anche per DELETE with payload
+    ...(config?.headers ? { headers: config.headers } : {})
   };
-  const response = await apiClient(config);
+  const response = await apiClient(axiosConfig);
   return response.data as T;
 };
 
@@ -1054,9 +1066,17 @@ export const apiUpload = async <T>(url: string, formData: FormData, config?: Rec
       }
     };
 
-    const response = await apiClient.post<T>(url, formData, enhancedConfig);
+    // P59: Supporto per method override (PUT per update)
+    const method = (config?.method as string)?.toLowerCase() || 'post';
+    delete enhancedConfig.method; // Rimuovi method dal config per axios
+
+    const response = method === 'put'
+      ? await apiClient.put<T>(url, formData, enhancedConfig)
+      : await apiClient.post<T>(url, formData, enhancedConfig);
+
     return response.data;
   } catch (error: unknown) {
+    if (import.meta.env.DEV) console.error('❌ [API UPLOAD] Upload failed', { url, error });
     throw error;
   }
 };
@@ -1080,14 +1100,14 @@ export const apiDownload = async (url: string): Promise<Blob> => {
   try {
     const response = await apiClient.get(url, {
       responseType: 'blob',
-      timeout: 60000, // Timeout esteso per download
+      timeout: 120000, // Timeout esteso per download PDF (Puppeteer può richiedere 60-90s)
       headers: {
         'Accept': 'application/pdf, application/octet-stream, */*'
       }
     });
     return response.data as Blob;
   } catch (error: unknown) {
-    console.error('🚨 [API DOWNLOAD] Error:', error);
+    if (import.meta.env.DEV) console.error('🚨 [API DOWNLOAD] Error:', error);
     throw error;
   }
 };
@@ -1103,7 +1123,7 @@ export const apiDownloadWithFilename = async (url: string): Promise<DownloadResu
   try {
     const response = await apiClient.get(url, {
       responseType: 'blob',
-      timeout: 60000, // Timeout esteso per download
+      timeout: 120000, // Timeout esteso per download PDF (Puppeteer può richiedere 60-90s)
       headers: {
         'Accept': 'application/pdf, application/octet-stream, */*'
       }
@@ -1125,7 +1145,7 @@ export const apiDownloadWithFilename = async (url: string): Promise<DownloadResu
       filename
     };
   } catch (error: unknown) {
-    console.error('🚨 [API DOWNLOAD WITH FILENAME] Error:', error);
+    if (import.meta.env.DEV) console.error('🚨 [API DOWNLOAD WITH FILENAME] Error:', error);
     throw error;
   }
 };
@@ -1147,11 +1167,10 @@ export const invalidateCache = (urlPattern: string): void => {
   // Elimina le chiavi trovate
   keysToDelete.forEach(key => {
     responseCache.delete(key);
-    console.log(`🗑️ Cache invalidated for: ${key}`);
   });
 
   if (keysToDelete.length > 0) {
-    console.log(`🗑️ Invalidated ${keysToDelete.length} cache entries for pattern: ${urlPattern}`);
+    // cache entries cleared
   }
 };
 
@@ -1161,7 +1180,7 @@ export const invalidateCache = (urlPattern: string): void => {
 export const clearCache = (): void => {
   const size = responseCache.size;
   responseCache.clear();
-  console.log(`🗑️ Cleared entire cache (${size} entries)`);
+  // cache cleared (size entries)
 };
 
 // API Service Object per compatibilità con import esistenti
@@ -1199,7 +1218,7 @@ async function refreshAccessToken(): Promise<string | null> {
       return newToken;
     } catch (e) {
       // Log minimale, senza dettagli sensibili
-      console.error('Error refreshing access token via auth.refreshAccess');
+      if (import.meta.env.DEV) console.error('Error refreshing access token via auth.refreshAccess');
       return null;
     } finally {
       isRefreshing = false;

@@ -24,16 +24,16 @@ export const FAQItem: React.FC<FAQItemProps> = ({ question, answer }) => {
         className="w-full flex items-center justify-between p-6 text-left hover:bg-white transition-colors"
       >
         <span className="font-semibold text-gray-900 pr-8">{question}</span>
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${isOpen ? 'bg-blue-100' : 'bg-gray-100'}`}>
+        <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${isOpen ? 'bg-primary-100' : 'bg-gray-100'}`}>
           {isOpen ? (
-            <ChevronUp className="w-5 h-5 text-blue-600" />
+            <ChevronUp className="w-5 h-5 text-primary-600" />
           ) : (
             <ChevronDown className="w-5 h-5 text-gray-400" />
           )}
         </div>
       </button>
       {isOpen && (
-        <div className="px-6 pb-6 pt-2 bg-gradient-to-r from-blue-50/50 to-transparent border-t border-gray-100">
+        <div className="px-6 pb-6 pt-2 border-t border-gray-100" style={{ backgroundImage: 'linear-gradient(to right, color-mix(in srgb, var(--color-primary-50) 50%, transparent), transparent)' }}>
           <p className="text-gray-600 leading-relaxed">{answer}</p>
         </div>
       )}

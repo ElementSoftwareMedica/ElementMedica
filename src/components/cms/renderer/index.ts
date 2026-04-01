@@ -13,7 +13,7 @@ export { FAQItem } from './FAQItem';
 export type { FAQItemProps } from './FAQItem';
 
 // Main content renderer
-export { CustomContentRenderer } from './CustomContentRenderer';
+export { CustomContentRenderer } from './custom-content-renderer';
 
 // Section renderers - will be added as they are created
 // export * from './sections';

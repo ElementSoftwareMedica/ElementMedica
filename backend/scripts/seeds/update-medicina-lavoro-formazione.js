@@ -2,7 +2,7 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function updateMedicinaLavoroFormazione() {
-  console.log('📄 Aggiornando Medicina del Lavoro per Element Formazione...\n');
+  console.log('📄 Aggiornando Medicina del Lavoro per Element Sicurezza...\n');
 
   const page = await prisma.cMSPage.findFirst({
     where: {
@@ -448,13 +448,13 @@ async function updateMedicinaLavoroFormazione() {
     where: { id: page.id },
     data: {
       content: updatedContent,
-      seoTitle: 'Medicina del Lavoro Milano - Sorveglianza Sanitaria | Element Formazione',
+      seoTitle: 'Medicina del Lavoro Padova - Sorveglianza Sanitaria | Element Sicurezza',
       seoDescription: 'Servizi completi di medicina del lavoro: visite preventive, sorveglianza sanitaria, medico competente, esami specialistici. Conformità D.Lgs 81/08. ✓ ISO 9001 ✓ 500+ aziende clienti',
       updatedAt: new Date()
     }
   });
 
-  console.log('✅ Pagina Medicina del Lavoro Element Formazione aggiornata!\n');
+  console.log('✅ Pagina Medicina del Lavoro Element Sicurezza aggiornata!\n');
   console.log('📊 Miglioramenti applicati:');
   console.log('   - Hero section medical con statistics e trust badges');
   console.log('   - 6 servizi dettagliati con icone e features');

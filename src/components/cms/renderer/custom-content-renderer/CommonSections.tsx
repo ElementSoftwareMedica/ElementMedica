@@ -20,12 +20,12 @@ export const WhyChooseUsSection: React.FC<{ content: any }> = ({ content }) => {
   if (!content.whyChooseUs) return null;
 
   return (
-    <section className="py-20 bg-gradient-to-br from-white via-amber-50/30 to-orange-50/40">
+    <section className="py-20 bg-gradient-to-br from-white via-accent-50/30 to-orange-50/40">
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
           <span className="inline-block px-4 py-2 bg-green-100 text-green-700 rounded-full text-sm font-semibold mb-4">Perché Noi</span>
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
-            {content.whyChooseUs.sectionTitle || content.whyChooseUs.title || 'Perché Scegliere Element Formazione'}
+            {content.whyChooseUs.sectionTitle || content.whyChooseUs.title || 'Perché Scegliere Element Sicurezza'}
           </h2>
           {(content.whyChooseUs.sectionSubtitle || content.whyChooseUs.description) && (
             <p className="text-xl text-gray-600 max-w-3xl mx-auto">
@@ -74,7 +74,7 @@ export const WhyChooseUsSection: React.FC<{ content: any }> = ({ content }) => {
                   </div>
                   <p className="text-gray-700 mb-6 italic">"{testimonial.text}"</p>
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold">
+                    <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold" style={{ backgroundImage: 'linear-gradient(to bottom right, var(--color-primary-500), var(--color-primary-700))' }}>
                       {testimonial.name?.charAt(0) || 'U'}
                     </div>
                     <div>
@@ -128,13 +128,13 @@ export const TestimonialsSection: React.FC<{ content: any }> = ({ content }) => 
               <p className="text-gray-700 mb-6 italic text-sm leading-relaxed">"{testimonial.text}"</p>
               <div className="border-t pt-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gradient-to-br from-teal-500 to-cyan-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm" style={{ backgroundImage: 'linear-gradient(to bottom right, var(--color-primary-500), var(--color-accent-600))' }}>
                     {testimonial.name?.charAt(0) || 'U'}
                   </div>
                   <div>
                     <div className="font-semibold text-gray-900">{testimonial.name}</div>
                     {testimonial.specialty && (
-                      <div className="text-xs text-teal-600 font-medium">{testimonial.specialty}</div>
+                      <div className="text-xs text-primary-600 font-medium">{testimonial.specialty}</div>
                     )}
                     {testimonial.role && <div className="text-xs text-gray-500">{testimonial.role}</div>}
                   </div>
@@ -158,18 +158,18 @@ export const FAQSection: React.FC<{ content: any }> = ({ content }) => {
   if (!content.faq) return null;
 
   return (
-    <section className="py-20 bg-gradient-to-br from-slate-50 via-blue-50/40 to-indigo-50/30 relative overflow-hidden">
+    <section className="py-20 bg-gradient-to-br from-slate-50 via-primary-50/40 to-accent-50/30 relative overflow-hidden">
       {/* Decorative bubbles */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-20 left-10 w-64 h-64 bg-blue-200/30 rounded-full blur-3xl" />
-        <div className="absolute top-40 right-20 w-48 h-48 bg-indigo-200/30 rounded-full blur-3xl" />
-        <div className="absolute bottom-20 left-1/4 w-56 h-56 bg-purple-200/20 rounded-full blur-3xl" />
-        <div className="absolute bottom-40 right-10 w-40 h-40 bg-teal-200/30 rounded-full blur-3xl" />
-        <div className="absolute top-1/2 left-1/2 w-72 h-72 bg-cyan-200/20 rounded-full blur-3xl transform -translate-x-1/2 -translate-y-1/2" />
+        <div className="absolute top-20 left-10 w-64 h-64 bg-primary-200/30 rounded-full blur-3xl" />
+        <div className="absolute top-40 right-20 w-48 h-48 bg-primary-200/30 rounded-full blur-3xl" />
+        <div className="absolute bottom-20 left-1/4 w-56 h-56 bg-secondary-200/20 rounded-full blur-3xl" />
+        <div className="absolute bottom-40 right-10 w-40 h-40 bg-primary-200/30 rounded-full blur-3xl" />
+        <div className="absolute top-1/2 left-1/2 w-72 h-72 bg-accent-200/20 rounded-full blur-3xl transform -translate-x-1/2 -translate-y-1/2" />
       </div>
       <div className="container mx-auto px-4 relative z-10">
         <div className="text-center mb-16">
-          <span className="inline-block px-4 py-2 bg-blue-100 text-blue-700 rounded-full text-sm font-semibold mb-4">
+          <span className="inline-block px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-4">
             FAQ
           </span>
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
@@ -202,29 +202,29 @@ export const CTASection: React.FC<{ content: any }> = ({ content }) => {
   if (!content.cta) return null;
 
   return (
-    <section className="py-20 bg-gradient-to-br from-blue-900 via-indigo-900 to-slate-900 text-white relative overflow-hidden">
+    <section className="py-20 text-white relative overflow-hidden" style={{ backgroundImage: 'linear-gradient(135deg, var(--color-primary-800), var(--color-primary-700), var(--color-primary-600))' }}>
       {/* Decorative background */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl translate-x-1/2 -translate-y-1/2" />
-        <div className="absolute bottom-0 left-0 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl -translate-x-1/2 translate-y-1/2" />
-        <div className="absolute top-1/2 left-1/2 w-[600px] h-[600px] bg-indigo-500/5 rounded-full blur-3xl transform -translate-x-1/2 -translate-y-1/2" />
+        <div className="absolute top-0 right-0 w-96 h-96 bg-primary-400/15 rounded-full blur-3xl translate-x-1/2 -translate-y-1/2" />
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-primary-400/10 rounded-full blur-3xl -translate-x-1/2 translate-y-1/2" />
+        <div className="absolute top-1/2 left-1/2 w-[600px] h-[600px] bg-primary-500/8 rounded-full blur-3xl transform -translate-x-1/2 -translate-y-1/2" />
         {/* Subtle grid pattern */}
         <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '40px 40px' }} />
       </div>
       <div className="container mx-auto px-4 text-center relative z-10">
-        <span className="inline-block px-4 py-2 bg-gradient-to-r from-blue-500/20 to-teal-500/20 backdrop-blur border border-white/10 rounded-full text-sm font-semibold mb-6">
+        <span className="inline-block px-4 py-2 backdrop-blur border border-white/10 rounded-full text-sm font-semibold mb-6" style={{ backgroundColor: 'color-mix(in srgb, var(--color-primary-500) 20%, transparent)' }}>
           {content.cta.badge || 'Inizia Ora'}
         </span>
-        <h2 className="text-3xl lg:text-5xl font-bold mb-6 bg-gradient-to-r from-white via-blue-100 to-teal-100 bg-clip-text text-transparent">
+        <h2 className="text-3xl lg:text-5xl font-bold mb-6 text-white">
           {content.cta.title}
         </h2>
-        <p className="text-xl text-gray-300 mb-8 max-w-2xl mx-auto">
+        <p className="text-xl text-white/90 mb-8 max-w-2xl mx-auto">
           {content.cta.description}
         </p>
         {content.cta.badges && (
           <div className="flex flex-wrap justify-center gap-3 mb-8">
             {content.cta.badges.map((badge: string, index: number) => (
-              <span key={index} className="px-4 py-2 bg-white/5 backdrop-blur border border-white/10 rounded-full text-sm text-gray-300">
+              <span key={index} className="px-4 py-2 bg-white/10 backdrop-blur border border-white/20 rounded-full text-sm text-white/80">
                 {badge}
               </span>
             ))}
@@ -234,7 +234,7 @@ export const CTASection: React.FC<{ content: any }> = ({ content }) => {
           {content.cta.primaryButton && (
             <button
               onClick={() => navigate(content.cta.primaryButton.href)}
-              className="px-8 py-4 bg-gradient-to-r from-blue-500 to-teal-500 text-white font-bold rounded-xl hover:from-blue-600 hover:to-teal-600 transition-all shadow-lg shadow-blue-500/25 flex items-center justify-center gap-2 group"
+              className="px-8 py-4 bg-primary-500 text-white font-bold rounded-xl hover:bg-primary-600 transition-all shadow-lg shadow-primary-500/25 flex items-center justify-center gap-2 group"
             >
               {content.cta.primaryButton.text}
               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
@@ -243,7 +243,7 @@ export const CTASection: React.FC<{ content: any }> = ({ content }) => {
           {content.cta.secondaryButton && (
             <button
               onClick={() => navigate(content.cta.secondaryButton.href)}
-              className="px-8 py-4 bg-white/5 border border-white/20 text-white font-bold rounded-xl hover:bg-white/10 hover:border-white/30 transition-all flex items-center justify-center gap-2"
+              className="px-8 py-4 bg-white/10 border border-white/30 text-white font-bold rounded-xl hover:bg-white/20 hover:border-white/40 transition-all flex items-center justify-center gap-2"
             >
               {content.cta.secondaryButton.text}
             </button>
@@ -261,10 +261,10 @@ export const OurProcessSection: React.FC<{ content: any }> = ({ content }) => {
   if (!content.ourProcess) return null;
 
   return (
-    <section className="py-20 bg-gradient-to-br from-indigo-50 via-purple-50 to-blue-50">
+    <section className="py-20" style={{ backgroundImage: 'linear-gradient(to bottom right, var(--color-primary-50), var(--color-accent-50), color-mix(in srgb, var(--color-primary-50) 30%, transparent))' }}>
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
-          <span className="inline-block px-4 py-2 bg-indigo-100 text-indigo-700 rounded-full text-sm font-semibold mb-4">Il Nostro Metodo</span>
+          <span className="inline-block px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-4">Il Nostro Metodo</span>
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
             {content.ourProcess.title || 'Come Lavoriamo'}
           </h2>
@@ -309,15 +309,16 @@ export const CompanyNumbersSection: React.FC<{ content: any }> = ({ content }) =
   if (!content.companyNumbers) return null;
 
   return (
-    <section className="py-20 bg-gradient-to-br from-blue-600 via-indigo-700 to-purple-800 text-white relative overflow-hidden">
+    <section className="py-20 text-white relative overflow-hidden" style={{ backgroundImage: 'linear-gradient(135deg, var(--color-primary-800), var(--color-primary-700), var(--color-primary-600))' }}>
       {/* Background decoration */}
-      <div className="absolute inset-0 opacity-10">
-        <div className="absolute top-0 left-0 w-96 h-96 bg-white rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
-        <div className="absolute bottom-0 right-0 w-96 h-96 bg-white rounded-full blur-3xl translate-x-1/2 translate-y-1/2" />
+      <div className="absolute inset-0">
+        <div className="absolute top-0 left-0 w-96 h-96 bg-primary-400/15 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
+        <div className="absolute bottom-0 right-0 w-96 h-96 bg-primary-300/10 rounded-full blur-3xl translate-x-1/2 translate-y-1/2" />
+        <div className="absolute top-1/2 left-1/2 w-[500px] h-[500px] bg-primary-500/8 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
       </div>
       <div className="container mx-auto px-4 relative z-10">
         <div className="text-center mb-16">
-          <span className="inline-block px-4 py-2 bg-white/20 backdrop-blur rounded-full text-sm font-semibold mb-4">I Nostri Numeri</span>
+          <span className="inline-block px-4 py-2 bg-white/15 backdrop-blur border border-white/10 rounded-full text-sm font-semibold mb-4">I Nostri Numeri</span>
           <h2 className="text-3xl lg:text-4xl font-bold mb-4">
             {content.companyNumbers.title || 'Esperienza che Conta'}
           </h2>
@@ -333,7 +334,7 @@ export const CompanyNumbersSection: React.FC<{ content: any }> = ({ content }) =
               const IconComponent = iconMap[stat.icon] || Award;
               return (
                 <div key={index} className="text-center group">
-                  <div className="w-16 h-16 bg-white/20 backdrop-blur rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:bg-white/30 transition-colors">
+                  <div className="w-16 h-16 bg-white/10 backdrop-blur border border-white/15 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:bg-white/20 transition-colors">
                     <IconComponent className="w-8 h-8 text-white" />
                   </div>
                   <div className="text-4xl lg:text-5xl font-bold mb-2">{stat.number}</div>
@@ -361,7 +362,7 @@ export const CertificationsSection: React.FC<{ content: any }> = ({ content }) =
     <section className="py-20 bg-gradient-to-br from-gray-50 to-white">
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
-          <span className="inline-block px-4 py-2 bg-emerald-100 text-emerald-700 rounded-full text-sm font-semibold mb-4">Qualità Certificata</span>
+          <span className="inline-block px-4 py-2 bg-secondary-100 text-secondary-700 rounded-full text-sm font-semibold mb-4">Qualità Certificata</span>
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
             {content.certifications.title || content.certifications.sectionTitle || 'Certificazioni e Riconoscimenti'}
           </h2>
@@ -400,7 +401,7 @@ export const PricingSection: React.FC<{ content: any }> = ({ content }) => {
   if (!content.pricing) return null;
 
   return (
-    <section className="py-20 bg-gradient-to-br from-slate-50 via-gray-50 to-blue-50/30">
+    <section className="py-20 bg-gradient-to-br from-slate-50 via-gray-50 to-primary-50/30">
       <div className="container mx-auto px-4">
         <div className="text-center mb-12">
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">

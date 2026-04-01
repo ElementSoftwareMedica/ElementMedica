@@ -238,7 +238,6 @@ export function useGDPRAudit({
       }));
       
     } catch (error) {
-      console.error('Errore nel flush audit buffer:', error);
       
       // Rimetti le entries nel buffer
       bufferRef.current = [...entriesToSend, ...bufferRef.current];
@@ -323,7 +322,6 @@ export function useGDPRAudit({
         }));
         
       } catch (error) {
-        console.error('Errore nel logging immediato:', error);
         // Fallback al buffer
         addToBuffer(entry);
       }
@@ -386,7 +384,7 @@ export function useGDPRAudit({
       
       return result;
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Log errore operazione
       await logAction(
         operation.operation,
@@ -471,7 +469,6 @@ export function useGDPRAudit({
       }));
       
     } catch (error) {
-      console.error('Errore nel caricamento audit history:', error);
       setState(prev => ({
         ...prev,
         loading: false,

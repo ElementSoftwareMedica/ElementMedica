@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Badge } from '../../../components/ui/badge';
-import { 
+import {
   BookOpen,
   Calendar,
   Clock,
@@ -11,7 +11,7 @@ import {
 import { GDPREntityTemplate } from '../GDPREntityTemplate';
 import { coursesConfig, createStandardColumns } from '../GDPREntityConfig';
 import { Course } from '../../../types/courses';
-import { DataTableColumn } from '../../../components/shared/tables/DataTable';
+import { DataTableColumn } from '../GDPREntityTemplate';
 
 /**
  * Esempio di implementazione del template GDPR per la gestione dei corsi
@@ -20,7 +20,7 @@ import { DataTableColumn } from '../../../components/shared/tables/DataTable';
 
 export const CoursesPageExample: React.FC = () => {
   const navigate = useNavigate();
-  
+
   // Definizione colonne personalizzate per i corsi
   const columns: DataTableColumn<Course>[] = [
     {
@@ -98,7 +98,7 @@ export const CoursesPageExample: React.FC = () => {
         <div className="flex items-center gap-1">
           <Calendar className="h-3.5 w-3.5 text-gray-400" />
           <span>
-            {course.createdAt 
+            {course.createdAt
               ? new Date(course.createdAt).toLocaleDateString('it-IT')
               : '-'
             }
@@ -121,7 +121,7 @@ export const CoursesPageExample: React.FC = () => {
             default: return 'secondary';
           }
         };
-        
+
         return (
           <Badge variant={getStatusVariant(course.status || 'draft')}>
             {course.status || 'Bozza'}
@@ -130,25 +130,23 @@ export const CoursesPageExample: React.FC = () => {
       }
     }
   ];
-  
+
   // Handler personalizzati per i corsi
   const handleCreateCourse = () => {
     navigate('/courses/create');
   };
-  
+
   const handleEditCourse = (course: Course) => {
     navigate(`/courses/${course.id}/edit`);
   };
-  
-  const handleDeleteCourse = async (id: string) => {
-    // Implementazione personalizzata per eliminazione corso
-    console.log('Eliminazione corso personalizzata:', id);
+
+  const handleDeleteCourse = async (_id: string) => {
+    // TODO: Implementazione personalizzata per eliminazione corso
   };
-  
+
   const handleImportCourses = async (data: any[]) => {
     // Implementazione personalizzata per import corsi
-    console.log('Import corsi personalizzato:', data);
-    
+
     // Validazioni specifiche per corsi
     const validatedData = data.map(item => ({
       ...item,
@@ -158,37 +156,33 @@ export const CoursesPageExample: React.FC = () => {
       status: item.status || 'draft'
     }));
   };
-  
+
   const handleExportCourses = (courses: Course[]) => {
     // Implementazione personalizzata per export corsi
-    console.log('Export corsi personalizzato:', courses);
-    
+
     // Formattazione dati per export
     const formattedData = courses.map(course => ({
       ...course,
       duration_formatted: `${course.duration || 0} ore`,
       price_formatted: `€${course.pricePerPerson || 0}`,
       max_people_info: course.maxPeople || 'Illimitato',
-      created_date_formatted: course.createdAt 
+      created_date_formatted: course.createdAt
         ? new Date(course.createdAt).toLocaleDateString('it-IT')
         : '-'
     }));
   };
-  
+
   const handleBatchAction = async (action: string, selectedIds: string[]) => {
     // Azioni batch personalizzate per corsi
     switch (action) {
       case 'activate':
-        console.log('Attivazione corsi:', selectedIds);
         break;
       case 'deactivate':
-        console.log('Disattivazione corsi:', selectedIds);
         break;
       case 'duplicate':
-        console.log('Duplicazione corsi:', selectedIds);
         break;
       default:
-        console.log('Azione batch:', action, selectedIds);
+        break;
     }
   };
 
@@ -199,29 +193,29 @@ export const CoursesPageExample: React.FC = () => {
         entityNamePlural="courses"
         entityDisplayName="Corso"
         entityDisplayNamePlural="Corsi"
-        
+
         // Permessi
         readPermission="courses.read"
         writePermission="courses.write"
         deletePermission="courses.delete"
         exportPermission="courses.export"
-        
+
         // API endpoint
-        apiEndpoint="/api/courses"
-        
+        apiEndpoint="/api/v1/courses"
+
         // Colonne personalizzate
         columns={columns}
-        
+
         // Handler personalizzati
         onCreateEntity={handleCreateCourse}
         onEditEntity={handleEditCourse}
         onDeleteEntity={handleDeleteCourse}
         onImportEntities={handleImportCourses}
         onExportEntities={handleExportCourses}
-        
+
         // Configurazioni di ricerca e filtri
         searchFields={['title', 'category', 'description']}
-        
+
         // Opzioni di ordinamento personalizzate
         sortOptions={[
           { key: 'title', label: 'Titolo' },
@@ -231,19 +225,19 @@ export const CoursesPageExample: React.FC = () => {
           { key: 'createdAt', label: 'Data Creazione' },
           { key: 'status', label: 'Stato' }
         ]}
-        
+
         // Configurazione card per vista mobile
         cardConfig={{
           titleField: 'title',
           subtitleField: 'category'
         }}
-        
+
         // Configurazioni UI specifiche per corsi
         enableBatchOperations={true}
         enableImportExport={true}
         enableColumnSelector={true}
         enableAdvancedFilters={true}
-        
+
         // Filtri personalizzati
         filterOptions={[
           {
@@ -277,7 +271,7 @@ export const CoursesPageExample: React.FC = () => {
             ]
           }
         ]}
-        
+
         // Configurazioni CSV
         csvHeaders={[
           { key: 'title', label: 'Titolo' },
@@ -293,15 +287,15 @@ export const CoursesPageExample: React.FC = () => {
 // Dashboard semplificata per i corsi
 export const CoursesPageDashboard: React.FC = () => {
   const columns: DataTableColumn<Course>[] = [
-    { 
-      key: 'title', 
-      label: 'Titolo', 
+    {
+      key: 'title',
+      label: 'Titolo',
       sortable: true,
       renderCell: (row: Course) => row.title || '-'
     },
-    { 
-      key: 'category', 
-      label: 'Categoria', 
+    {
+      key: 'category',
+      label: 'Categoria',
       sortable: true,
       renderCell: (row: Course) => (
         <Badge variant="outline">
@@ -325,9 +319,9 @@ export const CoursesPageDashboard: React.FC = () => {
       sortable: true,
       renderCell: (row: Course) => row.createdAt ? new Date(row.createdAt).toLocaleDateString('it-IT') : '-'
     },
-    { 
-      key: 'duration', 
-      label: 'Durata', 
+    {
+      key: 'duration',
+      label: 'Durata',
       sortable: true,
       renderCell: (row: Course) => `${row.duration || 0}h`
     }
@@ -342,7 +336,7 @@ export const CoursesPageDashboard: React.FC = () => {
       readPermission="courses.read"
       writePermission="courses.write"
       deletePermission="courses.delete"
-      apiEndpoint="/api/courses"
+      apiEndpoint="/api/v1/courses"
       columns={columns}
       searchFields={['title', 'category']}
       csvHeaders={[

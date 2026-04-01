@@ -1,14 +1,16 @@
 /**
  * User Preferences Page
+ * P60: Design System Unificato e Dark Mode
  * Week 14 Implementation - User Preferences Management
  */
 
 import React, { useState } from 'react';
-import { 
+import {
   Bell,
   Download,
   Layout,
   Palette,
+  PenLine,
   RotateCcw,
   Settings,
   Shield,
@@ -26,8 +28,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Separator } from '../../components/ui/separator';
 import { useUserPreferences } from '../../hooks/useUserPreferences';
 import { ThemeSelector } from '../../components/settings/ThemeSelector';
-import { useTheme } from '../../hooks/useTheme';
+import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 import { LanguageCode } from '../../types/preferences';
+import { SignaturePreferencesConfig } from '../../components/signature';
 
 const LANGUAGE_OPTIONS = [
   { code: 'it' as LanguageCode, name: 'Italiano', flag: '🇮🇹' },
@@ -57,9 +61,13 @@ const UserPreferences: React.FC = () => {
     exportPreferences,
     importPreferences
   } = useUserPreferences();
-  
+
   const { isDark } = useTheme();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('general');
+
+  // P65: Check if user is a doctor to show signature preferences
+  const isMedico = user?.roles?.includes('MEDICO') || user?.role === 'MEDICO';
 
   const handleFileImport = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -88,39 +96,39 @@ const UserPreferences: React.FC = () => {
 
   const handleNotificationChange = async (path: string, value: boolean | string) => {
     if (!preferences) return;
-    
+
     const pathParts = path.split('.');
     const updatedNotifications = { ...preferences.notifications };
-    
+
     // Navigate to the nested property and update it
     let current: any = updatedNotifications;
     for (let i = 0; i < pathParts.length - 1; i++) {
       current = current[pathParts[i]];
     }
     current[pathParts[pathParts.length - 1]] = value;
-    
+
     await updatePreferences({ notifications: updatedNotifications });
   };
 
   const handleAccessibilityChange = async (key: string, value: any) => {
     if (!preferences) return;
-    
+
     const updatedAccessibility = {
       ...preferences.accessibility,
       [key]: value
     };
-    
+
     await updatePreferences({ accessibility: updatedAccessibility });
   };
 
   const handlePrivacyChange = async (key: string, value: any) => {
     if (!preferences) return;
-    
+
     const updatedPrivacy = {
       ...preferences.privacy,
       [key]: value
     };
-    
+
     await updatePreferences({ privacy: updatedPrivacy });
   };
 
@@ -172,7 +180,7 @@ const UserPreferences: React.FC = () => {
           <Download className="w-4 h-4" />
           Esporta Preferenze
         </Button>
-        
+
         <div className="relative">
           <input
             type="file"
@@ -189,7 +197,7 @@ const UserPreferences: React.FC = () => {
             Importa Preferenze
           </Button>
         </div>
-        
+
         <Button
           onClick={resetPreferences}
           variant="outline"
@@ -202,7 +210,7 @@ const UserPreferences: React.FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-5">
+        <TabsList className={`grid w-full grid-cols-2 ${isMedico ? 'md:grid-cols-6' : 'md:grid-cols-5'}`}>
           <TabsTrigger value="general" className="flex items-center gap-2">
             <User className="w-4 h-4" />
             <span className="hidden sm:inline">Generali</span>
@@ -223,6 +231,13 @@ const UserPreferences: React.FC = () => {
             <Shield className="w-4 h-4" />
             <span className="hidden sm:inline">Privacy</span>
           </TabsTrigger>
+          {/* P65: Signature Preferences Tab - Only for Doctors */}
+          {isMedico && (
+            <TabsTrigger value="signature" className="flex items-center gap-2">
+              <PenLine className="w-4 h-4" />
+              <span className="hidden sm:inline">Firma</span>
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* General Settings */}
@@ -341,7 +356,7 @@ const UserPreferences: React.FC = () => {
                   onCheckedChange={(checked) => handleNotificationChange('email.enabled', checked)}
                 />
               </div>
-              
+
               {preferences?.notifications.email.enabled && (
                 <div className="space-y-4 pl-4 border-l-2 border-gray-200 dark:border-gray-700">
                   <div className="space-y-2">
@@ -361,7 +376,7 @@ const UserPreferences: React.FC = () => {
                       </SelectContent>
                     </Select>
                   </div>
-                  
+
                   <div className="space-y-3">
                     <Label>Tipi di notifica</Label>
                     {Object.entries(preferences.notifications.email.types).map(([key, value]) => (
@@ -402,7 +417,7 @@ const UserPreferences: React.FC = () => {
                   onCheckedChange={(checked) => handleNotificationChange('push.enabled', checked)}
                 />
               </div>
-              
+
               {preferences?.notifications.push.enabled && (
                 <div className="space-y-3 pl-4 border-l-2 border-gray-200 dark:border-gray-700">
                   <Label>Tipi di notifica</Label>
@@ -445,7 +460,7 @@ const UserPreferences: React.FC = () => {
                   onCheckedChange={(checked) => handleAccessibilityChange('highContrast', checked)}
                 />
               </div>
-              
+
               <div className="flex items-center justify-between">
                 <div>
                   <Label>Riduzione animazioni</Label>
@@ -458,7 +473,7 @@ const UserPreferences: React.FC = () => {
                   onCheckedChange={(checked) => handleAccessibilityChange('reducedMotion', checked)}
                 />
               </div>
-              
+
               <div className="space-y-2">
                 <Label>Dimensione font</Label>
                 <Select
@@ -502,7 +517,7 @@ const UserPreferences: React.FC = () => {
                   </SelectContent>
                 </Select>
               </div>
-              
+
               <div className="flex items-center justify-between">
                 <div>
                   <Label>Tracciamento attività</Label>
@@ -515,7 +530,7 @@ const UserPreferences: React.FC = () => {
                   onCheckedChange={(checked) => handlePrivacyChange('activityTracking', checked)}
                 />
               </div>
-              
+
               <div className="flex items-center justify-between">
                 <div>
                   <Label>Raccolta dati</Label>
@@ -531,6 +546,26 @@ const UserPreferences: React.FC = () => {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* P65: Signature Preferences Tab - Only for Doctors */}
+        {isMedico && (
+          <TabsContent value="signature" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <PenLine className="w-5 h-5" />
+                  Preferenze Firma Digitale
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <SignaturePreferencesConfig
+                  showTitle={false}
+                  className="max-w-2xl"
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* Status Info */}

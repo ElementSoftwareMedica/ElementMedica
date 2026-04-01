@@ -140,21 +140,52 @@ export const StepCourseDetails: React.FC<StepCourseDetailsProps> = ({
           }
         }}
         onAddDateTime={() => {
-          // Calcola end time basato sulle ore rimanenti
-          const startTime = '09:00';
-          const [startHours, startMinutes] = startTime.split(':').map(Number);
-          const startInMinutes = startHours * 60 + startMinutes;
+          // ✅ FIX: Logica intelligente per auto-fill date e orari nuove sessioni
+          const lastSession = formData.dates[formData.dates.length - 1];
+          const lastDate = lastSession?.date || '';
+          const lastEnd = lastSession?.end || '';
 
-          // Se ci sono ore rimanenti, pre-compila con quelle, altrimenti default 4 ore
-          const durationInHours = hoursLeft > 0 ? hoursLeft : 4;
+          // Parse ora fine ultima sessione (in minuti dalla mezzanotte)
+          const [lastEndHours, lastEndMinutes] = (lastEnd || '18:00').split(':').map(Number);
+          const lastEndInMinutes = lastEndHours * 60 + lastEndMinutes;
+
+          // Calcola ore da programmare: min tra hoursLeft e 4 (max per sessione)
+          const maxHoursPerSession = 4;
+          const durationInHours = Math.min(hoursLeft > 0 ? hoursLeft : 4, maxHoursPerSession);
+
+          let newDate = '';
+          let startTime = '09:00';
+          let startInMinutes = 9 * 60;
+
+          // Se l'ultima sessione finisce prima delle 14:00 → sessione pomeridiana stesso giorno
+          if (lastEndInMinutes <= 14 * 60 && lastDate) {
+            // Stessa data, orario pomeridiano 14:00-18:00
+            newDate = lastDate;
+            startTime = '14:00';
+            startInMinutes = 14 * 60;
+          } else if (lastDate) {
+            // Prossimo giorno lavorativo (salta weekend)
+            const currentDate = new Date(lastDate);
+            currentDate.setDate(currentDate.getDate() + 1);
+
+            // Salta sabato (6) e domenica (0)
+            while (currentDate.getDay() === 0 || currentDate.getDay() === 6) {
+              currentDate.setDate(currentDate.getDate() + 1);
+            }
+
+            newDate = currentDate.toISOString().split('T')[0];
+            startTime = '09:00';
+            startInMinutes = 9 * 60;
+          }
+
+          // Calcola ora di fine
           const endInMinutes = startInMinutes + (durationInHours * 60);
-
           const endHours = Math.floor(endInMinutes / 60);
-          const endMinutes = endInMinutes % 60;
-          const endTime = `${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}`;
+          const endMinutesVal = endInMinutes % 60;
+          const endTime = `${String(endHours).padStart(2, '0')}:${String(endMinutesVal).padStart(2, '0')}`;
 
           setFormData({
-            dates: [...formData.dates, { date: '', start: startTime, end: endTime, trainerId: '', coTrainerId: '' }]
+            dates: [...formData.dates, { date: newDate, start: startTime, end: endTime, trainerId: '', coTrainerId: '' }]
           });
         }}
         onRemoveDateTime={handleRemoveDate}

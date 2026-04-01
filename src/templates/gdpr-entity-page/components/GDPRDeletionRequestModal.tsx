@@ -104,7 +104,6 @@ export const GDPRDeletionRequestModal: React.FC<GDPRDeletionRequestModalProps> =
       
       onClose();
     } catch (error) {
-      console.error('Errore durante la richiesta di cancellazione:', error);
     } finally {
       setIsSubmitting(false);
     }

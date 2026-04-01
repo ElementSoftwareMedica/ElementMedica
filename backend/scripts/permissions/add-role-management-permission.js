@@ -8,33 +8,38 @@ const prisma = new PrismaClient();
 async function addRoleManagementPermission() {
   try {
     console.log('🔍 Adding ROLE_MANAGEMENT permission to admin...');
-    
-    // 1. Trova l'utente admin
-    const admin = await prisma.person.findUnique({
-      where: { email: 'admin@example.com' },
+
+    // P48: Trova l'utente admin per email nel PersonTenantProfile
+    const adminProfile = await prisma.personTenantProfile.findFirst({
+      where: { email: 'admin@example.com', deletedAt: null },
+      select: { personId: true }
+    });
+
+    const admin = adminProfile ? await prisma.person.findUnique({
+      where: { id: adminProfile.personId },
       include: {
-        roles: {
+        personRoles: {
           where: { isActive: true, deletedAt: null },
           include: {
             permissions: true
           }
         }
       }
-    });
-    
+    }) : null;
+
     if (!admin) {
       console.log('❌ Admin user not found');
       return;
     }
-    
+
     console.log('✅ Admin user found:', admin.email);
-    
+
     // 2. Trova il ruolo ADMIN
     let adminRole = admin.roles.find(role => role.roleType === 'ADMIN');
-    
+
     if (!adminRole) {
       console.log('⚠️  Admin role not found, creating one...');
-      
+
       adminRole = await prisma.personRole.create({
         data: {
           personId: admin.id,
@@ -48,25 +53,25 @@ async function addRoleManagementPermission() {
           permissions: true
         }
       });
-      
+
       console.log('✅ Admin role created');
     } else {
       console.log('✅ Admin role found');
     }
-    
+
     // 3. Verifica se ha già il permesso ROLE_MANAGEMENT
     const hasRoleManagement = adminRole.permissions.some(
       perm => perm.permission === 'ROLE_MANAGEMENT' && perm.isGranted
     );
-    
+
     if (hasRoleManagement) {
       console.log('✅ Admin already has ROLE_MANAGEMENT permission');
       return;
     }
-    
+
     // 4. Aggiungi il permesso ROLE_MANAGEMENT
     console.log('🔧 Adding ROLE_MANAGEMENT permission...');
-    
+
     try {
       await prisma.rolePermission.create({
         data: {
@@ -97,19 +102,19 @@ async function addRoleManagementPermission() {
         throw error;
       }
     }
-    
+
     // 5. Aggiungi anche altri permessi per i ruoli
     const rolePermissions = [
       'VIEW_ROLES',
-      'CREATE_ROLES', 
+      'CREATE_ROLES',
       'EDIT_ROLES',
       'DELETE_ROLES',
       'ASSIGN_ROLES',
       'REVOKE_ROLES'
     ];
-    
+
     console.log('🔧 Adding additional role permissions...');
-    
+
     for (const permission of rolePermissions) {
       try {
         await prisma.rolePermission.create({
@@ -141,7 +146,7 @@ async function addRoleManagementPermission() {
         }
       }
     }
-    
+
     // 6. Verifica finale
     const updatedRole = await prisma.personRole.findUnique({
       where: { id: adminRole.id },
@@ -151,14 +156,14 @@ async function addRoleManagementPermission() {
         }
       }
     });
-    
+
     const rolePermissionsCount = updatedRole.permissions.filter(
       p => p.permission.includes('ROLE') || p.permission === 'ROLE_MANAGEMENT'
     ).length;
-    
+
     console.log('✅ Role-related permissions count:', rolePermissionsCount);
     console.log('🎉 Role management permissions setup completed!');
-    
+
   } catch (error) {
     console.error('❌ Error:', error.message);
     console.error('Stack:', error.stack);

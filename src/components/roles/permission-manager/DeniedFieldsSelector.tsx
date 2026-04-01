@@ -120,15 +120,28 @@ export const DeniedFieldsSelector: React.FC<DeniedFieldsSelectorProps> = ({
         return fields;
     }, [entity?.fields, resourceName, showOnlySensitive]);
 
-    // Determina la modalità corrente
+    // P69 Session 5.9: Track explicit mode selection to fix "Escludi Alcuni" not working
+    // When user clicks "Escludi Alcuni", deniedFields is [] but we should still show denied mode
+    const [explicitMode, setExplicitMode] = React.useState<FieldMode | null>(null);
+
+    // Reset explicit mode when entity/resource changes
+    React.useEffect(() => {
+        setExplicitMode(null);
+    }, [resourceName]);
+
+    // Determina la modalità corrente - prioritize explicit mode selection
     const mode: FieldMode = React.useMemo(() => {
+        // If user explicitly selected a mode, use it
+        if (explicitMode !== null) return explicitMode;
+        // Otherwise, infer from current field state
         if (deniedFields && deniedFields.length > 0) return 'denied';
         if (allowedFields && allowedFields.length > 0 && !allowedFields.includes('*')) return 'allowed';
         return 'all';
-    }, [allowedFields, deniedFields]);
+    }, [allowedFields, deniedFields, explicitMode]);
 
     // Cambia modalità
     const handleModeChange = (newMode: FieldMode) => {
+        setExplicitMode(newMode); // Track explicit selection
         if (newMode === 'all') {
             onAllowedFieldsChange(null);
             onDeniedFieldsChange(null);
@@ -137,7 +150,7 @@ export const DeniedFieldsSelector: React.FC<DeniedFieldsSelectorProps> = ({
             onDeniedFieldsChange(null);
         } else if (newMode === 'denied') {
             onAllowedFieldsChange(null);
-            onDeniedFieldsChange([]); // Inizia vuoto
+            onDeniedFieldsChange([]); // Inizia vuoto - user can now add denied fields
         }
     };
 
@@ -206,8 +219,8 @@ export const DeniedFieldsSelector: React.FC<DeniedFieldsSelectorProps> = ({
                         onClick={() => handleModeChange('all')}
                         disabled={disabled}
                         className={`px-3 py-1 text-xs rounded-md transition-colors ${mode === 'all'
-                                ? 'bg-white text-blue-600 shadow-sm'
-                                : 'text-gray-600 hover:text-gray-900'
+                            ? 'bg-white text-blue-600 shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
                             }`}
                     >
                         Tutti
@@ -217,8 +230,8 @@ export const DeniedFieldsSelector: React.FC<DeniedFieldsSelectorProps> = ({
                         onClick={() => handleModeChange('allowed')}
                         disabled={disabled}
                         className={`px-3 py-1 text-xs rounded-md transition-colors ${mode === 'allowed'
-                                ? 'bg-white text-green-600 shadow-sm'
-                                : 'text-gray-600 hover:text-gray-900'
+                            ? 'bg-white text-green-600 shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
                             }`}
                     >
                         Solo Permessi
@@ -228,8 +241,8 @@ export const DeniedFieldsSelector: React.FC<DeniedFieldsSelectorProps> = ({
                         onClick={() => handleModeChange('denied')}
                         disabled={disabled}
                         className={`px-3 py-1 text-xs rounded-md transition-colors ${mode === 'denied'
-                                ? 'bg-white text-red-600 shadow-sm'
-                                : 'text-gray-600 hover:text-gray-900'
+                            ? 'bg-white text-red-600 shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
                             }`}
                     >
                         Escludi Alcuni

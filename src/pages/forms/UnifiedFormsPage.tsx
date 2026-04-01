@@ -9,7 +9,7 @@ const UnifiedFormsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('templates');
 
   const tabItems = [
-    { id: 'templates', label: 'Form Templates' },
+    { id: 'templates', label: 'Test' },
     { id: 'submissions', label: 'Risposte' }
   ];
 
@@ -18,9 +18,9 @@ const UnifiedFormsPage: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Gestione Forms</h1>
+          <h1 className="text-2xl font-bold text-gray-800">Test</h1>
           <p className="text-gray-500">
-            Gestisci form
+            Gestisci i test per i corsi di formazione e sicurezza
           </p>
         </div>
 
@@ -35,9 +35,9 @@ const UnifiedFormsPage: React.FC = () => {
       {/* Tab Content */}
       <div>
         {activeTab === 'templates' ? (
-          <FormTemplatesPage hideHeader />
+          <FormTemplatesPage hideHeader formType="COURSE_TEST" basePath="/test" />
         ) : (
-          <FormSubmissionsPage hideHeader />
+          <FormSubmissionsPage hideHeader formType="COURSE_TEST" basePath="/test" />
         )}
       </div>
     </div>

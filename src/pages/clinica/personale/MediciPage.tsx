@@ -35,7 +35,9 @@ import Modal from '../../../design-system/molecules/Modal/Modal';
 import { useTenantFilter } from '../../../context/TenantFilterContext';
 import { useViewMode } from '../../../hooks/useViewMode';
 import { ViewModeToggle } from '../../../components/clinica/ViewModeToggle';
-import { ActionMenu, createCrudActions } from '../../../components/clinica/ActionMenu';
+import { ActionMenu, createCrudActions } from '@/components/ui/ActionMenu';
+import { CRUDButton } from '../../../components/shared/CRUDButton';
+import { PersonCredentialsModal, type PersonCredentialInfo } from '../../../components/persons/PersonCredentialsModal';
 
 // Import Element Medica theme
 import '../../../styles/clinica-theme.css';
@@ -56,6 +58,10 @@ const MediciPage: React.FC = () => {
         open: boolean;
         credentials: { username: string; temporaryPassword: string } | null;
     }>({ open: false, credentials: null });
+
+    // State for post-creation credentials management
+    const [showCredentialsModal, setShowCredentialsModal] = useState(false);
+    const [selectedMediciForCredentials, setSelectedMediciForCredentials] = useState<PersonCredentialInfo[]>([]);
 
     // View mode with localStorage persistence
     const { viewMode, setViewMode } = useViewMode({ storageKey: 'medici' });
@@ -83,7 +89,7 @@ const MediciPage: React.FC = () => {
             setMedicoToDelete(null);
         },
         onError: (error: Error) => {
-            showToast({ type: 'error', message: error.message || 'Errore durante l\'eliminazione' });
+            showToast({ type: 'error', message: 'Errore durante l\'eliminazione' });
         }
     });
 
@@ -112,6 +118,16 @@ const MediciPage: React.FC = () => {
 
     const handleConfirmCreate = (credentials: { username: string; temporaryPassword: string }) => {
         setCredentialsModal({ open: true, credentials });
+    };
+
+    const handleManageCredentials = (medico: Medico) => {
+        setSelectedMediciForCredentials([{
+            id: medico.id,
+            firstName: medico.firstName || '',
+            lastName: medico.lastName || '',
+            email: medico.email ?? undefined,
+        }]);
+        setShowCredentialsModal(true);
     };
 
     // Get medico notes data (specializzazione, etc.)
@@ -144,7 +160,7 @@ const MediciPage: React.FC = () => {
                     <AlertCircle className="h-12 w-12 mb-4" />
                     <h3 className="text-lg font-medium">Errore nel caricamento</h3>
                     <p className="text-sm text-gray-500 mt-1">
-                        {error instanceof Error ? error.message : 'Errore sconosciuto'}
+                        {'Errore sconosciuto'}
                     </p>
                 </div>
             </div>
@@ -166,13 +182,14 @@ const MediciPage: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-3">
                     <ViewModeToggle viewMode={viewMode} onViewModeChange={setViewMode} />
-                    <button
+                    <CRUDButton
+                        operation="create"
                         onClick={() => navigate('/poliambulatorio/personale/medici/nuovo')}
                         className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
                     >
                         <UserPlus className="h-4 w-4" />
                         Nuovo Medico
-                    </button>
+                    </CRUDButton>
                 </div>
             </div>
 
@@ -257,13 +274,14 @@ const MediciPage: React.FC = () => {
                             : 'Inizia aggiungendo il primo medico al poliambulatorio'}
                     </p>
                     {!searchTerm && (
-                        <button
+                        <CRUDButton
+                            operation="create"
                             onClick={() => navigate('/poliambulatorio/personale/medici/nuovo')}
                             className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
                         >
                             <UserPlus className="h-4 w-4" />
                             Aggiungi Medico
-                        </button>
+                        </CRUDButton>
                     )}
                 </div>
             ) : (
@@ -294,14 +312,21 @@ const MediciPage: React.FC = () => {
                                                 </div>
                                             </div>
                                             <ActionMenu
-                                                actions={createCrudActions(
-                                                    () => navigate(`/poliambulatorio/personale/medici/${medico.id}`),
-                                                    () => navigate(`/poliambulatorio/personale/medici/${medico.id}/modifica`),
-                                                    () => {
-                                                        setMedicoToDelete(medico);
-                                                        setDeleteModalOpen(true);
+                                                actions={[
+                                                    ...createCrudActions(
+                                                        () => navigate(`/poliambulatorio/personale/medici/${medico.id}`),
+                                                        () => navigate(`/poliambulatorio/personale/medici/${medico.id}/modifica`),
+                                                        () => {
+                                                            setMedicoToDelete(medico);
+                                                            setDeleteModalOpen(true);
+                                                        }
+                                                    ),
+                                                    {
+                                                        label: 'Gestisci Credenziali',
+                                                        icon: Key,
+                                                        onClick: () => handleManageCredentials(medico),
                                                     }
-                                                )}
+                                                ]}
                                             />
                                         </div>
 
@@ -432,14 +457,21 @@ const MediciPage: React.FC = () => {
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                                     <ActionMenu
-                                                        actions={createCrudActions(
-                                                            () => navigate(`/poliambulatorio/personale/medici/${medico.id}`),
-                                                            () => navigate(`/poliambulatorio/personale/medici/${medico.id}/modifica`),
-                                                            () => {
-                                                                setMedicoToDelete(medico);
-                                                                setDeleteModalOpen(true);
+                                                        actions={[
+                                                            ...createCrudActions(
+                                                                () => navigate(`/poliambulatorio/personale/medici/${medico.id}`),
+                                                                () => navigate(`/poliambulatorio/personale/medici/${medico.id}/modifica`),
+                                                                () => {
+                                                                    setMedicoToDelete(medico);
+                                                                    setDeleteModalOpen(true);
+                                                                }
+                                                            ),
+                                                            {
+                                                                label: 'Gestisci Credenziali',
+                                                                icon: Key,
+                                                                onClick: () => handleManageCredentials(medico),
                                                             }
-                                                        )}
+                                                        ]}
                                                     />
                                                 </td>
                                             </tr>
@@ -500,7 +532,14 @@ const MediciPage: React.FC = () => {
                 </div>
             </Modal>
 
-            {/* Credentials Modal */}
+            {/* Credentials Modal — Post-creation send/resend */}
+            <PersonCredentialsModal
+                open={showCredentialsModal}
+                onOpenChange={setShowCredentialsModal}
+                persons={selectedMediciForCredentials}
+            />
+
+            {/* Credentials Modal — First-time display at creation */}
             <Modal
                 isOpen={credentialsModal.open}
                 onClose={() => setCredentialsModal({ open: false, credentials: null })}

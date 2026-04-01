@@ -385,7 +385,6 @@ export function getStoredConfig<T>(
       return mergeConfigs(defaultConfig, parsed);
     }
   } catch (error) {
-    console.warn(`Errore nel caricamento configurazione ${key}:`, error);
   }
   
   return defaultConfig;
@@ -401,7 +400,6 @@ export function saveStoredConfig<T>(
   try {
     localStorage.setItem(key, JSON.stringify(config));
   } catch (error) {
-    console.warn(`Errore nel salvataggio configurazione ${key}:`, error);
   }
 }
 
@@ -431,7 +429,7 @@ export const PERSON_TEMPLATE_PRESET: Partial<GDPREntityTemplateProps> = {
   entityName: 'person',
   entityDisplayName: 'Persona',
   entityDisplayNamePlural: 'Persone',
-  apiEndpoint: '/api/persons',
+  apiEndpoint: '/api/v1/persons',
   defaultSortField: 'lastName',
   enableImport: true,
   gdprConfig: {
@@ -467,7 +465,7 @@ export const COURSE_TEMPLATE_PRESET: Partial<GDPREntityTemplateProps> = {
   entityName: 'course',
   entityDisplayName: 'Corso',
   entityDisplayNamePlural: 'Corsi',
-  apiEndpoint: '/api/courses',
+  apiEndpoint: '/api/v1/courses',
   defaultSortField: 'startDate',
   enableImport: false,
   gdprConfig: {

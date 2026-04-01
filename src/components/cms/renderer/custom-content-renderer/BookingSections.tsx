@@ -6,11 +6,14 @@
  * @module components/cms/renderer/custom-content-renderer/BookingSections
  */
 
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { iconMap, CheckCircle, ArrowRight, Calendar, Clock, Shield, Star, Phone, Mail, Award, Heart, Users, FileText, Zap } from '../iconMap';
 import { PublicButton } from '../../../public/PublicButton';
 import { bookingCategoryColors, popularBookingColors } from './types';
+
+// Lazy-load BookingCalendarIsland (Island Architecture - dynamic widget)
+const BookingCalendarIsland = lazy(() => import('../../../public/BookingCalendarIsland'));
 
 /**
  * Booking Categories Section (Poliambulatorio homepage)
@@ -21,15 +24,15 @@ export const BookingCategoriesSection: React.FC<{ content: any }> = ({ content }
   if (!content.bookingCategories) return null;
 
   return (
-    <section className="py-20 bg-gradient-to-br from-white via-rose-50/30 to-pink-50/40 relative overflow-hidden">
+    <section className="py-20 bg-gradient-to-br from-white via-primary-50/30 to-accent-50/40 relative overflow-hidden">
       {/* Decorative bubbles */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-20 right-10 w-64 h-64 bg-rose-200/30 rounded-full blur-3xl" />
-        <div className="absolute bottom-20 left-10 w-56 h-56 bg-pink-200/30 rounded-full blur-3xl" />
+        <div className="absolute top-20 right-10 w-64 h-64 bg-primary-200/30 rounded-full blur-3xl" />
+        <div className="absolute bottom-20 left-10 w-56 h-56 bg-accent-200/30 rounded-full blur-3xl" />
       </div>
       <div className="container mx-auto px-4 relative z-10">
         <div className="text-center mb-16">
-          <span className="inline-block px-4 py-2 bg-rose-100 text-rose-700 rounded-full text-sm font-semibold mb-4">
+          <span className="inline-block px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-4">
             {content.bookingCategories.badge || 'Prenota Online'}
           </span>
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
@@ -57,7 +60,7 @@ export const BookingCategoriesSection: React.FC<{ content: any }> = ({ content }
                     <div className={`w-16 h-16 ${colors.bg} rounded-2xl flex items-center justify-center shadow-lg mb-4 group-hover:scale-110 transition-transform relative z-10`}>
                       <IconComponent className="w-8 h-8 text-white" />
                     </div>
-                    <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-rose-700 transition-colors">{category.name}</h3>
+                    <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-primary-700 transition-colors">{category.name}</h3>
                     <p className="text-gray-600 text-sm leading-relaxed">{category.description}</p>
                   </div>
                   <div className="p-6 bg-white">
@@ -87,7 +90,7 @@ export const BookingCategoriesSection: React.FC<{ content: any }> = ({ content }
                         )}
                       </div>
                     )}
-                    <div className="flex items-center text-rose-600 font-semibold text-sm group-hover:text-rose-700 transition-colors">
+                    <div className="flex items-center text-primary-600 font-semibold text-sm group-hover:text-primary-700 transition-colors">
                       Prenota Ora
                       <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
                     </div>
@@ -111,10 +114,10 @@ export const PopularBookingsSection: React.FC<{ content: any }> = ({ content }) 
   if (!content.popularBookings) return null;
 
   return (
-    <section className="py-16 bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/30 relative overflow-hidden">
+    <section className="py-16 bg-gradient-to-br from-slate-50 via-primary-50/30 to-accent-50/30 relative overflow-hidden">
       <div className="container mx-auto px-4">
         <div className="text-center mb-12">
-          <span className="inline-block px-4 py-2 bg-blue-100 text-blue-700 rounded-full text-sm font-semibold mb-4">
+          <span className="inline-block px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-4">
             {content.popularBookings.badge || 'Più Richiesti'}
           </span>
           <h2 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-4">
@@ -161,10 +164,10 @@ export const BookingStepsSection: React.FC<{ content: any }> = ({ content }) => 
   const stepIcons = [Calendar, FileText, CheckCircle, Award];
 
   return (
-    <section className="py-20 bg-gradient-to-br from-white via-teal-50/30 to-cyan-50/40">
+    <section className="py-20 bg-gradient-to-br from-white via-primary-50/30 to-accent-50/40">
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
-          <span className="inline-block px-4 py-2 bg-teal-100 text-teal-700 rounded-full text-sm font-semibold mb-4">
+          <span className="inline-block px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-4">
             {content.bookingSteps.badge || 'Come Prenotare'}
           </span>
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
@@ -180,17 +183,17 @@ export const BookingStepsSection: React.FC<{ content: any }> = ({ content }) => 
           <div className="max-w-5xl mx-auto">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 relative">
               {/* Connection line */}
-              <div className="hidden lg:block absolute top-16 left-1/4 right-1/4 h-0.5 bg-gradient-to-r from-teal-200 via-cyan-200 to-teal-200" />
+              <div className="hidden lg:block absolute top-16 left-1/4 right-1/4 h-0.5" style={{ backgroundImage: 'linear-gradient(to right, var(--color-primary-200), var(--color-accent-200), var(--color-primary-200))' }} />
 
               {content.bookingSteps.steps.map((step: any, index: number) => {
                 const IconComponent = iconMap[step.icon] || stepIcons[index % stepIcons.length];
                 return (
                   <div key={index} className="relative group text-center">
                     <div className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all relative z-10">
-                      <div className="w-16 h-16 bg-gradient-to-br from-teal-500 to-cyan-600 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform shadow-lg">
+                      <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform shadow-lg" style={{ backgroundImage: 'linear-gradient(to bottom right, var(--color-primary-500), var(--color-accent-600))' }}>
                         <IconComponent className="w-8 h-8 text-white" />
                       </div>
-                      <div className="text-3xl font-bold text-teal-600 mb-2">{step.number || index + 1}</div>
+                      <div className="text-3xl font-bold text-primary-600 mb-2">{step.number || index + 1}</div>
                       <h3 className="text-lg font-bold text-gray-900 mb-2">{step.title}</h3>
                       <p className="text-sm text-gray-600">{step.description}</p>
                     </div>
@@ -202,7 +205,7 @@ export const BookingStepsSection: React.FC<{ content: any }> = ({ content }) => 
         )}
         {content.bookingSteps.cta && (
           <div className="text-center mt-12">
-            <PublicButton variant="primary" size="lg" to={content.bookingSteps.cta.href || '/prenota-visita'}>
+            <PublicButton variant="primary" size="lg" to={content.bookingSteps.cta.href || '/prenota#booking'}>
               {content.bookingSteps.cta.text || 'Prenota Ora'}
             </PublicButton>
           </div>
@@ -221,7 +224,7 @@ export const GuaranteesSection: React.FC<{ content: any }> = ({ content }) => {
   const guaranteeIcons = [Shield, Award, Clock, Star, CheckCircle, Heart];
 
   return (
-    <section className="py-16 bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-700 text-white relative overflow-hidden">
+    <section className="py-16 text-white relative overflow-hidden" style={{ backgroundImage: 'linear-gradient(to bottom right, var(--color-primary-700), var(--color-primary-600), var(--color-accent-700))' }}>
       {/* Background decoration */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-0 left-0 w-96 h-96 bg-white/5 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
@@ -271,7 +274,7 @@ export const QualityAssuranceSection: React.FC<{ content: any }> = ({ content })
         <div className="max-w-5xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
             <div>
-              <span className="inline-block px-4 py-2 bg-blue-100 text-blue-700 rounded-full text-sm font-semibold mb-4">
+              <span className="inline-block px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-4">
                 {content.qualityAssurance.badge || 'Qualità e Sicurezza'}
               </span>
               <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-6">
@@ -284,8 +287,8 @@ export const QualityAssuranceSection: React.FC<{ content: any }> = ({ content })
                 <ul className="space-y-4">
                   {content.qualityAssurance.features.map((feature: any, index: number) => (
                     <li key={index} className="flex items-start">
-                      <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center mr-4 flex-shrink-0">
-                        <CheckCircle className="w-5 h-5 text-emerald-600" />
+                      <div className="w-8 h-8 bg-secondary-100 rounded-lg flex items-center justify-center mr-4 flex-shrink-0">
+                        <CheckCircle className="w-5 h-5 text-secondary-600" />
                       </div>
                       <div>
                         <h3 className="font-semibold text-gray-900">{feature.title}</h3>
@@ -300,7 +303,7 @@ export const QualityAssuranceSection: React.FC<{ content: any }> = ({ content })
               <div className="grid grid-cols-2 gap-4">
                 {content.qualityAssurance.certifications.map((cert: any, index: number) => (
                   <div key={index} className="bg-white rounded-2xl p-6 shadow-lg text-center">
-                    <Award className="w-12 h-12 text-blue-600 mx-auto mb-3" />
+                    <Award className="w-12 h-12 text-primary-600 mx-auto mb-3" />
                     <h3 className="font-semibold text-gray-900">{cert.name}</h3>
                     {cert.year && <p className="text-sm text-gray-500">{cert.year}</p>}
                   </div>
@@ -321,10 +324,10 @@ export const ResultDeliverySection: React.FC<{ content: any }> = ({ content }) =
   if (!content.resultDelivery) return null;
 
   return (
-    <section className="py-16 bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50">
+    <section className="py-16" style={{ backgroundImage: 'linear-gradient(to bottom right, var(--color-primary-50), color-mix(in srgb, var(--color-secondary-50) 30%, transparent), var(--color-accent-50))' }}>
       <div className="container mx-auto px-4">
         <div className="text-center mb-12">
-          <span className="inline-block px-4 py-2 bg-indigo-100 text-indigo-700 rounded-full text-sm font-semibold mb-4">
+          <span className="inline-block px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-4">
             {content.resultDelivery.badge || 'Consegna Referti'}
           </span>
           <h2 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-4">
@@ -342,13 +345,13 @@ export const ResultDeliverySection: React.FC<{ content: any }> = ({ content }) =
               const IconComponent = iconMap[method.icon] || FileText;
               return (
                 <div key={index} className="bg-white rounded-2xl p-8 shadow-lg text-center hover:shadow-xl transition-all">
-                  <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg" style={{ backgroundImage: 'linear-gradient(to bottom right, var(--color-primary-500), var(--color-primary-700))' }}>
                     <IconComponent className="w-8 h-8 text-white" />
                   </div>
                   <h3 className="text-lg font-bold text-gray-900 mb-2">{method.title}</h3>
                   <p className="text-sm text-gray-600 mb-3">{method.description}</p>
                   {method.time && (
-                    <span className="inline-block px-3 py-1 bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-full">
+                    <span className="inline-block px-3 py-1 bg-primary-100 text-primary-700 text-xs font-semibold rounded-full">
                       <Clock className="w-3 h-3 inline mr-1" />
                       {method.time}
                     </span>
@@ -383,12 +386,27 @@ export const ImportantInfoSection: React.FC<{ content: any }> = ({ content }) =>
               </h2>
               {content.importantInfo.items && (
                 <ul className="space-y-3">
-                  {content.importantInfo.items.map((item: string, index: number) => (
-                    <li key={index} className="flex items-start text-gray-700">
-                      <CheckCircle className="w-5 h-5 text-amber-500 mr-3 mt-0.5 flex-shrink-0" />
-                      {item}
-                    </li>
-                  ))}
+                  {content.importantInfo.items.map((item: any, index: number) => {
+                    // Handle both string items and object items {icon, title, content}
+                    if (typeof item === 'string') {
+                      return (
+                        <li key={index} className="flex items-start text-gray-700">
+                          <CheckCircle className="w-5 h-5 text-amber-500 mr-3 mt-0.5 flex-shrink-0" />
+                          {item}
+                        </li>
+                      );
+                    }
+                    const IconComponent = iconMap[item.icon] || CheckCircle;
+                    return (
+                      <li key={index} className="flex items-start text-gray-700">
+                        <IconComponent className="w-5 h-5 text-amber-500 mr-3 mt-0.5 flex-shrink-0" />
+                        <div>
+                          {item.title && <span className="font-semibold text-gray-900">{item.title}: </span>}
+                          {item.content}
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
               {content.importantInfo.note && (
@@ -409,20 +427,22 @@ export const EmergencySection: React.FC<{ content: any }> = ({ content }) => {
   if (!content.emergency) return null;
 
   return (
-    <section className="py-12 bg-gradient-to-br from-red-600 to-rose-700 text-white">
+    <section className="py-16" style={{ backgroundImage: 'linear-gradient(to bottom right, var(--color-accent-50), #ffffff, color-mix(in srgb, var(--color-primary-50) 30%, transparent))' }}>
       <div className="container mx-auto px-4">
         <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-2xl lg:text-3xl font-bold mb-4">
-            {content.emergency.title || 'Emergenze'}
+          <h2 className="text-2xl lg:text-3xl font-bold text-secondary-800 mb-4">
+            {content.emergency.title || 'Contatto Rapido'}
           </h2>
-          <p className="text-lg text-white/90 mb-6">
-            {content.emergency.description}
-          </p>
+          {content.emergency.description && (
+            <p className="text-lg text-gray-600 mb-8">
+              {content.emergency.description}
+            </p>
+          )}
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             {content.emergency.phone && (
               <a
                 href={`tel:${content.emergency.phone}`}
-                className="inline-flex items-center justify-center px-8 py-4 bg-white text-red-600 font-bold rounded-xl hover:bg-gray-100 transition-colors shadow-lg"
+                className="inline-flex items-center justify-center px-8 py-4 bg-primary-600 text-white font-bold rounded-xl hover:bg-primary-700 transition-colors shadow-lg shadow-primary-500/20"
               >
                 <Phone className="w-6 h-6 mr-2" />
                 {content.emergency.phone}
@@ -431,7 +451,7 @@ export const EmergencySection: React.FC<{ content: any }> = ({ content }) => {
             {content.emergency.email && (
               <a
                 href={`mailto:${content.emergency.email}`}
-                className="inline-flex items-center justify-center px-8 py-4 bg-white/10 border border-white/30 text-white font-bold rounded-xl hover:bg-white/20 transition-colors"
+                className="inline-flex items-center justify-center px-8 py-4 bg-primary-700 text-white font-bold rounded-xl hover:bg-primary-800 transition-colors shadow-lg shadow-primary-500/20"
               >
                 <Mail className="w-5 h-5 mr-2" />
                 {content.emergency.email}
@@ -439,11 +459,65 @@ export const EmergencySection: React.FC<{ content: any }> = ({ content }) => {
             )}
           </div>
           {content.emergency.hours && (
-            <p className="mt-4 text-sm text-white/80">
+            <p className="mt-6 text-sm text-gray-500">
               <Clock className="w-4 h-4 inline mr-1" />
               {content.emergency.hours}
             </p>
           )}
+        </div>
+      </div>
+    </section>
+  );
+};
+
+/**
+ * Live Booking Section - Dynamic Island
+ * 
+ * Renders the BookingCalendarIsland widget (real-time availability).
+ * This is the bridge between static CMS content and the dynamic booking flow.
+ * Activated when CMS content has `liveBooking` or `bookingWidget` key.
+ */
+export const LiveBookingSection: React.FC<{ content: any }> = ({ content }) => {
+  // Render if content explicitly requests the booking widget OR on prenota pages
+  const showWidget = content.liveBooking || content.bookingWidget || content.bookingCategories;
+  if (!showWidget) return null;
+
+  const widgetConfig = content.liveBooking || content.bookingWidget || {};
+
+  return (
+    <section id="prenota-online" className="py-20" style={{ backgroundImage: 'linear-gradient(to bottom right, var(--color-accent-50), #ffffff, color-mix(in srgb, var(--color-primary-50) 30%, transparent))' }}>
+      <div className="container mx-auto px-4">
+        <div className="text-center mb-12">
+          <span className="inline-block px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-4">
+            {widgetConfig.badge || 'Prenota Online'}
+          </span>
+          <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
+            {widgetConfig.title || 'Prenota la Tua Visita'}
+          </h2>
+          <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+            {widgetConfig.description || 'Seleziona la prestazione, scegli il medico e prenota il tuo appuntamento online.'}
+          </p>
+        </div>
+        <div className="max-w-4xl mx-auto">
+          <Suspense fallback={
+            <div className="bg-white rounded-2xl shadow-xl p-12 text-center">
+              <div className="animate-pulse space-y-4">
+                <div className="h-4 bg-gray-200 rounded w-3/4 mx-auto" />
+                <div className="h-4 bg-gray-200 rounded w-1/2 mx-auto" />
+                <div className="grid grid-cols-3 gap-4 mt-8">
+                  {[1, 2, 3].map(i => (
+                    <div key={i} className="h-24 bg-gray-100 rounded-xl" />
+                  ))}
+                </div>
+              </div>
+              <p className="text-gray-500 mt-6">Caricamento disponibilità...</p>
+            </div>
+          }>
+            <BookingCalendarIsland
+              initialPrestazioneId={widgetConfig.prestazioneId}
+              initialMedicoId={widgetConfig.medicoId}
+            />
+          </Suspense>
         </div>
       </div>
     </section>

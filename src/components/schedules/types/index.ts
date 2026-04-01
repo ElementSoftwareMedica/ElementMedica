@@ -42,7 +42,7 @@ export interface Trainer {
   lastName: string;
   certifications?: string[] | string;
   email?: string;
-  hourlyRate?: number;
+  hourlyRate?: number | string; // Progetto 48: Supporta sia number che string (Decimal)
 }
 
 // Person interface
@@ -52,7 +52,7 @@ export interface Person {
   lastName: string;
   email?: string;
   companyId?: string | number;
-  company?: { id?: string | number; name?: string };
+  company?: { id?: string | number; ragioneSociale?: string; name?: string };
   position?: string;
   birthDate?: string;
 }

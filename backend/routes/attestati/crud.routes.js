@@ -18,6 +18,7 @@ import {
   logger,
   isEmployeeOnlyAccess
 } from './common.js';
+import { getEffectiveTenantId } from '../../utils/tenantHelper.js';
 
 const router = express.Router();
 
@@ -25,11 +26,11 @@ const router = express.Router();
  * GET /api/v1/attestati
  * Get all certificates with optional filters
  */
-router.get('/', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
+router.get('/', authenticateToken, requirePermission('documents:read'), async (req, res) => {
   try {
     const { scheduleId, year } = req.query;
     let personId = req.query.personId;
-    const tenantId = req.person.tenantId;
+    const tenantId = getEffectiveTenantId(req);
     const person = req.person;
 
     // Se è EMPLOYEE, forza il filtro per il proprio personId
@@ -56,7 +57,11 @@ router.get('/', authenticateToken(), requirePermission('documents:read'), async 
             firstName: true,
             lastName: true,
             taxCode: true,
-            email: true
+            tenantProfiles: {
+              where: { deletedAt: null },
+              select: { email: true },
+              take: 1
+            }
           }
         },
         scheduledCourse: {
@@ -101,12 +106,14 @@ router.get('/', authenticateToken(), requirePermission('documents:read'), async 
         };
       }
 
-      const { taxCode, ...personWithoutTaxCode } = attestato.person;
+      const { taxCode, tenantProfiles, ...personRest } = attestato.person;
+      const email = tenantProfiles?.[0]?.email || '';
       return {
         ...attestato,
         person: {
-          ...personWithoutTaxCode,
-          cf: taxCode || ''
+          ...personRest,
+          cf: taxCode || '',
+          email
         }
       };
     });
@@ -116,14 +123,12 @@ router.get('/', authenticateToken(), requirePermission('documents:read'), async 
     logger.error('Failed to fetch attestati', {
       component: 'attestati-routes',
       action: 'list',
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       personId: req.person?.id
     });
     res.status(500).json({
-      error: 'Failed to fetch attestati',
-      message: error.message,
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      error: 'Errore nel recupero degli attestati'
     });
   }
 });
@@ -132,10 +137,10 @@ router.get('/', authenticateToken(), requirePermission('documents:read'), async 
  * GET /api/v1/attestati/:id
  * Get single certificate with full details
  */
-router.get('/:id', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
+router.get('/:id', authenticateToken, requirePermission('documents:read'), async (req, res) => {
   try {
     const { id } = req.params;
-    const tenantId = req.person.tenantId;
+    const tenantId = getEffectiveTenantId(req);
 
     const attestato = await prisma.attestato.findFirst({
       where: {
@@ -158,7 +163,7 @@ router.get('/:id', authenticateToken(), requirePermission('documents:read'), asy
     });
 
     if (!attestato) {
-      return res.status(404).json({ error: 'Attestato not found' });
+      return res.status(404).json({ error: 'Attestato non trovato' });
     }
 
     res.json(attestato);
@@ -167,10 +172,10 @@ router.get('/:id', authenticateToken(), requirePermission('documents:read'), asy
       component: 'attestati-routes',
       action: 'get',
       attestatoId: req.params.id,
-      error: error.message,
+      error: 'Operazione non riuscita',
       personId: req.person?.id
     });
-    res.status(500).json({ error: 'Failed to fetch attestato' });
+    res.status(500).json({ error: 'Errore nel recupero dell\'attestato' });
   }
 });
 
@@ -178,10 +183,10 @@ router.get('/:id', authenticateToken(), requirePermission('documents:read'), asy
  * DELETE /api/v1/attestati/:id
  * Soft delete certificate
  */
-router.delete('/:id', authenticateToken(), requirePermission('documents:delete'), async (req, res) => {
+router.delete('/:id', authenticateToken, requirePermission('documents:delete'), async (req, res) => {
   try {
     const { id } = req.params;
-    const tenantId = req.person.tenantId;
+    const tenantId = getEffectiveTenantId(req);
 
     const attestato = await prisma.attestato.findFirst({
       where: {
@@ -192,7 +197,7 @@ router.delete('/:id', authenticateToken(), requirePermission('documents:delete')
     });
 
     if (!attestato) {
-      return res.status(404).json({ error: 'Certificate not found' });
+      return res.status(404).json({ error: 'Certificato non trovato' });
     }
 
     await prisma.attestato.update({
@@ -207,16 +212,16 @@ router.delete('/:id', authenticateToken(), requirePermission('documents:delete')
       personId: req.person?.id
     });
 
-    res.json({ message: 'Certificate deleted successfully' });
+    res.json({ message: 'Certificato eliminato con successo' });
   } catch (error) {
     logger.error('Failed to delete certificate', {
       component: 'attestati-routes',
       action: 'delete',
       attestatoId: req.params.id,
-      error: error.message,
+      error: 'Operazione non riuscita',
       personId: req.person?.id
     });
-    res.status(500).json({ error: 'Failed to delete certificate' });
+    res.status(500).json({ error: 'Errore nell\'eliminazione del certificato' });
   }
 });
 
@@ -224,13 +229,13 @@ router.delete('/:id', authenticateToken(), requirePermission('documents:delete')
  * POST /api/v1/attestati/delete-batch
  * Soft delete multiple certificates
  */
-router.post('/delete-batch', authenticateToken(), requirePermission('documents:delete'), async (req, res) => {
+router.post('/delete-batch', authenticateToken, requirePermission('documents:delete'), async (req, res) => {
   try {
     const { ids } = req.body;
-    const tenantId = req.person.tenantId;
+    const tenantId = getEffectiveTenantId(req);
 
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({ error: 'Invalid request: ids array required' });
+      return res.status(400).json({ error: 'Richiesta non valida: array ids obbligatorio' });
     }
 
     // Verify all attestati belong to tenant
@@ -243,7 +248,7 @@ router.post('/delete-batch', authenticateToken(), requirePermission('documents:d
     });
 
     if (attestati.length === 0) {
-      return res.status(404).json({ error: 'No certificates found' });
+      return res.status(404).json({ error: 'Nessun certificato trovato' });
     }
 
     // Soft delete all found certificates
@@ -263,17 +268,17 @@ router.post('/delete-batch', authenticateToken(), requirePermission('documents:d
     });
 
     res.json({
-      message: `${attestati.length} certificate(s) deleted successfully`,
+      message: `${attestati.length} certificato/i eliminato/i con successo`,
       deleted: attestati.length
     });
   } catch (error) {
     logger.error('Failed to delete certificates in batch', {
       component: 'attestati-routes',
       action: 'delete-batch',
-      error: error.message,
+      error: 'Operazione non riuscita',
       personId: req.person?.id
     });
-    res.status(500).json({ error: 'Failed to delete certificates' });
+    res.status(500).json({ error: 'Errore nell\'eliminazione dei certificati' });
   }
 });
 

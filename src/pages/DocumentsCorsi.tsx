@@ -1,173 +1,980 @@
-import React, { useState, useMemo } from 'react';
-import EntityListLayout from '../components/layouts/EntityListLayout';
-import TabNavigation from '../components/shared/TabNavigation';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useToast } from '../hooks/useToast';
-import RegistriPresenze from './documents/RegistriPresenze';
-import LettereIncarico from './documents/LettereIncarico';
-import Attestati from './documents/Attestati';
-import { GenerateAttestatiModal } from '../components/shared';
-import { ViewModeToggle } from '../design-system/molecules/ViewModeToggle';
-import { HeaderPanel } from '../design-system/organisms/HeaderPanel';
-import { useAuth } from '../context/AuthContext';
+import { useTenantFilter } from '../context/TenantFilterContext';
+import {
+  FileText,
+  Award,
+  ClipboardList,
+  Calendar,
+  User,
+  Building2,
+  Download,
+  Eye,
+  Trash2,
+  Filter,
+  Search,
+  AlertCircle,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  LayoutGrid,
+  Table,
+  ChevronDown,
+  X,
+  BookOpen
+} from 'lucide-react';
+import { useConfirmDialog } from '../contexts/ConfirmDialogContext';
+import { apiGet, apiDelete } from '../services/api';
+import { format, addYears, differenceInDays, isPast, isFuture, subDays, subMonths, startOfMonth, startOfYear } from 'date-fns';
+import { it } from 'date-fns/locale';
+import DocumentListPage from './documents/DocumentListPage';
+import { DateRangeCalendar, type DateRange } from '../components/ui/DateRangeCalendar';
 
-const tabConfig = {
-  registri: {
-    title: 'Registri Presenze',
-    subtitle: 'Gestisci tutti i registri presenze dei corsi',
-    addLabel: 'Aggiungi Registro',
-    searchPlaceholder: 'Cerca registri presenze...'
-  },
-  lettere: {
-    title: 'Lettere di Incarico',
-    subtitle: 'Gestisci tutte le lettere di incarico per i formatori',
-    addLabel: 'Aggiungi Lettera',
-    searchPlaceholder: 'Cerca lettere di incarico...'
-  },
-  attestati: {
-    title: 'Attestati',
-    subtitle: 'Gestisci tutti gli attestati emessi',
-    addLabel: 'Aggiungi Attestato',
-    searchPlaceholder: 'Cerca attestati...'
-  }
-};
+// Types
+interface Document {
+  id: string;
+  type: 'attestato' | 'registro' | 'lettera';
+  nomeFile: string;
+  dataGenerazione: string;
+  url?: string;
+  fileUrl?: string;
+
+  // Common fields
+  scheduledCourse?: {
+    id: string;
+    course: {
+      id: string;
+      title: string;
+      code: string;
+      category: string;
+      duration: number;
+      validity?: number; // in years
+    };
+    startDate: string;
+    endDate: string;
+    trainer?: {
+      firstName: string;
+      lastName: string;
+    };
+  };
+
+  // Attestato specific
+  person?: {
+    firstName: string;
+    lastName: string;
+    taxCode: string;
+    email: string;
+  };
+  numeroProgressivo?: number;
+  annoProgressivo?: number;
+  expiryDate?: string; // Calculated
+  daysUntilExpiry?: number; // Calculated
+
+  // Registro specific
+  sessions?: any[];
+
+  // Lettera specific
+  trainer?: {
+    firstName: string;
+    lastName: string;
+  };
+}
+
+interface Stats {
+  total: number;
+  attestati: number;
+  registri: number;
+  lettere: number;
+  expiringSoon: number; // Attestati expiring in next 90 days
+  expired: number;
+}
 
 const DocumentsCorsi: React.FC = () => {
-  const { user } = useAuth();
+  const [searchParams] = useSearchParams();
+  const { confirmDelete } = useConfirmDialog();
   const { showToast } = useToast();
+  const { getTenantFilterParams, tenantFilterKey, isReady } = useTenantFilter();
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState<'all' | 'attestato' | 'registro' | 'lettera'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'valid' | 'expiring' | 'expired'>('all');
+  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
+  const [filterDateFrom, setFilterDateFrom] = useState<Date | null>(null);
+  const [filterDateTo, setFilterDateTo] = useState<Date | null>(null);
+  const [filterCompanyId, setFilterCompanyId] = useState<string>('');
+  const [filterCourseId, setFilterCourseId] = useState<string>('');
+  const [companySearch, setCompanySearch] = useState('');
+  const [courseSearch, setCourseSearch] = useState('');
+  const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
+  const [showCourseDropdown, setShowCourseDropdown] = useState(false);
+  const [companies, setCompanies] = useState<{ id: string; ragioneSociale: string }[]>([]);
+  const [courses, setCourses] = useState<{ id: string; title: string; code: string }[]>([]);
+  const companyRef = useRef<HTMLDivElement>(null);
+  const courseRef = useRef<HTMLDivElement>(null);
+  const [stats, setStats] = useState<Stats>({
+    total: 0,
+    attestati: 0,
+    registri: 0,
+    lettere: 0,
+    expiringSoon: 0,
+    expired: 0
+  });
 
-  // Verifica se l'utente è EMPLOYEE (non ha ruoli admin/trainer)
-  const isEmployee = useMemo(() => {
-    const roles = user?.roles || [];
-    const adminRoles = ['ADMIN', 'TRAINING_ADMIN', 'HR_MANAGER', 'COMPANY_MANAGER', 'SITE_MANAGER', 'TRAINER'];
-    return roles.includes('EMPLOYEE') && !roles.some(r => adminRoles.includes(r));
-  }, [user?.roles]);
+  // Fetch companies and courses for filter dropdowns
+  useEffect(() => {
+    if (!isReady) return;
+    const params = getTenantFilterParams();
+    const qs = params.allTenants ? '?allTenants=true' : params.tenantIds ? `?tenantIds=${params.tenantIds.join(',')}` : '';
+    apiGet<any[]>(`/api/v1/companies${qs}`).then(res => {
+      setCompanies((res || []).map((c: any) => ({ id: c.id, ragioneSociale: c.ragioneSociale || c.name || '' })).sort((a: any, b: any) => a.ragioneSociale.localeCompare(b.ragioneSociale)));
+    }).catch(() => { });
+    apiGet<any[]>(`/api/v1/courses${qs}`).then(res => {
+      setCourses((res || []).map((c: any) => ({ id: c.id, title: c.title || '', code: c.code || '' })).sort((a: any, b: any) => a.title.localeCompare(b.title)));
+    }).catch(() => { });
+  }, [isReady, tenantFilterKey]);
 
-  // Per EMPLOYEE, mostra solo tab attestati; per altri utenti, tutti i tab
-  const [activeTab, setActiveTab] = useState<'registri' | 'lettere' | 'attestati'>(isEmployee ? 'attestati' : 'registri');
-  const [searchTerm, setSearchTerm] = useState<string>('');
-  const [activeFilters, setActiveFilters] = useState<Record<string, string>>({});
-  const [activeSort, setActiveSort] = useState<{ field: string, direction: 'asc' | 'desc' } | null>(null);
-  const [selectionMode, setSelectionMode] = useState<boolean>(false);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [showGenerateModal, setShowGenerateModal] = useState<boolean>(false);
-  const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
+  // Close dropdowns on outside click
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (companyRef.current && !companyRef.current.contains(e.target as Node)) setShowCompanyDropdown(false);
+      if (courseRef.current && !courseRef.current.contains(e.target as Node)) setShowCourseDropdown(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
-  const handleAddNew = () => {
-    if (activeTab === 'attestati') {
-      setShowGenerateModal(true);
-    } else {
-      showToast({ type: 'warning', title: 'Attenzione', message: `Aggiunta di ${activeTab === 'registri' ? 'registro' : 'lettera di incarico'} non implementata` });
+  // Filtered company/course lists for searchable dropdowns
+  const filteredCompanies = useMemo(() => {
+    if (!companySearch) return companies;
+    const q = companySearch.toLowerCase();
+    return companies.filter(c => c.ragioneSociale.toLowerCase().includes(q));
+  }, [companies, companySearch]);
+
+  const filteredCourses = useMemo(() => {
+    if (!courseSearch) return courses;
+    const q = courseSearch.toLowerCase();
+    return courses.filter(c => c.title.toLowerCase().includes(q) || c.code.toLowerCase().includes(q));
+  }, [courses, courseSearch]);
+
+  // Date range presets for DateRangeCalendar
+  const datePresets = [
+    { label: 'Ultimi 7 giorni', getRange: () => ({ start: subDays(new Date(), 7), end: new Date() }) },
+    { label: 'Ultimi 30 giorni', getRange: () => ({ start: subDays(new Date(), 30), end: new Date() }) },
+    { label: 'Ultimi 90 giorni', getRange: () => ({ start: subDays(new Date(), 90), end: new Date() }) },
+    { label: 'Questo mese', getRange: () => ({ start: startOfMonth(new Date()), end: new Date() }) },
+    { label: 'Quest\'anno', getRange: () => ({ start: startOfYear(new Date()), end: new Date() }) },
+    { label: 'Ultimo anno', getRange: () => ({ start: subMonths(new Date(), 12), end: new Date() }) },
+  ];
+
+  // Apply URL filters on mount
+  useEffect(() => {
+    const typeParam = searchParams.get('type');
+    if (typeParam && ['attestato', 'registro', 'lettera'].includes(typeParam)) {
+      setFilterType(typeParam as 'attestato' | 'registro' | 'lettera');
+    }
+  }, [searchParams]);
+
+  // Refetch when searchParams or tenant filter changes
+  useEffect(() => {
+    if (isReady) fetchAllDocuments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, tenantFilterKey, isReady]);
+
+  const fetchAllDocuments = async () => {
+    try {
+      setLoading(true);
+
+      // Build query params for filtering
+      const scheduleId = searchParams.get('scheduleId');
+      const personId = searchParams.get('personId');
+      const trainerId = searchParams.get('trainerId');
+
+      // Build query strings for each endpoint
+      const attestatiParams = new URLSearchParams();
+      const registriParams = new URLSearchParams();
+      const lettereParams = new URLSearchParams();
+
+      if (scheduleId) {
+        attestatiParams.set('scheduleId', scheduleId);
+        registriParams.set('scheduleId', scheduleId);
+        lettereParams.set('scheduleId', scheduleId);
+      }
+      if (personId) {
+        attestatiParams.set('personId', personId);
+      }
+      if (trainerId) {
+        lettereParams.set('trainerId', trainerId);
+        registriParams.set('formatoreId', trainerId); // API uses formatoreId for trainer filter
+      }
+
+      // Add tenant filter params to all endpoints
+      const tenantParams = getTenantFilterParams();
+      if (tenantParams.tenantIds) {
+        const tenantIdsStr = tenantParams.tenantIds.join(',');
+        attestatiParams.set('tenantIds', tenantIdsStr);
+        registriParams.set('tenantIds', tenantIdsStr);
+        lettereParams.set('tenantIds', tenantIdsStr);
+      } else if (tenantParams.allTenants) {
+        attestatiParams.set('allTenants', 'true');
+        registriParams.set('allTenants', 'true');
+        lettereParams.set('allTenants', 'true');
+      }
+
+      const attestatiQuery = attestatiParams.toString() ? `?${attestatiParams.toString()}` : '';
+      const registriQuery = registriParams.toString() ? `?${registriParams.toString()}` : '';
+      const lettereQuery = lettereParams.toString() ? `?${lettereParams.toString()}` : '';
+
+      // Fetch all document types in parallel with filters
+      const [attestatiRes, registriRes, lettereRes] = await Promise.all([
+        apiGet<any[]>(`/api/v1/attestati${attestatiQuery}`).catch(() => []),
+        apiGet<any[]>(`/api/v1/registri-presenze${registriQuery}`).catch(() => []),
+        apiGet<any[]>(`/api/v1/lettere-incarico${lettereQuery}`).catch(() => [])
+      ]);
+
+      // Process attestati with expiry calculation
+      const attestati: Document[] = (attestatiRes || []).map((att: any) => {
+        const doc: Document = {
+          id: att.id,
+          type: 'attestato',
+          nomeFile: att.nomeFile,
+          dataGenerazione: att.dataGenerazione,
+          url: att.url,
+          fileUrl: att.fileUrl,
+          scheduledCourse: att.scheduledCourse,
+          person: att.person,
+          numeroProgressivo: att.numeroProgressivo,
+          annoProgressivo: att.annoProgressivo
+        };
+
+        // Calculate expiry date
+        if (att.scheduledCourse?.endDate && att.scheduledCourse?.course?.validity) {
+          const courseEndDate = new Date(att.scheduledCourse.endDate);
+          const validityYears = att.scheduledCourse.course.validity;
+          const expiryDate = addYears(courseEndDate, validityYears);
+
+          doc.expiryDate = expiryDate.toISOString();
+          doc.daysUntilExpiry = differenceInDays(expiryDate, new Date());
+        }
+
+        return doc;
+      });
+
+      // Process registri
+      const registri: Document[] = (registriRes || []).map((reg: any) => ({
+        id: reg.id,
+        type: 'registro',
+        nomeFile: reg.nomeFile || `Registro ${reg.scheduledCourse?.course?.title || 'N/A'}`,
+        dataGenerazione: reg.createdAt,
+        url: reg.url,
+        fileUrl: reg.fileUrl,
+        scheduledCourse: reg.scheduledCourse,
+        sessions: reg.sessions
+      }));
+
+      // Process lettere
+      const lettere: Document[] = (lettereRes || []).map((lett: any) => ({
+        id: lett.id,
+        type: 'lettera',
+        nomeFile: lett.nomeFile || `Lettera ${lett.trainer?.firstName || 'N/A'}`,
+        dataGenerazione: lett.createdAt,
+        url: lett.url,
+        fileUrl: lett.fileUrl,
+        scheduledCourse: lett.scheduledCourse,
+        trainer: lett.trainer
+      }));
+
+      const allDocs = [...attestati, ...registri, ...lettere].sort((a, b) => {
+        const dateA = a.dataGenerazione ? new Date(a.dataGenerazione).getTime() : 0;
+        const dateB = b.dataGenerazione ? new Date(b.dataGenerazione).getTime() : 0;
+        return dateB - dateA;
+      });
+
+      setDocuments(allDocs);
+
+      // Calculate stats
+      const expiringSoon = attestati.filter(a =>
+        a.daysUntilExpiry !== undefined &&
+        a.daysUntilExpiry > 0 &&
+        a.daysUntilExpiry <= 90
+      ).length;
+
+      const expired = attestati.filter(a =>
+        a.daysUntilExpiry !== undefined &&
+        a.daysUntilExpiry < 0
+      ).length;
+
+      setStats({
+        total: allDocs.length,
+        attestati: attestati.length,
+        registri: registri.length,
+        lettere: lettere.length,
+        expiringSoon,
+        expired
+      });
+
+    } catch (error) {
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Per EMPLOYEE mostra solo tab attestati
-  const tabItems = isEmployee
-    ? [{ id: 'attestati', label: 'I Miei Attestati' }]
-    : [
-      { id: 'registri', label: 'Registri Presenze' },
-      { id: 'lettere', label: 'Lettere di Incarico' },
-      { id: 'attestati', label: 'Attestati' }
-    ];
+  const handleDelete = async (doc: Document) => {
+    const shouldDelete = await confirmDelete(doc.nomeFile);
+    if (!shouldDelete) return;
+
+    try {
+      const endpoint = doc.type === 'attestato' ? 'attestati'
+        : doc.type === 'registro' ? 'registri-presenze'
+          : 'lettere-incarico';
+
+      await apiDelete(`/api/v1/${endpoint}/${doc.id}`);
+      setDocuments(docs => docs.filter(d => d.id !== doc.id));
+
+      // Update stats
+      setStats(prev => ({
+        ...prev,
+        total: prev.total - 1,
+        [doc.type === 'attestato' ? 'attestati' : doc.type === 'registro' ? 'registri' : 'lettere']:
+          prev[doc.type === 'attestato' ? 'attestati' : doc.type === 'registro' ? 'registri' : 'lettere'] - 1
+      }));
+    } catch (error) {
+      showToast({ message: 'Errore durante l\'eliminazione del documento', type: 'error' });
+    }
+  };
+
+  const getTypeInfo = (type: string) => {
+    switch (type) {
+      case 'attestato':
+        return { icon: Award, label: 'Attestato', color: 'text-blue-600 bg-blue-50' };
+      case 'registro':
+        return { icon: ClipboardList, label: 'Registro', color: 'text-green-600 bg-green-50' };
+      case 'lettera':
+        return { icon: FileText, label: 'Lettera', color: 'text-purple-600 bg-purple-50' };
+      default:
+        return { icon: FileText, label: 'Documento', color: 'text-gray-600 bg-gray-50' };
+    }
+  };
+
+  const getExpiryStatus = (doc: Document) => {
+    if (doc.type !== 'attestato' || !doc.daysUntilExpiry) return null;
+
+    if (doc.daysUntilExpiry < 0) {
+      return {
+        label: 'Scaduto',
+        color: 'text-red-600 bg-red-50 border-red-200',
+        icon: XCircle
+      };
+    } else if (doc.daysUntilExpiry <= 90) {
+      return {
+        label: `Scade tra ${doc.daysUntilExpiry} giorni`,
+        color: 'text-orange-600 bg-orange-50 border-orange-200',
+        icon: AlertCircle
+      };
+    } else {
+      return {
+        label: `Valido per ${Math.floor(doc.daysUntilExpiry / 365)} anni`,
+        color: 'text-green-600 bg-green-50 border-green-200',
+        icon: CheckCircle2
+      };
+    }
+  };
+
+  // Filter documents
+  const filteredDocuments = documents.filter(doc => {
+    // Type filter
+    if (filterType !== 'all' && doc.type !== filterType) return false;
+
+    // Status filter (for attestati only)
+    if (filterStatus !== 'all' && doc.type === 'attestato') {
+      if (filterStatus === 'expired' && (doc.daysUntilExpiry === undefined || doc.daysUntilExpiry >= 0)) return false;
+      if (filterStatus === 'expiring' && (doc.daysUntilExpiry === undefined || doc.daysUntilExpiry < 0 || doc.daysUntilExpiry > 90)) return false;
+      if (filterStatus === 'valid' && (doc.daysUntilExpiry === undefined || doc.daysUntilExpiry < 0)) return false;
+    }
+
+    // Date range filter
+    if (filterDateFrom || filterDateTo) {
+      const docDate = doc.dataGenerazione ? new Date(doc.dataGenerazione) : null;
+      if (!docDate) return false;
+      if (filterDateFrom && docDate < filterDateFrom) return false;
+      if (filterDateTo) {
+        const endOfDay = new Date(filterDateTo);
+        endOfDay.setHours(23, 59, 59, 999);
+        if (docDate > endOfDay) return false;
+      }
+    }
+
+    // Company filter
+    if (filterCompanyId) {
+      // Documents don't have direct companyId — match via person or scheduledCourse
+      // We can't filter by company client-side easily — keep it for future server-side support
+      // For now, skip this filter if no matching data
+    }
+
+    // Course filter
+    if (filterCourseId && doc.scheduledCourse?.course?.id !== filterCourseId) return false;
+
+    // Search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      return (
+        (doc.nomeFile?.toLowerCase().includes(query)) ||
+        (doc.scheduledCourse?.course?.title?.toLowerCase().includes(query)) ||
+        (doc.person?.firstName?.toLowerCase().includes(query)) ||
+        (doc.person?.lastName?.toLowerCase().includes(query)) ||
+        (doc.trainer?.firstName?.toLowerCase().includes(query)) ||
+        (doc.trainer?.lastName?.toLowerCase().includes(query))
+      );
+    }
+
+    return true;
+  });
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600"></div>
+      </div>
+    );
+  }
 
   return (
-    <>
-      <div className="mb-4">
-        <TabNavigation
-          tabs={tabItems}
-          activeTabId={activeTab}
-          onTabChange={(id: string) => {
-            setActiveTab(id as 'registri' | 'lettere' | 'attestati');
-            setSearchTerm('');
-            setActiveFilters({});
-            setActiveSort(null);
-            setSelectionMode(false);
-            setSelectedIds([]);
-          }}
-        />
+    <div className="container mx-auto px-4 py-8">
+      {/* Header with Toggle */}
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">
+            Documenti Corsi
+          </h1>
+          <p className="text-gray-500">
+            Gestisci documenti corsi
+          </p>
+        </div>
+
+        {/* View Toggle Switch */}
+        <div className="flex items-center bg-gray-100 rounded-lg p-1">
+          <button
+            onClick={() => setViewMode('cards')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${viewMode === 'cards'
+              ? 'bg-white shadow-sm text-orange-600'
+              : 'text-gray-600 hover:text-gray-800'
+              }`}
+          >
+            <LayoutGrid className="h-4 w-4" />
+            Corsi
+          </button>
+          <button
+            onClick={() => setViewMode('table')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${viewMode === 'table'
+              ? 'bg-white shadow-sm text-orange-600'
+              : 'text-gray-600 hover:text-gray-800'
+              }`}
+          >
+            <Table className="h-4 w-4" />
+            Tutti i Documenti
+          </button>
+        </div>
       </div>
 
-      <EntityListLayout
-        title={isEmployee ? 'I Miei Attestati' : tabConfig[activeTab].title}
-        subtitle={isEmployee ? 'Visualizza i tuoi attestati di formazione' : tabConfig[activeTab].subtitle}
-        extraControls={
-          <div className="flex items-center gap-2">
-            <ViewModeToggle
-              viewMode={viewMode}
-              onChange={setViewMode}
-              gridLabel="Griglia"
-              tableLabel="Tabella"
-            />
-            {/* Nasconde HeaderPanel per EMPLOYEE - non possono creare documenti */}
-            {!isEmployee && (
-              <HeaderPanel
-                entityType={activeTab === 'registri' ? 'registro' : activeTab === 'lettere' ? 'lettera' : 'attestato'}
-                entityGender={activeTab === 'lettere' ? 'f' : 'm'}
-                onAdd={handleAddNew}
-              />
+      {/* Conditional Content Based on View Mode */}
+      {viewMode === 'table' ? (
+        <DocumentListPage />
+      ) : (
+        <>
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4 mb-6">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">Totale</p>
+                  <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+                </div>
+                <FileText className="h-8 w-8 text-gray-400" />
+              </div>
+            </div>
+
+            <div
+              className="bg-blue-50 rounded-xl shadow-sm border border-blue-200 p-4 cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => setFilterType(filterType === 'attestato' ? 'all' : 'attestato')}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-blue-600 mb-1">Attestati</p>
+                  <p className="text-2xl font-bold text-blue-900">{stats.attestati}</p>
+                </div>
+                <Award className="h-8 w-8 text-blue-500" />
+              </div>
+            </div>
+
+            <div
+              className="bg-green-50 rounded-xl shadow-sm border border-green-200 p-4 cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => setFilterType(filterType === 'registro' ? 'all' : 'registro')}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-green-600 mb-1">Registri</p>
+                  <p className="text-2xl font-bold text-green-900">{stats.registri}</p>
+                </div>
+                <ClipboardList className="h-8 w-8 text-green-500" />
+              </div>
+            </div>
+
+            <div
+              className="bg-purple-50 rounded-xl shadow-sm border border-purple-200 p-4 cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => setFilterType(filterType === 'lettera' ? 'all' : 'lettera')}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-purple-600 mb-1">Lettere</p>
+                  <p className="text-2xl font-bold text-purple-900">{stats.lettere}</p>
+                </div>
+                <FileText className="h-8 w-8 text-purple-500" />
+              </div>
+            </div>
+
+            <div
+              className="bg-orange-50 rounded-xl shadow-sm border border-orange-200 p-4 cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => setFilterStatus(filterStatus === 'expiring' ? 'all' : 'expiring')}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-orange-600 mb-1">In Scadenza</p>
+                  <p className="text-2xl font-bold text-orange-900">{stats.expiringSoon}</p>
+                </div>
+                <Clock className="h-8 w-8 text-orange-500" />
+              </div>
+            </div>
+
+            <div
+              className="bg-red-50 rounded-xl shadow-sm border border-red-200 p-4 cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => setFilterStatus(filterStatus === 'expired' ? 'all' : 'expired')}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-red-600 mb-1">Scaduti</p>
+                  <p className="text-2xl font-bold text-red-900">{stats.expired}</p>
+                </div>
+                <AlertCircle className="h-8 w-8 text-red-500" />
+              </div>
+            </div>
+          </div>
+
+          {/* Filters */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-6 space-y-4">
+            {/* Row 1: Search + Type + Status */}
+            <div className="flex flex-col md:flex-row gap-4">
+              {/* Search */}
+              <div className="flex-1">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Cerca per nome file, corso, persona, formatore..."
+                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
+                  />
+                </div>
+              </div>
+
+              {/* Type Filter */}
+              <select
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value as any)}
+                className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
+              >
+                <option value="all">Tutti i tipi</option>
+                <option value="attestato">Attestati</option>
+                <option value="registro">Registri</option>
+                <option value="lettera">Lettere</option>
+              </select>
+
+              {/* Status Filter (only for attestati) */}
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value as any)}
+                className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
+                disabled={filterType !== 'all' && filterType !== 'attestato'}
+              >
+                <option value="all">Tutti gli stati</option>
+                <option value="valid">Validi</option>
+                <option value="expiring">In scadenza (90gg)</option>
+                <option value="expired">Scaduti</option>
+              </select>
+            </div>
+
+            {/* Row 2: Date Range + Company + Course */}
+            <div className="flex flex-col lg:flex-row gap-4 pt-3 border-t border-gray-100">
+              {/* Date Range Calendar with integrated presets */}
+              <div className="flex-1">
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">Periodo generazione</label>
+                <DateRangeCalendar
+                  value={{ start: filterDateFrom, end: filterDateTo }}
+                  onChange={(range: DateRange) => { setFilterDateFrom(range.start); setFilterDateTo(range.end); }}
+                  placeholder="Seleziona periodo"
+                  clearable
+                  theme="orange"
+                  size="sm"
+                  showPresets
+                  customPresets={datePresets}
+                />
+              </div>
+
+              {/* Company Searchable Dropdown */}
+              <div className="w-full lg:w-64" ref={companyRef}>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">Azienda</label>
+                <div className="relative">
+                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={filterCompanyId ? companies.find(c => c.id === filterCompanyId)?.ragioneSociale || '' : companySearch}
+                    onChange={(e) => {
+                      setCompanySearch(e.target.value);
+                      setFilterCompanyId('');
+                      setShowCompanyDropdown(true);
+                    }}
+                    onFocus={() => setShowCompanyDropdown(true)}
+                    placeholder="Cerca azienda..."
+                    className="w-full pl-9 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
+                  />
+                  {filterCompanyId ? (
+                    <button
+                      onClick={() => { setFilterCompanyId(''); setCompanySearch(''); }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-red-500"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  ) : (
+                    <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                  )}
+                  {showCompanyDropdown && filteredCompanies.length > 0 && (
+                    <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {filteredCompanies.slice(0, 50).map(c => (
+                        <button
+                          key={c.id}
+                          onClick={() => {
+                            setFilterCompanyId(c.id);
+                            setCompanySearch('');
+                            setShowCompanyDropdown(false);
+                          }}
+                          className={`w-full text-left px-3 py-2 text-sm hover:bg-orange-50 transition-colors ${filterCompanyId === c.id ? 'bg-orange-50 text-orange-700 font-medium' : 'text-gray-700'}`}
+                        >
+                          {c.ragioneSociale}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Course Searchable Dropdown */}
+              <div className="w-full lg:w-64" ref={courseRef}>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">Corso</label>
+                <div className="relative">
+                  <BookOpen className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={filterCourseId ? courses.find(c => c.id === filterCourseId)?.title || '' : courseSearch}
+                    onChange={(e) => {
+                      setCourseSearch(e.target.value);
+                      setFilterCourseId('');
+                      setShowCourseDropdown(true);
+                    }}
+                    onFocus={() => setShowCourseDropdown(true)}
+                    placeholder="Cerca corso..."
+                    className="w-full pl-9 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
+                  />
+                  {filterCourseId ? (
+                    <button
+                      onClick={() => { setFilterCourseId(''); setCourseSearch(''); }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-red-500"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  ) : (
+                    <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                  )}
+                  {showCourseDropdown && filteredCourses.length > 0 && (
+                    <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {filteredCourses.slice(0, 50).map(c => (
+                        <button
+                          key={c.id}
+                          onClick={() => {
+                            setFilterCourseId(c.id);
+                            setCourseSearch('');
+                            setShowCourseDropdown(false);
+                          }}
+                          className={`w-full text-left px-3 py-2 text-sm hover:bg-orange-50 transition-colors ${filterCourseId === c.id ? 'bg-orange-50 text-orange-700 font-medium' : 'text-gray-700'}`}
+                        >
+                          <span className="font-medium">{c.title}</span>
+                          {c.code && <span className="text-xs text-gray-400 ml-1.5">({c.code})</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Active filters */}
+            {(filterType !== 'all' || filterStatus !== 'all' || searchQuery || filterDateFrom || filterDateTo || filterCompanyId || filterCourseId) && (
+              <div className="flex flex-wrap gap-2 pt-3 border-t border-gray-100">
+                {filterType !== 'all' && (
+                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
+                    Tipo: {filterType}
+                    <button onClick={() => setFilterType('all')} className="hover:bg-blue-200 rounded-full p-0.5">
+                      <XCircle className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+                {filterStatus !== 'all' && (
+                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-sm">
+                    Stato: {filterStatus}
+                    <button onClick={() => setFilterStatus('all')} className="hover:bg-orange-200 rounded-full p-0.5">
+                      <XCircle className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+                {(filterDateFrom || filterDateTo) && (
+                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-teal-100 text-teal-700 rounded-full text-sm">
+                    Periodo: {filterDateFrom ? format(filterDateFrom, 'dd/MM/yy', { locale: it }) : '...'} — {filterDateTo ? format(filterDateTo, 'dd/MM/yy', { locale: it }) : '...'}
+                    <button onClick={() => { setFilterDateFrom(null); setFilterDateTo(null); }} className="hover:bg-teal-200 rounded-full p-0.5">
+                      <XCircle className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+                {filterCompanyId && (
+                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-violet-100 text-violet-700 rounded-full text-sm">
+                    Azienda: {companies.find(c => c.id === filterCompanyId)?.ragioneSociale || '...'}
+                    <button onClick={() => { setFilterCompanyId(''); setCompanySearch(''); }} className="hover:bg-violet-200 rounded-full p-0.5">
+                      <XCircle className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+                {filterCourseId && (
+                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-sm">
+                    Corso: {courses.find(c => c.id === filterCourseId)?.title || '...'}
+                    <button onClick={() => { setFilterCourseId(''); setCourseSearch(''); }} className="hover:bg-indigo-200 rounded-full p-0.5">
+                      <XCircle className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+                {searchQuery && (
+                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm">
+                    Cerca: "{searchQuery}"
+                    <button onClick={() => setSearchQuery('')} className="hover:bg-gray-200 rounded-full p-0.5">
+                      <XCircle className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+                <button
+                  onClick={() => {
+                    setFilterType('all');
+                    setFilterStatus('all');
+                    setSearchQuery('');
+                    setFilterDateFrom(null);
+                    setFilterDateTo(null);
+                    setFilterCompanyId('');
+                    setFilterCourseId('');
+                    setCompanySearch('');
+                    setCourseSearch('');
+                  }}
+                  className="text-sm text-gray-600 hover:text-gray-900 underline"
+                >
+                  Cancella tutto
+                </button>
+              </div>
             )}
           </div>
-        }
-      >
-        {activeTab === 'registri' && (
-          <RegistriPresenze
-            searchTerm={searchTerm}
-            setSearchTerm={setSearchTerm}
-            activeFilters={activeFilters}
-            setActiveFilters={setActiveFilters}
-            activeSort={activeSort as { field: string, direction: 'asc' | 'desc' }}
-            setActiveSort={setActiveSort}
-            selectionMode={selectionMode}
-            setSelectionMode={setSelectionMode}
-            selectedIds={selectedIds}
-            setSelectedIds={setSelectedIds}
-          />
-        )}
 
-        {activeTab === 'lettere' && (
-          <LettereIncarico
-            searchTerm={searchTerm}
-            setSearchTerm={setSearchTerm}
-            activeFilters={activeFilters}
-            setActiveFilters={setActiveFilters}
-            activeSort={activeSort as { field: string, direction: 'asc' | 'desc' }}
-            setActiveSort={setActiveSort}
-            selectionMode={selectionMode}
-            setSelectionMode={setSelectionMode}
-            selectedIds={selectedIds}
-            setSelectedIds={setSelectedIds}
-            showGenerateModal={showGenerateModal}
-            setShowGenerateModal={setShowGenerateModal}
-          />
-        )}
+          {/* Results count */}
+          <div className="mb-4 text-sm text-gray-600">
+            {filteredDocuments.length === documents.length
+              ? `${documents.length} documenti totali`
+              : `${filteredDocuments.length} di ${documents.length} documenti`}
+          </div>
 
-        {activeTab === 'attestati' && (
-          <Attestati
-            searchTerm={searchTerm}
-            setSearchTerm={setSearchTerm}
-            activeFilters={activeFilters}
-            setActiveFilters={setActiveFilters}
-            activeSort={activeSort as { field: string, direction: 'asc' | 'desc' }}
-            setActiveSort={setActiveSort}
-            selectionMode={selectionMode}
-            setSelectionMode={setSelectionMode}
-            selectedIds={selectedIds}
-            setSelectedIds={setSelectedIds}
-            showGenerateModal={showGenerateModal}
-            setShowGenerateModal={setShowGenerateModal}
-          />
-        )}
-      </EntityListLayout>
+          {/* Documents Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+            {filteredDocuments.map((doc) => {
+              const typeInfo = getTypeInfo(doc.type);
+              const TypeIcon = typeInfo.icon;
+              const expiryStatus = getExpiryStatus(doc);
+              const ExpiryIcon = expiryStatus?.icon;
 
-      {showGenerateModal && (
-        <GenerateAttestatiModal
-          isOpen={showGenerateModal}
-          onClose={() => setShowGenerateModal(false)}
-          onGenerate={() => {
-            // Implementazione della generazione
-          }}
-        />
+              return (
+                <div
+                  key={doc.id}
+                  className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow"
+                >
+                  {/* Card Header */}
+                  <div className="p-4 border-b border-gray-100">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className={`p-2 rounded-lg ${typeInfo.color}`}>
+                        <TypeIcon className="h-5 w-5" />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {doc.url && (
+                          <a
+                            href={doc.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Visualizza"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </a>
+                        )}
+                        {doc.fileUrl && (
+                          <a
+                            href={doc.fileUrl}
+                            download
+                            className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                            title="Scarica"
+                          >
+                            <Download className="h-4 w-4" />
+                          </a>
+                        )}
+                        <button
+                          onClick={() => handleDelete(doc)}
+                          className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Elimina"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <h3 className="font-semibold text-gray-900 mb-1 line-clamp-2">
+                      {doc.nomeFile}
+                    </h3>
+
+                    {doc.type === 'attestato' && doc.numeroProgressivo && (
+                      <p className="text-xs text-gray-500">
+                        N° {doc.numeroProgressivo}/{doc.annoProgressivo}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Card Body */}
+                  <div className="p-4 space-y-3">
+                    {/* Course Info */}
+                    {doc.scheduledCourse && (
+                      <div className="flex items-start gap-2">
+                        <Building2 className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-gray-900 truncate">
+                            {doc.scheduledCourse.course.title}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {doc.scheduledCourse.course.code} • {doc.scheduledCourse.course.category}
+                          </p>
+                          {/* Course dates */}
+                          <div className="flex items-center gap-1 mt-1 text-xs text-gray-500">
+                            <Calendar className="h-3 w-3" />
+                            <span>
+                              {format(new Date(doc.scheduledCourse.startDate), 'dd/MM/yyyy', { locale: it })}
+                              {doc.scheduledCourse.endDate && doc.scheduledCourse.endDate !== doc.scheduledCourse.startDate && (
+                                <> - {format(new Date(doc.scheduledCourse.endDate), 'dd/MM/yyyy', { locale: it })}</>
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Person Info (for attestati) */}
+                    {doc.person && (
+                      <div className="flex items-start gap-2">
+                        <User className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm text-gray-900 truncate">
+                            {doc.person.firstName} {doc.person.lastName}
+                          </p>
+                          <p className="text-xs text-gray-500">{doc.person.taxCode}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Trainer Info (for lettere) */}
+                    {doc.trainer && doc.type === 'lettera' && (
+                      <div className="flex items-start gap-2">
+                        <User className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm text-gray-900 truncate">
+                            {doc.trainer.firstName} {doc.trainer.lastName}
+                          </p>
+                          <p className="text-xs text-gray-500">Formatore</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Generation Date */}
+                    {doc.dataGenerazione && (
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                        <p className="text-sm text-gray-600">
+                          Generato il {format(new Date(doc.dataGenerazione), 'dd MMM yyyy', { locale: it })}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Expiry Status (for attestati) */}
+                    {expiryStatus && ExpiryIcon && (
+                      <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${expiryStatus.color}`}>
+                        <ExpiryIcon className="h-4 w-4 flex-shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium">{expiryStatus.label}</p>
+                          {doc.expiryDate && (
+                            <p className="text-xs opacity-75">
+                              Scadenza: {format(new Date(doc.expiryDate), 'dd MMM yyyy', { locale: it })}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Empty State */}
+          {filteredDocuments.length === 0 && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+              <FileText className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                Nessun documento trovato
+              </h3>
+              <p className="text-gray-600 mb-4">
+                {searchQuery || filterType !== 'all' || filterStatus !== 'all' || filterDateFrom || filterDateTo || filterCompanyId || filterCourseId
+                  ? 'Prova a modificare i filtri di ricerca'
+                  : 'Non ci sono ancora documenti generati'}
+              </p>
+              {(searchQuery || filterType !== 'all' || filterStatus !== 'all' || filterDateFrom || filterDateTo || filterCompanyId || filterCourseId) && (
+                <button
+                  onClick={() => {
+                    setSearchQuery('');
+                    setFilterType('all');
+                    setFilterStatus('all');
+                    setFilterDateFrom(null);
+                    setFilterDateTo(null);
+                    setFilterCompanyId('');
+                    setFilterCourseId('');
+                    setCompanySearch('');
+                    setCourseSearch('');
+                  }}
+                  className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
+                >
+                  Cancella filtri
+                </button>
+              )}
+            </div>
+          )}
+        </>
       )}
-    </>
+    </div>
   );
 };
 

@@ -66,10 +66,10 @@ export const GroupedCourseDetails: React.FC<GroupedCourseDetailsProps> = ({
         <div>
             {/* Toggle per espandere/comprimere */}
             <div
-                className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 transition-colors text-sm cursor-pointer"
+                className="w-full flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-sm cursor-pointer"
             >
                 <div
-                    className="flex items-center gap-2 text-gray-600 flex-1"
+                    className="flex items-center gap-2 text-gray-600 dark:text-gray-300 flex-1"
                     onClick={() => setExpanded(!expanded)}
                     role="button"
                     tabIndex={0}
@@ -94,7 +94,7 @@ export const GroupedCourseDetails: React.FC<GroupedCourseDetailsProps> = ({
                                 selectAllFromGroup(group);
                             }
                         }}
-                        className="flex items-center gap-1 text-orange-600 hover:text-orange-700"
+                        className="flex items-center gap-1 text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300"
                     >
                         {allSelected ? (
                             <>
@@ -113,14 +113,14 @@ export const GroupedCourseDetails: React.FC<GroupedCourseDetailsProps> = ({
 
             {/* Lista dettagliata dipendenti raggruppati per azienda */}
             {expanded && (
-                <div className="divide-y divide-gray-100">
+                <div className="divide-y divide-gray-100 dark:divide-gray-700">
                     {companiesMap.map(({ company, items }) => (
                         <div key={company?.id || 'no-company'} className="p-3">
                             {/* Header azienda */}
-                            <div className="flex items-center gap-2 mb-2 text-sm font-medium text-gray-700">
-                                <Building2 className="h-4 w-4 text-purple-500" />
+                            <div className="flex items-center gap-2 mb-2 text-sm font-medium text-gray-700 dark:text-gray-200">
+                                <Building2 className="h-4 w-4 text-purple-500 dark:text-purple-400" />
                                 <span>{company?.ragioneSociale || 'Senza azienda'}</span>
-                                <span className="text-gray-400">({items.length} dip.)</span>
+                                <span className="text-gray-400 dark:text-gray-500">({items.length} dip.)</span>
                             </div>
 
                             {/* Lista dipendenti */}
@@ -130,26 +130,28 @@ export const GroupedCourseDetails: React.FC<GroupedCourseDetailsProps> = ({
                                     .map(item => (
                                         <div
                                             key={item.id}
-                                            className={`flex items-center justify-between p-2 rounded-lg ${item.status === 'EXPIRED' ? 'bg-red-50' : 'bg-gray-50'
+                                            className={`flex items-center justify-between p-2 rounded-lg ${item.status === 'EXPIRED'
+                                                    ? 'bg-red-50 dark:bg-red-900/30'
+                                                    : 'bg-gray-50 dark:bg-gray-800'
                                                 }`}
                                         >
                                             <div className="flex items-center gap-3">
                                                 {!item.alreadyScheduled && (
                                                     <button
                                                         onClick={() => toggleSelection(item.id)}
-                                                        className="text-gray-400 hover:text-orange-600"
+                                                        className="text-gray-400 dark:text-gray-500 hover:text-orange-600 dark:hover:text-orange-400"
                                                     >
                                                         {selectedItems.has(item.id) ? (
-                                                            <CheckSquare className="h-4 w-4 text-orange-600" />
+                                                            <CheckSquare className="h-4 w-4 text-orange-600 dark:text-orange-400" />
                                                         ) : (
                                                             <Square className="h-4 w-4" />
                                                         )}
                                                     </button>
                                                 )}
-                                                <User className="h-4 w-4 text-gray-400" />
+                                                <User className="h-4 w-4 text-gray-400 dark:text-gray-500" />
                                                 <div>
-                                                    <p className="text-sm font-medium text-gray-900">{item.person.fullName}</p>
-                                                    <p className="text-xs text-gray-500">
+                                                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{item.person.fullName}</p>
+                                                    <p className="text-xs text-gray-500 dark:text-gray-400">
                                                         Scade: {format(new Date(item.expirationDate), 'dd/MM/yyyy', { locale: it })}
                                                     </p>
                                                 </div>
@@ -162,7 +164,7 @@ export const GroupedCourseDetails: React.FC<GroupedCourseDetailsProps> = ({
                                                         variant="ghost"
                                                         size="sm"
                                                         onClick={() => onScheduleCourse(item.person.id, item.course.id)}
-                                                        className="text-orange-600 hover:bg-orange-50 h-7 px-2"
+                                                        className="text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/30 h-7 px-2"
                                                     >
                                                         <Calendar className="h-3 w-3" />
                                                     </Button>

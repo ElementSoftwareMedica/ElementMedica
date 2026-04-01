@@ -34,6 +34,9 @@ import {
     Activity
 } from 'lucide-react';
 import { apiGet, apiPut, apiPost, apiDelete } from '../../../services/api';
+import { useTenantMode } from '../../../contexts/TenantModeContext';
+import { CRUDButton, CRUDPrimaryButton } from '../../../components/shared/CRUDButton';
+import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
 
 // Types
 interface UserData {
@@ -116,7 +119,10 @@ const GLOBAL_ROLES = [
 const UserDetailPage: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
-    
+    const { canPerformCRUD, getOperateHeaders } = useTenantMode();
+    const operateHeaders = getOperateHeaders();
+    const { confirm: confirmDialog } = useConfirmDialog();
+
     const [user, setUser] = useState<UserData | null>(null);
     const [tenants, setTenants] = useState<Tenant[]>([]);
     const [roles, setRoles] = useState<Role[]>([]);
@@ -138,19 +144,18 @@ const UserDetailPage: React.FC = () => {
     // Load user data
     const loadUser = useCallback(async () => {
         if (!id) return;
-        
+
         setLoading(true);
         setError(null);
-        
+
         try {
             const response = await apiGet<{ success: boolean; data: UserData }>(`/api/v1/persons/${id}`);
             if (response?.data) {
                 setUser(response.data);
                 setFormData(response.data);
             }
-        } catch (err: any) {
-            console.error('Error loading user:', err);
-            setError(err.message || 'Errore nel caricamento utente');
+        } catch (err: unknown) {
+            setError('Errore nel caricamento utente');
         } finally {
             setLoading(false);
         }
@@ -172,7 +177,6 @@ const UserDetailPage: React.FC = () => {
                 setRoles(rolesData);
             }
         } catch (err) {
-            console.error('Error loading options:', err);
         }
     }, []);
 
@@ -189,18 +193,18 @@ const UserDetailPage: React.FC = () => {
     // Save user changes
     const handleSave = async () => {
         if (!id) return;
-        
+
         setSaving(true);
         setError(null);
         setSuccess(null);
 
         try {
-            await apiPut(`/api/v1/persons/${id}`, formData);
+            await apiPut(`/api/v1/persons/${id}`, formData, { headers: operateHeaders });
             setSuccess('Utente aggiornato con successo');
             setEditMode(false);
             loadUser();
-        } catch (err: any) {
-            setError(err.message || 'Errore nel salvataggio');
+        } catch (err: unknown) {
+            setError('Errore nel salvataggio');
         } finally {
             setSaving(false);
         }
@@ -209,14 +213,14 @@ const UserDetailPage: React.FC = () => {
     // Toggle user active status
     const toggleUserStatus = async () => {
         if (!id || !user) return;
-        
+
         setSaving(true);
         try {
-            await apiPut(`/api/v1/persons/${id}`, { isActive: !user.isActive });
+            await apiPut(`/api/v1/persons/${id}`, { isActive: !user.isActive }, { headers: operateHeaders });
             setSuccess(user.isActive ? 'Utente disattivato' : 'Utente attivato');
             loadUser();
-        } catch (err: any) {
-            setError(err.message || 'Errore nel cambio stato');
+        } catch (err: unknown) {
+            setError('Errore nel cambio stato');
         } finally {
             setSaving(false);
         }
@@ -225,10 +229,10 @@ const UserDetailPage: React.FC = () => {
     // Add tenant access
     const addTenantAccess = async () => {
         if (!id || !newTenantAccess.tenantId) return;
-        
+
         setSaving(true);
         try {
-            await apiPost(`/api/v1/persons/${id}/tenant-access`, newTenantAccess);
+            await apiPost(`/api/v1/persons/${id}/tenant-access`, newTenantAccess, { headers: operateHeaders });
             setSuccess('Accesso tenant aggiunto');
             setShowAddTenantModal(false);
             setNewTenantAccess({
@@ -239,8 +243,8 @@ const UserDetailPage: React.FC = () => {
                 canManage: false
             });
             loadUser();
-        } catch (err: any) {
-            setError(err.message || 'Errore nell\'aggiunta accesso');
+        } catch (err: unknown) {
+            setError('Errore nell\'aggiunta accesso');
         } finally {
             setSaving(false);
         }
@@ -248,15 +252,15 @@ const UserDetailPage: React.FC = () => {
 
     // Remove tenant access
     const removeTenantAccess = async (accessId: string) => {
-        if (!confirm('Rimuovere questo accesso tenant?')) return;
-        
+        if (!(await confirmDialog({ title: 'Rimuovi accesso', message: 'Rimuovere questo accesso tenant?', variant: 'danger', confirmLabel: 'Rimuovi' }))) return;
+
         setSaving(true);
         try {
             await apiDelete(`/api/v1/person-tenant-access/${accessId}`);
             setSuccess('Accesso tenant rimosso');
             loadUser();
-        } catch (err: any) {
-            setError(err.message || 'Errore nella rimozione');
+        } catch (err: unknown) {
+            setError('Errore nella rimozione');
         } finally {
             setSaving(false);
         }
@@ -326,23 +330,23 @@ const UserDetailPage: React.FC = () => {
                                 <X className="w-4 h-4" />
                                 Annulla
                             </button>
-                            <button
+                            <CRUDPrimaryButton
                                 onClick={handleSave}
                                 disabled={saving}
-                                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2"
+                                operation="update"
                             >
                                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                                 Salva
-                            </button>
+                            </CRUDPrimaryButton>
                         </>
                     ) : (
-                        <button
+                        <CRUDPrimaryButton
                             onClick={() => setEditMode(true)}
-                            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2"
+                            operation="update"
                         >
                             <Edit2 className="w-4 h-4" />
                             Modifica
-                        </button>
+                        </CRUDPrimaryButton>
                     )}
                 </div>
             </div>
@@ -482,15 +486,17 @@ const UserDetailPage: React.FC = () => {
                                 <Building2 className="w-5 h-5 text-purple-600" />
                                 Accesso Tenant
                             </h2>
-                            <button
+                            <CRUDButton
                                 onClick={() => setShowAddTenantModal(true)}
+                                operation="create"
+                                variant="secondary"
                                 className="px-3 py-1.5 text-sm bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 flex items-center gap-1"
                             >
                                 <Plus className="w-4 h-4" />
                                 Aggiungi
-                            </button>
+                            </CRUDButton>
                         </div>
-                        
+
                         {/* Primary Tenant */}
                         <div className="mb-4 p-4 bg-purple-50 border border-purple-200 rounded-lg">
                             <div className="flex items-center justify-between">
@@ -511,13 +517,15 @@ const UserDetailPage: React.FC = () => {
                                     <div key={access.id} className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
                                         <div className="flex items-center justify-between mb-2">
                                             <span className="font-medium text-gray-900">{access.tenant.name}</span>
-                                            <button
+                                            <CRUDButton
                                                 onClick={() => removeTenantAccess(access.id)}
+                                                operation="delete"
+                                                variant="ghost"
                                                 className="p-1 text-red-600 hover:bg-red-100 rounded"
                                                 title="Rimuovi accesso"
                                             >
                                                 <Trash2 className="w-4 h-4" />
-                                            </button>
+                                            </CRUDButton>
                                         </div>
                                         <div className="flex flex-wrap gap-2">
                                             <span className={`px-2 py-0.5 text-xs rounded ${access.canRead ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
@@ -555,33 +563,32 @@ const UserDetailPage: React.FC = () => {
                         <div className="space-y-4">
                             <div className="flex items-center justify-between">
                                 <span className="text-gray-600">Account</span>
-                                <span className={`px-2 py-1 rounded-full text-sm font-medium ${
-                                    user.isActive 
-                                        ? 'bg-green-100 text-green-700' 
-                                        : 'bg-red-100 text-red-700'
-                                }`}>
+                                <span className={`px-2 py-1 rounded-full text-sm font-medium ${user.isActive
+                                    ? 'bg-green-100 text-green-700'
+                                    : 'bg-red-100 text-red-700'
+                                    }`}>
                                     {user.isActive ? 'Attivo' : 'Disattivato'}
                                 </span>
                             </div>
                             <div className="flex items-center justify-between">
                                 <span className="text-gray-600">Email</span>
-                                <span className={`px-2 py-1 rounded-full text-sm font-medium ${
-                                    user.emailVerified 
-                                        ? 'bg-green-100 text-green-700' 
-                                        : 'bg-amber-100 text-amber-700'
-                                }`}>
+                                <span className={`px-2 py-1 rounded-full text-sm font-medium ${user.emailVerified
+                                    ? 'bg-green-100 text-green-700'
+                                    : 'bg-amber-100 text-amber-700'
+                                    }`}>
                                     {user.emailVerified ? 'Verificata' : 'Non verificata'}
                                 </span>
                             </div>
                             <hr className="border-gray-200" />
-                            <button
+                            <CRUDButton
                                 onClick={toggleUserStatus}
                                 disabled={saving}
-                                className={`w-full py-2 rounded-lg flex items-center justify-center gap-2 ${
-                                    user.isActive
-                                        ? 'bg-red-50 text-red-700 hover:bg-red-100'
-                                        : 'bg-green-50 text-green-700 hover:bg-green-100'
-                                }`}
+                                operation="update"
+                                variant="ghost"
+                                className={`w-full py-2 rounded-lg flex items-center justify-center gap-2 ${user.isActive
+                                    ? 'bg-red-50 text-red-700 hover:bg-red-100'
+                                    : 'bg-green-50 text-green-700 hover:bg-green-100'
+                                    }`}
                             >
                                 {user.isActive ? (
                                     <>
@@ -594,7 +601,7 @@ const UserDetailPage: React.FC = () => {
                                         Attiva Account
                                     </>
                                 )}
-                            </button>
+                            </CRUDButton>
                         </div>
                     </div>
 
@@ -629,8 +636,8 @@ const UserDetailPage: React.FC = () => {
                         <div className="space-y-2">
                             {user.personRoles && user.personRoles.length > 0 ? (
                                 user.personRoles.map(pr => (
-                                    <div 
-                                        key={pr.id} 
+                                    <div
+                                        key={pr.id}
                                         className="px-3 py-2 bg-purple-50 text-purple-700 rounded-lg text-sm"
                                     >
                                         {pr.role.displayName || pr.role.name}
@@ -692,13 +699,13 @@ const UserDetailPage: React.FC = () => {
                             >
                                 Annulla
                             </button>
-                            <button
+                            <CRUDPrimaryButton
                                 onClick={addTenantAccess}
                                 disabled={!newTenantAccess.tenantId || saving}
-                                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+                                operation="create"
                             >
                                 Aggiungi
-                            </button>
+                            </CRUDPrimaryButton>
                         </div>
                     </div>
                 </div>

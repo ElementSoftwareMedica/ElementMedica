@@ -1,5 +1,18 @@
 import { apiGet, apiDelete, apiPost, apiPut, apiDeleteWithPayload } from './api';
+import type {
+  Person as PersonCore,
+  PersonTenantProfile,
+  PersonWithProfile,
+  PersonStatus
+} from '../types/personMultiTenant';
 
+// Re-export tipi dal modulo personMultiTenant per compatibilità
+export type { PersonCore, PersonTenantProfile, PersonWithProfile, PersonStatus };
+
+/**
+ * Person - Interfaccia legacy per compatibilità
+ * @deprecated Usa PersonWithProfile da types/personMultiTenant
+ */
 export interface Person {
   id: string;
   firstName: string;
@@ -10,15 +23,24 @@ export interface Person {
   residenceAddress?: string;
   position?: string;
   department?: string;
-  companyId?: string | number; // ✅ FIX: Supporta sia UUID (string) che ID numerico
+  companyId?: string | number;
+  // P49: Company sub-object per matching globale (company.id = global UUID)
+  company?: { id: string; ragioneSociale?: string; name?: string };
   birthDate?: string;
   roleType: string;
   isActive: boolean;
-  isOnline?: boolean; // Stato online/offline basato su sessioni attive
+  isOnline?: boolean;
   lastLogin?: string;
-  lastActivityAt?: string; // Ultima attività dell'utente
+  lastActivityAt?: string;
   createdAt: string;
   updatedAt: string;
+  // Progetto 48: Nuovi campi
+  tenantId?: string;
+  status?: string;
+  title?: string;
+  hourlyRate?: number | string;
+  tenantProfiles?: PersonTenantProfile[];
+  currentProfile?: PersonTenantProfile;
 }
 
 export interface CreatePersonDTO {
@@ -29,7 +51,8 @@ export interface CreatePersonDTO {
   residenceAddress?: string;
   position?: string;
   department?: string;
-  companyId?: number;
+  companyId?: string | number; // P49: alias for companyTenantProfileId (legacy support)
+  companyTenantProfileId?: string; // P49: UUID della CompanyTenantProfile
   roleType: string;
 }
 
@@ -41,7 +64,8 @@ export interface UpdatePersonDTO {
   residenceAddress?: string;
   position?: string;
   department?: string;
-  companyId?: number;
+  companyId?: string | number; // P49: alias for companyTenantProfileId (legacy support)
+  companyTenantProfileId?: string; // P49: UUID della CompanyTenantProfile
   roleType?: string;
   isActive?: boolean;
 }
@@ -55,6 +79,8 @@ export interface PersonsFilters {
   sortOrder?: 'asc' | 'desc';
   page?: number;
   limit?: number;
+  allTenants?: boolean | string;
+  tenantIds?: string;
 }
 
 export interface PersonsResponse {
@@ -84,6 +110,8 @@ export class PersonsService {
     if (filters.search) params.append('search', filters.search);
     if (filters.page) params.append('page', filters.page.toString());
     if (filters.limit) params.append('limit', filters.limit.toString());
+    if (filters.allTenants) params.append('allTenants', 'true');
+    if (filters.tenantIds) params.append('tenantIds', filters.tenantIds);
 
     const raw = await apiGet(`/api/v1/persons?${params.toString()}`) as any;
 
@@ -91,11 +119,6 @@ export class PersonsService {
     if (process.env.NODE_ENV === 'development' && raw) {
       const samplePerson = raw?.persons?.[0] || raw?.data?.persons?.[0] || raw?.data?.[0] || raw?.[0];
       if (samplePerson) {
-        console.debug('[PersonsService] Sample person:', {
-          id: samplePerson.id,
-          companyId: samplePerson.companyId,
-          hasCompanyId: !!samplePerson.companyId
-        });
       }
     }
 
@@ -139,6 +162,8 @@ export class PersonsService {
         position: p.position,
         department: p.department,
         companyId: finalCompanyId, // ✅ Mantieni il tipo originale (string o number)
+        // P49: Preserva company sub-object per matching con company.id (global UUID)
+        company: p.company ? { id: String(p.company.id), ragioneSociale: p.company.ragioneSociale, name: p.company.name || p.company.ragioneSociale } : undefined,
         roleType: p.roleType ?? p.role_type ?? p.role ?? 'USER',
         isActive: mapIsActive(p),
         isOnline: p.isOnline,
@@ -288,10 +313,26 @@ export class PersonsService {
   }
 
   /**
-   * Elimina più persone contemporaneamente
+   * Elimina più persone contemporaneamente (P58: con deletion reason per GDPR)
+   * @param personIds - Array di ID delle persone da eliminare
+   * @param deletionReason - Motivo eliminazione (min 10 caratteri, opzionale - default fornito)
    */
-  static async deleteMultiplePersons(personIds: string[]): Promise<void> {
-    await apiDeleteWithPayload('/api/v1/persons/bulk', { personIds });
+  static async deleteMultiplePersons(personIds: string[], deletionReason?: string): Promise<{
+    success: boolean;
+    deleted: number;
+    skipped: number;
+    errors: Array<{ personId: string; error: string }>;
+  }> {
+    const response = await apiDeleteWithPayload<{
+      success: boolean;
+      deleted: number;
+      skipped: number;
+      errors: Array<{ personId: string; error: string }>;
+    }>('/api/v1/persons/bulk', {
+      personIds,
+      deletionReason: deletionReason || 'Eliminazione massiva da gestione aziende'
+    });
+    return response;
   }
 
   /**
@@ -300,6 +341,51 @@ export class PersonsService {
   static async resetPassword(id: string): Promise<string> {
     const response = await PersonsService.resetPersonPassword(id);
     return response.temporaryPassword;
+  }
+
+  // ============================================
+  // PROGETTO 48: METODI PER PROFILI TENANT
+  // ============================================
+
+  /**
+   * Ottiene una persona con il profilo del tenant corrente
+   * Il backend automaticamente include il profilo basato sul tenantId della sessione
+   */
+  static async getPersonWithProfile(id: string): Promise<PersonWithProfile> {
+    const response = await apiGet(`/api/v1/persons/${id}?includeProfile=true`) as PersonWithProfile;
+    return response;
+  }
+
+  /**
+   * Ottiene tutti i profili tenant di una persona
+   */
+  static async getPersonProfiles(personId: string): Promise<PersonTenantProfile[]> {
+    const response = await apiGet(`/api/v1/person-profiles/${personId}`) as { profiles: PersonTenantProfile[] };
+    return response.profiles || [];
+  }
+
+  /**
+   * Crea o aggiorna il profilo di una persona per il tenant corrente
+   */
+  static async upsertPersonProfile(
+    personId: string,
+    tenantId: string,
+    profileData: Partial<PersonTenantProfile>
+  ): Promise<PersonTenantProfile> {
+    const response = await apiPost('/api/v1/person-profiles/get-or-create', {
+      personId,
+      tenantId,
+      ...profileData
+    }) as PersonTenantProfile;
+    return response;
+  }
+
+  /**
+   * Imposta il profilo primario di una persona
+   */
+  static async setPrimaryProfile(personId: string, tenantId: string): Promise<PersonTenantProfile> {
+    const response = await apiPost(`/api/v1/person-profiles/${personId}/tenant/${tenantId}/set-primary`, {}) as PersonTenantProfile;
+    return response;
   }
 }
 
@@ -318,5 +404,11 @@ export const checkUsernameAvailability = PersonsService.checkUsernameAvailabilit
 export const checkEmailAvailability = PersonsService.checkEmailAvailability;
 export const exportPersons = PersonsService.exportPersons;
 export const importPersons = PersonsService.importPersons;
+
+// Progetto 48: Export nuovi metodi per profili tenant
+export const getPersonWithProfile = PersonsService.getPersonWithProfile;
+export const getPersonProfiles = PersonsService.getPersonProfiles;
+export const upsertPersonProfile = PersonsService.upsertPersonProfile;
+export const setPrimaryProfile = PersonsService.setPrimaryProfile;
 
 export default PersonsService;

@@ -1,7 +1,7 @@
 /**
- * LoginFormazione - Login Page for Element Formazione
+ * LoginFormazione - Login Page for Element Sicurezza
  * 
- * Variante del login con branding Element Formazione (Blue theme)
+ * Variante del login con branding Element Sicurezza (Blue theme)
  * e redirect specifico al modulo formazione.
  * 
  * @module pages/formazione/LoginFormazione
@@ -11,6 +11,7 @@ import React, { useState, useEffect } from 'react';
 import { Navigate, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Eye, EyeOff, Lock, User, GraduationCap, Building2, Award, Phone, Mail } from 'lucide-react';
+import ForceChangePasswordModal from '../../components/auth/ForceChangePasswordModal';
 
 const LoginFormazione: React.FC = () => {
     const [identifier, setIdentifier] = useState('');
@@ -20,12 +21,12 @@ const LoginFormazione: React.FC = () => {
     const [error, setError] = useState('');
     const [loginSuccess, setLoginSuccess] = useState(false);
 
-    const { login, isAuthenticated } = useAuth();
+    const { login, isAuthenticated, mustChangePassword, pendingPassword, clearMustChangePassword, logout } = useAuth();
     const navigate = useNavigate();
 
     // Redirect quando isAuthenticated diventa true dopo login
     useEffect(() => {
-        if (loginSuccess && isAuthenticated) {
+        if (loginSuccess && isAuthenticated && !mustChangePassword) {
             const savedRedirect = sessionStorage.getItem('redirectAfterLogin');
             if (savedRedirect && savedRedirect !== '/login') {
                 sessionStorage.removeItem('redirectAfterLogin');
@@ -34,7 +35,7 @@ const LoginFormazione: React.FC = () => {
                 navigate('/dashboard', { replace: true });
             }
         }
-    }, [loginSuccess, isAuthenticated, navigate]);
+    }, [loginSuccess, isAuthenticated, mustChangePassword, navigate]);
 
     // Se già autenticato, reindirizza alla dashboard
     if (isAuthenticated && !loginSuccess) {
@@ -51,15 +52,31 @@ const LoginFormazione: React.FC = () => {
             // Setta il flag di successo, il useEffect farà il redirect quando isAuthenticated è true
             setLoginSuccess(true);
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Errore durante il login');
+            setError('Errore durante il login');
             setIsLoading(false);
         }
     };
 
     return (
-        <div className="min-h-screen flex" data-brand="element-formazione">
+        <div className="min-h-screen flex" data-brand="element-sicurezza">
+            {/* Modal forzato cambio password */}
+            {mustChangePassword && pendingPassword && (
+                <ForceChangePasswordModal
+                    currentPassword={pendingPassword}
+                    onSuccess={() => {
+                        clearMustChangePassword();
+                        setLoginSuccess(true);
+                    }}
+                    onLogout={async () => {
+                        clearMustChangePassword();
+                        await logout();
+                        setError('');
+                        setPassword('');
+                    }}
+                />
+            )}
             {/* Left Panel - Branding */}
-            <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 relative overflow-hidden">
+            <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden" style={{ backgroundImage: 'linear-gradient(to bottom right, var(--color-primary-600), var(--color-primary-700), var(--color-primary-800))' }}>
                 {/* Background Pattern */}
                 <div className="absolute inset-0 opacity-10">
                     <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
@@ -80,8 +97,8 @@ const LoginFormazione: React.FC = () => {
                             <GraduationCap className="h-10 w-10 text-white" />
                         </div>
                         <div>
-                            <h1 className="text-3xl font-bold">ElementFormazione</h1>
-                            <p className="text-blue-200">Formazione & Lavoro</p>
+                            <h1 className="text-3xl font-bold">ElementSicurezza</h1>
+                            <p className="text-white/70">Formazione & Lavoro</p>
                         </div>
                     </div>
 
@@ -93,7 +110,7 @@ const LoginFormazione: React.FC = () => {
                             </div>
                             <div>
                                 <h3 className="text-lg font-semibold mb-1">Gestione Corsi</h3>
-                                <p className="text-blue-100 text-sm">
+                                <p className="text-white/80 text-sm">
                                     Pianificazione, gestione aule e calendario corsi in un'unica piattaforma.
                                 </p>
                             </div>
@@ -105,7 +122,7 @@ const LoginFormazione: React.FC = () => {
                             </div>
                             <div>
                                 <h3 className="text-lg font-semibold mb-1">Formazione Sicurezza</h3>
-                                <p className="text-blue-100 text-sm">
+                                <p className="text-white/80 text-sm">
                                     Corsi D.Lgs 81/08, RSPP, primo soccorso e antincendio certificati.
                                 </p>
                             </div>
@@ -117,7 +134,7 @@ const LoginFormazione: React.FC = () => {
                             </div>
                             <div>
                                 <h3 className="text-lg font-semibold mb-1">Attestati Digitali</h3>
-                                <p className="text-blue-100 text-sm">
+                                <p className="text-white/80 text-sm">
                                     Generazione automatica attestati con QR code verificabile online.
                                 </p>
                             </div>
@@ -129,7 +146,7 @@ const LoginFormazione: React.FC = () => {
                             </div>
                             <div>
                                 <h3 className="text-lg font-semibold mb-1">GDPR Compliant</h3>
-                                <p className="text-blue-100 text-sm">
+                                <p className="text-white/80 text-sm">
                                     Sicurezza dei dati e conformità normativa garantita.
                                 </p>
                             </div>
@@ -137,24 +154,24 @@ const LoginFormazione: React.FC = () => {
                     </div>
 
                     {/* Footer */}
-                    <div className="text-sm text-blue-200">
-                        <p>© 2025 ElementFormazione - Formazione e Lavoro</p>
+                    <div className="text-sm text-white/70">
+                        <p>© 2025 ElementSicurezza - Formazione e Lavoro</p>
                         <p className="mt-1">Un prodotto Element Software</p>
                     </div>
                 </div>
             </div>
 
             {/* Right Panel - Login Form */}
-            <div className="w-full lg:w-1/2 flex items-center justify-center bg-gray-50 px-4 py-12">
+            <div className="w-full lg:w-1/2 flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4 py-12">
                 <div className="w-full max-w-md">
                     {/* Mobile Logo */}
                     <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
-                        <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center">
+                        <div className="w-12 h-12 bg-primary-600 rounded-xl flex items-center justify-center">
                             <GraduationCap className="h-7 w-7 text-white" />
                         </div>
                         <div>
-                            <h1 className="text-xl font-bold text-gray-900">ElementFormazione</h1>
-                            <p className="text-sm text-gray-500">Formazione e Lavoro</p>
+                            <h1 className="text-xl font-bold text-gray-900 dark:text-gray-50">ElementSicurezza</h1>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Formazione e Lavoro</p>
                         </div>
                     </div>
 
@@ -186,7 +203,7 @@ const LoginFormazione: React.FC = () => {
                                         type="text"
                                         autoComplete="username"
                                         required
-                                        className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none"
+                                        className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all outline-none"
                                         placeholder="email@esempio.com"
                                         value={identifier}
                                         onChange={(e) => setIdentifier(e.target.value)}
@@ -208,7 +225,7 @@ const LoginFormazione: React.FC = () => {
                                         type={showPassword ? 'text' : 'password'}
                                         autoComplete="current-password"
                                         required
-                                        className="w-full pl-12 pr-12 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none"
+                                        className="w-full pl-12 pr-12 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all outline-none"
                                         placeholder="••••••••"
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
@@ -227,11 +244,11 @@ const LoginFormazione: React.FC = () => {
                                 <label className="flex items-center">
                                     <input
                                         type="checkbox"
-                                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
                                     />
                                     <span className="ml-2 text-sm text-gray-600">Ricordami</span>
                                 </label>
-                                <Link to="/forgot-password" className="text-sm text-blue-600 hover:text-blue-700 font-medium">
+                                <Link to="/forgot-password" className="text-sm text-primary-600 hover:text-primary-700 font-medium">
                                     Password dimenticata?
                                 </Link>
                             </div>
@@ -239,7 +256,7 @@ const LoginFormazione: React.FC = () => {
                             <button
                                 type="submit"
                                 disabled={isLoading}
-                                className="w-full py-3 text-base font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-200"
+                                className="w-full py-3 text-base font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-primary-200"
                             >
                                 {isLoading ? (
                                     <span className="flex items-center justify-center gap-2">
@@ -260,12 +277,12 @@ const LoginFormazione: React.FC = () => {
                     <div className="mt-8 text-center">
                         <p className="text-sm text-gray-500 mb-3">Hai bisogno di assistenza?</p>
                         <div className="flex items-center justify-center gap-4 text-sm">
-                            <a href="tel:+390123456789" className="flex items-center gap-1 text-gray-600 hover:text-blue-600">
+                            <a href="tel:+393516239176" className="flex items-center gap-1 text-gray-600 hover:text-primary-600">
                                 <Phone className="h-4 w-4" />
                                 <span>Supporto</span>
                             </a>
                             <span className="text-gray-300">|</span>
-                            <a href="mailto:support@elementformazione.it" className="flex items-center gap-1 text-gray-600 hover:text-blue-600">
+                            <a href="mailto:info@elementsicurezza.com" className="flex items-center gap-1 text-gray-600 hover:text-primary-600">
                                 <Mail className="h-4 w-4" />
                                 <span>Email</span>
                             </a>

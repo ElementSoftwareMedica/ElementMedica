@@ -38,18 +38,18 @@ class DataInitializer {
 
             // 1. Verifica/crea tenant di default
             const defaultTenant = await this.ensureDefaultTenant();
-            
+
             // 2. Crea/aggiorna account admin
             const adminPerson = await this.createAdminAccount(defaultTenant.id);
-            
+
             // 3. Imposta gerarchia dei ruoli
             await this.setupRoleHierarchy(adminPerson.id, defaultTenant.id);
-            
+
             // 4. Crea permessi di base
             await this.createBasePermissions(adminPerson.id, defaultTenant.id);
 
             await this.log('✅ Inizializzazione completata con successo');
-            
+
         } catch (error) {
             await this.log(`❌ Errore durante l'inizializzazione: ${error.message}`);
             throw error;
@@ -60,7 +60,7 @@ class DataInitializer {
 
     async ensureDefaultTenant() {
         await this.log('📋 Verifica tenant di default...');
-        
+
         // Prima cerca il tenant globale esistente
         let tenant = await prisma.tenant.findFirst({
             where: { slug: 'global' }
@@ -97,27 +97,34 @@ class DataInitializer {
 
     async createAdminAccount(tenantId) {
         await this.log('👤 Creazione/aggiornamento account admin...');
-        
-        // Verifica se l'admin esiste già
-        let adminPerson = await prisma.person.findUnique({
-            where: { email: this.adminCredentials.email }
+
+        // P48: Cerca admin per email nel PersonTenantProfile
+        const existingProfile = await prisma.personTenantProfile.findFirst({
+            where: { email: this.adminCredentials.email, tenantId, deletedAt: null },
+            include: { person: true }
         });
+        let adminPerson = existingProfile?.person;
 
         const hashedPassword = await bcrypt.hash(this.adminCredentials.password, 12);
 
         if (!adminPerson) {
-            // Crea nuovo admin
+            // P48: Crea Person con soli campi globali + PersonTenantProfile
             adminPerson = await prisma.person.create({
                 data: {
                     firstName: this.adminCredentials.firstName,
                     lastName: this.adminCredentials.lastName,
-                    email: this.adminCredentials.email,
+                    username: this.adminCredentials.email.split('@')[0],
                     password: hashedPassword,
-                    status: 'ACTIVE',
-                    globalRole: 'ADMIN',
-                    tenantId: tenantId,
                     gdprConsentDate: new Date(),
-                    gdprConsentVersion: '1.0'
+                    gdprConsentVersion: '1.0',
+                    tenantProfiles: {
+                        create: {
+                            tenantId,
+                            email: this.adminCredentials.email,
+                            status: 'ACTIVE',
+                            isPrimary: true
+                        }
+                    }
                 }
             });
             await this.log('✓ Account admin creato');
@@ -126,11 +133,13 @@ class DataInitializer {
             adminPerson = await prisma.person.update({
                 where: { id: adminPerson.id },
                 data: {
-                    password: hashedPassword,
-                    globalRole: 'ADMIN',
-                    status: 'ACTIVE',
-                    tenantId: tenantId
+                    password: hashedPassword
                 }
+            });
+            // Aggiorna anche il profilo
+            await prisma.personTenantProfile.updateMany({
+                where: { personId: adminPerson.id, tenantId, deletedAt: null },
+                data: { status: 'ACTIVE' }
             });
             await this.log('✓ Account admin aggiornato');
         }
@@ -171,27 +180,33 @@ class DataInitializer {
 
         await this.log('✓ Ruolo ADMIN assegnato all\'account admin');
 
-        // Verifica se esiste un SUPER_ADMIN
-        const superAdminExists = await prisma.person.findFirst({
+        // Verifica se esiste un SUPER_ADMIN nel tenant
+        const superAdminRole = await prisma.personRole.findFirst({
             where: {
-                globalRole: 'SUPER_ADMIN',
-                tenantId: tenantId
+                roleType: 'SUPER_ADMIN',
+                tenantId: tenantId,
+                isActive: true
             }
         });
 
-        if (!superAdminExists) {
-            // Crea un SUPER_ADMIN di sistema
+        if (!superAdminRole) {
+            // P48: Crea SUPER_ADMIN con PersonTenantProfile
             const superAdmin = await prisma.person.create({
                 data: {
                     firstName: 'Super',
                     lastName: 'Admin',
-                    email: 'superadmin@system.local',
+                    username: 'superadmin',
                     password: await bcrypt.hash('SuperAdmin123!', 12),
-                    status: 'ACTIVE',
-                    globalRole: 'SUPER_ADMIN',
-                    tenantId: tenantId,
                     gdprConsentDate: new Date(),
-                    gdprConsentVersion: '1.0'
+                    gdprConsentVersion: '1.0',
+                    tenantProfiles: {
+                        create: {
+                            tenantId,
+                            email: 'superadmin@system.local',
+                            status: 'ACTIVE',
+                            isPrimary: true
+                        }
+                    }
                 }
             });
 
@@ -243,7 +258,7 @@ class DataInitializer {
         // Permessi di base per l'admin
         const basePermissions = [
             'VIEW_COMPANIES',
-            'CREATE_COMPANIES', 
+            'CREATE_COMPANIES',
             'EDIT_COMPANIES',
             'DELETE_COMPANIES',
             'VIEW_EMPLOYEES',

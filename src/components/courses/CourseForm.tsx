@@ -3,6 +3,7 @@ import type { Course } from '../../types/courses';
 import { useToast } from '../../hooks/useToast';
 import { createCourse, updateCourse } from '../../services/courses';
 import { isRLSCourse, getRiskLevelOptions } from '../../utils/courseLabels';
+import { useTenantMode } from '../../contexts/TenantModeContext';
 import {
   Award,
   BookOpen,
@@ -41,6 +42,8 @@ export const CourseForm: React.FC<CourseFormProps> = ({
   cancelLabel = 'Annulla'
 }) => {
   const { showToast } = useToast();
+  const { getOperateHeaders } = useTenantMode();
+  const operateHeaders = getOperateHeaders();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -56,7 +59,7 @@ export const CourseForm: React.FC<CourseFormProps> = ({
     contents: course?.contents || '',
     code: course?.code || '',
     category: course?.category || '',
-    status: course?.status || 'Active',
+    status: course?.status || 'DRAFT',
     // Nuovi campi per frontend pubblico
     subcategory: course?.subcategory || '',
     riskLevel: course?.riskLevel || '',
@@ -92,14 +95,14 @@ export const CourseForm: React.FC<CourseFormProps> = ({
 
       if (course) {
         // Update existing course
-        await updateCourse(course.id, payload);
+        await updateCourse(course.id, payload, { headers: operateHeaders });
         showToast({
           message: 'Corso aggiornato con successo',
           type: 'success'
         });
       } else {
         // Create new course
-        await createCourse(payload);
+        await createCourse(payload, { headers: operateHeaders });
         showToast({
           message: 'Corso creato con successo',
           type: 'success'
@@ -107,9 +110,8 @@ export const CourseForm: React.FC<CourseFormProps> = ({
       }
       onSubmit(payload);
     } catch (error) {
-      console.error('Error saving course:', error);
       showToast({
-        message: `Errore: ${error instanceof Error ? error.message : 'Errore nel salvataggio del corso'}`,
+        message: `Errore: ${'Errore nel salvataggio del corso'}`,
         type: 'error'
       });
     } finally {
@@ -134,9 +136,12 @@ export const CourseForm: React.FC<CourseFormProps> = ({
 
   // Options per i select
   const statusOptions = [
-    { value: 'Active', label: 'Attivo' },
-    { value: 'Inactive', label: 'Inattivo' },
-    { value: 'Draft', label: 'Bozza' }
+    { value: 'DRAFT', label: 'Bozza' },
+    { value: 'ACTIVE', label: 'Attivo' },
+    { value: 'PUBLISHED', label: 'Pubblicato' },
+    { value: 'SUSPENDED', label: 'Sospeso' },
+    { value: 'CANCELLED', label: 'Annullato' },
+    { value: 'COMPLETED', label: 'Completato' }
   ];
 
   // Ottieni opzioni dinamiche per livello di rischio basate sul titolo del corso

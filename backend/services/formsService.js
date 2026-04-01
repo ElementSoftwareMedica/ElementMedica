@@ -4,7 +4,7 @@
  * Estratta dai controllers per migliorare testabilità e riutilizzabilità
  */
 
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/prisma-optimization.js';
 import crypto from 'crypto';
 import logger from '../utils/logger.js';
 import {
@@ -13,7 +13,6 @@ import {
   SUBMISSION_SOURCES
 } from '../constants/formEnums.js';
 
-const prisma = new PrismaClient();
 
 /**
  * ============================================
@@ -170,7 +169,7 @@ export const checkTemplateNameUniqueness = async ({ tenantId, name, excludeId = 
     where.id = { not: excludeId };
   }
 
-  const existing = await prisma.formTemplate.findFirst({ where });
+  const existing = await prisma.formTemplate.findFirst({ where: { ...where, deletedAt: null } });
   return existing === null; // true se nome è disponibile
 };
 
@@ -195,7 +194,7 @@ export const createTemplate = async ({ tenantId, userId, templateData, fields = 
     } = templateData;
 
     // Crea template con solo i campi validi
-    const template = await tx.form_templates.create({
+    const template = await tx.formTemplate.create({
       data: {
         id: crypto.randomUUID(),
         name,
@@ -254,7 +253,7 @@ export const createTemplate = async ({ tenantId, userId, templateData, fields = 
         };
       });
 
-      await tx.formFields.createMany({
+      await tx.formField.createMany({
         data: fieldsData
       });
     }
@@ -293,7 +292,7 @@ export const updateTemplate = async ({ tenantId, templateId, templateData, field
     updateData.updatedAt = new Date();
 
     // Aggiorna template
-    const template = await tx.form_templates.update({
+    const template = await tx.formTemplate.update({
       where: { id: templateId },
       data: updateData
     });
@@ -301,7 +300,7 @@ export const updateTemplate = async ({ tenantId, templateId, templateData, field
     // Se forniti, aggiorna campi
     if (fields !== null) {
       // Get existing field IDs
-      const existingFields = await tx.formFields.findMany({
+      const existingFields = await tx.formField.findMany({
         where: { templateId },
         select: { id: true, name: true }
       });
@@ -312,7 +311,7 @@ export const updateTemplate = async ({ tenantId, templateId, templateData, field
       // Delete fields that are not in the incoming list
       const fieldsToDelete = existingFields.filter(f => !incomingFieldIds.has(f.id));
       if (fieldsToDelete.length > 0) {
-        await tx.formFields.deleteMany({
+        await tx.formField.deleteMany({
           where: {
             id: { in: fieldsToDelete.map(f => f.id) }
           }
@@ -361,13 +360,13 @@ export const updateTemplate = async ({ tenantId, templateId, templateData, field
 
           if (field.id && existingFieldIds.has(field.id)) {
             // Update existing field
-            await tx.formFields.update({
+            await tx.formField.update({
               where: { id: field.id },
               data: fieldData
             });
           } else {
             // Create new field
-            await tx.formFields.create({
+            await tx.formField.create({
               data: {
                 id: field.id || crypto.randomUUID(),
                 ...fieldData
@@ -518,7 +517,16 @@ export const getSubmissionsList = async ({ tenantId, filters = {}, pagination = 
       where,
       include: {
         assignedTo: {
-          select: { id: true, firstName: true, lastName: true, email: true }
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            tenantProfiles: {
+              where: { deletedAt: null, isActive: true },
+              select: { email: true, isPrimary: true },
+              take: 1
+            }
+          }
         },
         CourseSchedule: {
           select: {
@@ -531,7 +539,16 @@ export const getSubmissionsList = async ({ tenantId, filters = {}, pagination = 
           }
         },
         persons_contact_submissions_relatedPersonIdTopersons: {
-          select: { id: true, firstName: true, lastName: true, email: true }
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            tenantProfiles: {
+              where: { deletedAt: null, isActive: true },
+              select: { email: true, isPrimary: true },
+              take: 1
+            }
+          }
         }
       },
       orderBy: { createdAt: 'desc' },
@@ -563,7 +580,16 @@ export const getSubmissionById = async ({ tenantId, submissionId }) => {
     },
     include: {
       assignedTo: {
-        select: { id: true, firstName: true, lastName: true, email: true }
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          tenantProfiles: {
+            where: { deletedAt: null, isActive: true },
+            select: { email: true, isPrimary: true },
+            take: 1
+          }
+        }
       },
       CourseSchedule: {
         select: {
@@ -576,10 +602,36 @@ export const getSubmissionById = async ({ tenantId, submissionId }) => {
         }
       },
       persons_contact_submissions_relatedPersonIdTopersons: {
-        select: { id: true, firstName: true, lastName: true, email: true, phone: true }
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          tenantProfiles: {
+            where: { deletedAt: null, isActive: true },
+            select: { email: true, phone: true, isPrimary: true },
+            take: 1
+          }
+        }
       }
     }
   });
+
+  // P48: Flatten email from tenantProfiles
+  if (submission) {
+    const flattenPerson = (person) => person ? {
+      id: person.id,
+      firstName: person.firstName,
+      lastName: person.lastName,
+      email: person.tenantProfiles?.[0]?.email || null,
+      phone: person.tenantProfiles?.[0]?.phone || null
+    } : null;
+
+    return {
+      ...submission,
+      assignedTo: flattenPerson(submission.assignedTo),
+      persons_contact_submissions_relatedPersonIdTopersons: flattenPerson(submission.persons_contact_submissions_relatedPersonIdTopersons)
+    };
+  }
 
   return submission;
 };
@@ -595,14 +647,31 @@ export const createSubmission = async ({
   userAgent = null
 }) => {
   // Recupera template per validazione
-  const template = await prisma.formTemplate.findUnique({
-    where: { id: submissionData.templateId },
-    include: { formFields: true }
-  });
+  // Security: usa findFirst senza filtro tenantId per supportare template pubblici,
+  // ma verifica che il template appartenga al tenant oppure sia pubblico (isPublic: true)
+  const template = submissionData.templateId
+    ? await prisma.formTemplate.findFirst({
+      where: { id: submissionData.templateId, deletedAt: null },
+      include: { formFields: true }
+    })
+    : null;
 
-  if (!template) {
+  if (submissionData.templateId && !template) {
     throw new Error('Template non trovato');
   }
+
+  // Security check F129: previene cross-tenant injection — il template deve
+  // appartenere al tenant specificato oppure essere marcato come pubblico
+  if (template && !template.isPublic && template.tenantId !== tenantId) {
+    logger.warn('Cross-tenant template injection attempt blocked', {
+      templateId: submissionData.templateId,
+      templateTenantId: template.tenantId,
+      requestedTenantId: tenantId
+    });
+    throw new Error('Template non disponibile per questo tenant');
+  }
+  // Usa il tenantId del template come fonte autoritativa
+  const effectiveTenantId = template ? template.tenantId : tenantId;
 
   // Estrai sections dal settings con logging dettagliato
   let sections = [];
@@ -669,19 +738,36 @@ export const createSubmission = async ({
     };
 
     // Auto-create Person se richiesto
+    // P48/P63: Person non ha email, phone, tenantId — usare Person + PersonTenantProfile
     if (autoCreatePerson && !relatedPersonId) {
-      const personData = {
-        firstName: legacyFields.name.split(' ')[0] || 'Anonimo',
-        lastName: legacyFields.name.split(' ').slice(1).join(' ') || '',
-        email: legacyFields.email,
-        phone: formDataObject.phone || submissionData.phone || null,
-        tenantId,
-        source: 'form_submission',
-        id: crypto.randomUUID()
-      };
+      const nameParts = legacyFields.name.split(' ');
+      const firstName = nameParts[0] || 'Anonimo';
+      const lastName = nameParts.slice(1).join(' ') || '';
+      const newPersonId = crypto.randomUUID();
+      const username = `form_${newPersonId.slice(0, 8)}`;
+      const submissionEmail = legacyFields.email !== 'noreply@form.local' ? legacyFields.email : null;
 
-      const person = await tx.persons.create({
-        data: personData
+      // Crea Person con soli campi anagrafici (P63: no tenantId, email, phone)
+      const person = await tx.person.create({
+        data: {
+          id: newPersonId,
+          firstName,
+          lastName,
+          username,
+        }
+      });
+
+      // P48: Crea PersonTenantProfile per i dati specifici del tenant
+      await tx.personTenantProfile.create({
+        data: {
+          personId: newPersonId,
+          tenantId: effectiveTenantId,
+          email: submissionEmail,
+          phone: formDataObject.phone || submissionData.phone || null,
+          status: 'PENDING',
+          isActive: false,
+          isPrimary: true,
+        }
       });
 
       relatedPersonId = person.id;
@@ -700,7 +786,7 @@ export const createSubmission = async ({
       autoCreatePerson,
       formVersion: submissionData.formVersion || 1,
       relatedPersonId,
-      tenantId,
+      tenantId: effectiveTenantId,
       ipAddress,
       userAgent,
       status: SUBMISSION_STATUS.PENDING,
@@ -957,7 +1043,7 @@ export const checkOptionCapacity = async ({ tenantId, templateId, fieldName, opt
     }
 
     // 4. Conta le submission esistenti per questa opzione
-    const currentCount = await prisma.contact_submissions.count({
+    const currentCount = await prisma.contactSubmission.count({
       where: {
         templateId,
         tenantId,
@@ -991,7 +1077,7 @@ export const checkOptionCapacity = async ({ tenantId, templateId, fieldName, opt
     // In caso di errore, allow submission per non bloccare il flusso
     return {
       available: true,
-      error: error.message
+      error: 'Verifica disponibilità non riuscita'
     };
   }
 };

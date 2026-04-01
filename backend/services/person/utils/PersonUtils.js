@@ -1,4 +1,5 @@
 import logger from '../../../utils/logger.js';
+import crypto from 'crypto';
 
 /**
  * Utility per la gestione e validazione dei dati delle persone
@@ -25,16 +26,20 @@ class PersonUtils {
     // Rimuovi tutti gli spazi e caratteri speciali dai nomi
     const cleanFirstName = firstName.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
     const cleanLastName = lastName.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
-    
-    const baseUsername = `${cleanFirstName}.${cleanLastName}`;
+
+    // VarChar(50): trunca la parte base a 47 chars per lasciare spazio al suffisso ".N"
+    const MAX_BASE = 47;
+    const rawBase = `${cleanFirstName}.${cleanLastName}`;
+    const baseUsername = rawBase.length > MAX_BASE ? rawBase.substring(0, MAX_BASE) : rawBase;
     let username = baseUsername;
     let counter = 1;
-    
+
     while (await checkExistence(username)) {
-      username = `${baseUsername}${counter}`;
+      const suffix = String(counter);
+      username = `${baseUsername.substring(0, MAX_BASE - suffix.length)}${suffix}`;
       counter++;
     }
-    
+
     return username;
   }
 
@@ -45,10 +50,10 @@ class PersonUtils {
    */
   static parseDate(dateStr) {
     if (!dateStr) return null;
-    
+
     // Normalizza la stringa rimuovendo spazi extra
     const cleanDateStr = dateStr.toString().trim();
-    
+
     // Prova diversi formati
     const formats = [
       /^(\d{2})\/(\d{2})\/(\d{4})$/, // DD/MM/YYYY
@@ -57,12 +62,12 @@ class PersonUtils {
       /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/, // D/M/YYYY
       /^(\d{1,2})-(\d{1,2})-(\d{4})$/, // D-M-YYYY
     ];
-    
+
     for (const format of formats) {
       const match = cleanDateStr.match(format);
       if (match) {
         let day, month, year;
-        
+
         if (format.source.includes('(\\d{4})') && format.source.indexOf('(\\d{4})') === 1) {
           // YYYY-MM-DD
           year = parseInt(match[1]);
@@ -74,7 +79,7 @@ class PersonUtils {
           month = parseInt(match[2]);
           year = parseInt(match[3]);
         }
-        
+
         // Validazione dei valori
         if (day >= 1 && day <= 31 && month >= 1 && month <= 12 && year >= 1900 && year <= 2100) {
           const date = new Date(year, month - 1, day);
@@ -85,7 +90,7 @@ class PersonUtils {
         }
       }
     }
-    
+
     // Fallback: prova a parsare direttamente
     try {
       const date = new Date(cleanDateStr);
@@ -95,7 +100,7 @@ class PersonUtils {
     } catch (error) {
       logger.warn(`Impossibile parsare la data: ${cleanDateStr}`);
     }
-    
+
     return null;
   }
 
@@ -109,31 +114,31 @@ class PersonUtils {
     if (!taxCode || taxCode.length !== 16) {
       throw new Error('Codice fiscale non valido');
     }
-    
+
     const yearPart = taxCode.substring(6, 8);
     const monthPart = taxCode.substring(8, 9);
     const dayPart = taxCode.substring(9, 11);
-    
+
     // Mappa mesi
     const monthMap = {
       'A': 1, 'B': 2, 'C': 3, 'D': 4, 'E': 5, 'H': 6,
       'L': 7, 'M': 8, 'P': 9, 'R': 10, 'S': 11, 'T': 12
     };
-    
+
     const month = monthMap[monthPart];
     if (!month) {
       throw new Error('Mese non valido nel codice fiscale');
     }
-    
+
     // Calcola anno (assumendo che anni 00-30 siano 2000-2030, 31-99 siano 1931-1999)
     const year = parseInt(yearPart) <= 30 ? 2000 + parseInt(yearPart) : 1900 + parseInt(yearPart);
-    
+
     // Calcola giorno (per le donne si aggiunge 40)
     let day = parseInt(dayPart);
     if (day > 31) {
       day -= 40; // Donna
     }
-    
+
     return new Date(year, month - 1, day);
   }
 
@@ -173,10 +178,17 @@ class PersonUtils {
 
   /**
    * Genera una password temporanea sicura
-   * @returns {string} Password temporanea
+   * Formato: Prefisso + 10 caratteri random base64url + carattere speciale
+   * Esempio: Tmp_aB3dEf9Gh2!
+   * @returns {string} Password temporanea sicura
    */
   static generateTemporaryPassword() {
-    return 'Password123!';
+    // DEFAULT_TEMP_PASSWORD obbligatorio — nessun fallback hardcoded per sicurezza
+    const tempPassword = process.env.DEFAULT_TEMP_PASSWORD;
+    if (!tempPassword) {
+      throw new Error('[CONFIG] DEFAULT_TEMP_PASSWORD env var is required — set it in .env');
+    }
+    return tempPassword;
   }
 
   /**

@@ -12,7 +12,8 @@
  * @module services/clinicaApi
  */
 
-import { apiGet, apiPost, apiPut, apiPatch, apiDelete } from './api';
+import { apiGet, apiPost, apiPut, apiPatch, apiDelete, apiDeleteWithPayload, apiUpload, apiDownload, apiDownloadWithFilename } from './api';
+import type { PersonTenantProfile } from '../types/personMultiTenant';
 
 // Base URL for clinical endpoints
 const CLINICA_BASE = '/api/v1/clinica';
@@ -27,6 +28,27 @@ interface ApiResponse<T> {
     data: T;
     error?: string;
     message?: string;
+}
+
+// API Response con meta (per permessi e flag aggiuntivi)
+interface ApiResponseWithMeta<T> {
+    success: boolean;
+    data: T;
+    meta?: {
+        canViewOtherMedici?: boolean;
+        [key: string]: unknown;
+    };
+    error?: string;
+    message?: string;
+}
+
+// Risultato con meta inclusi
+export interface ResultWithMeta<T> {
+    data: T;
+    meta?: {
+        canViewOtherMedici?: boolean;
+        [key: string]: unknown;
+    };
 }
 
 // Helper per estrarre dati dalla risposta wrapper
@@ -115,6 +137,57 @@ export interface Poliambulatorio {
 // Prisma enum StatoAmbulatorio
 export type StatoAmbulatorio = 'ATTIVO' | 'INATTIVO' | 'MANUTENZIONE' | 'CHIUSO';
 
+// Tipi di chiusura speciale
+export type TipoChiusuraSpeciale =
+    | 'FESTIVITA'      // Festività nazionali (Natale, Pasqua, etc.)
+    | 'PONTE'          // Ponti (es. ponte 2 Giugno)
+    | 'FERIE_ESTIVE'   // Chiusura estiva
+    | 'FERIE_NATALIZIE'// Chiusura natalizia
+    | 'FERIE_PASQUALI' // Chiusura pasquale
+    | 'STRAORDINARIA'  // Chiusura straordinaria (es. ristrutturazione)
+    | 'FORMAZIONE'     // Chiusura per formazione del personale
+    | 'EVENTO'         // Chiusura per evento speciale
+    | 'ALTRO';         // Altro tipo di chiusura
+
+// Chiusure speciali della sede (festivi, ponti, ferie, etc.)
+export interface ChiusuraSpecialeSede {
+    id: string;
+    sedeId: string;
+    tipo: TipoChiusuraSpeciale;
+    nome: string;           // Nome della chiusura (es. "Natale", "Ponte 2 Giugno")
+    descrizione?: string;   // Descrizione opzionale
+    dataInizio: string;     // Data inizio chiusura (ISO string)
+    dataFine: string;       // Data fine chiusura (per chiusure multi-giorno)
+    oraInizio?: string;     // Orario inizio chiusura (se chiusura parziale)
+    oraFine?: string;       // Orario fine chiusura (se chiusura parziale)
+    isParziale: boolean;    // Se true, chiusura solo in parte della giornata
+    ricorrente: boolean;    // Se true, si ripete ogni anno alla stessa data
+    annoRiferimento?: number; // Anno di riferimento per chiusure ricorrenti
+    attivo: boolean;
+    tenantId: string;
+}
+
+// Input types for create/update operations (without auto-generated fields)
+export type ChiusuraSpecialeSedeInput = Omit<ChiusuraSpecialeSede, 'id' | 'sedeId' | 'tenantId'> & {
+    id?: string; // Optional for updates
+};
+
+// Orari di apertura settimanali della sede
+export interface OrarioSede {
+    id: string;
+    sedeId: string;
+    giornoSettimana: number; // 0=Domenica, 1=Lunedì, ..., 6=Sabato
+    fascia: number; // 1=Prima fascia (mattina), 2=Seconda fascia (pomeriggio), etc.
+    oraInizio: string; // Formato HH:MM
+    oraFine: string;   // Formato HH:MM
+    isChiuso: boolean;
+    note?: string;
+    tenantId: string;
+}
+
+// Input type for create/update operations (without auto-generated fields)
+export type OrarioSedeInput = Omit<OrarioSede, 'id' | 'sedeId' | 'tenantId'>;
+
 export interface SedePoliambulatorio {
     id: string;
     tenantId: string;
@@ -150,10 +223,21 @@ export interface SedePoliambulatorio {
         specialties?: string[];
     };
     ambulatori?: Ambulatorio[];
+    orariSettimanali?: OrarioSede[];
+    chiusureSpeciali?: ChiusuraSpecialeSede[];
     _count?: {
         ambulatori?: number;
     };
 }
+
+// Input type for creating/updating SedePoliambulatorio
+export type SedePoliambulatorioInput = Omit<
+    Partial<SedePoliambulatorio>,
+    'id' | 'tenantId' | 'poliambulatorioId' | 'createdAt' | 'updatedAt' | 'deletedAt' | 'poliambulatorio' | 'direttoreSanitario' | 'ambulatori' | '_count' | 'orariSettimanali' | 'chiusureSpeciali'
+> & {
+    orariSettimanali?: OrarioSedeInput[];
+    chiusureSpeciali?: ChiusuraSpecialeSedeInput[];
+};
 
 export interface Ambulatorio {
     id: string;
@@ -322,6 +406,10 @@ export interface Medico {
             nome: string;
             tipo?: string;
             brancaSpecialistica?: string;
+            prezzoBase?: number | null;
+            prezzoPrimaVisita?: number | null;
+            prezzoControllo?: number | null;
+            durata?: number | null;
         };
     }>;
     note?: string;
@@ -332,6 +420,9 @@ export interface Medico {
         roleType: string;
         isActive: boolean;
     }>;
+    // Multi-tenant support (Progetto 48)
+    tenantProfiles?: PersonTenantProfile[];
+    currentProfile?: PersonTenantProfile;
     ambulatoriAssegnati?: MedicoAmbulatorio[];
     disponibilita?: DisponibilitaMedico[];
     _count?: {
@@ -461,6 +552,20 @@ export interface PrestazioneStrumento {
     strumento?: Strumento;
 }
 
+// Tipologia strumento richiesta per prestazione
+export interface PrestazioneTipologiaStrumento {
+    id: string;
+    prestazioneId: string;
+    tipologia: TipologiaStrumento;
+    isObbligatorio: boolean;
+    quantitaMinima: number;
+    note?: string;
+    tenantId: string;
+    createdAt: string;
+    updatedAt: string;
+    deletedAt?: string;
+}
+
 export interface AmbulatorioPrestazione {
     id: string;
     ambulatorioId: string;
@@ -509,6 +614,12 @@ export interface Prestazione {
     istruzioniPreparazione?: string;
     richiedeStrumento: boolean;
     strumentiRichiesti: string[];
+    // P65.7: Gestione prima visita / controllo
+    prezzoPrimaVisita?: number; // Prezzo prima visita (se diverso da prezzoBase)
+    prezzoControllo?: number;   // Prezzo controllo (se diverso da prezzoBase)
+    durataPrimaVisita?: number; // Durata prima visita in minuti (se diversa da durataPrevista)
+    durataControllo?: number;   // Durata visita di controllo in minuti (se diversa da durataPrevista)
+    scadenzaDefaultMesi?: number; // Scadenza default per prossimo controllo (mesi)
     createdAt: string;
     updatedAt: string;
     deletedAt?: string;
@@ -517,8 +628,10 @@ export interface Prestazione {
     ambulatori?: AmbulatorioPrestazione[];
     listiniPrezzo?: ListinoPrezzo[];
     mediciAbilitati?: MedicoAbilitato[];
-    templateCampi?: TemplateCampoVisita[];
+    // P65.7: templateCampi rimosso - consolidato in visitTemplates con scope=CATALOGO
+    visitTemplates?: VisitTemplate[];
     strumentiNecessari?: PrestazioneStrumento[];
+    tipologieRichieste?: PrestazioneTipologiaStrumento[]; // Tipologie strumenti richieste
     _count?: {
         visite?: number;
         ambulatori?: number;
@@ -537,6 +650,7 @@ export interface PrestazioneAmbulatorio {
 }
 
 // Enum per i tipi di campo visita (allineato a Prisma TipoCampoVisita)
+// P65.7: Usato da VisitField in VisitTemplate
 export type TipoCampoVisita =
     | 'TESTO'
     | 'TEXTAREA'
@@ -549,31 +663,15 @@ export type TipoCampoVisita =
     | 'MULTISELECT'
     | 'FILE';
 
-export interface TemplateCampoVisita {
-    id: string;
-    tenantId: string;
-    prestazioneId: string;
-    nome: string;           // Field name (internal)
-    etichetta: string;      // Display label
-    tipo: TipoCampoVisita;
-    obbligatorio: boolean;
-    ordine: number;         // Display order
-    opzioni?: string;       // JSON array for SELECT/MULTISELECT
-    valoreDefault?: string;
-    validazione?: string;   // JSON validation rules
-    placeholder?: string;
-    helpText?: string;
-    isActive: boolean;
-    createdAt: string;
-    updatedAt: string;
-    deletedAt?: string;
-}
+// P65.7: TemplateCampoVisita RIMOSSO - consolidato in VisitTemplate con scope=CATALOGO
+// Usare visitTemplatesApi per gestire i template catalogo delle prestazioni
 
 export interface ListinoPrezzo {
     id: string;
     tenantId: string;
     prestazioneId?: string;      // Opzionale: per listino prestazione singola
     bundleId?: string;           // Opzionale: per listino bundle (Tariffario Avanzato)
+    documentoTemplateId?: string; // P72_19: per listino questionario MDL
     poliambulatorioId?: string;
     convenzioneId?: string;
     medicoId?: string;           // Tariffario: prezzo specifico per medico
@@ -601,6 +699,7 @@ export interface ListinoPrezzo {
     // Relations
     prestazione?: Prestazione;
     bundle?: OffertaBundle;      // Relazione bundle
+    documentoTemplate?: { id: string; nome: string; codice?: string; tipo?: string }; // P72_19
     poliambulatorio?: Poliambulatorio;
     convenzione?: Convenzione;
     medico?: Medico;
@@ -608,6 +707,256 @@ export interface ListinoPrezzo {
 
 // Tariffario: Tipo compenso medico
 export type TipoCompensoMedico = 'PERCENTUALE' | 'FISSO' | 'MINIMO_MASSIMO';
+
+// =====================================================
+// MDL - MEDICINA DEL LAVORO TYPES (Progetto 56)
+// =====================================================
+
+// Enum types - aligned with backend schema
+/** Tipi visita MDL — D.Lgs 81/08 art. 41 + D.Lgs 19/2022. Allineato a Prisma enum TipoVisitaMDL. */
+export type TipoVisitaMDL =
+    // Visite ordinarie (Art. 41 c.2)
+    | 'PREVENTIVA'                // Art. 41 c.2a – prima dell'assunzione (include prima visita nuovo lavoratore)
+    | 'PREVENTIVA_PREASSUNTIVA'   // Art. 41 c.2a-bis – preassuntiva su scelta datore
+    | 'PERIODICA'
+    | 'CAMBIO_MANSIONE'
+    | 'CESSAZIONE_RAPPORTO'
+    | 'PRECEDENTE_ASSENZA'
+    | 'SU_RICHIESTA_LAVORATORE'
+    // Visite speciali
+    | 'STRAORDINARIA'
+    | 'VERIFICA_IDONEITA'
+    | 'RIENTRO_MATERNITA';
+
+export type CodiceRischio =
+    | 'RUM' | 'VIB_MB' | 'VIB_WBV' | 'RAD_ION' | 'RAD_NIR' | 'CEM' | 'MIC' | 'CHI'
+    | 'CAN' | 'AMI' | 'PIO' | 'BIO' | 'MMC' | 'MOV_RIP' | 'POS' | 'NOT' | 'VDT'
+    | 'SLC' | 'QUO' | 'SPA_CON' | 'GUI_MEZ' | 'CAR_ELE' | 'ELE' | 'INC' | 'ISO'
+    | 'IPE' | 'POL' | 'ALC';
+
+export type LivelloRischio = 'BASSO' | 'MEDIO' | 'ALTO' | 'MOLTO_ALTO';
+
+export type CompilatoreQuestionario = 'MEDICO' | 'PAZIENTE' | 'ENTRAMBI' | 'ASSISTITO';
+
+// Aligned with Prisma enum CategoriaRischio
+export type CategoriaRischio =
+    | 'FISICI'      // Rumore, vibrazioni, radiazioni, microclima
+    | 'CHIMICI'     // Chimici, cancerogeni, amianto, piombo
+    | 'BIOLOGICI'   // Agenti biologici
+    | 'ERGONOMICI'  // MMC, movimenti ripetitivi, posture
+    | 'ORGANIZZATIVI' // Notturno, VDT, stress
+    | 'SPECIFICI'   // Quota, spazi confinati, guida
+    | 'SETTORIALI'; // Carrelli, elettrico, incendio
+
+export type TipoGiudizioIdoneita =
+    | 'IDONEO'
+    | 'IDONEO_CON_PRESCRIZIONI'
+    | 'IDONEO_CON_LIMITAZIONI'
+    | 'NON_IDONEO_TEMPORANEO'
+    | 'NON_IDONEO_PERMANENTE';
+
+export type StatoGiudizio = 'VALIDO' | 'SCADUTO' | 'SOSPESO' | 'REVOCATO' | 'IN_RICORSO';
+
+// Valori enum Prisma per periodicità esami
+export type TipoPeriodicita =
+    | 'MESI_6'         // Semestrale
+    | 'MESI_12'        // Annuale
+    | 'MESI_24'        // Biennale
+    | 'MESI_36'        // Triennale
+    | 'MESI_60'        // Quinquennale
+    | 'SU_INDICAZIONE' // Come da protocollo MC
+    | 'UNA_TANTUM';    // Solo alla prima visita
+
+// MDL Interfaces
+export interface Mansione {
+    id: string;
+    tenantId: string;
+    siteId?: string;
+    codice: string;
+    denominazione: string;
+    descrizione?: string;
+    settore?: string;
+    areaLavoro?: string;
+    createdAt: string;
+    updatedAt: string;
+    deletedAt?: string;
+    site?: CompanySite;
+    rischi?: MansioneRischio[];
+    rischiAssociati?: MansioneRischio[];
+    lavoratori?: LavoratoreMansione[];
+    _count?: {
+        rischi: number;
+        rischiAssociati: number;
+        lavoratori: number;
+    };
+}
+
+export interface MansioneRischio {
+    id: string;
+    mansioneId: string;
+    codiceRischio: CodiceRischio;
+    // Backend uses livello/categoria, frontend transforms to livelloRischio/categoriaRischio
+    livello?: LivelloRischio;
+    livelloRischio?: LivelloRischio;
+    categoria?: CategoriaRischio;
+    categoriaRischio?: CategoriaRischio;
+    descrizioneEsposizione?: string;
+    descrizione?: string;
+    misurePrevenzioneDPI?: string;
+    fonteRischio?: string;
+    periodicitaMesi?: number;
+    noteValutazione?: string;
+    tenantId: string;
+    createdAt: string;
+    updatedAt?: string;
+    deletedAt?: string;
+    mansione?: Mansione;
+}
+
+// DTO per create/update Mansione
+export interface MansioneRischioInput {
+    codiceRischio: CodiceRischio;
+    livello?: LivelloRischio;
+    categoria?: CategoriaRischio;
+    descrizioneEsposizione?: string;
+    misurePrevenzioneDPI?: string;
+    fonteRischio?: string;
+    periodicitaMesi?: number;
+}
+
+export interface MansioneCreateInput {
+    codice: string;
+    denominazione: string;
+    siteId?: string;
+    descrizione?: string;
+    settore?: string;
+    areaLavoro?: string;
+    rischi?: MansioneRischioInput[];
+}
+
+export interface MansioneUpdateInput extends Partial<MansioneCreateInput> { }
+
+// Person basic info for lavoratori relations
+interface PersonBasicInfo {
+    id: string;
+    firstName?: string;
+    lastName?: string;
+}
+
+export interface LavoratoreMansione {
+    id: string;
+    personId: string;
+    mansioneId: string;
+    dataInizio?: string;
+    dataAssegnazione?: string;
+    dataFine?: string;
+    isAttiva?: boolean;
+    isActive?: boolean;
+    isPrimaria?: boolean;
+    note?: string;
+    tenantId: string;
+    createdAt: string;
+    deletedAt?: string;
+    person?: PersonBasicInfo | PersonTenantProfile;
+    mansione?: Mansione;
+}
+
+export interface GiudizioIdoneitaMansione {
+    id: string;
+    giudizioId: string;
+    mansioneId: string;
+    mansione?: Mansione;
+}
+
+export interface GiudizioIdoneita {
+    id: string;
+    personId: string;
+    medicoCompetenteId: string;
+    visitaId?: string;
+    tipoGiudizio: TipoGiudizioIdoneita;
+    stato: StatoGiudizio;
+    dataEmissione: string;
+    dataScadenza?: string;
+    prescrizioniIdoneita?: string;
+    limitazioni?: string;
+    note?: string;
+    notificatoLavoratore: boolean;
+    notificatoDatoreLavoro: boolean;
+    dataNotificaLavoratore?: string;
+    dataNotificaDatoreLavoro?: string;
+    dataRicorso?: string;
+    esitoRicorso?: string;
+    motivazioni?: string;
+    ricorsoEntro?: string;
+    // PDF generati alla conclusione visita MDL (Art. 41 c.7 D.Lgs 81/08)
+    pdfLavoratoreUrl?: string;
+    pdfDatoreUrl?: string;
+    pdfGeneratoAt?: string;
+    tenantId: string;
+    createdAt: string;
+    updatedAt: string;
+    deletedAt?: string;
+    /** P48: il backend include direttamente i campi anagrafici della Person */
+    person?: {
+        id: string;
+        firstName?: string;
+        lastName?: string;
+        taxCode?: string;
+    };
+    medicoCompetente?: Medico;
+    visita?: Visita;
+    mansioni?: GiudizioIdoneitaMansione[];
+}
+
+export interface RischioPrestazione {
+    id: string;
+    codiceRischio: CodiceRischio;
+    prestazioneId: string;
+    periodicita: TipoPeriodicita;
+    obbligatoria: boolean;
+    note?: string;
+    riferimentoNormativo?: string;
+    tenantId: string;
+    createdAt: string;
+    deletedAt?: string;
+    prestazione?: Prestazione;
+}
+
+export interface CompanySite {
+    id: string;
+    companyTenantProfileId: string;
+    siteName: string;
+    indirizzo?: string;
+    citta?: string;
+    cap?: string;
+    provincia?: string;
+    telefono?: string;
+    email?: string;
+    rsppId?: string;
+    medicoCompetenteId?: string;
+    tenantId: string;
+    deletedAt?: string;
+}
+
+// Catalogo rischi (statico, D.Lgs 81/08)
+export interface CatalogoRischio {
+    codice: CodiceRischio;
+    nome: string;
+    descrizione: string;
+    categoria: CategoriaRischio;
+    riferimentoNormativo: string;
+    normativa?: string; // Alias per riferimentoNormativo da backend
+    periodicita?: number; // Mesi consigliati per accertamenti periodici
+    prestazioniObbligatorie: string[];
+}
+
+// Risposta API catalogo rischi (backend format)
+export interface CatalogoRischiResponse {
+    totale: number;
+    categorie: string[];
+    rischi: Record<CategoriaRischio, CatalogoRischio[]>;
+    flatList: CatalogoRischio[];
+}
 
 // Tariffario: Fonte prezzo base
 export type FontePrezzoBase =
@@ -635,6 +984,816 @@ export interface CalcoloPrezzoOutput {
     ivaAliquota: number;
     importoIva: number;
     totaleConIva: number;
+}
+
+// =====================================================
+// MDL - PROTOCOLLI SANITARI (Progetto 56 - FASE 2)
+// =====================================================
+
+export type StatoNomina = 'ATTIVA' | 'SOSPESA' | 'REVOCATA' | 'SCADUTA';
+export type TipoNominaRuolo = 'MEDICO_COMPETENTE' | 'RSPP' | 'ASPP' | 'RLS' | 'PREPOSTO' | 'ADDETTO_PS' | 'ADDETTO_AI' | 'DIRIGENTE_SICUREZZA';
+
+export interface ProtocolloSanitario {
+    id: string;
+    codice: string;
+    denominazione: string;
+    descrizione?: string;
+    mansioneId?: string;
+    siteId?: string;
+    periodicitaVisiteMesi: number;
+    isAttivo: boolean;
+    note?: string;
+    tenantId: string;
+    createdAt: string;
+    updatedAt: string;
+    deletedAt?: string;
+    mansione?: Mansione;
+    site?: CompanySite;
+    prestazioni?: ProtocolloPrestazione[];
+    mansioniAssociate?: Array<{
+        id: string;
+        mansioneId: string;
+        mansione?: Mansione;
+    }>;
+    questionari?: Array<{
+        id: string;
+        titolo?: string;
+        documentoTemplate?: { id: string; nome: string };
+        compilabileDa?: string;
+        periodicitaMesi?: number;
+        haScoring?: boolean;
+    }>;
+    _count?: {
+        prestazioni: number;
+        questionari?: number;
+    };
+}
+
+export interface ProtocolloPrestazione {
+    id: string;
+    protocolloId: string;
+    prestazioneId: string;
+    isObbligatoria: boolean;
+    periodicita?: TipoPeriodicita;
+    condizioniApplicazione?: string;
+    note?: string;
+    createdAt: string;
+    deletedAt?: string;
+    protocollo?: ProtocolloSanitario;
+    prestazione?: Prestazione;
+}
+
+export interface ProtocolloCreateInput {
+    codice: string;
+    denominazione: string;
+    descrizione?: string;
+    mansioneId?: string;
+    mansioniIds?: string[];
+    siteId?: string;
+    periodicitaVisiteMesi?: number;
+    isAttivo?: boolean;
+    note?: string;
+    prestazioni?: ProtocolloPrestazioneInput[];
+    questionariIds?: string[];
+}
+
+export interface ProtocolloPrestazioneInput {
+    prestazioneId: string;
+    isObbligatoria?: boolean;
+    periodicita?: TipoPeriodicita;
+    condizioniApplicazione?: string;
+    note?: string;
+}
+
+export interface ProtocolloUpdateInput extends Partial<ProtocolloCreateInput> { }
+
+export interface ProtocolloCosto {
+    totale: number;
+    totaleObbligatorie: number;
+    dettaglio: Array<{
+        prestazioneId: string;
+        prestazioneNome: string;
+        costo: number;
+        isObbligatoria: boolean;
+        periodicita?: string;
+    }>;
+}
+
+// =====================================================
+// MDL - NOMINE RUOLO (Progetto 56 - FASE 3)
+// =====================================================
+
+export interface NominaRuolo {
+    id: string;
+    personId: string;
+    siteId?: string;
+    companyTenantProfileId?: string;
+    tipoRuolo: TipoNominaRuolo;
+    stato: StatoNomina;
+    dataInizio: string;
+    dataFine?: string;
+    dataScadenza?: string;
+    dataUltimaFormazione?: string;
+    dataProssimaFormazione?: string;
+    formazioneRichiesta?: string;
+    note?: string;
+    tenantId: string;
+    createdAt: string;
+    updatedAt: string;
+    deletedAt?: string;
+    person?: {
+        id: string;
+        firstName: string;
+        lastName: string;
+        taxCode?: string;
+        tenantProfiles?: Array<{
+            email?: string;
+            phone?: string;
+        }>;
+    };
+    site?: CompanySite & { companyTenantProfileId?: string };
+    companyTenantProfile?: {
+        id: string;
+        company?: {
+            ragioneSociale?: string;
+            piva?: string;
+        };
+    };
+}
+
+export interface NominaRuoloCreateInput {
+    personId: string;
+    siteId?: string;
+    companyTenantProfileId?: string;
+    tipoRuolo: TipoNominaRuolo;
+    dataInizio: string;
+    dataFine?: string;
+    dataScadenza?: string;
+    dataUltimaFormazione?: string;
+    dataProssimaFormazione?: string;
+    formazioneRichiesta?: string;
+    note?: string;
+}
+
+export interface NominaRuoloUpdateInput extends Partial<NominaRuoloCreateInput> {
+    stato?: StatoNomina;
+}
+
+export interface NominaStats {
+    totaleAttive: number;
+    perRuolo: Record<TipoNominaRuolo, number>;
+    inScadenza30gg: number;
+    formazioneScadenza30gg: number;
+    alertTotali: number;
+}
+
+// =====================================================
+// MDL - ALLEGATO 3A (Progetto 56 - FASE 5)
+// Cartella Sanitaria e di Rischio D.Lgs 81/08 Art. 41 c.5
+// =====================================================
+
+export interface Allegato3AData {
+    lavoratore: Allegato3ALavoratore;
+    azienda: Allegato3AAzienda;
+    datiLavorativi: Allegato3ADatiLavorativi;
+    rischiProfessionali: Allegato3ARischio[];
+    accertamentiSanitari: Allegato3AAccertamento[];
+    giudizioAttuale: Allegato3AGiudizio | null;
+    medicoCompetente: Allegato3AMedicoCompetente | null;
+    generatedAt: string;
+    protocolloApplicato?: string;
+}
+
+export interface Allegato3ALavoratore {
+    id: string;
+    taxCode?: string;
+    firstName?: string;
+    lastName?: string;
+    gender?: string;
+    birthDate?: string;
+    birthPlace?: string;
+    residenza?: {
+        indirizzo?: string;
+        citta?: string;
+        cap?: string;
+        provincia?: string;
+    };
+    contatti?: {
+        email?: string;
+        phone?: string;
+    };
+}
+
+export interface Allegato3AAzienda {
+    id: string;
+    ragioneSociale?: string;
+    piva?: string;
+    codiceFiscale?: string;
+    sedeLegale?: {
+        indirizzo?: string;
+        citta?: string;
+        cap?: string;
+        provincia?: string;
+    };
+    codiceAteco?: string;
+    settore?: string;
+    sede?: {
+        id?: string;
+        nome?: string;
+        indirizzo?: string;
+        citta?: string;
+    };
+}
+
+export interface Allegato3ADatiLavorativi {
+    dataAssunzione?: string;
+    mansioneAttuale?: string;
+    mansioneCodice?: string;
+    reparto?: string;
+    turno?: string;
+    contratto?: string;
+    storicoMansioni: Array<{
+        mansioneNome?: string;
+        mansioneCodice?: string;
+        dataInizio?: string;
+        dataFine?: string;
+    }>;
+}
+
+export interface Allegato3ARischio {
+    tipo: string;
+    livello: string;
+    descrizione?: string;
+    dpiRichiesti?: string[];
+    misurePrevenzione?: string[];
+    dataValutazione?: string;
+}
+
+export interface Allegato3AAccertamento {
+    id: string;
+    tipo: string;
+    data: string;
+    esito?: string;
+    note?: string;
+    prestazioniEseguite?: Array<{
+        id: string;
+        nome: string;
+        codice?: string;
+        esito?: string;
+    }>;
+    medicoEsecutore?: string;
+}
+
+export interface Allegato3AGiudizio {
+    id: string;
+    data: string;
+    esito: string;
+    limitazioni?: string;
+    prescrizioniIdoneita?: string;
+    validoFino?: string;
+    prossimaVisita?: string;
+    tipoVisita?: string;
+}
+
+export interface Allegato3AMedicoCompetente {
+    id: string;
+    nome: string;
+    cognome: string;
+    alboMedici?: string;
+    specializzazione?: string;
+    email?: string;
+    telefono?: string;
+}
+
+export interface Allegato3AStats {
+    totaleWorkers: number;
+    withActiveGiudizio: number;
+    withExpiredGiudizio: number;
+    pendingVisits: number;
+    byMansione: Record<string, number>;
+    byEsitoGiudizio: Record<string, number>;
+}
+
+// =====================================================
+// MDL - ALLEGATO 3B (Progetto 56 - FASE 6)
+// Relazione Annuale INAIL D.Lgs 81/08 Art. 40
+// =====================================================
+
+export type StatoAllegato3B = 'DA_COMPILARE' | 'BOZZA' | 'COMPILATO' | 'PRONTO' | 'INVIATO' | 'CONFERMATO' | 'ERRORE';
+
+export interface Allegato3B {
+    id: string;
+    anno: number;
+    companyTenantProfileId: string;
+    medicoCompetenteId: string;
+    stato: StatoAllegato3B;
+    dataCompilazione?: string;
+    dataInvio?: string;
+    dataConferma?: string;
+    statoInvio: StatoAllegato3B; // Alias per stato (backward compat)
+    protocolloInvio?: string;
+    ricevutaInvio?: string;
+
+    // Dati statistici aggregati (da Prisma schema)
+    totLavoratoriSorvegliati: number;
+    totVisiteEffettuate: number;
+    totGiudiziIdoneita: number;
+    totGiudiziConLimitazioni: number;
+    totGiudiziConPrescrizioni: number;
+    totInidoneita: number;
+    statistichePerRischio?: Record<string, { lavoratoriEsposti?: number; perLivello?: Record<string, number> }>;
+    malattieProf?: { totale?: number; perPatologia?: Record<string, number> };
+    lavoratoriPerGenere?: { maschi?: number; femmine?: number; altro?: number };
+    lavoratoriPerFasciaEta?: Record<string, number>;
+    visitePerTipologia?: Record<string, number>;
+    giudiziPerTipologia?: Record<string, number>;
+
+    // Statistiche dettagliate (opzionale)
+    statistiche?: Allegato3BStatistiche;
+
+    note?: string;
+    tenantId: string;
+    createdAt: string;
+    updatedAt: string;
+    deletedAt?: string;
+    companyTenantProfile?: {
+        id: string;
+        company?: {
+            ragioneSociale?: string;
+            piva?: string;
+            codiceFiscale?: string;
+        };
+    };
+    medicoCompetente?: {
+        id: string;
+        firstName: string;
+        lastName: string;
+    };
+}
+
+export interface Allegato3BStatistiche {
+    // Sezione A - Dati generali
+    totaleOccupati: number;
+    totaleOccupatiMaschi: number;
+    totaleOccupatiFemmine: number;
+    totaleSorvegliatiSanitari: number;
+
+    // Sezione B - Visite mediche
+    visitePreventive: number;
+    visitePeriodiche: number;
+    visiteRichiestaDL: number;
+    visiteRichiestaLavoratore: number;
+    visiteCambioMansione: number;
+    visiteRientroMalattia: number;
+
+    // Sezione C - Giudizi di idoneità
+    idonei: number;
+    idoneiConPrescrizioni: number;
+    idoneiConLimitazioni: number;
+    nonIdoneiTemporanei: number;
+    nonIdoneiPermanenti: number;
+
+    // Sezione D - Statistiche per rischio
+    statistichePerRischio: Array<{
+        tipoRischio: string;
+        lavoratoriEsposti: number;
+        visiteProgrammate: number;
+        visiteEffettuate: number;
+        giudiziEmessi: number;
+    }>;
+
+    // Sezione E - Malattie professionali
+    malattieRilevate: number;
+    malattieDeununciate: number;
+
+    // Metadati
+    periodoRiferimento: {
+        dataInizio: string;
+        dataFine: string;
+    };
+    dataGenerazione: string;
+}
+
+export interface Allegato3BCreateInput {
+    anno: number;
+    companyTenantProfileId: string;
+    medicoCompetenteId: string;
+    note?: string;
+}
+
+export interface Allegato3BUpdateInput {
+    statoInvio?: StatoAllegato3B;
+    dataInvio?: string;
+    codiceInvio?: string;
+    erroreInvio?: string;
+    note?: string;
+}
+
+// =====================================================
+// MALATTIE PROFESSIONALI - D.Lgs 81/08 Art. 40
+// =====================================================
+
+export type TipologiaMalattiaProfessionale = 'SOSPETTA' | 'ACCERTATA';
+export type EsitoMalattiaProfessionale = 'IN_ACCERTAMENTO' | 'RICONOSCIUTA' | 'NON_RICONOSCIUTA';
+
+export interface MalattiaProfessionale {
+    id: string;
+    personId: string;
+    tenantId: string;
+    companyTenantProfileId: string;
+    codiceNosologico?: string;
+    denominazione: string;
+    dataDiagnosi: string;
+    dataNotificaINAIL?: string;
+    agenteCausale?: string;
+    tipologia: TipologiaMalattiaProfessionale;
+    esito: EsitoMalattiaProfessionale;
+    note?: string;
+    createdAt: string;
+    updatedAt: string;
+    deletedAt?: string;
+    person?: {
+        id: string;
+        firstName: string;
+        lastName: string;
+        taxCode?: string;
+        gender?: string;
+    };
+    companyTenantProfile?: {
+        id: string;
+        company?: {
+            id: string;
+            ragioneSociale?: string;
+        };
+    };
+}
+
+export interface MalattiaProfessionaleCreateInput {
+    personId: string;
+    companyTenantProfileId: string;
+    codiceNosologico?: string;
+    denominazione: string;
+    dataDiagnosi: string;
+    dataNotificaINAIL?: string;
+    agenteCausale?: string;
+    tipologia?: TipologiaMalattiaProfessionale;
+    esito?: EsitoMalattiaProfessionale;
+    note?: string;
+}
+
+export interface MalattiaProfessionaleUpdateInput {
+    codiceNosologico?: string;
+    denominazione?: string;
+    dataDiagnosi?: string;
+    dataNotificaINAIL?: string;
+    agenteCausale?: string;
+    tipologia?: TipologiaMalattiaProfessionale;
+    esito?: EsitoMalattiaProfessionale;
+    note?: string;
+}
+
+export interface MalattieProfessionaliAggregazione {
+    totale: number;
+    perPatologia: Array<{
+        codice?: string;
+        denominazione: string;
+        totale: number;
+        sospette: number;
+        accertate: number;
+    }>;
+}
+
+// =====================================================
+// MDL - SCADENZE MDL (Progetto 56 - FASE 7)
+// Dashboard Scadenze Medicina del Lavoro
+// =====================================================
+
+export type CategoriaScadenzaMDL =
+    | 'nomina_mc'
+    | 'nomina_rspp'
+    | 'giudizio_idoneita'
+    | 'visita_periodica'
+    | 'sopralluogo'
+    | 'dvr';
+
+export type LivelloUrgenzaScadenza =
+    | 'scaduto'      // Già scaduto
+    | 'critico'      // < 7 giorni
+    | 'urgente'      // 7-30 giorni
+    | 'attenzione'   // 30-60 giorni
+    | 'programmato'; // > 60 giorni
+
+export interface ScadenzaMDL {
+    id: string;
+    categoria: CategoriaScadenzaMDL;
+    tipo: string;
+    descrizione: string;
+    dataScadenza: string;
+    livelloUrgenza: LivelloUrgenzaScadenza;
+    giorniAllaScadenza: number | null;
+    isPrenotata?: boolean;
+    entita: ScadenzaEntita;
+    azioni: Array<{
+        tipo: string;
+        label: string;
+        url: string;
+    }>;
+}
+
+export interface ScadenzaEntita {
+    tipo: string;
+    id?: string;
+    persona?: string;
+    personaId?: string;
+    azienda?: string;
+    companyTenantProfileId?: string;
+    sede?: string;
+    siteId?: string;
+    mansione?: string;
+    mansioneId?: string;
+    mansioneIds?: string[];
+    esito?: string;
+    giudizioId?: string;
+    protocollo?: string;
+    frequenzaMesi?: number;
+    ultimoSopralluogo?: string;
+    dataEsecuzione?: string;
+    effettuatoDa?: string;
+    // Campi visita protocollo
+    scadenzaPrestazioneId?: string;
+    prestazione?: string;
+    prestazioneId?: string;
+    protocolloId?: string;
+    periodicitaMesi?: number;
+    isPrimaVisita?: boolean;
+    // Ricongiunzione: slot visita che aggrega più accertamenti
+    isRaggruppata?: boolean;
+    isPrenotata?: boolean;
+    isObbligatoria?: boolean;
+    prestazioni?: Array<{
+        scadenzaPrestazioneId: string;
+        prestazione: string | null;
+        prestazioneId: string;
+        dataScadenza: string;
+        periodicitaMesi: number;
+        isObbligatoria?: boolean;
+    }>;
+}
+
+/** Scadenza singola per lavoratore (all'interno di un gruppo per prestazione) */
+export interface ScadenzaProtocolloItem {
+    id: string;
+    dataScadenza: string | null;
+    dataEsecuzione: string | null;
+    eseguita: boolean;
+    isPrimaVisita: boolean;
+    appuntamento: { id: string; dataOra: string | null; stato: string; tipoVisitaMDL: string | null } | null;
+    visita: { id: string; dataOra: string | null } | null;
+}
+
+/** Gruppo di scadenze per una singola prestazione (es. "Visita Medica del Lavoro") - usato in VisitaScadenzaCard */
+export interface ScadenzaProtocolloGruppo {
+    prestazioneId: string | null;
+    /** P72_21: presente quando si tratta di un questionario periodico (al posto di prestazioneId) */
+    documentoTemplateId?: string | null;
+    prestazioneName: string;
+    prestazioneCodice: string | null;
+    /** Tipo prestazione — VISITA_MEDICINA_LAVORO identifica la visita medica principale; QUESTIONARIO per questionari periodici */
+    prestazioneTipo: string | null;
+    /** P72_14: true se la prestazione è obbligatoria nel protocollo sanitario */
+    isObbligatoria: boolean;
+    periodicitaMesi: number;
+    scadenze: ScadenzaProtocolloItem[];
+}
+
+/** Scadenza per-prestazione in prossima esecuzione (±60 giorni dalla data appuntamento) - usato nel booking modal */
+export interface ScadenzaPrestazioneInScadenza {
+    id: string;
+    prestazioneId: string;
+    prestazione: { id: string; nome: string; codice: string | null; tipo: string } | null;
+    dataScadenza: string | null;
+    periodicitaMesi: number;
+    isPrimaVisita: boolean;
+    giorniAllaScadenza: number; // positivo = manca, negativo = scaduta
+}
+
+export interface ScadenzeMDLStatistiche {
+    perUrgenza: {
+        critico: number;
+        urgente: number;
+        attenzione: number;
+        programmato: number;
+    };
+    perCategoria: {
+        nomina_mc: number;
+        nomina_rspp: number;
+        giudizio_idoneita: number;
+        visita_periodica: number;
+        sopralluogo: number;
+        dvr: number;
+    };
+    indicePriorita: number;
+}
+
+export interface ScadenzeMDLResponse {
+    scadenze: ScadenzaMDL[];
+    statistiche: ScadenzeMDLStatistiche;
+    filtri: {
+        dataInizio: string;
+        dataFine: string;
+        totale: number;
+    };
+}
+
+export interface ScadenzeMDLNotifiche {
+    notifiche: ScadenzaMDL[];
+    conteggio: {
+        scadute: number;
+        critiche: number;
+        urgenti: number;
+    };
+}
+
+export interface ScadenzeAziendaRiepilogo {
+    companyTenantProfileId: string;
+    statisticheGenerali: ScadenzeMDLStatistiche;
+    perSede: Array<{
+        siteId: string;
+        sede: string;
+        scadenze: ScadenzaMDL[];
+        statistiche: {
+            totale: number;
+            scaduti: number;
+            critici: number;
+            urgenti: number;
+        };
+    }>;
+}
+
+export interface ScadenzeCalendarioEvento {
+    id: string;
+    title: string;
+    description: string;
+    date: string;
+    categoria: CategoriaScadenzaMDL;
+    urgenza: LivelloUrgenzaScadenza;
+    color: string;
+    entita: ScadenzaEntita;
+}
+
+// =====================================================
+// PEC - POSTA ELETTRONICA CERTIFICATA (FASE 4)
+// =====================================================
+
+// Tipo PEC Log
+export type TipoPecLog = 'GIUDIZIO_LAVORATORE' | 'GIUDIZIO_DATORE' | 'COMUNICAZIONE_MDL' | 'ALLEGATO_3B';
+
+// Stato invio PEC
+export type StatoPecLog = 'PENDING' | 'INVIATO' | 'ACCETTATO' | 'CONSEGNATO' | 'ERRORE' | 'RIMBALZATO';
+
+// Log invio PEC
+export interface PecLog {
+    id: string;
+    messageId: string;
+    giudizioId?: string;
+    tenantId: string;
+    tipo: TipoPecLog;
+    destinatario: string;
+    oggetto: string;
+    statoInvio: StatoPecLog;
+    dataInvio: string;
+    smtpResponse?: string;
+    ricevutaAccettazione?: string;
+    dataAccettazione?: string;
+    ricevutaConsegna?: string;
+    dataConsegna?: string;
+    errore?: string;
+    tentativiInvio: number;
+    createdAt: string;
+    updatedAt: string;
+}
+
+// Risultato invio PEC
+export interface PecSendResult {
+    success: boolean;
+    messageId: string;
+    pecLog: PecLog;
+    smtpResponse?: string;
+}
+
+// Input invio PEC al lavoratore
+export interface PecSendToWorkerInput {
+    pecDestinatario?: string; // Se non specificato usa PEC del lavoratore
+    ccDatoreLavoro?: boolean; // Mette in CC il datore
+}
+
+// Input invio PEC al datore
+export interface PecSendToEmployerInput {
+    pecDestinatario?: string; // Se non specificato usa PEC azienda
+}
+
+// Input invio PEC a entrambi
+export interface PecSendToBothInput {
+    pecLavoratore?: string;
+    pecDatoreLavoro?: string;
+}
+
+// Risultato invio a entrambi
+export interface PecSendBothResult {
+    lavoratore: PecSendResult | null;
+    datore: PecSendResult | null;
+    errors: Array<{ recipient: 'lavoratore' | 'datore'; error: string }>;
+}
+
+// Stato consegna PEC
+export interface PecDeliveryStatus {
+    messageId: string;
+    stato: StatoPecLog;
+    dataInvio: string;
+    accettato: boolean;
+    dataAccettazione?: string;
+    consegnato: boolean;
+    dataConsegna?: string;
+    errore?: string;
+}
+
+// Statistiche PEC
+export interface PecStats {
+    totaleInvii: number;
+    pending: number;
+    inviati: number;
+    accettati: number;
+    consegnati: number;
+    errori: number;
+    tassoSuccesso: number;
+    perTipo: Record<TipoPecLog, number>;
+}
+
+// =====================================================
+// PEC CONFIG - Configurazione PEC Tenant (FASE 4.2)
+// =====================================================
+
+// Provider PEC supportati
+export type PecProvider = 'ARUBA' | 'LEGALMAIL' | 'POSTECERT' | 'CUSTOM' | 'ENV';
+
+// Configurazione PEC per tenant
+export interface PecConfig {
+    provider: PecProvider;
+    host: string;
+    port: number;
+    secure: boolean;
+    pecAddress: string;
+    senderName: string;
+    enabled: boolean;
+    testMode: boolean;
+    testRecipient?: string | null;
+    hasPassword: boolean;
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+// Provider PEC disponibile
+export interface PecProviderInfo {
+    code: PecProvider;
+    name: string;
+    host: string | null;
+    port: number;
+    secure: boolean;
+    instructions: string;
+}
+
+// Input per salvare configurazione PEC
+export interface PecConfigInput {
+    provider: PecProvider;
+    host?: string;
+    port?: number;
+    secure?: boolean;
+    pecAddress: string;
+    password?: string;
+    senderName?: string;
+    enabled?: boolean;
+    testMode?: boolean;
+    testRecipient?: string;
+}
+
+// Stato configurazione PEC
+export interface PecConfigStatus {
+    configured: boolean;
+    enabled: boolean;
+    ready: boolean;
+    provider?: PecProvider;
+    pecAddress?: string;
+    testMode?: boolean;
+    message: string;
+}
+
+// Risultato test PEC
+export interface PecTestResult {
+    success: boolean;
+    message: string;
+    messageId?: string;
+    recipient: string;
+    sentAt: string;
 }
 
 // Tariffario: Input calcolo prezzo
@@ -809,9 +1968,6 @@ export interface PazienteFilter {
     isNuovoPaziente?: boolean;
 }
 
-// Legacy type alias for backward compatibility - use ListinoPrezzo directly
-export type Listino = ListinoPrezzo;
-
 // Enum TipoConvenzione - aligned with Prisma schema
 export type TipoConvenzione = 'AZIENDALE' | 'ASSICURATIVA' | 'PUBBLICA' | 'PRIVATA';
 
@@ -843,6 +1999,18 @@ export interface Convenzione {
     deletedAt?: string | null;
     createdBy?: string | null;
     aziende?: ConvenzioneAzienda[];
+    // Listini associati con info prestazione
+    listiniPrezzo?: Array<{
+        id: string;
+        prestazioneId?: string | null;
+        bundleId?: string | null;
+        prezzo: number;
+        prestazione?: {
+            id: string;
+            codice: string;
+            nome: string;
+        } | null;
+    }>;
 }
 
 // Convenzione-Azienda association
@@ -964,18 +2132,90 @@ export type StatoAppuntamento =
     | 'IN_ATTESA'
     | 'IN_CORSO'
     | 'COMPLETATO'
+    | 'FATTURATO'
     | 'ANNULLATO'
-    | 'NO_SHOW';
+    | 'NO_SHOW'
+    | 'RINVIATO';
+
+// === PROGETTO 55: Stati Prestazione Appuntamento ===
+export type StatoPrestazioneAppuntamento =
+    | 'DA_ESEGUIRE'
+    | 'IN_CORSO'
+    | 'ESEGUITA'
+    | 'IN_ATTESA_REFERTO'
+    | 'REFERTATA'
+    | 'ANNULLATA';
+
+// === PROGETTO 55: Multi-Prestazioni per Appuntamento ===
+export interface AppuntamentoPrestazione {
+    id: string;
+    appuntamentoId: string;
+    prestazioneId: string;
+    medicoRefertanteId?: string | null;
+    ordine: number;
+    stato: StatoPrestazioneAppuntamento;
+    dataEsecuzione?: string | null;
+    note?: string | null;
+    refertoId?: string | null;
+    compensoMedicoCalcolato?: number | null;
+    compensoMedicoPagato: boolean;
+    compensoPagatoData?: string | null;
+    tenantId: string;
+    createdAt: string;
+    updatedAt: string;
+    deletedAt?: string | null;
+    /** P73: ID visita secondaria creata per il medico specialista, se diverso dal medico principale */
+    visitaSecondariaId?: string | null;
+    // Relazioni espanse
+    prestazione?: {
+        id: string;
+        nome: string;
+        codice: string;
+        categoria?: string;
+        brancheSpecialistiche?: string[];
+    };
+    medicoRefertante?: {
+        id: string;
+        firstName: string;
+        lastName: string;
+        gender?: string;
+    };
+    referto?: {
+        id: string;
+        numeroReferto: string;
+        stato: string;
+    };
+    appuntamento?: Appuntamento & {
+        paziente?: {
+            id: string;
+            firstName: string;
+            lastName: string;
+            taxCode?: string;
+            birthDate?: string;
+        };
+        medico?: {
+            id: string;
+            firstName: string;
+            lastName: string;
+        };
+        azienda?: {
+            id: string;
+            ragioneSociale: string;
+        };
+    };
+}
 
 export interface SlotDisponibilita {
     id: string;
     tenantId: string;
     ambulatorioId: string;
     medicoId?: string;
+    disponibilitaMedicoId?: string; // P68: Reference to parent recurring pattern
     data: string;
     oraInizio: string;
     oraFine: string;
     disponibile: boolean;
+    forceCreate?: boolean; // Allow creating even if overlap exists (for scenario 2)
     createdAt: string;
     updatedAt: string;
 }
@@ -985,16 +2225,21 @@ export interface DisponibilitaMedico {
     tenantId: string;
     medicoId: string;
     ambulatorioId?: string;
-    giornoSettimana: number; // 0=Sunday, 1=Monday, etc.
+    giorno: number;           // 0=Sunday, 1=Monday, etc. (Prisma field)
     oraInizio: string;       // HH:MM
     oraFine: string;         // HH:MM
-    validoDa: string;
-    validoA?: string;
+    validoDal: string;       // Prisma field
+    validoAl?: string;       // Prisma field (optional end date)
+    durataSlot?: number;     // minutes per slot
+    maxAppuntamenti?: number | string; // max bookings per slot
     note?: string;
-    isActive: boolean;
+    attivo: boolean;         // Prisma field
     createdAt: string;
     updatedAt: string;
     deletedAt?: string;
+    // P68: Auto-generation metadata (returned on create/update)
+    _slotsGenerated?: number;
+    _slotsSkipped?: number;
 }
 
 export interface FerieAssenza {
@@ -1018,9 +2263,11 @@ export interface Appuntamento {
     medicoId: string;
     ambulatorioId: string;
     prestazioneId?: string;
+    convenzioneId?: string;
     dataOra: string;
-    durataPrevista: number;
+    durataMinuti: number;  // Duration in minutes (database field, default 30)
     stato: StatoAppuntamento;
+    isOverbooking?: boolean;  // Flag to track if appointment was booked in overbooking
     note?: string;
     noteInterne?: string;
     promemoria: boolean;
@@ -1029,12 +2276,21 @@ export interface Appuntamento {
     dataAnnullamento?: string;
     motivoAnnullamento?: string;
     numeroCoda?: number;
+    displayNumberCoda?: string; // P61: Display number formato "AMB1-03"
+    queueEntryId?: string;      // P61: ID entry coda per chiamare paziente
+    queueEntryStato?: string;   // P61: Stato entry coda (IN_ATTESA, CHIAMATO, etc)
+    queueSessionId?: string;    // P61: ID sessione coda per filtrare la coda
     oraArrivo?: string;
+    oraChiamata?: string;
     oraInizio?: string;
     oraFine?: string;
+    pagamentoAnticipato?: boolean;  // Pagamento registrato prima della visita
+    pagamentoDataOra?: string;       // Data/ora del pagamento
     isRecurring: boolean;
     recurringPattern?: string;
     parentAppuntamentoId?: string;
+    companyTenantProfileId?: string;  // Azienda per MDL / sorveglianza sanitaria
+    tipoVisitaMDL?: TipoVisitaMDL;    // Tipo visita MDL (Art. 41 D.Lgs 81/08)
     createdBy?: string;
     createdAt: string;
     updatedAt: string;
@@ -1044,6 +2300,17 @@ export interface Appuntamento {
     medico?: Medico;
     ambulatorio?: Ambulatorio;
     prestazione?: Prestazione;
+    convenzione?: {
+        id: string;
+        nome: string;
+        codice: string;
+        condizioni?: {
+            scontoPercentuale?: number;
+            scontoFisso?: number;
+            codiceSconto?: string;
+        };
+    };
+    visita?: Visita;
 }
 
 // Clinical types
@@ -1055,11 +2322,399 @@ export interface Visita {
     medicoId: string;
     prestazioneId: string;
     stato: 'PROGRAMMATA' | 'IN_CORSO' | 'COMPLETATA' | 'ANNULLATA';
-    dataInizio?: string;
+    dataOra?: string; // Data/ora visita dal backend Prisma
+    dataInizio?: string; // Legacy - backward compatibility
     dataFine?: string;
     note?: string;
     createdAt: string;
     updatedAt: string;
+    // Progetto 52 - Visit Template System
+    visitTemplateId?: string;
+    confidentiality?: VisitConfidentiality;
+    accessControl?: VisitAccessControl;
+    datiStrutturati?: Record<string, unknown>;
+    visitTemplate?: VisitTemplate;
+    // P65.7: Prima visita / controllo
+    isPrimaVisita?: boolean; // Se true, usa prezzoPrimaVisita invece di prezzoBase/prezzoControllo
+    // P56: Medicina del Lavoro
+    tipoVisitaMDL?: TipoVisitaMDL;
+    // Fatturazione
+    fatture?: {
+        id: string;
+        numeroFattura: string;
+        stato: string;
+        totale: number;
+        dataEmissione: string;
+        dataPagamento?: string;
+    }[];
+    // Relazioni opzionali (incluse da API con include)
+    prestazione?: {
+        id: string;
+        nome: string;
+        codice?: string;
+        prezzo?: number;
+        durata?: number;
+        scadenzaDefaultMesi?: number; // Mesi default per prossimo controllo
+    };
+    medico?: {
+        id: string;
+        firstName?: string;
+        lastName?: string;
+        gender?: string;
+    };
+    // Medico refertante (può differire dal medico visitante)
+    medicoRefertanteId?: string | null;
+    medicoRefertante?: {
+        id: string;
+        firstName?: string;
+        lastName?: string;
+        gender?: string;
+        tenantProfiles?: {
+            specialties?: string[];
+            registerCode?: string;
+            email?: string;
+            isPrimary?: boolean;
+        }[];
+    } | null;
+    paziente?: {
+        id: string;
+        firstName?: string;
+        lastName?: string;
+        codiceFiscale?: string;
+    };
+    // Timer persistence
+    durataEffettiva?: number; // seconds
+    // P65.7: Follow-up / scadenza prossimo controllo
+    prossimoControllo?: string | null; // ISO date: next scheduled visit
+    noteFollowup?: string | null;
+    // Revision tracking (Session #12b)
+    revisions?: VisitaRevision[];
+    // P71: Invio referto via email al paziente
+    invioRefertoMail?: boolean;
+    // P73: Visita secondaria per specialista
+    isVisitaSecundaria?: boolean;
+    visitaParentId?: string | null;
+}
+
+/** P73: Visita collegata (secondaria o principale) */
+export interface VisitaCollegata {
+    id: string;
+    stato: string;
+    dataOra?: string;
+    isVisitaSecundaria: boolean;
+    appPrestazioneId?: string | null;
+    medico?: { id: string; firstName?: string; lastName?: string };
+    prestazione?: { id: string; nome: string; codice?: string };
+}
+
+/**
+ * Revisione di una visita per audit trail
+ */
+export interface VisitaRevision {
+    id: string;
+    version?: number;
+    revisionNumber?: number;
+    createdAt?: string;
+    changedAt?: string;
+    motivo?: string;
+    changeReason?: string;
+    changeType?: string;
+    changedFields?: string[];
+    previousData?: Record<string, unknown>;
+    newData?: Record<string, unknown>;
+    createdBy?: {
+        id?: string;
+        firstName?: string;
+        lastName?: string;
+    };
+    changer?: {
+        id?: string;
+        firstName?: string;
+        lastName?: string;
+    };
+}
+
+// =====================================================
+// PROGETTO 52 - VISIT TEMPLATE TYPES
+// =====================================================
+
+/**
+ * Livelli di riservatezza per le visite
+ */
+export type VisitConfidentiality = 'NORMAL' | 'RESTRICTED' | 'HIGHLY_RESTRICTED';
+
+/**
+ * Controllo accessi per visite ristrette
+ */
+export interface VisitAccessControl {
+    confidentiality: VisitConfidentiality;
+    allowedPersonIds?: string[];
+    allowedRoleTypes?: string[];
+    allowedSpecialties?: string[];
+    denyPersonIds?: string[];
+}
+
+/**
+ * Tipi di campo supportati nel template
+ */
+export type VisitFieldType =
+    | 'TEXT'
+    | 'TEXTAREA'
+    | 'RICHTEXT'
+    | 'NUMBER'
+    | 'DROPDOWN'
+    | 'MULTI_CHOICE'
+    | 'DATE'
+    | 'DATETIME'
+    | 'BOOLEAN'
+    | 'FILE'
+    | 'VITALS'
+    | 'STRUMENTARIO_IMPORT';
+
+/**
+ * Opzioni di stampa per un campo
+ */
+export interface VisitFieldPrintOptions {
+    include: 'ALWAYS' | 'IF_VALUED' | 'NEVER';
+    showLabel: boolean;
+    showTitle: boolean;
+    section?: string;
+}
+
+/**
+ * Range di validazione per campi
+ */
+export interface VisitFieldValidation {
+    min?: number;
+    max?: number;
+    minLength?: number;
+    maxLength?: number;
+    pattern?: string;
+}
+
+/**
+ * Range valori normali (per grafici)
+ */
+export interface VisitFieldNormalRange {
+    min?: number;
+    max?: number;
+}
+
+/**
+ * Configurazione HL7/CDA per un campo - Per export FSE 2.0
+ * Permette di mappare campi personalizzati a codici LOINC standard
+ */
+export interface VisitFieldHL7Config {
+    /** Codice LOINC/ICD/SNOMED del campo */
+    code?: string;
+    /** Sistema di codifica (default: LOINC) */
+    codeSystem?: 'LOINC' | 'ICD10' | 'ICD9_CM' | 'SNOMED_CT' | 'ATC';
+    /** Sezione CDA di appartenenza */
+    section?: 'ANAMNESI' | 'ESAME_OBIETTIVO' | 'DIAGNOSI' | 'TERAPIA' | 'PRESCRIZIONI' | 'ALLERGIE' | 'CONCLUSIONI' | 'ESAMI_LABORATORIO' | 'ESAMI_RADIOLOGIA';
+    /** Nome visualizzato nel CDA */
+    displayName?: string;
+    /** Unità di misura (per valori numerici) */
+    unit?: string;
+    /** Se includere nel CDA export (default: true se code presente) */
+    includeInCDA?: boolean;
+}
+
+/**
+ * Definizione di un campo nel template visita
+ */
+export interface VisitField {
+    id?: string;
+    name: string;
+    label: string;
+    type: VisitFieldType;
+    section: string;
+    position?: { row: number; col: number };
+    size?: { width: number; height: number };
+    carryOverFromPrevious?: boolean;
+    showChart?: boolean;
+    required: boolean;
+    visible: boolean;
+    order: number;
+    defaultValue?: string;
+    placeholder?: string;
+    helpText?: string;
+    options?: (string | { value: string; label: string })[];
+    validation?: VisitFieldValidation;
+    normalRange?: VisitFieldNormalRange;
+    metadata?: Record<string, unknown>;
+    computed?: boolean;
+    computeFormula?: string;
+    printOptions?: VisitFieldPrintOptions;
+    /** Quando true, il MULTI_CHOICE mostra un campo "Altro" per voci personalizzate */
+    allowCustom?: boolean;
+    /** P65: Configurazione HL7/CDA per export FSE - Opzionale */
+    hl7?: VisitFieldHL7Config;
+    /**
+     * P72: Binding diretto a colonna flat di Visita al salvataggio.
+     * Il valore di questo campo viene copiato anche nella colonna DB corrispondente
+     * ad ogni aggiornamento della visita, garantendo coerenza tra datiStrutturati e flat columns.
+     */
+    mappedField?: 'anamnesi' | 'esamiObiettivo' | 'diagnosiPrincipale' | 'terapia' | 'noteClinico' | 'prescrizioni';
+}
+
+/**
+ * Sezione della sidebar
+ */
+export interface VisitSidebarSection {
+    id: string;
+    label?: string;
+    title: string;
+    icon?: string;
+    order: number;
+    visible: boolean;
+    expandedByDefault?: boolean;
+}
+
+/**
+ * Configurazione sidebar del template
+ */
+export interface VisitSidebarConfig {
+    singlePage?: boolean; // Se true, mostra tutti i campi in un'unica pagina senza tab
+    collapsible: boolean;
+    defaultTab: string;
+    defaultCollapsed?: string[];
+    sections: VisitSidebarSection[];
+    /** Layout delle sezioni: 'tabs' (default), 'sections' (pagina singola con card), 'continuous' (flusso continuo) */
+    sectionLayout?: 'tabs' | 'sections' | 'continuous';
+    /** Se mostrare il timer visivamente (viene sempre registrato) */
+    showTimer?: boolean;
+}
+
+/**
+ * Sezione di stampa
+ */
+export interface VisitPrintSection {
+    id: string;
+    label: string;
+    order: number;
+    include: boolean;
+}
+
+/**
+ * Configurazione stampa referto
+ */
+export interface VisitPrintConfig {
+    showLogo?: boolean;
+    showHeader?: boolean;
+    showFooter?: boolean;
+    includeLogo: boolean;
+    includeHeader: boolean;
+    includeFooter: boolean;
+    includeSignature: boolean;
+    pageFormat: 'A4' | 'A5' | 'LETTER';
+    orientation: 'portrait' | 'landscape';
+    headerContent?: string;
+    footerContent?: string;
+    signaturePosition?: 'bottom-left' | 'bottom-center' | 'bottom-right';
+    includeTimestamp?: boolean;
+    includePageNumbers?: boolean;
+    sections?: VisitPrintSection[];
+    /** P52 Session #11: ID template di stampa da /management/templates */
+    printTemplateId?: string;
+}
+
+/**
+ * Scope gerarchico del template visita
+ * PERSONAL: Template personale del medico per una prestazione
+ * CATALOGO: Template campi default per prestazione nel catalogo (consolida TemplateCampoVisita)
+ * PRESTAZIONE: Template default per una prestazione specifica
+ * GLOBAL: Template globale di sistema (default per tutti)
+ */
+export type TemplateScope = 'GLOBAL' | 'CATALOGO' | 'PRESTAZIONE' | 'PERSONAL';
+
+/**
+ * Template visita personalizzabile per medico
+ */
+export interface VisitTemplate {
+    id: string;
+    medicoId?: string; // Null per template GLOBAL/CATALOGO
+    tenantId: string;
+    scope?: TemplateScope; // Scope gerarchico
+    prestazioneId?: string;
+    bundleId?: string;
+    name: string;
+    description?: string;
+    isDefault: boolean;
+    isActive: boolean;
+    fields: VisitField[];
+    sidebarConfig: VisitSidebarConfig;
+    printConfig: VisitPrintConfig;
+    // P65.7: Scadenza default per prossimo controllo (mesi)
+    defaultScadenzaMesi?: number;
+    version: number;
+    createdAt: string;
+    updatedAt: string;
+    deletedAt?: string;
+    createdBy?: string;
+    resolvedScope?: TemplateScope | 'DEFAULT' | 'SYSTEM_DEFAULT'; // Set when resolved
+    // Relations (when populated)
+    medico?: {
+        id: string;
+        firstName: string;
+        lastName: string;
+        tenantProfiles?: Array<{
+            specialties?: string[];
+            title?: string;
+        }>;
+    };
+    prestazione?: {
+        id: string;
+        nome: string;
+        codice: string;
+        tipo?: string;
+    };
+    bundle?: {
+        id: string;
+        nome: string;
+        codice: string;
+    };
+    isSystem?: boolean; // true per template default sistema
+}
+
+/**
+ * Defaults del sistema per template
+ */
+export interface VisitTemplateDefaults {
+    fields: VisitField[];
+    sidebarConfig: VisitSidebarConfig;
+    printConfig: VisitPrintConfig;
+    fieldTypes: Record<string, string>;
+}
+
+/**
+ * Input per creazione/aggiornamento template
+ */
+export interface VisitTemplateInput {
+    medicoId?: string; // Null per template GLOBAL/CATALOGO
+    medicoIds?: string[]; // Multi-select: admin crea un template per medico (scope PERSONAL)
+    name: string;
+    description?: string;
+    scope?: TemplateScope; // GLOBAL, CATALOGO, PRESTAZIONE, PERSONAL
+    prestazioneId?: string;
+    prestazioneIds?: string[]; // Multi-select: creates one template per prestazione
+    bundleId?: string;
+    fields?: VisitField[];
+    sidebarConfig?: VisitSidebarConfig;
+    printConfig?: VisitPrintConfig;
+    // P65.7: Scadenza default per prossimo controllo (mesi)
+    defaultScadenzaMesi?: number;
+    isDefault?: boolean;
+    isActive?: boolean;
+}
+
+/**
+ * Opzioni per clonazione template
+ */
+export interface VisitTemplateCloneOptions {
+    newName?: string;
+    newMedicoId?: string;
+    newPrestazioneId?: string;
+    newBundleId?: string;
 }
 
 export interface Referto {
@@ -1074,6 +2729,9 @@ export interface Referto {
     firmato: boolean;
     createdAt: string;
     updatedAt: string;
+    // Additional fields returned by API
+    numeroReferto?: string;
+    titolo?: string;
     // Relations (when populated)
     visita?: Visita;
     medico?: Medico;
@@ -1084,15 +2742,41 @@ export interface Referto {
 export interface Paziente {
     id: string;
     tenantId: string;
+    // Italian field names (legacy/internal)
     nome: string;
     cognome: string;
-    codiceFiscale?: string;
-    dataNascita?: string;
-    email?: string;
     telefono?: string;
+    // English field names (API format from Person model)
+    firstName?: string;
+    lastName?: string;
+    phone?: string;
+    // Common fields
+    codiceFiscale?: string;
+    taxCode?: string;
+    dataNascita?: string;
+    birthDate?: string;
+    email?: string;
     indirizzo?: string;
     createdAt: string;
     updatedAt: string;
+    // Multi-tenant support (Progetto 48)
+    tenantProfiles?: PersonTenantProfile[];
+    currentProfile?: PersonTenantProfile;
+
+    // Extended fields from P48 migration (now returned by AppuntamentoService)
+    gender?: 'MALE' | 'FEMALE';
+    sesso?: 'MALE' | 'FEMALE' | '';
+    birthPlace?: string;
+    comuneNascita?: string;
+    birthProvince?: string;
+    provinciaNascita?: string;
+    residenceAddress?: string;
+    residenceCity?: string;
+    comune?: string;
+    postalCode?: string;
+    cap?: string;
+    province?: string;
+    provincia?: string;
 }
 
 // Discount types
@@ -1189,9 +2873,11 @@ export const ambulatoriApi = {
         apiGet<ApiResponse<Ambulatorio>>(`${CLINICA_BASE}/ambulatori/${id}`)
             .then(extractData),
 
-    getByPoliambulatorio: (poliambulatorioId: string) =>
-        apiGet<ApiResponse<Ambulatorio[]>>(`${CLINICA_BASE}/poliambulatori/${poliambulatorioId}/ambulatori`)
-            .then(extractData),
+    /** @deprecated Use getAll with poliambulatorioId filter instead */
+    getByPoliambulatorio: async (poliambulatorioId: string): Promise<Ambulatorio[]> => {
+        const result = await ambulatoriApi.getAll({ poliambulatorioId, stato: 'ATTIVO' });
+        return result.data || [];
+    },
 
     create: (data: Partial<Ambulatorio>) =>
         apiPost<ApiResponse<Ambulatorio>>(`${CLINICA_BASE}/ambulatori`, data)
@@ -1425,24 +3111,8 @@ export const prestazioniApi = {
     delete: (id: string) =>
         apiDelete<{ success: boolean }>(`${CLINICA_BASE}/prestazioni/${id}`),
 
-    // Template fields
-    getCampi: (id: string) =>
-        apiGet<ApiResponse<TemplateCampoVisita[]>>(`${CLINICA_BASE}/prestazioni/${id}/campi`)
-            .then(extractData),
-
-    addCampo: (id: string, data: Partial<TemplateCampoVisita>) =>
-        apiPost<ApiResponse<TemplateCampoVisita>>(`${CLINICA_BASE}/prestazioni/${id}/campi`, data)
-            .then(extractData),
-
-    updateCampo: (prestazioneId: string, campoId: string, data: Partial<TemplateCampoVisita>) =>
-        apiPut<ApiResponse<TemplateCampoVisita>>(`${CLINICA_BASE}/prestazioni/${prestazioneId}/campi/${campoId}`, data)
-            .then(extractData),
-
-    deleteCampo: (prestazioneId: string, campoId: string) =>
-        apiDelete<{ success: boolean }>(`${CLINICA_BASE}/prestazioni/${prestazioneId}/campi/${campoId}`),
-
-    reorderCampi: (id: string, orderedIds: string[]) =>
-        apiPost<{ success: boolean }>(`${CLINICA_BASE}/prestazioni/${id}/campi/reorder`, { orderedIds }),
+    // P65.7: Template campi RIMOSSI - usare visitTemplatesApi con scope=CATALOGO
+    // Esempio: visitTemplatesApi.getByPrestazione(prestazioneId, { scope: 'CATALOGO' })
 
     // Doctors association
     getMedici: (id: string) =>
@@ -1508,6 +3178,10 @@ export const listiniApi = {
         apiGet<ApiResponse<ListinoPrezzo[]>>(`${CLINICA_BASE}/listini/prestazione/${prestazioneId}`)
             .then(extractData),
 
+    getByMedico: (medicoId: string) =>
+        apiGet<ApiResponse<ListinoPrezzo[]>>(`${CLINICA_BASE}/listini/medico/${medicoId}`)
+            .then(extractData),
+
     // Listini per bundle (Tariffario Avanzato)
     getByBundle: (bundleId: string) =>
         apiGet<ApiResponse<ListinoPrezzo[]>>(`${CLINICA_BASE}/listini/bundle/${bundleId}`)
@@ -1516,6 +3190,16 @@ export const listiniApi = {
     // Crea listino per bundle (specifico per medico)
     createForBundle: (data: Partial<ListinoPrezzo> & { bundleId: string }) =>
         apiPost<ApiResponse<ListinoPrezzo>>(`${CLINICA_BASE}/listini/bundle`, data)
+            .then(extractData),
+
+    // P72_19: Listini per questionario (documentoTemplate)
+    getByDocumentoTemplate: (templateId: string) =>
+        apiGet<ApiResponse<ListinoPrezzo[]>>(`${CLINICA_BASE}/listini/questionario/${templateId}`)
+            .then(extractData),
+
+    // P72_19: Crea listino per questionario (specifico per medico)
+    createForDocumentoTemplate: (data: Partial<ListinoPrezzo> & { documentoTemplateId: string }) =>
+        apiPost<ApiResponse<ListinoPrezzo>>(`${CLINICA_BASE}/listini/questionario`, data)
             .then(extractData),
 
     calculatePrice: (data: { prestazioneId: string; convenzioneId?: string; poliambulatorioId?: string }) =>
@@ -1795,6 +3479,10 @@ export const slotsApi = {
     delete: (id: string) =>
         apiDelete<{ success: boolean }>(`${CLINICA_BASE}/slots/${id}`),
 
+    // P68: Cascade delete (deletes all future slots from the same pattern)
+    deleteCascade: (id: string) =>
+        apiDelete<{ success: boolean; deletedSlots: number; message: string }>(`${CLINICA_BASE}/slots/${id}/cascade`),
+
     getAvailability: (params: { dataInizio: string; dataFine: string; ambulatorioId?: string; medicoId?: string }) =>
         apiGet<ApiResponse<SlotDisponibilita[]>>(`${CLINICA_BASE}/slots/availability`, params)
             .then(extractData),
@@ -1833,6 +3521,10 @@ export const disponibilitaApi = {
 
     copyWeek: (medicoId: string, fromDate: string, toDate: string) =>
         apiPost<ApiResponse<{ success: boolean; created: number }>>(`${CLINICA_BASE}/disponibilita/copy-week`, { medicoId, fromDate, toDate })
+            .then(extractData),
+
+    generateSlots: (medicoId: string, dataInizio: string, dataFine: string) =>
+        apiPost<ApiResponse<{ created: number; skipped: number; errors: number; details: string[] }>>(`${CLINICA_BASE}/disponibilita/generate-slots`, { medicoId, dataInizio, dataFine })
             .then(extractData)
 };
 
@@ -1901,13 +3593,57 @@ export const appuntamentiApi = {
         apiGet<ApiResponse<{ availableStates: string[] }>>(`${CLINICA_BASE}/appuntamenti/${id}/transitions`)
             .then(extractData),
 
-    accetta: (id: string) =>
-        apiPost<ApiResponse<Appuntamento>>(`${CLINICA_BASE}/appuntamenti/${id}/accetta`)
+    /**
+     * Accetta paziente (check-in) - Cambia stato a IN_ATTESA
+     * @param id - ID appuntamento
+     * @param data - Dati opzionali (convenzioneId, pazienteId, note, noteInterne)
+     * @param tenantId - Tenant ID opzionale per cross-tenant
+     * @returns Appuntamento con flag noActiveQueueSession se nessuna sessione coda attiva
+     */
+    accetta: (id: string, data?: { convenzioneId?: string; pazienteId?: string; note?: string; noteInterne?: string; stato?: string }, tenantId?: string) =>
+        apiPost<ApiResponse<Appuntamento> & { noActiveQueueSession?: boolean }>(
+            `${CLINICA_BASE}/appuntamenti/${id}/accetta`,
+            data,
+            tenantId ? { headers: { 'X-Operate-Tenant-Id': tenantId } } : undefined
+        ),
+
+    chiama: (id: string, tenantId?: string) =>
+        apiPost<ApiResponse<Appuntamento>>(
+            `${CLINICA_BASE}/appuntamenti/${id}/chiama`,
+            undefined,
+            tenantId ? { headers: { 'X-Operate-Tenant-Id': tenantId } } : undefined
+        ).then(extractData),
+
+    /**
+     * Annulla visita in corso: azzera oraInizio e riporta stato a PRENOTATO.
+     * Da usare quando il medico esce dalla VisitaPage senza completare.
+     */
+    annullaVisita: (id: string) =>
+        apiPost<ApiResponse<Appuntamento>>(`${CLINICA_BASE}/appuntamenti/${id}/annulla-visita`, {})
             .then(extractData),
 
-    chiama: (id: string) =>
-        apiPost<ApiResponse<Appuntamento>>(`${CLINICA_BASE}/appuntamenti/${id}/chiama`)
-            .then(extractData),
+    /**
+     * Registra pagamento per appuntamento
+     * Gestisce sia il pagamento anticipato che quello post-visita
+     * - Se stato è PRENOTATO/CONFERMATO/IN_ATTESA/IN_CORSO: registra pagamento anticipato
+     * - Se stato è COMPLETATO: cambia in FATTURATO
+     */
+    registraPagamento: (id: string, tenantId?: string) =>
+        apiPost<ApiResponse<Appuntamento>>(
+            `${CLINICA_BASE}/appuntamenti/${id}/pagamento`,
+            undefined,
+            tenantId ? { headers: { 'X-Operate-Tenant-Id': tenantId } } : undefined
+        ).then(extractData),
+
+    /**
+     * Check if patient already has an appointment with the same doctor on the same day
+     * Used to warn users before creating potential duplicate bookings
+     */
+    checkDuplicate: (pazienteId: string, medicoId: string, dataOra: string, excludeAppuntamentoId?: string) =>
+        apiGet<ApiResponse<{ hasDuplicate: boolean; existingAppointments: Appuntamento[] }>>(
+            `${CLINICA_BASE}/appuntamenti/check-duplicate`,
+            { pazienteId, medicoId, dataOra, ...(excludeAppuntamentoId && { excludeAppuntamentoId }) }
+        ).then(extractData),
 
     getByPaziente: (pazienteId: string) =>
         apiGet<ApiResponse<Appuntamento[]>>(`${CLINICA_BASE}/appuntamenti/paziente/${pazienteId}`)
@@ -1917,9 +3653,205 @@ export const appuntamentiApi = {
         apiGet<ApiResponse<Appuntamento[]>>(`${CLINICA_BASE}/appuntamenti/medico/${medicoId}`)
             .then(extractData),
 
-    getToday: () =>
-        apiGet<ApiResponse<Appuntamento[]>>(`${CLINICA_BASE}/appuntamenti/today`)
-            .then(extractData)
+    /** 
+     * Get today's appointments with permission meta 
+     * @returns Data and meta with canViewOtherMedici flag
+     */
+    getToday: async (): Promise<Appuntamento[]> => {
+        const response = await apiGet<ApiResponseWithMeta<Appuntamento[]>>(`${CLINICA_BASE}/appuntamenti/today`);
+        // Store meta in a way components can access
+        // For simplicity, attach to the array (not ideal but works)
+        const data = response.data || [];
+        // @ts-expect-error - Attaching meta to array for backward compatibility
+        data._meta = response.meta;
+        return data;
+    },
+
+    /** 
+     * Get today's appointments with full response including meta
+     */
+    getTodayWithMeta: async (): Promise<ResultWithMeta<Appuntamento[]>> => {
+        const response = await apiGet<ApiResponseWithMeta<Appuntamento[]>>(`${CLINICA_BASE}/appuntamenti/today`);
+        return {
+            data: response.data || [],
+            meta: response.meta
+        };
+    },
+
+    /** Get appointments for a specific date */
+    getByDate: (date: string) => {
+        // date is in YYYY-MM-DD format (local timezone)
+        // Send as-is to backend - backend will interpret as full day range
+        // DO NOT append 'Z' suffix as that forces UTC interpretation
+        return apiGet<BackendPaginatedResponse<Appuntamento>>(
+            `${CLINICA_BASE}/appuntamenti`,
+            { dataInizio: date, dataFine: date, limit: 100 }
+        ).then(extractPaginatedData);
+    },
+
+    /** Get appointments for a date range (e.g., Jan 14-17) */
+    getByDateRange: (dataInizio: string, dataFine: string) => {
+        // Dates in YYYY-MM-DD format (local timezone)
+        // For range queries - useful for Accettazione multi-day view
+        return apiGet<BackendPaginatedResponse<Appuntamento>>(
+            `${CLINICA_BASE}/appuntamenti`,
+            { dataInizio, dataFine, limit: 500 }
+        ).then(extractPaginatedData);
+    }
+};
+
+// =====================================================
+// PROGETTO 55: Multi-Prestazioni API
+// =====================================================
+
+export interface AppuntamentoPrestazioneStats {
+    totali: number;
+    daRefertare: number;
+    refertate: number;
+    percentualeCompletamento: number;
+    totaleCompensi: number;
+    compensiPagati: number;
+    compensiDaPagare: number;
+}
+
+/**
+ * API per gestione multi-prestazioni appuntamento
+ * Progetto 55: Medicina del Lavoro
+ */
+export const appuntamentoPrestazioniApi = {
+    /**
+     * Crea prestazioni da bundle
+     * @param appuntamentoId - ID appuntamento
+     * @param bundleId - ID bundle offerta
+     * @param medicoRefertanteOverrides - Override medico refertante per prestazioneId
+     */
+    createFromBundle: (
+        appuntamentoId: string,
+        bundleId: string,
+        medicoRefertanteOverrides?: Record<string, string>
+    ) =>
+        apiPost<ApiResponse<AppuntamentoPrestazione[]>>(
+            `${CLINICA_BASE}/appuntamenti/${appuntamentoId}/prestazioni/from-bundle`,
+            { bundleId, medicoRefertanteOverrides }
+        ).then(extractData),
+
+    /**
+     * Crea prestazioni singole
+     * @param appuntamentoId - ID appuntamento
+     * @param prestazioni - Array di { prestazioneId, medicoRefertanteId?, ordine? }
+     * @param visitaId - P73: ID visita principale (opzionale, per creare visita secondaria)
+     */
+    create: (
+        appuntamentoId: string,
+        prestazioni: Array<{ prestazioneId: string; medicoRefertanteId?: string; ordine?: number }>,
+        visitaId?: string
+    ) =>
+        apiPost<ApiResponse<AppuntamentoPrestazione[]>>(
+            `${CLINICA_BASE}/appuntamenti/${appuntamentoId}/prestazioni`,
+            { prestazioni, visitaId }
+        ).then(extractData),
+
+    /**
+     * Lista prestazioni per appuntamento
+     * @param appuntamentoId - ID appuntamento
+     */
+    listByAppuntamento: (appuntamentoId: string) =>
+        apiGet<ApiResponse<AppuntamentoPrestazione[]>>(
+            `${CLINICA_BASE}/appuntamenti/${appuntamentoId}/prestazioni`
+        ).then(extractData),
+
+    /**
+     * Lista prestazioni da refertare per medico corrente
+     * @param options - Opzioni query (page, limit, stati)
+     */
+    listDaRefertare: (options?: { page?: number; limit?: number; stati?: string }) =>
+        apiGet<{
+            success: boolean;
+            data: AppuntamentoPrestazione[];
+            total: number;
+            page: number;
+            limit: number;
+            totalPages: number;
+        }>(
+            `${CLINICA_BASE}/prestazioni-da-refertare`,
+            options
+        ),
+
+    /**
+     * Statistiche prestazioni per medico refertante
+     * @param dateRange - Range date opzionale
+     */
+    getStats: (dateRange?: { from?: string; to?: string }) =>
+        apiGet<ApiResponse<AppuntamentoPrestazioneStats>>(
+            `${CLINICA_BASE}/prestazioni-da-refertare/stats`,
+            dateRange
+        ).then(extractData),
+
+    /**
+     * Aggiorna stato prestazione
+     * @param id - ID prestazione appuntamento
+     * @param stato - Nuovo stato
+     * @param updates - Altri campi (note, dataEsecuzione)
+     */
+    updateStato: (
+        id: string,
+        stato: StatoPrestazioneAppuntamento,
+        updates?: { note?: string; dataEsecuzione?: string }
+    ) =>
+        apiPatch<ApiResponse<AppuntamentoPrestazione>>(
+            `${CLINICA_BASE}/prestazioni/${id}/stato`,
+            { stato, ...updates }
+        ).then(extractData),
+
+    /**
+     * Collega referto a prestazione
+     * @param id - ID prestazione appuntamento
+     * @param refertoId - ID referto
+     */
+    linkReferto: (id: string, refertoId: string) =>
+        apiPost<ApiResponse<AppuntamentoPrestazione>>(
+            `${CLINICA_BASE}/prestazioni/${id}/link-referto`,
+            { refertoId }
+        ).then(extractData),
+
+    /**
+     * Assegna medico refertante
+     * @param id - ID prestazione appuntamento
+     * @param medicoRefertanteId - ID medico
+     */
+    assignMedicoRefertante: (id: string, medicoRefertanteId: string) =>
+        apiPost<ApiResponse<AppuntamentoPrestazione>>(
+            `${CLINICA_BASE}/prestazioni/${id}/medico-refertante`,
+            { medicoRefertanteId }
+        ).then(extractData),
+
+    /**
+     * Calcola compenso per medico refertante
+     * @param id - ID prestazione appuntamento
+     * @param importoPrestazione - Importo della prestazione
+     */
+    calcolaCompenso: (id: string, importoPrestazione: number) =>
+        apiPost<ApiResponse<AppuntamentoPrestazione>>(
+            `${CLINICA_BASE}/prestazioni/${id}/calcola-compenso`,
+            { importoPrestazione }
+        ).then(extractData),
+
+    /**
+     * Marca compenso come pagato
+     * @param id - ID prestazione appuntamento
+     */
+    marcaCompensoPagato: (id: string) =>
+        apiPost<ApiResponse<AppuntamentoPrestazione>>(
+            `${CLINICA_BASE}/prestazioni/${id}/compenso-pagato`,
+            {}
+        ).then(extractData),
+
+    /**
+     * Elimina prestazione (soft delete)
+     * @param id - ID prestazione appuntamento
+     */
+    delete: (id: string) =>
+        apiDelete<{ success: boolean }>(`${CLINICA_BASE}/prestazioni/${id}`)
 };
 
 // =====================================================
@@ -1929,6 +3861,110 @@ export const appuntamentiApi = {
 /**
  * Visite API
  */
+// =====================================================
+// API FUNCTIONS - VISIT TEMPLATES (Progetto 52)
+// =====================================================
+
+/**
+ * Visit Templates API
+ * Gestione template visite personalizzabili per medico
+ */
+export const visitTemplatesApi = {
+    /**
+     * Recupera tutti i template (con paginazione, per admin)
+     * P65.7: Aggiunto supporto per filtro `scope` (PERSONAL, PRESTAZIONE, GLOBAL, CATALOGO)
+     */
+    getAll: (options?: QueryOptions & {
+        medicoId?: string;
+        prestazioneId?: string;
+        bundleId?: string;
+        scope?: TemplateScope; // P65.7: Filtro per scope
+        isDefault?: boolean;
+        isActive?: boolean;
+        allTenants?: boolean;
+        tenantIds?: string;
+    }) =>
+        apiGet<BackendPaginatedResponse<VisitTemplate>>(`${CLINICA_BASE}/visit-templates`, options)
+            .then(extractPaginatedData),
+
+    /**
+     * Recupera un template per ID
+     */
+    getById: (id: string) =>
+        apiGet<ApiResponse<VisitTemplate>>(`${CLINICA_BASE}/visit-templates/${id}`)
+            .then(extractData),
+
+    /**
+     * Recupera i template del medico corrente
+     */
+    getMyTemplates: (options?: { includeInactive?: boolean }) =>
+        apiGet<ApiResponse<VisitTemplate[]>>(`${CLINICA_BASE}/visit-templates/my-templates`, options)
+            .then(extractData),
+
+    /**
+     * Recupera i template di un medico specifico
+     */
+    getByMedico: (medicoId: string, options?: { includeInactive?: boolean }) =>
+        apiGet<ApiResponse<VisitTemplate[]>>(`${CLINICA_BASE}/visit-templates/medico/${medicoId}`, options)
+            .then(extractData),
+
+    /**
+     * Trova il template da usare per una visita specifica
+     * Priorità: prestazione > bundle > default medico > sistema
+     */
+    getForVisit: (params: { medicoId: string; prestazioneId?: string; bundleId?: string }) =>
+        apiGet<ApiResponse<VisitTemplate>>(`${CLINICA_BASE}/visit-templates/for-visit`, params)
+            .then(extractData),
+
+    /**
+     * Recupera i default del sistema (campi, sidebar, stampa, tipi)
+     */
+    getDefaults: () =>
+        apiGet<ApiResponse<VisitTemplateDefaults>>(`${CLINICA_BASE}/visit-templates/defaults`)
+            .then(extractData),
+
+    /**
+     * Crea un nuovo template
+     */
+    create: (data: VisitTemplateInput) =>
+        apiPost<ApiResponse<VisitTemplate>>(`${CLINICA_BASE}/visit-templates`, data)
+            .then(extractData),
+
+    /**
+     * Aggiorna un template esistente
+     */
+    update: (id: string, data: Partial<VisitTemplateInput>) =>
+        apiPut<ApiResponse<VisitTemplate>>(`${CLINICA_BASE}/visit-templates/${id}`, data)
+            .then(extractData),
+
+    /**
+     * Clona un template
+     */
+    clone: (id: string, options: VisitTemplateCloneOptions) =>
+        apiPost<ApiResponse<VisitTemplate>>(`${CLINICA_BASE}/visit-templates/${id}/clone`, options)
+            .then(extractData),
+
+    /**
+     * Risolve gerarchicamente il template applicabile (PERSONAL > PRESTAZIONE > GLOBAL)
+     * @param medicoId - ID del medico (opzionale, usa utente corrente)
+     * @param prestazioneId - ID della prestazione (opzionale)
+     * @param bundleId - ID del bundle (opzionale)
+     */
+    resolve: (params?: { medicoId?: string; prestazioneId?: string; bundleId?: string }) =>
+        apiGet<ApiResponse<VisitTemplate>>(`${CLINICA_BASE}/visit-templates/resolve`, params)
+            .then(extractData),
+
+    /**
+     * Elimina un template (soft delete)
+     */
+    delete: (id: string) =>
+        apiDelete<{ success: boolean }>(`${CLINICA_BASE}/visit-templates/${id}`)
+};
+
+// =====================================================
+// API FUNCTIONS - CLINICAL (VISITE & REFERTI)
+// =====================================================
+
 export const visiteApi = {
     getAll: (options?: QueryOptions) =>
         apiGet<BackendPaginatedResponse<Visita>>(`${CLINICA_BASE}/visite`, options)
@@ -1938,6 +3974,22 @@ export const visiteApi = {
         apiGet<ApiResponse<Visita>>(`${CLINICA_BASE}/visite/${id}`)
             .then(extractData),
 
+    /**
+     * Get or create visita from appuntamento
+     * If visita exists for appuntamento, returns it.
+     * If not, creates a new visita with data from appuntamento.
+     * @param appuntamentoId - Appointment ID
+     * @returns {Promise<{visita: Visita, created: boolean, medicoAssegnato: Medico | null, medicoCorrente: Medico | null}>}
+     */
+    getOrCreateByAppuntamento: (appuntamentoId: string) =>
+        apiGet<{
+            success: boolean;
+            data: Visita;
+            created: boolean;
+            medicoAssegnato: { id: string; firstName: string; lastName: string } | null;
+            medicoCorrente: { id: string; firstName: string; lastName: string } | null;
+        }>(`${CLINICA_BASE}/visite/by-appuntamento/${appuntamentoId}`),
+
     create: (data: Partial<Visita>) =>
         apiPost<ApiResponse<Visita>>(`${CLINICA_BASE}/visite`, data)
             .then(extractData),
@@ -1946,15 +3998,22 @@ export const visiteApi = {
         apiPut<ApiResponse<Visita>>(`${CLINICA_BASE}/visite/${id}`, data)
             .then(extractData),
 
-    delete: (id: string) =>
-        apiDelete<{ success: boolean }>(`${CLINICA_BASE}/visite/${id}`),
+    delete: (id: string, deletionReason: string) =>
+        apiDeleteWithPayload<{ success: boolean; id: string; deletedAt: string; deletionReason: string }>(`${CLINICA_BASE}/visite/${id}`, { deletionReason }),
 
     inizia: (id: string) =>
         apiPost<ApiResponse<Visita>>(`${CLINICA_BASE}/visite/${id}/inizia`)
             .then(extractData),
 
     termina: (id: string) =>
-        apiPost<ApiResponse<Visita>>(`${CLINICA_BASE}/visite/${id}/termina`)
+        apiPost<{ success: boolean; data: Visita; billingWarnings?: Array<{ type: string; message: string; solutionUrl?: string; field?: string }>; message?: string }>(`${CLINICA_BASE}/visite/${id}/termina`),
+
+    nuovaVersione: (id: string, motivo?: string) =>
+        apiPost<ApiResponse<Visita>>(`${CLINICA_BASE}/visite/${id}/nuova-versione`, { motivo })
+            .then(extractData),
+
+    annullaModifiche: (id: string) =>
+        apiPost<ApiResponse<Visita>>(`${CLINICA_BASE}/visite/${id}/annulla-modifiche`)
             .then(extractData),
 
     getCampi: (id: string) =>
@@ -1975,7 +4034,65 @@ export const visiteApi = {
 
     getToday: () =>
         apiGet<ApiResponse<Visita[]>>(`${CLINICA_BASE}/visite/today`)
+            .then(extractData),
+
+    /**
+     * Genera PDF del referto per una visita
+     * @param id - Visita ID
+     * @returns PDF generation result with fileUrl and displayFilename
+     */
+    generateRefertoPdf: (id: string) =>
+        apiPost<ApiResponse<{
+            documentId: string;
+            fileUrl: string;
+            displayFilename: string;
+            fileSize: number;
+            generatedAt: string;
+        }>>(`${CLINICA_BASE}/visite/${id}/pdf`)
+            .then(extractData),
+
+    /**
+     * Ottiene l'ultimo PDF referto generato per una visita
+     * @param id - Visita ID
+     * @returns PDF info or null if not found
+     */
+    getRefertoPdf: (id: string) =>
+        apiGet<ApiResponse<{
+            id: string;
+            fileUrl: string;
+            displayFilename: string;
+            createdAt: string;
+        } | null>>(`${CLINICA_BASE}/visite/${id}/pdf`)
             .then(extractData)
+            .catch(() => null),  // Return null if no PDF exists
+
+    /**
+     * Aggiorna il medico refertante di una visita
+     * @param id - Visita ID
+     * @param medicoRefertanteId - Person ID del medico refertante (null per ripristinare l'originale)
+     */
+    updateMedicoRefertante: (id: string, medicoRefertanteId: string | null) =>
+        apiPut<ApiResponse<Visita>>(`${CLINICA_BASE}/visite/${id}/medico-refertante`, { medicoRefertanteId })
+            .then(extractData),
+
+    /**
+     * P71: Aggiorna impostazione "invio referto via mail" per la visita
+     * @param id - Visita ID
+     * @param invioRefertoMail - true = invia referto PDF al paziente via email dopo terminazione
+     */
+    updateImpostazioniInvio: (id: string, invioRefertoMail: boolean) =>
+        apiPatch<ApiResponse<{ id: string; invioRefertoMail: boolean }>>(`${CLINICA_BASE}/visite/${id}/impostazioni-invio`, { invioRefertoMail })
+            .then(extractData),
+
+    /** P73: Visita principale — recupera tutte le visite specialistiche collegate */
+    getVisiteCollegate: (id: string) =>
+        apiGet<ApiResponse<VisitaCollegata[]>>(`${CLINICA_BASE}/visite/${id}/visite-collegate`)
+            .then(extractData),
+
+    /** P73: Visita secondaria — recupera la visita principale */
+    getVisitaPrincipale: (id: string) =>
+        apiGet<ApiResponse<VisitaCollegata>>(`${CLINICA_BASE}/visite/${id}/visita-principale`)
+            .then(extractData),
 };
 
 /**
@@ -2046,6 +4163,9 @@ export const pazientiApi = {
         apiPost<ApiResponse<Paziente>>(`${CLINICA_BASE}/pazienti`, data)
             .then(extractData),
 
+    createProvisional: (data: { firstName: string; lastName: string; phone?: string; email?: string }) =>
+        apiPost<{ success: boolean; data: { id: string; firstName: string; lastName: string; taxCode?: string; birthDate?: string; phone?: string; email?: string; residenceAddress?: string; tenantId: string }; isNew: boolean; wasLinked: boolean; message: string }>(`${CLINICA_BASE}/pazienti/provisional`, data),
+
     update: (id: string, data: Partial<Paziente>) =>
         apiPut<ApiResponse<Paziente>>(`${CLINICA_BASE}/pazienti/${id}`, data)
             .then(extractData),
@@ -2058,8 +4178,91 @@ export const pazientiApi = {
             .then(extractData),
 
     getStorico: (id: string) =>
-        apiGet<ApiResponse<{ visite: Visita[]; referti: Referto[]; appuntamenti: Appuntamento[] }>>(`${CLINICA_BASE}/pazienti/${id}/storico`)
-            .then(extractData)
+        apiGet<ApiResponse<{
+            visite: Visita[];
+            referti: Referto[];
+            appuntamenti: Appuntamento[];
+            prossimaScadenzaMDL: string | null;
+            prossimaScadenzaPeriodicita: number | null;
+            /** Ultima visita MDL completata (PREVENTIVA o PERIODICA). Fallback: ultimo appuntamento. */
+            ultimaScadenzaMDL: {
+                dataEsecuzione: string | null;
+                dataOra: string | null;
+                tipoVisitaMDL: string | null;
+                giudizioIdoneita: string | null;
+                /** true se non esiste visita MDL e il dato proviene dall'ultimo appuntamento */
+                isFallbackAppuntamento?: boolean;
+            } | null;
+            /** Prossima scadenza già coperta da un appuntamento attivo (computed field) */
+            prossimaScadenzaPrenotata: {
+                dataOra: string | null;
+                tipoVisitaMDL: string | null;
+                dataScadenza: string | null;
+            } | null;
+            /** true se la prossima scadenza ha già un appuntamento prenotato (non annullato/no-show) */
+            prossimaScadenzaIsBooked: boolean;
+            /** Data appuntamento prenotato per la prossima scadenza (valorizzata solo se prossimaScadenzaIsBooked) */
+            prossimaScadenzaAppuntamentoData: string | null;
+        }>>(`${CLINICA_BASE}/pazienti/${id}/storico`)
+            .then(extractData),
+
+    /**
+     * Cerca persona per codice fiscale (anche cross-tenant)
+     * @param taxCode - Codice fiscale (16 caratteri)
+     * @returns Info sulla persona trovata e se è già paziente nel tenant corrente
+     */
+    searchByTaxCode: (taxCode: string) =>
+        apiGet<{
+            success: boolean;
+            found: boolean;
+            isPazienteInTenant?: boolean;
+            person?: {
+                id: string;
+                firstName: string;
+                lastName: string;
+                taxCode: string;
+                email?: string;
+                phone?: string;
+                birthDate?: string;
+                residenceAddress?: string;
+                residenceCity?: string;
+                postalCode?: string;
+                province?: string;
+                isFromOtherTenant: boolean;
+                roles: string[];
+            };
+            message?: string;
+        }>(`${CLINICA_BASE}/pazienti/cerca-cf/${taxCode}`),
+
+    /**
+     * Crea o aggiorna paziente con dati accettazione
+     * Usa POST /pazienti che internamente chiama findOrCreatePaziente
+     * @param data - Dati paziente completi
+     * @returns Paziente creato/aggiornato
+     */
+    findOrCreate: (data: {
+        existingPersonId?: string;  // ID paziente esistente per update
+        firstName: string;
+        lastName: string;
+        taxCode: string;
+        birthDate?: string;
+        gender?: 'MALE' | 'FEMALE';
+        birthPlace?: string;
+        birthProvince?: string;
+        email?: string;
+        phone?: string;
+        residenceAddress?: string;
+        residenceCity?: string;
+        postalCode?: string;
+        province?: string;
+    }) =>
+        apiPost<{
+            success: boolean;
+            data: Paziente;
+            isNew: boolean;
+            wasLinked: boolean;
+            message: string;
+        }>(`${CLINICA_BASE}/pazienti`, data)
 };
 
 // =====================================================
@@ -2093,185 +4296,1704 @@ export const dashboardApi = {
 };
 
 // =====================================================
-// FATTURAZIONE API
+// MODULISTICA TYPES & API (Progetto 53 - Session #13)
 // =====================================================
 
-// Fattura types
-export type StatoFattura = 'emessa' | 'pagata' | 'annullata' | 'parzialmente_pagata';
-export type MetodoPagamento = 'cash' | 'card' | 'transfer' | 'pos' | 'check';
+// Enums Modulistica
+export type FaseDocumento =
+    | 'REGISTRAZIONE'
+    | 'PRE_VISITA'
+    | 'DURANTE_VISITA'
+    | 'POST_VISITA'
+    | 'AMMINISTRATIVO'
+    | 'ALTRO';
 
-export interface FatturaSanitaria {
+export type TipoDocumentoTemplate =
+    | 'CONSENSO_INFORMATO'
+    | 'PRIVACY'
+    | 'ANAMNESI'
+    | 'CERTIFICATO'
+    | 'PRESCRIZIONE'
+    | 'REFERTO'
+    | 'MODULO_GENERICO'
+    | 'DICHIARAZIONE'
+    | 'QUESTIONARIO_ANAMNESI_MDL'
+    | 'QUESTIONARIO_RISCHIO'
+    | 'QUESTIONARIO_SINTOMI'
+    | 'SCHEDA_SORVEGLIANZA'
+    | 'ALCOL_SCREENING'
+    | 'ALTRO';
+
+export type StatoDocumentoCompilato =
+    | 'BOZZA'
+    | 'DA_FIRMARE'
+    | 'FIRMATO_PAZIENTE'
+    | 'FIRMATO_MEDICO'
+    | 'COMPLETATO'
+    | 'SCADUTO'
+    | 'ANNULLATO';
+
+// Campo template compilabile
+// Logica condizionale per mostrare/nascondere campi
+export interface CampoCondition {
+    /** Nome del campo da cui dipende */
+    fieldName: string;
+    /** Operatore di confronto */
+    operator: 'equals' | 'notEquals' | 'contains' | 'greaterThan' | 'lessThan' | 'isEmpty' | 'isNotEmpty';
+    /** Valore atteso per attivare la condizione */
+    value?: string | number | boolean;
+}
+
+export type CampoTemplateType = 'text' | 'textarea' | 'number' | 'date' | 'boolean' | 'select' | 'multiselect' | 'radio' | 'email' | 'phone' | 'signature';
+
+export interface CampoTemplate {
+    name: string;
+    type: CampoTemplateType;
+    label: string;
+    required: boolean;
+    options?: string[];
+    defaultValue?: string;
+    placeholder?: string;
+    helpText?: string;
+    validation?: {
+        min?: number;
+        max?: number;
+        pattern?: string;
+        message?: string;
+    };
+    /** Condizione per mostrare questo campo (se non soddisfatta, il campo è nascosto) */
+    condition?: CampoCondition;
+    /** Configurazione scoring per campo (attiva solo se template ha haScoring) */
+    scoring?: {
+        /** Peso del campo nel calcolo del punteggio (default 1) */
+        weight?: number;
+        /** Per boolean: punteggio se true */
+        trueScore?: number;
+        /** Per boolean: punteggio se false */
+        falseScore?: number;
+        /** Per boolean: se true è critico */
+        trueCritical?: boolean;
+        /** Per boolean: se false è critico */
+        falseCritical?: boolean;
+        /** Per select/radio/multiselect: punteggi per opzione (indice → score) */
+        optionScores?: number[];
+        /** Per number: range → punteggio [{min, max, score, critical}] */
+        ranges?: { min?: number; max?: number; score: number; critical?: boolean }[];
+    };
+}
+
+// Template documento
+export interface DocumentoTemplate {
     id: string;
     tenantId: string;
-    numero: string;
-    dataEmissione: string;
-    pazienteId: string;
-    visitaId?: string;
-    imponibile: number;
-    aliquotaIva: number;
-    importoIva: number;
-    totale: number;
-    metodoPagamento?: MetodoPagamento;
-    dataPagamento?: string;
-    stato: StatoFattura;
-    note?: string;
-    inviatoTS: boolean;
-    dataInvioTS?: string;
-    codiceDocumentoTS?: string;
+    nome: string;
+    descrizione?: string;
+    codice?: string;
+    tipo: TipoDocumentoTemplate;
+    fase: FaseDocumento;
+    versione: number;
+    contenutoHtml?: string;
+    contenutoPdf?: string;
+    campi?: CampoTemplate[];
+    branchTypes: string[];
+    richiedeFirma: boolean;
+    richiedeFirmaMedico: boolean;
+    richiedeFirmaDipendente?: boolean;
+    richiedeFirmaFormatore?: boolean;
+    richiedeFirmaDatore?: boolean;
+    validitaGiorni?: number;
+    scadenzaFissa?: string;
+    isActive: boolean;
+    ordine: number;
+    obbligatorio: boolean;
+    /** Configurazione questionario/scoring (1:1 relation) */
+    questionarioConfig?: {
+        id: string;
+        haScoring: boolean;
+        scoringConfig?: { maxScore?: number; passingScore?: number };
+        sogliaCritica?: number;
+        // MDL-specific
+        specializzazione?: string;
+        codiciRischio?: CodiceRischio[];
+        tipiVisitaMDL?: TipoVisitaMDL[];
+        compilabileDa?: CompilatoreQuestionario;
+        tempoStimato?: number;
+        istruzioniPaziente?: string;
+        istruzioniMedico?: string;
+        richiedeRevisione?: boolean;
+        periodicitaMesi?: number;
+        promemoria?: boolean;
+        isPagamento?: boolean;
+        fatturabile?: boolean;
+        prezzoDefault?: number | null;
+    };
     createdBy?: string;
     createdAt: string;
     updatedAt: string;
-    deletedAt?: string;
     // Relations
-    paziente?: Paziente;
+    prestazioni?: {
+        prestazioneId: string;
+        obbligatorio: boolean;
+        prestazione?: { id: string; nome: string; codice?: string };
+    }[];
+    medici?: {
+        medicoId: string;
+        medico?: { id: string; firstName: string; lastName: string; gender?: string };
+    }[];
+    _count?: { compilati: number };
 }
 
-export interface FatturaStats {
-    totale: {
-        fatturato: number;
-        imponibile: number;
-        iva: number;
-        count: number;
-    };
-    perStato: Array<{
-        stato: StatoFattura;
-        totale: number;
-        count: number;
-    }>;
-    perMetodoPagamento: Array<{
-        metodo: MetodoPagamento;
-        totale: number;
-        count: number;
-    }>;
-    trend: Array<{
-        mese: string;
-        totale: number;
-        count: number;
-    }>;
-}
-
-// Report Types
-export interface ReportPrestazione {
-    prestazioneId: string;
-    prestazioneName: string;
-    countFatture: number;
-    totale: number;
-    imponibile: number;
-    iva: number;
-    mediaFattura: number;
-}
-
-export interface ReportMedico {
-    medicoId: string;
-    medicoName: string;
-    countFatture: number;
-    totale: number;
-    imponibile: number;
-    iva: number;
-    pagati: number;
-    pendenti: number;
-}
-
-export interface DailyReport {
-    data: string;
-    countFatture: number;
-    totale: number;
-    incassato: number;
-    pendente: number;
-}
-
-export interface ReportComparison {
-    corrente: FatturaStats;
-    precedente: FatturaStats;
-    variazioni: {
-        fatturato: string;
-        count: string;
-        mediaFattura: string;
+// Input per creazione/aggiornamento template
+export interface DocumentoTemplateInput {
+    nome: string;
+    descrizione?: string;
+    codice?: string;
+    tipo?: TipoDocumentoTemplate;
+    fase?: FaseDocumento;
+    contenutoHtml?: string;
+    campi?: CampoTemplate[];
+    branchTypes?: string[];
+    richiedeFirma?: boolean;
+    richiedeFirmaMedico?: boolean;
+    richiedeFirmaDipendente?: boolean;
+    richiedeFirmaFormatore?: boolean;
+    richiedeFirmaDatore?: boolean;
+    validitaGiorni?: number;
+    scadenzaFissa?: string;
+    isActive?: boolean;
+    ordine?: number;
+    obbligatorio?: boolean;
+    prestazioniIds?: string[];
+    mediciIds?: string[];
+    /** Configurazione questionario/scoring */
+    questionarioConfig?: {
+        haScoring?: boolean;
+        scoringConfig?: {
+            maxScore?: number;
+            passingScore?: number;
+        };
+        sogliaCritica?: number;
+        // MDL-specific
+        specializzazione?: string;
+        codiciRischio?: CodiceRischio[];
+        tipiVisitaMDL?: TipoVisitaMDL[];
+        compilabileDa?: CompilatoreQuestionario;
+        tempoStimato?: number;
+        istruzioniPaziente?: string;
+        istruzioniMedico?: string;
+        richiedeRevisione?: boolean;
+        periodicitaMesi?: number;
+        promemoria?: boolean;
+        isPagamento?: boolean;
+        fatturabile?: boolean;
+        prezzoDefault?: number | null;
     };
 }
 
-/**
- * Fatturazione API
- */
-export const fattureApi = {
-    getAll: (options?: QueryOptions & {
-        stato?: StatoFattura;
-        pazienteId?: string;
-        dataInizio?: string;
-        dataFine?: string;
-    }) =>
-        apiGet<BackendPaginatedResponse<FatturaSanitaria>>(`${CLINICA_BASE}/fatture`, options)
-            .then(extractPaginatedData),
+// Documento compilato
+export interface DocumentoCompilato {
+    id: string;
+    tenantId: string;
+    documentoTemplateId: string;
+    pazienteId: string;
+    visitaId?: string;
+    appuntamentoId?: string;
+    datiCompilati?: Record<string, unknown>;
+    stato: StatoDocumentoCompilato;
+    pdfUrl?: string;
+    pdfGeneratoAt?: string;
+    firmaPaziente?: string;
+    firmaPazienteAt?: string;
+    firmaMedico?: string;
+    firmaMedicoAt?: string;
+    firmaMedicoId?: string;
+    dataScadenza?: string;
+    note?: string;
+    motivoAnnullamento?: string;
+    compilatoDa?: string;
+    createdAt: string;
+    updatedAt: string;
+    // Relations
+    documentoTemplate?: DocumentoTemplate;
+    paziente?: { id: string; firstName: string; lastName: string; taxCode?: string };
+    visita?: { id: string; dataOra: string; stato: string };
+    medicoFirmante?: { id: string; firstName: string; lastName: string; gender?: string };
+}
+
+// Stats modulistica
+export interface ModulisticaStats {
+    totali: number;
+    perStato: Record<StatoDocumentoCompilato, number>;
+    scadutiOggi: number;
+    daFirmare: number;
+}
+
+// Documento da compilare (template + stato compilazione)
+export interface DocumentoDaCompilare {
+    template: DocumentoTemplate;
+    compilato: { id: string; stato: StatoDocumentoCompilato; firmaPaziente?: string; firmaMedico?: string; pdfUrl?: string } | null;
+    obbligatorio: boolean;
+}
+
+// Templates API
+export const modulisticaTemplatesApi = {
+    getAll: (options?: QueryOptions & { tipo?: TipoDocumentoTemplate; fase?: FaseDocumento; isActive?: boolean }) =>
+        apiGet<{ success: boolean; data: DocumentoTemplate[]; total: number; page: number; limit: number }>(
+            `${CLINICA_BASE}/modulistica/templates`,
+            options
+        ).then(res => ({ data: res.data || [], total: res.total || 0, page: res.page || 1, limit: res.limit || 50 })),
+
+    getApplicabili: (options: { prestazioneId?: string; medicoId?: string; fase?: FaseDocumento; branchTypes?: string }) =>
+        apiGet<ApiResponse<DocumentoTemplate[]>>(`${CLINICA_BASE}/modulistica/templates/applicabili`, options)
+            .then(extractData),
 
     getById: (id: string) =>
-        apiGet<ApiResponse<FatturaSanitaria>>(`${CLINICA_BASE}/fatture/${id}`)
+        apiGet<ApiResponse<DocumentoTemplate>>(`${CLINICA_BASE}/modulistica/templates/${id}`)
             .then(extractData),
 
-    getByPaziente: (pazienteId: string, options?: QueryOptions) =>
-        apiGet<BackendPaginatedResponse<FatturaSanitaria>>(`${CLINICA_BASE}/fatture/paziente/${pazienteId}`, options)
-            .then(extractPaginatedData),
-
-    getStats: (options?: { dataInizio?: string; dataFine?: string }) =>
-        apiGet<ApiResponse<FatturaStats>>(`${CLINICA_BASE}/fatture/stats`, options)
+    create: (data: DocumentoTemplateInput) =>
+        apiPost<ApiResponse<DocumentoTemplate>>(`${CLINICA_BASE}/modulistica/templates`, data)
             .then(extractData),
 
-    getEnums: () =>
-        apiGet<ApiResponse<{ stati: StatoFattura[]; metodiPagamento: MetodoPagamento[] }>>(`${CLINICA_BASE}/fatture/enums`)
-            .then(extractData),
-
-    create: (data: {
-        pazienteId: string;
-        dataEmissione: string;
-        imponibile: number;
-        aliquotaIva?: number;
-        visitaId?: string;
-        note?: string;
-    }) =>
-        apiPost<ApiResponse<FatturaSanitaria>>(`${CLINICA_BASE}/fatture`, data)
-            .then(extractData),
-
-    createFromVisita: (visitaId: string) =>
-        apiPost<ApiResponse<FatturaSanitaria>>(`${CLINICA_BASE}/fatture/from-visita/${visitaId}`, {})
-            .then(extractData),
-
-    update: (id: string, data: Partial<FatturaSanitaria>) =>
-        apiPut<ApiResponse<FatturaSanitaria>>(`${CLINICA_BASE}/fatture/${id}`, data)
-            .then(extractData),
-
-    registerPayment: (id: string, data: { metodoPagamento: MetodoPagamento; note?: string }) =>
-        apiPost<ApiResponse<FatturaSanitaria>>(`${CLINICA_BASE}/fatture/${id}/pagamento`, data)
-            .then(extractData),
-
-    cancel: (id: string, motivo?: string) =>
-        apiPost<ApiResponse<FatturaSanitaria>>(`${CLINICA_BASE}/fatture/${id}/annulla`, { motivo })
+    update: (id: string, data: Partial<DocumentoTemplateInput>) =>
+        apiPut<ApiResponse<DocumentoTemplate>>(`${CLINICA_BASE}/modulistica/templates/${id}`, data)
             .then(extractData),
 
     delete: (id: string) =>
-        apiDelete<{ success: boolean }>(`${CLINICA_BASE}/fatture/${id}`),
+        apiDelete<{ success: boolean }>(`${CLINICA_BASE}/modulistica/templates/${id}`),
 
-    // Report endpoints
-    getReportByPrestazione: (options?: { dataInizio?: string; dataFine?: string }) =>
-        apiGet<ApiResponse<ReportPrestazione[]>>(`${CLINICA_BASE}/fatture/report/prestazioni`, options)
+    toggleActive: (id: string, isActive: boolean) =>
+        apiPost<ApiResponse<DocumentoTemplate>>(`${CLINICA_BASE}/modulistica/templates/${id}/toggle-active`, { isActive })
             .then(extractData),
 
-    getReportByMedico: (options?: { dataInizio?: string; dataFine?: string }) =>
-        apiGet<ApiResponse<ReportMedico[]>>(`${CLINICA_BASE}/fatture/report/medici`, options)
+    duplicate: (id: string) =>
+        apiPost<ApiResponse<DocumentoTemplate>>(`${CLINICA_BASE}/modulistica/templates/${id}/duplicate`, {})
             .then(extractData),
 
-    getDailyReport: (options?: { dataInizio?: string; dataFine?: string }) =>
-        apiGet<ApiResponse<DailyReport[]>>(`${CLINICA_BASE}/fatture/report/daily`, options)
+    initDaNormativa: () =>
+        apiPost<ApiResponse<{ created: number; skipped: number; total: number; templates: DocumentoTemplate[] }>>(
+            `${CLINICA_BASE}/modulistica/templates/init-da-normativa`, {}
+        ).then(extractData)
+};
+
+// Documenti compilati API
+export const modulisticaDocumentiApi = {
+    getAll: (options?: QueryOptions & {
+        pazienteId?: string;
+        visitaId?: string;
+        appuntamentoId?: string;
+        stato?: StatoDocumentoCompilato;
+        templateId?: string;
+        scaduti?: boolean;
+    }) =>
+        apiGet<{ success: boolean; data: DocumentoCompilato[]; total: number; page: number; limit: number }>(
+            `${CLINICA_BASE}/modulistica/documenti`,
+            options
+        ).then(res => ({ data: res.data || [], total: res.total || 0, page: res.page || 1, limit: res.limit || 50 })),
+
+    getDaCompilare: (options: { pazienteId: string; prestazioneId?: string; medicoId?: string; fase: FaseDocumento }) =>
+        apiGet<ApiResponse<DocumentoDaCompilare[]>>(`${CLINICA_BASE}/modulistica/documenti/da-compilare`, options)
             .then(extractData),
 
-    getComparison: (options: {
-        dataInizioCorrente: string;
-        dataFineCorrente: string;
-        dataInizioPrecedente: string;
-        dataFinePrecedente: string;
-    }) => apiGet<ApiResponse<ReportComparison>>(`${CLINICA_BASE}/fatture/report/comparison`, options)
-        .then(extractData),
+    getStats: () =>
+        apiGet<ApiResponse<ModulisticaStats>>(`${CLINICA_BASE}/modulistica/documenti/stats`)
+            .then(extractData),
 
-    exportCSV: (options?: { dataInizio?: string; dataFine?: string; stato?: StatoFattura }) =>
-        `${CLINICA_BASE}/fatture/export/csv?${new URLSearchParams(options as Record<string, string>).toString()}`
+    getById: (id: string) =>
+        apiGet<ApiResponse<DocumentoCompilato>>(`${CLINICA_BASE}/modulistica/documenti/${id}`)
+            .then(extractData),
+
+    create: (data: {
+        documentoTemplateId: string;
+        pazienteId: string;
+        visitaId?: string;
+        appuntamentoId?: string;
+        datiCompilati?: Record<string, unknown>;
+        note?: string;
+    }) =>
+        apiPost<ApiResponse<DocumentoCompilato>>(`${CLINICA_BASE}/modulistica/documenti`, data)
+            .then(extractData),
+
+    update: (id: string, datiCompilati: Record<string, unknown>) =>
+        apiPut<ApiResponse<DocumentoCompilato>>(`${CLINICA_BASE}/modulistica/documenti/${id}`, { datiCompilati })
+            .then(extractData),
+
+    firmaPaziente: (id: string, firma: string) =>
+        apiPost<ApiResponse<DocumentoCompilato>>(`${CLINICA_BASE}/modulistica/documenti/${id}/firma-paziente`, { firma })
+            .then(extractData),
+
+    firmaMedico: (id: string, firma: string) =>
+        apiPost<ApiResponse<DocumentoCompilato>>(`${CLINICA_BASE}/modulistica/documenti/${id}/firma-medico`, { firma })
+            .then(extractData),
+
+    savePdf: (id: string, pdfUrl: string) =>
+        apiPost<ApiResponse<DocumentoCompilato>>(`${CLINICA_BASE}/modulistica/documenti/${id}/pdf`, { pdfUrl })
+            .then(extractData),
+
+    annulla: (id: string, motivo: string) =>
+        apiPost<ApiResponse<DocumentoCompilato>>(`${CLINICA_BASE}/modulistica/documenti/${id}/annulla`, { motivo })
+            .then(extractData),
+
+    delete: (id: string, deletionReason: string) =>
+        apiDeleteWithPayload<{ success: boolean }>(`${CLINICA_BASE}/modulistica/documenti/${id}`, { deletionReason }),
+
+    processScaduti: () =>
+        apiPost<{ success: boolean; processed: number }>(`${CLINICA_BASE}/modulistica/process-scaduti`, {})
+};
+
+// =====================================================
+// DOCUMENTI CLINICI API (Allegati Visita)
+// Session #17: Upload allegati visita
+// =====================================================
+
+export type TipoAllegatoClinico = 'document' | 'image' | 'dicom' | 'lab_result' | 'trace' | 'other';
+
+export type TipologiaClinicaAllegato =
+    | 'ECG'
+    | 'AUDIOMETRIA'
+    | 'SPIROMETRIA'
+    | 'ESAMI_SANGUE'
+    | 'TEST_DROGA'
+    | 'ALCOL_TEST'
+    | 'RADIOGRAFIA'
+    | 'ECOGRAFIA'
+    | 'VISITA'
+    | 'CERTIFICATO'
+    | 'ALTRO';
+
+export const TIPOLOGIE_CLINICHE_LABELS: Record<TipologiaClinicaAllegato, string> = {
+    ECG: 'ECG',
+    AUDIOMETRIA: 'Audiometria',
+    SPIROMETRIA: 'Spirometria',
+    ESAMI_SANGUE: 'Esami del Sangue',
+    TEST_DROGA: 'Test Droga',
+    ALCOL_TEST: 'AlcolTest',
+    RADIOGRAFIA: 'Radiografia',
+    ECOGRAFIA: 'Ecografia',
+    VISITA: 'Visita',
+    CERTIFICATO: 'Certificato',
+    ALTRO: 'Altro',
+};
+
+export interface AllegatoClinico {
+    id: string;
+    visitaId: string;
+    /** Nome display (fornito dall'utente al momento dell'upload) */
+    nome: string;
+    /** Nome file generato per lo storage (es. timestamp_uuid.ext) */
+    fileName: string;
+    /** URL/path del file sul server */
+    fileUrl: string;
+    mimeType: string;
+    fileSize?: number | null;
+    tipo: TipoAllegatoClinico;
+    descrizione?: string;
+    tipologiaClinica?: TipologiaClinicaAllegato | string;
+    dataEsecuzione?: string;
+    caricatoDa?: string | null;
+    hashFile?: string | null;
+    createdAt: string;
+    updatedAt: string;
+    /** P73: true se l'allegato appartiene a una visita collegata (principale o secondaria) */
+    fromLinkedVisit?: boolean;
+}
+
+export interface StorageStats {
+    totalFiles: number;
+    totalSize: number;
+    totalSizeFormatted: string;
+    byType: Record<string, { count: number; size: number }>;
+}
+
+export const documentiCliniciApi = {
+    /**
+     * Get storage statistics for clinical documents
+     */
+    getStorageStats: () =>
+        apiGet<ApiResponse<StorageStats>>(`${CLINICA_BASE}/documenti/storage-stats`)
+            .then(extractData),
+
+    /**
+     * List allegati for a specific visit
+     */
+    getAllegatiVisita: (visitaId: string) =>
+        apiGet<ApiResponse<AllegatoClinico[]>>(`${CLINICA_BASE}/documenti/visita/${visitaId}`)
+            .then(extractData),
+
+    /**
+     * Upload allegato to visit (multipart/form-data)
+     */
+    uploadAllegatoVisita: async (
+        file: File,
+        visitaId: string,
+        tipo: TipoAllegatoClinico = 'document',
+        descrizione?: string,
+        tipologiaClinica?: string,
+        dataEsecuzione?: string
+    ): Promise<AllegatoClinico> => {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('visitaId', visitaId);
+        formData.append('tipo', tipo);
+        if (descrizione) formData.append('descrizione', descrizione);
+        if (tipologiaClinica) formData.append('tipologiaClinica', tipologiaClinica);
+        if (dataEsecuzione) formData.append('dataEsecuzione', dataEsecuzione);
+
+        const result = await apiUpload<ApiResponse<AllegatoClinico>>(`${CLINICA_BASE}/documenti/visita/upload`, formData);
+        return extractData(result);
+    },
+
+    /**
+     * Download allegato
+     */
+    downloadAllegato: async (allegatoId: string): Promise<Blob> => {
+        return apiDownload(`${CLINICA_BASE}/documenti/visita/download/${allegatoId}`);
+    },
+
+    /**
+     * Delete allegato
+     */
+    deleteAllegato: (allegatoId: string) =>
+        apiDelete<{ success: boolean }>(`${CLINICA_BASE}/documenti/visita/${allegatoId}`),
+
+    /**
+     * Update allegato metadata
+     */
+    updateAllegato: (allegatoId: string, data: {
+        nome?: string;
+        descrizione?: string;
+        tipologiaClinica?: string | null;
+        dataEsecuzione?: string | null;
+    }) =>
+        apiPatch<ApiResponse<AllegatoClinico>>(`${CLINICA_BASE}/documenti/visita/${allegatoId}`, data)
+            .then(extractData),
+
+    /**
+     * Get all allegati for a patient across all visits (optional tipologiaClinica filter)
+     */
+    getAllegatiPaziente: (personId: string, tipologiaClinica?: string | string[]) => {
+        const tipologieStr = Array.isArray(tipologiaClinica)
+            ? tipologiaClinica.join(',')
+            : tipologiaClinica;
+        return apiGet<ApiResponse<(AllegatoClinico & {
+            visita: { id: string; dataOra: string; prestazione?: { nome: string }; medico?: { firstName: string; lastName: string } }
+        })[]>>(`${CLINICA_BASE}/documenti/paziente/${personId}`,
+            tipologieStr ? { tipologiaClinica: tipologieStr } : undefined
+        ).then(extractData);
+    },
+};
+
+// =====================================================
+// R19 - PROFILO DI SALUTE PERSONA
+// =====================================================
+
+/**
+ * Profilo sanitario e di sicurezza per una persona in un tenant.
+ * Traccia invalidità, abitudini salute, DPI e mezzi aziendali.
+ */
+// ─── Sub-types ────────────────────────────────────────────────────────────────
+export interface VaccinazioneRecord {
+    tipo: string;          // es. "tetano", "covid", "epatiteB", "influenza"
+    data?: string | null;  // ISO date
+    scadenza?: string | null;
+    eseguita: boolean;
+    note?: string | null;
+}
+
+export interface EsposizioneRecord {
+    agente: string;        // es. "amianto", "piombo", "rumore", "vibrazioni"
+    periodoInizio?: string | null;
+    periodoFine?: string | null;
+    azienda?: string | null;
+    note?: string | null;
+}
+
+export interface CorsoFormazioneDpiRecord {
+    tipo: string;          // es. "uso_dpi", "sicurezza_lavoro", "primo_soccorso"
+    data?: string | null;
+    scadenza?: string | null;
+    ente?: string | null;
+    valido?: boolean;
+}
+
+export interface AbilitazioneMezzo {
+    tipo: string;          // es. "carrello_elevatore", "PLE", "gruetta", "trattore"
+    ottenuto?: string | null;  // data conseguimento
+    scadenza?: string | null;
+    ente?: string | null;      // ente formatore/certificatore
+    nota?: string | null;
+}
+
+export interface DpiConsegna {
+    tipo: string;          // es. "guanti", "elmetto", "scarpe_antinf"
+    data?: string | null;
+    misura?: string | null;
+    firma?: boolean;       // firma di ricevuta
+    note?: string | null;
+}
+
+export interface ProfiloDiSalute {
+    id: string;
+    personId: string;
+    tenantId: string;
+    // Stato civile & familiari
+    statoCivile?: string | null;
+    numeroFigli?: number | null;
+    professione?: string | null;
+    // Invalidità
+    hasInvalidita: boolean;
+    tipoInvalidita?: string | null;
+    gradoInvaliditaCivile?: number | null;
+    gradoInvaliditaInail?: number | null;
+    gradoInvaliditaInps?: number | null;
+    causaDiServizio: boolean;
+    gradoCausaDiServizio?: number | null;
+    legge104: boolean;
+    legge104Grado?: number | null;
+    // Patologie croniche
+    hasDiabete: boolean;
+    tipoDiabete?: string | null;
+    terapiaInsulina: boolean;
+    hasIpertensione: boolean;
+    hasCardiopatie: boolean;
+    hasAsma: boolean;
+    hasEpilessia: boolean;
+    altrePatologie?: string | null;
+    farmaci?: string | null;
+    allergieFarmaci?: string | null;
+    // Abitudini
+    fumatore?: string | null;
+    tipoSigaretta?: string | null;
+    sigaretteGiorno?: number | null;
+    anniFumo?: number | null;
+    etaInizioFumo?: number | null;
+    alcol?: string | null;
+    unitaAlcolSettimana?: number | null;
+    droghe?: string | null;
+    attivitaFisica?: string | null;
+    oreAttivitaSettimana?: number | null;
+    alimentazione?: string | null;
+    porzioniFruttaVerdure?: number | null;
+    // Sonno
+    qualitaSonno?: string | null;
+    oreSonnoNotte?: number | null;
+    sonnolenzaDiurna: boolean;
+    scalaEpworth?: number | null;
+    apneaNotturna: boolean;
+    disturbiSonno?: string | null;
+    // Diuresi
+    diuresiFrequenza?: string | null;
+    diuresiNocturia: boolean;
+    diuresiUrgenza: boolean;
+    diuresiDolore: boolean;
+    diuresiEmaturia: boolean;
+    // Alvo
+    alvoFrequenza?: string | null;
+    alvoFormaBristol?: number | null;
+    alvoDolore: boolean;
+    alvoSanguinamento: boolean;
+    // Salute riproduttiva
+    sesso?: string | null;
+    ciclaMestruale?: boolean | null;
+    etaMenarca?: number | null;
+    cicloDurata?: number | null;
+    cicloDurataFlusso?: number | null;
+    cicloRegolare?: boolean | null;
+    ultimaMestruazione?: string | null;
+    menopausa: boolean;
+    etaMenopausa?: number | null;
+    numeroGravidanze?: number | null;
+    gravidanzeATermine?: number | null;
+    gravidanzePretermine?: number | null;
+    abortiSpontanei?: number | null;
+    abortiVolontari?: number | null;
+    inGravidanza: boolean;
+    inAllattamento: boolean;
+    settimanaGestazione?: number | null;
+    // Vaccinazioni & esposizioni
+    vaccinazioni?: VaccinazioneRecord[] | null;
+    esposizioniLavorative?: EsposizioneRecord[] | null;
+    // Donazioni
+    donatoreOrgani: boolean;
+    donatoreSangue: boolean;
+    donatoreSangueFrequenza?: string | null;
+    // DPI personali
+    usaDpiPersonali: boolean;
+    dpiPersonali: string[];
+    datInizioUsoDpiPersonali?: string | null;
+    // DPI aziendali
+    dpiAzienda: string[];
+    altriDpiAzienda?: string | null;
+    dataInizioUsoDpiAzienda?: string | null;
+    corsiFormazioneDpi?: CorsoFormazioneDpiRecord[] | null;
+    // Mezzi aziendali
+    usaMezziAziendali: boolean;
+    mezziAziendali: string[];
+    altriMezziAziendali?: string | null;
+    patenteCategorie: string[];
+    patenteScadenza?: string | null;
+    patenteSospesa: boolean;
+    cqc: boolean;                        // Certificato Qualificazione Conducente
+    cqcScadenza?: string | null;
+    abilitazioniMezzi?: AbilitazioneMezzo[] | null;
+    // Formazione obbligatoria D.Lgs 81/08 art. 37
+    formazioneGenerale: boolean;
+    formazioneGeneraleData?: string | null;
+    formazioneGeneraleScadenza?: string | null;
+    formazioneSpecifica: boolean;
+    formazioneSpecificaData?: string | null;
+    formazioneSpecificaScadenza?: string | null;
+    addestramentoCompletato: boolean;
+    // Idoneità specifiche
+    idoneoLavoroInQuota?: boolean | null;
+    idoneoSpazioConfinato?: boolean | null;
+    idoneoGuida?: boolean | null;
+    idoneoVDT?: boolean | null;           // VDT > 20h/settimana
+    // DPI consegne
+    dpiConsegne?: DpiConsegna[] | null;
+    // Note
+    noteSalute?: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export const FUMATORE_LABELS: Record<string, string> = {
+    non_fumatore: 'Non fumatore',
+    ex_fumatore: 'Ex fumatore',
+    occasionale: 'Fumatore occasionale',
+    fumatore: 'Fumatore',
+};
+
+export const ALCOL_LABELS: Record<string, string> = {
+    non_bevitore: 'Non bevitore',
+    occasionale: 'Occasionale',
+    moderato: 'Moderato',
+    eccessivo: 'Eccessivo',
+};
+
+export const ATTIVITA_FISICA_LABELS: Record<string, string> = {
+    sedentario: 'Sedentario',
+    leggera: 'Attività leggera',
+    moderata: 'Attività moderata',
+    intensa: 'Attività intensa',
+};
+
+export const DPI_PERSONALI_OPTIONS = [
+    { value: 'occhiali', label: 'Occhiali da vista' },
+    { value: 'lenti_contatto', label: 'Lenti a contatto' },
+    { value: 'apparecchio_acustico', label: 'Apparecchio acustico' },
+    { value: 'protesi_arto', label: 'Protesi arto' },
+    { value: 'bustina_lombare', label: 'Busto lombare' },
+    { value: 'girello_stampelle', label: 'Girello/stampelle' },
+    { value: 'altro', label: 'Altro' },
+] as const;
+
+export const DPI_AZIENDA_OPTIONS = [
+    { value: 'elmetto', label: 'Elmetto' },
+    { value: 'guanti', label: 'Guanti' },
+    { value: 'scarpe_antinf', label: 'Scarpe antinfortunistiche' },
+    { value: 'mascherina_ffp2', label: 'Mascherina FFP2/FFP3' },
+    { value: 'otoprotettori', label: 'Otoprotettori' },
+    { value: 'occhiali_protezione', label: 'Occhiali protezione' },
+    { value: 'visiera', label: 'Visiera' },
+    { value: 'imbracatura', label: 'Imbracatura' },
+    { value: 'indumenti_protezione', label: 'Indumenti protezione' },
+    { value: 'guanti_antitaglio', label: 'Guanti antitaglio' },
+    { value: 'gilet_riflettente', label: 'Gilet riflettente' },
+    { value: 'altro', label: 'Altro' },
+] as const;
+
+export const MEZZI_AZIENDALI_OPTIONS = [
+    { value: 'autovettura', label: 'Autovettura' },
+    { value: 'furgone', label: 'Furgone' },
+    { value: 'muletto', label: 'Muletto/Carrello elevatore' },
+    { value: 'piattaforma_elevabile', label: 'Piattaforma elevabile' },
+    { value: 'trattore', label: 'Trattore' },
+    { value: 'mezzo_aereo', label: 'Mezzo aereo' },
+    { value: 'moto', label: 'Moto/Scooter' },
+    { value: 'camion', label: 'Camion' },
+    { value: 'altro', label: 'Altro' },
+] as const;
+
+export const profiloDiSaluteApi = {
+    getByPerson: (personId: string) =>
+        apiGet<ApiResponse<ProfiloDiSalute | null>>(`${CLINICA_BASE}/profilo-salute/persona/${personId}`)
+            .then(extractData),
+
+    upsert: (personId: string, data: Partial<ProfiloDiSalute>) =>
+        apiPut<ApiResponse<ProfiloDiSalute>>(`${CLINICA_BASE}/profilo-salute/persona/${personId}`, data)
+            .then(extractData),
+
+    delete: (personId: string) =>
+        apiDelete<{ success: boolean }>(`${CLINICA_BASE}/profilo-salute/persona/${personId}`),
+};
+
+// =====================================================
+// MDL - MEDICINA DEL LAVORO API (Progetto 56)
+// =====================================================
+
+/**
+ * Mansioni API - Gestione mansioni con rischi associati
+ */
+export const mansioniApi = {
+    getAll: (options?: QueryOptions) =>
+        apiGet<BackendPaginatedResponse<Mansione>>(`${CLINICA_BASE}/mansioni`, options)
+            .then(extractPaginatedData),
+
+    getById: (id: string) =>
+        apiGet<ApiResponse<Mansione>>(`${CLINICA_BASE}/mansioni/${id}`)
+            .then(extractData),
+
+    create: (data: MansioneCreateInput) =>
+        apiPost<ApiResponse<Mansione>>(`${CLINICA_BASE}/mansioni`, data)
+            .then(extractData),
+
+    update: (id: string, data: MansioneUpdateInput) =>
+        apiPut<ApiResponse<Mansione>>(`${CLINICA_BASE}/mansioni/${id}`, data)
+            .then(extractData),
+
+    delete: (id: string) =>
+        apiDelete<{ success: boolean }>(`${CLINICA_BASE}/mansioni/${id}`),
+
+    duplicate: (id: string) =>
+        apiPost<ApiResponse<Mansione>>(`${CLINICA_BASE}/mansioni/${id}/duplicate`, {})
+            .then(extractData),
+
+    // Worker assignment
+    assignWorker: (id: string, data: { personId: string; dataAssegnazione?: string; note?: string }) =>
+        apiPost<ApiResponse<LavoratoreMansione>>(`${CLINICA_BASE}/mansioni/${id}/assign`, data)
+            .then(extractData),
+
+    removeWorkerAssignment: (assignmentId: string) =>
+        apiDelete<{ success: boolean }>(`${CLINICA_BASE}/mansioni/assignment/${assignmentId}`),
+
+    getWorkerRisks: (personId: string) =>
+        apiGet<ApiResponse<{ rischi: MansioneRischio[]; mansioni: Mansione[] }>>(`${CLINICA_BASE}/mansioni/worker/${personId}/risks`)
+            .then(extractData),
+
+    // By site
+    getBySite: (siteId: string, options?: QueryOptions) =>
+        apiGet<BackendPaginatedResponse<Mansione>>(`${CLINICA_BASE}/mansioni`, { ...options, siteId })
+            .then(extractPaginatedData)
+};
+
+/**
+ * Giudizi Idoneità API - Gestione giudizi medico competente (Art. 41 D.Lgs 81/08)
+ */
+export const giudiziIdoneitaApi = {
+    getAll: (options?: QueryOptions) =>
+        apiGet<BackendPaginatedResponse<GiudizioIdoneita>>(`${CLINICA_BASE}/giudizi-idoneita`, options)
+            .then(extractPaginatedData),
+
+    getById: (id: string) =>
+        apiGet<ApiResponse<GiudizioIdoneita>>(`${CLINICA_BASE}/giudizi-idoneita/${id}`)
+            .then(extractData),
+
+    getByWorker: (personId: string) =>
+        apiGet<ApiResponse<GiudizioIdoneita>>(`${CLINICA_BASE}/giudizi-idoneita/worker/${personId}`)
+            .then(extractData),
+
+    getExpiring: (days?: number) =>
+        apiGet<ApiResponse<GiudizioIdoneita[]>>(`${CLINICA_BASE}/giudizi-idoneita/expiring`, { days })
+            .then(extractData),
+
+    getStatsByMedico: (medicoId: string) =>
+        apiGet<ApiResponse<{
+            totale: number;
+            perTipo: Record<TipoGiudizioIdoneita, number>;
+            perStato: Record<StatoGiudizio, number>;
+        }>>(`${CLINICA_BASE}/giudizi-idoneita/stats/${medicoId}`)
+            .then(extractData),
+
+    create: (data: Partial<GiudizioIdoneita>) =>
+        apiPost<ApiResponse<GiudizioIdoneita>>(`${CLINICA_BASE}/giudizi-idoneita`, data)
+            .then(extractData),
+
+    update: (id: string, data: Partial<GiudizioIdoneita>) =>
+        apiPut<ApiResponse<GiudizioIdoneita>>(`${CLINICA_BASE}/giudizi-idoneita/${id}`, data)
+            .then(extractData),
+
+    delete: (id: string, deletionReason: string) =>
+        apiDeleteWithPayload<{ success: boolean }>(`${CLINICA_BASE}/giudizi-idoneita/${id}`, { deletionReason }),
+
+    // Notifications
+    notifyWorker: (id: string) =>
+        apiPost<ApiResponse<GiudizioIdoneita>>(`${CLINICA_BASE}/giudizi-idoneita/${id}/notify-worker`, {})
+            .then(extractData),
+
+    notifyEmployer: (id: string) =>
+        apiPost<ApiResponse<GiudizioIdoneita>>(`${CLINICA_BASE}/giudizi-idoneita/${id}/notify-employer`, {})
+            .then(extractData),
+
+    // Appeals (Art. 41 c.9)
+    registerAppeal: (id: string, data: { dataRicorso: string; motivazione?: string }) =>
+        apiPost<ApiResponse<GiudizioIdoneita>>(`${CLINICA_BASE}/giudizi-idoneita/${id}/appeal`, data)
+            .then(extractData),
+
+    resolveAppeal: (id: string, data: { esitoRicorso: string; note?: string }) =>
+        apiPost<ApiResponse<GiudizioIdoneita>>(`${CLINICA_BASE}/giudizi-idoneita/${id}/appeal-resolution`, data)
+            .then(extractData),
+
+    // PDF Documents (Art. 41 c.7 — copia lavoratore e datore di lavoro)
+    generateDocuments: (id: string) =>
+        apiPost<ApiResponse<{ pdfLavoratoreUrl: string; pdfDatoreUrl: string }>>(
+            `${CLINICA_BASE}/giudizi-idoneita/${id}/generate-documents`, {}
+        ).then(extractData),
+
+    completeWorkflow: (id: string) =>
+        apiPost<ApiResponse<{ pdfLavoratoreUrl: string; pdfDatoreUrl: string; emailInviata: boolean }>>(
+            `${CLINICA_BASE}/giudizi-idoneita/${id}/complete-workflow`, {}
+        ).then(extractData),
+
+    getPdfUrl: (id: string, destinatario: 'lavoratore' | 'datore') =>
+        `${CLINICA_BASE}/giudizi-idoneita/${id}/pdf/${destinatario}`,
+
+    batchPreview: () =>
+        apiGet<ApiResponse<{
+            totaleGiudizi: number;
+            companies: Array<{
+                companyTenantProfileId: string | null;
+                ragioneSociale: string;
+                totale: number;
+                giaInviati: number;
+                giudizi: Array<{
+                    id: string;
+                    personId: string;
+                    lavoratore: string;
+                    tipoGiudizio: string;
+                    hasPdf: boolean;
+                    alreadySent: boolean;
+                }>;
+            }>;
+        }>>(`${CLINICA_BASE}/giudizi-idoneita/batch-preview`)
+            .then(extractData),
+
+    batchGenerateAndSend: (params?: {
+        companyTenantProfileId?: string;
+        companyTenantProfileIds?: string[];
+        personIds?: string[];
+        force?: boolean;
+    }) =>
+        apiPost<ApiResponse<{
+            giudiziTrovati: number;
+            pdfGenerati: number;
+            pdfErrori: number;
+            email: { processed: number; sent: number; skipped: number; errors: number };
+            zipAziende: { total: number; companies: number; sent: number; errors: number };
+        }>>(`${CLINICA_BASE}/giudizi-idoneita/batch-generate-send`, params || {})
+            .then(extractData)
+};
+
+/**
+ * Rischio-Prestazioni API - Mapping rischi → prestazioni obbligatorie
+ */
+export const rischioPrestazioniApi = {
+    // Catalogo statico rischi D.Lgs 81/08
+    getCatalogo: () =>
+        apiGet<CatalogoRischiResponse>(`${CLINICA_BASE}/rischio-prestazioni/catalogo`),
+
+    // Default mapping da normativa
+    getDefaultMapping: () =>
+        apiGet<ApiResponse<Record<CodiceRischio, { prestazioni: string[]; periodicita: TipoPeriodicita }>>>(`${CLINICA_BASE}/rischio-prestazioni/default-mapping`)
+            .then(extractData),
+
+    // Mapping configurato per tenant
+    getAll: (options?: QueryOptions) =>
+        apiGet<BackendPaginatedResponse<RischioPrestazione>>(`${CLINICA_BASE}/rischio-prestazioni`, options)
+            .then(extractPaginatedData),
+
+    getByRischio: (codiceRischio: CodiceRischio) =>
+        apiGet<ApiResponse<RischioPrestazione[]>>(`${CLINICA_BASE}/rischio-prestazioni/by-risk/${codiceRischio}`)
+            .then(extractData),
+
+    // Calcolo prestazioni per lavoratore
+    getWorkerPrestazioni: (personId: string) =>
+        apiGet<ApiResponse<{
+            rischi: MansioneRischio[];
+            prestazioniRichieste: Array<{
+                prestazione: Prestazione;
+                periodicita: TipoPeriodicita;
+                obbligatoria: boolean;
+                daCodiceRischio: CodiceRischio;
+            }>;
+        }>>(`${CLINICA_BASE}/rischio-prestazioni/worker/${personId}`)
+            .then(extractData),
+
+    getStats: () =>
+        apiGet<ApiResponse<{
+            totaleMapping: number;
+            perRischio: Record<CodiceRischio, number>;
+            perPeriodicita: Record<TipoPeriodicita, number>;
+        }>>(`${CLINICA_BASE}/rischio-prestazioni/stats`)
+            .then(extractData),
+
+    create: (data: Partial<RischioPrestazione>) =>
+        apiPost<ApiResponse<RischioPrestazione>>(`${CLINICA_BASE}/rischio-prestazioni`, data)
+            .then(extractData),
+
+    update: (id: string, data: Partial<RischioPrestazione>) =>
+        apiPut<ApiResponse<RischioPrestazione>>(`${CLINICA_BASE}/rischio-prestazioni/${id}`, data)
+            .then(extractData),
+
+    delete: (id: string) =>
+        apiDelete<{ success: boolean }>(`${CLINICA_BASE}/rischio-prestazioni/${id}`),
+
+    seedDefaults: () =>
+        apiPost<ApiResponse<{
+            success: boolean;
+            prestazioni: { created: number; skipped: number };
+            mappings: { created: number; skipped: number };
+            summary: string;
+        }>>(`${CLINICA_BASE}/rischio-prestazioni/seed-defaults`, {})
+            .then(extractData)
+};
+
+/**
+ * Protocolli Sanitari API - Gestione protocolli per mansione/sede (Progetto 56 - FASE 2)
+ */
+export const protocolliSanitariApi = {
+    getAll: (options?: QueryOptions & { mansioneId?: string; siteId?: string; isAttivo?: boolean }) =>
+        apiGet<BackendPaginatedResponse<ProtocolloSanitario>>(`${CLINICA_BASE}/protocolli-sanitari`, options)
+            .then(extractPaginatedData),
+
+    getById: (id: string) =>
+        apiGet<ApiResponse<ProtocolloSanitario>>(`${CLINICA_BASE}/protocolli-sanitari/${id}`)
+            .then(extractData),
+
+    getByMansione: (mansioneId: string) =>
+        apiGet<ApiResponse<ProtocolloSanitario[]>>(`${CLINICA_BASE}/protocolli-sanitari/by-mansione/${mansioneId}`)
+            .then(extractData),
+
+    getBySite: (siteId: string) =>
+        apiGet<ApiResponse<ProtocolloSanitario[]>>(`${CLINICA_BASE}/protocolli-sanitari/by-site/${siteId}`)
+            .then(extractData),
+
+    getCost: (id: string) =>
+        apiGet<ApiResponse<ProtocolloCosto>>(`${CLINICA_BASE}/protocolli-sanitari/${id}/cost`)
+            .then(extractData),
+
+    suggest: (mansioneId: string) =>
+        apiGet<ApiResponse<{ prestazioniSuggerite: Array<{ prestazioneId: string; prestazione: { id: string; codice: string; nome: string }; isObbligatoria: boolean; periodicita: string; rischiCorrelati: string[] }>; suggestedCodice: string; suggestedDenominazione: string; periodicitaVisiteMesiSuggerita: number }>>(`${CLINICA_BASE}/protocolli-sanitari/suggest/${mansioneId}`)
+            .then(extractData),
+
+    create: (data: ProtocolloCreateInput) =>
+        apiPost<ApiResponse<ProtocolloSanitario>>(`${CLINICA_BASE}/protocolli-sanitari`, data)
+            .then(extractData),
+
+    update: (id: string, data: ProtocolloUpdateInput) =>
+        apiPut<ApiResponse<ProtocolloSanitario>>(`${CLINICA_BASE}/protocolli-sanitari/${id}`, data)
+            .then(extractData),
+
+    delete: (id: string) =>
+        apiDelete<{ success: boolean }>(`${CLINICA_BASE}/protocolli-sanitari/${id}`),
+
+    duplicate: (id: string) =>
+        apiPost<ApiResponse<ProtocolloSanitario>>(`${CLINICA_BASE}/protocolli-sanitari/${id}/duplicate`, {})
+            .then(extractData),
+
+    setActive: (id: string, isAttivo: boolean) =>
+        apiPut<ApiResponse<ProtocolloSanitario>>(`${CLINICA_BASE}/protocolli-sanitari/${id}/activate`, { isAttivo })
+            .then(extractData)
+};
+
+/**
+ * Nomine Ruolo API - Gestione figure sicurezza MC/RSPP/RLS (Progetto 56 - FASE 3)
+ */
+export const nomineRuoloApi = {
+    getAll: (options?: QueryOptions & {
+        siteId?: string;
+        companyTenantProfileId?: string;
+        tipoRuolo?: TipoNominaRuolo;
+        stato?: StatoNomina;
+        personId?: string;
+        expiringDays?: number
+    }) =>
+        apiGet<BackendPaginatedResponse<NominaRuolo>>(`${CLINICA_BASE}/nomine-ruolo`, options)
+            .then(extractPaginatedData),
+
+    getById: (id: string) =>
+        apiGet<ApiResponse<NominaRuolo>>(`${CLINICA_BASE}/nomine-ruolo/${id}`)
+            .then(extractData),
+
+    getBySite: (siteId: string) =>
+        apiGet<ApiResponse<NominaRuolo[]>>(`${CLINICA_BASE}/nomine-ruolo/by-site/${siteId}`)
+            .then(extractData),
+
+    getByCompany: (companyTenantProfileId: string) =>
+        apiGet<ApiResponse<NominaRuolo[]>>(`${CLINICA_BASE}/nomine-ruolo/by-company/${companyTenantProfileId}`)
+            .then(extractData),
+
+    getByPerson: (personId: string) =>
+        apiGet<ApiResponse<NominaRuolo[]>>(`${CLINICA_BASE}/nomine-ruolo/by-person/${personId}`)
+            .then(extractData),
+
+    getExpiring: (days?: number) =>
+        apiGet<ApiResponse<NominaRuolo[]>>(`${CLINICA_BASE}/nomine-ruolo/expiring/${days || 30}`)
+            .then(extractData),
+
+    getStats: () =>
+        apiGet<ApiResponse<NominaStats>>(`${CLINICA_BASE}/nomine-ruolo/stats`)
+            .then(extractData),
+
+    create: (data: NominaRuoloCreateInput) =>
+        apiPost<ApiResponse<NominaRuolo>>(`${CLINICA_BASE}/nomine-ruolo`, data)
+            .then(extractData),
+
+    update: (id: string, data: NominaRuoloUpdateInput) =>
+        apiPut<ApiResponse<NominaRuolo>>(`${CLINICA_BASE}/nomine-ruolo/${id}`, data)
+            .then(extractData),
+
+    delete: (id: string) =>
+        apiDelete<{ success: boolean }>(`${CLINICA_BASE}/nomine-ruolo/${id}`),
+
+    cease: (id: string, dataFine?: string) =>
+        apiPut<ApiResponse<NominaRuolo>>(`${CLINICA_BASE}/nomine-ruolo/${id}/cease`, { dataFine })
+            .then(extractData),
+
+    suspend: (id: string, motivo: string) =>
+        apiPut<ApiResponse<NominaRuolo>>(`${CLINICA_BASE}/nomine-ruolo/${id}/suspend`, { motivo })
+            .then(extractData),
+
+    reactivate: (id: string) =>
+        apiPut<ApiResponse<NominaRuolo>>(`${CLINICA_BASE}/nomine-ruolo/${id}/reactivate`, {})
+            .then(extractData),
+
+    renew: (id: string, newPersonId?: string) =>
+        apiPut<ApiResponse<NominaRuolo>>(`${CLINICA_BASE}/nomine-ruolo/${id}/renew`, { newPersonId })
+            .then(extractData),
+
+    updateFormazione: (id: string, data: {
+        dataUltimaFormazione?: string;
+        dataProssimaFormazione?: string;
+        formazioneRichiesta?: string;
+        note?: string;
+    }) =>
+        apiPut<ApiResponse<NominaRuolo>>(`${CLINICA_BASE}/nomine-ruolo/${id}/formazione`, data)
+            .then(extractData)
+};
+
+// =====================================================
+// MDL - ALLEGATO 3A API (Progetto 56 - FASE 5)
+// =====================================================
+
+export const allegato3AApi = {
+    // Genera dati cartella sanitaria per un lavoratore
+    generate: (personId: string, companyTenantProfileId: string) =>
+        apiGet<ApiResponse<Allegato3AData>>(`${CLINICA_BASE}/allegato-3a/${personId}/${companyTenantProfileId}`)
+            .then(extractData),
+
+    // Genera bulk per tutti i lavoratori di un'azienda
+    generateBulk: (companyTenantProfileId: string) =>
+        apiGet<ApiResponse<{ workers: Allegato3AData[]; stats: Allegato3AStats }>>(`${CLINICA_BASE}/allegato-3a/bulk/${companyTenantProfileId}`)
+            .then(extractData),
+
+    // Ottiene statistiche per azienda
+    getStats: (companyTenantProfileId: string) =>
+        apiGet<ApiResponse<Allegato3AStats>>(`${CLINICA_BASE}/allegato-3a/stats/${companyTenantProfileId}`)
+            .then(extractData),
+
+    // Ottiene storico visite lavoratore
+    getWorkerHistory: (personId: string) =>
+        apiGet<ApiResponse<Allegato3AAccertamento[]>>(`${CLINICA_BASE}/allegato-3a/worker/${personId}/history`)
+            .then(extractData),
+
+    // Ottiene giudizio attuale lavoratore
+    getWorkerGiudizio: (personId: string) =>
+        apiGet<ApiResponse<Allegato3AGiudizio | null>>(`${CLINICA_BASE}/allegato-3a/worker/${personId}/giudizio`)
+            .then(extractData)
+};
+
+// =====================================================
+// MDL - ALLEGATO 3B API (Progetto 56 - FASE 6)
+// =====================================================
+
+export const allegato3BApi = {
+    // Lista allegati 3B
+    getAll: (params?: { anno?: number; companyTenantProfileId?: string }) =>
+        apiGet<ApiResponse<Allegato3B[]>>(`${CLINICA_BASE}/allegato-3b`, params as Record<string, string>)
+            .then(extractData),
+
+    // Ottiene dettaglio allegato 3B
+    getById: (id: string) =>
+        apiGet<ApiResponse<Allegato3B>>(`${CLINICA_BASE}/allegato-3b/${id}`)
+            .then(extractData),
+
+    // Crea nuovo allegato 3B
+    create: (data: Allegato3BCreateInput) =>
+        apiPost<ApiResponse<Allegato3B>>(`${CLINICA_BASE}/allegato-3b`, data)
+            .then(extractData),
+
+    // Compila statistiche allegato 3B
+    compile: (id: string) =>
+        apiPost<ApiResponse<Allegato3B>>(`${CLINICA_BASE}/allegato-3b/${id}/compile`, {})
+            .then(extractData),
+
+    // Genera e scarica XML INAIL — usa download diretto (il server invia raw XML)
+    getXml: (id: string) =>
+        apiDownloadWithFilename(`${CLINICA_BASE}/allegato-3b/${id}/xml`),
+
+    // Scarica ZIP con tutti gli XML di un anno
+    getZip: (anno: number) =>
+        apiDownloadWithFilename(`${CLINICA_BASE}/allegato-3b/zip/${anno}`),
+
+    // Preview statistiche (senza salvare)
+    preview: (data: { anno: number; companyTenantProfileId: string }) =>
+        apiPost<ApiResponse<Allegato3BStatistiche>>(`${CLINICA_BASE}/allegato-3b/preview`, data)
+            .then(extractData),
+
+    // Aggiorna stato invio
+    updateStato: (id: string, data: Allegato3BUpdateInput) =>
+        apiPut<ApiResponse<Allegato3B>>(`${CLINICA_BASE}/allegato-3b/${id}/stato`, data)
+            .then(extractData),
+
+    // Elimina allegato 3B (soft delete)
+    delete: (id: string) =>
+        apiDelete<ApiResponse<void>>(`${CLINICA_BASE}/allegato-3b/${id}`),
+
+    // Genera e compila Allegato 3B per tutte le aziende con MC attivo
+    generateAll: (anno: number) =>
+        apiPost<ApiResponse<{
+            anno: number;
+            totaleAziende: number;
+            creati: number;
+            compilati: number;
+            errori: number;
+            dettagli: Array<{ companyTenantProfileId: string; ragioneSociale: string; status: string; error?: string }>;
+        }>>(`${CLINICA_BASE}/allegato-3b/generate-all`, { anno })
+            .then(extractData)
+};
+
+// =====================================================
+// MALATTIE PROFESSIONALI API
+// =====================================================
+
+export const malattieProfessionaliApi = {
+    getAll: (params?: { personId?: string; companyTenantProfileId?: string; anno?: number; tipologia?: string; esito?: string; page?: number; limit?: number }) =>
+        apiGet<{ success: boolean; data: MalattiaProfessionale[]; pagination: { total: number; page: number; limit: number; pages: number } }>(`${CLINICA_BASE}/malattie-professionali`, params as Record<string, string>)
+            .then(res => res),
+
+    getByPerson: (personId: string) =>
+        apiGet<ApiResponse<MalattiaProfessionale[]>>(`${CLINICA_BASE}/malattie-professionali/by-person/${personId}`)
+            .then(extractData),
+
+    getByCompany: (companyTenantProfileId: string, anno?: number) =>
+        apiGet<{ success: boolean; data: MalattiaProfessionale[]; aggregazione: MalattieProfessionaliAggregazione }>(`${CLINICA_BASE}/malattie-professionali/by-company/${companyTenantProfileId}`, anno ? { anno: String(anno) } as Record<string, string> : undefined)
+            .then(res => res),
+
+    getById: (id: string) =>
+        apiGet<ApiResponse<MalattiaProfessionale>>(`${CLINICA_BASE}/malattie-professionali/${id}`)
+            .then(extractData),
+
+    create: (data: MalattiaProfessionaleCreateInput) =>
+        apiPost<ApiResponse<MalattiaProfessionale>>(`${CLINICA_BASE}/malattie-professionali`, data)
+            .then(extractData),
+
+    update: (id: string, data: MalattiaProfessionaleUpdateInput) =>
+        apiPut<ApiResponse<MalattiaProfessionale>>(`${CLINICA_BASE}/malattie-professionali/${id}`, data)
+            .then(extractData),
+
+    delete: (id: string) =>
+        apiDelete<{ success: boolean }>(`${CLINICA_BASE}/malattie-professionali/${id}`),
+};
+
+// =====================================================
+// MDL - SCADENZE MDL API (Progetto 56 - FASE 7)
+// =====================================================
+
+export const scadenzeMDLApi = {
+    // Ottiene tutte le scadenze MDL
+    getAll: (params?: {
+        companyTenantProfileId?: string;
+        siteId?: string;
+        categoria?: CategoriaScadenzaMDL;
+        livelloUrgenza?: LivelloUrgenzaScadenza;
+        giorni?: number;
+        limit?: number;
+        includePrenotate?: boolean;
+    }) =>
+        apiGet<ApiResponse<ScadenzeMDLResponse>>(`${CLINICA_BASE}/scadenze-mdl`, params as Record<string, string>)
+            .then(extractData),
+
+    // Ottiene solo statistiche aggregate
+    getStatistiche: (giorni?: number) =>
+        apiGet<ApiResponse<ScadenzeMDLStatistiche>>(`${CLINICA_BASE}/scadenze-mdl/statistiche`, { giorni: giorni?.toString() })
+            .then(extractData),
+
+    // Ottiene notifiche urgenti (per badge/alert)
+    getNotifiche: (giorniAvviso?: number) =>
+        apiGet<ApiResponse<ScadenzeMDLNotifiche>>(`${CLINICA_BASE}/scadenze-mdl/notifiche`, { giorniAvviso: giorniAvviso?.toString() })
+            .then(extractData),
+
+    // Ottiene riepilogo per azienda
+    getByAzienda: (companyTenantProfileId: string) =>
+        apiGet<ApiResponse<ScadenzeAziendaRiepilogo>>(`${CLINICA_BASE}/scadenze-mdl/azienda/${companyTenantProfileId}`)
+            .then(extractData),
+
+    // Ottiene scadenze per sede
+    getBySede: (siteId: string, giorni?: number) =>
+        apiGet<ApiResponse<ScadenzeMDLResponse>>(`${CLINICA_BASE}/scadenze-mdl/sede/${siteId}`, { giorni: giorni?.toString() })
+            .then(extractData),
+
+    // Ottiene scadenze formato calendario
+    getCalendario: (params?: {
+        dataInizio?: string;
+        dataFine?: string;
+        companyTenantProfileId?: string;
+    }) =>
+        apiGet<ApiResponse<{ eventi: ScadenzeCalendarioEvento[]; periodo: { dataInizio: string; dataFine: string } }>>(`${CLINICA_BASE}/scadenze-mdl/calendario`, params as Record<string, string>)
+            .then(extractData),
+
+    // Export scadenze
+    exportData: (params?: {
+        formato?: 'csv' | 'json';
+        giorni?: number;
+        companyTenantProfileId?: string;
+    }) =>
+        apiGet<ApiResponse<ScadenzaMDL[]>>(`${CLINICA_BASE}/scadenze-mdl/export`, params as Record<string, string>)
+            .then(extractData),
+
+    // Registra esecuzione scadenze per-prestazione dopo visita MDL e crea le successive
+    programmaPrestazioni: (data: {
+        personId: string;
+        mansioneId: string;
+        visitaId?: string;
+        dataVisita?: string; // ISO date string
+        excludePrestazioniIds?: string[]; // P72_15: prestazioni da non programmare
+        dateOverrides?: Record<string, string>; // P72_18: date manuali per prestazione (prestazioneId → ISO date)
+        prestazioniAggiuntive?: { id: string; periodicitaMesi: number }[]; // P72_20: aggiuntive per ScadenzaPrestazioneProtocollo
+        questionariAggiuntivi?: { documentoTemplateId: string; periodicitaMesi: number }[]; // P72_23: questionari periodici
+    }) =>
+        apiPost<ApiResponse<{ updated: number; created: number; message: string }>>(`${CLINICA_BASE}/scadenze-mdl/programma-prestazioni`, data)
+            .then(extractData),
+
+    /** Restituisce tutte le ScadenzaPrestazioneProtocollo di un lavoratore, raggruppate per prestazione */
+    getScadenzePersona: (personId: string) =>
+        apiGet<ApiResponse<ScadenzaProtocolloGruppo[]>>(`${CLINICA_BASE}/scadenze-mdl/persona/${personId}`)
+            .then(extractData),
+
+    /**
+     * Restituisce le ScadenzaPrestazioneProtocollo aperte di un lavoratore entro ±giorni dalla dataRiferimento.
+     * Usato dal modal prenotazione MDL per auto-selezionare le prestazioni in scadenza.
+     */
+    getScadenzeInScadenza: (personId: string, dataRiferimento: string, options?: { giorni?: number; excludeAppuntamentoId?: string }) =>
+        apiGet<ApiResponse<ScadenzaPrestazioneInScadenza[]>>(
+            `${CLINICA_BASE}/scadenze-mdl/persona/${personId}/in-scadenza`,
+            {
+                dataRiferimento,
+                ...(options?.giorni != null && { giorni: options.giorni.toString() }),
+                ...(options?.excludeAppuntamentoId && { excludeAppuntamentoId: options.excludeAppuntamentoId }),
+            }
+        ).then(extractData),
+
+    /** Aggiorna la data di scadenza di una singola ScadenzaPrestazioneProtocollo */
+    patchDataScadenza: (id: string, dataScadenza: string) =>
+        apiPatch<ApiResponse<{ id: string; dataScadenza: string }>>(`${CLINICA_BASE}/scadenze-mdl/${id}/data-scadenza`, { dataScadenza })
+            .then(extractData),
+
+    /** Riconcilia le date di un gruppo di scadenze pendenti alla stessa data */
+    reconciliaDate: (ids: string[], targetDate: string) =>
+        apiPost<ApiResponse<{ aggiornate: number }>>(`${CLINICA_BASE}/scadenze-mdl/reconcilia-date`, { ids, targetDate })
+            .then(extractData)
+};
+
+// =====================================================
+// PEC - POSTA ELETTRONICA CERTIFICATA API (FASE 4)
+// =====================================================
+
+export const pecApi = {
+    // Invia giudizio al lavoratore via PEC
+    sendToWorker: (giudizioId: string, data: PecSendToWorkerInput = {}) =>
+        apiPost<ApiResponse<PecSendResult>>(`${CLINICA_BASE}/pec/giudizio/${giudizioId}/lavoratore`, data)
+            .then(extractData),
+
+    // Invia giudizio al datore di lavoro via PEC
+    sendToEmployer: (giudizioId: string, data: PecSendToEmployerInput = {}) =>
+        apiPost<ApiResponse<PecSendResult>>(`${CLINICA_BASE}/pec/giudizio/${giudizioId}/datore`, data)
+            .then(extractData),
+
+    // Invia giudizio a entrambi (lavoratore e datore)
+    sendToBoth: (giudizioId: string, data: PecSendToBothInput = {}) =>
+        apiPost<ApiResponse<PecSendBothResult>>(`${CLINICA_BASE}/pec/giudizio/${giudizioId}/both`, data)
+            .then(extractData),
+
+    // Ottiene log PEC per un giudizio
+    getLogsForGiudizio: (giudizioId: string) =>
+        apiGet<ApiResponse<PecLog[]>>(`${CLINICA_BASE}/pec/giudizio/${giudizioId}/logs`)
+            .then(extractData),
+
+    // Verifica stato consegna PEC
+    checkStatus: (messageId: string) =>
+        apiGet<ApiResponse<PecDeliveryStatus>>(`${CLINICA_BASE}/pec/status/${messageId}`)
+            .then(extractData),
+
+    // Ottiene statistiche PEC
+    getStats: (params?: { from?: string; to?: string }) =>
+        apiGet<ApiResponse<PecStats>>(`${CLINICA_BASE}/pec/stats`, params as Record<string, string>)
+            .then(extractData)
+};
+
+// =====================================================
+// PEC CONFIG - CONFIGURAZIONE PEC TENANT API (FASE 4.2)
+// =====================================================
+
+export const pecConfigApi = {
+    // Lista provider PEC supportati
+    getProviders: () =>
+        apiGet<ApiResponse<PecProviderInfo[]>>(`${CLINICA_BASE}/pec-config/providers`)
+            .then(extractData),
+
+    // Recupera configurazione PEC del tenant corrente
+    getConfig: () =>
+        apiGet<ApiResponse<PecConfig | null>>(`${CLINICA_BASE}/pec-config`)
+            .then(res => res.data),
+
+    // Verifica stato configurazione PEC
+    getStatus: () =>
+        apiGet<ApiResponse<PecConfigStatus>>(`${CLINICA_BASE}/pec-config/status`)
+            .then(extractData),
+
+    // Salva/aggiorna configurazione PEC
+    saveConfig: (data: PecConfigInput) =>
+        apiPost<ApiResponse<PecConfig>>(`${CLINICA_BASE}/pec-config`, data)
+            .then(extractData),
+
+    // Elimina configurazione PEC
+    deleteConfig: () =>
+        apiDelete<ApiResponse<{ deleted: boolean }>>(`${CLINICA_BASE}/pec-config`)
+            .then(extractData),
+
+    // Testa configurazione PEC
+    testConfig: (testRecipient: string) =>
+        apiPost<ApiResponse<PecTestResult>>(`${CLINICA_BASE}/pec-config/test`, { testRecipient })
+            .then(extractData)
+};
+
+// =====================================================
+// P66 - SCADENZE CENTRALIZZATE API (Deadlines & Farmaci)
+// =====================================================
+
+// Types for Scadenze
+export type DeadlineCategory =
+    | 'VISITA'
+    | 'PROTOCOLLO_SANITARIO'
+    | 'TARIFFARIO'
+    | 'FARMACO'
+    | 'MANUTENZIONE'
+    | 'CERTIFICAZIONE'
+    | 'DOCUMENTO'
+    | 'CONTRATTO'
+    | 'ALTRO';
+
+export type DeadlinePriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
+
+export type DeadlineStatus = 'ATTIVA' | 'IN_PREAVVISO' | 'SCADUTA' | 'COMPLETATA' | 'ANNULLATA';
+
+export type FormaFarmaceutica =
+    | 'COMPRESSE' | 'CAPSULE' | 'FIALE' | 'SOLUZIONE_ORALE' | 'SCIROPPO'
+    | 'CREMA' | 'POMATA' | 'GEL' | 'COLLIRIO' | 'SPRAY' | 'SUPPOSTE'
+    | 'AEROSOL' | 'CEROTTO' | 'ALTRO';
+
+export interface DeadlineItem {
+    id: string;
+    tenantId: string;
+    categoria: DeadlineCategory;
+    priorita: DeadlinePriority;
+    status: DeadlineStatus;
+
+    // Riferimento polimorfico
+    entityType?: string;
+    entityId?: string;
+
+    // Dati scadenza
+    dataScadenza: string;
+    dataPreavviso1?: string;
+    dataPreavviso2?: string;
+    giorniPreavviso1?: number;
+    giorniPreavviso2?: number;
+
+    // Informazioni
+    titolo: string;
+    descrizione?: string;
+
+    // Responsabili
+    responsabileId?: string;
+    responsabile?: { id: string; nome: string; cognome: string; };
+    personId?: string;
+    person?: { id: string; nome: string; cognome: string; };
+    companyId?: string;
+    company?: { id: string; ragioneSociale: string; };
+    companySiteId?: string;
+    companySite?: { id: string; nome: string; };
+    ambulatorioId?: string;
+    ambulatorio?: { id: string; nome: string; };
+
+    // Notifiche
+    notificaInviata1: boolean;
+    notificaInviata2: boolean;
+
+    // Completamento
+    completataIl?: string;
+    completatoDaId?: string;
+    noteCompletamento?: string;
+
+    // Ricorrenza
+    ricorrente: boolean;
+    frequenzaMesi?: number;
+
+    // Extra per farmaco
+    ubicazione?: string;
+    quantita?: number;
+    unitaMisura?: string;
+    lottoNumero?: string;
+    farmacoId?: string;
+
+    // Timestamps
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface DeadlineInput {
+    categoria: DeadlineCategory;
+    priorita: DeadlinePriority;
+    entityType?: string;
+    entityId?: string;
+    dataScadenza: string;
+    giorniPreavviso1?: number;
+    giorniPreavviso2?: number;
+    titolo: string;
+    descrizione?: string;
+    responsabileId?: string;
+    personId?: string;
+    companyId?: string;
+    companySiteId?: string;
+    ambulatorioId?: string;
+    ricorrente?: boolean;
+    frequenzaMesi?: number;
+    ubicazione?: string;
+    quantita?: number;
+    unitaMisura?: string;
+    lottoNumero?: string;
+}
+
+export interface DeadlineStats {
+    totali: number;
+    scadute: number;
+    inScadenza7gg: number;
+    inScadenza30gg: number;
+    perCategoria: Array<{ categoria: DeadlineCategory; count: number; }>;
+    perPriorita: Array<{ priorita: DeadlinePriority; count: number; }>;
+}
+
+export interface DeadlineFilters {
+    categoria?: DeadlineCategory;
+    status?: DeadlineStatus;
+    priorita?: DeadlinePriority;
+    dataInizio?: string;
+    dataFine?: string;
+    responsabileId?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+}
+
+export const scadenzeApi = {
+    // Lista scadenze con filtri
+    getAll: (filters?: DeadlineFilters) =>
+        apiGet<PaginatedResponse<DeadlineItem>>('/api/v1/scadenze', filters as Record<string, string>),
+
+    // Statistiche dashboard
+    getStats: () =>
+        apiGet<DeadlineStats>('/api/v1/scadenze/stats'),
+
+    // Dettaglio scadenza
+    getById: (id: string) =>
+        apiGet<DeadlineItem>(`/api/v1/scadenze/${id}`),
+
+    // Crea scadenza
+    create: (data: DeadlineInput) =>
+        apiPost<DeadlineItem>('/api/v1/scadenze', data),
+
+    // Aggiorna scadenza
+    update: (id: string, data: Partial<DeadlineInput>) =>
+        apiPut<DeadlineItem>(`/api/v1/scadenze/${id}`, data),
+
+    // Completa scadenza
+    complete: (id: string, noteCompletamento?: string) =>
+        apiPost<DeadlineItem>(`/api/v1/scadenze/${id}/complete`, { noteCompletamento }),
+
+    // Elimina scadenza
+    delete: (id: string, deletionReason: string) =>
+        apiDeleteWithPayload<{ success: boolean }>(`/api/v1/scadenze/${id}`, { deletionReason })
+};
+
+// Farmaco types
+export interface Farmaco {
+    id: string;
+    tenantId: string;
+    codice: string;
+    nome: string;
+    principioAttivo?: string;
+    formaFarmaceutica?: FormaFarmaceutica;
+    dosaggio?: string;
+    ubicazione: string;
+    ambulatorioId?: string;
+    ambulatorio?: { id: string; nome: string; codice?: string; };
+    quantitaDisponibile: number;
+    unitaMisura: string;
+    quantitaMinima?: number;
+    dataScadenza: string;
+    lottoNumero?: string;
+    fornitore?: string;
+    dataAcquisto?: string;
+    prezzoAcquisto?: number;
+    note?: string;
+    immagineUrl?: string;
+
+    // Computed flags
+    isSottoScorta?: boolean;
+    isInScadenza?: boolean;
+    isScaduto?: boolean;
+
+    // Related deadlines
+    deadlines?: DeadlineItem[];
+
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface FarmacoInput {
+    codice: string;
+    nome: string;
+    principioAttivo?: string;
+    formaFarmaceutica?: FormaFarmaceutica;
+    dosaggio?: string;
+    ubicazione: string;
+    ambulatorioId?: string;
+    quantitaDisponibile: number;
+    unitaMisura?: string;
+    quantitaMinima?: number;
+    dataScadenza: string;
+    lottoNumero?: string;
+    fornitore?: string;
+    dataAcquisto?: string;
+    prezzoAcquisto?: number;
+    note?: string;
+}
+
+export interface FarmacoFilters {
+    ambulatorioId?: string;
+    ubicazione?: string;
+    formaFarmaceutica?: FormaFarmaceutica;
+    inScadenza?: boolean;
+    sottoScorta?: boolean;
+    search?: string;
+    page?: number;
+    limit?: number;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+}
+
+export interface FarmacoStats {
+    totali: number;
+    scaduti: number;
+    inScadenza30gg: number;
+    sottoScorta: number;
+    perUbicazione: Array<{ ubicazione: string; count: number; }>;
+}
+
+export const farmaciApi = {
+    // Lista farmaci con filtri
+    getAll: (filters?: FarmacoFilters) =>
+        apiGet<PaginatedResponse<Farmaco>>('/api/v1/scadenze/farmaci', filters as Record<string, string>),
+
+    // Statistiche farmaci
+    getStats: () =>
+        apiGet<FarmacoStats>('/api/v1/scadenze/farmaci/stats'),
+
+    // Ubicazioni per autocomplete
+    getUbicazioni: () =>
+        apiGet<string[]>('/api/v1/scadenze/farmaci/ubicazioni'),
+
+    // Dettaglio farmaco
+    getById: (id: string) =>
+        apiGet<Farmaco>(`/api/v1/scadenze/farmaci/${id}`),
+
+    // Crea farmaco
+    create: (data: FarmacoInput) =>
+        apiPost<Farmaco>('/api/v1/scadenze/farmaci', data),
+
+    // Aggiorna farmaco
+    update: (id: string, data: Partial<FarmacoInput>) =>
+        apiPut<Farmaco>(`/api/v1/scadenze/farmaci/${id}`, data),
+
+    // Carico/scarico quantità
+    updateQuantita: (id: string, delta: number, motivo: string) =>
+        apiPost<Farmaco>(`/api/v1/scadenze/farmaci/${id}/quantita`, { delta, motivo }),
+
+    // Elimina farmaco
+    delete: (id: string, deletionReason: string) =>
+        apiDeleteWithPayload<{ success: boolean }>(`/api/v1/scadenze/farmaci/${id}`, { deletionReason })
+};
+
+// =====================================================
+// P74 - EMAIL TEMPLATES
+// =====================================================
+
+export interface EmailTemplate {
+    id: string;
+    tenantId: string;
+    nome: string;
+    branca?: string | null;
+    medicoId?: string | null;
+    prestazioneId?: string | null;
+    subject: string;
+    bodyHtml: string;
+    allegatiIds: string[];
+    isDefault: boolean;
+    isActive: boolean;
+    createdAt: string;
+    updatedAt: string;
+    createdBy?: string | null;
+    deletedAt?: string | null;
+}
+
+export interface EmailTemplateInput {
+    nome: string;
+    branca?: string;
+    medicoId?: string;
+    prestazioneId?: string;
+    subject: string;
+    bodyHtml: string;
+    allegatiIds?: string[];
+    isDefault?: boolean;
+    isActive?: boolean;
+}
+
+export const emailTemplatesApi = {
+    getAll: (params?: { branca?: string; medicoId?: string; prestazioneId?: string; isActive?: boolean }) =>
+        apiGet<{ success: boolean; data: EmailTemplate[]; total: number; page: number }>(`${CLINICA_BASE}/email-templates`, params)
+            .then(res => ({ data: res.data || [], total: res.total || 0 })),
+
+    getById: (id: string) =>
+        apiGet<{ success: boolean; data: EmailTemplate }>(`${CLINICA_BASE}/email-templates/${id}`)
+            .then(res => res.data),
+
+    resolve: (params: { prestazioneId?: string; medicoId?: string; branca?: string }) =>
+        apiGet<{ success: boolean; data: EmailTemplate | null }>(`${CLINICA_BASE}/email-templates/resolve`, params)
+            .then(res => res.data),
+
+    create: (data: EmailTemplateInput) =>
+        apiPost<{ success: boolean; data: EmailTemplate }>(`${CLINICA_BASE}/email-templates`, data)
+            .then(res => res.data),
+
+    update: (id: string, data: Partial<EmailTemplateInput>) =>
+        apiPut<{ success: boolean; data: EmailTemplate }>(`${CLINICA_BASE}/email-templates/${id}`, data)
+            .then(res => res.data),
+
+    delete: (id: string) =>
+        apiDelete<{ success: boolean }>(`${CLINICA_BASE}/email-templates/${id}`)
 };
 
 // =====================================================
@@ -2307,11 +6029,38 @@ export const clinicaApi = {
     // Patients
     pazienti: pazientiApi,
 
-    // Fatturazione
-    fatture: fattureApi,
-
     // Dashboard
-    dashboard: dashboardApi
+    dashboard: dashboardApi,
+
+    // Modulistica (Progetto 53)
+    modulisticaTemplates: modulisticaTemplatesApi,
+    modulisticaDocumenti: modulisticaDocumentiApi,
+
+    // Documenti Clinici (Allegati)
+    documentiClinici: documentiCliniciApi,
+
+    // MDL - Medicina del Lavoro (Progetto 56)
+    mansioni: mansioniApi,
+    giudiziIdoneita: giudiziIdoneitaApi,
+    rischioPrestazioni: rischioPrestazioniApi,
+    protocolliSanitari: protocolliSanitariApi,
+    nomineRuolo: nomineRuoloApi,
+    allegato3A: allegato3AApi,           // FASE 5: Cartella Sanitaria
+    allegato3B: allegato3BApi,           // FASE 6: Relazione Annuale INAIL
+    malattieProfessionali: malattieProfessionaliApi, // Malattie Professionali D.Lgs 81/08 Art. 40
+    scadenzeMDL: scadenzeMDLApi,         // FASE 7: Dashboard Scadenze
+    pec: pecApi,                         // FASE 4: PEC Integration
+    pecConfig: pecConfigApi,             // FASE 4.2: Configurazione PEC Tenant
+
+    // P66 - Sistema Scadenze Centralizzato
+    scadenze: scadenzeApi,
+    farmaci: farmaciApi,
+
+    // R19 - Profilo Di Salute Persona
+    profiloDiSalute: profiloDiSaluteApi,
+
+    // P74 - Email Templates
+    emailTemplates: emailTemplatesApi,
 };
 
 export default clinicaApi;

@@ -166,7 +166,6 @@ class RolesService {
     parentRoleType?: string;
     permissions?: string[]
   }): Promise<Role> {
-    console.log('RolesService.create called with:', role);
     // Usa l'endpoint per ruoli personalizzati
     const response = await apiPost<{ success: boolean, data: Role }>(`${this.baseUrl}/custom`, role);
     return response.data;
@@ -230,28 +229,17 @@ class RolesService {
 
   async getRolePermissions(roleType: string): Promise<string[]> {
     const encodedRoleType = encodeURIComponent(roleType);
-    console.log('🔍 [RolesService] Getting permissions for role:', roleType, 'encoded:', encodedRoleType);
 
     const response = await apiGet<{ success: boolean, data: { permissions: Array<{ permissionId: string, granted: boolean }> } }>(`${this.baseUrl}/${encodedRoleType}/permissions`);
-
-    console.log('🔍 [RolesService] Raw API response:', response);
-    console.log('🔍 [RolesService] Response data:', response.data);
-    console.log('🔍 [RolesService] Response data permissions:', response.data?.permissions);
 
     // Il backend restituisce { success: true, data: { permissions: [...], ... } }
     // Ogni permission ha la struttura { permissionId: string, granted: boolean, ... }
     // Restituiamo solo i permissionId dei permessi granted
     if (response.data && response.data.permissions && Array.isArray(response.data.permissions)) {
-      console.log('🔍 [RolesService] Processing permissions array, length:', response.data.permissions.length);
-
       const grantedPermissions = response.data.permissions
-        .filter((perm) => {
-          console.log('🔍 [RolesService] Permission:', perm.permissionId, 'granted:', perm.granted);
-          return perm.granted === true;
-        })
+        .filter((perm) => perm.granted === true)
         .map((perm) => perm.permissionId);
 
-      console.log('🔍 [RolesService] Granted permissions:', grantedPermissions);
       return grantedPermissions;
     }
 

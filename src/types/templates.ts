@@ -12,6 +12,9 @@ export type TemplateType =
   | 'CERTIFICATE'
   | 'INVOICE'
   | 'COURSE_PROGRAM'
+  | 'PREVENTIVO'
+  | 'SLIDES'
+  | 'VISITA_MEDICA'
   | 'CUSTOM';
 
 export type TemplateFormat =
@@ -32,37 +35,37 @@ export interface Template {
   name: string;
   type: TemplateType;
   fileFormat?: TemplateFormat;
-  
+
   // Content
   content?: string;
   header?: string;
   footer?: string;
-  
+
   // Layout & Styling
   styles?: Record<string, any>;
   layout?: TemplateLayout;
   logoImage?: string;
   logoPosition?: string;
-  
+
   // Marker configuration
   markers?: Record<string, any>;
   markerSchema?: Record<string, any>;
-  
+
   // Versioning
   version: number;
   isActive: boolean;
   isDefault: boolean;
-  
+
   // Google Integration
   googleDocsUrl?: string;
   lastSyncedAt?: string;
   syncEnabled: boolean;
-  
+
   // Metadata
   description?: string;
   category?: string;
   tags: string[];
-  
+
   // Multi-tenant & Audit
   companyId?: string;
   tenantId: string;
@@ -70,7 +73,7 @@ export interface Template {
   createdAt: string;
   updatedAt: string;
   deletedAt?: string;
-  
+
   // Relations (populated by backend)
   company?: {
     id: string;
@@ -104,7 +107,7 @@ export interface TemplateVersion {
   id: string;
   templateId: string;
   version: number;
-  
+
   // Snapshot of content
   content: string;
   header?: string;
@@ -112,16 +115,16 @@ export interface TemplateVersion {
   styles?: Record<string, any>;
   layout?: TemplateLayout;
   markers?: Record<string, any>;
-  
+
   // Change tracking
   changesSummary?: string;
   changeDetails?: Record<string, any>;
-  
+
   // Metadata
   createdBy: string;
   createdAt: string;
   tenantId: string;
-  
+
   // Relations
   creator?: {
     id: string;
@@ -132,16 +135,16 @@ export interface TemplateVersion {
 
 export interface GeneratedDocument {
   id: string;
-  
+
   // Template reference
   templateId: string;
   templateVersion: number;
   type: TemplateType;
-  
+
   // Entity reference
   entityType: string;
   entityId: string;
-  
+
   // File info
   filename: string;
   filepath: string;
@@ -149,29 +152,29 @@ export interface GeneratedDocument {
   fileSize: number;
   fileHash?: string;
   mimeType: string;
-  
+
   // Generation context
   markers: Record<string, any>;
   metadata?: Record<string, any>;
   status: DocumentStatus;
-  
+
   // Batch reference
   batchId?: string;
   batchSize?: number;
   batchIndex?: number;
-  
+
   // Delivery
   sentAt?: string;
   sentTo?: string;
   downloadCount: number;
   lastDownloadAt?: string;
-  
+
   // Audit
   generatedBy: string;
   generatedAt: string;
   tenantId: string;
   deletedAt?: string;
-  
+
   // Relations (populated by backend)
   template?: {
     id: string;

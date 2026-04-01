@@ -32,11 +32,12 @@ const PRIVATE_ROUTES = [
   '/schedules',
   '/settings',
   '/tenants',
-  '/quotes-and-invoices',
+  '/preventivi',
   '/documents-corsi',
   '/gdpr',
   '/admin',
   '/forms',
+  '/test',
   '/demo'
 ];
 
@@ -62,7 +63,7 @@ export const AreaThemeProvider: React.FC<AreaThemeProviderProps> = ({ children }
   // Applica le CSS variables al documento
   useEffect(() => {
     const root = document.documentElement;
-    
+
     // Rimuovi le variabili precedenti
     Object.keys(publicThemeCSSVars).forEach(key => {
       root.style.removeProperty(key);
@@ -70,19 +71,19 @@ export const AreaThemeProvider: React.FC<AreaThemeProviderProps> = ({ children }
     Object.keys(privateThemeCSSVars).forEach(key => {
       root.style.removeProperty(key);
     });
-    
+
     // Applica le nuove variabili
     Object.entries(cssVars).forEach(([key, value]) => {
       root.style.setProperty(key, String(value));
     });
-    
+
     // Aggiungi una classe CSS per identificare l'area corrente
     root.classList.remove('area-public', 'area-private');
     root.classList.add(`area-${area}`);
-    
+
     // Aggiungi attributo data per debugging
     root.setAttribute('data-theme-area', area);
-    
+
   }, [area, cssVars]);
 
   const contextValue: AreaThemeContextType = {

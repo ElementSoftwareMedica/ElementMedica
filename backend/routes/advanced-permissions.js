@@ -1,12 +1,12 @@
 import express from 'express';
 import logger from "../utils/logger.js";
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/prisma-optimization.js';
 import enhancedRoleService from '../services/enhancedRoleService.js';
-import { authenticate } from '../auth/middleware.js';
+import authMiddleware from '../middleware/auth.js';
+const { authenticate } = authMiddleware;
 import { tenantMiddleware } from '../middleware/tenant.js';
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 // Applica solo il middleware del tenant globalmente
 // Il middleware di autenticazione sarà applicato solo alle route che ne hanno bisogno
@@ -19,7 +19,7 @@ router.use(tenantMiddleware);
  * @updated Fixed permission format to use backend format
  */
 router.get('/entities',
-  authenticate(),
+  authenticate,
   enhancedRoleService.requirePermission('roles:manage'), // Re-enabled (Phase 1 Security)
   async (req, res) => {
     try {
@@ -648,7 +648,7 @@ router.get('/entities',
       logger.error('[ADVANCED_PERMISSIONS] Error getting entities:', error);
       res.status(500).json({
         success: false,
-        error: 'Failed to get entities'
+        error: 'Errore nel recupero delle entità'
       });
     }
   }
@@ -712,7 +712,7 @@ router.get('/resources',
       logger.error('[ADVANCED_PERMISSIONS] Error getting resources:', error);
       res.status(500).json({
         success: false,
-        error: 'Failed to get resources'
+        error: 'Errore nel recupero delle risorse'
       });
     }
   }
@@ -724,7 +724,7 @@ router.get('/resources',
  * @access Admin
  */
 router.get('/scopes',
-  authenticate(),
+  authenticate,
   enhancedRoleService.requirePermission('roles:read'),
   async (req, res) => {
     try {
@@ -759,7 +759,7 @@ router.get('/scopes',
       logger.error('[ADVANCED_PERMISSIONS] Error getting scopes:', error);
       res.status(500).json({
         success: false,
-        error: 'Failed to get scopes'
+        error: 'Errore nel recupero degli ambiti'
       });
     }
   }
@@ -771,7 +771,7 @@ router.get('/scopes',
  * @access Admin
  */
 router.get('/conditions',
-  authenticate(),
+  authenticate,
   enhancedRoleService.requirePermission('roles:read'),
   async (req, res) => {
     try {
@@ -806,7 +806,7 @@ router.get('/conditions',
       logger.error('[ADVANCED_PERMISSIONS] Error getting conditions:', error);
       res.status(500).json({
         success: false,
-        error: 'Failed to get conditions'
+        error: 'Errore nel recupero delle condizioni'
       });
     }
   }
@@ -818,7 +818,7 @@ router.get('/conditions',
  * @access Admin
  */
 router.post('/validate',
-  authenticate(),
+  authenticate,
   enhancedRoleService.requirePermission('roles:manage'),
   async (req, res) => {
     try {
@@ -873,7 +873,7 @@ router.post('/validate',
       logger.error('[ADVANCED_PERMISSIONS] Error validating configuration:', error);
       res.status(500).json({
         success: false,
-        error: 'Failed to validate configuration'
+        error: 'Errore nella validazione della configurazione'
       });
     }
   }
@@ -892,43 +892,12 @@ router.get('/health', (req, res) => {
 });
 
 /**
- * @route GET /api/advanced-permissions/test
- * @desc Test endpoint per verificare il middleware
- * @access Admin
- */
-router.get('/test',
-  authenticate(),
-  enhancedRoleService.requirePermission('roles:read'),
-  async (req, res) => {
-    try {
-      logger.info('[ADVANCED_PERMISSIONS] Test endpoint called successfully');
-      res.json({
-        success: true,
-        message: 'Test endpoint working',
-        user: {
-          id: req.person?.id,
-          email: req.person?.email,
-          globalRole: req.person?.globalRole
-        },
-        timestamp: new Date().toISOString()
-      });
-    } catch (error) {
-      logger.error('[ADVANCED_PERMISSIONS] Test endpoint error:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Test endpoint failed'
-      });
-    }
-  }
-);
-
-/**
  * @route GET /api/advanced-permissions/roles/:roleId
  * @desc Ottiene i permessi avanzati per un ruolo specifico
  * @access Admin
  */
 router.get('/roles/:roleId',
-  authenticate(),
+  authenticate,
   enhancedRoleService.requirePermission('roles:read'),
   async (req, res) => {
     try {
@@ -950,7 +919,7 @@ router.get('/roles/:roleId',
         logger.info(`[ADVANCED_PERMISSIONS] Invalid roleType: ${roleId}`);
         return res.status(404).json({
           success: false,
-          error: 'Invalid role type'
+          error: 'Tipo ruolo non valido'
         });
       }
 
@@ -1087,7 +1056,7 @@ router.get('/roles/:roleId',
       logger.error('[ADVANCED_PERMISSIONS] Error getting role permissions:', error);
       res.status(500).json({
         success: false,
-        error: 'Failed to get role permissions'
+        error: 'Errore nel recupero dei permessi del ruolo'
       });
     }
   }
@@ -1099,7 +1068,7 @@ router.get('/roles/:roleId',
  * @access Admin
  */
 router.get('/preview',
-  authenticate(),
+  authenticate,
   enhancedRoleService.requirePermission('roles:read'),
   async (req, res) => {
     try {
@@ -1199,7 +1168,7 @@ router.get('/preview',
       logger.error('[ADVANCED_PERMISSIONS] Error generating preview:', error);
       res.status(500).json({
         success: false,
-        error: 'Failed to generate preview'
+        error: 'Errore nella generazione dell\'anteprima'
       });
     }
   }

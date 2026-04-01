@@ -1,0 +1,599 @@
+/**
+ * RisultatiAnonimiCard
+ *
+ * R17: Card per la generazione dei Risultati Anonimi Collettivi (Art. 40 c.1 D.Lgs 81/08).
+ * Consente al medico competente di selezionare un periodo e visualizzare statistiche
+ * aggregate anonime sulle visite e giudizi dell'azienda.
+ *
+ * @module components/companies
+ */
+
+import React, { useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
+import { useQuery } from '@tanstack/react-query';
+import {
+    BarChart3,
+    X,
+    Calendar,
+    Users,
+    Stethoscope,
+    ShieldCheck,
+    FileText,
+    Loader2,
+    AlertCircle,
+    ChevronRight,
+    Download,
+    CheckCircle2,
+    AlertTriangle,
+    Info,
+    ClipboardList,
+    Activity
+} from 'lucide-react';
+import { cn } from '../../design-system/utils';
+import { useToast } from '../../hooks/useToast';
+import { apiGet, apiDownload } from '../../services/api';
+import { DatePickerElegante } from '../ui/DatePickerElegante';
+
+// =============================================
+// TYPES
+// =============================================
+
+interface TipoVisitaItem {
+    tipo: string;
+    label: string;
+    conteggio: number;
+}
+
+interface GiudizioItem {
+    tipo: string;
+    label: string;
+    conteggio: number;
+    percentuale: number;
+}
+
+interface PrestazioneItem {
+    nome: string;
+    conteggio: number;
+}
+
+interface RisultatiAnonimiStats {
+    periodo: { da: string; a: string };
+    totaleVisite: number;
+    lavoratoriDistinti: number;
+    visiteSenzaGiudizio: number;
+    giudiziRegistratiPercentuale: number;
+    tipiVisita: TipoVisitaItem[];
+    giudizi: GiudizioItem[];
+    prestazioniEseguite: PrestazioneItem[];
+    esamiAggregati?: Array<{
+        tipo: string;
+        label: string;
+        eseguiti: number;
+        normali: number;
+        alterati: number;
+    }>;
+}
+
+interface RisultatiAnonimiCardProps {
+    companyTenantProfileId: string;
+    companyName: string;
+    onActionComplete?: () => void;
+}
+
+// =============================================
+// HELPERS
+// =============================================
+
+function getDefaultPeriod(): { from: string; to: string } {
+    const prevYear = new Date().getFullYear() - 1;
+    return {
+        from: `${prevYear}-01-01`,
+        to: `${prevYear}-12-31`
+    };
+}
+
+function formatDateLabel(iso: string): string {
+    const [y, m, d] = iso.split('-');
+    return `${d}/${m}/${y}`;
+}
+
+function getGiudizioColor(tipo: string): string {
+    const map: Record<string, string> = {
+        IDONEO: 'bg-green-500',
+        IDONEO_CON_PRESCRIZIONI: 'bg-yellow-400',
+        IDONEO_CON_LIMITAZIONI: 'bg-amber-400',
+        NON_IDONEO_TEMPORANEO: 'bg-orange-500',
+        NON_IDONEO_PERMANENTE: 'bg-red-600'
+    };
+    return map[tipo] || 'bg-gray-400';
+}
+
+function getGiudizioTextColor(tipo: string): string {
+    const map: Record<string, string> = {
+        IDONEO: 'text-green-700',
+        IDONEO_CON_PRESCRIZIONI: 'text-yellow-700',
+        IDONEO_CON_LIMITAZIONI: 'text-amber-700',
+        NON_IDONEO_TEMPORANEO: 'text-orange-700',
+        NON_IDONEO_PERMANENTE: 'text-red-700'
+    };
+    return map[tipo] || 'text-gray-700';
+}
+
+// =============================================
+// COMPONENT
+// =============================================
+
+export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
+    companyTenantProfileId,
+    companyName,
+    onActionComplete
+}) => {
+    const { showToast } = useToast();
+    const defaults = useMemo(() => getDefaultPeriod(), []);
+
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [dateFrom, setDateFrom] = useState(defaults.from);
+    const [dateTo, setDateTo] = useState(defaults.to);
+    const [queriedFrom, setQueriedFrom] = useState<string | null>(null);
+    const [queriedTo, setQueriedTo] = useState<string | null>(null);
+    const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
+    // =============================================
+    // QUERY — fires only when user clicks "Genera"
+    // =============================================
+
+    const { data: stats, isLoading, isError, error, refetch } = useQuery<RisultatiAnonimiStats>({
+        queryKey: ['risultati-anonimi', companyTenantProfileId, queriedFrom, queriedTo],
+        queryFn: async () => {
+            const resp = await apiGet<{ success: boolean; data: RisultatiAnonimiStats }>(
+                `/api/v1/companies/${companyTenantProfileId}/risultati-anonimi?dateFrom=${queriedFrom}&dateTo=${queriedTo}`
+            );
+            if (!resp.success) throw new Error('Errore nel caricamento statistiche');
+            return resp.data;
+        },
+        enabled: !!queriedFrom && !!queriedTo,
+        retry: false,
+        staleTime: 5 * 60 * 1000
+    });
+
+    const handleGenera = () => {
+        if (!dateFrom || !dateTo) {
+            showToast({ type: 'warning', message: 'Selezionare date di inizio e fine periodo' });
+            return;
+        }
+        if (dateFrom > dateTo) {
+            showToast({ type: 'warning', message: 'La data di inizio deve essere prima della data di fine' });
+            return;
+        }
+        setQueriedFrom(dateFrom);
+        setQueriedTo(dateTo);
+    };
+
+    const handleGeneraPdf = async () => {
+        if (!stats || !queriedFrom || !queriedTo) return;
+        setIsGeneratingPdf(true);
+        try {
+            const blob = await apiDownload(
+                `/api/v1/companies/${companyTenantProfileId}/risultati-anonimi/pdf?dateFrom=${queriedFrom}&dateTo=${queriedTo}`
+            );
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `risultati-anonimi-${companyName.replace(/\s+/g, '-')}-${queriedFrom}-${queriedTo}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            showToast({ type: 'success', message: 'PDF generato con successo' });
+        } catch {
+            showToast({ type: 'error', message: 'Errore nella generazione del PDF' });
+        } finally {
+            setIsGeneratingPdf(false);
+        }
+    };
+
+    // =============================================
+    // MODAL
+    // =============================================
+
+    const modal = isModalOpen ? createPortal(
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[1000] flex items-start justify-center p-4 pt-16 overflow-y-auto">
+            <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-3xl">
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+                    <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-teal-100 dark:bg-teal-900/40 flex items-center justify-center">
+                            <BarChart3 className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+                        </div>
+                        <div>
+                            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+                                Risultati Anonimi Collettivi
+                            </h2>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                                Art. 40 c.1 D.Lgs 81/08 — {companyName}
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => setIsModalOpen(false)}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                    >
+                        <X className="h-5 w-5" />
+                    </button>
+                </div>
+
+                {/* Period selector */}
+                <div className="px-6 py-4 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-700">
+                    <div className="flex flex-wrap items-end gap-4">
+                        <div className="flex-1 min-w-[150px]">
+                            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                                Dal
+                            </label>
+                            <DatePickerElegante
+                                value={dateFrom || null}
+                                onChange={(d) => setDateFrom(d ? d.toISOString().split('T')[0] : '')}
+                                theme="teal"
+                                size="sm"
+                                placeholder="Dal..."
+                            />
+                        </div>
+                        <div className="flex-1 min-w-[150px]">
+                            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                                Al
+                            </label>
+                            <DatePickerElegante
+                                value={dateTo || null}
+                                onChange={(d) => setDateTo(d ? d.toISOString().split('T')[0] : '')}
+                                theme="teal"
+                                size="sm"
+                                placeholder="Al..."
+                            />
+                        </div>
+
+                        {/* Quick selectors */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                            {[
+                                { label: defaults.from.slice(0, 4), value: { from: defaults.from, to: defaults.to } },
+                                { label: String(new Date().getFullYear()), value: { from: `${new Date().getFullYear()}-01-01`, to: `${new Date().getFullYear()}-12-31` } },
+                            ].map(preset => (
+                                <button
+                                    key={preset.label}
+                                    onClick={() => { setDateFrom(preset.value.from); setDateTo(preset.value.to); }}
+                                    className={cn(
+                                        'px-3 py-2 text-xs font-medium rounded-lg border transition-colors',
+                                        dateFrom === preset.value.from && dateTo === preset.value.to
+                                            ? 'bg-teal-100 border-teal-300 text-teal-700 dark:bg-teal-900/40 dark:border-teal-600 dark:text-teal-300'
+                                            : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-600'
+                                    )}
+                                >
+                                    Anno {preset.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        <button
+                            onClick={handleGenera}
+                            disabled={isLoading}
+                            className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2 disabled:opacity-60"
+                        >
+                            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <BarChart3 className="h-4 w-4" />}
+                            Genera
+                        </button>
+                    </div>
+                </div>
+
+                {/* Content */}
+                <div className="px-6 py-5 space-y-5 max-h-[60vh] overflow-y-auto">
+                    {!queriedFrom && (
+                        <div className="flex flex-col items-center justify-center py-12 text-center">
+                            <BarChart3 className="h-12 w-12 text-gray-300 dark:text-gray-600 mb-3" />
+                            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                                Seleziona il periodo e clicca "Genera"
+                            </p>
+                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                                Pre-impostato all'anno precedente ({defaults.from.slice(0, 4)})
+                            </p>
+                        </div>
+                    )}
+
+                    {isLoading && (
+                        <div className="flex flex-col items-center justify-center py-12">
+                            <Loader2 className="h-10 w-10 text-teal-500 animate-spin mb-3" />
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Elaborazione statistiche...</p>
+                        </div>
+                    )}
+
+                    {isError && (
+                        <div className="flex items-start gap-3 p-4 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-200 dark:border-red-700">
+                            <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+                            <div>
+                                <p className="text-sm font-medium text-red-700 dark:text-red-400">Errore nel caricamento</p>
+                                <p className="text-xs text-red-600 dark:text-red-500 mt-1">
+                                    {(error as Error)?.message || 'Riprova o contatta il supporto'}
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
+                    {stats && !isLoading && (
+                        <>
+                            {/* Stats header */}
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <Calendar className="h-4 w-4 text-teal-500" />
+                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                        Periodo: {formatDateLabel(stats.periodo.da)} — {formatDateLabel(stats.periodo.a)}
+                                    </span>
+                                </div>
+                                <button
+                                    onClick={handleGeneraPdf}
+                                    disabled={isGeneratingPdf || stats.totaleVisite === 0}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-teal-700 border border-teal-200 rounded-lg hover:bg-teal-50 dark:text-teal-400 dark:border-teal-700 dark:hover:bg-teal-900/30 transition-colors disabled:opacity-50"
+                                >
+                                    {isGeneratingPdf
+                                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        : <Download className="h-3.5 w-3.5" />
+                                    }
+                                    Esporta PDF
+                                </button>
+                            </div>
+
+                            {stats.totaleVisite === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-10 text-center">
+                                    <Info className="h-10 w-10 text-gray-300 dark:text-gray-600 mb-3" />
+                                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                                        Nessuna visita completata nel periodo selezionato
+                                    </p>
+                                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                                        Prova a modificare il periodo di riferimento
+                                    </p>
+                                </div>
+                            ) : (
+                                <>
+                                    {/* KPI row */}
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <div className="bg-teal-50 dark:bg-teal-900/20 border border-teal-100 dark:border-teal-800 rounded-xl p-4">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <Stethoscope className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+                                                <span className="text-xs font-medium text-teal-700 dark:text-teal-300">Visite totali</span>
+                                            </div>
+                                            <p className="text-3xl font-bold text-teal-700 dark:text-teal-300">{stats.totaleVisite}</p>
+                                        </div>
+
+                                        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-xl p-4">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <Users className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                                                <span className="text-xs font-medium text-blue-700 dark:text-blue-300">Lavoratori</span>
+                                            </div>
+                                            <p className="text-3xl font-bold text-blue-700 dark:text-blue-300">{stats.lavoratoriDistinti}</p>
+                                        </div>
+
+                                        <div className={cn(
+                                            'border rounded-xl p-4',
+                                            stats.giudiziRegistratiPercentuale >= 80
+                                                ? 'bg-green-50 dark:bg-green-900/20 border-green-100 dark:border-green-800'
+                                                : 'bg-amber-50 dark:bg-amber-900/20 border-amber-100 dark:border-amber-800'
+                                        )}>
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <ShieldCheck className={cn(
+                                                    'h-4 w-4',
+                                                    stats.giudiziRegistratiPercentuale >= 80 ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'
+                                                )} />
+                                                <span className={cn(
+                                                    'text-xs font-medium',
+                                                    stats.giudiziRegistratiPercentuale >= 80 ? 'text-green-700 dark:text-green-300' : 'text-amber-700 dark:text-amber-300'
+                                                )}>Giudizi registrati</span>
+                                            </div>
+                                            <p className={cn(
+                                                'text-3xl font-bold',
+                                                stats.giudiziRegistratiPercentuale >= 80 ? 'text-green-700 dark:text-green-300' : 'text-amber-700 dark:text-amber-300'
+                                            )}>{stats.giudiziRegistratiPercentuale}%</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Giudizi idoneità */}
+                                    {stats.giudizi.length > 0 && (
+                                        <div>
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <ShieldCheck className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                                                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                                    Giudizi di idoneità
+                                                </h3>
+                                            </div>
+
+                                            {/* Bar chart */}
+                                            <div className="space-y-2.5">
+                                                {stats.giudizi.map(g => (
+                                                    <div key={g.tipo} className="flex items-center gap-3">
+                                                        <div className="w-40 text-xs text-gray-600 dark:text-gray-400 truncate flex-shrink-0">
+                                                            {g.label}
+                                                        </div>
+                                                        <div className="flex-1 h-5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                                                            <div
+                                                                className={cn('h-full rounded-full transition-all', getGiudizioColor(g.tipo))}
+                                                                style={{ width: `${Math.max(g.percentuale, 4)}%` }}
+                                                            />
+                                                        </div>
+                                                        <div className="w-20 flex items-center gap-1.5 flex-shrink-0">
+                                                            <span className={cn('text-xs font-semibold', getGiudizioTextColor(g.tipo))}>
+                                                                {g.conteggio}
+                                                            </span>
+                                                            <span className="text-xs text-gray-400 dark:text-gray-500">
+                                                                ({g.percentuale}%)
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                                {stats.visiteSenzaGiudizio > 0 && (
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-40 text-xs text-gray-400 dark:text-gray-500 flex-shrink-0">
+                                                            Senza giudizio
+                                                        </div>
+                                                        <div className="flex-1 h-5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                                                            <div
+                                                                className="h-full rounded-full bg-gray-300 dark:bg-gray-600"
+                                                                style={{ width: `${Math.max(Math.round(stats.visiteSenzaGiudizio / stats.totaleVisite * 100), 4)}%` }}
+                                                            />
+                                                        </div>
+                                                        <div className="w-20 flex-shrink-0">
+                                                            <span className="text-xs text-gray-400 dark:text-gray-500">
+                                                                {stats.visiteSenzaGiudizio}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Tipi di visita */}
+                                    {stats.tipiVisita.length > 0 && (
+                                        <div>
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <ClipboardList className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                                                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                                    Tipi di visita
+                                                </h3>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                {stats.tipiVisita.map(t => (
+                                                    <div key={t.tipo} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate">{t.label}</p>
+                                                        </div>
+                                                        <span className="text-lg font-bold text-gray-800 dark:text-gray-200 flex-shrink-0">{t.conteggio}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Esami strumentali */}
+                                    {stats.esamiAggregati && stats.esamiAggregati.length > 0 && (
+                                        <div>
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <Activity className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                                                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                                    Esami strumentali
+                                                </h3>
+                                            </div>
+                                            <div className="rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+                                                <table className="w-full text-sm">
+                                                    <thead>
+                                                        <tr className="bg-gray-50 dark:bg-gray-800/50">
+                                                            <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Esame</th>
+                                                            <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500 dark:text-gray-400">Eseguiti</th>
+                                                            <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500 dark:text-gray-400">Normali</th>
+                                                            <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500 dark:text-gray-400">Alterati</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                                                        {stats.esamiAggregati.map(e => (
+                                                            <tr key={e.tipo} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                                                                <td className="px-4 py-2.5 text-xs text-gray-700 dark:text-gray-300">{e.label}</td>
+                                                                <td className="px-4 py-2.5 text-xs font-semibold text-gray-800 dark:text-gray-200 text-right">{e.eseguiti}</td>
+                                                                <td className="px-4 py-2.5 text-xs font-semibold text-green-600 dark:text-green-400 text-right">{e.normali}</td>
+                                                                <td className="px-4 py-2.5 text-xs font-semibold text-amber-600 dark:text-amber-400 text-right">{e.alterati}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Prestazioni eseguite */}
+                                    {stats.prestazioniEseguite.length > 0 && (
+                                        <div>
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <Stethoscope className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                                                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                                    Accertamenti eseguiti
+                                                </h3>
+                                            </div>
+                                            <div className="rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+                                                <table className="w-full text-sm">
+                                                    <thead>
+                                                        <tr className="bg-gray-50 dark:bg-gray-800/50">
+                                                            <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Prestazione</th>
+                                                            <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500 dark:text-gray-400">N°</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                                                        {stats.prestazioniEseguite.map((p, i) => (
+                                                            <tr key={p.nome} className={cn(
+                                                                'hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors',
+                                                                i >= 5 ? 'hidden' : ''
+                                                            )}>
+                                                                <td className="px-4 py-2.5 text-xs text-gray-700 dark:text-gray-300">{p.nome}</td>
+                                                                <td className="px-4 py-2.5 text-xs font-semibold text-gray-800 dark:text-gray-200 text-right">{p.conteggio}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                                {stats.prestazioniEseguite.length > 5 && (
+                                                    <div className="px-4 py-2 bg-gray-50 dark:bg-gray-800/50 text-xs text-gray-400 dark:text-gray-500 text-center border-t border-gray-100 dark:border-gray-700">
+                                                        +{stats.prestazioniEseguite.length - 5} altre prestazioni
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Nota Art. 40 */}
+                                    <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800">
+                                        <Info className="h-4 w-4 text-blue-500 flex-shrink-0 mt-0.5" />
+                                        <p className="text-xs text-blue-700 dark:text-blue-300">
+                                            I dati sono aggregati ed anonimi ai sensi dell'Art. 40 c.1 D.Lgs 81/08.
+                                            Non contengono dati personali identificabili dei lavoratori.
+                                        </p>
+                                    </div>
+                                </>
+                            )}
+                        </>
+                    )}
+                </div>
+            </div>
+        </div>,
+        document.body
+    ) : null;
+
+    // =============================================
+    // RENDER
+    // =============================================
+
+    return (
+        <>
+            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-5">
+                <div className="flex items-start gap-4">
+                    <div className="w-10 h-10 rounded-xl bg-teal-50 dark:bg-teal-900/30 flex items-center justify-center flex-shrink-0">
+                        <BarChart3 className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                                    Risultati Anonimi Collettivi
+                                </h3>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                    Art. 40 c.1 D.Lgs 81/08 — Statistiche aggregate anonime per periodo
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setIsModalOpen(true)}
+                                className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-lg shadow-sm transition-colors flex-shrink-0"
+                            >
+                                <BarChart3 className="h-4 w-4" />
+                                Genera
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {modal}
+        </>
+    );
+};
+
+export default RisultatiAnonimiCard;

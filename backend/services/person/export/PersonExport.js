@@ -14,15 +14,25 @@ class PersonExport {
   static async exportToCSV(filters = {}, options = {}) {
     try {
       const where = this.buildWhereClause(filters);
-      
+
       const persons = await prisma.person.findMany({
         where,
         include: {
           personRoles: {
             where: { isActive: true }
           },
-          company: true,
-          tenant: true,
+          // P49: Person non ha più company, usare tenantProfiles
+          tenantProfiles: {
+            where: { deletedAt: null, isActive: true },
+            include: {
+              companyTenantProfile: {
+                include: { company: true }
+              },
+              site: true,
+              tenant: true
+            }
+          },
+          // P63: Person.Tenant RIMOSSO - usare tenantProfiles.tenant
           personSessions: {
             where: {
               isActive: true,
@@ -38,13 +48,13 @@ class PersonExport {
         },
         orderBy: { lastName: 'asc' }
       });
-      
+
       // Aggiungi il campo isOnline basandosi sulle sessioni attive
       const personsWithOnlineStatus = persons.map(person => ({
         ...person,
         isOnline: person.personSessions && person.personSessions.length > 0
       }));
-      
+
       return this.generateCSVContent(personsWithOnlineStatus, options);
     } catch (error) {
       logger.error('Error exporting persons to CSV:', { error: error.message, filters });
@@ -61,19 +71,29 @@ class PersonExport {
   static async exportToJSON(filters = {}, options = {}) {
     try {
       const where = this.buildWhereClause(filters);
-      
+
       const persons = await prisma.person.findMany({
         where,
         include: {
           personRoles: {
             where: { isActive: true },
             include: {
-              company: true,
+              companyTenantProfile: true, // P49: company -> companyTenantProfile
               tenant: true
             }
           },
-          company: true,
-          tenant: true,
+          // P49: Person non ha più company, usare tenantProfiles
+          tenantProfiles: {
+            where: { deletedAt: null, isActive: true },
+            include: {
+              companyTenantProfile: {
+                include: { company: true }
+              },
+              site: true,
+              tenant: true
+            }
+          },
+          // P63: Person.Tenant RIMOSSO
           personSessions: {
             where: {
               isActive: true,
@@ -90,7 +110,7 @@ class PersonExport {
         },
         orderBy: { lastName: 'asc' }
       });
-      
+
       // Aggiungi il campo isOnline e pulisci i dati sensibili
       const cleanedPersons = persons.map(person => ({
         ...person,
@@ -128,7 +148,7 @@ class PersonExport {
     try {
       // Per ora restituiamo CSV, in futuro si può implementare XLSX
       const csvContent = await this.exportToCSV(filters, options);
-      
+
       // Qui si potrebbe usare una libreria come 'xlsx' per generare un vero file Excel
       // Per ora convertiamo il CSV in un formato compatibile
       return Buffer.from(csvContent, 'utf8');
@@ -147,7 +167,7 @@ class PersonExport {
     const where = {
       deletedAt: null // Escludi sempre i record eliminati
     };
-    
+
     if (filters.roleType) {
       const trainerFamily = ['TRAINER', 'SENIOR_TRAINER', 'TRAINER_COORDINATOR', 'EXTERNAL_TRAINER'];
       let roleCondition;
@@ -166,25 +186,50 @@ class PersonExport {
         }
       };
     }
-    
+
+    // P48/P49: status, companyId, email sono in PersonTenantProfile
+    // Costruisci filtro per tenantProfiles
+    const tenantProfileFilter = {
+      deletedAt: null
+    };
+    let needsTenantProfileFilter = false;
+
     if (filters.isActive !== undefined) {
-      where.status = filters.isActive ? 'ACTIVE' : 'INACTIVE';
+      tenantProfileFilter.status = filters.isActive ? 'ACTIVE' : 'INACTIVE';
+      needsTenantProfileFilter = true;
     }
-    
+
     if (filters.companyId) {
-      where.companyId = filters.companyId;
+      tenantProfileFilter.companyTenantProfileId = filters.companyId;
+      needsTenantProfileFilter = true;
     }
 
     if (filters.tenantId) {
-      where.tenantId = filters.tenantId;
+      tenantProfileFilter.tenantId = filters.tenantId;
+      needsTenantProfileFilter = true;
     }
-    
+
+    // Applica filtro tenantProfiles se necessario
+    if (needsTenantProfileFilter) {
+      where.tenantProfiles = {
+        some: tenantProfileFilter
+      };
+    }
+
     if (filters.search) {
       where.OR = [
         { firstName: { contains: filters.search, mode: 'insensitive' } },
         { lastName: { contains: filters.search, mode: 'insensitive' } },
-        { email: { contains: filters.search, mode: 'insensitive' } },
-        { username: { contains: filters.search, mode: 'insensitive' } }
+        { username: { contains: filters.search, mode: 'insensitive' } },
+        // P48: email è in tenantProfiles
+        {
+          tenantProfiles: {
+            some: {
+              email: { contains: filters.search, mode: 'insensitive' },
+              deletedAt: null
+            }
+          }
+        }
       ];
     }
 
@@ -193,9 +238,9 @@ class PersonExport {
     }
 
     if (filters.createdBefore) {
-      where.createdAt = { 
+      where.createdAt = {
         ...where.createdAt,
-        lte: new Date(filters.createdBefore) 
+        lte: new Date(filters.createdBefore)
       };
     }
 
@@ -204,12 +249,12 @@ class PersonExport {
     }
 
     if (filters.lastLoginBefore) {
-      where.lastLogin = { 
+      where.lastLogin = {
         ...where.lastLogin,
-        lte: new Date(filters.lastLoginBefore) 
+        lte: new Date(filters.lastLoginBefore)
       };
     }
-    
+
     return where;
   }
 
@@ -223,18 +268,19 @@ class PersonExport {
     const allowedFields = Array.isArray(options.allowedFields) ? options.allowedFields : ['*'];
 
     // Definizione colonne con mapping e chiave di autorizzazione
+    // P48: email, phone, company, tenant, status are on tenantProfiles, not Person
     const columnDefs = [
       { header: 'ID', key: 'id', accessor: (p) => p.id },
       { header: 'Nome', key: 'firstName', accessor: (p) => p.firstName || '' },
       { header: 'Cognome', key: 'lastName', accessor: (p) => p.lastName || '' },
-      { header: 'Email', key: 'email', accessor: (p) => p.email || '' },
+      { header: 'Email', key: 'email', accessor: (p) => p.tenantProfiles?.[0]?.email || '' },
       { header: 'Username', key: 'username', accessor: (p) => p.username || '' },
-      { header: 'Telefono', key: 'phone', accessor: (p) => p.phone || '' },
+      { header: 'Telefono', key: 'phone', accessor: (p) => p.tenantProfiles?.[0]?.phone || '' },
       { header: 'Ruolo Principale', key: 'personRoles', accessor: (p) => p.personRoles?.[0]?.roleType || '' },
       { header: 'Tutti i Ruoli', key: 'personRoles', accessor: (p) => p.personRoles?.map(role => role.roleType).join('; ') || '' },
-      { header: "Azienda", key: 'company', accessor: (p) => p.company?.name || '' },
-      { header: 'Tenant', key: 'tenant', accessor: (p) => p.tenant?.name || '' },
-      { header: 'Stato', key: 'status', accessor: (p) => p.status === 'ACTIVE' ? 'Attivo' : 'Inattivo' },
+      { header: "Azienda", key: 'company', accessor: (p) => p.tenantProfiles?.[0]?.companyTenantProfile?.company?.ragioneSociale || '' },
+      { header: 'Tenant', key: 'tenant', accessor: (p) => p.tenantProfiles?.[0]?.tenant?.name || '' },
+      { header: 'Stato', key: 'status', accessor: (p) => p.tenantProfiles?.[0]?.status === 'ACTIVE' ? 'Attivo' : 'Inattivo' },
       { header: 'Online', key: 'isOnline', accessor: (p) => p.isOnline ? 'Sì' : 'No' },
       { header: 'Ultimo Login', key: 'lastLogin', accessor: (p) => p.lastLogin ? new Date(p.lastLogin).toLocaleString('it-IT') : '' },
       { header: 'Data Creazione', key: 'createdAt', accessor: (p) => p.createdAt ? new Date(p.createdAt).toLocaleString('it-IT') : '' },
@@ -255,7 +301,7 @@ class PersonExport {
     const csvContent = [headers, ...rows]
       .map(row => row.map(field => `"${String(field).replace(/"/g, '""')}"`).join(','))
       .join('\n');
-    
+
     return csvContent;
   }
 

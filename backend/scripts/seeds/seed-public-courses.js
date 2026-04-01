@@ -13,7 +13,7 @@ async function main() {
     process.exit(1);
   }
 
-  // Corsi pubblici di esempio per Element Formazione
+  // Corsi pubblici di esempio per Element Sicurezza
   const publicCourses = [
     {
       title: 'Corso di Primo Soccorso Aziendale',
@@ -32,7 +32,7 @@ async function main() {
       slug: 'corso-primo-soccorso-aziendale',
       riskLevel: 'ALTO',
       courseType: 'PRIMO_CORSO',
-      seoTitle: 'Corso Primo Soccorso Aziendale - Element Formazione',
+      seoTitle: 'Corso Primo Soccorso Aziendale - Element Sicurezza',
       seoDescription: 'Corso di primo soccorso aziendale obbligatorio secondo D.Lgs. 81/08. Formazione professionale per addetti al primo soccorso.',
       subcategory: 'Emergenze Sanitarie'
     },
@@ -53,7 +53,7 @@ async function main() {
       slug: 'corso-antincendio-rischio-medio',
       riskLevel: 'MEDIO',
       courseType: 'PRIMO_CORSO',
-      seoTitle: 'Corso Antincendio Rischio Medio - Element Formazione',
+      seoTitle: 'Corso Antincendio Rischio Medio - Element Sicurezza',
       seoDescription: 'Corso antincendio per addetti in attività a rischio medio. Formazione teorica e pratica secondo normativa vigente.',
       subcategory: 'Prevenzione Incendi'
     },
@@ -175,7 +175,7 @@ async function main() {
   }
 
   console.log('🎉 Public courses seeding completed successfully!');
-  console.log(`📊 Created ${publicCourses.length} public courses for Element Formazione`);
+  console.log(`📊 Created ${publicCourses.length} public courses for Element Sicurezza`);
 }
 
 main()

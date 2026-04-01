@@ -11,7 +11,8 @@
  * @project 43 - Tenant Roles Management System
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
     Building2,
     Search,
@@ -40,6 +41,9 @@ import {
 import { useAuth } from '../../../hooks/auth/useAuth';
 import { managementApi, type TenantData } from '../api';
 import { apiGet } from '../../../services/api';
+import { CRUDButton } from '../../../components/shared/CRUDButton';
+import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
+import { useTenantFilter } from '../../../context/TenantFilterContext';
 import type { Tenant } from '../types';
 
 interface TenantStats {
@@ -63,7 +67,7 @@ const FEATURE_LIST = [
 const FEATURE_PRESETS = [
     {
         id: 'formazione',
-        name: 'Element Formazione',
+        name: 'Element Sicurezza',
         description: 'Solo funzionalità per la gestione della formazione',
         features: ['formazione', 'cms', 'gdpr', 'documents', 'reports'],
         color: 'bg-blue-50 border-blue-200 text-blue-800'
@@ -100,6 +104,16 @@ const BILLING_PLAN_COLORS: Record<string, string> = {
 
 const TenantsManagement: React.FC = () => {
     const { user: currentUser } = useAuth();
+    const { getTenantFilterParams, tenantFilterKey, isReady } = useTenantFilter();
+    const { confirmDelete } = useConfirmDialog();
+
+    // Check if current user is admin (for delete permission)
+    const isAdmin = useMemo(() => {
+        if (!currentUser) return false;
+        const role = currentUser.globalRole || currentUser.role;
+        return role === 'ADMIN' || role === 'SUPER_ADMIN';
+    }, [currentUser]);
+
     const [tenants, setTenants] = useState<Tenant[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -113,33 +127,43 @@ const TenantsManagement: React.FC = () => {
     const [filterPlan, setFilterPlan] = useState<string>('');
     const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
 
-    // Check if user is admin
-    const isAdmin = currentUser?.role === 'Admin' ||
-        currentUser?.globalRole === 'ADMIN' ||
-        currentUser?.globalRole === 'SUPER_ADMIN' ||
-        currentUser?.roles?.includes('ADMIN') ||
-        currentUser?.roles?.includes('SUPER_ADMIN');
+    // Load tenants with filter
+    // silent=true skips the loading spinner (used after create to avoid unmounting open modals)
+    const loadTenants = useCallback(async (silent = false) => {
+        try {
+            if (!silent) setLoading(true);
+            setError(null);
+
+            // Get tenant filter params
+            const tenantParams = getTenantFilterParams();
+
+            // Build query string with tenant filter
+            const params = new URLSearchParams();
+            if (tenantParams.tenantIds) {
+                params.append('tenantIds', tenantParams.tenantIds.join(','));
+            }
+            if (tenantParams.allTenants) {
+                params.append('allTenants', 'true');
+            }
+
+            // Use the filtered tenants endpoint
+            const queryString = params.toString();
+            const url = queryString ? `/api/v1/tenants?${queryString}` : '/api/v1/tenants';
+            const response = await apiGet<{ success: boolean; data: Tenant[] }>(url);
+
+            setTenants(response.data || []);
+        } catch (err: unknown) {
+            if (!silent) setError('Errore nel caricamento dei tenant');
+        } finally {
+            if (!silent) setLoading(false);
+        }
+    }, [getTenantFilterParams, tenantFilterKey]);
 
     useEffect(() => {
-        loadTenants();
-    }, [isAdmin]);
-
-    const loadTenants = async () => {
-        try {
-            setLoading(true);
-            setError(null);
-            // Admin gets ALL tenants, regular users get only their accessible tenants
-            const response = isAdmin
-                ? await managementApi.getTenants()
-                : await managementApi.getMyTenants();
-            setTenants(response.data || []);
-        } catch (err: any) {
-            console.error('Error loading tenants:', err);
-            setError(err.message || 'Errore nel caricamento dei tenant');
-        } finally {
-            setLoading(false);
+        if (isReady) {
+            loadTenants();
         }
-    };
+    }, [loadTenants, isReady]);
 
     // Filter tenants
     const filteredTenants = useMemo(() => {
@@ -185,21 +209,21 @@ const TenantsManagement: React.FC = () => {
     };
 
     const handleDeleteTenant = async (tenant: Tenant) => {
-        if (!confirm(`Sei sicuro di voler eliminare il tenant "${tenant.name}"? Questa azione è irreversibile.`)) {
+        if (!(await confirmDelete(tenant.name))) {
             return;
         }
         try {
             await managementApi.deleteTenant(tenant.id);
             await loadTenants();
-        } catch (err: any) {
-            console.error('Error deleting tenant:', err);
-            setError(err.message || 'Errore nell\'eliminazione del tenant');
+        } catch (err: unknown) {
+            setError('Errore nell\'eliminazione del tenant');
         }
     };
 
     const handleCreateSuccess = async () => {
-        setShowCreateModal(false);
-        await loadTenants();
+        // Use silent refresh to avoid showing loading spinner (which unmounts the modal)
+        // so the user can see the success state and configure the first user
+        await loadTenants(true);
     };
 
     const handleEditSuccess = async () => {
@@ -264,13 +288,14 @@ const TenantsManagement: React.FC = () => {
                         <Filter className="w-5 h-5" />
                         Filtri
                     </button>
-                    <button
+                    <CRUDButton
+                        operation="create"
                         onClick={() => setShowCreateModal(true)}
                         className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
                     >
                         <Plus className="w-5 h-5" />
                         Nuovo Tenant
-                    </button>
+                    </CRUDButton>
                 </div>
             </div>
 
@@ -724,19 +749,50 @@ const CreateTenantModal: React.FC<{
     onClose: () => void;
     onSuccess: () => Promise<void>;
 }> = ({ onClose, onSuccess }) => {
-    const [formData, setFormData] = useState<TenantData>({
+    const navigate = useNavigate();
+    const [currentStep, setCurrentStep] = useState(1);
+    const [formData, setFormData] = useState<TenantData & {
+        // Company data
+        companyName?: string;
+        vatNumber?: string;
+        fiscalCode?: string;
+        legalAddress?: string;
+        legalCity?: string;
+        legalZip?: string;
+        legalProvince?: string;
+    }>({
         name: '',
         slug: '',
         domain: '',
         billingPlan: 'basic',
         isActive: true
     });
+    const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
+    // P-FIX: Use ref to track manual slug edits to avoid stale closure issues
+    const slugManuallyEditedRef = useRef(false);
     const [selectedFeatures, setSelectedFeatures] = useState<Set<string>>(new Set());
+    const [createdTenant, setCreatedTenant] = useState<Tenant | null>(null);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const generateSlug = (name: string) => {
         return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    };
+
+    const handleNameChange = (name: string) => {
+        setFormData(f => ({
+            ...f,
+            name,
+            // Auto-generate slug only if user hasn't manually edited it
+            // P-FIX: Use ref instead of state to get current value in closure
+            slug: slugManuallyEditedRef.current ? f.slug : generateSlug(name)
+        }));
+    };
+
+    const handleSlugChange = (slug: string) => {
+        setSlugManuallyEdited(true);
+        slugManuallyEditedRef.current = true;
+        setFormData(f => ({ ...f, slug }));
     };
 
     const toggleFeature = (featureId: string) => {
@@ -753,6 +809,8 @@ const CreateTenantModal: React.FC<{
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        // Guard against double-click on "Avanti" triggering submit on step 1
+        if (currentStep !== 2) return;
         if (!formData.name || !formData.slug) {
             setError('Nome e slug sono obbligatori');
             return;
@@ -762,30 +820,61 @@ const CreateTenantModal: React.FC<{
         setError(null);
 
         try {
-            await managementApi.createTenant({
-                ...formData,
+            const response = await managementApi.createTenant({
+                name: formData.name,
+                slug: formData.slug,
+                domain: formData.domain,
+                billingPlan: formData.billingPlan,
+                isActive: formData.isActive,
                 settings: {
-                    enabledFeatures: Array.from(selectedFeatures)
+                    enabledFeatures: Array.from(selectedFeatures),
+                    // P69: Include company data in settings for sync
+                    companyName: formData.companyName || formData.name,
+                    vatNumber: formData.vatNumber,
+                    fiscalCode: formData.fiscalCode,
+                    legalAddress: formData.legalAddress,
+                    legalCity: formData.legalCity,
+                    legalZip: formData.legalZip,
+                    legalProvince: formData.legalProvince
                 }
             });
+            setCreatedTenant(response.data);
             await onSuccess();
-        } catch (err: any) {
-            console.error('Error creating tenant:', err);
-            setError(err.message || 'Errore nella creazione del tenant');
+        } catch (err: unknown) {
+            setError('Errore nella creazione del tenant');
         } finally {
             setSaving(false);
         }
     };
 
+    const handleConfigureFirstUser = () => {
+        if (!createdTenant?.id) return;
+        onClose();
+        navigate(`/management/tenant-access?tenantId=${encodeURIComponent(createdTenant.id)}`);
+    };
+
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-hidden">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
                 {/* Header */}
                 <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                    <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                        <Plus className="w-5 h-5 text-purple-600" />
-                        Nuovo Tenant
-                    </h2>
+                    <div>
+                        <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                            <Plus className="w-5 h-5 text-purple-600" />
+                            Nuovo Tenant
+                        </h2>
+                        <div className="flex items-center gap-2 mt-2">
+                            <div className={`flex items-center gap-1.5 ${currentStep === 1 ? 'text-purple-600' : 'text-gray-400'}`}>
+                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${currentStep === 1 ? 'bg-purple-600 text-white' : 'bg-gray-200'}`}>1</div>
+                                <span className="text-sm">Dati Tenant</span>
+                            </div>
+                            <ChevronRight className="w-4 h-4 text-gray-400" />
+                            <div className={`flex items-center gap-1.5 ${currentStep === 2 ? 'text-purple-600' : 'text-gray-400'}`}>
+                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${currentStep === 2 ? 'bg-purple-600 text-white' : 'bg-gray-200'}`}>2</div>
+                                <span className="text-sm">Dati Azienda</span>
+                            </div>
+                        </div>
+                    </div>
                     <button
                         onClick={onClose}
                         className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
@@ -795,171 +884,329 @@ const CreateTenantModal: React.FC<{
                 </div>
 
                 {/* Content */}
-                <form onSubmit={handleSubmit}>
+                <form
+                    onSubmit={handleSubmit}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && currentStep < 2) e.preventDefault(); }}
+                >
                     <div className="p-6 overflow-y-auto max-h-[calc(90vh-180px)] space-y-4">
-                        {error && (
-                            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-center gap-2">
-                                <AlertCircle className="w-4 h-4" />
-                                {error}
+                        {createdTenant ? (
+                            <div className="space-y-4">
+                                <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                                    <h3 className="text-base font-semibold text-green-800 mb-1">Tenant creato con successo</h3>
+                                    <p className="text-sm text-green-700">
+                                        Il tenant <strong>{createdTenant.name}</strong> e` pronto. Ora puoi creare subito il primo utente e definirlo come tenant admin.
+                                    </p>
+                                </div>
+                                <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                                    <p className="text-sm text-amber-800">
+                                        Suggerimento: completa ora la configurazione per evitare tenant senza account amministrativo.
+                                    </p>
+                                </div>
                             </div>
+                        ) : (
+                            <>
+                                {error && (
+                                    <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-center gap-2">
+                                        <AlertCircle className="w-4 h-4" />
+                                        {error}
+                                    </div>
+                                )}
+
+                                {/* Step 1: Dati Tenant */}
+                                {currentStep === 1 && (
+                                    <>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                Nome Tenant *
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={formData.name}
+                                                onChange={(e) => handleNameChange(e.target.value)}
+                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                                                required
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                Slug *
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={formData.slug}
+                                                onChange={(e) => handleSlugChange(e.target.value)}
+                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                                                placeholder="es. element-sicurezza"
+                                                required
+                                            />
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                Identificativo URL univoco (solo lettere minuscole e trattini)
+                                            </p>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                Dominio
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={formData.domain || ''}
+                                                onChange={(e) => setFormData(f => ({ ...f, domain: e.target.value }))}
+                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                                                placeholder="es. formazione.example.com"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                Piano
+                                            </label>
+                                            <select
+                                                value={formData.billingPlan || 'basic'}
+                                                onChange={(e) => setFormData(f => ({ ...f, billingPlan: e.target.value }))}
+                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                                            >
+                                                <option value="free">Free</option>
+                                                <option value="basic">Basic</option>
+                                                <option value="professional">Professional</option>
+                                                <option value="enterprise">Enterprise</option>
+                                            </select>
+                                        </div>
+
+                                        {/* Feature Presets */}
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Preset Funzionalità
+                                            </label>
+                                            <div className="grid grid-cols-2 gap-2 mb-4">
+                                                {FEATURE_PRESETS.map(preset => (
+                                                    <button
+                                                        key={preset.id}
+                                                        type="button"
+                                                        onClick={() => setSelectedFeatures(new Set(preset.features))}
+                                                        className={`p-3 rounded-lg border text-left transition-colors hover:shadow-sm ${preset.color}`}
+                                                    >
+                                                        <div className="font-medium text-sm">{preset.name}</div>
+                                                        <div className="text-xs opacity-75 mt-0.5">{preset.description}</div>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Features */}
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Funzionalità ({selectedFeatures.size} selezionate)
+                                            </label>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                {FEATURE_LIST.map(feature => (
+                                                    <label
+                                                        key={feature.id}
+                                                        className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${selectedFeatures.has(feature.id)
+                                                            ? 'bg-purple-50 border border-purple-200'
+                                                            : 'bg-gray-50 border border-gray-200 hover:bg-gray-100'
+                                                            }`}
+                                                    >
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={selectedFeatures.has(feature.id)}
+                                                            onChange={() => toggleFeature(feature.id)}
+                                                            className="sr-only"
+                                                        />
+                                                        <feature.icon className={`w-4 h-4 ${selectedFeatures.has(feature.id) ? 'text-purple-600' : 'text-gray-400'
+                                                            }`} />
+                                                        <span className={`text-sm ${selectedFeatures.has(feature.id) ? 'text-purple-900' : 'text-gray-700'
+                                                            }`}>
+                                                            {feature.name}
+                                                        </span>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={formData.isActive ?? true}
+                                                    onChange={(e) => setFormData(f => ({ ...f, isActive: e.target.checked }))}
+                                                    className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                                                />
+                                                <span className="text-sm text-gray-700">Tenant attivo</span>
+                                            </label>
+                                        </div>
+                                    </>
+                                )}
+
+                                {/* Step 2: Dati Azienda */}
+                                {currentStep === 2 && (
+                                    <>
+                                        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
+                                            <p className="text-sm text-purple-800">
+                                                <strong>Dati Azienda</strong>: Questi dati verranno usati per creare l'azienda associata al tenant.
+                                            </p>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                Ragione Sociale
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={formData.companyName || formData.name}
+                                                onChange={(e) => setFormData(f => ({ ...f, companyName: e.target.value }))}
+                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                                                placeholder="Es. Element Sicurezza S.r.l."
+                                            />
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                    Partita IVA
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={formData.vatNumber || ''}
+                                                    onChange={(e) => setFormData(f => ({ ...f, vatNumber: e.target.value }))}
+                                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                                                    placeholder="Es. IT12345678901"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                    Codice Fiscale
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={formData.fiscalCode || ''}
+                                                    onChange={(e) => setFormData(f => ({ ...f, fiscalCode: e.target.value }))}
+                                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                                                    placeholder="Es. 12345678901"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                Indirizzo Sede Legale
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={formData.legalAddress || ''}
+                                                onChange={(e) => setFormData(f => ({ ...f, legalAddress: e.target.value }))}
+                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                                                placeholder="Es. Via Roma, 1"
+                                            />
+                                        </div>
+
+                                        <div className="grid grid-cols-3 gap-4">
+                                            <div className="col-span-2">
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                    Città
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={formData.legalCity || ''}
+                                                    onChange={(e) => setFormData(f => ({ ...f, legalCity: e.target.value }))}
+                                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                                                    placeholder="Es. Milano"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                    CAP
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={formData.legalZip || ''}
+                                                    onChange={(e) => setFormData(f => ({ ...f, legalZip: e.target.value }))}
+                                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                                                    placeholder="Es. 20100"
+                                                    maxLength={5}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                Provincia
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={formData.legalProvince || ''}
+                                                onChange={(e) => setFormData(f => ({ ...f, legalProvince: e.target.value.toUpperCase().slice(0, 2) }))}
+                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                                                placeholder="Es. MI"
+                                                maxLength={2}
+                                            />
+                                        </div>
+                                    </>
+                                )}
+                            </>
                         )}
-
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Nome Tenant *
-                            </label>
-                            <input
-                                type="text"
-                                value={formData.name}
-                                onChange={(e) => {
-                                    const name = e.target.value;
-                                    setFormData(f => ({
-                                        ...f,
-                                        name,
-                                        slug: f.slug || generateSlug(name)
-                                    }));
-                                }}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                                required
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Slug *
-                            </label>
-                            <input
-                                type="text"
-                                value={formData.slug}
-                                onChange={(e) => setFormData(f => ({ ...f, slug: e.target.value }))}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                                placeholder="es. element-formazione"
-                                required
-                            />
-                            <p className="text-xs text-gray-500 mt-1">
-                                Identificativo URL univoco (solo lettere minuscole e trattini)
-                            </p>
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Dominio
-                            </label>
-                            <input
-                                type="text"
-                                value={formData.domain || ''}
-                                onChange={(e) => setFormData(f => ({ ...f, domain: e.target.value }))}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                                placeholder="es. formazione.example.com"
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Piano
-                            </label>
-                            <select
-                                value={formData.billingPlan || 'basic'}
-                                onChange={(e) => setFormData(f => ({ ...f, billingPlan: e.target.value }))}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                            >
-                                <option value="free">Free</option>
-                                <option value="basic">Basic</option>
-                                <option value="professional">Professional</option>
-                                <option value="enterprise">Enterprise</option>
-                            </select>
-                        </div>
-
-                        {/* Feature Presets */}
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Preset Funzionalità
-                            </label>
-                            <div className="grid grid-cols-2 gap-2 mb-4">
-                                {FEATURE_PRESETS.map(preset => (
-                                    <button
-                                        key={preset.id}
-                                        type="button"
-                                        onClick={() => setSelectedFeatures(new Set(preset.features))}
-                                        className={`p-3 rounded-lg border text-left transition-colors hover:shadow-sm ${preset.color}`}
-                                    >
-                                        <div className="font-medium text-sm">{preset.name}</div>
-                                        <div className="text-xs opacity-75 mt-0.5">{preset.description}</div>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Features */}
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Funzionalità ({selectedFeatures.size} selezionate)
-                            </label>
-                            <div className="grid grid-cols-2 gap-2">
-                                {FEATURE_LIST.map(feature => (
-                                    <label
-                                        key={feature.id}
-                                        className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${selectedFeatures.has(feature.id)
-                                            ? 'bg-purple-50 border border-purple-200'
-                                            : 'bg-gray-50 border border-gray-200 hover:bg-gray-100'
-                                            }`}
-                                    >
-                                        <input
-                                            type="checkbox"
-                                            checked={selectedFeatures.has(feature.id)}
-                                            onChange={() => toggleFeature(feature.id)}
-                                            className="sr-only"
-                                        />
-                                        <feature.icon className={`w-4 h-4 ${selectedFeatures.has(feature.id) ? 'text-purple-600' : 'text-gray-400'
-                                            }`} />
-                                        <span className={`text-sm ${selectedFeatures.has(feature.id) ? 'text-purple-900' : 'text-gray-700'
-                                            }`}>
-                                            {feature.name}
-                                        </span>
-                                    </label>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={formData.isActive ?? true}
-                                    onChange={(e) => setFormData(f => ({ ...f, isActive: e.target.checked }))}
-                                    className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
-                                />
-                                <span className="text-sm text-gray-700">Tenant attivo</span>
-                            </label>
-                        </div>
                     </div>
 
                     {/* Footer */}
-                    <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                        >
-                            Annulla
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={saving}
-                            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center gap-2"
-                        >
-                            {saving ? (
-                                <>
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                    Creazione...
-                                </>
-                            ) : (
-                                <>
-                                    <Save className="w-4 h-4" />
-                                    Crea Tenant
-                                </>
+                    <div className="px-6 py-4 border-t border-gray-200 flex justify-between">
+                        <div>
+                            {!createdTenant && currentStep > 1 && (
+                                <button
+                                    type="button"
+                                    onClick={() => setCurrentStep(currentStep - 1)}
+                                    className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                                >
+                                    ← Indietro
+                                </button>
                             )}
-                        </button>
+                        </div>
+                        <div className="flex gap-3">
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                            >
+                                {createdTenant ? 'Chiudi' : 'Annulla'}
+                            </button>
+                            {createdTenant ? (
+                                <button
+                                    type="button"
+                                    onClick={handleConfigureFirstUser}
+                                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
+                                >
+                                    <Users className="w-4 h-4" />
+                                    Crea primo utente/admin
+                                </button>
+                            ) : currentStep < 2 ? (
+                                <button
+                                    type="button"
+                                    onClick={() => setCurrentStep(2)}
+                                    disabled={!formData.name || !formData.slug}
+                                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
+                                >
+                                    Avanti →
+                                </button>
+                            ) : (
+                                <button
+                                    type="submit"
+                                    disabled={saving}
+                                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                                >
+                                    {saving ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            Creazione...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Save className="w-4 h-4" />
+                                            Crea Tenant
+                                        </>
+                                    )}
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </form>
             </div>
@@ -1015,9 +1262,8 @@ const EditTenantModal: React.FC<{
                 }
             });
             await onSuccess();
-        } catch (err: any) {
-            console.error('Error updating tenant:', err);
-            setError(err.message || 'Errore nell\'aggiornamento del tenant');
+        } catch (err: unknown) {
+            setError('Errore nell\'aggiornamento del tenant');
         } finally {
             setSaving(false);
         }
@@ -1204,9 +1450,8 @@ const TenantUsersModal: React.FC<{
                 `/api/v1/persons?tenantId=${tenant.id}&limit=500`
             );
             setUsers(response.data || []);
-        } catch (err: any) {
-            console.error('Error loading users:', err);
-            setError(err.message || 'Errore nel caricamento utenti');
+        } catch (err: unknown) {
+            setError('Errore nel caricamento utenti');
         } finally {
             setLoading(false);
         }
@@ -1284,10 +1529,10 @@ const TenantUsersModal: React.FC<{
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <span className={`px-2 py-1 rounded text-xs font-medium ${person.globalRole === 'ADMIN' || person.globalRole === 'SUPER_ADMIN'
-                                                ? 'bg-purple-100 text-purple-800'
-                                                : person.globalRole === 'MANAGER'
-                                                    ? 'bg-blue-100 text-blue-800'
-                                                    : 'bg-gray-100 text-gray-800'
+                                            ? 'bg-purple-100 text-purple-800'
+                                            : person.globalRole === 'MANAGER'
+                                                ? 'bg-blue-100 text-blue-800'
+                                                : 'bg-gray-100 text-gray-800'
                                             }`}>
                                             {person.globalRole || 'USER'}
                                         </span>

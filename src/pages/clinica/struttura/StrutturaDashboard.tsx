@@ -8,7 +8,7 @@
  */
 
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
     Building2,
@@ -23,6 +23,7 @@ import {
     Activity
 } from 'lucide-react';
 import { poliambulatoriApi, ambulatoriApi, strumentiApi } from '../../../services/clinicaApi';
+import { CRUDButton } from '../../../components/shared/CRUDButton';
 import type { Poliambulatorio, Ambulatorio, Strumento, StatoStrumento } from '../../../services/clinicaApi';
 
 // Import Element Medica theme
@@ -158,6 +159,8 @@ const AlertItem: React.FC<AlertItemProps> = ({ type, title, description, action 
 };
 
 const StrutturaDashboard: React.FC = () => {
+    const navigate = useNavigate();
+    
     // Queries
     const { data: poliambulatori, isLoading: loadingPoliambulatori } = useQuery({
         queryKey: ['poliambulatori'],
@@ -349,9 +352,14 @@ const StrutturaDashboard: React.FC = () => {
                                 <div className="p-8 text-center text-gray-500">
                                     <Building2 className="h-12 w-12 mx-auto text-gray-300 mb-3" />
                                     <p>Nessun poliambulatorio registrato</p>
-                                    <Link to="/poliambulatorio/poliambulatori/nuovo" className="text-teal-600 font-medium mt-2 inline-block">
+                                    <CRUDButton
+                                        operation="create"
+                                        variant="ghost"
+                                        onClick={() => navigate('/poliambulatorio/poliambulatori/nuovo')}
+                                        className="text-teal-600 font-medium mt-2 inline-block"
+                                    >
                                         Crea il primo poliambulatorio
-                                    </Link>
+                                    </CRUDButton>
                                 </div>
                             )}
                         </div>

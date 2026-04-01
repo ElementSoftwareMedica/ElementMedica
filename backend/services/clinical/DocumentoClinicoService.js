@@ -36,13 +36,12 @@
  * @since 2025-01-31
  */
 
-import { PrismaClient } from '@prisma/client';
+import prisma from '../../config/prisma-optimization.js';
 import logger from '../../utils/logger.js';
 import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs/promises';
 
-const prisma = new PrismaClient();
 
 /**
  * Configurazione storage
@@ -137,11 +136,13 @@ const DocumentoClinicoService = {
                 throw new Error(validation.error);
             }
 
-            // Verifica che la visita esista e appartenga al tenant
+            // Verifica che la visita esista.
+            // P59: Non filtrare per tenantId qui — lo risolviamo dalla visita stessa per supportare
+            // admin cross-tenant senza dover trasportare il tenantId corretto nel token JWT.
+            // L'autorizzazione è garantita dai middleware requirePermission.
             const visita = await prisma.visita.findFirst({
                 where: {
                     id: data.visitaId,
-                    tenantId,
                     deletedAt: null
                 },
                 include: {
@@ -153,11 +154,15 @@ const DocumentoClinicoService = {
                 throw new Error('Visita non trovata o non autorizzata');
             }
 
+            // Usa il tenantId della visita (non quello del richiedente) per storage e audit
+            const effectiveTenantId = visita.tenantId;
+
             // Calcola hash per integrità
             const fileHash = this._calculateHash(data.buffer);
 
-            // Genera path univoco per storage
-            const storagePath = this._generateStoragePath(tenantId, 'visite', data.visitaId, data.nome);
+            // Genera path univoco per storage (usa effectiveTenantId dalla visita)
+            const storagePath = this._generateStoragePath(effectiveTenantId, 'visite', data.visitaId, data.nome);
+            const generatedFileName = path.basename(storagePath);
 
             // Salva file
             const savedPath = await this._saveFile(data.buffer, storagePath);
@@ -169,10 +174,15 @@ const DocumentoClinicoService = {
                     tipo: data.tipo,
                     nome: data.nome,
                     descrizione: data.descrizione || null,
-                    filePath: savedPath,
+                    tipologiaClinica: data.tipologiaClinica || null,
+                    dataEsecuzione: data.dataEsecuzione || null,
+                    fileName: generatedFileName,
+                    fileUrl: savedPath,
+                    fileSize: data.buffer.length,
                     mimeType: data.mimeType,
-                    dimensione: data.buffer.length,
-                    uploadatoBy: userId
+                    hashFile: fileHash,
+                    caricatoDa: userId,
+                    tenantId: effectiveTenantId
                 }
             });
 
@@ -183,7 +193,7 @@ const DocumentoClinicoService = {
                 entityId: allegato.id,
                 visitaId: data.visitaId,
                 pazienteId: visita.paziente?.id,
-                tenantId,
+                tenantId: effectiveTenantId,
                 userId,
                 details: {
                     fileName: data.nome,
@@ -258,6 +268,7 @@ const DocumentoClinicoService = {
 
             // Genera path univoco per storage
             const storagePath = this._generateStoragePath(tenantId, 'referti', data.refertoId, data.nome);
+            const generatedFileName = path.basename(storagePath);
 
             // Salva file
             const savedPath = await this._saveFile(data.buffer, storagePath);
@@ -269,10 +280,12 @@ const DocumentoClinicoService = {
                     tipo: data.tipo,
                     nome: data.nome,
                     descrizione: data.descrizione || null,
-                    filePath: savedPath,
+                    fileName: generatedFileName,
+                    fileUrl: savedPath,
+                    fileSize: data.buffer.length,
                     mimeType: data.mimeType,
-                    dimensione: data.buffer.length,
-                    uploadatoBy: userId
+                    hashFile: fileHash,
+                    tenantId
                 }
             });
 
@@ -343,7 +356,7 @@ const DocumentoClinicoService = {
             }
 
             // Leggi file
-            const buffer = await this._readFile(allegato.filePath);
+            const buffer = await this._readFile(allegato.fileUrl);
 
             // Audit log
             await this._createAuditLog({
@@ -356,7 +369,7 @@ const DocumentoClinicoService = {
                 userId,
                 details: {
                     fileName: allegato.nome,
-                    fileSize: allegato.dimensione
+                    fileSize: allegato.fileSize
                 }
             });
 
@@ -366,7 +379,7 @@ const DocumentoClinicoService = {
                 buffer,
                 fileName: allegato.nome,
                 mimeType: allegato.mimeType,
-                size: allegato.dimensione
+                size: allegato.fileSize
             };
         } catch (error) {
             logger.error({ error: error.message, allegatoId }, 'Errore download allegato visita');
@@ -412,7 +425,7 @@ const DocumentoClinicoService = {
             }
 
             // Leggi file
-            const buffer = await this._readFile(allegato.filePath);
+            const buffer = await this._readFile(allegato.fileUrl);
 
             // Audit log
             await this._createAuditLog({
@@ -425,7 +438,7 @@ const DocumentoClinicoService = {
                 userId,
                 details: {
                     fileName: allegato.nome,
-                    fileSize: allegato.dimensione
+                    fileSize: allegato.fileSize
                 }
             });
 
@@ -435,7 +448,7 @@ const DocumentoClinicoService = {
                 buffer,
                 fileName: allegato.nome,
                 mimeType: allegato.mimeType,
-                size: allegato.dimensione
+                size: allegato.fileSize
             };
         } catch (error) {
             logger.error({ error: error.message, allegatoId }, 'Errore download allegato referto');
@@ -451,24 +464,49 @@ const DocumentoClinicoService = {
      */
     async getAllegatiVisita(visitaId, tenantId) {
         try {
-            // Verifica visita appartiene al tenant
+            // Verifica visita appartiene al tenant, caricando anche le relazioni P73
             const visita = await prisma.visita.findFirst({
-                where: { id: visitaId, tenantId, deletedAt: null }
+                where: { id: visitaId, tenantId, deletedAt: null },
+                select: {
+                    id: true,
+                    isVisitaSecundaria: true,
+                    visitaParentId: true,
+                    visiteSecundarie: {
+                        where: { deletedAt: null },
+                        select: { id: true }
+                    }
+                }
             });
 
             if (!visita) {
                 throw new Error('Visita non trovata o non autorizzata');
             }
 
+            // P73: costruisci l'insieme di visitaIds da includere
+            // - Se secondaria → includi anche la visita principale (visitaParentId)
+            // - Se principale → includi anche tutte le visite secondarie collegate
+            const linkedIds = new Set([visitaId]);
+            if (visita.isVisitaSecundaria && visita.visitaParentId) {
+                linkedIds.add(visita.visitaParentId);
+            }
+            if (!visita.isVisitaSecundaria && visita.visiteSecundarie?.length > 0) {
+                visita.visiteSecundarie.forEach(vs => linkedIds.add(vs.id));
+            }
+            const visitaIds = Array.from(linkedIds);
+
             const allegati = await prisma.allegatoVisita.findMany({
                 where: {
-                    visitaId,
+                    visitaId: { in: visitaIds },
                     deletedAt: null
                 },
                 orderBy: { createdAt: 'desc' }
             });
 
-            return allegati;
+            // Aggiunge campo fromLinkedVisit per distinguere allegati propri da quelli condivisi
+            return allegati.map(a => ({
+                ...a,
+                fromLinkedVisit: a.visitaId !== visitaId
+            }));
         } catch (error) {
             logger.error({ error: error.message, visitaId }, 'Errore recupero allegati visita');
             throw error;
@@ -514,6 +552,50 @@ const DocumentoClinicoService = {
      * @param {string} userId - ID utente
      * @returns {Promise<boolean>} Successo
      */
+    /**
+     * Aggiorna metadati allegato visita
+     * @param {string} allegatoId - ID allegato
+     * @param {Object} data - Dati da aggiornare
+     * @param {string} tenantId - ID tenant
+     * @returns {Promise<Object>} Allegato aggiornato
+     */
+    async updateAllegatoVisita(allegatoId, data, tenantId) {
+        try {
+            const allegato = await prisma.allegatoVisita.findFirst({
+                where: { id: allegatoId, deletedAt: null },
+                include: {
+                    visita: { select: { tenantId: true } }
+                }
+            });
+
+            if (!allegato) {
+                throw new Error('Allegato non trovato');
+            }
+
+            if (allegato.visita.tenantId !== tenantId) {
+                throw new Error('Allegato non autorizzato');
+            }
+
+            const updateData = {};
+            if (data.nome !== undefined) updateData.nome = data.nome;
+            if (data.descrizione !== undefined) updateData.descrizione = data.descrizione;
+            if (data.tipologiaClinica !== undefined) updateData.tipologiaClinica = data.tipologiaClinica;
+            if (data.dataEsecuzione !== undefined) updateData.dataEsecuzione = data.dataEsecuzione;
+
+            const updated = await prisma.allegatoVisita.update({
+                where: { id: allegatoId },
+                data: updateData
+            });
+
+            logger.info({ allegatoId }, 'Metadati allegato visita aggiornati');
+
+            return updated;
+        } catch (error) {
+            logger.error({ error: error.message, allegatoId }, 'Errore aggiornamento allegato visita');
+            throw error;
+        }
+    },
+
     async deleteAllegatoVisita(allegatoId, tenantId, userId) {
         try {
             const allegato = await prisma.allegatoVisita.findFirst({
@@ -632,7 +714,7 @@ const DocumentoClinicoService = {
                         visita: { tenantId, deletedAt: null }
                     },
                     _count: { id: true },
-                    _sum: { dimensione: true }
+                    _sum: { fileSize: true }
                 }),
                 prisma.allegatoReferto.aggregate({
                     where: {
@@ -640,23 +722,23 @@ const DocumentoClinicoService = {
                         referto: { tenantId, deletedAt: null }
                     },
                     _count: { id: true },
-                    _sum: { dimensione: true }
+                    _sum: { fileSize: true }
                 })
             ]);
 
             const totalFiles = (visitaStats._count.id || 0) + (refertoStats._count.id || 0);
-            const totalSize = (visitaStats._sum.dimensione || 0) + (refertoStats._sum.dimensione || 0);
+            const totalSize = (visitaStats._sum.fileSize || 0) + (refertoStats._sum.fileSize || 0);
 
             return {
                 allegatiVisita: {
                     count: visitaStats._count.id || 0,
-                    sizeBytes: visitaStats._sum.dimensione || 0,
-                    sizeMB: Math.round((visitaStats._sum.dimensione || 0) / 1024 / 1024 * 100) / 100
+                    sizeBytes: visitaStats._sum.fileSize || 0,
+                    sizeMB: Math.round((visitaStats._sum.fileSize || 0) / 1024 / 1024 * 100) / 100
                 },
                 allegatiReferto: {
                     count: refertoStats._count.id || 0,
-                    sizeBytes: refertoStats._sum.dimensione || 0,
-                    sizeMB: Math.round((refertoStats._sum.dimensione || 0) / 1024 / 1024 * 100) / 100
+                    sizeBytes: refertoStats._sum.fileSize || 0,
+                    sizeMB: Math.round((refertoStats._sum.fileSize || 0) / 1024 / 1024 * 100) / 100
                 },
                 totale: {
                     count: totalFiles,

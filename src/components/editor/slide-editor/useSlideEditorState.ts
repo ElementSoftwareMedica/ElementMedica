@@ -78,16 +78,17 @@ export const useSlideEditorState = (
     }, [elements, onChange]);
 
     // Add new element
-    const addElement = useCallback((type: SlideElement['type']) => {
+    const addElement = useCallback((type: SlideElement['type'], options?: { logoType?: 'tenant' | 'branch' }) => {
         const newElement: SlideElement = {
             id: generateId(),
             type,
             x: 50,
             y: 50,
-            width: type === 'text' ? 200 : type === 'line' || type === 'arrow' ? 150 : type === 'qrcode' ? 100 : 150,
-            height: type === 'text' ? 50 : type === 'line' || type === 'arrow' ? 4 : type === 'qrcode' ? 100 : 100,
+            width: type === 'text' ? 200 : type === 'line' || type === 'arrow' ? 150 : type === 'qrcode' ? 100 : type === 'logo' ? 120 : 150,
+            height: type === 'text' ? 50 : type === 'line' || type === 'arrow' ? 4 : type === 'qrcode' ? 100 : type === 'logo' ? 60 : 100,
             rotation: 0,
             content: type === 'text' ? 'Nuovo testo' : type === 'qrcode' ? '{{document.qrCode}}' : undefined,
+            ...(type === 'logo' && options?.logoType ? { logoType: options.logoType } : {}),
             style: DEFAULT_STYLES[type],
             locked: false,
             zIndex: elements.length,
@@ -198,7 +199,7 @@ export const useSlideEditorState = (
         // Refs
         canvasRef,
         textSelectionRef,
-        
+
         // State
         margins,
         selectedId,
@@ -216,7 +217,7 @@ export const useSlideEditorState = (
         showMediaPicker,
         showPrintMargins,
         selectedElement,
-        
+
         // Setters
         setSelectedId,
         setEditingTextId,
@@ -232,7 +233,7 @@ export const useSlideEditorState = (
         setShowMediaPicker,
         setShowPrintMargins,
         updateMargins,
-        
+
         // Actions
         snapToGridValue,
         saveTextSelection,

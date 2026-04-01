@@ -6,3 +6,4 @@ export { default as CourseDetailsForm } from './CourseDetailsForm';
 export { default as DateTimeManager } from './DateTimeManager';
 export { default as GenerateRegistriModal } from './GenerateRegistriModal';
 export { default as GenerateLettereModal } from './GenerateLettereModal';
+export { default as ParticipantCredentialsCard } from './ParticipantCredentialsCard';

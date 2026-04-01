@@ -12,10 +12,19 @@ const prisma = new PrismaClient();
 async function assignCompaniesPermissionsToAdmin() {
   try {
     logger.info('🚀 Inizio assegnazione permessi companies all\'admin...');
-    
-    // 1. Trova l'utente admin
+
+    // P48: Trova l'utente admin per email nel PersonTenantProfile
+    const adminProfile = await prisma.personTenantProfile.findFirst({
+      where: { email: 'admin@example.com', deletedAt: null },
+      select: { personId: true }
+    });
+
+    if (!adminProfile) {
+      throw new Error('Utente admin non trovato (admin@example.com)');
+    }
+
     const adminUser = await prisma.person.findUnique({
-      where: { email: 'admin@example.com' },
+      where: { id: adminProfile.personId },
       include: {
         personRoles: {
           where: { isActive: true },
@@ -25,22 +34,22 @@ async function assignCompaniesPermissionsToAdmin() {
         }
       }
     });
-    
+
     if (!adminUser) {
       throw new Error('Utente admin non trovato (admin@example.com)');
     }
-    
-    logger.info(`✅ Utente admin trovato: ${adminUser.email} (ID: ${adminUser.id})`);
-    
+
+    logger.info(`✅ Utente admin trovato: admin@example.com (ID: ${adminUser.id})`);
+
     // 2. Trova il ruolo ADMIN dell'utente
     const adminRole = adminUser.personRoles.find(pr => pr.roleType === 'ADMIN');
-    
+
     if (!adminRole) {
       throw new Error('Ruolo ADMIN non trovato per l\'utente admin');
     }
-    
+
     logger.info(`✅ Ruolo ADMIN trovato (ID: ${adminRole.id})`);
-    
+
     // 3. Definisci i permessi necessari per le companies
     const companiesPermissions = [
       'VIEW_COMPANIES',    // Per vedere le companies
@@ -88,9 +97,9 @@ async function assignCompaniesPermissionsToAdmin() {
         }
       }
     }
-    
+
     logger.info(`✅ Assegnati ${missingPermissions.length} permessi all'admin`);
-    
+
     // 6. Verifica finale
     const updatedAdminRole = await prisma.personRole.findUnique({
       where: { id: adminRole.id },
@@ -98,12 +107,12 @@ async function assignCompaniesPermissionsToAdmin() {
         permissions: true
       }
     });
-    
+
     const finalPermissions = updatedAdminRole.permissions.map(p => p.permission);
     logger.info(`✅ Permessi finali dell'admin: ${finalPermissions.join(', ')}`);
-    
+
     logger.info('🎉 Assegnazione permessi completata con successo!');
-    
+
   } catch (error) {
     logger.error('❌ Errore durante l\'assegnazione dei permessi:', {
       error: error.message,

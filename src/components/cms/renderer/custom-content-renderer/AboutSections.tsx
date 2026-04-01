@@ -7,6 +7,7 @@
  */
 
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { iconMap, CheckCircle, Users, GraduationCap, Star } from '../iconMap';
 import { bgColorMap, missionColors, storiaColors, approachColors } from './types';
 
@@ -17,7 +18,7 @@ export const WhatIsRSPPSection: React.FC<{ content: any }> = ({ content }) => {
   if (!content.whatIsRSPP) return null;
 
   return (
-    <section className="py-20 bg-gradient-to-br from-white via-blue-50/30 to-slate-50/40">
+    <section className="py-20 bg-gradient-to-br from-white via-primary-50/30 to-slate-50/40">
       <div className="container mx-auto px-4">
         <div className="max-w-4xl mx-auto text-center mb-12">
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-6">
@@ -118,17 +119,17 @@ export const MissionSection: React.FC<{ content: any }> = ({ content }) => {
   if (!content.mission) return null;
 
   return (
-    <section className="py-20 bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40">
+    <section className="py-20" style={{ backgroundImage: 'linear-gradient(to bottom right, #f8fafc, color-mix(in srgb, var(--color-primary-50) 30%, transparent), color-mix(in srgb, var(--color-accent-50) 40%, transparent))' }}>
       <div className="container mx-auto px-4">
         <div className="max-w-4xl mx-auto text-center mb-16">
-          <span className="inline-block px-4 py-2 bg-blue-100 text-blue-700 rounded-full text-sm font-semibold mb-4">
+          <span className="inline-block px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-4">
             La Nostra Missione
           </span>
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-6">
             {content.mission.title}
           </h2>
           {content.mission.subtitle && (
-            <p className="text-xl text-blue-600 font-medium mb-4">{content.mission.subtitle}</p>
+            <p className="text-xl text-primary-600 font-medium mb-4">{content.mission.subtitle}</p>
           )}
           <p className="text-lg text-gray-600 leading-relaxed">
             {content.mission.description}
@@ -141,7 +142,7 @@ export const MissionSection: React.FC<{ content: any }> = ({ content }) => {
               const color = missionColors[index % missionColors.length];
               return (
                 <div key={index} className={`${color.light} rounded-2xl p-8 border ${color.border} hover:shadow-lg transition-all group`}>
-                  <div className={`w-16 h-16 bg-gradient-to-br ${color.bg} rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-lg`}>
+                  <div className="w-16 h-16 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-lg" style={color.style}>
                     <IconComponent className="w-8 h-8 text-white" />
                   </div>
                   <h3 className="text-xl font-bold text-gray-900 mb-3">{value.title}</h3>
@@ -163,7 +164,7 @@ export const StoriaSection: React.FC<{ content: any }> = ({ content }) => {
   if (!content.storia) return null;
 
   return (
-    <section className="py-20 bg-gradient-to-br from-blue-900 via-indigo-900 to-slate-900 text-white">
+    <section className="py-20 text-white" style={{ backgroundImage: 'linear-gradient(135deg, var(--color-primary-800), var(--color-primary-700), var(--color-primary-600))' }}>
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
           <span className="inline-block px-4 py-2 bg-white/10 text-white rounded-full text-sm font-semibold mb-4 backdrop-blur">
@@ -175,7 +176,7 @@ export const StoriaSection: React.FC<{ content: any }> = ({ content }) => {
         <div className="max-w-5xl mx-auto">
           <div className="relative">
             {/* Vertical line */}
-            <div className="hidden lg:block absolute left-1/2 top-0 bottom-0 w-1 bg-gradient-to-b from-blue-500 via-purple-500 to-teal-500 transform -translate-x-1/2 rounded-full" />
+            <div className="hidden lg:block absolute left-1/2 top-0 bottom-0 w-1 transform -translate-x-1/2 rounded-full" style={{ backgroundImage: 'linear-gradient(to bottom, var(--color-primary-500), var(--color-secondary-500), var(--color-primary-500))' }} />
             {content.storia.timeline?.map((item: any, index: number) => {
               const isLeft = index % 2 === 0;
               const gradient = storiaColors[item.color] || storiaColors.blue;
@@ -183,7 +184,7 @@ export const StoriaSection: React.FC<{ content: any }> = ({ content }) => {
                 <div key={index} className={`relative flex items-center mb-12 ${isLeft ? 'lg:flex-row' : 'lg:flex-row-reverse'}`}>
                   <div className={`w-full lg:w-1/2 ${isLeft ? 'lg:pr-12 lg:text-right' : 'lg:pl-12'}`}>
                     <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20 hover:bg-white/15 transition-all">
-                      <span className={`inline-block px-3 py-1 bg-gradient-to-r ${gradient} rounded-full text-sm font-bold mb-3`}>
+                      <span className="inline-block px-3 py-1 rounded-full text-sm font-bold mb-3" style={gradient}>
                         {item.year}
                       </span>
                       <h3 className="text-xl font-bold mb-2">{item.title}</h3>
@@ -191,7 +192,7 @@ export const StoriaSection: React.FC<{ content: any }> = ({ content }) => {
                     </div>
                   </div>
                   {/* Center dot */}
-                  <div className={`hidden lg:flex absolute left-1/2 transform -translate-x-1/2 w-6 h-6 bg-gradient-to-br ${gradient} rounded-full border-4 border-gray-900 shadow-lg`} />
+                  <div className="hidden lg:flex absolute left-1/2 transform -translate-x-1/2 w-6 h-6 rounded-full border-4 border-gray-900 shadow-lg" style={gradient} />
                 </div>
               );
             })}
@@ -209,10 +210,10 @@ export const TeamSection: React.FC<{ content: any }> = ({ content }) => {
   if (!content.team) return null;
 
   return (
-    <section className="py-20 bg-gradient-to-br from-white via-slate-50 to-blue-50/30">
+    <section className="py-20" style={{ backgroundImage: 'linear-gradient(to bottom right, #ffffff, #f8fafc, color-mix(in srgb, var(--color-primary-50) 30%, transparent))' }}>
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
-          <span className="inline-block px-4 py-2 bg-indigo-100 text-indigo-700 rounded-full text-sm font-semibold mb-4">
+          <span className="inline-block px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-4">
             Il Nostro Team
           </span>
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">{content.team.sectionTitle || content.team.title}</h2>
@@ -226,7 +227,7 @@ export const TeamSection: React.FC<{ content: any }> = ({ content }) => {
               const IconComponent = iconMap[stat.icon] || Users;
               return (
                 <div key={index} className="text-center">
-                  <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+                  <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg" style={{ backgroundImage: 'linear-gradient(to bottom right, var(--color-primary-500), var(--color-primary-700))' }}>
                     <IconComponent className="w-8 h-8 text-white" />
                   </div>
                   <div className="text-3xl font-bold text-gray-900">{stat.number}</div>
@@ -242,11 +243,11 @@ export const TeamSection: React.FC<{ content: any }> = ({ content }) => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             {content.team.members.map((member: any, index: number) => (
               <div key={index} className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all text-center group">
-                <div className="w-24 h-24 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4 text-white text-3xl font-bold group-hover:scale-105 transition-transform">
+                <div className="w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-4 text-white text-3xl font-bold group-hover:scale-105 transition-transform" style={{ backgroundImage: 'linear-gradient(to bottom right, var(--color-primary-500), var(--color-primary-700))' }}>
                   {member.name?.charAt(0) || 'U'}
                 </div>
                 <h3 className="text-lg font-bold text-gray-900 mb-1">{member.name}</h3>
-                <p className="text-indigo-600 font-medium text-sm mb-2">{member.role}</p>
+                <p className="text-primary-600 font-medium text-sm mb-2">{member.role}</p>
                 <p className="text-gray-500 text-sm">{member.expertise}</p>
               </div>
             ))}
@@ -257,18 +258,22 @@ export const TeamSection: React.FC<{ content: any }> = ({ content }) => {
         {content.team.doctors && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {content.team.doctors.map((doctor: any, index: number) => (
-              <div key={index} className="bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all group">
+              <Link
+                key={index}
+                to={doctor.id ? `/medici/${doctor.id}` : '/medici'}
+                className="bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all group block"
+              >
                 {/* Doctor Photo/Avatar */}
-                <div className="h-48 bg-gradient-to-br from-teal-500 to-cyan-600 flex items-center justify-center">
+                <div className="h-48 flex items-center justify-center" style={{ backgroundImage: 'linear-gradient(to bottom right, var(--color-primary-500), var(--color-accent-600))' }}>
                   <div className="w-24 h-24 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-white text-4xl font-bold border-4 border-white/30">
                     {doctor.name?.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
                   </div>
                 </div>
                 <div className="p-6">
-                  <div className="inline-block px-3 py-1 bg-teal-100 text-teal-700 rounded-full text-xs font-semibold mb-3">
+                  <div className="inline-block px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-xs font-semibold mb-3">
                     {doctor.specialty}
                   </div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">{doctor.name}</h3>
+                  <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-primary-700 transition-colors">{doctor.name}</h3>
                   <p className="text-gray-600 text-sm mb-4 line-clamp-3">{doctor.description}</p>
                   {doctor.education && (
                     <p className="text-xs text-gray-500 mb-2 flex items-center">
@@ -277,7 +282,7 @@ export const TeamSection: React.FC<{ content: any }> = ({ content }) => {
                     </p>
                   )}
                   {doctor.languages && doctor.languages.length > 0 && (
-                    <div className="flex flex-wrap gap-1">
+                    <div className="flex flex-wrap gap-1 mb-4">
                       {doctor.languages.map((lang: string, langIdx: number) => (
                         <span key={langIdx} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
                           {lang}
@@ -285,8 +290,12 @@ export const TeamSection: React.FC<{ content: any }> = ({ content }) => {
                       ))}
                     </div>
                   )}
+                  <div className="flex items-center text-primary-600 font-semibold text-sm pt-3 border-t border-gray-100">
+                    Vedi profilo e prenota
+                    <svg className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                  </div>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         )}
@@ -302,10 +311,10 @@ export const ApproachSection: React.FC<{ content: any }> = ({ content }) => {
   if (!content.approach) return null;
 
   return (
-    <section className="py-20 bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50">
+    <section className="py-20" style={{ backgroundImage: 'linear-gradient(to bottom right, var(--color-secondary-50), var(--color-primary-50), var(--color-accent-50))' }}>
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
-          <span className="inline-block px-4 py-2 bg-teal-100 text-teal-700 rounded-full text-sm font-semibold mb-4">
+          <span className="inline-block px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-4">
             Metodologia
           </span>
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">{content.approach.title}</h2>
@@ -322,7 +331,7 @@ export const ApproachSection: React.FC<{ content: any }> = ({ content }) => {
                   {step.number}
                 </div>
                 <div className="relative z-10">
-                  <div className={`w-14 h-14 bg-gradient-to-br ${color.icon} rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-lg`}>
+                  <div className="w-14 h-14 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-lg" style={color.style}>
                     <IconComponent className="w-7 h-7 text-white" />
                   </div>
                   <h3 className="text-xl font-bold text-gray-900 mb-3">{step.title}</h3>
@@ -343,29 +352,34 @@ export const ApproachSection: React.FC<{ content: any }> = ({ content }) => {
 export const NumbersSection: React.FC<{ content: any }> = ({ content }) => {
   if (!content.numbers) return null;
 
-  const colors = ['from-blue-500/20 to-blue-600/20', 'from-teal-500/20 to-teal-600/20', 'from-emerald-500/20 to-emerald-600/20', 'from-cyan-500/20 to-cyan-600/20'];
+  const colorStyles = [
+    { backgroundImage: 'linear-gradient(to bottom right, color-mix(in srgb, var(--color-primary-500) 20%, transparent), color-mix(in srgb, var(--color-primary-600) 20%, transparent))' },
+    { backgroundImage: 'linear-gradient(to bottom right, color-mix(in srgb, var(--color-primary-500) 20%, transparent), color-mix(in srgb, var(--color-primary-600) 20%, transparent))' },
+    { backgroundImage: 'linear-gradient(to bottom right, color-mix(in srgb, var(--color-primary-500) 20%, transparent), color-mix(in srgb, var(--color-primary-600) 20%, transparent))' },
+    { backgroundImage: 'linear-gradient(to bottom right, color-mix(in srgb, var(--color-accent-500) 20%, transparent), color-mix(in srgb, var(--color-accent-600) 20%, transparent))' },
+  ];
 
   return (
-    <section className="py-20 bg-gradient-to-br from-blue-900 via-indigo-900 to-slate-900 text-white relative overflow-hidden">
+    <section className="py-20 text-white relative overflow-hidden" style={{ backgroundImage: 'linear-gradient(135deg, var(--color-primary-800), var(--color-primary-700), var(--color-primary-600))' }}>
       {/* Subtle decorative elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl" />
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-primary-500/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-primary-500/10 rounded-full blur-3xl" />
       </div>
       <div className="container mx-auto px-4 relative z-10">
         <div className="text-center mb-12">
-          <h2 className="text-3xl lg:text-4xl font-bold mb-4 bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">{content.numbers.title}</h2>
+          <h2 className="text-3xl lg:text-4xl font-bold mb-4 text-white">{content.numbers.title}</h2>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8 max-w-5xl mx-auto">
           {content.numbers.items?.map((item: any, index: number) => {
             const IconComponent = iconMap[item.icon] || Star;
             return (
               <div key={index} className="text-center group">
-                <div className={`w-20 h-20 bg-gradient-to-br ${colors[index % colors.length]} backdrop-blur border border-white/10 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-105 transition-all`}>
+                <div className="w-20 h-20 backdrop-blur border border-white/10 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-105 transition-all" style={colorStyles[index % colorStyles.length]}>
                   <IconComponent className="w-10 h-10 text-white" />
                 </div>
-                <div className="text-4xl lg:text-5xl font-black mb-2 bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">{item.value}</div>
-                <div className="text-gray-400 font-medium">{item.label}</div>
+                <div className="text-4xl lg:text-5xl font-black mb-2 text-white">{item.value}</div>
+                <div className="text-white/80 font-medium">{item.label}</div>
               </div>
             );
           })}

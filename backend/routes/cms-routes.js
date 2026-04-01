@@ -15,6 +15,8 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs/promises';
 import cmsService from '../services/cmsService.js';
+import { getEffectiveTenantId } from '../utils/tenantHelper.js';
+import { publicContentMiddleware } from '../middleware/brandDetection.js';
 
 const { authenticate } = authMiddleware;
 const router = express.Router();
@@ -39,7 +41,7 @@ router.get('/pages', authenticate, requirePermissions('cms.pages:read'), [
     if (!errors.isEmpty()) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid parameters',
+        error: 'Parametri non validi',
         details: errors.array()
       });
     }
@@ -59,7 +61,7 @@ router.get('/pages', authenticate, requirePermissions('cms.pages:read'), [
       }
     } else {
       // Utente normale: sempre filtrato per il proprio tenant
-      filterTenantId = req.person.tenantId;
+      filterTenantId = getEffectiveTenantId(req);
     }
 
     const result = await cmsService.listPages({
@@ -78,13 +80,12 @@ router.get('/pages', authenticate, requirePermissions('cms.pages:read'), [
   } catch (error) {
     logger.error('Failed to list CMS pages', {
       component: 'cms-routes',
-      error: error.message,
+      error: 'Operazione non riuscita',
       tenantId: req.person?.tenantId
     });
     res.status(500).json({
       success: false,
-      error: 'Internal server error',
-      message: error.message
+      error: 'Errore interno del server',
     });
   }
 });
@@ -97,7 +98,7 @@ router.get('/pages', authenticate, requirePermissions('cms.pages:read'), [
  * al frontend pubblico di recuperare i contenuti delle pagine.
  * Restituisce solo pagine pubblicate.
  */
-router.get('/pages/slug/:slug', [
+router.get('/pages/slug/:slug', publicContentMiddleware, [
   param('slug').isString().trim().notEmpty()
 ], async (req, res) => {
   try {
@@ -124,12 +125,12 @@ router.get('/pages/slug/:slug', [
     };
 
     // Se il middleware ha iniettato il tenantId, filtra per brand
-    if (req.brandTenantId) {
-      whereClause.tenantId = req.brandTenantId;
+    if (req.publicTenantId) {
+      whereClause.tenantId = req.publicTenantId;
       logger.info('CMS page query with tenant filter', {
         component: 'cms-routes',
         slug: req.params.slug,
-        tenantId: req.brandTenantId
+        tenantId: req.publicTenantId
       });
     }
 
@@ -140,8 +141,7 @@ router.get('/pages/slug/:slug', [
     if (!page) {
       return res.status(404).json({
         success: false,
-        error: 'Page not found',
-        details: req.brandTenantId ? `No page found for slug "${req.params.slug}" in tenant "${req.brandTenantId}"` : undefined
+        error: 'Pagina non trovata'
       });
     }
 
@@ -152,12 +152,12 @@ router.get('/pages/slug/:slug', [
   } catch (error) {
     logger.error('Failed to get CMS page by slug', {
       component: 'cms-routes',
-      error: error.message,
+      error: 'Operazione non riuscita',
       slug: req.params.slug
     });
     res.status(500).json({
       success: false,
-      error: 'Internal server error'
+      error: 'Errore interno del server'
     });
   }
 });
@@ -172,7 +172,7 @@ router.get('/pages/:id', authenticate, requirePermissions('cms.pages:read'), [
   try {
     // Gli admin globali possono vedere pagine di qualsiasi tenant
     const isGlobalAdmin = req.person.globalRole === 'ADMIN' || req.person.globalRole === 'SUPER_ADMIN';
-    const page = await cmsService.getPage(req.params.id, req.person.tenantId, isGlobalAdmin);
+    const page = await cmsService.getPage(req.params.id, getEffectiveTenantId(req), isGlobalAdmin);
 
     res.json({
       success: true,
@@ -181,20 +181,20 @@ router.get('/pages/:id', authenticate, requirePermissions('cms.pages:read'), [
   } catch (error) {
     logger.error('Failed to get CMS page', {
       component: 'cms-routes',
-      error: error.message,
+      error: 'Operazione non riuscita',
       pageId: req.params.id
     });
 
     if (error.message === 'Page not found') {
       return res.status(404).json({
         success: false,
-        error: 'Page not found'
+        error: 'Pagina non trovata'
       });
     }
 
     res.status(500).json({
       success: false,
-      error: 'Internal server error'
+      error: 'Errore interno del server'
     });
   }
 });
@@ -217,14 +217,14 @@ router.post('/pages', authenticate, requirePermissions('cms.pages:create'), [
     if (!errors.isEmpty()) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid parameters',
+        error: 'Parametri non validi',
         details: errors.array()
       });
     }
 
     const page = await cmsService.createPage({
       ...req.body,
-      tenantId: req.person.tenantId
+      tenantId: getEffectiveTenantId(req)
     }, req.person.id);
 
     res.status(201).json({
@@ -234,20 +234,20 @@ router.post('/pages', authenticate, requirePermissions('cms.pages:create'), [
   } catch (error) {
     logger.error('Failed to create CMS page', {
       component: 'cms-routes',
-      error: error.message,
+      error: 'Operazione non riuscita',
       slug: req.body.slug
     });
 
     if (error.message === 'Slug already exists') {
       return res.status(409).json({
         success: false,
-        error: 'Slug already exists'
+        error: 'Lo slug esiste già'
       });
     }
 
     res.status(500).json({
       success: false,
-      error: 'Internal server error'
+      error: 'Errore interno del server'
     });
   }
 });
@@ -271,7 +271,7 @@ router.patch('/pages/:id', authenticate, requirePermissions('cms.pages:update'),
     if (!errors.isEmpty()) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid parameters',
+        error: 'Parametri non validi',
         details: errors.array()
       });
     }
@@ -281,7 +281,7 @@ router.patch('/pages/:id', authenticate, requirePermissions('cms.pages:update'),
     const page = await cmsService.updatePage(
       req.params.id,
       req.body,
-      req.person.tenantId,
+      getEffectiveTenantId(req),
       isGlobalAdmin
     );
 
@@ -292,27 +292,27 @@ router.patch('/pages/:id', authenticate, requirePermissions('cms.pages:update'),
   } catch (error) {
     logger.error('Failed to update CMS page', {
       component: 'cms-routes',
-      error: error.message,
+      error: 'Operazione non riuscita',
       pageId: req.params.id
     });
 
     if (error.message === 'Page not found') {
       return res.status(404).json({
         success: false,
-        error: 'Page not found'
+        error: 'Pagina non trovata'
       });
     }
 
     if (error.message === 'Slug already exists') {
       return res.status(409).json({
         success: false,
-        error: 'Slug already exists'
+        error: 'Lo slug esiste già'
       });
     }
 
     res.status(500).json({
       success: false,
-      error: 'Internal server error'
+      error: 'Errore interno del server'
     });
   }
 });
@@ -325,7 +325,7 @@ router.post('/pages/:id/publish', authenticate, requirePermissions('cms.pages:pu
   param('id').isString()
 ], async (req, res) => {
   try {
-    const page = await cmsService.publishPage(req.params.id, req.person.tenantId);
+    const page = await cmsService.publishPage(req.params.id, getEffectiveTenantId(req));
 
     res.json({
       success: true,
@@ -334,12 +334,12 @@ router.post('/pages/:id/publish', authenticate, requirePermissions('cms.pages:pu
   } catch (error) {
     logger.error('Failed to publish CMS page', {
       component: 'cms-routes',
-      error: error.message,
+      error: 'Operazione non riuscita',
       pageId: req.params.id
     });
     res.status(500).json({
       success: false,
-      error: 'Internal server error'
+      error: 'Errore interno del server'
     });
   }
 });
@@ -352,7 +352,7 @@ router.post('/pages/:id/unpublish', authenticate, requirePermissions('cms.pages:
   param('id').isString()
 ], async (req, res) => {
   try {
-    const page = await cmsService.unpublishPage(req.params.id, req.person.tenantId);
+    const page = await cmsService.unpublishPage(req.params.id, getEffectiveTenantId(req));
 
     res.json({
       success: true,
@@ -361,12 +361,12 @@ router.post('/pages/:id/unpublish', authenticate, requirePermissions('cms.pages:
   } catch (error) {
     logger.error('Failed to unpublish CMS page', {
       component: 'cms-routes',
-      error: error.message,
+      error: 'Operazione non riuscita',
       pageId: req.params.id
     });
     res.status(500).json({
       success: false,
-      error: 'Internal server error'
+      error: 'Errore interno del server'
     });
   }
 });
@@ -379,7 +379,7 @@ router.delete('/pages/:id', authenticate, requirePermissions('cms.pages:delete')
   param('id').isString()
 ], async (req, res) => {
   try {
-    const page = await cmsService.deletePage(req.params.id, req.person.tenantId);
+    const page = await cmsService.deletePage(req.params.id, getEffectiveTenantId(req));
 
     res.json({
       success: true,
@@ -388,12 +388,12 @@ router.delete('/pages/:id', authenticate, requirePermissions('cms.pages:delete')
   } catch (error) {
     logger.error('Failed to delete CMS page', {
       component: 'cms-routes',
-      error: error.message,
+      error: 'Operazione non riuscita',
       pageId: req.params.id
     });
     res.status(500).json({
       success: false,
-      error: 'Internal server error'
+      error: 'Errore interno del server'
     });
   }
 });
@@ -408,7 +408,7 @@ router.post('/pages/:id/duplicate', authenticate, requirePermissions('cms.pages:
   try {
     const page = await cmsService.duplicatePage(
       req.params.id,
-      req.person.tenantId,
+      getEffectiveTenantId(req),
       req.person.id
     );
 
@@ -419,12 +419,12 @@ router.post('/pages/:id/duplicate', authenticate, requirePermissions('cms.pages:
   } catch (error) {
     logger.error('Failed to duplicate CMS page', {
       component: 'cms-routes',
-      error: error.message,
+      error: 'Operazione non riuscita',
       pageId: req.params.id
     });
     res.status(500).json({
       success: false,
-      error: 'Internal server error'
+      error: 'Errore interno del server'
     });
   }
 });
@@ -496,7 +496,7 @@ router.get('/courses', authenticate, requirePermissions('cms:read'), [
     } = req.query;
 
     const offset = (parseInt(page) - 1) * parseInt(limit);
-    const tenantId = req.person.tenantId;
+    const tenantId = getEffectiveTenantId(req);
 
     // Costruisci il filtro WHERE
     const where = {
@@ -561,7 +561,7 @@ router.get('/courses', authenticate, requirePermissions('cms:read'), [
     logger.error('Errore nel recupero dei corsi CMS', {
       component: 'cms-routes',
       action: 'getCMSCourses',
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       userId: req.person?.id,
       tenantId: req.person?.tenantId
@@ -592,7 +592,7 @@ router.get('/courses/:id', authenticate, requirePermissions('cms:read'), [
     }
 
     const { id } = req.params;
-    const tenantId = req.person.tenantId;
+    const tenantId = getEffectiveTenantId(req);
 
     const course = await prisma.course.findFirst({
       where: {
@@ -636,7 +636,7 @@ router.get('/courses/:id', authenticate, requirePermissions('cms:read'), [
     logger.error('Errore nel recupero del corso CMS', {
       component: 'cms-routes',
       action: 'getCMSCourse',
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       courseId: req.params.id,
       userId: req.person?.id
@@ -685,7 +685,7 @@ router.put('/courses/:id/content', authenticate, requirePermissions('cms:update'
       where: {
         id: id,
         deletedAt: null,
-        tenantId: req.person.tenantId
+        tenantId: getEffectiveTenantId(req)
       }
     });
 
@@ -740,7 +740,7 @@ router.put('/courses/:id/content', authenticate, requirePermissions('cms:update'
     logger.error('Errore nell\'aggiornamento contenuti corso', {
       component: 'cms-routes',
       action: 'updateCourseContent',
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       courseId: req.params.id,
       userId: req.person?.id
@@ -774,7 +774,7 @@ router.post('/upload/image', authenticate, requirePermissions('cms.media:manage'
       });
     }
 
-    const tenantId = req.person.tenantId;
+    const tenantId = getEffectiveTenantId(req);
     const userId = req.person.id;
     const file = req.file;
 
@@ -818,7 +818,7 @@ router.post('/upload/image', authenticate, requirePermissions('cms.media:manage'
     logger.error('Errore nell\'upload dell\'immagine', {
       component: 'cms-routes',
       action: 'uploadImage',
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       userId: req.person?.id
     });
@@ -854,7 +854,7 @@ router.get('/media', authenticate, requirePermissions('cms:read'), [
     } = req.query;
 
     const offset = (parseInt(page) - 1) * parseInt(limit);
-    const tenantId = req.person.tenantId;
+    const tenantId = getEffectiveTenantId(req);
 
     const [media, total] = await Promise.all([
       prisma.cMSMedia.findMany({
@@ -905,7 +905,7 @@ router.get('/media', authenticate, requirePermissions('cms:read'), [
     logger.error('Errore nel recupero dei media', {
       component: 'cms-routes',
       action: 'getMedia',
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       userId: req.person?.id
     });
@@ -935,7 +935,7 @@ router.delete('/media/:id', authenticate, requirePermissions('cms.media:manage')
     }
 
     const { id } = req.params;
-    const tenantId = req.person.tenantId;
+    const tenantId = getEffectiveTenantId(req);
     const userId = req.person.id;
 
     // Trova il record media
@@ -972,7 +972,7 @@ router.delete('/media/:id', authenticate, requirePermissions('cms.media:manage')
         component: 'cms-routes',
         action: 'deleteMedia',
         filename: mediaRecord.filename,
-        error: fileError.message
+        error: 'Operazione non riuscita'
       });
     }
 
@@ -991,7 +991,7 @@ router.delete('/media/:id', authenticate, requirePermissions('cms.media:manage')
     logger.error('Errore nell\'eliminazione del media', {
       component: 'cms-routes',
       action: 'deleteMedia',
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       mediaId: req.params.id,
       userId: req.person?.id
@@ -1010,7 +1010,7 @@ router.delete('/media/:id', authenticate, requirePermissions('cms.media:manage')
  */
 router.get('/public-content', authenticate, requirePermissions('cms:read'), async (req, res) => {
   try {
-    const tenantId = req.person.tenantId;
+    const tenantId = getEffectiveTenantId(req);
 
     // Cerca la pagina CMS per il contenuto pubblico
     const publicContentPage = await prisma.cMSPage.findFirst({
@@ -1081,7 +1081,7 @@ router.get('/public-content', authenticate, requirePermissions('cms:read'), asyn
     logger.error('Errore nel recupero del contenuto pubblico', {
       component: 'cms-routes',
       action: 'getPublicContent',
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       userId: req.person?.id,
       tenantId: req.person?.tenantId
@@ -1115,7 +1115,7 @@ router.put('/public-content', authenticate, requirePermissions('cms:update'), [
       });
     }
 
-    const tenantId = req.person.tenantId;
+    const tenantId = getEffectiveTenantId(req);
     const userId = req.person.id;
     const contentData = req.body;
 
@@ -1168,7 +1168,7 @@ router.put('/public-content', authenticate, requirePermissions('cms:update'), [
     logger.error('Errore nell\'aggiornamento del contenuto pubblico', {
       component: 'cms-routes',
       action: 'updatePublicContent',
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       userId: req.person?.id,
       tenantId: req.person?.tenantId

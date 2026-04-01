@@ -40,8 +40,11 @@ import {
   type ViewsOverTime
 } from '../../services/cmsAnalyticsService';
 import CMSManager from './CMSManager';
+import CMSFormSubmissions from './CMSFormSubmissions';
+import CMSFormTemplates from './CMSFormTemplates';
+import { useNewPublicSubmissionsCount } from '../../hooks/useNewPublicSubmissionsCount';
 
-type CMSView = 'analytics' | 'pages';
+type CMSView = 'analytics' | 'pages' | 'form-responses' | 'form-templates';
 type PeriodOption = '7d' | '30d' | '90d' | '1y';
 
 const periodLabels: Record<PeriodOption, string> = {
@@ -235,6 +238,9 @@ const CMSHub: React.FC<CMSHubProps> = ({ className = '', initialView = 'analytic
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Badge per risposte ai form pubblici
+  const { count: newPublicSubmissionsCount } = useNewPublicSubmissionsCount();
+
   // Carica dati analytics
   useEffect(() => {
     if (activeView !== 'analytics') return;
@@ -243,17 +249,14 @@ const CMSHub: React.FC<CMSHubProps> = ({ className = '', initialView = 'analytic
       try {
         setLoading(true);
         setError(null);
-        console.log('[CMSHub] 🔄 Loading analytics for period:', period);
         const [summaryData, pagesData] = await Promise.all([
           getAnalyticsSummary(period),
           getPageAnalytics({ limit: 10 })
         ]);
-        console.log('[CMSHub] 📊 Summary data received:', summaryData);
-        console.log('[CMSHub] 📄 Pages data received:', pagesData);
         setSummary(summaryData);
         setPageAnalytics(pagesData);
       } catch (err) {
-        console.error('[CMSHub] ❌ Failed to load analytics:', err);
+        if (import.meta.env.DEV) console.error('[CMSHub] ❌ Failed to load analytics:', err);
         setError('Errore nel caricamento delle statistiche');
       } finally {
         setLoading(false);
@@ -277,7 +280,7 @@ const CMSHub: React.FC<CMSHubProps> = ({ className = '', initialView = 'analytic
         });
         setPageDetail(data);
       } catch (err) {
-        console.error('Failed to load page analytics:', err);
+        if (import.meta.env.DEV) console.error('Failed to load page analytics:', err);
       }
     };
     loadPageDetail();
@@ -333,8 +336,8 @@ const CMSHub: React.FC<CMSHubProps> = ({ className = '', initialView = 'analytic
                 type="button"
                 onClick={() => setActiveView('analytics')}
                 className={`px-4 py-1 text-base font-semibold rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-300 ${(activeView as CMSView) === 'analytics'
-                    ? 'bg-blue-600 text-white shadow'
-                    : 'bg-transparent text-gray-700 hover:bg-blue-100'
+                  ? 'bg-blue-600 text-white shadow'
+                  : 'bg-transparent text-gray-700 hover:bg-blue-100'
                   }`}
               >
                 Analytics
@@ -343,11 +346,36 @@ const CMSHub: React.FC<CMSHubProps> = ({ className = '', initialView = 'analytic
                 type="button"
                 onClick={() => setActiveView('pages')}
                 className={`px-4 py-1 text-base font-semibold rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-300 ${(activeView as CMSView) === 'pages'
-                    ? 'bg-blue-600 text-white shadow'
-                    : 'bg-transparent text-gray-700 hover:bg-blue-100'
+                  ? 'bg-blue-600 text-white shadow'
+                  : 'bg-transparent text-gray-700 hover:bg-blue-100'
                   }`}
               >
                 Pagine
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveView('form-responses')}
+                className={`relative px-4 py-1 text-base font-semibold rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-300 ${(activeView as CMSView) === 'form-responses'
+                  ? 'bg-blue-600 text-white shadow'
+                  : 'bg-transparent text-gray-700 hover:bg-blue-100'
+                  }`}
+              >
+                Risposte Form
+                {newPublicSubmissionsCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
+                    {newPublicSubmissionsCount > 99 ? '99+' : newPublicSubmissionsCount}
+                  </span>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveView('form-templates')}
+                className={`px-4 py-1 text-base font-semibold rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-300 ${(activeView as CMSView) === 'form-templates'
+                  ? 'bg-blue-600 text-white shadow'
+                  : 'bg-transparent text-gray-700 hover:bg-blue-100'
+                  }`}
+              >
+                Form Pubblici
               </button>
             </div>
           </div>
@@ -355,6 +383,134 @@ const CMSHub: React.FC<CMSHubProps> = ({ className = '', initialView = 'analytic
 
         {/* CMSManager Component */}
         <CMSManager />
+      </div>
+    );
+  }
+
+  // Vista Risposte Form
+  if (activeView === 'form-responses') {
+    return (
+      <div className={`cms-hub ${className}`}>
+        {/* Header con Toggle */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                <Globe className="w-7 h-7 text-blue-600" />
+                Content Management System
+              </h1>
+              <p className="text-sm text-gray-500 mt-1">
+                Risposte dai form pubblici del sito
+              </p>
+            </div>
+
+            {/* Toggle Switch */}
+            <div
+              className="flex bg-gray-100 rounded-full shadow-sm border border-gray-200 overflow-x-auto px-2 py-1 gap-1"
+              style={{ minHeight: '40px' }}
+            >
+              <button
+                type="button"
+                onClick={() => setActiveView('analytics')}
+                className={`px-4 py-1 text-base font-semibold rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-300 ${'analytics' === (activeView as CMSView)
+                  ? 'bg-blue-600 text-white shadow'
+                  : 'bg-transparent text-gray-700 hover:bg-blue-100'
+                  }`}
+              >
+                Analytics
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveView('pages')}
+                className={`px-4 py-1 text-base font-semibold rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-300 ${'pages' === (activeView as CMSView)
+                  ? 'bg-blue-600 text-white shadow'
+                  : 'bg-transparent text-gray-700 hover:bg-blue-100'
+                  }`}
+              >
+                Pagine
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveView('form-responses')}
+                className={`relative px-4 py-1 text-base font-semibold rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-300 ${'form-responses' === activeView
+                  ? 'bg-blue-600 text-white shadow'
+                  : 'bg-transparent text-gray-700 hover:bg-blue-100'
+                  }`}
+              >
+                Risposte Form
+                {newPublicSubmissionsCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
+                    {newPublicSubmissionsCount > 99 ? '99+' : newPublicSubmissionsCount}
+                  </span>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveView('form-templates')}
+                className={`px-4 py-1 text-base font-semibold rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-300 ${'form-templates' === (activeView as CMSView)
+                  ? 'bg-blue-600 text-white shadow'
+                  : 'bg-transparent text-gray-700 hover:bg-blue-100'
+                  }`}
+              >
+                Form Pubblici
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* CMSFormSubmissions Component */}
+        <CMSFormSubmissions />
+      </div>
+    );
+  }
+
+  // Vista Form Templates pubblici
+  if (activeView === 'form-templates') {
+    return (
+      <div className={`cms-hub ${className}`}>
+        {/* Header con Toggle */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                <Globe className="w-7 h-7 text-blue-600" />
+                Content Management System
+              </h1>
+              <p className="text-sm text-gray-500 mt-1">
+                Form pubblici visibili sul sito
+              </p>
+            </div>
+            {/* Toggle Switch */}
+            <div
+              className="flex bg-gray-100 rounded-full shadow-sm border border-gray-200 overflow-x-auto px-2 py-1 gap-1"
+              style={{ minHeight: '40px' }}
+            >
+              <button type="button" onClick={() => setActiveView('analytics')}
+                className={`px-4 py-1 text-base font-semibold rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-300 ${'analytics' === (activeView as CMSView) ? 'bg-blue-600 text-white shadow' : 'bg-transparent text-gray-700 hover:bg-blue-100'}`}>
+                Analytics
+              </button>
+              <button type="button" onClick={() => setActiveView('pages')}
+                className={`px-4 py-1 text-base font-semibold rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-300 ${'pages' === (activeView as CMSView) ? 'bg-blue-600 text-white shadow' : 'bg-transparent text-gray-700 hover:bg-blue-100'}`}>
+                Pagine
+              </button>
+              <button type="button" onClick={() => setActiveView('form-responses')}
+                className={`relative px-4 py-1 text-base font-semibold rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-300 ${'form-responses' === (activeView as CMSView) ? 'bg-blue-600 text-white shadow' : 'bg-transparent text-gray-700 hover:bg-blue-100'}`}>
+                Risposte Form
+                {newPublicSubmissionsCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
+                    {newPublicSubmissionsCount > 99 ? '99+' : newPublicSubmissionsCount}
+                  </span>
+                )}
+              </button>
+              <button type="button" onClick={() => setActiveView('form-templates')}
+                className={`px-4 py-1 text-base font-semibold rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-300 ${'form-templates' === activeView ? 'bg-blue-600 text-white shadow' : 'bg-transparent text-gray-700 hover:bg-blue-100'}`}>
+                Form Pubblici
+              </button>
+            </div>
+          </div>
+        </div>
+        {/* CMSFormTemplates Component */}
+        <CMSFormTemplates />
       </div>
     );
   }
@@ -384,8 +540,8 @@ const CMSHub: React.FC<CMSHubProps> = ({ className = '', initialView = 'analytic
               type="button"
               onClick={() => setActiveView('analytics')}
               className={`px-4 py-1 text-base font-semibold rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-300 ${(activeView as CMSView) === 'analytics'
-                  ? 'bg-blue-600 text-white shadow'
-                  : 'bg-transparent text-gray-700 hover:bg-blue-100'
+                ? 'bg-blue-600 text-white shadow'
+                : 'bg-transparent text-gray-700 hover:bg-blue-100'
                 }`}
             >
               Analytics
@@ -394,11 +550,36 @@ const CMSHub: React.FC<CMSHubProps> = ({ className = '', initialView = 'analytic
               type="button"
               onClick={() => setActiveView('pages')}
               className={`px-4 py-1 text-base font-semibold rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-300 ${(activeView as CMSView) === 'pages'
-                  ? 'bg-blue-600 text-white shadow'
-                  : 'bg-transparent text-gray-700 hover:bg-blue-100'
+                ? 'bg-blue-600 text-white shadow'
+                : 'bg-transparent text-gray-700 hover:bg-blue-100'
                 }`}
             >
               Pagine
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveView('form-responses')}
+              className={`relative px-4 py-1 text-base font-semibold rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-300 ${(activeView as CMSView) === 'form-responses'
+                ? 'bg-blue-600 text-white shadow'
+                : 'bg-transparent text-gray-700 hover:bg-blue-100'
+                }`}
+            >
+              Risposte Form
+              {newPublicSubmissionsCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
+                  {newPublicSubmissionsCount > 99 ? '99+' : newPublicSubmissionsCount}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveView('form-templates')}
+              className={`px-4 py-1 text-base font-semibold rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-300 ${(activeView as CMSView) === 'form-templates'
+                ? 'bg-blue-600 text-white shadow'
+                : 'bg-transparent text-gray-700 hover:bg-blue-100'
+                }`}
+            >
+              Form Pubblici
             </button>
           </div>
         </div>
@@ -415,8 +596,8 @@ const CMSHub: React.FC<CMSHubProps> = ({ className = '', initialView = 'analytic
                 key={key}
                 onClick={() => setPeriod(key)}
                 className={`px-3 py-1.5 text-sm font-medium transition-colors ${period === key
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-600 hover:bg-gray-50'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-600 hover:bg-gray-50'
                   }`}
               >
                 {key === '7d' ? '7G' : key === '30d' ? '30G' : key === '90d' ? '90G' : '1A'}
@@ -597,9 +778,9 @@ const CMSHub: React.FC<CMSHubProps> = ({ className = '', initialView = 'analytic
                         >
                           <td className="px-5 py-4 whitespace-nowrap">
                             <span className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold ${idx === 0 ? 'bg-yellow-100 text-yellow-700' :
-                                idx === 1 ? 'bg-gray-200 text-gray-700' :
-                                  idx === 2 ? 'bg-orange-100 text-orange-700' :
-                                    'bg-gray-100 text-gray-500'
+                              idx === 1 ? 'bg-gray-200 text-gray-700' :
+                                idx === 2 ? 'bg-orange-100 text-orange-700' :
+                                  'bg-gray-100 text-gray-500'
                               }`}>
                               {idx + 1}
                             </span>

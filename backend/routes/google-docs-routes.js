@@ -1,16 +1,16 @@
 import express from 'express';
 import googleApiService from '../utils/googleApiService.js';
 import { logger, logAudit } from '../utils/logger.js';
-import middleware from '../auth/middleware.js';
-import { 
-  documentCacheMiddleware, 
-  templateCacheMiddleware, 
+import middleware from '../middleware/auth.js';
+import {
+  documentCacheMiddleware,
+  templateCacheMiddleware,
   cacheInvalidationMiddleware,
   documentInvalidationPatterns,
-  templateInvalidationPatterns 
+  templateInvalidationPatterns
 } from '../middleware/cache.js';
 
-const { authenticate: authenticateToken, authorize: requirePermission, requireSameCompany: requireCompanyAccess } = middleware;
+const { authenticate: authenticateToken, requirePermission } = middleware;
 const router = express.Router();
 
 /**
@@ -18,21 +18,21 @@ const router = express.Router();
  * @desc Ottiene la lista dei file da Google Drive
  * @access Private (documents:read)
  */
-router.get('/files', 
-  authenticateToken(), 
+router.get('/files',
+  authenticateToken,
   requirePermission('documents:read'),
   documentCacheMiddleware(1800), // Cache for 30 minutes
   async (req, res) => {
     try {
       const { folderId, useCache = 'true' } = req.query;
       const personId = req.person.id;
-    const userCompanyId = req.person.companyId;
-      
+      const userCompanyId = req.person.companyTenantProfileId;
+
       const files = await googleApiService.listFiles(
-        folderId || null, 
+        folderId || null,
         useCache === 'true'
       );
-      
+
       logAudit('google_drive_files_listed', personId, 'google-drive', {
         userCompanyId,
         folderId: folderId || 'root',
@@ -40,7 +40,7 @@ router.get('/files',
         ip: req.ip,
         userAgent: req.get('User-Agent')
       });
-      
+
       res.json({
         success: true,
         data: {
@@ -53,13 +53,13 @@ router.get('/files',
       logger.error('Error listing Google Drive files', {
         service: 'documents-server',
         personId: req.person?.id,
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack
       });
-      
+
       res.status(500).json({
         success: false,
-        error: 'Failed to retrieve files from Google Drive',
+        error: 'Errore nel recupero dei file da Google Drive',
         code: 'GOOGLE_DRIVE_ERROR'
       });
     }
@@ -71,8 +71,8 @@ router.get('/files',
  * @desc Ottiene i metadati di un file specifico
  * @access Private (documents:read)
  */
-router.get('/file/:fileId', 
-  authenticateToken(), 
+router.get('/file/:fileId',
+  authenticateToken,
   requirePermission('documents:read'),
   documentCacheMiddleware(1800), // Cache for 30 minutes
   async (req, res) => {
@@ -80,8 +80,8 @@ router.get('/file/:fileId',
       const { fileId } = req.params;
       const { useCache = 'true' } = req.query;
       const personId = req.person.id;
-    const userCompanyId = req.person.companyId;
-      
+      const userCompanyId = req.person.companyTenantProfileId;
+
       if (!fileId) {
         return res.status(400).json({
           success: false,
@@ -89,12 +89,12 @@ router.get('/file/:fileId',
           code: 'MISSING_FILE_ID'
         });
       }
-      
+
       const fileMetadata = await googleApiService.getFileMetadata(
-        fileId, 
+        fileId,
         useCache === 'true'
       );
-      
+
       logAudit('google_drive_file_accessed', personId, 'google-drive', {
         userCompanyId,
         fileId,
@@ -103,7 +103,7 @@ router.get('/file/:fileId',
         ip: req.ip,
         userAgent: req.get('User-Agent')
       });
-      
+
       res.json({
         success: true,
         data: fileMetadata
@@ -113,13 +113,13 @@ router.get('/file/:fileId',
         service: 'documents-server',
         personId: req.person?.id,
         fileId: req.params.fileId,
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack
       });
-      
+
       res.status(500).json({
         success: false,
-        error: 'Failed to retrieve file metadata from Google Drive',
+        error: 'Errore nel recupero dei metadati file da Google Drive',
         code: 'GOOGLE_DRIVE_ERROR'
       });
     }
@@ -131,8 +131,8 @@ router.get('/file/:fileId',
  * @desc Ottiene il contenuto di un Google Doc
  * @access Private (documents:read)
  */
-router.get('/document/:documentId', 
-  authenticateToken(), 
+router.get('/document/:documentId',
+  authenticateToken,
   requirePermission('documents:read'),
   documentCacheMiddleware(900), // Cache for 15 minutes
   async (req, res) => {
@@ -140,8 +140,8 @@ router.get('/document/:documentId',
       const { documentId } = req.params;
       const { useCache = 'true' } = req.query;
       const personId = req.person.id;
-    const userCompanyId = req.person.companyId;
-      
+      const userCompanyId = req.person.companyTenantProfileId;
+
       if (!documentId) {
         return res.status(400).json({
           success: false,
@@ -149,12 +149,12 @@ router.get('/document/:documentId',
           code: 'MISSING_DOCUMENT_ID'
         });
       }
-      
+
       const documentContent = await googleApiService.getDocumentContent(
-        documentId, 
+        documentId,
         useCache === 'true'
       );
-      
+
       logAudit('google_doc_content_accessed', personId, 'google-docs', {
         userCompanyId,
         documentId,
@@ -162,7 +162,7 @@ router.get('/document/:documentId',
         ip: req.ip,
         userAgent: req.get('User-Agent')
       });
-      
+
       res.json({
         success: true,
         data: documentContent
@@ -172,13 +172,13 @@ router.get('/document/:documentId',
         service: 'documents-server',
         personId: req.person?.id,
         documentId: req.params.documentId,
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack
       });
-      
+
       res.status(500).json({
         success: false,
-        error: 'Failed to retrieve document content from Google Docs',
+        error: 'Errore nel recupero del contenuto documento da Google Docs',
         code: 'GOOGLE_DOCS_ERROR'
       });
     }
@@ -190,8 +190,8 @@ router.get('/document/:documentId',
  * @desc Crea una copia di un template Google Doc
  * @access Private (documents:create)
  */
-router.post('/template/:templateId/copy', 
-  authenticateToken(), 
+router.post('/template/:templateId/copy',
+  authenticateToken,
   requirePermission('documents:create'),
   cacheInvalidationMiddleware(documentInvalidationPatterns),
   async (req, res) => {
@@ -199,8 +199,8 @@ router.post('/template/:templateId/copy',
       const { templateId } = req.params;
       const { newName, destinationFolderId } = req.body;
       const personId = req.person.id;
-    const userCompanyId = req.person.companyId;
-      
+      const userCompanyId = req.person.companyTenantProfileId;
+
       if (!templateId) {
         return res.status(400).json({
           success: false,
@@ -208,7 +208,7 @@ router.post('/template/:templateId/copy',
           code: 'MISSING_TEMPLATE_ID'
         });
       }
-      
+
       if (!newName) {
         return res.status(400).json({
           success: false,
@@ -216,13 +216,13 @@ router.post('/template/:templateId/copy',
           code: 'MISSING_DOCUMENT_NAME'
         });
       }
-      
+
       const newDocument = await googleApiService.copyTemplate(
         templateId,
         newName,
         destinationFolderId
       );
-      
+
       logAudit('google_doc_template_copied', personId, 'google-docs', {
         userCompanyId,
         templateId,
@@ -232,7 +232,7 @@ router.post('/template/:templateId/copy',
         ip: req.ip,
         userAgent: req.get('User-Agent')
       });
-      
+
       res.json({
         success: true,
         data: {
@@ -247,13 +247,13 @@ router.post('/template/:templateId/copy',
         service: 'documents-server',
         personId: req.person?.id,
         templateId: req.params.templateId,
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack
       });
-      
+
       res.status(500).json({
         success: false,
-        error: 'Failed to copy template from Google Docs',
+        error: 'Errore nella copia del template da Google Docs',
         code: 'GOOGLE_DOCS_ERROR'
       });
     }
@@ -265,8 +265,8 @@ router.post('/template/:templateId/copy',
  * @desc Aggiorna il contenuto di un Google Doc
  * @access Private (documents:update)
  */
-router.put('/document/:documentId', 
-  authenticateToken(), 
+router.put('/document/:documentId',
+  authenticateToken,
   requirePermission('documents:update'),
   cacheInvalidationMiddleware(documentInvalidationPatterns),
   async (req, res) => {
@@ -274,8 +274,8 @@ router.put('/document/:documentId',
       const { documentId } = req.params;
       const { requests } = req.body;
       const personId = req.person.id;
-    const userCompanyId = req.person.companyId;
-      
+      const userCompanyId = req.person.companyTenantProfileId;
+
       if (!documentId) {
         return res.status(400).json({
           success: false,
@@ -283,7 +283,7 @@ router.put('/document/:documentId',
           code: 'MISSING_DOCUMENT_ID'
         });
       }
-      
+
       if (!requests || !Array.isArray(requests)) {
         return res.status(400).json({
           success: false,
@@ -291,12 +291,12 @@ router.put('/document/:documentId',
           code: 'MISSING_UPDATE_REQUESTS'
         });
       }
-      
+
       const updateResult = await googleApiService.updateDocumentContent(
         documentId,
         requests
       );
-      
+
       logAudit('google_doc_content_updated', personId, 'google-docs', {
         userCompanyId,
         documentId,
@@ -304,7 +304,7 @@ router.put('/document/:documentId',
         ip: req.ip,
         userAgent: req.get('User-Agent')
       });
-      
+
       res.json({
         success: true,
         data: {
@@ -318,13 +318,13 @@ router.put('/document/:documentId',
         service: 'documents-server',
         personId: req.person?.id,
         documentId: req.params.documentId,
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack
       });
-      
+
       res.status(500).json({
         success: false,
-        error: 'Failed to update document content in Google Docs',
+        error: 'Errore nell\'aggiornamento del contenuto documento in Google Docs',
         code: 'GOOGLE_DOCS_ERROR'
       });
     }
@@ -336,13 +336,13 @@ router.put('/document/:documentId',
  * @desc Ottiene statistiche del servizio Google API
  * @access Private (admin only)
  */
-router.get('/stats', 
-  authenticateToken(), 
+router.get('/stats',
+  authenticateToken,
   requirePermission('system:manage'),
   async (req, res) => {
     try {
       const stats = googleApiService.getStats();
-      
+
       res.json({
         success: true,
         data: stats
@@ -351,12 +351,12 @@ router.get('/stats',
       logger.error('Error retrieving Google API stats', {
         service: 'documents-server',
         personId: req.person?.id,
-        error: error.message
+        error: 'Operazione non riuscita'
       });
-      
+
       res.status(500).json({
         success: false,
-        error: 'Failed to retrieve Google API statistics',
+        error: 'Errore nel recupero delle statistiche Google API',
         code: 'STATS_ERROR'
       });
     }

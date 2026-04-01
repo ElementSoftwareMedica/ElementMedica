@@ -4,6 +4,7 @@
  */
 
 import AdvancedPermissionService from '../services/advanced-permission.js';
+import logger from './logger.js';
 
 // Istanza del servizio di permessi avanzati
 const advancedPermissionService = new AdvancedPermissionService();
@@ -19,7 +20,7 @@ export function checkPermission(permission) {
       // Verifica che l'utente sia autenticato
       if (!req.person || !req.person.id) {
         return res.status(401).json({
-          error: 'Authentication required',
+          error: 'Autenticazione richiesta',
           code: 'AUTH_REQUIRED'
         });
       }
@@ -28,7 +29,7 @@ export function checkPermission(permission) {
       const [resource, action] = permission.split(':');
       if (!resource || !action) {
         return res.status(400).json({
-          error: 'Invalid permission format',
+          error: 'Formato permesso non valido',
           code: 'INVALID_PERMISSION_FORMAT',
           expected: 'resource:action'
         });
@@ -45,7 +46,7 @@ export function checkPermission(permission) {
 
       if (!permissionResult.allowed) {
         return res.status(403).json({
-          error: 'Permission denied',
+          error: 'Permesso negato',
           code: 'PERMISSION_DENIED',
           reason: permissionResult.reason
         });
@@ -60,9 +61,9 @@ export function checkPermission(permission) {
 
       next();
     } catch (error) {
-      console.error('Permission check error:', error);
+      logger.error('Permission check error:', { error: error.message });
       res.status(500).json({
-        error: 'Permission check failed',
+        error: 'Verifica permessi fallita',
         code: 'PERMISSION_CHECK_ERROR'
       });
     }

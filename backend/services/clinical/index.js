@@ -30,17 +30,22 @@ export { AppuntamentoService } from './AppuntamentoService.js';
 export { VisitaService } from './VisitaService.js';
 export { RefertoService } from './RefertoService.js';
 
-// Template & Dynamic forms services
-export { default as TemplateCampoVisitaService } from './TemplateCampoVisitaService.js';
+// Template & Dynamic forms services (Progetto 52)
+// P65.7: TemplateCampoVisitaService RIMOSSO - consolidato in VisitTemplateService con scope=CATALOGO
+export { VisitTemplateService } from './VisitTemplateService.js';
 
 // Document management services
 export { default as DocumentoClinicoService } from './DocumentoClinicoService.js';
-
-// Invoice & billing services
-export { default as FatturaSanitariaService, STATI_FATTURA, METODI_PAGAMENTO } from './FatturaSanitariaService.js';
 
 // Location & facilities services
 export { default as SedePoliambulatorioService } from './SedePoliambulatorioService.js';
 
 // Maintenance & equipment services
 export { default as ManutenzioneStrumentoService } from './ManutenzioneStrumentoService.js';
+// Holidays & absences services (Progetto 54)
+export { FerieAssenzaService } from './FerieAssenzaService.js';
+
+// === PROGETTO 56: MEDICINA DEL LAVORO COMPLETO ===
+export { default as MansioneService } from './MansioneService.js';
+export { default as GiudizioIdoneitaService } from './GiudizioIdoneitaService.js';
+export { default as RischioPrestazioneService, DEFAULT_RISCHIO_PRESTAZIONI } from './RischioPrestazioneService.js';

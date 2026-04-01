@@ -11,7 +11,7 @@ import {
     Plus, Minus,
     ArrowRight, MoveHorizontal,
     Maximize2, ChevronsUp, ChevronsDown,
-    QrCode
+    QrCode, Building2, ImageIcon
 } from 'lucide-react';
 import type { SlideElement } from './types';
 import { LINE_THICKNESS_OPTIONS } from './types';
@@ -22,7 +22,7 @@ interface EditorToolbarProps {
     showGrid: boolean;
     snapToGrid: boolean;
     showPrintMargins: boolean;
-    onAddElement: (type: SlideElement['type']) => void;
+    onAddElement: (type: SlideElement['type'], options?: { logoType?: 'tenant' | 'branch' }) => void;
     onMoveInZOrder: (direction: 'up' | 'down' | 'top' | 'bottom') => void;
     onToggleLock: () => void;
     onDuplicate: () => void;
@@ -76,6 +76,17 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
                 </button>
                 <button onClick={() => onAddElement('arrow')} className="p-2 hover:bg-slate-100 rounded" title="Freccia">
                     <ArrowRight className="w-4 h-4" />
+                </button>
+            </div>
+
+            {/* Logo Elements */}
+            <div className="flex items-center gap-1 border-r border-slate-200 pr-2">
+                <span className="text-xs text-slate-500 mr-1">Logo:</span>
+                <button onClick={() => onAddElement('logo', { logoType: 'tenant' })} className="p-2 hover:bg-indigo-50 rounded group" title="Logo Ente (tenant)">
+                    <ImageIcon className="w-4 h-4 group-hover:text-indigo-600" />
+                </button>
+                <button onClick={() => onAddElement('logo', { logoType: 'branch' })} className="p-2 hover:bg-teal-50 rounded group" title="Logo Sede (branch)">
+                    <Building2 className="w-4 h-4 group-hover:text-teal-600" />
                 </button>
             </div>
 

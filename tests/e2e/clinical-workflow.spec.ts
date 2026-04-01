@@ -12,7 +12,8 @@ import { test, expect, Page } from '@playwright/test';
 
 // Test configuration
 const BASE_URL = process.env.BASE_URL || 'http://localhost:5173';
-const API_URL = process.env.API_URL || 'http://localhost:4003';
+// P64: Direct connection to API server (proxy eliminated)
+const API_URL = process.env.API_URL || 'http://localhost:4001';
 
 // Test credentials
 const ADMIN_EMAIL = 'admin@example.com';

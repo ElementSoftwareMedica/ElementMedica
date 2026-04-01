@@ -11,7 +11,14 @@ export type RelationType =
   | 'MEDICO_COMPETENTE'    // Medico → Siti assegnati → Dipendenti
   | 'RSPP'                 // RSPP → Siti assegnati → Dipendenti/DVR
   | 'CONSULTANT'           // Consulente → Aziende clienti → Documenti
-  | 'AUDITOR';             // Auditor → Aziende assegnate → Reports
+  | 'AUDITOR'              // Auditor → Aziende assegnate → Reports
+  // P69: Clinical/Poliambulatorio relation types
+  | 'MEDICO_AMBULATORIO'         // Medico → Ambulatori assegnati → Appuntamenti/Visite
+  | 'MEDICO_PAZIENTI'            // Medico → Pazienti assegnati → Visite/Referti/Documenti
+  | 'MEDICO_PRESTAZIONI'         // Medico → Prestazioni abilitate → Appuntamenti
+  | 'CLINIC_ADMIN_POLIAMBULATORIO' // Admin Clinica → Poliambulatorio → Tutte le risorse cliniche
+  | 'AMBULATORIO_STRUMENTI'      // Ambulatorio → Strumenti assegnati
+  | 'CONVENZIONE_AZIENDA';       // Convenzione → Azienda convenzionata → Tariffari
 
 /**
  * Scope disponibili per i permessi
@@ -31,6 +38,7 @@ export interface EntityPermission {
   priority?: number;                // Per risoluzione conflitti (higher = more priority)
   isInherited?: boolean;            // Se ereditato da ruolo genitore
   sourceRoleId?: string;            // ID del ruolo da cui è stato ereditato
+  allowCrossTenant?: boolean;       // P69: Se il permesso vale per tutti i tenant accessibili
 }
 
 export interface RolePermissions {

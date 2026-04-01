@@ -65,13 +65,16 @@ const ACTIONS = [
     { id: 'manage', name: 'Gestione', icon: Settings, color: 'text-orange-600' },
 ];
 
-// System roles
+// P69: System roles with correct hierarchy
+// SUPER_ADMIN > ADMIN > TENANT_ADMIN > COMPANY_ADMIN > others
 const SYSTEM_ROLES = [
-    { id: 'SUPER_ADMIN', name: 'Super Admin', level: 100, color: 'bg-purple-100 text-purple-800' },
-    { id: 'ADMIN', name: 'Admin', level: 90, color: 'bg-red-100 text-red-800' },
-    { id: 'MANAGER', name: 'Manager', level: 70, color: 'bg-blue-100 text-blue-800' },
-    { id: 'TRAINER', name: 'Formatore', level: 50, color: 'bg-green-100 text-green-800' },
-    { id: 'EMPLOYEE', name: 'Dipendente', level: 10, color: 'bg-gray-100 text-gray-800' },
+    { id: 'SUPER_ADMIN', name: 'Super Admin', level: 0, color: 'bg-purple-100 text-purple-800' },
+    { id: 'ADMIN', name: 'Admin', level: 1, color: 'bg-red-100 text-red-800' },
+    { id: 'TENANT_ADMIN', name: 'Tenant Admin', level: 2, color: 'bg-amber-100 text-amber-800' },
+    { id: 'COMPANY_ADMIN', name: 'Company Admin', level: 3, color: 'bg-orange-100 text-orange-800' },
+    { id: 'MANAGER', name: 'Manager', level: 5, color: 'bg-blue-100 text-blue-800' },
+    { id: 'TRAINER', name: 'Formatore', level: 8, color: 'bg-green-100 text-green-800' },
+    { id: 'EMPLOYEE', name: 'Dipendente', level: 9, color: 'bg-gray-100 text-gray-800' },
 ];
 
 // Default permissions matrix
@@ -195,9 +198,8 @@ const PermissionMatrixPage: React.FC<PermissionMatrixPageProps> = ({ className =
             // For now, use default permissions
             // In production, fetch from API: const response = await apiGet('/api/v1/permissions/matrix');
             setPermissions(DEFAULT_PERMISSIONS);
-        } catch (err: any) {
-            console.error('Error loading permissions:', err);
-            setError(err.message || 'Errore nel caricamento permessi');
+        } catch (err: unknown) {
+            setError('Errore nel caricamento permessi');
         } finally {
             setLoading(false);
         }
@@ -232,14 +234,12 @@ const PermissionMatrixPage: React.FC<PermissionMatrixPageProps> = ({ className =
         try {
             setSaving(true);
             // In production: await apiPut('/api/v1/permissions/matrix', permissions);
-            console.log('Saving permissions:', permissions);
             // Simulate save
             await new Promise(resolve => setTimeout(resolve, 1000));
             setHasChanges(false);
             showToast({ message: 'Permessi salvati con successo!', type: 'success' });
-        } catch (err: any) {
-            console.error('Error saving permissions:', err);
-            setError(err.message || 'Errore nel salvataggio permessi');
+        } catch (err: unknown) {
+            setError('Errore nel salvataggio permessi');
         } finally {
             setSaving(false);
         }
@@ -452,8 +452,8 @@ const PermissionMatrixPage: React.FC<PermissionMatrixPageProps> = ({ className =
                                                             onClick={() => handleTogglePermission(role.id, resource.id, action.id)}
                                                             disabled={isLocked}
                                                             className={`p-1.5 rounded transition-all ${hasPerm
-                                                                    ? `${action.color} bg-opacity-10 hover:bg-opacity-20`
-                                                                    : 'text-gray-300 hover:text-gray-400 hover:bg-gray-100'
+                                                                ? `${action.color} bg-opacity-10 hover:bg-opacity-20`
+                                                                : 'text-gray-300 hover:text-gray-400 hover:bg-gray-100'
                                                                 } ${isLocked ? 'cursor-not-allowed opacity-50' : ''}`}
                                                             title={`${action.name}: ${hasPerm ? 'Abilitato' : 'Disabilitato'}${isLocked ? ' (Bloccato)' : ''}`}
                                                         >

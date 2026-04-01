@@ -7,6 +7,8 @@ import { z } from 'zod';
 import prisma from '../config/prisma-optimization.js';
 import crypto from 'crypto';
 import logger from '../utils/logger.js';
+import NotificationService from '../services/notifications/NotificationService.js';
+import { loadPublicBrandMapping } from '../routes/public-brand-settings-routes.js';
 
 // Schema di validazione per submission pubblica
 const publicSubmissionSchema = z.object({
@@ -30,11 +32,12 @@ const getPublicFormTemplate = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Trova il template attivo
+    // Trova il template attivo e pubblico
     const template = await prisma.formTemplate.findFirst({
       where: {
         id,
         isActive: true,
+        isPublic: true,
         deletedAt: null
       },
       include: {
@@ -86,13 +89,13 @@ const getPublicFormTemplate = async (req, res) => {
       component: 'publicFormsController',
       action: 'getPublicTemplate',
       slug: req.params.slug,
-      error: error.message,
+      error: 'Errore interno del server',
       stack: error.stack
     });
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
-      error: error.message
+      error: 'Errore interno del server'
     });
   }
 };
@@ -130,19 +133,22 @@ const submitPublicForm = async (req, res) => {
       });
     }
 
-    // Trova il primo tenant attivo per le submissions pubbliche
-    const tenant = await prisma.tenant.findFirst({
-      where: {
-        isActive: true,
-        deletedAt: null
-      },
-      orderBy: { createdAt: 'asc' }
-    });
-
-    if (!tenant) {
+    // Usa il tenant del form template — ogni form appartiene al tenant che lo ha creato
+    if (!template.tenantId) {
       return res.status(500).json({
         success: false,
-        message: 'Configurazione sistema non valida'
+        message: 'Il form non è associato a nessun tenant. Contattare il supporto.'
+      });
+    }
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: template.tenantId }
+    });
+
+    if (!tenant || !tenant.isActive || tenant.deletedAt) {
+      return res.status(500).json({
+        success: false,
+        message: 'Tenant non disponibile'
       });
     }
 
@@ -185,29 +191,38 @@ const submitPublicForm = async (req, res) => {
     // Crea la submission in transazione
     const result = await prisma.$transaction(async (tx) => {
       // Crea o trova la persona se email fornita
+      // NOTA: email e tenantId sono su PersonTenantProfile, non su Person
       let createdPersonId = null;
-      if (extractedData.email) {
-        const existingPerson = await tx.person.findFirst({
+      if (extractedData.email && extractedData.email !== 'noreply@example.com') {
+        const existingProfile = await tx.personTenantProfile.findFirst({
           where: {
             email: extractedData.email,
-            tenantId: tenant.id
-          }
+            tenantId: tenant.id,
+            deletedAt: null
+          },
+          select: { personId: true }
         });
 
-        if (!existingPerson) {
+        if (!existingProfile) {
+          const nameParts = extractedData.name.split(' ');
           const newPerson = await tx.person.create({
             data: {
-              firstName: extractedData.name.split(' ')[0] || extractedData.name,
-              lastName: extractedData.name.split(' ').slice(1).join(' ') || '',
-              email: extractedData.email,
-              phone: extractedData.phone,
+              firstName: nameParts[0] || extractedData.name,
+              lastName: nameParts.slice(1).join(' ') || '-',
+            }
+          });
+          await tx.personTenantProfile.create({
+            data: {
+              personId: newPerson.id,
               tenantId: tenant.id,
+              email: extractedData.email,
+              phone: extractedData.phone || null,
               status: 'PENDING'
             }
           });
           createdPersonId = newPerson.id;
         } else {
-          createdPersonId = existingPerson.id;
+          createdPersonId = existingProfile.personId;
         }
       }
 
@@ -258,6 +273,88 @@ const submitPublicForm = async (req, res) => {
         message: 'Form inviato con successo'
       }
     });
+
+    // Notifica in-app ai gestori del CMS (fire-and-forget)
+    setImmediate(async () => {
+      try {
+        // Trova gli utenti del tenant con ruoli di gestione (ADMIN, TRAINING_ADMIN, HR_MANAGER)
+        const managers = await prisma.person.findMany({
+          where: {
+            deletedAt: null,
+            tenantProfiles: {
+              some: {
+                tenantId: tenant.id,
+                status: 'ACTIVE',
+                deletedAt: null,
+                OR: [
+                  { role: 'ADMIN' },
+                  { role: 'TRAINING_ADMIN' },
+                  { role: 'HR_MANAGER' },
+                  { role: 'COMPANY_MANAGER' }
+                ]
+              }
+            }
+          },
+          select: { id: true },
+          take: 50 // Limite di sicurezza
+        });
+
+        if (managers.length === 0) {
+          // Fallback: notifica al primo admin del tenant
+          const firstAdmin = await prisma.personTenantProfile.findFirst({
+            where: { tenantId: tenant.id, role: 'ADMIN', deletedAt: null },
+            select: { personId: true }
+          });
+          if (firstAdmin) {
+            managers.push({ id: firstAdmin.personId });
+          }
+        }
+
+        const notificationPayload = {
+          title: '📋 Nuova risposta al form pubblico',
+          body: `${extractedData.name} ha compilato il form "${template.name}". Prendila in carico dalla sezione CMS > Risposte Form.`,
+          shortBody: `Nuova risposta: ${template.name}`,
+          type: 'INFO',
+          category: 'PUBLIC_FORM_SUBMISSION',
+          priority: 'NORMAL',
+          channels: ['IN_APP'],
+          isDismissable: true,
+          metadata: {
+            submissionId: result.submission.id,
+            templateName: template.name,
+            senderName: extractedData.name,
+            senderEmail: extractedData.email,
+            actionUrl: '/management/cms'
+          }
+        };
+
+        await Promise.all(
+          managers.map(m =>
+            NotificationService.sendToPerson(m.id, notificationPayload, tenant.id).catch(err =>
+              logger.warn('Failed to send form submission notification to person', {
+                personId: m.id,
+                error: err.message
+              })
+            )
+          )
+        );
+
+        logger.info('Form submission notifications sent', {
+          component: 'publicFormsController',
+          action: 'submitPublicForm',
+          submissionId: result.submission.id,
+          templateName: template.name,
+          notifiedCount: managers.length
+        });
+      } catch (notifyErr) {
+        // Non bloccare il flusso principale in caso di errore notifiche
+        logger.warn('Failed to send public form submission notifications', {
+          component: 'publicFormsController',
+          action: 'submitPublicForm',
+          error: notifyErr.message
+        });
+      }
+    });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({
@@ -271,13 +368,13 @@ const submitPublicForm = async (req, res) => {
       component: 'publicFormsController',
       action: 'submitPublicForm',
       slug: req.params.slug,
-      error: error.message,
+      error: 'Errore interno del server',
       stack: error.stack
     });
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
-      error: error.message
+      error: 'Errore interno del server'
     });
   }
 };
@@ -288,16 +385,34 @@ const submitPublicForm = async (req, res) => {
  */
 const getPublicFormTemplates = async (req, res) => {
   try {
+    // Filtra per brand se fornito (?brand=element-medica)
+    // Usa publicBrandTenantMapping per trovare il tenant corretto
+    let tenantFilter = {};
+    const { brand } = req.query;
+    if (brand) {
+      const mapping = await loadPublicBrandMapping();
+      const mappedTenantId = mapping[brand];
+      if (mappedTenantId) {
+        tenantFilter = { tenantId: mappedTenantId };
+      } else {
+        // Brand richiesto ma non mappato → lista vuota
+        return res.json({ success: true, data: [] });
+      }
+    }
+
     const templates = await prisma.formTemplate.findMany({
       where: {
         isActive: true,
-        deletedAt: null
+        isPublic: true,
+        deletedAt: null,
+        ...tenantFilter
       },
       select: {
         id: true,
         name: true,
         description: true,
-        type: true
+        type: true,
+        tenantId: true
       },
       orderBy: { createdAt: 'desc' }
     });
@@ -310,13 +425,13 @@ const getPublicFormTemplates = async (req, res) => {
     logger.error('Failed to retrieve public templates list', {
       component: 'publicFormsController',
       action: 'getPublicTemplates',
-      error: error.message,
+      error: 'Errore interno del server',
       stack: error.stack
     });
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
-      error: error.message
+      error: 'Errore interno del server'
     });
   }
 };

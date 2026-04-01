@@ -3,6 +3,7 @@ import prisma from '../config/prisma-optimization.js';
 import { authenticate } from '../middleware/auth.js';
 import { tenantMiddleware } from '../middleware/tenant.js';
 import logger from '../utils/logger.js';
+import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 
 const router = express.Router();
 
@@ -16,7 +17,11 @@ const router = express.Router();
 router.get('/stats', authenticate, tenantMiddleware, async (req, res) => {
   try {
     const person = req.person;
-    const tenantId = req.person.tenantId;
+    const tenantId = getEffectiveTenantId(req);
+
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant non disponibile' });
+    }
 
     logger.info('Getting dashboard stats', {
       personId: person?.id,
@@ -26,20 +31,30 @@ router.get('/stats', authenticate, tenantMiddleware, async (req, res) => {
 
     // Query parallele ottimizzate per i contatori
     const [companiesCount, employeesCount] = await Promise.all([
-      // Conteggio aziende
+      // Conteggio aziende (Company è globale, filtro via CompanyTenantProfile)
       prisma.company.count({
         where: {
           deletedAt: null,
-          ...(tenantId && { tenantId })
+          tenantProfiles: {
+            some: {
+              tenantId,
+              deletedAt: null
+            }
+          }
         }
       }),
 
-      // Conteggio dipendenti (persone con ruoli di dipendente)
+      // Conteggio dipendenti (Person è globale, filtro via PersonTenantProfile)
       prisma.person.count({
         where: {
           deletedAt: null,
-          status: 'ACTIVE',
-          ...(tenantId && { tenantId }),
+          tenantProfiles: {
+            some: {
+              tenantId,
+              status: 'ACTIVE',
+              deletedAt: null
+            }
+          },
           personRoles: {
             some: {
               roleType: {
@@ -68,15 +83,14 @@ router.get('/stats', authenticate, tenantMiddleware, async (req, res) => {
 
   } catch (error) {
     logger.error('Error getting dashboard stats:', {
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       personId: req.person?.id
     });
 
     res.status(500).json({
       success: false,
-      error: 'Failed to retrieve dashboard stats',
-      details: error.message
+      error: 'Errore nel recupero delle statistiche dashboard',
     });
   }
 });
@@ -85,7 +99,7 @@ router.get('/stats', authenticate, tenantMiddleware, async (req, res) => {
 router.get('/companies', authenticate, tenantMiddleware, async (req, res) => {
   try {
     const person = req.person;
-    const tenantId = req.person.tenantId;
+    const tenantId = getEffectiveTenantId(req);
 
     logger.info('Getting companies for dashboard', {
       personId: person?.id,
@@ -95,7 +109,12 @@ router.get('/companies', authenticate, tenantMiddleware, async (req, res) => {
     const companies = await prisma.company.findMany({
       where: {
         deletedAt: null,
-        ...(tenantId && { tenantId })
+        tenantProfiles: {
+          some: {
+            tenantId,
+            deletedAt: null
+          }
+        }
       },
       select: {
         id: true,
@@ -122,15 +141,14 @@ router.get('/companies', authenticate, tenantMiddleware, async (req, res) => {
 
   } catch (error) {
     logger.error('Error getting companies for dashboard:', {
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       personId: req.person?.id
     });
 
     res.status(500).json({
       success: false,
-      error: 'Failed to retrieve companies',
-      details: error.message
+      error: 'Errore nel recupero delle aziende',
     });
   }
 });
@@ -139,7 +157,7 @@ router.get('/companies', authenticate, tenantMiddleware, async (req, res) => {
 router.get('/employees', authenticate, tenantMiddleware, async (req, res) => {
   try {
     const person = req.person;
-    const tenantId = req.person.tenantId;
+    const tenantId = getEffectiveTenantId(req);
 
     logger.info('Getting employees for dashboard', {
       personId: person?.id,
@@ -149,8 +167,13 @@ router.get('/employees', authenticate, tenantMiddleware, async (req, res) => {
     const employees = await prisma.person.findMany({
       where: {
         deletedAt: null,
-        status: 'ACTIVE',
-        ...(tenantId && { tenantId }),
+        tenantProfiles: {
+          some: {
+            tenantId,
+            status: 'ACTIVE',
+            deletedAt: null
+          }
+        },
         personRoles: {
           some: {
             roleType: {
@@ -170,13 +193,18 @@ router.get('/employees', authenticate, tenantMiddleware, async (req, res) => {
         id: true,
         firstName: true,
         lastName: true,
-        email: true,
         taxCode: true,
-        companyId: true,
-        tenantId: true,
-        status: true,
         createdAt: true,
-        updatedAt: true
+        updatedAt: true,
+        tenantProfiles: {
+          where: { tenantId, deletedAt: null },
+          select: {
+            email: true,
+            phone: true,
+            status: true,
+            companyTenantProfileId: true
+          }
+        }
       },
       orderBy: [
         { lastName: 'asc' },
@@ -192,15 +220,14 @@ router.get('/employees', authenticate, tenantMiddleware, async (req, res) => {
 
   } catch (error) {
     logger.error('Error getting employees for dashboard:', {
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       personId: req.person?.id
     });
 
     res.status(500).json({
       success: false,
-      error: 'Failed to retrieve employees',
-      details: error.message
+      error: 'Errore nel recupero dei dipendenti',
     });
   }
 });

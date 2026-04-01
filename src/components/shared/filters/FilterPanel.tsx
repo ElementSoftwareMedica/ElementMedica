@@ -2,6 +2,7 @@ import React from 'react';
 import { Filter, X } from 'lucide-react';
 import { Button } from '../../../design-system/atoms/Button';
 import { cn } from '../../../design-system/utils';
+import { DatePickerElegante } from '../../ui/DatePickerElegante';
 
 interface FilterConfig {
   key: string;
@@ -65,11 +66,11 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
 
       case 'date':
         return (
-          <input
-            type="date"
+          <DatePickerElegante
             value={value}
-            onChange={(e) => handleFilterChange(filter.key, e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            onChange={(date) => handleFilterChange(filter.key, date ? date.toISOString().split('T')[0] : '')}
+            theme="teal"
+            size="sm"
           />
         );
 
@@ -117,7 +118,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
           <Filter className="h-4 w-4 text-gray-500" />
           <span className="text-sm font-medium text-gray-700">Filtri</span>
         </div>
-        
+
         {hasActiveFilters && (
           <Button
             variant="outline"

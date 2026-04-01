@@ -52,7 +52,6 @@ export const GoogleImportDialog: React.FC<GoogleImportDialogProps> = ({
       }
     } catch (err) {
       // Error already handled by hook
-      console.error('Import failed:', err);
     }
   };
 

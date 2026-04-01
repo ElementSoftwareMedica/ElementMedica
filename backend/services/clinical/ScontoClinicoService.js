@@ -672,8 +672,7 @@ export class ScontoClinicoService {
   }
 
   /**
-   * Format response for backward compatibility
-   * Maps unified CodiceSconto to legacy format where needed
+   * Format response (standardized fields, no backward compat aliases)
    */
   static _formatResponse(sconto) {
     return {
@@ -686,14 +685,9 @@ export class ScontoClinicoService {
       valore: Number(sconto.valore),
       dataInizio: sconto.dataInizio,
       dataFine: sconto.dataFine,
-      validoDa: sconto.dataInizio, // Legacy alias
-      validoA: sconto.dataFine, // Legacy alias
       attivo: sconto.attivo,
-      isActive: sconto.attivo, // Legacy alias
       utilizzoMassimo: sconto.utilizzoMassimo,
-      limiteUtilizzi: sconto.utilizzoMassimo, // Legacy alias
       utilizzoCorrente: sconto.utilizzoCorrente,
-      utilizziAttuali: sconto.utilizzoCorrente, // Legacy alias
       prestazioniIds: sconto.prestazioniIds || [],
       cumulabile: sconto.cumulabile,
       minImporto: sconto.minImporto ? Number(sconto.minImporto) : null,

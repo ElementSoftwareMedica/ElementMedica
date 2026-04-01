@@ -8,42 +8,46 @@ import PersonRoleMapping from '../utils/PersonRoleMapping.js';
 class PersonRoles {
   /**
    * Aggiunge un ruolo a una persona
+   * P49: usa companyTenantProfileId invece del legacy companyId
    * @param {string} personId - ID della persona
    * @param {string} roleType - Tipo di ruolo
-   * @param {string} companyId - ID dell'azienda (opzionale)
+   * @param {string} companyTenantProfileId - ID profilo azienda per tenant (opzionale, ex companyId)
    * @param {string} tenantId - ID del tenant (opzionale)
    * @returns {Promise<Object>} Ruolo creato
    */
-  static async addRole(personId, roleType, companyId = null, tenantId = null) {
+  static async addRole(personId, roleType, companyTenantProfileId = null, tenantId = null) {
     try {
       // Mappa il ruolo se necessario
       const mappedRoleType = PersonRoleMapping.mapRoleType(roleType);
 
-      // Verifica se esiste già QUALSIASI ruolo con la stessa combinazione (attivo o meno)
+      // Verifica se esiste già QUALSIASI ruolo con la stessa combinazione unica (attivo o meno)
+      // @@unique([personId, roleType, customRoleId, companyTenantProfileId, tenantId])
       const existingAny = await prisma.personRole.findFirst({
         where: {
           personId,
           roleType: mappedRoleType,
-          companyId,
+          companyTenantProfileId: companyTenantProfileId || null,
+          customRoleId: null,
           tenantId
         }
       });
 
       if (existingAny) {
-        // Se già attivo, blocca l'operazione
-        if (existingAny.isActive) {
+        // Se già attivo, segnala
+        if (existingAny.isActive && !existingAny.deletedAt) {
           throw new Error('Role already exists for this person');
         }
-        // Se esiste ma non è attivo, riattivalo invece di crearne uno nuovo (evita violazione unique)
+        // Se esiste ma non è attivo/è soft-deleted, riattivalo (evita violazione unique constraint)
         return await prisma.personRole.update({
           where: { id: existingAny.id },
           data: {
             isActive: true,
+            deletedAt: null,
             updatedAt: new Date()
           },
           include: {
             person: true,
-            company: true,
+            companyTenantProfile: true,
             tenant: true
           }
         });
@@ -55,12 +59,12 @@ class PersonRoles {
           personId,
           roleType: mappedRoleType,
           isActive: true,
-          companyId,
+          companyTenantProfileId: companyTenantProfileId || null,
           tenantId
         },
         include: {
           person: true,
-          company: true,
+          companyTenantProfile: true,
           tenant: true
         }
       });
@@ -78,7 +82,7 @@ class PersonRoles {
    * @param {string} tenantId - ID del tenant (opzionale)
    * @returns {Promise<Object>} Risultato dell'operazione
    */
-  static async removeRole(personId, roleType, companyId = null, tenantId = null) {
+  static async removeRole(personId, roleType, companyTenantProfileId = null, tenantId = null) {
     try {
       const mappedRoleType = PersonRoleMapping.mapRoleType(roleType);
 
@@ -86,7 +90,7 @@ class PersonRoles {
         where: {
           personId,
           roleType: mappedRoleType,
-          companyId,
+          companyTenantProfileId: companyTenantProfileId || null,
           tenantId,
         },
         data: {
@@ -112,11 +116,12 @@ class PersonRoles {
       if (activeOnly) {
         where.isActive = true;
       }
+      where.deletedAt = null; // F226: always exclude soft-deleted roles
 
       return await prisma.personRole.findMany({
         where,
         include: {
-          company: true,
+          companyTenantProfile: true, // P49: company -> companyTenantProfile
           tenant: true
         },
         orderBy: [
@@ -158,7 +163,7 @@ class PersonRoles {
         },
         include: {
           person: true,
-          company: true,
+          companyTenantProfile: true, // P49: company -> companyTenantProfile
           tenant: true
         }
       });
@@ -179,10 +184,11 @@ class PersonRoles {
         where: {
           personId,
           isActive: true,
-          isPrimary: true
+          isPrimary: true,
+          deletedAt: null,
         },
         include: {
-          company: true,
+          companyTenantProfile: true, // P49: company -> companyTenantProfile
           tenant: true
         }
       });
@@ -196,11 +202,11 @@ class PersonRoles {
    * Verifica se una persona ha un ruolo specifico
    * @param {string} personId - ID della persona
    * @param {string|Array} roleType - Tipo/i di ruolo
-   * @param {string} companyId - ID dell'azienda (opzionale)
+   * @param {string} companyTenantProfileId - ID profilo azienda per tenant (opzionale)
    * @param {string} tenantId - ID del tenant (opzionale)
    * @returns {Promise<boolean>} True se ha il ruolo
    */
-  static async hasRole(personId, roleType, companyId = null, tenantId = null) {
+  static async hasRole(personId, roleType, companyTenantProfileId = null, tenantId = null) {
     try {
       const roleTypes = Array.isArray(roleType) ? roleType : [roleType];
       const mappedRoleTypes = roleTypes.map(rt => PersonRoleMapping.mapRoleType(rt));
@@ -208,11 +214,12 @@ class PersonRoles {
       const where = {
         personId,
         roleType: { in: mappedRoleTypes },
-        isActive: true
+        isActive: true,
+        deletedAt: null
       };
 
-      if (companyId) {
-        where.companyId = companyId;
+      if (companyTenantProfileId) {
+        where.companyTenantProfileId = companyTenantProfileId;
       }
 
       if (tenantId) {
@@ -222,10 +229,10 @@ class PersonRoles {
       const role = await prisma.personRole.findFirst({ where });
       return !!role;
     } catch (error) {
-      logger.error('Error checking if person has role:', { 
-        error: error.message, 
-        personId, 
-        roleType 
+      logger.error('Error checking if person has role:', {
+        error: error.message,
+        personId,
+        roleType
       });
       throw error;
     }
@@ -245,6 +252,7 @@ class PersonRoles {
       const where = {
         roleType: { in: mappedRoleTypes },
         isActive: true,
+        deletedAt: null, // F226: exclude soft-deleted roles
         ...filters
       };
 
@@ -253,11 +261,11 @@ class PersonRoles {
         include: {
           person: {
             include: {
-              company: true,
+              companyTenantProfile: true, // P49: company -> companyTenantProfile
               tenant: true
             }
           },
-          company: true,
+          companyTenantProfile: true, // P49: company -> companyTenantProfile
           tenant: true
         },
         orderBy: {
@@ -288,7 +296,7 @@ class PersonRoles {
         },
         include: {
           person: true,
-          company: true,
+          companyTenantProfile: true, // P49: company -> companyTenantProfile
           tenant: true
         }
       });
@@ -350,7 +358,7 @@ class PersonRoles {
   static async transferRoles(fromPersonId, toPersonId) {
     try {
       const rolesToTransfer = await this.getPersonRoles(fromPersonId, true);
-      
+
       const results = {
         transferred: 0,
         errors: []
@@ -359,11 +367,11 @@ class PersonRoles {
       for (const role of rolesToTransfer) {
         try {
           // Disattiva il ruolo dalla persona sorgente
-          await this.removeRole(fromPersonId, role.roleType, role.companyId, role.tenantId);
-          
+          await this.removeRole(fromPersonId, role.roleType, role.companyTenantProfileId, role.tenantId);
+
           // Aggiungi il ruolo alla persona destinazione
-          await this.addRole(toPersonId, role.roleType, role.companyId, role.tenantId);
-          
+          await this.addRole(toPersonId, role.roleType, role.companyTenantProfileId, role.tenantId);
+
           results.transferred++;
         } catch (error) {
           results.errors.push({
@@ -375,10 +383,10 @@ class PersonRoles {
 
       return results;
     } catch (error) {
-      logger.error('Error transferring roles:', { 
-        error: error.message, 
-        fromPersonId, 
-        toPersonId 
+      logger.error('Error transferring roles:', {
+        error: error.message,
+        fromPersonId,
+        toPersonId
       });
       throw error;
     }
@@ -392,7 +400,7 @@ class PersonRoles {
   static validateRoleType(roleType) {
     const mappedRole = PersonRoleMapping.mapRoleType(roleType);
     const isValid = PersonRoleMapping.isValidRole(mappedRole);
-    
+
     return {
       isValid,
       originalRole: roleType,

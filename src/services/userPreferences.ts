@@ -22,7 +22,6 @@ export const savePreference = async (
     localStorage.setItem(key, JSON.stringify(value));
     return Promise.resolve();
   } catch (error) {
-    console.error('Error saving user preference to localStorage:', error);
     return Promise.reject(error);
   }
 };
@@ -42,7 +41,6 @@ export const getPreference = async <T>(
     const value = localStorage.getItem(key);
     return value ? (JSON.parse(value) as T) : undefined;
   } catch (error) {
-    console.error('Error loading user preference from localStorage:', error);
     return undefined;
   }
 };

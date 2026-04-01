@@ -7,6 +7,8 @@ export const typography = {
   // Font Families
   fontFamily: {
     sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+    heading: ['Space Grotesk', 'Inter', 'system-ui', 'sans-serif'],
+    body: ['Montserrat', 'Inter', 'system-ui', 'sans-serif'],
     mono: ['JetBrains Mono', 'Menlo', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', 'monospace'],
     serif: ['Georgia', 'Cambria', 'Times New Roman', 'Times', 'serif'],
   },
@@ -178,15 +180,14 @@ export type TextStyle = keyof typeof typography.textStyles;
 export const getTypography = (token: string): any => {
   const keys = token.split('.');
   let value: any = typography;
-  
+
   for (const key of keys) {
     value = value[key];
     if (value === undefined) {
-      console.warn(`Typography token '${token}' not found`);
       return undefined;
     }
   }
-  
+
   return value;
 };
 
@@ -196,7 +197,7 @@ export const typographyCSSVars = {
   '--font-sans': typography.fontFamily.sans.join(', '),
   '--font-mono': typography.fontFamily.mono.join(', '),
   '--font-serif': typography.fontFamily.serif.join(', '),
-  
+
   // Font Sizes
   '--text-xs': typography.fontSize.xs,
   '--text-sm': typography.fontSize.sm,
@@ -206,14 +207,14 @@ export const typographyCSSVars = {
   '--text-2xl': typography.fontSize['2xl'],
   '--text-3xl': typography.fontSize['3xl'],
   '--text-4xl': typography.fontSize['4xl'],
-  
+
   // Font Weights
   '--font-light': typography.fontWeight.light,
   '--font-normal': typography.fontWeight.normal,
   '--font-medium': typography.fontWeight.medium,
   '--font-semibold': typography.fontWeight.semibold,
   '--font-bold': typography.fontWeight.bold,
-  
+
   // Line Heights
   '--leading-tight': typography.lineHeight.tight,
   '--leading-normal': typography.lineHeight.normal,
@@ -224,7 +225,6 @@ export const typographyCSSVars = {
 export const applyTextStyle = (style: TextStyle) => {
   const textStyle = typography.textStyles[style];
   if (!textStyle) {
-    console.warn(`Text style '${style}' not found`);
     return {};
   }
   return textStyle;

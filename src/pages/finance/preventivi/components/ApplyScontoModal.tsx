@@ -44,8 +44,8 @@ const ApplyScontoModal: React.FC<ApplyScontoModalProps> = ({
             await onApply(preventivo.id, codice.trim().toUpperCase());
             setCodice('');
             onClose();
-        } catch (err: any) {
-            setError(err.message || 'Codice sconto non valido');
+        } catch (err: unknown) {
+            setError('Codice sconto non valido');
         } finally {
             setLoading(false);
         }
@@ -55,25 +55,25 @@ const ApplyScontoModal: React.FC<ApplyScontoModalProps> = ({
 
     return ReactDOM.createPortal(
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
-                <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                    <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl dark:shadow-black/50 w-full max-w-md">
+                <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-50 flex items-center gap-2">
                         <Tag className="h-5 w-5 text-green-600" />
                         Applica Codice Sconto
                     </h2>
-                    <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
-                        <X className="h-5 w-5 text-gray-500" />
+                    <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+                        <X className="h-5 w-5 text-gray-500 dark:text-gray-400" />
                     </button>
                 </div>
 
                 <div className="p-6">
                     <div className="mb-4">
-                        <p className="text-sm text-gray-600 mb-1">Preventivo</p>
-                        <p className="font-mono font-medium">{preventivo.numero}</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Preventivo</p>
+                        <p className="font-mono font-medium text-gray-900 dark:text-gray-50">{preventivo.numero}</p>
                     </div>
 
                     <div className="mb-4">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                             Codice Sconto
                         </label>
                         <div className="relative">
@@ -83,19 +83,19 @@ const ApplyScontoModal: React.FC<ApplyScontoModalProps> = ({
                                 value={codice}
                                 onChange={(e) => setCodice(e.target.value.toUpperCase())}
                                 placeholder="Es. SCONTO20"
-                                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 uppercase"
+                                className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 uppercase bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-50"
                             />
                         </div>
                     </div>
 
                     {error && (
-                        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                        <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 rounded-lg text-red-700 dark:text-red-400 text-sm">
                             {error}
                         </div>
                     )}
                 </div>
 
-                <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+                <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
                     <Button variant="outline" onClick={onClose}>Annulla</Button>
                     <Button
                         variant="primary"

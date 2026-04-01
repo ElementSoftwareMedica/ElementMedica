@@ -116,7 +116,7 @@ class SedePoliambulatorioService {
         include: {
           poliambulatorio: true,
           direttoreSanitario: {
-            select: { id: true, firstName: true, lastName: true, email: true }
+            select: { id: true, firstName: true, lastName: true, tenantProfiles: { select: { email: true, phone: true, tenantId: true } } }
           },
           ambulatori: true,
           orariSettimanali: { where: { deletedAt: null }, orderBy: [{ giornoSettimana: 'asc' }, { fascia: 'asc' }] },
@@ -131,8 +131,11 @@ class SedePoliambulatorioService {
 
   /**
    * Ottiene tutte le sedi di un tenant
-   * @param {string} tenantId - ID del tenant
+   * @param {string} tenantId - ID del tenant principale (fallback)
    * @param {Object} options - Opzioni di filtro
+   * @param {string} options.tenantIds - Comma-separated list of tenant IDs (multi-tenant support)
+   * @param {boolean} options.allTenants - If true and accessibleTenantIds provided, show all
+   * @param {string[]} options.accessibleTenantIds - Array of tenant IDs the user can access
    * @returns {Promise<Array>} Lista sedi
    */
   async findAll(tenantId, options = {}) {
@@ -141,14 +144,50 @@ class SedePoliambulatorioService {
       isAttiva,
       search,
       page = 1,
-      limit = 50
+      limit = 50,
+      tenantIds = null,
+      allTenants = false,
+      accessibleTenantIds = []
     } = options;
 
+    // Convert query params from string to correct types (Prisma requires proper types)
+    const parsedLimit = typeof limit === 'string' ? parseInt(limit, 10) : limit;
+    const parsedPage = typeof page === 'string' ? parseInt(page, 10) : page;
+    const parsedIsAttiva = isAttiva === 'true' ? true : isAttiva === 'false' ? false : isAttiva;
+
+    // Determine tenant filter based on user's access (multi-tenant support)
+    let tenantFilter = {};
+
+    if (tenantIds) {
+      // Filter by specific tenant IDs (must be in user's accessible tenants)
+      const requestedIds = Array.isArray(tenantIds)
+        ? tenantIds
+        : (typeof tenantIds === 'string' ? tenantIds.split(',').map(id => id.trim()) : []);
+      const allowedIds = accessibleTenantIds.length > 0
+        ? requestedIds.filter(id => accessibleTenantIds.includes(id))
+        : requestedIds;
+
+      if (allowedIds.length > 0) {
+        tenantFilter = allowedIds.length === 1
+          ? { tenantId: allowedIds[0] }
+          : { tenantId: { in: allowedIds } };
+      } else {
+        // User has no access to requested tenants, fallback to primary tenant
+        tenantFilter = tenantId ? { tenantId } : {};
+      }
+    } else if (allTenants && accessibleTenantIds.length > 0) {
+      // Show all accessible tenants
+      tenantFilter = { tenantId: { in: accessibleTenantIds } };
+    } else if (tenantId) {
+      // Default: filter by user's primary tenant only
+      tenantFilter = { tenantId };
+    }
+
     const where = {
-      tenantId,
       deletedAt: null,
+      ...tenantFilter,
       ...(poliambulatorioId && { poliambulatorioId }),
-      ...(isAttiva !== undefined && { isAttiva })
+      ...(parsedIsAttiva !== undefined && { isAttiva: parsedIsAttiva })
     };
 
     if (search) {
@@ -160,24 +199,42 @@ class SedePoliambulatorioService {
       ];
     }
 
+    logger.debug('Sedi query where clause', {
+      component: 'sede-poliambulatorio-service',
+      action: 'findAll',
+      where: JSON.stringify(where),
+      tenantId,
+      tenantIds,
+      allTenants,
+      accessibleTenantIds: accessibleTenantIds.length
+    });
+
     const [sedi, total] = await Promise.all([
       prisma.sedePoliambulatorio.findMany({
         where,
         include: {
           poliambulatorio: { select: { id: true, nome: true } },
           direttoreSanitario: {
-            select: { id: true, firstName: true, lastName: true }
+            select: { id: true, firstName: true, lastName: true, tenantProfiles: { select: { email: true, phone: true, tenantId: true } } }
+          },
+          orariSettimanali: {
+            where: { deletedAt: null },
+            orderBy: [{ giornoSettimana: 'asc' }, { fascia: 'asc' }]
+          },
+          chiusureSpeciali: {
+            where: { deletedAt: null, attivo: true },
+            orderBy: { dataInizio: 'asc' }
           },
           _count: { select: { ambulatori: true } }
         },
         orderBy: [{ isPrincipale: 'desc' }, { nome: 'asc' }],
-        skip: (page - 1) * limit,
-        take: limit
+        skip: (parsedPage - 1) * parsedLimit,
+        take: parsedLimit
       }),
       prisma.sedePoliambulatorio.count({ where })
     ]);
 
-    return { data: sedi, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return { data: sedi, total, page: parsedPage, limit: parsedLimit, totalPages: Math.ceil(total / parsedLimit) };
   }
 
   /**
@@ -192,7 +249,7 @@ class SedePoliambulatorioService {
       include: {
         poliambulatorio: true,
         direttoreSanitario: {
-          select: { id: true, firstName: true, lastName: true, email: true, phone: true }
+          select: { id: true, firstName: true, lastName: true, tenantProfiles: { select: { email: true, phone: true, tenantId: true } } }
         },
         ambulatori: {
           where: { deletedAt: null },
@@ -286,10 +343,10 @@ class SedePoliambulatorioService {
 
       // Aggiorna orari settimanali se forniti
       if (orariSettimanali !== undefined) {
-        // Soft delete degli orari esistenti
-        await tx.orarioSede.updateMany({
-          where: { sedeId: id, deletedAt: null },
-          data: { deletedAt: new Date() }
+        // HARD DELETE degli orari esistenti (non sono PII, solo config)
+        // Necessario perché unique constraint è su (sedeId, giornoSettimana, fascia)
+        await tx.orarioSede.deleteMany({
+          where: { sedeId: id }
         });
 
         // Crea nuovi orari
@@ -345,7 +402,7 @@ class SedePoliambulatorioService {
         include: {
           poliambulatorio: true,
           direttoreSanitario: {
-            select: { id: true, firstName: true, lastName: true, email: true }
+            select: { id: true, firstName: true, lastName: true, tenantProfiles: { select: { email: true, phone: true, tenantId: true } } }
           },
           ambulatori: true,
           orariSettimanali: { where: { deletedAt: null }, orderBy: [{ giornoSettimana: 'asc' }, { fascia: 'asc' }] },
@@ -446,7 +503,7 @@ class SedePoliambulatorioService {
       include: {
         poliambulatorio: true,
         direttoreSanitario: {
-          select: { id: true, firstName: true, lastName: true }
+          select: { id: true, firstName: true, lastName: true, tenantProfiles: { select: { email: true, phone: true, tenantId: true } } }
         }
       }
     });

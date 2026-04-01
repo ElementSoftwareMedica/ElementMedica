@@ -8,13 +8,16 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-    Users, Search, Plus, Edit, Eye, Phone, Mail,
-    Calendar, FileText, AlertCircle, CheckCircle, Link2
+    Users, Search, Plus, Eye, Phone, Mail,
+    Calendar, FileText, AlertCircle, CheckCircle, Link2, Edit, Receipt
 } from 'lucide-react';
 import { useAuth } from '../../../context/AuthContext';
 import { useTenantFilter } from '../../../context/TenantFilterContext';
 import { useToast } from '../../../hooks/useToast';
-import { apiGet, apiPost, apiPut } from '../../../services/api';
+import { apiGet, apiPost } from '../../../services/api';
+import type { PersonTenantProfile } from '../../../types/personMultiTenant';
+import { DatePickerElegante } from '../../../components/ui/DatePickerElegante';
+import { ActionButton, CRUDPrimaryButton } from '../../../components/ui';
 
 interface Paziente {
     id: string;
@@ -34,6 +37,9 @@ interface Paziente {
         dataOra: string;
         stato: string;
     }>;
+    // Progetto 48: Multi-tenant support
+    tenantProfiles?: PersonTenantProfile[];
+    currentProfile?: PersonTenantProfile;
 }
 
 interface SearchPerson {
@@ -50,6 +56,8 @@ interface SearchPerson {
     province: string | null;
     roles: string[];
     isFromOtherTenant?: boolean;
+    // Progetto 48: Multi-tenant support
+    tenantProfiles?: PersonTenantProfile[];
 }
 
 interface SearchResult {
@@ -65,7 +73,7 @@ const PazientiPage: React.FC = () => {
     const { showToast } = useToast();
 
     // Tenant filter from global context
-    const { getTenantFilterParams, tenantFilterKey } = useTenantFilter();
+    const { getTenantFilterParams, tenantFilterKey, isReady } = useTenantFilter();
 
     const [pazienti, setPazienti] = useState<Paziente[]>([]);
     const [loading, setLoading] = useState(true);
@@ -101,7 +109,7 @@ const PazientiPage: React.FC = () => {
         setLoading(true);
         try {
             const tenantParams = getTenantFilterParams();
-            let url = `/api/v1/poliambulatorio/pazienti?page=${pagination.page}&pageSize=${pagination.pageSize}&search=${searchTerm}`;
+            let url = `/api/v1/clinica/pazienti?page=${pagination.page}&pageSize=${pagination.pageSize}&search=${searchTerm}`;
             if (tenantParams.tenantIds) {
                 url += `&tenantIds=${tenantParams.tenantIds.join(',')}`;
             }
@@ -121,15 +129,16 @@ const PazientiPage: React.FC = () => {
             }
         } catch (err) {
             setError('Errore nel caricamento pazienti');
-            console.error(err);
         } finally {
             setLoading(false);
         }
-    }, [pagination.page, pagination.pageSize, searchTerm, getTenantFilterParams]);
+    }, [pagination.page, pagination.pageSize, searchTerm, getTenantFilterParams, tenantFilterKey]);
 
     useEffect(() => {
-        fetchPazienti();
-    }, [fetchPazienti]);
+        if (isReady) {
+            fetchPazienti();
+        }
+    }, [fetchPazienti, isReady]);
 
     // Ricerca paziente per CF con debounce custom
     const searchByTaxCode = useMemo(() => {
@@ -150,7 +159,7 @@ const PazientiPage: React.FC = () => {
                         found: boolean;
                         isPazienteInTenant?: boolean;
                         person?: SearchResult['person'];
-                    }>(`/api/v1/poliambulatorio/pazienti/cerca-cf/${taxCode.toUpperCase()}`);
+                    }>(`/api/v1/clinica/pazienti/cerca-cf/${taxCode.toUpperCase()}`);
 
                     if (response.success) {
                         setCfSearchResult({
@@ -177,7 +186,6 @@ const PazientiPage: React.FC = () => {
                         }
                     }
                 } catch (err) {
-                    console.error('Error searching by CF:', err);
                 } finally {
                     setCfSearching(false);
                 }
@@ -207,7 +215,7 @@ const PazientiPage: React.FC = () => {
                 isNew: boolean;
                 wasLinked: boolean;
                 message: string;
-            }>('/api/v1/poliambulatorio/pazienti', newPaziente);
+            }>('/api/v1/clinica/pazienti', newPaziente);
 
             if (response.success) {
                 setShowNewModal(false);
@@ -226,7 +234,6 @@ const PazientiPage: React.FC = () => {
             }
         } catch (err) {
             setError('Errore nel salvataggio paziente');
-            console.error(err);
         } finally {
             setSaving(false);
         }
@@ -251,13 +258,10 @@ const PazientiPage: React.FC = () => {
                         Gestione pazienti con integrazione anagrafica formazione
                     </p>
                 </div>
-                <button
-                    onClick={() => setShowNewModal(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                >
-                    <Plus className="w-5 h-5" />
+                <CRUDPrimaryButton onClick={() => setShowNewModal(true)}>
+                    <Plus className="w-5 h-5 mr-2" />
                     Nuovo Paziente
-                </button>
+                </CRUDPrimaryButton>
             </div>
 
             {/* Search */}
@@ -311,7 +315,11 @@ const PazientiPage: React.FC = () => {
                             </tr>
                         ) : (
                             pazienti.map((paziente) => (
-                                <tr key={paziente.id} className="hover:bg-gray-50">
+                                <tr
+                                    key={paziente.id}
+                                    className="hover:bg-teal-50 cursor-pointer transition-colors"
+                                    onClick={() => navigate(`/poliambulatorio/pazienti/${paziente.id}`)}
+                                >
                                     <td className="px-6 py-4">
                                         <div className="flex items-center">
                                             <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
@@ -366,38 +374,54 @@ const PazientiPage: React.FC = () => {
                                     </td>
                                     <td className="px-6 py-4">
                                         <div className="flex flex-wrap gap-1">
-                                            {paziente.personRoles.map((role, idx) => (
+                                            {/* Deduplicate role types - a person may have same role in multiple tenants */}
+                                            {Array.from(new Set(paziente.personRoles.map(r => r.roleType))).map((roleType) => (
                                                 <span
-                                                    key={idx}
-                                                    className={`px-2 py-0.5 rounded-full text-xs ${role.roleType === 'PAZIENTE'
+                                                    key={roleType}
+                                                    className={`px-2 py-0.5 rounded-full text-xs font-medium ${roleType === 'PAZIENTE'
                                                         ? 'bg-blue-100 text-blue-800'
-                                                        : role.roleType === 'EMPLOYEE'
+                                                        : roleType === 'EMPLOYEE'
                                                             ? 'bg-purple-100 text-purple-800'
-                                                            : 'bg-gray-100 text-gray-800'
+                                                            : roleType === 'TRAINER' || roleType === 'SENIOR_TRAINER' || roleType === 'EXTERNAL_TRAINER'
+                                                                ? 'bg-green-100 text-green-800'
+                                                                : roleType === 'MEDICO' || roleType === 'MEDICO_COMPETENTE'
+                                                                    ? 'bg-teal-100 text-teal-800'
+                                                                    : 'bg-gray-100 text-gray-700'
                                                         }`}
                                                 >
-                                                    {role.roleType}
+                                                    {roleType === 'PAZIENTE' ? 'Paziente'
+                                                        : roleType === 'EMPLOYEE' ? 'Dipendente'
+                                                            : roleType === 'TRAINER' ? 'Formatore'
+                                                                : roleType === 'SENIOR_TRAINER' ? 'Form. Senior'
+                                                                    : roleType === 'EXTERNAL_TRAINER' ? 'Form. Esterno'
+                                                                        : roleType === 'MEDICO' ? 'Medico'
+                                                                            : roleType === 'MEDICO_COMPETENTE' ? 'Med. Competente'
+                                                                                : roleType}
                                                 </span>
                                             ))}
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4 text-right">
-                                        <div className="flex justify-end gap-2">
-                                            <button
-                                                onClick={() => navigate(`/poliambulatorio/pazienti/${paziente.id}`)}
-                                                className="p-2 text-gray-400 hover:text-blue-600"
-                                                title="Visualizza cartella"
-                                            >
-                                                <Eye className="w-5 h-5" />
-                                            </button>
-                                            <button
-                                                onClick={() => navigate(`/poliambulatorio/pazienti/${paziente.id}#referti`)}
-                                                className="p-2 text-gray-400 hover:text-green-600"
-                                                title="Referti"
-                                            >
-                                                <FileText className="w-5 h-5" />
-                                            </button>
-                                        </div>
+                                    <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
+                                        <ActionButton
+                                            theme="teal"
+                                            actions={[
+                                                {
+                                                    label: 'Cartella clinica',
+                                                    icon: <Eye className="w-4 h-4" />,
+                                                    onClick: () => navigate(`/poliambulatorio/pazienti/${paziente.id}`)
+                                                },
+                                                {
+                                                    label: 'Referti',
+                                                    icon: <FileText className="w-4 h-4" />,
+                                                    onClick: () => navigate(`/poliambulatorio/pazienti/${paziente.id}#referti`)
+                                                },
+                                                {
+                                                    label: 'Fatture',
+                                                    icon: <Receipt className="w-4 h-4" />,
+                                                    onClick: () => navigate(`/poliambulatorio/pazienti/${paziente.id}#fatture`)
+                                                },
+                                            ]}
+                                        />
                                     </td>
                                 </tr>
                             ))
@@ -553,11 +577,10 @@ const PazientiPage: React.FC = () => {
 
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Data di Nascita</label>
-                                <input
-                                    type="date"
+                                <DatePickerElegante
                                     value={newPaziente.birthDate}
-                                    onChange={(e) => setNewPaziente(p => ({ ...p, birthDate: e.target.value }))}
-                                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    onChange={(date) => setNewPaziente(p => ({ ...p, birthDate: date ? date.toISOString().split('T')[0] : '' }))}
+                                    theme="teal"
                                 />
                             </div>
 
@@ -622,7 +645,7 @@ const PazientiPage: React.FC = () => {
                             <button
                                 onClick={handleSave}
                                 disabled={saving || !newPaziente.firstName || !newPaziente.lastName}
-                                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                                className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50"
                             >
                                 {saving ? 'Salvataggio...' : cfSearchResult?.found && !cfSearchResult.isPazienteInTenant
                                     ? 'Collega Paziente'

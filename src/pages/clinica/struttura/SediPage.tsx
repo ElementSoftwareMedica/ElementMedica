@@ -33,7 +33,9 @@ import Modal from '../../../design-system/molecules/Modal/Modal';
 import { useTenantFilter } from '../../../context/TenantFilterContext';
 import { useViewMode } from '../../../hooks/useViewMode';
 import { ViewModeToggle } from '../../../components/clinica/ViewModeToggle';
-import { ActionMenu, createCrudActions } from '../../../components/clinica/ActionMenu';
+import { ActionMenu, createCrudActions } from '@/components/ui/ActionMenu';
+import { CRUDButton } from '../../../components/shared/CRUDButton';
+import { formatMedicoName } from '../../../utils/textFormatters';
 
 // Import Element Medica theme
 import '../../../styles/clinica-theme.css';
@@ -83,7 +85,7 @@ const SediPage: React.FC = () => {
             setSedeToDelete(null);
         },
         onError: (error: Error) => {
-            showToast({ type: 'error', message: error.message || 'Errore durante l\'eliminazione' });
+            showToast({ type: 'error', message: 'Errore durante l\'eliminazione' });
         }
     });
 
@@ -127,7 +129,7 @@ const SediPage: React.FC = () => {
                     <AlertCircle className="h-12 w-12 mb-4" />
                     <h3 className="text-lg font-medium">Errore nel caricamento</h3>
                     <p className="text-sm text-gray-500 mt-1">
-                        {error instanceof Error ? error.message : 'Errore sconosciuto'}
+                        {'Errore sconosciuto'}
                     </p>
                 </div>
             </div>
@@ -189,13 +191,14 @@ const SediPage: React.FC = () => {
                         }
                     </p>
                     {!searchTerm && (
-                        <button
+                        <CRUDButton
+                            operation="create"
                             onClick={() => navigate('/poliambulatorio/sedi/nuovo')}
                             className="btn-clinica-primary inline-flex items-center gap-2"
                         >
                             <Plus className="h-4 w-4" />
                             Aggiungi Sede
-                        </button>
+                        </CRUDButton>
                     )}
                 </div>
             ) : viewMode === 'grid' ? (
@@ -276,7 +279,7 @@ const SediPage: React.FC = () => {
                                     <div className="flex items-center gap-2 text-sm">
                                         <User className="h-4 w-4 text-gray-400" />
                                         <span className="text-gray-700">
-                                            Dott. {sede.direttoreSanitario.firstName} {sede.direttoreSanitario.lastName}
+                                            {formatMedicoName(sede.direttoreSanitario)}
                                         </span>
                                     </div>
                                 )}
@@ -378,8 +381,8 @@ const SediPage: React.FC = () => {
                                     </td>
                                     <td>
                                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${sede.isAttiva
-                                                ? 'bg-emerald-100 text-emerald-700'
-                                                : 'bg-gray-100 text-gray-600'
+                                            ? 'bg-emerald-100 text-emerald-700'
+                                            : 'bg-gray-100 text-gray-600'
                                             }`}>
                                             {sede.isAttiva ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
                                             {sede.isAttiva ? 'Attiva' : 'Inattiva'}

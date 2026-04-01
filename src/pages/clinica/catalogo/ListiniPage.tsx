@@ -34,12 +34,13 @@ import {
 } from 'lucide-react';
 import {
     listiniApi,
-    Listino,
+    ListinoPrezzo as Listino,
     PaginatedResponse
 } from '../../../services/clinicaApi';
 import { formatDate } from '../../../utils/dateUtils';
 import { useTenantFilter } from '../../../context/TenantFilterContext';
 import { useToast } from '../../../hooks/useToast';
+import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 import '../../../styles/clinica-theme.css';
 
 // =====================================================
@@ -89,6 +90,7 @@ export const ListiniPage: React.FC = () => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const { showToast } = useToast();
+    const { confirmDelete } = useConfirmDialog();
 
     // Tenant filter from global context
     const { getTenantFilterParams, isReady, tenantFilterKey } = useTenantFilter();
@@ -113,7 +115,7 @@ export const ListiniPage: React.FC = () => {
             ...(tenantParams.tenantIds && { tenantIds: tenantParams.tenantIds.join(',') }),
             ...(tenantParams.allTenants && { allTenants: 'true' })
         };
-    }, [page, filters, getTenantFilterParams]);
+    }, [page, filters, getTenantFilterParams, tenantFilterKey]);
 
     // Queries
     const {
@@ -150,11 +152,11 @@ export const ListiniPage: React.FC = () => {
         setPage(1);
     }, []);
 
-    const handleDelete = useCallback((id: string) => {
-        if (window.confirm('Sei sicuro di voler eliminare questo listino?')) {
+    const handleDelete = useCallback(async (id: string) => {
+        if (await confirmDelete('questo listino')) {
             deleteMutation.mutate(id);
         }
-    }, [deleteMutation]);
+    }, [deleteMutation, confirmDelete]);
 
     // Export listini to CSV
     const handleExport = useCallback(async () => {
@@ -192,7 +194,6 @@ export const ListiniPage: React.FC = () => {
             link.click();
             URL.revokeObjectURL(link.href);
         } catch (error) {
-            console.error('Export error:', error);
             showToast({ type: 'error', message: 'Errore durante l\'esportazione' });
         } finally {
             setIsExporting(false);
@@ -240,7 +241,7 @@ export const ListiniPage: React.FC = () => {
                         } as any);
                         imported.push(i);
                     } catch (err) {
-                        errors.push(`Riga ${i + 1}: ${err instanceof Error ? err.message : 'Errore'}`);
+                        errors.push(`Riga ${i + 1}: ${'Errore'}`);
                     }
                 }
 
@@ -253,7 +254,6 @@ export const ListiniPage: React.FC = () => {
                 }
                 showToast({ type: errors.length > 0 ? 'warning' : 'success', message });
             } catch (error) {
-                console.error('Import error:', error);
                 showToast({ type: 'error', message: 'Errore durante l\'importazione del file' });
             } finally {
                 setIsImporting(false);
@@ -427,7 +427,7 @@ export const ListiniPage: React.FC = () => {
                                     </Link>
                                     <Link
                                         to={`/poliambulatorio/catalogo/listini/${listino.id}/modifica`}
-                                        className="p-2 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                                        className="p-2 text-gray-500 hover:text-teal-600 dark:text-gray-400 dark:hover:text-teal-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
                                         title="Modifica"
                                     >
                                         <Edit className="w-4 h-4" />

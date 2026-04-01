@@ -216,8 +216,8 @@ const additionalContent = {
     emergency: {
         title: "Prenota la Tua Visita",
         subtitle: "Il nostro team è pronto ad accoglierti",
-        phone: "02 1234567",
-        email: "visite@elementmedica.it",
+        phone: "+39 351 318 1574",
+        email: "info@elementmedica.com",
         hours: "Lun-Ven 8:00-20:00 | Sab 8:00-13:00",
         ctaText: "Prenota Online",
         ctaHref: "/prenota",
@@ -234,7 +234,6 @@ const additionalContent = {
         subtitle: "Oltre 30 Specialità Mediche",
         description: "Un team di medici esperti a tua disposizione. Prenota la tua visita specialistica con tempi rapidi, tecnologie avanzate e un approccio umano alla cura.",
         backgroundVariant: "gradient",
-        backgroundImage: "/images/hero-visite.jpg",
         primaryButton: {
             text: "Prenota Visita",
             href: "/prenota",

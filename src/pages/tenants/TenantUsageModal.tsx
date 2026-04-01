@@ -36,8 +36,8 @@ const TenantUsageModal: React.FC<TenantUsageModalProps> = ({
       setError(null);
       const data = await getTenantUsage(tenantId);
       setUsage(data);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError('Errore del server');
     } finally {
       setIsLoading(false);
     }

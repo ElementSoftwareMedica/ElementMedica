@@ -4,14 +4,14 @@ export const TEMPLATE_EXAMPLES = {
   <h1>Attestato di Partecipazione</h1>
   <h2>ATTESTATO</h2>
   <p>Si certifica che</p>
-  <h3>{{dipendente_nome}} {{dipendente_cognome}}</h3>
+  <h3>{{person.fullName}}</h3>
   <p>ha partecipato con successo al corso</p>
-  <h3>"{{corso_nome}}"</h3>
-  <p>della durata di {{Ore corso}} ore</p>
-  <p>svoltosi dal {{data_1}} al {{data_2}}</p>
+  <h3>"{{course.title}}"</h3>
+  <p>della durata di {{course.duration}} ore</p>
+  <p>svoltosi dal {{schedule.startDate}} al {{schedule.endDate}}</p>
   
   <div style="margin-top: 40px;">
-    <p>{{data_generazione_template}}</p>
+    <p>{{current.date}}</p>
     <p>Firma del Responsabile</p>
     <p>_______________________</p>
   </div>
@@ -21,13 +21,11 @@ export const TEMPLATE_EXAMPLES = {
 <div>
   <h1>Lettera di Incarico</h1>
   
-  <p>Spett.le {{formatore_nome}} {{formatore_cognome}}<br>
-  {{formatore_indirizzo}}<br>
-  {{formatore_cap}} {{formatore_citta}} ({{formatore_provincia}})</p>
+  <p>Spett.le {{trainer.firstName}} {{trainer.lastName}}<br>
 
   <p><strong>Oggetto: Incarico per attività di docenza</strong></p>
 
-  <p>Con la presente si conferisce a {{formatore_nome}} {{formatore_cognome}}, nato/a a {{formatore_luogo_nascita}} il {{formatore_data_nascita}}, l'incarico di svolgere attività di docenza per il corso "{{corso_nome}}" da tenersi presso {{luogo}}.</p>
+  <p>Con la presente si conferisce a {{trainer.fullName}} l'incarico di svolgere attività di docenza per il corso "{{course.title}}" da tenersi presso {{schedule.location}}.</p>
 
   <p>L'incarico prevede lo svolgimento delle seguenti attività:</p>
   <ul>
@@ -36,13 +34,13 @@ export const TEMPLATE_EXAMPLES = {
     <li>Valutazione dei partecipanti</li>
   </ul>
 
-  <p><strong>Periodo di svolgimento:</strong> dal {{PRIMA_DATA}} al {{ULTIMA_DATA}}<br>
-  <strong>Ore di docenza:</strong> {{ORE_TOTALI}}<br>
-  <strong>Compenso:</strong> € {{COMPENSO_TOTALE}} (comprensivo di oneri fiscali e previdenziali)</p>
+  <p><strong>Periodo di svolgimento:</strong> dal {{schedule.startDate}} al {{schedule.endDate}}<br>
+  <strong>Ore di docenza:</strong> {{trainer.totalHours}}<br>
+  <strong>Compenso:</strong> {{trainer.totalCompensation|currency:€}}</p>
 
   <p>Cordiali saluti,</p>
 
-  <p>{{data_generazione_template}}</p>
+  <p>{{current.date}}</p>
 
   <p>Il Responsabile<br>
   _______________________</p>
@@ -54,38 +52,17 @@ export const TEMPLATE_EXAMPLES = {
   
   <div style="text-align: center;">
     <h2>REGISTRO PRESENZE</h2>
-    <h3>Corso: "{{corso_nome}}"</h3>
+    <h3>Corso: "{{course.title}}"</h3>
   </div>
 
-  <p><strong>Data:</strong> _______________<br>
-  <strong>Orario:</strong> dalle ________ alle ________<br>
-  <strong>Docente:</strong> {{formatore_nome}} {{formatore_cognome}}<br>
-  <strong>Sede:</strong> {{luogo}}</p>
+  <p><strong>Data:</strong> {{session.date}}<br>
+  <strong>Orario:</strong> dalle {{session.startTime}} alle {{session.endTime}}<br>
+  <strong>Docente:</strong> {{trainer.fullName}}<br>
+  <strong>Sede:</strong> {{schedule.location}}</p>
 
   <h2>Elenco Partecipanti</h2>
 
-  <table border="1" style="width: 100%; border-collapse: collapse;">
-    <tr>
-      <th style="width: 5%; text-align: center;">N.</th>
-      <th style="width: 40%;">Cognome e Nome</th>
-      <th style="width: 25%;">Firma Entrata</th>
-      <th style="width: 25%;">Firma Uscita</th>
-    </tr>
-    <tr><td style="text-align: center;">1</td><td></td><td></td><td></td></tr>
-    <tr><td style="text-align: center;">2</td><td></td><td></td><td></td></tr>
-    <tr><td style="text-align: center;">3</td><td></td><td></td><td></td></tr>
-    <tr><td style="text-align: center;">4</td><td></td><td></td><td></td></tr>
-    <tr><td style="text-align: center;">5</td><td></td><td></td><td></td></tr>
-    <tr><td style="text-align: center;">6</td><td></td><td></td><td></td></tr>
-    <tr><td style="text-align: center;">7</td><td></td><td></td><td></td></tr>
-    <tr><td style="text-align: center;">8</td><td></td><td></td><td></td></tr>
-    <tr><td style="text-align: center;">9</td><td></td><td></td><td></td></tr>
-    <tr><td style="text-align: center;">10</td><td></td><td></td><td></td></tr>
-    <tr><td style="text-align: center;">11</td><td></td><td></td><td></td></tr>
-    <tr><td style="text-align: center;">12</td><td></td><td></td><td></td></tr>
-  </table>
-
-  <p style="margin-top: 30px;">Firma del docente: ______________________</p>
+  {{{table.sessionAttendance}}}
 </div>`,
 
   documento: `
@@ -107,7 +84,7 @@ export const TEMPLATE_EXAMPLES = {
   <h2>Conclusioni</h2>
   <p>Riassumi qui i punti principali del documento.</p>
   
-  <p class="data">{{data_generazione_template}}</p>
+  <p class="data">{{current.date}}</p>
   <p class="firma">Firma: _______________________</p>
 </div>
 

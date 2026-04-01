@@ -27,7 +27,7 @@
  */
 
 import express from 'express';
-import middleware from '../../auth/middleware.js';
+import middleware from '../../middleware/auth.js';
 import { checkAdvancedPermission } from '../../middleware/advanced-permissions.js';
 import logger from '../../utils/logger.js';
 import { auditClinico, getEffectiveTenantId } from './utils/clinica-utils.js';
@@ -47,12 +47,59 @@ const router = express.Router();
 // ============================================
 
 /**
+ * @route GET /api/v1/clinica/slots
+ * @desc Lista slot (con filtri, paginazione)
+ * @access Authenticated
+ */
+router.get('/',
+    authenticateToken,
+    auditClinico('list_slots'),
+    async (req, res) => {
+        try {
+            const tenantId = getEffectiveTenantId(req);
+            const { limit, tenantIds, allTenants, filters = {} } = req.query;
+
+            const queryFilters = {
+                ...(typeof filters === 'object' ? filters : {}),
+                ...(limit && { limit: parseInt(limit) })
+            };
+
+            const options = {
+                tenantIds,
+                allTenants: allTenants === 'true',
+                accessibleTenantIds: req.accessibleTenantIds || []
+            };
+
+            const slots = await SlotDisponibilitaService.getAvailable(queryFilters, tenantId, options);
+
+            res.json({
+                success: true,
+                data: slots,
+                total: slots.length,
+                count: slots.length
+            });
+        } catch (error) {
+            logger.error('Failed to list slots', {
+                component: 'slots-routes',
+                error: 'Operazione non riuscita',
+                tenantId: getEffectiveTenantId(req)
+            });
+
+            res.status(500).json({
+                success: false,
+                error: 'Errore nel recupero degli slot',
+            });
+        }
+    }
+);
+
+/**
  * @route GET /api/v1/clinica/slots/available
  * @desc Lista slot disponibili per prenotazione
  * @access Authenticated
  */
 router.get('/available',
-    authenticateToken(),
+    authenticateToken,
     clinicalValidators.slotDisponibilita.query,
     auditClinico('list_slots_available'),
     async (req, res) => {
@@ -68,14 +115,13 @@ router.get('/available',
         } catch (error) {
             logger.error('Failed to get available slots', {
                 component: 'slots-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero degli slot',
-                message: error.message
             });
         }
     }
@@ -87,7 +133,7 @@ router.get('/available',
  * @access Authenticated + VIEW_AGENDA
  */
 router.get('/grouped',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('agenda', 'read'),
     clinicalValidators.slotDisponibilita.query,
     auditClinico('list_slots_grouped'),
@@ -104,14 +150,13 @@ router.get('/grouped',
         } catch (error) {
             logger.error('Failed to get grouped slots', {
                 component: 'slots-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero degli slot',
-                message: error.message
             });
         }
     }
@@ -123,7 +168,7 @@ router.get('/grouped',
  * @access Authenticated
  */
 router.get('/first-available',
-    authenticateToken(),
+    authenticateToken,
     auditClinico('get_first_available_slot'),
     async (req, res) => {
         try {
@@ -150,14 +195,13 @@ router.get('/first-available',
         } catch (error) {
             logger.error('Failed to get first available slot', {
                 component: 'slots-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero dello slot',
-                message: error.message
             });
         }
     }
@@ -169,7 +213,7 @@ router.get('/first-available',
  * @access Authenticated + VIEW_AGENDA
  */
 router.get('/medico/:medicoId',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('agenda', 'read'),
     auditClinico('list_medico_slots'),
     async (req, res) => {
@@ -200,7 +244,7 @@ router.get('/medico/:medicoId',
         } catch (error) {
             logger.error('Failed to get medico slots', {
                 component: 'slots-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 medicoId: req.params.medicoId,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -208,7 +252,6 @@ router.get('/medico/:medicoId',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero degli slot',
-                message: error.message
             });
         }
     }
@@ -220,7 +263,7 @@ router.get('/medico/:medicoId',
  * @access Authenticated + VIEW_AGENDA
  */
 router.get('/medico/:medicoId/availability',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('agenda', 'read'),
     auditClinico('get_medico_availability'),
     async (req, res) => {
@@ -250,7 +293,7 @@ router.get('/medico/:medicoId/availability',
         } catch (error) {
             logger.error('Failed to calculate medico availability', {
                 component: 'slots-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 medicoId: req.params.medicoId,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -258,7 +301,6 @@ router.get('/medico/:medicoId/availability',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel calcolo della disponibilità',
-                message: error.message
             });
         }
     }
@@ -270,7 +312,7 @@ router.get('/medico/:medicoId/availability',
  * @access Authenticated
  */
 router.get('/:id',
-    authenticateToken(),
+    authenticateToken,
     clinicalValidators.params.id,
     auditClinico('get_slot'),
     async (req, res) => {
@@ -292,7 +334,7 @@ router.get('/:id',
         } catch (error) {
             logger.error('Failed to get slot', {
                 component: 'slots-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 slotId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -300,7 +342,6 @@ router.get('/:id',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero dello slot',
-                message: error.message
             });
         }
     }
@@ -312,7 +353,7 @@ router.get('/:id',
  * @access Authenticated + MANAGE_AGENDA
  */
 router.post('/',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('agenda', 'create'),
     clinicalValidators.slotDisponibilita.create,
     auditClinico('create_slot'),
@@ -329,7 +370,7 @@ router.post('/',
         } catch (error) {
             logger.error('Failed to create slot', {
                 component: 'slots-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
@@ -337,7 +378,6 @@ router.post('/',
             res.status(statusCode).json({
                 success: false,
                 error: 'Errore nella creazione dello slot',
-                message: error.message
             });
         }
     }
@@ -349,7 +389,7 @@ router.post('/',
  * @access Authenticated + MANAGE_AGENDA
  */
 router.post('/bulk',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('agenda', 'create'),
     auditClinico('create_slots_bulk'),
     async (req, res) => {
@@ -374,14 +414,13 @@ router.post('/bulk',
         } catch (error) {
             logger.error('Failed to create slots bulk', {
                 component: 'slots-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nella creazione degli slot',
-                message: error.message
             });
         }
     }
@@ -393,7 +432,7 @@ router.post('/bulk',
  * @access Authenticated + MANAGE_AGENDA
  */
 router.post('/generate',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('agenda', 'create'),
     clinicalValidators.slotDisponibilita.generate,
     auditClinico('generate_slots'),
@@ -419,14 +458,13 @@ router.post('/generate',
         } catch (error) {
             logger.error('Failed to generate slots', {
                 component: 'slots-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nella generazione degli slot',
-                message: error.message
             });
         }
     }
@@ -438,7 +476,7 @@ router.post('/generate',
  * @access Authenticated + MANAGE_AGENDA
  */
 router.put('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('agenda', 'update'),
     clinicalValidators.params.id,
     clinicalValidators.slotDisponibilita.update,
@@ -456,7 +494,7 @@ router.put('/:id',
         } catch (error) {
             logger.error('Failed to update slot', {
                 component: 'slots-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 slotId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -466,7 +504,6 @@ router.put('/:id',
             res.status(statusCode).json({
                 success: false,
                 error: 'Errore nell\'aggiornamento dello slot',
-                message: error.message
             });
         }
     }
@@ -478,7 +515,7 @@ router.put('/:id',
  * @access Authenticated
  */
 router.post('/:id/book',
-    authenticateToken(),
+    authenticateToken,
     clinicalValidators.params.id,
     clinicalValidators.slotDisponibilita.book,
     auditClinico('book_slot'),
@@ -495,7 +532,7 @@ router.post('/:id/book',
         } catch (error) {
             logger.error('Failed to book slot', {
                 component: 'slots-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 slotId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -505,7 +542,6 @@ router.post('/:id/book',
             res.status(statusCode).json({
                 success: false,
                 error: 'Errore nella prenotazione dello slot',
-                message: error.message
             });
         }
     }
@@ -517,7 +553,7 @@ router.post('/:id/book',
  * @access Authenticated + MANAGE_AGENDA
  */
 router.post('/:id/release',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('agenda', 'update'),
     clinicalValidators.params.id,
     auditClinico('release_slot'),
@@ -534,7 +570,7 @@ router.post('/:id/release',
         } catch (error) {
             logger.error('Failed to release slot', {
                 component: 'slots-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 slotId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -543,7 +579,6 @@ router.post('/:id/release',
             res.status(statusCode).json({
                 success: false,
                 error: 'Errore nella liberazione dello slot',
-                message: error.message
             });
         }
     }
@@ -555,7 +590,7 @@ router.post('/:id/release',
  * @access Authenticated + MANAGE_AGENDA
  */
 router.post('/:id/block',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('agenda', 'update'),
     clinicalValidators.params.id,
     clinicalValidators.slotDisponibilita.block,
@@ -573,7 +608,7 @@ router.post('/:id/block',
         } catch (error) {
             logger.error('Failed to block slot', {
                 component: 'slots-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 slotId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -583,7 +618,6 @@ router.post('/:id/block',
             res.status(statusCode).json({
                 success: false,
                 error: 'Errore nel blocco dello slot',
-                message: error.message
             });
         }
     }
@@ -595,7 +629,7 @@ router.post('/:id/block',
  * @access Authenticated + MANAGE_AGENDA
  */
 router.delete('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('agenda', 'delete'),
     clinicalValidators.params.id,
     auditClinico('delete_slot'),
@@ -611,7 +645,7 @@ router.delete('/:id',
         } catch (error) {
             logger.error('Failed to delete slot', {
                 component: 'slots-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 slotId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -621,7 +655,6 @@ router.delete('/:id',
             res.status(statusCode).json({
                 success: false,
                 error: 'Errore nell\'eliminazione dello slot',
-                message: error.message
             });
         }
     }
@@ -633,7 +666,7 @@ router.delete('/:id',
  * @access Authenticated + MANAGE_AGENDA
  */
 router.delete('/medico/:medicoId/range',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('agenda', 'delete'),
     auditClinico('delete_slots_range'),
     async (req, res) => {
@@ -665,7 +698,7 @@ router.delete('/medico/:medicoId/range',
         } catch (error) {
             logger.error('Failed to delete slots by range', {
                 component: 'slots-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 medicoId: req.params.medicoId,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -673,7 +706,6 @@ router.delete('/medico/:medicoId/range',
             res.status(500).json({
                 success: false,
                 error: 'Errore nell\'eliminazione degli slot',
-                message: error.message
             });
         }
     }

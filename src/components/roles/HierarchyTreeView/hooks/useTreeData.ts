@@ -29,7 +29,6 @@ export const useTreeData = ({ externalHierarchy }: UseTreeDataOptions): UseTreeD
   const buildTreeStructure = (hierarchyData: RoleHierarchyType): TreeNode[] => {
     // Controllo se hierarchyData è valido
     if (!hierarchyData || typeof hierarchyData !== 'object') {
-      console.warn('buildTreeStructure: hierarchyData is invalid:', hierarchyData);
       return [];
     }
 
@@ -128,8 +127,7 @@ export const useTreeData = ({ externalHierarchy }: UseTreeDataOptions): UseTreeD
       const tree = buildTreeStructure(hierarchyData);
       setTreeData(tree);
       
-    } catch (err: any) {
-      console.error('Error loading hierarchy data:', err);
+    } catch (err: unknown) {
       setError('Errore nel caricamento della gerarchia dei ruoli. Riprova più tardi.');
     } finally {
       setLoading(false);

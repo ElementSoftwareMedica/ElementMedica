@@ -1,13 +1,16 @@
 import express from 'express';
-import { body } from 'express-validator';
+import { body, validationResult } from 'express-validator';
 import personController from '../controllers/personController.js';
-import middleware from '../auth/middleware.js';
+import middleware from '../middleware/auth.js';
+import { auditLog } from '../middleware/audit.js';
 import logger from '../utils/logger.js';
 import { createUploadConfig } from '../config/multer.js';
 import { roleDataFilter, filterResponseFields } from '../middleware/role-data-filter.js';
+import prisma from '../config/prisma-optimization.js';
+import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 
 const router = express.Router();
-const { authenticate: authenticateToken, authorize: requirePermission, auditLog } = middleware;
+const { authenticate: authenticateToken, requirePermission } = middleware;
 
 // Validation middleware per la creazione/aggiornamento di persone
 const validatePerson = [
@@ -16,14 +19,24 @@ const validatePerson = [
   body('email').optional().isEmail().withMessage('Invalid email format'),
   body('phone').optional().isLength({ max: 20 }).withMessage('Phone number too long'),
   body('taxCode').optional().isLength({ max: 16 }).withMessage('Tax code too long'),
-  body('roleType').optional().isIn(['EMPLOYEE', 'TRAINER', 'ADMIN', 'COMPANY_ADMIN', 'MANAGER']).withMessage('Invalid role type')
+  body('roleType').optional().isIn([
+    'EMPLOYEE', 'MANAGER', 'HR_MANAGER', 'DEPARTMENT_HEAD',
+    'TRAINER', 'SENIOR_TRAINER', 'TRAINER_COORDINATOR', 'EXTERNAL_TRAINER',
+    'SUPER_ADMIN', 'ADMIN', 'COMPANY_ADMIN', 'TENANT_ADMIN',
+    'VIEWER', 'OPERATOR', 'COORDINATOR', 'SUPERVISOR',
+    'GUEST', 'CONSULTANT', 'AUDITOR', 'TRAINING_ADMIN',
+    'CLINIC_ADMIN', 'COMPANY_MANAGER',
+    'MEDICO', 'PAZIENTE', 'INFERMIERE', 'SEGRETERIA_CLINICA',
+    'MEDICO_COMPETENTE', 'RSPP', 'ASPP',
+    'TECNICO_SICUREZZA', 'CONSULENTE_SICUREZZA'
+  ]).withMessage('Invalid role type')
 ];
 
 // ===== NUOVE ROUTE UNIFICATE =====
 
 // GET /api/persons/employees - Ottieni tutti i dipendenti
 router.get('/employees',
-  authenticateToken(),
+  authenticateToken,
   requirePermission('employees:read'),
   roleDataFilter,
   filterResponseFields,
@@ -33,7 +46,7 @@ router.get('/employees',
 
 // GET /api/persons/trainers - Ottieni tutti i formatori
 router.get('/trainers',
-  authenticateToken(),
+  authenticateToken,
   requirePermission('trainers:read'),
   roleDataFilter,
   filterResponseFields,
@@ -43,7 +56,7 @@ router.get('/trainers',
 
 // GET /api/persons/users - Ottieni tutti gli utenti sistema
 router.get('/users',
-  authenticateToken(),
+  authenticateToken,
   requirePermission('users:read'),
   roleDataFilter,
   filterResponseFields,
@@ -53,7 +66,7 @@ router.get('/users',
 
 // GET /api/persons - Ottieni tutte le persone con filtri e paginazione
 router.get('/',
-  authenticateToken(),
+  authenticateToken,
   requirePermission('persons:read'),
   roleDataFilter,
   filterResponseFields,
@@ -63,7 +76,7 @@ router.get('/',
 
 // GET /api/persons/stats - Ottieni statistiche utenti
 router.get('/stats',
-  authenticateToken(),
+  authenticateToken,
   requirePermission('persons:read'),
   auditLog('VIEW_PERSON_STATS'),
   personController.getPersonStats
@@ -71,46 +84,46 @@ router.get('/stats',
 
 // GET /api/persons/check-username - Verifica disponibilità username
 router.get('/check-username',
-  authenticateToken(),
+  authenticateToken,
   personController.checkUsernameAvailability
 );
 
 // GET /api/persons/check-email - Verifica disponibilità email
 router.get('/check-email',
-  authenticateToken(),
+  authenticateToken,
   personController.checkEmailAvailability
 );
 
 // GET /api/persons/check-taxcode - Verifica disponibilità codice fiscale
 router.get('/check-taxcode',
-  authenticateToken(),
+  authenticateToken,
   personController.checkTaxCodeAvailability
 );
 
 // GET /api/persons/preferences - Ottieni preferenze utente
 router.get('/preferences',
-  authenticateToken(),
+  authenticateToken,
   auditLog('VIEW_PREFERENCES'),
   personController.getPreferences
 );
 
 // PUT /api/persons/preferences - Aggiorna preferenze utente
 router.put('/preferences',
-  authenticateToken(),
+  authenticateToken,
   auditLog('UPDATE_PREFERENCES'),
   personController.updatePreferences
 );
 
 // POST /api/persons/preferences/reset - Reset preferenze utente ai valori predefiniti
 router.post('/preferences/reset',
-  authenticateToken(),
+  authenticateToken,
   auditLog('RESET_PREFERENCES'),
   personController.resetPreferences
 );
 
 // GET /api/persons/export - Esporta persone in CSV
 router.get('/export',
-  authenticateToken(),
+  authenticateToken,
   requirePermission('persons:export'),
   auditLog('EXPORT_PERSONS'),
   personController.exportPersons
@@ -118,7 +131,7 @@ router.get('/export',
 
 // GET /api/persons/:id/fields-visibility - Visibilità campi per view e ruolo
 router.get('/:id/fields-visibility',
-  authenticateToken(),
+  authenticateToken,
   requirePermission('persons:read'),
   auditLog('VIEW_PERSON_FIELDS_VISIBILITY'),
   personController.getPersonFieldsVisibility
@@ -126,14 +139,14 @@ router.get('/:id/fields-visibility',
 
 // GET /api/persons/:id - Ottieni persona per ID
 router.get('/:id',
-  authenticateToken(),
+  authenticateToken,
   auditLog('VIEW_PERSON'),
   personController.getPersonById
 );
 
 // POST /api/persons - Crea nuova persona
 router.post('/',
-  authenticateToken(),
+  authenticateToken,
   requirePermission('persons:create'),
   validatePerson,
   auditLog('CREATE_PERSON'),
@@ -142,7 +155,7 @@ router.post('/',
 
 // PUT /api/persons/:id - Aggiorna persona
 router.put('/:id',
-  authenticateToken(),
+  authenticateToken,
   requirePermission('persons:update'),
   validatePerson,
   auditLog('UPDATE_PERSON'),
@@ -151,7 +164,7 @@ router.put('/:id',
 
 // DELETE /api/persons/:id - Elimina persona (soft delete)
 router.delete('/:id',
-  authenticateToken(),
+  authenticateToken,
   requirePermission('persons:delete'),
   auditLog('DELETE_PERSON'),
   personController.deletePerson
@@ -159,16 +172,25 @@ router.delete('/:id',
 
 // POST /api/persons/:id/roles - Aggiungi ruolo a persona
 router.post('/:id/roles',
-  authenticateToken(),
+  authenticateToken,
   requirePermission('roles:manage'),
-  body('roleType').isIn(['EMPLOYEE', 'TRAINER', 'ADMIN', 'COMPANY_ADMIN', 'MANAGER']).withMessage('Invalid role type'),
+  body('roleType').isIn([
+    'EMPLOYEE', 'MANAGER', 'HR_MANAGER', 'DEPARTMENT_HEAD',
+    'TRAINER', 'SENIOR_TRAINER', 'TRAINER_COORDINATOR', 'EXTERNAL_TRAINER',
+    'SUPER_ADMIN', 'ADMIN', 'COMPANY_ADMIN', 'TENANT_ADMIN',
+    'VIEWER', 'OPERATOR', 'COORDINATOR', 'SUPERVISOR',
+    'GUEST', 'CONSULTANT', 'AUDITOR', 'TRAINING_ADMIN',
+    'CLINIC_ADMIN', 'COMPANY_MANAGER', 'MEDICO', 'PAZIENTE',
+    'INFERMIERE', 'SEGRETERIA_CLINICA', 'MEDICO_COMPETENTE',
+    'RSPP', 'ASPP', 'TECNICO_SICUREZZA', 'CONSULENTE_SICUREZZA'
+  ]).withMessage('Invalid role type'),
   auditLog('ADD_PERSON_ROLE'),
   personController.addRole
 );
 
 // DELETE /api/persons/:id/roles/:roleType - Rimuovi ruolo da persona
 router.delete('/:id/roles/:roleType',
-  authenticateToken(),
+  authenticateToken,
   requirePermission('roles:manage'),
   auditLog('REMOVE_PERSON_ROLE'),
   personController.removeRole
@@ -176,16 +198,23 @@ router.delete('/:id/roles/:roleType',
 
 // PUT /api/persons/:id/status - Attiva/disattiva persona
 router.put('/:id/status',
-  authenticateToken(),
+  authenticateToken,
   requirePermission('persons:update'),
   body('isActive').isBoolean().withMessage('isActive must be a boolean'),
   auditLog('UPDATE_PERSON_STATUS'),
   personController.togglePersonStatus
 );
 
+// PATCH /api/persons/:id/contact - Aggiorna email/phone su PersonTenantProfile
+router.patch('/:id/contact',
+  authenticateToken,
+  requirePermission('persons:update'),
+  personController.updateContact
+);
+
 // POST /api/persons/:id/reset-password - Reset password persona
 router.post('/:id/reset-password',
-  authenticateToken(),
+  authenticateToken,
   requirePermission('persons:update'),
   auditLog('RESET_PERSON_PASSWORD'),
   personController.resetPersonPassword
@@ -202,7 +231,7 @@ const applyCsvMulterIfMultipart = (req, res, next) => {
   return next();
 };
 router.post('/import',
-  authenticateToken(),
+  authenticateToken,
   requirePermission('persons:create'),
   applyCsvMulterIfMultipart,
   auditLog('IMPORT_PERSONS'),
@@ -213,7 +242,7 @@ router.post('/import',
 
 // GET /api/persons/me/privacy-settings - Ottieni privacy settings utente corrente
 router.get('/me/privacy-settings',
-  authenticateToken(),
+  authenticateToken,
   auditLog('VIEW_PRIVACY_SETTINGS'),
   async (req, res) => {
     try {
@@ -252,12 +281,12 @@ router.get('/me/privacy-settings',
       });
     } catch (error) {
       logger.error('Failed to get privacy settings', {
-        error: error.message,
+        error: 'Operazione non riuscita',
         personId: req.person?.personId || req.person?.id
       });
       res.status(500).json({
         success: false,
-        error: 'Failed to get privacy settings'
+        error: 'Errore nel recupero'
       });
     }
   }
@@ -265,7 +294,7 @@ router.get('/me/privacy-settings',
 
 // PUT /api/persons/me/privacy-settings - Aggiorna privacy settings utente corrente
 router.put('/me/privacy-settings',
-  authenticateToken(),
+  authenticateToken,
   auditLog('UPDATE_PRIVACY_SETTINGS'),
   async (req, res) => {
     try {
@@ -292,12 +321,12 @@ router.put('/me/privacy-settings',
       });
     } catch (error) {
       logger.error('Failed to update privacy settings', {
-        error: error.message,
+        error: 'Operazione non riuscita',
         personId: req.person?.personId || req.person?.id
       });
       res.status(500).json({
         success: false,
-        error: 'Failed to update privacy settings'
+        error: 'Errore nell\'aggiornamento'
       });
     }
   }
@@ -305,7 +334,7 @@ router.put('/me/privacy-settings',
 
 // DELETE /api/persons/bulk - Elimina più persone
 router.delete('/bulk',
-  authenticateToken(),
+  authenticateToken,
   requirePermission('persons:delete'),
   body('personIds').isArray({ min: 1 }).withMessage('personIds must be a non-empty array'),
   auditLog('DELETE_MULTIPLE_PERSONS'),
@@ -324,5 +353,81 @@ const logBackwardCompatibility = (entityType) => (req, res, next) => {
   });
   next();
 };
+
+// ===== BILLING SETTINGS (disagioPsicologico su PersonTenantProfile) =====
+
+/**
+ * @route GET /api/v1/persons/:id/billing-settings
+ * @desc Legge le impostazioni di fatturazione del paziente (disagioPsicologico)
+ * @access Authenticated
+ */
+router.get('/:id/billing-settings',
+  authenticateToken,
+  requirePermission('persons:read'),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const tenantId = getEffectiveTenantId(req);
+
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+        return res.status(400).json({ success: false, error: 'ID non valido' });
+      }
+
+      const profile = await prisma.personTenantProfile.findFirst({
+        where: { personId: id, tenantId, deletedAt: null },
+        select: { disagioPsicologico: true }
+      });
+
+      if (!profile) {
+        return res.status(404).json({ success: false, error: 'Profilo non trovato' });
+      }
+
+      res.json({ success: true, data: { disagioPsicologico: profile.disagioPsicologico } });
+    } catch (error) {
+      logger.error({ error: error.message, personId: req.params.id }, 'Errore lettura billing-settings');
+      res.status(500).json({ success: false, error: 'Errore nel recupero delle impostazioni' });
+    }
+  }
+);
+
+/**
+ * @route PATCH /api/v1/persons/:id/billing-settings
+ * @desc Aggiorna le impostazioni di fatturazione del paziente
+ * @access Authenticated
+ */
+router.patch('/:id/billing-settings',
+  authenticateToken,
+  requirePermission('persons:update'),
+  body('disagioPsicologico').isBoolean().withMessage('disagioPsicologico deve essere booleano'),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const tenantId = getEffectiveTenantId(req);
+      const { disagioPsicologico } = req.body;
+
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+        return res.status(400).json({ success: false, error: 'ID non valido' });
+      }
+
+      const profile = await prisma.personTenantProfile.findFirst({
+        where: { personId: id, tenantId, deletedAt: null }
+      });
+
+      if (!profile) {
+        return res.status(404).json({ success: false, error: 'Profilo non trovato' });
+      }
+
+      await prisma.personTenantProfile.update({
+        where: { id: profile.id },
+        data: { disagioPsicologico: !!disagioPsicologico }
+      });
+
+      res.json({ success: true, data: { disagioPsicologico: !!disagioPsicologico } });
+    } catch (error) {
+      logger.error({ error: error.message, personId: req.params.id }, 'Errore aggiornamento billing-settings');
+      res.status(500).json({ success: false, error: 'Errore nel salvataggio delle impostazioni' });
+    }
+  }
+);
 
 export default router;

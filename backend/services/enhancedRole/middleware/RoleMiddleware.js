@@ -25,21 +25,20 @@ export function requirePermission(requiredPermissions, options = {}) {
       if (!userId) {
         logger.warn('[ROLE_MIDDLEWARE] Missing user ID in request');
         return res.status(401).json({
-          error: 'Authentication required',
+          error: 'Autenticazione obbligatoria',
           code: 'AUTH_REQUIRED'
         });
       }
 
-      // OTTIMIZZAZIONE: Bypass per utenti ADMIN/SUPER_ADMIN per evitare timeout
+      // P48: OTTIMIZZAZIONE: Bypass per utenti ADMIN/SUPER_ADMIN per evitare timeout
+      // globalRole è deprecato, usare roles da middleware auth
       const userRoles = req.person?.roles || [];
-      const globalRole = req.person?.globalRole;
-      const isAdmin = userRoles.includes('ADMIN') || userRoles.includes('SUPER_ADMIN') || globalRole === 'ADMIN' || globalRole === 'SUPER_ADMIN';
+      const isAdmin = userRoles.includes('ADMIN') || userRoles.includes('SUPER_ADMIN');
 
       if (isAdmin) {
         logger.info('[ROLE_MIDDLEWARE] Admin user bypassing permission check', {
           userId,
           roles: userRoles,
-          globalRole,
           requiredPermissions
         });
 
@@ -62,7 +61,7 @@ export function requirePermission(requiredPermissions, options = {}) {
       if (!tenantId) {
         logger.warn('[ROLE_MIDDLEWARE] Missing tenant ID in request');
         return res.status(400).json({
-          error: 'Tenant context required',
+          error: 'Contesto tenant obbligatorio',
           code: 'TENANT_REQUIRED'
         });
       }
@@ -98,7 +97,7 @@ export function requirePermission(requiredPermissions, options = {}) {
         });
 
         return res.status(403).json({
-          error: 'Insufficient permissions',
+          error: 'Permessi insufficienti',
           code: 'PERMISSION_DENIED',
           required: permissions
         });
@@ -115,7 +114,7 @@ export function requirePermission(requiredPermissions, options = {}) {
     } catch (error) {
       logger.error('[ROLE_MIDDLEWARE] Error checking permissions:', error);
       res.status(500).json({
-        error: 'Internal server error during permission check',
+        error: 'Errore interno del server durante la verifica dei permessi',
         code: 'PERMISSION_CHECK_ERROR'
       });
     }
@@ -137,7 +136,7 @@ export function requireRole(requiredRoles, options = {}) {
 
       if (!userId) {
         return res.status(401).json({
-          error: 'Authentication required',
+          error: 'Autenticazione obbligatoria',
           code: 'AUTH_REQUIRED'
         });
       }
@@ -165,7 +164,7 @@ export function requireRole(requiredRoles, options = {}) {
         });
 
         return res.status(403).json({
-          error: 'Insufficient role privileges',
+          error: 'Privilegi di ruolo insufficienti',
           code: 'ROLE_DENIED',
           required: roles
         });
@@ -179,7 +178,7 @@ export function requireRole(requiredRoles, options = {}) {
     } catch (error) {
       logger.error('[ROLE_MIDDLEWARE] Error checking roles:', error);
       res.status(500).json({
-        error: 'Internal server error during role check',
+        error: 'Errore interno del server durante la verifica del ruolo',
         code: 'ROLE_CHECK_ERROR'
       });
     }
@@ -215,14 +214,14 @@ export function requireCompanyAccess(getCompanyId) {
 
       if (!userId || !tenantId) {
         return res.status(401).json({
-          error: 'Authentication required',
+          error: 'Autenticazione obbligatoria',
           code: 'AUTH_REQUIRED'
         });
       }
 
       if (!companyId) {
         return res.status(400).json({
-          error: 'Company ID required',
+          error: 'ID azienda obbligatorio',
           code: 'COMPANY_ID_REQUIRED'
         });
       }
@@ -249,7 +248,7 @@ export function requireCompanyAccess(getCompanyId) {
         });
 
         return res.status(403).json({
-          error: 'Access denied to this company',
+          error: 'Accesso negato a questa azienda',
           code: 'COMPANY_ACCESS_DENIED'
         });
       }
@@ -264,7 +263,7 @@ export function requireCompanyAccess(getCompanyId) {
     } catch (error) {
       logger.error('[ROLE_MIDDLEWARE] Error checking company access:', error);
       res.status(500).json({
-        error: 'Internal server error during company access check',
+        error: 'Errore interno del server durante la verifica dell\'accesso aziendale',
         code: 'COMPANY_ACCESS_CHECK_ERROR'
       });
     }
@@ -322,7 +321,7 @@ export function requireAccess(requirements = {}) {
     } catch (error) {
       logger.error('[ROLE_MIDDLEWARE] Error in combined access check:', error);
       res.status(500).json({
-        error: 'Internal server error during access check',
+        error: 'Errore interno del server durante la verifica dell\'accesso',
         code: 'ACCESS_CHECK_ERROR'
       });
     }

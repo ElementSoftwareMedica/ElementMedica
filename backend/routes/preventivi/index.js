@@ -20,6 +20,7 @@ import workflowRoutes from './workflow.routes.js';
 import scontiRoutes from './sconti.routes.js';
 import pdfRoutes from './pdf.routes.js';
 import mergeRoutes from './merge.routes.js';
+import mdlRoutes from './mdl.routes.js';
 
 const router = express.Router();
 
@@ -43,6 +44,9 @@ router.use('/', scontiRoutes);
 
 // PDF routes - GET /:id/pdf
 router.use('/', pdfRoutes);
+
+// MDL routes - Generazione preventivi Medicina del Lavoro
+router.use('/mdl', mdlRoutes);
 
 // CRUD routes - GET /, POST /, GET /:id, PUT /:id, DELETE /:id
 // MUST be last to prevent /:id from matching specific routes

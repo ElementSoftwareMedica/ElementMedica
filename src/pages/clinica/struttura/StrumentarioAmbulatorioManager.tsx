@@ -24,6 +24,7 @@ import { strumentiApi } from '../../../services/clinicaApi';
 import type { Strumento, StrumentoAmbulatorio } from '../../../services/clinicaApi';
 import { apiPost, apiDelete } from '../../../services/api';
 import { useToast } from '../../../hooks/useToast';
+import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
 
 // Import Element Medica theme
 import '../../../styles/clinica-theme.css';
@@ -49,6 +50,7 @@ const StrumentarioAmbulatorioManager: React.FC<StrumentarioAmbulatorioManagerPro
 }) => {
     const queryClient = useQueryClient();
     const { showToast } = useToast();
+    const { confirm: confirmDialog } = useConfirmDialog();
 
     // State
     const [searchTerm, setSearchTerm] = useState('');
@@ -124,8 +126,8 @@ const StrumentarioAmbulatorioManager: React.FC<StrumentarioAmbulatorioManagerPro
         assignMutation.mutate(strumentoId);
     };
 
-    const handleRemove = (strumentoId: string) => {
-        if (confirm('Rimuovere lo strumento da questo ambulatorio?')) {
+    const handleRemove = async (strumentoId: string) => {
+        if (await confirmDialog({ title: 'Rimuovi strumento', message: 'Rimuovere lo strumento da questo ambulatorio?', variant: 'warning', confirmLabel: 'Rimuovi' })) {
             removeMutation.mutate(strumentoId);
         }
     };

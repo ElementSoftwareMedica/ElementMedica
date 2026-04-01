@@ -42,7 +42,6 @@ export const useRoleOperations = ({ onDataChange }: UseRoleOperationsProps) => {
   const handleEditRole = (roleType: string, hierarchy: any) => {
     if (!hierarchy || !hierarchy[roleType]) {
       // Toast handled by calling component - throw error instead
-      console.error('Ruolo non trovato nella gerarchia.');
       return;
     }
     const roleData = hierarchy[roleType];
@@ -56,7 +55,6 @@ export const useRoleOperations = ({ onDataChange }: UseRoleOperationsProps) => {
   const handleDeleteRole = (roleType: string, hierarchy: any) => {
     if (!hierarchy || !hierarchy[roleType]) {
       // Toast handled by calling component - throw error instead
-      console.error('Ruolo non trovato nella gerarchia.');
       return;
     }
     const roleData = hierarchy[roleType];
@@ -70,7 +68,6 @@ export const useRoleOperations = ({ onDataChange }: UseRoleOperationsProps) => {
   const handleMoveRole = (roleType: string, hierarchy: any) => {
     if (!hierarchy || !hierarchy[roleType]) {
       // Toast handled by calling component - throw error instead
-      console.error('Ruolo non trovato nella gerarchia.');
       return;
     }
     const roleData = hierarchy[roleType];
@@ -87,7 +84,6 @@ export const useRoleOperations = ({ onDataChange }: UseRoleOperationsProps) => {
       let permissions: string[] = [];
       let fullPermissions: FullPermission[] = [];
       
-      console.log('🔧 Original permissions from modal:', roleData.permissions);
       
       if (roleData.permissions) {
         if (Array.isArray(roleData.permissions)) {
@@ -132,13 +128,9 @@ export const useRoleOperations = ({ onDataChange }: UseRoleOperationsProps) => {
         }
       }
 
-      console.log('🔧 Processed permissions:', permissions);
-      console.log('🔧 Permissions count:', permissions.length);
-      console.log('🔧 Full permissions:', fullPermissions);
 
       if (editingRole) {
         // Aggiorna ruolo esistente
-        console.log('🔧 Updating role with data:', { ...roleData, permissions });
         
         // Per i ruoli personalizzati, aggiorna sia i dati base che i permessi
         if (editingRole.roleType.startsWith('CUSTOM_')) {
@@ -170,7 +162,6 @@ export const useRoleOperations = ({ onDataChange }: UseRoleOperationsProps) => {
             fieldRestrictions: []
           }));
           
-          console.log('🔧 Formatted permissions for backend:', systemRolePermissions);
           
           // Usa updateSystemRolePermissions che chiama l'endpoint /permissions
           await updateSystemRolePermissions(editingRole.roleType, systemRolePermissions);
@@ -187,7 +178,6 @@ export const useRoleOperations = ({ onDataChange }: UseRoleOperationsProps) => {
           permissions: permissions
         };
         
-        console.log('🔧 Creating role with data:', customRoleData);
         await createRole(customRoleData);
         // Toast handled by calling component
       }
@@ -197,7 +187,6 @@ export const useRoleOperations = ({ onDataChange }: UseRoleOperationsProps) => {
       setIsRoleModalOpen(false);
       setEditingRole(null);
     } catch (error: unknown) {
-      console.error('❌ Error in handleRoleSubmit:', error);
       // Toast handled by calling component
       throw error;
     }

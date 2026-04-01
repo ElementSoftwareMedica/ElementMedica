@@ -20,6 +20,8 @@ import {
     Building,
     Loader2
 } from 'lucide-react';
+import { getCurrentBrand } from '@/config/brands.config';
+import SEOHead from '../../components/seo/SEOHead';
 
 interface AttestationData {
     isValid: boolean;
@@ -70,6 +72,7 @@ const VerifyAttestato: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [data, setData] = useState<AttestationData | null>(null);
+    const brand = getCurrentBrand();
 
     useEffect(() => {
         const verifyAttestation = async () => {
@@ -85,7 +88,7 @@ const VerifyAttestato: React.FC = () => {
 
                 // Chiamata API pubblica per verifica - usa path relativo che viene gestito da Nginx proxy
                 const response = await fetch(
-                    `/api/v1/public/verify-attestato/${encodeURIComponent(decodedNumber)}`
+                    `/api/public/verify-attestato/${encodeURIComponent(decodedNumber)}`
                 );
 
                 if (!response.ok) {
@@ -106,7 +109,6 @@ const VerifyAttestato: React.FC = () => {
                     setError(result.error || 'Attestato non valido');
                 }
             } catch (err) {
-                console.error('Verification error:', err);
                 setError('Impossibile verificare l\'attestato. Riprova più tardi.');
             } finally {
                 setLoading(false);
@@ -119,9 +121,9 @@ const VerifyAttestato: React.FC = () => {
     // Loading state
     if (loading) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+            <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundImage: 'linear-gradient(to bottom right, var(--color-accent-50), var(--color-accent-100))' }}>
                 <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
-                    <Loader2 className="w-16 h-16 text-blue-500 animate-spin mx-auto mb-4" />
+                    <Loader2 className="w-16 h-16 text-primary-500 animate-spin mx-auto mb-4" />
                     <h2 className="text-xl font-semibold text-gray-700">Verifica in corso...</h2>
                     <p className="text-gray-500 mt-2">Stiamo controllando la validità dell'attestato</p>
                 </div>
@@ -149,10 +151,10 @@ const VerifyAttestato: React.FC = () => {
                         <div className="text-sm text-gray-500">
                             <p>Se ritieni che questo sia un errore, contatta:</p>
                             <a
-                                href="mailto:info@elementmedica.it"
-                                className="text-blue-600 hover:underline"
+                                href={`mailto:${brand.contacts.email}`}
+                                className="text-primary-600 hover:underline"
                             >
-                                info@elementmedica.it
+                                {brand.contacts.email}
                             </a>
                         </div>
                     </div>
@@ -184,13 +186,19 @@ const VerifyAttestato: React.FC = () => {
 
     return (
         <div className={`min-h-screen flex items-center justify-center p-4 ${isValid && !validity.isExpired
-            ? 'bg-gradient-to-br from-green-50 to-emerald-100'
+            ? 'bg-gradient-to-br from-green-50 to-primary-100'
             : 'bg-gradient-to-br from-yellow-50 to-orange-100'
             }`}>
+            <SEOHead
+                title="Verifica Attestato | Element Sicurezza"
+                description="Verifica la validità di un attestato di formazione sulla sicurezza sul lavoro."
+                noindex={true}
+                nofollow={true}
+            />
             <div className="bg-white rounded-2xl shadow-xl overflow-hidden max-w-lg w-full">
                 {/* Header con stato */}
                 <div className={`p-6 text-center ${isValid && !validity.isExpired
-                    ? 'bg-gradient-to-r from-green-500 to-emerald-600'
+                    ? 'bg-gradient-to-r from-green-500 to-primary-600'
                     : 'bg-gradient-to-r from-yellow-500 to-orange-500'
                     }`}>
                     <div className="mx-auto w-20 h-20 rounded-full bg-white/20 backdrop-blur flex items-center justify-center mb-4">
@@ -221,8 +229,8 @@ const VerifyAttestato: React.FC = () => {
 
                     {/* Info partecipante */}
                     <div className="flex items-start gap-4">
-                        <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                            <User className="w-6 h-6 text-blue-600" />
+                        <div className="w-12 h-12 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
+                            <User className="w-6 h-6 text-primary-600" />
                         </div>
                         <div>
                             <p className="text-sm text-gray-500">Partecipante</p>
@@ -234,8 +242,8 @@ const VerifyAttestato: React.FC = () => {
 
                     {/* Info corso */}
                     <div className="flex items-start gap-4">
-                        <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
-                            <BookOpen className="w-6 h-6 text-purple-600" />
+                        <div className="w-12 h-12 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
+                            <BookOpen className="w-6 h-6 text-primary-600" />
                         </div>
                         <div className="flex-1">
                             <p className="text-sm text-gray-500">Corso</p>
@@ -247,7 +255,7 @@ const VerifyAttestato: React.FC = () => {
                                     Rischio {riskConfig.label}
                                 </span>
                                 {/* Course Type Badge */}
-                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-primary-100 text-primary-700">
                                     <TypeIcon className="w-3 h-3" />
                                     {typeConfig.label}
                                 </span>
@@ -307,7 +315,7 @@ const VerifyAttestato: React.FC = () => {
                         Verifica effettuata il {formatDate(new Date().toISOString())} alle {formatTime(new Date().toISOString())}
                     </p>
                     <p className="text-xs text-gray-400 mt-1">
-                        Powered by <span className="font-semibold">ElementMedica</span>
+                        Powered by <span className="font-semibold">{brand.displayName}</span>
                     </p>
                 </div>
             </div>

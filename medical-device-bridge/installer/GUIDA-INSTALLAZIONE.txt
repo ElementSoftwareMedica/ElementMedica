@@ -1,0 +1,467 @@
+╔══════════════════════════════════════════════════════════════════════════╗
+║        ElementMedica - Medical Device Bridge                            ║
+║          Guida all'Installazione e Configurazione                       ║
+║                      Versione 1.0                                       ║
+╚══════════════════════════════════════════════════════════════════════════╝
+
+
+══════════════════════════════════════════════════════════════════════════
+  INDICE
+══════════════════════════════════════════════════════════════════════════
+
+  1. Panoramica del sistema
+  2. Requisiti di sistema
+  3. Installazione rapida
+  4. Configurazione Edan ECG (Elettrocardiografo)
+  5. Configurazione MIR WinSpiro (Spirometro)
+  6. Configurazione Oscilla (Audiometro)
+  7. Verifica connessione dalla webapp
+  8. Risoluzione problemi
+  9. Supporto tecnico
+
+
+══════════════════════════════════════════════════════════════════════════
+  1. PANORAMICA DEL SISTEMA
+══════════════════════════════════════════════════════════════════════════
+
+Il Medical Device Bridge è un programma che si installa sul PC del
+medico e collega automaticamente i dispositivi medici alla webapp
+ElementMedica.
+
+Come funziona:
+
+  Webapp (browser) ←→ Bridge (questo programma) ←→ Dispositivo medico
+
+  1. Il medico clicca "Avvia ECG" (o Spirometria/Audiometria) nella
+     scheda visita della webapp
+  2. Il Bridge avvia automaticamente il software del dispositivo con
+     i dati del paziente già compilati
+  3. Il medico esegue l'esame
+  4. I risultati e il PDF del referto vengono importati automaticamente
+     nella webapp
+
+Il Bridge comunica con i dispositivi tramite il protocollo standard
+GDT 2.1 (file di testo in cartelle condivise).
+
+
+══════════════════════════════════════════════════════════════════════════
+  2. REQUISITI DI SISTEMA
+══════════════════════════════════════════════════════════════════════════
+
+  • Windows 10/11 (64 bit)
+  • Connessione internet (per comunicare con la webapp)
+  • Software dei dispositivi medici già installati:
+    - Edan PCECG / ECGViewer (per ECG)
+    - MIR WinSpiro PRO (per spirometria)
+    - Oscilla AudioConsole (per audiometria)
+  • Porta 3000 libera (configurabile)
+  • 100 MB di spazio su disco
+
+  NOTA: Non è necessario installare Node.js. L'eseguibile del Bridge
+  è già compilato e include tutto il necessario.
+
+
+══════════════════════════════════════════════════════════════════════════
+  3. INSTALLAZIONE RAPIDA
+══════════════════════════════════════════════════════════════════════════
+
+  PASSO 1: Scaricare il pacchetto
+  ─────────────────────────────────────────
+  Dalla webapp ElementMedica, andare su:
+  Impostazioni → Medical Device Bridge → Scarica per Windows
+
+  PASSO 2: Estrarre il file ZIP
+  ─────────────────────────────────────────
+  Fare clic destro sul file scaricato → "Estrai tutto..."
+  Scegliere una cartella qualsiasi (es. Desktop)
+
+  NOTA: Se Windows segnala il file come "non sicuro" o "bloccato":
+  - Fare clic destro sul file ZIP → Proprietà
+  - In basso, spuntare la casella "Sblocca" → OK
+  - Poi estrarre normalmente
+
+  PASSO 3: Eseguire l'installazione
+  ─────────────────────────────────────────
+  Aprire la cartella estratta e fare doppio clic su:
+  
+    install.bat
+
+  Se Windows mostra un avviso "PC protetto da Windows":
+  - Cliccare "Ulteriori informazioni"
+  - Poi "Esegui comunque"
+
+  Seguire le istruzioni a schermo.
+  Il Bridge si avviera' e aprira' una pagina nel browser per
+  l'attivazione guidata. Sara' sufficiente inserire il codice di
+  attivazione (formato: ELEM-XXXX-XXXX-XXXX) fornito
+  dall'amministratore del sistema.
+
+  Il codice si ottiene dalla webapp:
+  Impostazioni -> Medical Device Bridge -> Licenze -> Nuova licenza
+
+  Dopo l'attivazione, il Bridge si configurera' automaticamente.
+  Non e' necessario configurare alcun file manualmente.
+  Nella schermata dispositivi, compilare anche "Cartella PDF Referti"
+  se il software salva i PDF in una cartella diversa dal GDT Output.
+
+  PASSO 4: Verificare la connessione
+  ─────────────────────────────────────────
+  Aprire la webapp e andare su:
+  Impostazioni → Medical Device Bridge → Esegui Diagnostica
+  
+  Tutti i test devono risultare verdi ✓
+
+
+══════════════════════════════════════════════════════════════════════════
+  4. CONFIGURAZIONE EDAN ECG (Elettrocardiografo)
+══════════════════════════════════════════════════════════════════════════
+
+  Dispositivo:  Edan SE-1515 (o compatibile)
+  Software:     Edan PCECG oppure Edan ECGViewer
+  Protocollo:   GDT 2.1
+  Output:       File GDT + PDF del tracciato
+
+  PASSO A: Installare il software Edan
+  ─────────────────────────────────────────
+  1. Inserire il CD/USB del software Edan oppure scaricarlo dal sito
+     del produttore
+  2. Eseguire il programma di installazione
+  3. Percorso tipico: C:\Program Files\EDAN\ECGViewer.exe
+     (annotare il percorso esatto)
+
+  PASSO B: Configurare le cartelle GDT nel software Edan
+  ─────────────────────────────────────────
+  1. Aprire il software Edan (PCECG o ECGViewer)
+    2. Andare su: Impostazioni → GDT / PVS Interface
+      (la posizione esatta varia in base alla versione)
+    3. Se sul PC esiste gia' la cartella:
+
+       C:\SE-1515\GDTFolder001
+
+      ed al suo interno vedi file tipo 6300, 6301, 6310, 6311,
+      significa che l'interfaccia GDT del software Edan e' attiva.
+      In questo caso NON cambiare cartella: usa quella esistente.
+    4. Configurare:
+  
+     ┌────────────────────────────────────────────────────────┐
+     │  Cartella Import (Input):   C:\SE-1515\GDTFolder001    │
+     │  Cartella Export (Output):  C:\SE-1515\GDTFolder001    │
+     │  GDT ID:                   EDAN_ECG                   │
+     │  Formato file:             GDT 2.1                    │
+     │  Codifica:                 ISO-8859-1 (Latin-1)       │
+     │  Esporta PDF:              Sì / Abilitato             │
+     └────────────────────────────────────────────────────────┘
+
+  5. IMPORTANTE: Nelle impostazioni di esportazione, abilitare:
+     - "Esporta risultati in formato GDT" → SÌ
+     - "Esporta PDF automaticamente" → SÌ
+     - "Sovrascrivi file esistenti" → SÌ
+
+  6. Salvare le impostazioni
+
+  PASSO C: Verificare le cartelle
+  ─────────────────────────────────────────
+  Se usi la cartella nativa Edan, assicurarsi che esista:
+    C:\SE-1515\GDTFolder001
+
+  Nota pratica: alcuni software Edan usano una cartella unica per
+  input/output. E' normale.
+
+  Se invece usi cartelle personalizzate, assicurarsi che esistano:
+    C:\GDT\EDAN\Input   (il Bridge scriverà qui le richieste)
+    C:\GDT\EDAN\Output  (il software Edan scriverà qui i risultati)
+
+  Se non esistono, crearle manualmente oppure saranno create
+  automaticamente dallo script di installazione.
+
+  PASSO D: Test rapido
+  ─────────────────────────────────────────
+  1. Dalla webapp, aprire una visita esistente
+  2. Nella sezione "Esami Strumentali", cliccare "ECG"
+  3. Il software Edan dovrebbe aprirsi automaticamente
+  4. Eseguire l'esame (o simulare chiudendo il software)
+  5. I risultati dovrebbero apparire nella webapp entro 30 secondi
+
+
+══════════════════════════════════════════════════════════════════════════
+  5. CONFIGURAZIONE MIR WINSPIRO (Spirometro)
+══════════════════════════════════════════════════════════════════════════
+
+  Dispositivo:  MIR MiniSpir (o compatibile MIR)
+  Software:     WinSpiro PRO
+  Protocollo:   GDT 2.1
+  Output:       File GDT + PDF del referto spirometrico
+
+  PASSO A: Installare WinSpiro PRO
+  ─────────────────────────────────────────
+  1. Scaricare WinSpiro PRO dal sito MIR o dal CD fornito
+  2. Eseguire l'installazione guidata
+  3. Percorso tipico: C:\Program Files\MIR\WinspiroPRO\Winspiro.exe
+     (annotare il percorso esatto)
+
+  PASSO B: Configurare GDT in WinSpiro PRO
+  ─────────────────────────────────────────
+    1. Aprire WinSpiro PRO
+    2. Andare su: Strumenti → Opzioni → Interfaccia GDT
+      (oppure Configurazione → GDT)
+    3. Se NON trovi la voce GDT:
+      - Cerca nei menu: Impostazioni, Integrazioni, PVS, EMR, HIS
+      - Cerca voci simili: "Import/Export", "Interfaccia esterna",
+       "Comunicazione", "Third-party"
+      - In alcune installazioni MIR la voce compare solo con profilo
+       amministratore Windows
+    4. Se ancora non compare, procedere cosi':
+      - Nel Bridge attivare comunque MIR e impostare i percorsi GDT
+      - Eseguire un test da webapp (Avvia Spirometria)
+      - Se WinSpiro si apre ma non importa/esporta dati, contattare
+       il fornitore MIR per abilitare il modulo GDT sulla licenza
+      5. Se nella tua versione trovi SOLO impostazioni EHR/HL7,
+        con opzioni:
+         - HL7 via WebSocket
+         - HL7 via File System
+         - HL7 via WebService
+        allora usare questa regola:
+
+        a) Se esiste anche una voce GDT/PVS, usare GDT/PVS (preferito)
+        b) Se NON esiste GDT/PVS, scegliere HL7 via File System e impostare
+          una cartella dedicata (es. C:\GDT\MIR\HL7)
+        c) Campo "HL7 Standard": usare ORU^R01 (o, se non disponibile,
+          il primo standard ORU v2.x disponibile: es. HL7 v2.3/v2.5)
+
+        Configurazione consigliata in modalita' EHR:
+          - Trasporto: HL7 via File System
+          - Standard: ORU^R01 (v2.x)
+          - Cartella: C:\GDT\MIR\HL7
+
+        ATTENZIONE:
+        Il Bridge ElementMedica usa GDT come canale principale. Quindi,
+        una configurazione SOLO HL7 potrebbe non importare automaticamente
+        i risultati nel formato atteso.
+
+        In questo caso chiedere al supporto MIR l'abilitazione del modulo
+        GDT/PVS per WinSpiro 2.1.10 (o versione in uso).
+
+      6. Configurare (quando il menu GDT e' disponibile):
+  
+     ┌────────────────────────────────────────────────────────┐
+     │  Abilitare interfaccia GDT:  Sì                       │
+     │  Cartella Import (Input):    C:\GDT\MIR\Input         │
+     │  Cartella Export (Output):   C:\GDT\MIR\Output        │
+     │  GDT ID:                    WINSPIRO                  │
+     │  Versione GDT:              2.1                       │
+     │  Codifica:                  ISO-8859-1                │
+     │  Esporta PDF automatico:    Sì                        │
+     └────────────────────────────────────────────────────────┘
+
+    7. Nella sezione "Esportazione risultati":
+     - Abilitare "Esporta parametri base" (FVC, FEV1, PEF, ecc.)
+     - Abilitare "Esporta referto PDF"
+     - Formato data: GGMMAAAA (standard GDT)
+
+    8. Salvare e riavviare WinSpiro PRO
+
+  PASSO C: Verificare le cartelle
+  ─────────────────────────────────────────
+  Assicurarsi che esistano:
+    C:\GDT\MIR\Input
+    C:\GDT\MIR\Output
+
+  PASSO D: Test rapido
+  ─────────────────────────────────────────
+  1. Dalla webapp, aprire una visita
+  2. Nella sezione "Esami Strumentali", cliccare "Spirometria"
+  3. WinSpiro dovrebbe aprirsi con i dati paziente precompilati
+  4. Eseguire il test spirometrico
+  5. Alla chiusura, i risultati (FVC, FEV1, ecc.) appariranno
+     automaticamente nella webapp
+
+
+══════════════════════════════════════════════════════════════════════════
+  6. CONFIGURAZIONE OSCILLA (Audiometro)
+══════════════════════════════════════════════════════════════════════════
+
+  Dispositivo:  Oscilla TSA (o compatibile Oscilla)
+  Software:     Oscilla AudioConsole
+  Protocollo:   GDT 2.1
+  Output:       File GDT + PDF dell'audiogramma
+
+  PASSO A: Installare Oscilla AudioConsole
+  ─────────────────────────────────────────
+  1. Scaricare il software dal sito Oscilla o dal CD fornito
+  2. Eseguire l'installazione
+  3. Percorso tipico: C:\Program Files\Oscilla\AudioConsole.exe
+     (annotare il percorso esatto)
+
+  PASSO B: Configurare GDT in Oscilla
+  ─────────────────────────────────────────
+    1. Aprire Oscilla AudioConsole
+    2. Andare su: Settings → GDT Interface
+      (oppure Configurazione → Interfaccia PVS)
+    3. Se NON trovi la sezione GDT:
+      - Cerca nei menu: Settings, Advanced, Integration, External Interface
+      - Cerca voci alternative: PVS, EMR, HIS, Export Interface
+      - Verifica di avere diritti amministratore Windows
+    4. Se il menu non esiste ancora:
+      - Continua configurando il Bridge con percorsi GDT standard
+      - Fai un test da webapp (Avvia Audiometria)
+      - Se AudioConsole non genera file GDT/PDF, chiedi al fornitore
+       Oscilla se la versione 4.5 richiede un modulo/licenza aggiuntiva
+       per interfaccia GDT
+    5. Configurare (quando disponibile):
+  
+     ┌────────────────────────────────────────────────────────┐
+     │  GDT Interface:              Abilitata                │
+     │  Cartella Import (Input):    C:\GDT\OSCILLA\Input     │
+     │  Cartella Export (Output):   C:\GDT\OSCILLA\Output    │
+     │  GDT ID:                    OSCILLA                   │
+     │  Versione:                  2.1                       │
+     │  Codifica caratteri:        ISO-8859-1                │
+     │  Esporta audiogramma PDF:   Sì                        │
+     └────────────────────────────────────────────────────────┘
+
+    6. Nella sezione esportazione:
+     - Abilitare "Esporta risultati audiometria tonale"
+     - Abilitare "Esporta PDF audiogramma"
+     - Abilitare "Auto-export al termine del test"
+
+    7. Salvare le impostazioni
+
+  PASSO C: Verificare le cartelle
+  ─────────────────────────────────────────
+  Assicurarsi che esistano:
+    C:\GDT\OSCILLA\Input
+    C:\GDT\OSCILLA\Output
+
+  PASSO D: Test rapido
+  ─────────────────────────────────────────
+  1. Dalla webapp, aprire una visita
+  2. Nella sezione "Esami Strumentali", cliccare "Audiometria"
+  3. AudioConsole dovrebbe aprirsi
+  4. Eseguire il test audiometrico
+  5. L'audiogramma e i risultati appariranno nella webapp
+
+
+══════════════════════════════════════════════════════════════════════════
+  7. VERIFICA CONNESSIONE DALLA WEBAPP
+══════════════════════════════════════════════════════════════════════════
+
+  Dopo l'installazione e la configurazione dei dispositivi:
+
+  1. Assicurarsi che il Bridge sia in esecuzione
+     (l'icona dovrebbe essere visibile nella system tray, oppure
+     avviare manualmente con avvia-bridge.bat)
+
+  2. Aprire la webapp ElementMedica nel browser
+
+  3. Andare su: Impostazioni → Medical Device Bridge
+
+  4. Cliccare "Esegui Diagnostica"
+
+  5. Verificare i risultati:
+
+     ✓ Backend API          → Il server è raggiungibile
+     ✓ Bridge Locale        → Il Bridge è in esecuzione su questa
+                               postazione (localhost:3000)
+     ✓ Licenza Attiva       → Il Bridge è attivato e autenticato
+
+  Se un test fallisce, consultare la sezione "Risoluzione problemi".
+
+
+══════════════════════════════════════════════════════════════════════════
+  8. RISOLUZIONE PROBLEMI
+══════════════════════════════════════════════════════════════════════════
+
+  PROBLEMA: "Bridge non connesso" nella webapp
+  ─────────────────────────────────────────
+  Causa:  Il Bridge non è in esecuzione o la porta è occupata.
+  
+  Soluzione:
+  1. Verificare che il Bridge sia avviato:
+     - Aprire il Task Manager (Ctrl+Shift+Esc)
+     - Cercare "medical-bridge" nei processi
+  2. Se non è in esecuzione, avviarlo:
+     - Eseguire: %LOCALAPPDATA%\ElementMedica\MedicalDeviceBridge\avvia-bridge.bat
+  3. Se la porta 3000 è occupata da un altro programma:
+     - Chiudere il programma che usa la porta 3000
+     - Riavviare il Bridge
+
+  NOTA IMPORTANTE (nuovo installer):
+  Durante install.bat viene eseguito un controllo automatico di avvio.
+  Se il Bridge si chiude subito, l'installer mostra errore e indica il log:
+    %LOCALAPPDATA%\ElementMedica\MedicalDeviceBridge\logs\bridge-runtime.log
+  Aprire quel file per vedere la causa tecnica (porta occupata, blocco antivirus,
+  errore runtime, ecc.).
+
+  PROBLEMA: Il software del dispositivo non si avvia
+  ─────────────────────────────────────────
+  Causa:  Percorso eseguibile non trovato dal Bridge.
+  
+  Soluzione:
+  1. Verificare che il software del dispositivo sia installato
+  2. Il Bridge cerca automaticamente i software nei percorsi standard
+  3. Se il software è installato in una posizione non standard,
+     contattare il supporto per la configurazione
+
+  PROBLEMA: L'esame si completa ma i risultati non arrivano
+  ─────────────────────────────────────────
+  Causa:  Le cartelle GDT non corrispondono tra Bridge e dispositivo.
+  
+  Soluzione:
+  1. Verificare che le cartelle GDT configurate nel software del
+     dispositivo corrispondano a quelle usate dal Bridge
+  2. Le cartelle predefinite del Bridge sono:
+     - ECG:          C:\GDT\EDAN\Input e C:\GDT\EDAN\Output
+     - Spirometro:   C:\GDT\MIR\Input e C:\GDT\MIR\Output
+     - Audiometro:   C:\GDT\OSCILLA\Input e C:\GDT\OSCILLA\Output
+  3. Controllare i permessi di lettura/scrittura sulle cartelle
+
+  CHECK RAPIDO EDAN (cartella reale):
+  Se usi Edan SE-1515 e in C:\SE-1515\GDTFolder001 vedi file 6300/6301/6310,
+  il protocollo GDT e' attivo. In questo caso usa quella cartella anche nel Bridge
+  (sia Input che Output) e riesegui il test.
+
+  PROBLEMA: Errore "Licenza non valida" o "Codice di attivazione non valido"
+  ─────────────────────────────────────────
+  Causa:  Il codice di attivazione è errato o è già stato usato.
+  
+  Soluzione:
+  1. Verificare di aver inserito il codice corretto (ELEM-XXXX-XXXX-XXXX)
+  2. Se il codice è stato revocato, chiedere all'amministratore
+     di crearne uno nuovo dalla webapp
+  3. Ogni codice può essere usato su UN solo PC
+
+  PROBLEMA: "Encoding error" nei risultati
+  ─────────────────────────────────────────
+  Causa:  Il dispositivo non usa la codifica ISO-8859-1.
+  
+  Soluzione:
+  1. Verificare nelle impostazioni GDT del software del dispositivo
+     che la codifica sia impostata su ISO-8859-1 (Latin-1)
+
+  DOVE SONO I LOG:
+  ─────────────────────────────────────────
+  I log del Bridge sono salvati in:
+    %LOCALAPPDATA%\ElementMedica\MedicalDeviceBridge\logs\bridge.log
+
+  In caso di problemi, inviare questo file al supporto tecnico.
+
+
+══════════════════════════════════════════════════════════════════════════
+  9. SUPPORTO TECNICO
+══════════════════════════════════════════════════════════════════════════
+
+  Per assistenza tecnica:
+  - Email: supporto@elementmedica.com
+  - Dalla webapp: Impostazioni → Supporto
+  
+  Informazioni da fornire al supporto:
+  1. Il file di log: logs\bridge.log
+  2. Screenshot dell'errore
+  3. Modello del dispositivo medico utilizzato
+  4. Versione del software del dispositivo
+  5. Il codice di attivazione utilizzato (ELEM-XXXX-XXXX-XXXX)
+
+
+══════════════════════════════════════════════════════════════════════════
+  © ElementMedica - Tutti i diritti riservati
+══════════════════════════════════════════════════════════════════════════

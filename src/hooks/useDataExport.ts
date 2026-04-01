@@ -4,7 +4,8 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { apiClient } from '../services';
+import { apiGet, apiPost, apiDelete } from '../services/api';
+import { apiClient } from '../services'; // Keep for blob downloads
 import {
   DataExportRequest,
   DataExportFormData,
@@ -30,29 +31,27 @@ export const useDataExport = (): UseDataExportReturn => {
       setLoading(true);
       setError(null);
 
-      const response = await apiClient.get<GDPRApiResponse<{ exports: DataExportRequest[] }>>(
+      const data = await apiGet<GDPRApiResponse<{ exports: DataExportRequest[] }>>(
         '/api/v1/gdpr/data-export'
       );
 
       // Backend might not have this endpoint - handle gracefully
-      if (response.data.success && response.data.data) {
-        setExportRequests(response.data.data.exports);
-      } else if (Array.isArray(response.data)) {
-        setExportRequests(response.data);
+      if (data.success && data.data) {
+        setExportRequests(data.data.exports);
+      } else if (Array.isArray(data)) {
+        setExportRequests(data as unknown as DataExportRequest[]);
       } else {
         // Backend may not support listing exports - set empty array
         setExportRequests([]);
       }
     } catch (err) {
       // Non mostrare errori se l'endpoint non esiste
-      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch export requests';
+      const errorMessage = 'Errore nel recupero delle richieste di esportazione';
       if (!errorMessage.includes('404') && !errorMessage.includes('500')) {
         setError(errorMessage);
-        console.error('Error fetching export requests:', err);
       } else {
         // Endpoint non disponibile - set array vuoto silenziosamente
         setExportRequests([]);
-        console.warn('GDPR export endpoint not available, using empty state');
       }
     } finally {
       setLoading(false);
@@ -62,19 +61,19 @@ export const useDataExport = (): UseDataExportReturn => {
   /**
    * Request a new data export
    */
-  const requestExport = useCallback(async (data: DataExportFormData) => {
+  const requestExport = useCallback(async (formData: DataExportFormData) => {
     try {
       setLoading(true);
       setError(null);
 
-      const response = await apiClient.post<DataExportResponse>('/api/v1/gdpr/data-export', {
-        format: data.format,
-        includeAuditTrail: data.includeAuditTrail,
-        includeConsents: data.includeConsents
+      const response = await apiPost<DataExportResponse>('/api/v1/gdpr/data-export', {
+        format: formData.format,
+        includeAuditTrail: formData.includeAuditTrail,
+        includeConsents: formData.includeConsents
       });
 
-      if (response.data.success && response.data.data) {
-        const newRequest = response.data.data.exportRequest;
+      if (response.success && response.data) {
+        const newRequest = response.data.exportRequest;
 
         // Add to local state
         setExportRequests(prev => [newRequest, ...prev]);
@@ -84,12 +83,11 @@ export const useDataExport = (): UseDataExportReturn => {
         // Start polling for completion
         pollExportStatus(newRequest.id);
       } else {
-        throw new Error(response.data.error || 'Failed to request data export');
+        throw new Error('Errore nella richiesta di esportazione dati');
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to request data export';
+      const errorMessage = 'Errore nella richiesta di esportazione dati';
       setError(errorMessage);
-      console.error('Error requesting data export:', err);
       // Toast handled by calling component
       throw err;
     } finally {
@@ -141,8 +139,7 @@ export const useDataExport = (): UseDataExportReturn => {
 
       // Toast handled by calling component
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to download export';
-      console.error('Error downloading export:', err);
+      const errorMessage = 'Errore nel download dell\'esportazione';
       // Toast handled by calling component
       throw err;
     } finally {
@@ -157,20 +154,19 @@ export const useDataExport = (): UseDataExportReturn => {
     try {
       setLoading(true);
 
-      const response = await apiClient.delete<GDPRApiResponse>(
+      const data = await apiDelete<GDPRApiResponse>(
         `/api/v1/gdpr/data-export/${requestId}`
       );
 
-      if (response.data.success) {
+      if (data.success) {
         // Remove from local state
         setExportRequests(prev => prev.filter(req => req.id !== requestId));
         // Toast handled by calling component
       } else {
-        throw new Error(response.data.error || 'Failed to cancel export');
+        throw new Error('Errore nell\'annullamento dell\'esportazione');
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to cancel export';
-      console.error('Error cancelling export:', err);
+      const errorMessage = 'Errore nell\'annullamento dell\'esportazione';
       // Toast handled by calling component
       throw err;
     } finally {
@@ -188,12 +184,12 @@ export const useDataExport = (): UseDataExportReturn => {
 
     const poll = async () => {
       try {
-        const response = await apiClient.get<DataExportResponse>(
+        const data = await apiGet<DataExportResponse>(
           `/api/v1/gdpr/data-export/status/${requestId}`
         );
 
-        if (response.data.success && response.data.data) {
-          const updatedRequest = response.data.data.exportRequest;
+        if (data.success && data.data) {
+          const updatedRequest = data.data.exportRequest;
 
           // Update local state
           setExportRequests(prev =>
@@ -218,7 +214,6 @@ export const useDataExport = (): UseDataExportReturn => {
           }
         }
       } catch (err) {
-        console.error('Error polling export status:', err);
         // Don't show error toast for polling failures
       }
     };

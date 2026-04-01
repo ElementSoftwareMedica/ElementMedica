@@ -55,6 +55,7 @@ import {
 } from '../../../services/clinicaApi';
 import { useTenantFilter } from '../../../context/TenantFilterContext';
 import { useToast } from '../../../hooks/useToast';
+import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 import '../../../styles/clinica-theme.css';
 
 // =====================================================
@@ -482,6 +483,7 @@ const MediciTab: React.FC<{ bundle: OffertaBundle }> = ({ bundle }) => {
     const { getTenantFilterParams, tenantFilterKey } = useTenantFilter();
     const queryClient = useQueryClient();
     const { showToast } = useToast();
+    const { confirmDelete } = useConfirmDialog();
 
     // State per form aggiunta listino bundle
     const [isAddingNew, setIsAddingNew] = useState(false);
@@ -605,7 +607,6 @@ const MediciTab: React.FC<{ bundle: OffertaBundle }> = ({ bundle }) => {
                         compensoMedicoMassimo: bundle.compensoMedicoMassimo ? Number(bundle.compensoMedicoMassimo) : undefined,
                         attivo: true
                     }).catch(err => {
-                        console.warn(`Errore aggiungendo medico ${medico.medicoId}:`, err);
                         return null;
                     })
                 )
@@ -634,7 +635,7 @@ const MediciTab: React.FC<{ bundle: OffertaBundle }> = ({ bundle }) => {
             resetForm();
         },
         onError: (error: Error) => {
-            showToast({ type: 'error', message: error.message });
+            showToast({ type: 'error', message: 'Errore del server' });
         }
     });
 
@@ -649,7 +650,7 @@ const MediciTab: React.FC<{ bundle: OffertaBundle }> = ({ bundle }) => {
             resetForm();
         },
         onError: (error: Error) => {
-            showToast({ type: 'error', message: error.message });
+            showToast({ type: 'error', message: 'Errore del server' });
         }
     });
 
@@ -715,8 +716,8 @@ const MediciTab: React.FC<{ bundle: OffertaBundle }> = ({ bundle }) => {
         setIsAddingNew(false);
     };
 
-    const handleDelete = (id: string) => {
-        if (confirm('Sei sicuro di voler eliminare questo listino?')) {
+    const handleDelete = async (id: string) => {
+        if (await confirmDelete('questo listino')) {
             deleteListinoMutation.mutate(id);
         }
     };
@@ -887,8 +888,8 @@ const MediciTab: React.FC<{ bundle: OffertaBundle }> = ({ bundle }) => {
                                                 type="button"
                                                 onClick={() => setFormData(prev => ({ ...prev, compensoTipo: option.value }))}
                                                 className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm rounded-lg border-2 transition-all ${formData.compensoTipo === option.value
-                                                        ? 'border-teal-500 bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400'
-                                                        : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600'
+                                                    ? 'border-teal-500 bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400'
+                                                    : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600'
                                                     }`}
                                             >
                                                 <Icon className="w-4 h-4" />
@@ -1267,6 +1268,7 @@ const OffertaBundleDetailPage: React.FC = () => {
     const queryClient = useQueryClient();
     const { showToast } = useToast();
     const { tenantFilterKey } = useTenantFilter();
+    const { confirmDelete: confirmDeleteBundle } = useConfirmDialog();
 
     const [activeTab, setActiveTab] = useState<TabType>('info');
 
@@ -1286,12 +1288,12 @@ const OffertaBundleDetailPage: React.FC = () => {
             navigate('/poliambulatorio/catalogo/bundles');
         },
         onError: (err: Error) => {
-            showToast({ type: 'error', message: err.message });
+            showToast({ type: 'error', message: 'Errore del server' });
         }
     });
 
-    const handleDelete = () => {
-        if (confirm('Sei sicuro di voler eliminare questo bundle?')) {
+    const handleDelete = async () => {
+        if (await confirmDeleteBundle('questo bundle')) {
             deleteMutation.mutate();
         }
     };

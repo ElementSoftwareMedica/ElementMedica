@@ -30,7 +30,7 @@
  */
 
 import express from 'express';
-import middleware from '../../auth/middleware.js';
+import middleware from '../../middleware/auth.js';
 import { checkAdvancedPermission } from '../../middleware/advanced-permissions.js';
 import logger from '../../utils/logger.js';
 import { auditClinico, getEffectiveTenantId } from './utils/clinica-utils.js';
@@ -56,7 +56,7 @@ const router = express.Router();
  * @access Authenticated + VIEW_CONVENZIONI
  */
 router.get('/',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('convenzioni', 'read'),
     clinicalValidators.convenzione.query,
     auditClinico('list_convenzioni'),
@@ -72,14 +72,13 @@ router.get('/',
         } catch (error) {
             logger.error('Failed to list convenzioni', {
                 component: 'convenzioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero delle convenzioni',
-                message: error.message
             });
         }
     }
@@ -91,7 +90,7 @@ router.get('/',
  * @access Authenticated + VIEW_CONVENZIONI
  */
 router.get('/statistics',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('convenzioni', 'read'),
     auditClinico('get_convenzioni_statistics'),
     async (req, res) => {
@@ -106,14 +105,13 @@ router.get('/statistics',
         } catch (error) {
             logger.error('Failed to get convenzioni statistics', {
                 component: 'convenzioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero delle statistiche',
-                message: error.message
             });
         }
     }
@@ -125,7 +123,7 @@ router.get('/statistics',
  * @access Authenticated + VIEW_CONVENZIONI
  */
 router.get('/expiring',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('convenzioni', 'read'),
     auditClinico('list_convenzioni_expiring'),
     async (req, res) => {
@@ -143,14 +141,13 @@ router.get('/expiring',
         } catch (error) {
             logger.error('Failed to get expiring convenzioni', {
                 component: 'convenzioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero delle convenzioni',
-                message: error.message
             });
         }
     }
@@ -162,7 +159,7 @@ router.get('/expiring',
  * @access Authenticated
  */
 router.get('/available',
-    authenticateToken(),
+    authenticateToken,
     auditClinico('list_convenzioni_available'),
     async (req, res) => {
         try {
@@ -177,14 +174,13 @@ router.get('/available',
         } catch (error) {
             logger.error('Failed to get available convenzioni', {
                 component: 'convenzioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero delle convenzioni',
-                message: error.message
             });
         }
     }
@@ -196,7 +192,7 @@ router.get('/available',
  * @access Authenticated + VIEW_CONVENZIONI
  */
 router.get('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('convenzioni', 'read'),
     clinicalValidators.params.id,
     auditClinico('get_convenzione'),
@@ -219,7 +215,7 @@ router.get('/:id',
         } catch (error) {
             logger.error('Failed to get convenzione', {
                 component: 'convenzioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 convenzioneId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -227,7 +223,6 @@ router.get('/:id',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero della convenzione',
-                message: error.message
             });
         }
     }
@@ -239,7 +234,7 @@ router.get('/:id',
  * @access Authenticated
  */
 router.get('/:id/validity',
-    authenticateToken(),
+    authenticateToken,
     clinicalValidators.params.id,
     auditClinico('check_convenzione_validity'),
     async (req, res) => {
@@ -254,7 +249,7 @@ router.get('/:id/validity',
         } catch (error) {
             logger.error('Failed to check convenzione validity', {
                 component: 'convenzioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 convenzioneId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -263,7 +258,6 @@ router.get('/:id/validity',
             res.status(statusCode).json({
                 success: false,
                 error: 'Errore nella verifica della convenzione',
-                message: error.message
             });
         }
     }
@@ -275,7 +269,7 @@ router.get('/:id/validity',
  * @access Authenticated + VIEW_CONVENZIONI
  */
 router.get('/:id/listini',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('convenzioni', 'read'),
     clinicalValidators.params.id,
     auditClinico('get_convenzione_listini'),
@@ -292,7 +286,7 @@ router.get('/:id/listini',
         } catch (error) {
             logger.error('Failed to get convenzione listini', {
                 component: 'convenzioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 convenzioneId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -301,7 +295,6 @@ router.get('/:id/listini',
             res.status(statusCode).json({
                 success: false,
                 error: 'Errore nel recupero dei listini',
-                message: error.message
             });
         }
     }
@@ -313,7 +306,7 @@ router.get('/:id/listini',
  * @access Authenticated + VIEW_CONVENZIONI
  */
 router.get('/:id/aziende',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('convenzioni', 'read'),
     clinicalValidators.params.id,
     auditClinico('get_convenzione_aziende'),
@@ -330,7 +323,7 @@ router.get('/:id/aziende',
         } catch (error) {
             logger.error('Failed to get convenzione aziende', {
                 component: 'convenzioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 convenzioneId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -338,7 +331,6 @@ router.get('/:id/aziende',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero delle aziende',
-                message: error.message
             });
         }
     }
@@ -350,7 +342,7 @@ router.get('/:id/aziende',
  * @access Authenticated + VIEW_CONVENZIONI
  */
 router.get('/:id/aziende/:aziendaAssociazioneId/riconoscimenti',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('convenzioni', 'read'),
     auditClinico('get_riconoscimenti'),
     async (req, res) => {
@@ -369,14 +361,13 @@ router.get('/:id/aziende/:aziendaAssociazioneId/riconoscimenti',
         } catch (error) {
             logger.error('Failed to get riconoscimenti', {
                 component: 'convenzioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero dei riconoscimenti',
-                message: error.message
             });
         }
     }
@@ -388,7 +379,7 @@ router.get('/:id/aziende/:aziendaAssociazioneId/riconoscimenti',
  * @access Authenticated + CREATE_CONVENZIONI
  */
 router.post('/',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('convenzioni', 'create'),
     clinicalValidators.convenzione.create,
     auditClinico('create_convenzione'),
@@ -409,11 +400,20 @@ router.post('/',
                 tenantId: getEffectiveTenantId(req)
             });
 
-            const statusCode = error.message.includes('già esistente') ? 409 : 500;
+            // Determina status code appropriato dal messaggio di errore
+            let statusCode = 500;
+            let errorMessage = 'Errore nella creazione della convenzione';
+            if (error.message.includes('già esistente')) {
+                statusCode = 409;
+                errorMessage = 'Convenzione con questo codice già esistente';
+            } else if (error.message.includes('non appartiene') || error.message.includes('non trovato') || error.message.includes('non valido')) {
+                statusCode = 400;
+                errorMessage = 'Dati non validi o risorsa non trovata';
+            }
+
             res.status(statusCode).json({
                 success: false,
-                error: 'Errore nella creazione della convenzione',
-                message: error.message
+                error: errorMessage,
             });
         }
     }
@@ -425,7 +425,7 @@ router.post('/',
  * @access Authenticated + UPDATE_CONVENZIONI
  */
 router.post('/:id/listini',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('convenzioni', 'update'),
     clinicalValidators.params.id,
     clinicalValidators.convenzione.associateListino,
@@ -447,7 +447,7 @@ router.post('/:id/listini',
         } catch (error) {
             logger.error('Failed to associate listino to convenzione', {
                 component: 'convenzioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 convenzioneId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -457,7 +457,6 @@ router.post('/:id/listini',
             res.status(statusCode).json({
                 success: false,
                 error: 'Errore nell\'associazione del listino',
-                message: error.message
             });
         }
     }
@@ -469,7 +468,7 @@ router.post('/:id/listini',
  * @access Authenticated + UPDATE_CONVENZIONI
  */
 router.post('/:id/aziende',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('convenzioni', 'update'),
     clinicalValidators.params.id,
     auditClinico('associate_convenzione_azienda'),
@@ -502,7 +501,7 @@ router.post('/:id/aziende',
         } catch (error) {
             logger.error('Failed to associate azienda to convenzione', {
                 component: 'convenzioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 convenzioneId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -512,7 +511,6 @@ router.post('/:id/aziende',
             res.status(statusCode).json({
                 success: false,
                 error: 'Errore nell\'associazione dell\'azienda',
-                message: error.message
             });
         }
     }
@@ -524,7 +522,7 @@ router.post('/:id/aziende',
  * @access Authenticated + UPDATE_CONVENZIONI
  */
 router.put('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('convenzioni', 'update'),
     clinicalValidators.params.id,
     clinicalValidators.convenzione.update,
@@ -542,7 +540,7 @@ router.put('/:id',
         } catch (error) {
             logger.error('Failed to update convenzione', {
                 component: 'convenzioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 convenzioneId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -552,7 +550,6 @@ router.put('/:id',
             res.status(statusCode).json({
                 success: false,
                 error: 'Errore nell\'aggiornamento della convenzione',
-                message: error.message
             });
         }
     }
@@ -564,7 +561,7 @@ router.put('/:id',
  * @access Authenticated + UPDATE_CONVENZIONI
  */
 router.put('/:id/aziende/:aziendaAssociazioneId',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('convenzioni', 'update'),
     auditClinico('update_convenzione_azienda'),
     async (req, res) => {
@@ -585,7 +582,7 @@ router.put('/:id/aziende/:aziendaAssociazioneId',
         } catch (error) {
             logger.error('Failed to update convenzione-azienda association', {
                 component: 'convenzioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 convenzioneId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -594,7 +591,6 @@ router.put('/:id/aziende/:aziendaAssociazioneId',
             res.status(statusCode).json({
                 success: false,
                 error: 'Errore nell\'aggiornamento dell\'associazione',
-                message: error.message
             });
         }
     }
@@ -606,7 +602,7 @@ router.put('/:id/aziende/:aziendaAssociazioneId',
  * @access Authenticated + DELETE_CONVENZIONI
  */
 router.delete('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('convenzioni', 'delete'),
     clinicalValidators.params.id,
     auditClinico('delete_convenzione'),
@@ -622,7 +618,7 @@ router.delete('/:id',
         } catch (error) {
             logger.error('Failed to delete convenzione', {
                 component: 'convenzioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 convenzioneId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -631,7 +627,6 @@ router.delete('/:id',
             res.status(statusCode).json({
                 success: false,
                 error: 'Errore nell\'eliminazione della convenzione',
-                message: error.message
             });
         }
     }
@@ -643,7 +638,7 @@ router.delete('/:id',
  * @access Authenticated + UPDATE_CONVENZIONI
  */
 router.delete('/:id/listini/:listinoId',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('convenzioni', 'update'),
     auditClinico('remove_convenzione_listino'),
     async (req, res) => {
@@ -658,7 +653,7 @@ router.delete('/:id/listini/:listinoId',
         } catch (error) {
             logger.error('Failed to remove listino from convenzione', {
                 component: 'convenzioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 convenzioneId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -667,7 +662,6 @@ router.delete('/:id/listini/:listinoId',
             res.status(statusCode).json({
                 success: false,
                 error: 'Errore nella rimozione del listino',
-                message: error.message
             });
         }
     }
@@ -679,7 +673,7 @@ router.delete('/:id/listini/:listinoId',
  * @access Authenticated + UPDATE_CONVENZIONI
  */
 router.delete('/:id/aziende/:aziendaAssociazioneId',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('convenzioni', 'update'),
     auditClinico('remove_convenzione_azienda'),
     async (req, res) => {
@@ -694,7 +688,7 @@ router.delete('/:id/aziende/:aziendaAssociazioneId',
         } catch (error) {
             logger.error('Failed to remove azienda from convenzione', {
                 component: 'convenzioni-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 convenzioneId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -703,7 +697,6 @@ router.delete('/:id/aziende/:aziendaAssociazioneId',
             res.status(statusCode).json({
                 success: false,
                 error: 'Errore nella rimozione dell\'azienda',
-                message: error.message
             });
         }
     }

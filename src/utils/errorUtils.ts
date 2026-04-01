@@ -7,43 +7,9 @@
  * Filtra i messaggi di errore per rimuovere riferimenti tecnici
  * e restituire messaggi user-friendly
  */
-export function sanitizeErrorMessage(error: unknown, fallbackMessage: string = 'Si è verificato un errore'): string {
-  let message: string;
-  
-  // Estrai il messaggio dall'errore
-  if (error instanceof Error) {
-    message = error.message;
-  } else if (typeof error === 'string') {
-    message = error;
-  } else {
-    return fallbackMessage;
-  }
-  
-  // Lista di termini tecnici da filtrare
-  const technicalTerms = [
-    'tanstack',
-    'react-query',
-    'query client',
-    'mutation',
-    'axios',
-    'fetch failed',
-    'network error',
-    'cors',
-    'preflight'
-  ];
-  
-  // Controlla se il messaggio contiene termini tecnici
-  const containsTechnicalTerms = technicalTerms.some(term => 
-    message.toLowerCase().includes(term.toLowerCase())
-  );
-  
-  // Se contiene termini tecnici, restituisci il messaggio fallback
-  if (containsTechnicalTerms) {
-    return fallbackMessage;
-  }
-  
-  // Altrimenti restituisci il messaggio originale
-  return message;
+export function sanitizeErrorMessage(_error: unknown, fallbackMessage: string = 'Si è verificato un errore'): string {
+  // Rule 30: MAI esporre error.message al client — sempre messaggio statico italiano
+  return fallbackMessage;
 }
 
 /**

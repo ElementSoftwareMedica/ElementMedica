@@ -50,14 +50,7 @@ export function useScheduleDraftAutoSave(
       };
 
       localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
-      console.log('[Draft Auto-Save] 💾 Bozza salvata:', {
-        training_id: formData.training_id,
-        dates: formData.dates?.length || 0,
-        companies: selectedCompanies.size,
-        persons: selectedPersons.size
-      });
     } catch (error) {
-      console.error('[Draft Auto-Save] ❌ Errore salvataggio:', error);
     }
   }, [formData, selectedCompanies, selectedPersons, attendance, isEditing]);
 
@@ -80,22 +73,13 @@ export function useScheduleDraftAutoSave(
       // Verifica età della bozza
       const age = Date.now() - draft.timestamp;
       if (age > DRAFT_EXPIRY_MS) {
-        console.log('[Draft Auto-Save] ⏰ Bozza scaduta, eliminata');
         clearDraft();
         return null;
       }
 
-      console.log('[Draft Auto-Save] 📂 Bozza caricata:', {
-        age: `${Math.round(age / 1000 / 60)} minuti`,
-        training_id: draft.formData.training_id,
-        dates: draft.formData.dates?.length || 0,
-        companies: draft.selectedCompanies.length,
-        persons: draft.selectedPersons.length
-      });
 
       return draft;
     } catch (error) {
-      console.error('[Draft Auto-Save] ❌ Errore caricamento bozza:', error);
       clearDraft();
       return null;
     }
@@ -105,9 +89,7 @@ export function useScheduleDraftAutoSave(
   const clearDraft = useCallback(() => {
     try {
       localStorage.removeItem(DRAFT_STORAGE_KEY);
-      console.log('[Draft Auto-Save] 🗑️ Bozza eliminata');
     } catch (error) {
-      console.error('[Draft Auto-Save] ❌ Errore eliminazione bozza:', error);
     }
   }, []);
 

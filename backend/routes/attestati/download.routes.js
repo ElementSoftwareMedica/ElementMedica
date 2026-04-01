@@ -22,6 +22,8 @@ import {
   path,
   __dirname
 } from './common.js';
+import { getEffectiveTenantId } from '../../utils/tenantHelper.js';
+import { signDocument, signDocumentsBulk } from '../../services/documentSigningService.js';
 
 const router = express.Router();
 
@@ -29,10 +31,10 @@ const router = express.Router();
  * GET /api/v1/attestati/:id/download
  * Download certificate PDF
  */
-router.get('/:id/download', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
+router.get('/:id/download', authenticateToken, requirePermission('documents:read'), async (req, res) => {
   try {
     const { id } = req.params;
-    const tenantId = req.person.tenantId;
+    const tenantId = getEffectiveTenantId(req);
 
     const attestato = await prisma.attestato.findFirst({
       where: {
@@ -82,13 +84,15 @@ router.get('/:id/download', authenticateToken(), requirePermission('documents:re
     });
 
     // Handle local file paths
+    // __dirname is backend/routes/attestati/, need ../../ to reach backend/
+    const backendRoot = path.join(__dirname, '..', '..');
     if (attestato.fileUrl.startsWith('/uploads/') || attestato.fileUrl.startsWith('/documents/')) {
       let filePath;
       if (attestato.fileUrl.startsWith('/uploads/')) {
-        filePath = path.join(__dirname, '..', attestato.fileUrl);
+        filePath = path.join(backendRoot, attestato.fileUrl);
       } else {
         const relativePath = attestato.fileUrl.substring(1);
-        filePath = path.join(__dirname, '..', 'uploads', relativePath);
+        filePath = path.join(backendRoot, 'uploads', relativePath);
       }
 
       logger.debug('Attempting to serve file', {
@@ -104,10 +108,10 @@ router.get('/:id/download', authenticateToken(), requirePermission('documents:re
         return res.download(filePath, downloadFileName);
       } else {
         // Fallback paths
-        const uploadsBasePath = path.join(__dirname, '..', 'uploads', 'documents');
+        const uploadsBasePath = path.join(backendRoot, 'uploads', 'documents');
         const justFileName = path.basename(attestato.fileUrl);
         const altPath1 = path.join(uploadsBasePath, justFileName);
-        const altPath2 = path.join(__dirname, '..', attestato.fileUrl);
+        const altPath2 = path.join(backendRoot, attestato.fileUrl);
 
         if (fsSync.existsSync(altPath1)) {
           return res.download(altPath1, downloadFileName);
@@ -141,17 +145,17 @@ router.get('/:id/download', authenticateToken(), requirePermission('documents:re
         error: fetchError.message,
         fileUrl: attestato.fileUrl
       });
-      return res.status(500).json({ error: 'Failed to fetch certificate file' });
+      return res.status(500).json({ error: 'Errore nel recupero del file certificato' });
     }
   } catch (error) {
     logger.error('Failed to download certificate', {
       component: 'attestati-routes',
       action: 'download',
       attestatoId: req.params.id,
-      error: error.message,
+      error: 'Operazione non riuscita',
       personId: req.person?.id
     });
-    res.status(500).json({ error: 'Failed to download certificate' });
+    res.status(500).json({ error: 'Errore nel download del certificato' });
   }
 });
 
@@ -161,7 +165,7 @@ router.get('/:id/download', authenticateToken(), requirePermission('documents:re
  */
 router.post(
   '/download-zip-batch',
-  authenticateToken(),
+  authenticateToken,
   requirePermission('documents:read'),
   [
     body('attestatoIds').isArray({ min: 1 }).withMessage('At least one certificate ID required'),
@@ -175,7 +179,7 @@ router.post(
       }
 
       const { attestatoIds } = req.body;
-      const tenantId = req.person.tenantId;
+      const tenantId = getEffectiveTenantId(req);
 
       // Get all certificates
       const attestati = await prisma.attestato.findMany({
@@ -224,7 +228,7 @@ router.post(
             logger.warn('Failed to access certificate file for ZIP', {
               attestatoId: attestato.id,
               fileUrl: attestato.fileUrl,
-              error: fileError.message
+              error: 'Operazione non riuscita'
             });
           }
         }
@@ -240,7 +244,7 @@ router.post(
       // Create ZIP archive
       const archive = archiver('zip', { zlib: { level: 9 } });
       const zipFileName = `attestati_${Date.now()}.zip`;
-      
+
       res.attachment(zipFileName);
       res.setHeader('Content-Type', 'application/zip');
 
@@ -278,12 +282,159 @@ router.post(
       logger.error('Failed to create ZIP archive', {
         component: 'attestati-routes',
         action: 'download-zip-batch',
-        error: error.message,
+        error: 'Operazione non riuscita',
         personId: req.person?.id
       });
-      res.status(500).json({ error: 'Failed to create ZIP archive' });
+      res.status(500).json({ error: 'Errore nella creazione dell\'archivio ZIP' });
     }
   }
 );
+
+/**
+ * GET /api/v1/attestati/:id/preview
+ * Serve attestato PDF inline for preview (used by SigningWorkflowModal)
+ */
+router.get('/:id/preview', authenticateToken, requirePermission('documents:read'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const tenantId = getEffectiveTenantId(req);
+
+    const attestato = await prisma.attestato.findFirst({
+      where: { id, tenantId, deletedAt: null }
+    });
+
+    if (!attestato) {
+      return res.status(404).json({ error: 'Attestato non trovato' });
+    }
+
+    if (!attestato.fileUrl) {
+      return res.status(404).json({ error: 'File attestato non trovato' });
+    }
+
+    const backendRoot = path.join(__dirname, '..', '..');
+
+    if (attestato.fileUrl.startsWith('/uploads/') || attestato.fileUrl.startsWith('/documents/')) {
+      let filePath;
+      if (attestato.fileUrl.startsWith('/uploads/')) {
+        filePath = path.join(backendRoot, attestato.fileUrl);
+      } else {
+        filePath = path.join(backendRoot, 'uploads', attestato.fileUrl.substring(1));
+      }
+
+      if (fsSync.existsSync(filePath)) {
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', 'inline');
+        return fsSync.createReadStream(filePath).pipe(res);
+      }
+
+      // Fallback paths
+      const justFileName = path.basename(attestato.fileUrl);
+      const altPath = path.join(backendRoot, 'uploads', 'documents', justFileName);
+      if (fsSync.existsSync(altPath)) {
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', 'inline');
+        return fsSync.createReadStream(altPath).pipe(res);
+      }
+
+      return res.status(404).json({ error: 'File non trovato su disco' });
+    }
+
+    // External URL: proxy the file
+    const axios = await import('axios');
+    const fileResponse = await axios.default.get(attestato.fileUrl, { responseType: 'stream' });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline');
+    fileResponse.data.pipe(res);
+  } catch (error) {
+    logger.error('Failed to preview attestato', {
+      component: 'attestati-routes',
+      action: 'preview',
+      attestatoId: req.params.id,
+      error: 'Operazione non riuscita'
+    });
+    res.status(500).json({ error: 'Errore nel caricamento dell\'anteprima' });
+  }
+});
+
+/**
+ * POST /api/v1/attestati/:id/sign
+ * Apply signature to attestato
+ */
+router.post('/:id/sign', authenticateToken, requirePermission('documents:write'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const tenantId = getEffectiveTenantId(req);
+    const { signatureData, placement } = req.body;
+
+    if (!signatureData) {
+      return res.status(400).json({ error: 'Dati firma mancanti' });
+    }
+
+    const result = await signDocument({
+      documentId: id,
+      signatureBase64: signatureData,
+      signedById: req.person?.id,
+      tenantId,
+      placement
+    });
+
+    logger.info('Attestato signed', {
+      component: 'attestati-routes',
+      action: 'sign',
+      attestatoId: id,
+      signerId: req.person?.id
+    });
+
+    res.json({ success: true, message: 'Firma applicata con successo', signedFileUrl: result.signedFileUrl });
+  } catch (error) {
+    logger.error('Failed to sign attestato', {
+      component: 'attestati-routes',
+      action: 'sign',
+      attestatoId: req.params.id,
+      error: 'Operazione non riuscita'
+    });
+    res.status(500).json({ error: 'Errore nell\'applicazione della firma' });
+  }
+});
+
+/**
+ * POST /api/v1/attestati/bulk-sign
+ * Apply signature to multiple attestati
+ */
+router.post('/bulk-sign', authenticateToken, requirePermission('documents:write'), async (req, res) => {
+  try {
+    const tenantId = getEffectiveTenantId(req);
+    const { documentIds, signatureData, placement } = req.body;
+
+    if (!signatureData || !Array.isArray(documentIds) || documentIds.length === 0) {
+      return res.status(400).json({ error: 'Dati firma o ID documenti mancanti' });
+    }
+
+    const { succeeded, failed } = await signDocumentsBulk({
+      documentIds,
+      signatureBase64: signatureData,
+      signedById: req.person?.id,
+      tenantId,
+      placement
+    });
+
+    logger.info('Attestati bulk signed', {
+      component: 'attestati-routes',
+      action: 'bulk-sign',
+      succeeded: succeeded.length,
+      failed: failed.length,
+      signerId: req.person?.id
+    });
+
+    res.json({ succeeded, failed });
+  } catch (error) {
+    logger.error('Failed to bulk sign attestati', {
+      component: 'attestati-routes',
+      action: 'bulk-sign',
+      error: 'Operazione non riuscita'
+    });
+    res.status(500).json({ error: 'Errore nella firma multipla' });
+  }
+});
 
 export default router;

@@ -6,7 +6,7 @@
 const corsConfig = {
   development: {
     origin: [
-      'http://localhost:5173',  // Element Formazione - Vite dev server
+      'http://localhost:5173',  // Element Sicurezza - Vite dev server
       'http://localhost:5174',  // Element Medica - Vite dev server
       'http://localhost:3000',  // Alternative frontend port
       'http://127.0.0.1:5173',
@@ -20,6 +20,8 @@ const corsConfig = {
       'Authorization',
       'X-Tenant-ID',
       'X-Frontend-Id',  // MULTI-BRAND: Header per identificare il frontend brand
+      'X-Operate-Tenant-Id', // P59: Header per cross-tenant operations
+      'x-operate-tenant-id', // P59: lowercase version
       'X-Requested-With',
       'Accept',
       'Origin',
@@ -56,6 +58,8 @@ const corsConfig = {
       'Authorization',
       'X-Tenant-ID',
       'X-Frontend-Id',  // MULTI-BRAND: Header per identificare il frontend brand
+      'X-Operate-Tenant-Id', // P59: Header per cross-tenant operations
+      'x-operate-tenant-id', // P59: lowercase version
       'X-Requested-With',
       'Accept',
       'cache-control',

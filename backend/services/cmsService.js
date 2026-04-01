@@ -11,6 +11,7 @@
 
 import prisma from '../config/prisma-optimization.js';
 import logger from '../utils/logger.js';
+import webhookDispatcher from './webhookDispatcher.js';
 
 class CMSService {
   /**
@@ -326,6 +327,14 @@ class CMSService {
         slug: page.slug
       });
 
+      // Trigger pre-render if page is published
+      if (page.isPublished) {
+        webhookDispatcher.onPageUpdated(page.id, page.slug, page.tenantId)
+          .catch(err => logger.error('Webhook dispatch failed after page update', {
+            component: 'cmsService', error: err.message, pageId: id
+          }));
+      }
+
       return page;
     } catch (error) {
       logger.error('Failed to update CMS page', {
@@ -366,6 +375,12 @@ class CMSService {
         pageId: id
       });
 
+      // Trigger pre-render for newly published page
+      webhookDispatcher.onPagePublished(page.id, page.slug, tenantId)
+        .catch(err => logger.error('Webhook dispatch failed after publish', {
+          component: 'cmsService', error: err.message, pageId: id
+        }));
+
       return page;
     } catch (error) {
       logger.error('Failed to publish CMS page', {
@@ -405,6 +420,12 @@ class CMSService {
         pageId: id
       });
 
+      // Remove pre-rendered HTML for unpublished page
+      webhookDispatcher.onPageUnpublished(page.id, page.slug, tenantId)
+        .catch(err => logger.error('Webhook dispatch failed after unpublish', {
+          component: 'cmsService', error: err.message, pageId: id
+        }));
+
       return page;
     } catch (error) {
       logger.error('Failed to unpublish CMS page', {
@@ -443,6 +464,12 @@ class CMSService {
         component: 'cmsService',
         pageId: id
       });
+
+      // Remove pre-rendered HTML for deleted page
+      webhookDispatcher.onPageDeleted(page.id, page.slug, tenantId)
+        .catch(err => logger.error('Webhook dispatch failed after delete', {
+          component: 'cmsService', error: err.message, pageId: id
+        }));
 
       return page;
     } catch (error) {

@@ -189,7 +189,7 @@ export const SECURITY_HEADERS = {
  */
 export const createSecurityMiddleware = (environment = process.env.NODE_ENV || 'development') => {
   const config = HELMET_CONFIGS[environment];
-  
+
   if (!config) {
     logger.warn(`Security config for environment '${environment}' not found, using development`, {
       service: 'security',
@@ -213,77 +213,36 @@ export const createSecurityMiddleware = (environment = process.env.NODE_ENV || '
  */
 export const customSecurityHeaders = (environment = process.env.NODE_ENV || 'development') => {
   const headers = SECURITY_HEADERS[environment] || SECURITY_HEADERS.development;
-  
+
   return (req, res, next) => {
     // Applica headers personalizzati
     Object.entries(headers).forEach(([key, value]) => {
       res.setHeader(key, value);
     });
-    
+
     // Header dinamici
     res.setHeader('X-Request-ID', req.id || 'unknown');
     res.setHeader('X-Timestamp', new Date().toISOString());
-    
+
     next();
   };
 };
 
 /**
- * Middleware per protezione CSRF (se necessario)
+ * CSRF Mitigation Strategy
+ *
+ * F302: Removed broken csrfProtection middleware (was never applied, only checked
+ * token presence without cryptographic validation — false sense of security).
+ *
+ * CSRF is mitigated by the following defense-in-depth controls:
+ * 1. JWT access tokens in httpOnly cookies with sameSite: 'strict' (production)
+ *    — browsers won't send the cookie on cross-origin requests.
+ * 2. JWT in Authorization: Bearer header — CSRF attacks cannot forge request headers.
+ * 3. Short-lived access tokens (15m) with refresh rotation stored server-side.
+ * 4. CORS allowlist restricts which origins can make requests.
+ *
+ * No additional CSRF token middleware is needed for this API architecture.
  */
-export const csrfProtection = (options = {}) => {
-  const defaultOptions = {
-    cookie: {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict'
-    },
-    ignoreMethods: ['GET', 'HEAD', 'OPTIONS'],
-    value: (req) => {
-      return req.headers['x-csrf-token'] || req.body._csrf || req.query._csrf;
-    }
-  };
-  
-  const config = { ...defaultOptions, ...options };
-  
-  return (req, res, next) => {
-    // Implementazione semplificata CSRF
-    if (config.ignoreMethods.includes(req.method)) {
-      return next();
-    }
-    
-    // In produzione, verificare token CSRF
-    if (process.env.NODE_ENV === 'production') {
-      const token = config.value(req);
-      if (!token) {
-        return res.status(403).json({
-          error: 'CSRF token missing',
-          message: 'CSRF protection requires a valid token'
-        });
-      }
-    }
-    
-    next();
-  };
-};
-
-/**
- * Middleware per protezione contro attacchi di timing
- */
-export const timingAttackProtection = (delay = 100) => {
-  return (req, res, next) => {
-    const start = Date.now();
-    
-    res.on('finish', () => {
-      const elapsed = Date.now() - start;
-      if (elapsed < delay) {
-        setTimeout(() => {}, delay - elapsed);
-      }
-    });
-    
-    next();
-  };
-};
 
 /**
  * Middleware per limitazione dimensione richieste
@@ -291,10 +250,10 @@ export const timingAttackProtection = (delay = 100) => {
 export const requestSizeLimit = (maxSize = '10mb') => {
   return (req, res, next) => {
     const contentLength = parseInt(req.headers['content-length'] || '0');
-    const maxBytes = typeof maxSize === 'string' ? 
+    const maxBytes = typeof maxSize === 'string' ?
       parseInt(maxSize.replace(/[^0-9]/g, '')) * (maxSize.includes('mb') ? 1024 * 1024 : 1024) :
       maxSize;
-    
+
     if (contentLength > maxBytes) {
       return res.status(413).json({
         error: 'Request too large',
@@ -303,20 +262,19 @@ export const requestSizeLimit = (maxSize = '10mb') => {
         receivedSize: contentLength
       });
     }
-    
+
     next();
   };
 };
 
 /**
  * Configurazione completa di sicurezza
+ * F302: ritorna solo helm (l'unico middleware effettivamente registrato in api-server.js).
  */
 export const createSecurityConfig = (environment = process.env.NODE_ENV || 'development') => {
   return {
     helmet: createSecurityMiddleware(environment),
     customHeaders: customSecurityHeaders(environment),
-    csrf: csrfProtection(),
-    timingProtection: timingAttackProtection(),
     sizeLimit: requestSizeLimit('50mb')
   };
 };
@@ -326,20 +284,20 @@ export const createSecurityConfig = (environment = process.env.NODE_ENV || 'deve
  */
 export const validateSecurityConfig = (config) => {
   const errors = [];
-  
+
   if (!config) {
     errors.push('Security config is required');
     return { isValid: false, errors };
   }
-  
+
   if (config.contentSecurityPolicy && !config.contentSecurityPolicy.directives) {
     errors.push('CSP directives are required when CSP is enabled');
   }
-  
+
   if (config.hsts && (!config.hsts.maxAge || config.hsts.maxAge < 300)) {
     errors.push('HSTS maxAge must be at least 300 seconds');
   }
-  
+
   return {
     isValid: errors.length === 0,
     errors
@@ -351,7 +309,7 @@ export const validateSecurityConfig = (config) => {
  */
 export const getSecurityConfig = (environment = process.env.NODE_ENV || 'development') => {
   const config = HELMET_CONFIGS[environment];
-  
+
   if (!config) {
     logger.warn(`Security config for environment '${environment}' not found, using development`, {
       service: 'security',
@@ -359,15 +317,13 @@ export const getSecurityConfig = (environment = process.env.NODE_ENV || 'develop
     });
     return HELMET_CONFIGS.development;
   }
-  
+
   return config;
 };
 
 export default {
   createSecurityMiddleware,
   customSecurityHeaders,
-  csrfProtection,
-  timingAttackProtection,
   requestSizeLimit,
   createSecurityConfig,
   validateSecurityConfig,

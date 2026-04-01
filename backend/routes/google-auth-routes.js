@@ -4,8 +4,8 @@
  */
 
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
-import middleware from '../auth/middleware.js';
+import prisma from '../config/prisma-optimization.js';
+import middleware from '../middleware/auth.js';
 import {
   getOAuth2Client,
   saveTokens,
@@ -16,6 +16,7 @@ import {
 import { importDocument } from '../services/googleDocsImporter.js';
 import { importPresentation } from '../services/googleSlidesImporter.js';
 import logger from '../utils/logger.js';
+import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 import googleDocsService from '../services/google-docs-service.js';
 import fs from 'fs/promises';
 import path from 'path';
@@ -25,22 +26,21 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 // Middleware destructuring
-const { authenticate: authenticateToken, authorize: requirePermission } = middleware;
+const { authenticate: authenticateToken, requirePermission } = middleware;
 
 // Helper to get authenticated user info
 const getAuthUser = (req) => ({
   userId: req.person.id,
-  tenantId: req.person.tenantId
+  tenantId: getEffectiveTenantId(req)
 });
 
 /**
  * GET /api/v1/google/auth/url
  * Generate Google OAuth2 authorization URL
  */
-router.get('/auth/url', authenticateToken(), requirePermission('templates:manage'), async (req, res) => {
+router.get('/auth/url', authenticateToken, requirePermission('templates:manage'), async (req, res) => {
   try {
     const { userId, tenantId } = getAuthUser(req);
 
@@ -79,13 +79,12 @@ router.get('/auth/url', authenticateToken(), requirePermission('templates:manage
     logger.error('Failed to generate auth URL', {
       component: 'google-auth-routes',
       action: 'getAuthUrl',
-      error: error.message
+      error: 'Operazione non riuscita'
     });
 
     res.status(500).json({
       success: false,
-      error: 'Failed to generate authorization URL',
-      message: error.message
+      error: 'Errore nella generazione dell\'URL di autorizzazione',
     });
   }
 });
@@ -94,7 +93,7 @@ router.get('/auth/url', authenticateToken(), requirePermission('templates:manage
  * POST /api/v1/google/auth/callback
  * Handle OAuth2 callback and exchange code for tokens
  */
-router.post('/auth/callback', authenticateToken(), requirePermission('templates:manage'), async (req, res) => {
+router.post('/auth/callback', authenticateToken, requirePermission('templates:manage'), async (req, res) => {
   try {
     const { userId, tenantId } = getAuthUser(req);
     const { code, state } = req.body;
@@ -102,7 +101,7 @@ router.post('/auth/callback', authenticateToken(), requirePermission('templates:
     if (!code) {
       return res.status(400).json({
         success: false,
-        error: 'Authorization code is required'
+        error: 'Codice di autorizzazione obbligatorio'
       });
     }
 
@@ -147,7 +146,7 @@ router.post('/auth/callback', authenticateToken(), requirePermission('templates:
 
     res.json({
       success: true,
-      message: 'Successfully connected to Google',
+      message: 'Connessione a Google completata',
       data: {
         connected: true,
         scopes: tokens.scope ? tokens.scope.split(' ') : []
@@ -157,14 +156,13 @@ router.post('/auth/callback', authenticateToken(), requirePermission('templates:
     logger.error('OAuth callback failed', {
       component: 'google-auth-routes',
       action: 'callback',
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack
     });
 
     res.status(500).json({
       success: false,
-      error: 'Failed to connect to Google',
-      message: error.message
+      error: 'Errore nella connessione a Google',
     });
   }
 });
@@ -173,7 +171,7 @@ router.post('/auth/callback', authenticateToken(), requirePermission('templates:
  * GET /api/v1/google/status
  * Get current Google connection status
  */
-router.get('/status', authenticateToken(), requirePermission('templates:read'), async (req, res) => {
+router.get('/status', authenticateToken, requirePermission('templates:read'), async (req, res) => {
   try {
     const { userId, tenantId } = getAuthUser(req);
 
@@ -195,13 +193,12 @@ router.get('/status', authenticateToken(), requirePermission('templates:read'), 
     logger.error('Failed to get connection status', {
       component: 'google-auth-routes',
       action: 'getStatus',
-      error: error.message
+      error: 'Operazione non riuscita'
     });
 
     res.status(500).json({
       success: false,
-      error: 'Failed to retrieve connection status',
-      message: error.message
+      error: 'Errore nel recupero dello stato connessione',
     });
   }
 });
@@ -210,7 +207,7 @@ router.get('/status', authenticateToken(), requirePermission('templates:read'), 
  * DELETE /api/v1/google/disconnect
  * Disconnect Google account and revoke tokens
  */
-router.delete('/disconnect', authenticateToken(), requirePermission('templates:manage'), async (req, res) => {
+router.delete('/disconnect', authenticateToken, requirePermission('templates:manage'), async (req, res) => {
   try {
     const { userId, tenantId } = getAuthUser(req);
 
@@ -225,7 +222,7 @@ router.delete('/disconnect', authenticateToken(), requirePermission('templates:m
 
     res.json({
       success: true,
-      message: 'Successfully disconnected from Google',
+      message: 'Account Google disconnesso',
       data: {
         connected: false
       }
@@ -234,13 +231,12 @@ router.delete('/disconnect', authenticateToken(), requirePermission('templates:m
     logger.error('Failed to disconnect Google account', {
       component: 'google-auth-routes',
       action: 'disconnect',
-      error: error.message
+      error: 'Operazione non riuscita'
     });
 
     res.status(500).json({
       success: false,
-      error: 'Failed to disconnect from Google',
-      message: error.message
+      error: 'Errore nella disconnessione da Google',
     });
   }
 });
@@ -249,7 +245,7 @@ router.delete('/disconnect', authenticateToken(), requirePermission('templates:m
  * POST /api/v1/google/import-docs
  * Import Google Docs document and convert to template data
  */
-router.post('/import-docs', authenticateToken(), requirePermission('templates:create'), async (req, res) => {
+router.post('/import-docs', authenticateToken, requirePermission('templates:create'), async (req, res) => {
   try {
     const { userId, tenantId } = getAuthUser(req);
     const { documentId, convertToHtml = true } = req.body;
@@ -257,7 +253,7 @@ router.post('/import-docs', authenticateToken(), requirePermission('templates:cr
     if (!documentId) {
       return res.status(400).json({
         success: false,
-        error: 'Document ID or URL is required'
+        error: 'ID o URL del documento obbligatorio'
       });
     }
 
@@ -282,14 +278,14 @@ router.post('/import-docs', authenticateToken(), requirePermission('templates:cr
 
     res.json({
       success: true,
-      message: 'Document imported successfully',
+      message: 'Documento importato con successo',
       data: templateData
     });
   } catch (error) {
     logger.error('Failed to import Google Docs', {
       component: 'google-auth-routes',
       action: 'importDocs',
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack
     });
 
@@ -297,8 +293,8 @@ router.post('/import-docs', authenticateToken(), requirePermission('templates:cr
     if (error.message.includes('not connected')) {
       return res.status(401).json({
         success: false,
-        error: 'Not connected to Google',
-        message: 'Please connect your Google account first',
+        error: 'Non connesso a Google',
+        message: 'Collegare prima il proprio account Google',
         code: 'GOOGLE_NOT_CONNECTED'
       });
     }
@@ -306,31 +302,29 @@ router.post('/import-docs', authenticateToken(), requirePermission('templates:cr
     if (error.message.includes('Invalid Google Docs URL')) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid document URL',
-        message: error.message
+        error: 'URL del documento non valido',
       });
     }
 
     if (error.code === 404 || error.message.includes('not found')) {
       return res.status(404).json({
         success: false,
-        error: 'Document not found',
-        message: 'The specified Google Docs document was not found or is not accessible'
+        error: 'Documento non trovato',
+        message: 'Il documento Google Docs specificato non è stato trovato o non è accessibile'
       });
     }
 
     if (error.code === 403 || error.message.includes('permission')) {
       return res.status(403).json({
         success: false,
-        error: 'Permission denied',
-        message: 'You do not have permission to access this document'
+        error: 'Permesso negato',
+        message: 'Non hai i permessi per accedere a questo documento'
       });
     }
 
     res.status(500).json({
       success: false,
-      error: 'Failed to import document',
-      message: error.message
+      error: 'Errore nell\'importazione del documento',
     });
   }
 });
@@ -339,7 +333,7 @@ router.post('/import-docs', authenticateToken(), requirePermission('templates:cr
  * POST /api/v1/google/import-slides
  * Import Google Slides presentation and convert to template data
  */
-router.post('/import-slides', authenticateToken(), requirePermission('templates:create'), async (req, res) => {
+router.post('/import-slides', authenticateToken, requirePermission('templates:create'), async (req, res) => {
   try {
     const { userId, tenantId } = getAuthUser(req);
     const { presentationId, convertToHtml = true } = req.body;
@@ -347,7 +341,7 @@ router.post('/import-slides', authenticateToken(), requirePermission('templates:
     if (!presentationId) {
       return res.status(400).json({
         success: false,
-        error: 'Presentation ID or URL is required'
+        error: 'ID o URL della presentazione obbligatorio'
       });
     }
 
@@ -372,14 +366,14 @@ router.post('/import-slides', authenticateToken(), requirePermission('templates:
 
     res.json({
       success: true,
-      message: 'Presentation imported successfully',
+      message: 'Presentazione importata con successo',
       data: templateData
     });
   } catch (error) {
     logger.error('Failed to import Google Slides', {
       component: 'google-auth-routes',
       action: 'importSlides',
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack
     });
 
@@ -387,8 +381,8 @@ router.post('/import-slides', authenticateToken(), requirePermission('templates:
     if (error.message.includes('not connected')) {
       return res.status(401).json({
         success: false,
-        error: 'Not connected to Google',
-        message: 'Please connect your Google account first',
+        error: 'Non connesso a Google',
+        message: 'Collegare prima il proprio account Google',
         code: 'GOOGLE_NOT_CONNECTED'
       });
     }
@@ -396,31 +390,29 @@ router.post('/import-slides', authenticateToken(), requirePermission('templates:
     if (error.message.includes('Invalid Google Slides URL')) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid presentation URL',
-        message: error.message
+        error: 'URL della presentazione non valido',
       });
     }
 
     if (error.code === 404 || error.message.includes('not found')) {
       return res.status(404).json({
         success: false,
-        error: 'Presentation not found',
-        message: 'The specified Google Slides presentation was not found or is not accessible'
+        error: 'Presentazione non trovata',
+        message: 'La presentazione Google Slides specificata non è stata trovata o non è accessibile'
       });
     }
 
     if (error.code === 403 || error.message.includes('permission')) {
       return res.status(403).json({
         success: false,
-        error: 'Permission denied',
-        message: 'You do not have permission to access this presentation'
+        error: 'Permesso negato',
+        message: 'Non hai i permessi per accedere a questa presentazione'
       });
     }
 
     res.status(500).json({
       success: false,
-      error: 'Failed to import presentation',
-      message: error.message
+      error: 'Errore nell\'importazione della presentazione',
     });
   }
 });
@@ -429,7 +421,7 @@ router.post('/import-slides', authenticateToken(), requirePermission('templates:
  * POST /api/v1/google/generate
  * Generate document from template with placeholder replacement
  */
-router.post('/generate', authenticateToken(), requirePermission('templates:create'), async (req, res) => {
+router.post('/generate', authenticateToken, requirePermission('templates:create'), async (req, res) => {
   try {
     const { userId, tenantId } = getAuthUser(req);
     const { templateId, type, data } = req.body;
@@ -437,7 +429,7 @@ router.post('/generate', authenticateToken(), requirePermission('templates:creat
     if (!templateId && !type) {
       return res.status(400).json({
         success: false,
-        error: 'Either templateId or type is required'
+        error: 'Specificare templateId o type'
       });
     }
 
@@ -465,7 +457,7 @@ router.post('/generate', authenticateToken(), requirePermission('templates:creat
     if (!template) {
       return res.status(404).json({
         success: false,
-        error: templateId ? 'Template not found' : `No default template found for type ${type}`
+        error: templateId ? 'Template non trovato' : `Nessun template predefinito trovato per il tipo ${type}`
       });
     }
 
@@ -473,7 +465,7 @@ router.post('/generate', authenticateToken(), requirePermission('templates:creat
     if (!template.googleDocsId && !template.googleSlidesId) {
       return res.status(400).json({
         success: false,
-        error: 'Template is not linked to a Google document'
+        error: 'Il template non è collegato a un documento Google'
       });
     }
 
@@ -510,10 +502,10 @@ router.post('/generate', authenticateToken(), requirePermission('templates:creat
     // Save PDF to uploads directory
     const uploadsDir = path.join(__dirname, '..', 'uploads', 'generated-docs');
     await fs.mkdir(uploadsDir, { recursive: true });
-    
+
     const filename = `${template.type.toLowerCase()}_${timestamp}.pdf`;
     const filepath = path.join(uploadsDir, filename);
-    
+
     await fs.writeFile(filepath, pdfBuffer);
 
     const fileUrl = `/uploads/generated-docs/${filename}`;
@@ -535,7 +527,7 @@ router.post('/generate', authenticateToken(), requirePermission('templates:creat
 
     res.json({
       success: true,
-      message: 'Document generated successfully',
+      message: 'Documento generato con successo',
       fileUrl,
       fileName: filename,
       fileFormat: 'PDF',
@@ -545,15 +537,15 @@ router.post('/generate', authenticateToken(), requirePermission('templates:creat
     logger.error('Failed to generate document', {
       component: 'google-auth-routes',
       action: 'generate',
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack
     });
 
     res.status(500).json({
       success: false,
-      error: 'Failed to generate document',
+      error: 'Errore nella generazione del documento',
       code: 'GENERATE_FAILED',
-      message: error.message
+      message: 'Operazione non riuscita'
     });
   }
 });

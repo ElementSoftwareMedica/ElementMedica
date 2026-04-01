@@ -11,7 +11,7 @@ interface CompanyLite {
  * Servizio per la mappatura e normalizzazione dei dati CSV
  */
 export class CsvMappingService {
-  
+
   /**
    * Ottiene la mappatura degli header CSV
    */
@@ -56,11 +56,11 @@ export class CsvMappingService {
     if (!companyName || !existingCompanies.length) return null;
 
     const normalizedName = this.normalizeCompanyName(companyName);
-    
+
     return existingCompanies.find(company => {
       const ragioneSociale = company.ragioneSociale ? this.normalizeCompanyName(company.ragioneSociale) : '';
       const name = company.name ? this.normalizeCompanyName(company.name) : '';
-      
+
       return ragioneSociale === normalizedName || name === normalizedName;
     }) || null;
   }
@@ -72,15 +72,15 @@ export class CsvMappingService {
     if (!companyName || !existingCompanies.length) return [];
 
     const normalizedName = this.normalizeCompanyName(companyName);
-    
+
     return existingCompanies.filter(company => {
       const ragioneSociale = company.ragioneSociale ? this.normalizeCompanyName(company.ragioneSociale) : '';
       const name = company.name ? this.normalizeCompanyName(company.name) : '';
-      
-      return ragioneSociale.includes(normalizedName) || 
-             normalizedName.includes(ragioneSociale) ||
-             name.includes(normalizedName) || 
-             normalizedName.includes(name);
+
+      return ragioneSociale.includes(normalizedName) ||
+        normalizedName.includes(ragioneSociale) ||
+        name.includes(normalizedName) ||
+        normalizedName.includes(name);
     });
   }
 
@@ -93,12 +93,12 @@ export class CsvMappingService {
     }
 
     const matchingCompany = this.findMatchingCompany(person.companyName, existingCompanies);
-    
+
     if (matchingCompany) {
       return {
         ...person,
         companyId: matchingCompany.id,
-        companyName: matchingCompany.ragioneSociale || matchingCompany.name
+        companyName: matchingCompany.ragioneSociale
       };
     }
 
@@ -137,9 +137,9 @@ export class CsvMappingService {
    * Valida se una riga è un template vuoto
    */
   static isEmptyTemplate(person: Partial<PersonData>): boolean {
-    return !person.firstName?.trim() && 
-           !person.lastName?.trim() && 
-           !person.taxCode?.trim();
+    return !person.firstName?.trim() &&
+      !person.lastName?.trim() &&
+      !person.taxCode?.trim();
   }
 
   /**
@@ -148,11 +148,11 @@ export class CsvMappingService {
   static prepareForAPI(person: PersonData): Record<string, unknown> {
     const apiData: Record<string, unknown> = {};
     const source: Record<string, unknown> = person as Record<string, unknown>;
-    
+
     // Campi da includere nell'API
     const apiFields = [
       'firstName', 'lastName', 'email', 'phone', 'taxCode', 'birthDate',
-      'residenceAddress', 'city', 'province', 'postalCode', 'title', 'companyId', 
+      'residenceAddress', 'city', 'province', 'postalCode', 'title', 'companyId',
       'username', 'notes', 'roleType'
     ] as const;
 
@@ -177,7 +177,7 @@ export class CsvMappingService {
   static convertCompaniesToOptions(companies: CompanyLite[]): Array<{ value: string; label: string }> {
     return companies.map(company => ({
       value: company.id,
-      label: company.ragioneSociale || company.name || 'Azienda senza nome'
+      label: company.ragioneSociale || 'Azienda senza nome'
     }));
   }
 
@@ -186,7 +186,7 @@ export class CsvMappingService {
    */
   static extractUniqueCompanyNames(persons: PersonData[]): string[] {
     const companyNames = new Set<string>();
-    
+
     persons.forEach(person => {
       if (person.companyName && typeof person.companyName === 'string') {
         companyNames.add(person.companyName.trim());
@@ -214,7 +214,7 @@ export class CsvMappingService {
 
     // Verifica che almeno una riga abbia dati validi
     const hasValidData = data.some(person => !this.isEmptyTemplate(person as Partial<PersonData>));
-    
+
     if (!hasValidData) {
       errors.push('Il file non contiene righe con dati validi');
       return { isValid: false, errors };

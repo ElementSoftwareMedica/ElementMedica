@@ -6,7 +6,7 @@
  */
 
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../../config/prisma-optimization.js';
 import logger from '../../utils/logger.js';
 
 // Import dei middleware
@@ -23,7 +23,6 @@ import {
 import { validateAdvancedPermission } from './utils/validators.js';
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 // ========================================
 // ROUTES STATICHE (PRIMA delle routes con :roleType)
@@ -61,14 +60,11 @@ router.get('/relation-definitions',
 
     } catch (error) {
       logger.error('Error getting relation definitions', {
-        error: error.message,
+        error: 'Operazione non riuscita',
         tenantId: req.tenant?.id || req.person?.tenantId
       });
 
-      res.status(500).json(createErrorResponse(
-        'Failed to get relation definitions',
-        error.message
-      ));
+      res.status(500).json(createErrorResponse('Errore nel recupero delle definizioni di relazione'));
     }
   }
 );
@@ -84,8 +80,8 @@ router.post('/test-data-filter',
     // Solo in development
     if (process.env.NODE_ENV === 'production') {
       return res.status(404).json(createErrorResponse(
-        'Not found',
-        'This endpoint is only available in development mode'
+        'Non trovato',
+        'Endpoint disponibile solo in modalità sviluppo'
       ));
     }
 
@@ -96,8 +92,8 @@ router.post('/test-data-filter',
 
       if (!resource) {
         return res.status(400).json(createErrorResponse(
-          'Validation error',
-          'resource is required'
+          'Errore di validazione',
+          'Il campo resource è obbligatorio'
         ));
       }
 
@@ -119,7 +115,7 @@ router.post('/test-data-filter',
           reason: accessCheck.reason,
           resource,
           action
-        }, 'Access denied'));
+        }, 'Accesso negato'));
       }
 
       // Costruisci filtro relazionale se applicabile
@@ -148,15 +144,12 @@ router.post('/test-data-filter',
 
     } catch (error) {
       logger.error('Error testing data filter', {
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         requestData: req.body
       });
 
-      res.status(500).json(createErrorResponse(
-        'Failed to test data filter',
-        error.message
-      ));
+      res.status(500).json(createErrorResponse('Errore nel test del filtro dati'));
     }
   }
 );
@@ -189,7 +182,7 @@ router.get('/:roleType/advanced-permissions',
 
       if (!role) {
         return res.status(404).json(createErrorResponse(
-          'Role not found',
+          'Ruolo non trovato',
           `Role with type '${roleType}' not found or inactive`
         ));
       }
@@ -239,7 +232,7 @@ router.get('/:roleType/advanced-permissions',
           : null
       };
 
-      logger.info('Advanced permissions retrieved', {
+      logger.info('Permessi avanzati recuperati', {
         roleType,
         roleId: role.id,
         tenantId,
@@ -262,17 +255,14 @@ router.get('/:roleType/advanced-permissions',
 
     } catch (error) {
       logger.error('Error retrieving advanced permissions', {
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         roleType: req.params.roleType,
         tenantId: req.tenant?.id || req.person?.tenantId,
         userId: req.person?.id
       });
 
-      res.status(500).json(createErrorResponse(
-        'Failed to retrieve advanced permissions',
-        error.message
-      ));
+      res.status(500).json(createErrorResponse('Errore nel recupero dei permessi avanzati'));
     }
   }
 );
@@ -294,7 +284,7 @@ router.post('/:roleType/advanced-permissions',
 
       if (!Array.isArray(permissions) || permissions.length === 0) {
         return res.status(400).json(createErrorResponse(
-          'Invalid input',
+          'Dati non validi',
           'permissions must be a non-empty array'
         ));
       }
@@ -304,7 +294,7 @@ router.post('/:roleType/advanced-permissions',
         const validation = validateAdvancedPermission(permission);
         if (!validation.isValid) {
           return res.status(400).json(createErrorResponse(
-            'Invalid permission data',
+            'Dati dei permessi non validi',
             validation.errors.join(', ')
           ));
         }
@@ -321,7 +311,7 @@ router.post('/:roleType/advanced-permissions',
 
       if (!role) {
         return res.status(404).json(createErrorResponse(
-          'Role not found',
+          'Ruolo non trovato',
           `Role with type '${roleType}' not found or inactive`
         ));
       }
@@ -339,7 +329,7 @@ router.post('/:roleType/advanced-permissions',
         const foundIds = existingPermissions.map(p => p.id);
         const missingIds = permissionIds.filter(id => !foundIds.includes(id));
         return res.status(404).json(createErrorResponse(
-          'Some permissions not found',
+          'Alcuni permessi non trovati',
           `Permissions with IDs ${missingIds.join(', ')} not found or inactive`
         ));
       }
@@ -381,7 +371,7 @@ router.post('/:roleType/advanced-permissions',
         }
       });
 
-      logger.info('Advanced permissions added', {
+      logger.info('Permessi avanzati aggiunti', {
         roleType,
         roleId: role.id,
         tenantId,
@@ -415,7 +405,7 @@ router.post('/:roleType/advanced-permissions',
 
     } catch (error) {
       logger.error('Error adding advanced permissions', {
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         roleType: req.params.roleType,
         requestData: req.body,
@@ -423,10 +413,7 @@ router.post('/:roleType/advanced-permissions',
         userId: req.person?.id
       });
 
-      res.status(500).json(createErrorResponse(
-        'Failed to add advanced permissions',
-        error.message
-      ));
+      res.status(500).json(createErrorResponse('Errore nell\'aggiunta dei permessi avanzati'));
     }
   }
 );
@@ -447,7 +434,7 @@ router.delete('/:roleType/advanced-permissions',
 
       if (!Array.isArray(permissionIds) || permissionIds.length === 0) {
         return res.status(400).json(createErrorResponse(
-          'Invalid input',
+          'Dati non validi',
           'permissionIds must be a non-empty array'
         ));
       }
@@ -462,7 +449,7 @@ router.delete('/:roleType/advanced-permissions',
 
       if (!role) {
         return res.status(404).json(createErrorResponse(
-          'Role not found',
+          'Ruolo non trovato',
           `Role with type '${roleType}' not found`
         ));
       }
@@ -511,7 +498,7 @@ router.delete('/:roleType/advanced-permissions',
         removedAt: new Date().toISOString()
       }));
 
-      logger.info('Advanced permissions removed', {
+      logger.info('Permessi avanzati rimossi', {
         roleType,
         roleId: role.id,
         tenantId,
@@ -538,7 +525,7 @@ router.delete('/:roleType/advanced-permissions',
 
     } catch (error) {
       logger.error('Error removing advanced permissions', {
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         roleType: req.params.roleType,
         requestData: req.body,
@@ -546,10 +533,7 @@ router.delete('/:roleType/advanced-permissions',
         userId: req.person?.id
       });
 
-      res.status(500).json(createErrorResponse(
-        'Failed to remove advanced permissions',
-        error.message
-      ));
+      res.status(500).json(createErrorResponse('Errore nella rimozione dei permessi avanzati'));
     }
   }
 );
@@ -571,7 +555,7 @@ router.put('/:roleType/advanced-permissions/sync',
 
       if (!Array.isArray(permissions)) {
         return res.status(400).json(createErrorResponse(
-          'Invalid input',
+          'Dati non validi',
           'permissions must be an array'
         ));
       }
@@ -587,12 +571,12 @@ router.put('/:roleType/advanced-permissions/sync',
 
       if (!role) {
         return res.status(404).json(createErrorResponse(
-          'Role not found',
+          'Ruolo non trovato',
           `Role with type '${roleType}' not found or inactive`
         ));
       }
 
-      // Se l'array è vuoto, rimuovi tutti i permessi
+      // Se l\'array è vuoto, rimuovi tutti i permessi
       if (permissions.length === 0) {
         const removedCount = await prisma.rolePermission.updateMany({
           where: { roleId: role.id },
@@ -635,7 +619,7 @@ router.put('/:roleType/advanced-permissions/sync',
         const foundIds = existingPermissions.map(p => p.id);
         const missingIds = permissionIds.filter(id => !foundIds.includes(id));
         return res.status(404).json(createErrorResponse(
-          'Some permissions not found',
+          'Alcuni permessi non trovati',
           `Permissions with IDs ${missingIds.join(', ')} not found or inactive`
         ));
       }
@@ -663,7 +647,7 @@ router.put('/:roleType/advanced-permissions/sync',
         return { removedCount: removedCount.count, addedCount: addedCount.count };
       });
 
-      logger.info('Advanced permissions synced', {
+      logger.info('Permessi avanzati sincronizzati', {
         roleType,
         roleId: role.id,
         tenantId,
@@ -691,7 +675,7 @@ router.put('/:roleType/advanced-permissions/sync',
 
     } catch (error) {
       logger.error('Error syncing advanced permissions', {
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         roleType: req.params.roleType,
         requestData: req.body,
@@ -699,10 +683,7 @@ router.put('/:roleType/advanced-permissions/sync',
         userId: req.person?.id
       });
 
-      res.status(500).json(createErrorResponse(
-        'Failed to sync advanced permissions',
-        error.message
-      ));
+      res.status(500).json(createErrorResponse('Errore nella sincronizzazione dei permessi avanzati'));
     }
   }
 );

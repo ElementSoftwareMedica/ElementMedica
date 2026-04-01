@@ -128,7 +128,7 @@ router.put('/:id/stato',
         component: 'preventivi-routes',
         action: 'update_stato',
         preventivoId: req.params.id,
-        error: error.message
+        error: 'Operazione non riuscita'
       });
       res.status(500).json({
         success: false,

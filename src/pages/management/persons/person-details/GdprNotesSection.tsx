@@ -6,6 +6,7 @@ import React from 'react';
 import { Lock, UserCheck, FileText } from 'lucide-react';
 import type { PersonData } from './types';
 import { formatDate, formatDateForInput, formatDateTime } from './utils';
+import { DatePickerElegante } from '../../../../components/ui/DatePickerElegante';
 
 interface GdprNotesSectionProps {
     person: PersonData;
@@ -35,11 +36,10 @@ export const GdprSection: React.FC<GdprNotesSectionProps> = ({
                 <div>
                     <label className={labelClasses}>Data Consenso GDPR</label>
                     {isEditing ? (
-                        <input
-                            type="date"
+                        <DatePickerElegante
                             value={formatDateForInput(editedPerson.gdprConsentDate)}
-                            onChange={(e) => onFieldChange('gdprConsentDate', e.target.value)}
-                            className={inputClasses}
+                            onChange={(date) => onFieldChange('gdprConsentDate', date ? date.toISOString().split('T')[0] : '')}
+                            theme="blue"
                         />
                     ) : (
                         <p className="text-gray-900 dark:text-white">
@@ -70,11 +70,10 @@ export const GdprSection: React.FC<GdprNotesSectionProps> = ({
                 <div>
                     <label className={labelClasses}>Conservazione Dati Fino A</label>
                     {isEditing ? (
-                        <input
-                            type="date"
+                        <DatePickerElegante
                             value={formatDateForInput(editedPerson.dataRetentionUntil)}
-                            onChange={(e) => onFieldChange('dataRetentionUntil', e.target.value)}
-                            className={inputClasses}
+                            onChange={(date) => onFieldChange('dataRetentionUntil', date ? date.toISOString().split('T')[0] : '')}
+                            theme="blue"
                         />
                     ) : (
                         <p className="text-gray-900 dark:text-white">{formatDate(person.dataRetentionUntil)}</p>

@@ -141,7 +141,7 @@ router.post('/:id/applica-sconto',
         component: 'preventivi-routes',
         action: 'apply_discount',
         preventivoId: req.params.id,
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack
       });
 
@@ -149,7 +149,7 @@ router.post('/:id/applica-sconto',
       if (error.message.includes('già applicato')) {
         return res.status(409).json({
           success: false,
-          error: error.message
+          error: 'Errore interno del server'
         });
       }
 
@@ -231,13 +231,13 @@ router.delete('/:id/sconti/:scontoId',
         action: 'remove_discount',
         preventivoId: req.params.id,
         scontoId: req.params.scontoId,
-        error: error.message
+        error: 'Operazione non riuscita'
       });
 
       if (error.message.includes('non trovato')) {
         return res.status(404).json({
           success: false,
-          error: error.message
+          error: 'Errore interno del server'
         });
       }
 

@@ -6,26 +6,34 @@
  */
 
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
-import middleware from '../auth/middleware.js';
+import prisma from '../config/prisma-optimization.js';
+import middleware from '../middleware/auth.js';
 import { body, validationResult } from 'express-validator';
 import logger from '../utils/logger.js';
 import { DocumentService } from '../services/documentService.js';
+import movimentoContabileService from '../services/management/movimento-contabile-service.js';
+import { getEffectiveTenantId } from '../utils/tenantHelper.js';
+import { signDocument, signDocumentsBulk } from '../services/documentSigningService.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const router = express.Router();
-const prisma = new PrismaClient();
 const documentService = new DocumentService();
 
-const { authenticate: authenticateToken, authorize: requirePermission } = middleware;
+const { authenticate: authenticateToken, requirePermission } = middleware;
 
 /**
  * GET /api/v1/lettere-incarico
  * Get all letters of engagement
  */
-router.get('/', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
+router.get('/', authenticateToken, requirePermission('documents:read'), async (req, res) => {
   try {
     const { scheduleId, trainerId } = req.query;
-    const tenantId = req.person.tenantId;
+    const tenantId = getEffectiveTenantId(req);
 
     const where = {
       tenantId,
@@ -42,7 +50,7 @@ router.get('/', authenticateToken(), requirePermission('documents:read'), async 
           include: {
             course: true,
             companies: {
-              include: { company: true }
+              include: { companyTenantProfile: { include: { company: true } } }
             }
           }
         },
@@ -63,10 +71,10 @@ router.get('/', authenticateToken(), requirePermission('documents:read'), async 
     logger.error('Failed to fetch lettere incarico', {
       component: 'lettere-incarico-routes',
       action: 'list',
-      error: error.message,
+      error: 'Operazione non riuscita',
       personId: req.person?.id
     });
-    res.status(500).json({ error: 'Failed to fetch lettere incarico' });
+    res.status(500).json({ error: 'Errore nel recupero delle lettere di incarico' });
   }
 });
 
@@ -75,14 +83,14 @@ router.get('/', authenticateToken(), requirePermission('documents:read'), async 
  * Generate letter of engagement from template
  */
 router.post('/generate',
-  authenticateToken(),
+  authenticateToken,
   requirePermission('documents:create'),
   [
-    body('scheduleId').notEmpty().withMessage('Schedule ID is required'),
-    body('trainerId').notEmpty().withMessage('Trainer ID is required'),
+    body('scheduleId').notEmpty().withMessage('ID programmazione obbligatorio'),
+    body('trainerId').notEmpty().withMessage('ID formatore obbligatorio'),
     body('templateId').optional().isString(),
-    body('hourlyRate').optional().isNumeric().withMessage('Hourly rate must be a number'),
-    body('expenses').optional().isNumeric().withMessage('Expenses must be a number'),
+    body('hourlyRate').optional().isNumeric().withMessage('La tariffa oraria deve essere un numero'),
+    body('expenses').optional().isNumeric().withMessage('Le spese devono essere un numero'),
     body('sendEmail').optional().isBoolean(),
     body('email').optional().isEmail()
   ],
@@ -90,11 +98,11 @@ router.post('/generate',
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
-        return res.status(400).json({ error: 'Validation error', details: errors.array() });
+        return res.status(400).json({ error: 'Errore di validazione', details: errors.array() });
       }
 
       const { scheduleId, trainerId, templateId, hourlyRate, expenses, sendEmail, email } = req.body;
-      const tenantId = req.person.tenantId;
+      const tenantId = getEffectiveTenantId(req);
       const userId = req.person.id;
 
       // Verify schedule exists
@@ -103,7 +111,7 @@ router.post('/generate',
         include: {
           course: true,
           companies: {
-            include: { company: true }
+            include: { companyTenantProfile: { include: { company: true } } }
           },
           sessions: {
             include: {
@@ -114,17 +122,30 @@ router.post('/generate',
       });
 
       if (!schedule) {
-        return res.status(404).json({ error: 'Schedule not found' });
+        return res.status(404).json({ error: 'Programmazione non trovata' });
       }
 
-      // Verify trainer exists
+      // P48: Verify trainer exists via PersonTenantProfile (Person is global, no tenantId)
       const trainer = await prisma.person.findFirst({
-        where: { id: trainerId, tenantId, deletedAt: null }
+        where: {
+          id: trainerId,
+          deletedAt: null,
+          tenantProfiles: { some: { tenantId, deletedAt: null } }
+        },
+        include: {
+          tenantProfiles: {
+            where: { tenantId, deletedAt: null },
+            take: 1
+          }
+        }
       });
 
       if (!trainer) {
-        return res.status(404).json({ error: 'Trainer not found' });
+        return res.status(404).json({ error: 'Formatore non trovato' });
       }
+
+      // P48: Extract tenant profile for email, phone, hourlyRate, etc.
+      const trainerProfile = trainer.tenantProfiles?.[0] || {};
 
       // Helper function to calculate hours from start and end time strings (e.g., "09:00", "13:00")
       const calculateSessionDuration = (start, end) => {
@@ -165,8 +186,8 @@ router.post('/generate',
         calculatedTotalHours: totalHours
       });
 
-      // Use provided hourlyRate or trainer's default
-      const effectiveHourlyRate = hourlyRate !== undefined ? parseFloat(hourlyRate) : (parseFloat(trainer.hourlyRate) || 0);
+      // Use provided hourlyRate or trainer's default (P48: hourlyRate on PersonTenantProfile)
+      const effectiveHourlyRate = hourlyRate !== undefined ? parseFloat(hourlyRate) : (parseFloat(trainerProfile.hourlyRate) || 0);
 
       // Use provided expenses or 0
       const effectiveExpenses = expenses !== undefined ? parseFloat(expenses) : 0;
@@ -181,7 +202,7 @@ router.post('/generate',
           where: { id: templateId, tenantId, type: 'LETTER_OF_ENGAGEMENT', deletedAt: null }
         });
         if (!template) {
-          return res.status(404).json({ error: 'Template not found' });
+          return res.status(404).json({ error: 'Template non trovato' });
         }
       } else {
         template = await prisma.templateLink.findFirst({
@@ -194,7 +215,7 @@ router.post('/generate',
           }
         });
         if (!template) {
-          return res.status(404).json({ error: 'No default template found. Please specify a template ID.' });
+          return res.status(404).json({ error: 'Nessun template predefinito trovato. Specificare un ID template.' });
         }
       }
 
@@ -213,7 +234,8 @@ router.post('/generate',
       const existingLettera = await prisma.letteraIncarico.findFirst({
         where: {
           scheduledCourseId: scheduleId,
-          trainerId: trainerId
+          trainerId: trainerId,
+          tenantId
           // NOTE: Don't filter by deletedAt here - unique constraint doesn't consider soft delete
         }
       });
@@ -240,9 +262,9 @@ router.post('/generate',
       };
 
       // Build participant companies list
-      // Note: Company model uses 'ragioneSociale' field, not 'name'
+      // P48: ScheduleCompany → companyTenantProfile → company
       const participantCompanies = (schedule.companies || [])
-        .map(sc => sc.company?.ragioneSociale || sc.company?.name)
+        .map(sc => sc.companyTenantProfile?.company?.ragioneSociale || sc.companyTenantProfile?.company?.name)
         .filter(Boolean)
         .join(', ') || 'N/A';
 
@@ -268,17 +290,17 @@ router.post('/generate',
           strict: false, // Permette marker custom non standard (es. session.trainer) - NON è un bypass di sicurezza
           trainerId: trainerId, // Pass trainer ID for multi-trainer schedules
           customData: {
-            // Override trainer data with calculated values
+            // Override trainer data with calculated values (P48: profile fields from trainerProfile)
             trainerOverride: {
               id: trainer.id,
               fullName: `${trainer.firstName} ${trainer.lastName}`,
               firstName: trainer.firstName,
               lastName: trainer.lastName,
-              email: trainer.email,
-              phone: trainer.phone || '',
-              qualifications: trainer.qualifications || '',
-              certifications: trainer.certifications || '',
-              specialties: trainer.specialties || '',
+              email: trainerProfile.email || '',
+              phone: trainerProfile.phone || '',
+              qualifications: '',
+              certifications: (trainerProfile.certifications || []).join(', '),
+              specialties: (trainerProfile.specialties || []).join(', '),
               hourlyRate: effectiveHourlyRate,
               totalHours: totalHours,
               expenses: effectiveExpenses,
@@ -308,14 +330,14 @@ router.post('/generate',
                 fullName: `${trainer.firstName} ${trainer.lastName}`,
                 firstName: trainer.firstName,
                 lastName: trainer.lastName,
-                email: trainer.email
+                email: trainerProfile.email || ''
               },
               participantCompanies: participantCompanies,
               partecipantCompanies: participantCompanies // Alias for typo in templates
             }
           },
           sendEmail: sendEmail || false,
-          email: email || trainer.email
+          email: email || trainerProfile.email || ''
         }
       });
 
@@ -339,7 +361,15 @@ router.post('/generate',
             deletedAt: null, // Resurrect if was soft-deleted
             // Keep existing number if active, use new number if was deleted
             numeroProgressivo: isExistingActive ? existingLettera.numeroProgressivo : numeroProgressivo,
-            annoProgressivo: isExistingActive ? existingLettera.annoProgressivo : year
+            annoProgressivo: isExistingActive ? existingLettera.annoProgressivo : year,
+            // Reset firma se il documento era stato eliminato (ricreazione)
+            ...(existingLettera.deletedAt ? {
+              firmaFormatore: null,
+              firmaFormatoreAt: null,
+              firmaDatoreLavoro: null,
+              firmaDatoreLavoroAt: null,
+              firmaDatoreLavoroId: null,
+            } : {})
           }
         });
       } else {
@@ -468,20 +498,49 @@ router.post('/generate',
         }
       }
 
+      // Crea bozza MovimentoContabile USCITA per compenso formatore (idempotente)
+      if (totalCompensation > 0) {
+        try {
+          const esistenteUscita = await prisma.movimentoContabile.findFirst({
+            where: { courseScheduleId: scheduleId, personId: trainerId, tipo: 'COMPENSO_FORMATORE', direzione: 'USCITA', tenantId, deletedAt: null }
+          });
+          if (esistenteUscita) {
+            await prisma.movimentoContabile.update({
+              where: { id: esistenteUscita.id },
+              data: {
+                importoLordo: totalCompensation, importoNetto: totalCompensation, importoIva: 0, aliquotaIva: 0,
+                descrizione: `Compenso formatore - ${trainer.firstName} ${trainer.lastName} - ${schedule.course?.title || 'Corso'}`,
+                preventivoId: preventivoCompensazione?.id || null, updatedBy: userId
+              }
+            });
+          } else {
+            await movimentoContabileService.create(tenantId, {
+              direzione: 'USCITA', tipo: 'COMPENSO_FORMATORE', tipoSoggetto: 'FORMATORE', stato: 'BOZZA',
+              importoLordo: totalCompensation, importoNetto: totalCompensation, importoIva: 0, aliquotaIva: 0,
+              dataEsecuzione: new Date(), courseScheduleId: scheduleId,
+              preventivoId: preventivoCompensazione?.id || null, personId: trainerId,
+              descrizione: `Compenso formatore - ${trainer.firstName} ${trainer.lastName} - ${schedule.course?.title || 'Corso'}`,
+              branchType: 'MEDICA', createdBy: userId
+            });
+          }
+          logger.info('MovimentoContabile USCITA formatore', { component: 'lettere-incarico-routes', trainerId, scheduleId, aggiornato: !!esistenteUscita });
+        } catch (movErr) {
+          logger.error('Errore MovimentoContabile USCITA formatore', { component: 'lettere-incarico-routes', trainerId, scheduleId, error: movErr.message });
+        }
+      }
+
       logger.info('Letter of engagement generated', {
-        component: 'lettere-incarico-routes',
-        action: 'generate',
-        letteraId: lettera.id,
-        documentId: document.id,
-        scheduleId,
-        trainerId,
-        templateId: template.id,
-        personId: userId,
-        preventivoCompensoId: preventivoCompensazione?.id || null
+        component: 'lettere-incarico-routes', action: 'generate',
+        letteraId: lettera.id, documentId: document.id, scheduleId, trainerId,
+        templateId: template.id, personId: userId, preventivoCompensoId: preventivoCompensazione?.id || null
       });
 
       res.json({
-        lettera,
+        lettera: {
+          ...lettera,
+          trainerName: `${trainer.firstName} ${trainer.lastName}`,
+          trainerEmail: trainerProfile.email || null
+        },
         document,
         downloadUrl: document.fileUrl,
         preventivoCompenso: preventivoCompensazione
@@ -490,11 +549,11 @@ router.post('/generate',
       logger.error('Failed to generate letter of engagement', {
         component: 'lettere-incarico-routes',
         action: 'generate',
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         personId: req.person?.id
       });
-      res.status(500).json({ error: 'Failed to generate letter of engagement', message: error.message });
+      res.status(500).json({ error: 'Errore nella generazione della lettera di incarico' });
     }
   }
 );
@@ -504,11 +563,11 @@ router.post('/generate',
  * Generate letters for multiple trainers in a schedule
  */
 router.post('/generate-batch',
-  authenticateToken(),
+  authenticateToken,
   requirePermission('documents:create'),
   [
-    body('scheduleId').notEmpty().withMessage('Schedule ID is required'),
-    body('trainerIds').isArray({ min: 1 }).withMessage('At least one trainer ID is required'),
+    body('scheduleId').notEmpty().withMessage('ID programmazione obbligatorio'),
+    body('trainerIds').isArray({ min: 1 }).withMessage('Almeno un ID formatore è richiesto'),
     body('templateId').optional().isString(),
     body('sendEmail').optional().isBoolean()
   ],
@@ -516,11 +575,11 @@ router.post('/generate-batch',
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
-        return res.status(400).json({ error: 'Validation error', details: errors.array() });
+        return res.status(400).json({ error: 'Errore di validazione', details: errors.array() });
       }
 
       const { scheduleId, trainerIds, templateId, sendEmail } = req.body;
-      const tenantId = req.person.tenantId;
+      const tenantId = getEffectiveTenantId(req);
       const userId = req.person.id;
 
       // Verify schedule
@@ -529,7 +588,7 @@ router.post('/generate-batch',
       });
 
       if (!schedule) {
-        return res.status(404).json({ error: 'Schedule not found' });
+        return res.status(404).json({ error: 'Programmazione non trovata' });
       }
 
       // Get template
@@ -551,7 +610,7 @@ router.post('/generate-batch',
       }
 
       if (!template) {
-        return res.status(404).json({ error: 'Template not found' });
+        return res.status(404).json({ error: 'Template non trovato' });
       }
 
       // Generate batch
@@ -583,16 +642,16 @@ router.post('/generate-batch',
         batchId: batchJob.batchId,
         status: batchJob.status,
         total: trainerIds.length,
-        message: 'Batch generation started'
+        message: 'Generazione batch avviata'
       });
     } catch (error) {
       logger.error('Failed to start batch letter generation', {
         component: 'lettere-incarico-routes',
         action: 'generate-batch',
-        error: error.message,
+        error: 'Operazione non riuscita',
         personId: req.person?.id
       });
-      res.status(500).json({ error: 'Failed to start batch generation', message: error.message });
+      res.status(500).json({ error: 'Errore nella generazione batch delle lettere di incarico' });
     }
   }
 );
@@ -601,17 +660,17 @@ router.post('/generate-batch',
  * DELETE /api/v1/lettere-incarico/:id
  * Delete letter (soft delete)
  */
-router.delete('/:id', authenticateToken(), requirePermission('documents:delete'), async (req, res) => {
+router.delete('/:id', authenticateToken, requirePermission('documents:delete'), async (req, res) => {
   try {
     const { id } = req.params;
-    const tenantId = req.person.tenantId;
+    const tenantId = getEffectiveTenantId(req);
 
     const lettera = await prisma.letteraIncarico.findFirst({
-      where: { id, tenantId }
+      where: { id, tenantId, deletedAt: null }
     });
 
     if (!lettera) {
-      return res.status(404).json({ error: 'Lettera incarico not found' });
+      return res.status(404).json({ error: 'Lettera di incarico non trovata' });
     }
 
     await prisma.letteraIncarico.update({
@@ -626,15 +685,16 @@ router.delete('/:id', authenticateToken(), requirePermission('documents:delete')
       personId: req.person?.id
     });
 
-    res.json({ message: 'Lettera incarico deleted successfully' });
+    res.json({ message: 'Lettera di incarico eliminata con successo' });
   } catch (error) {
     logger.error('Failed to delete letter of engagement', {
       component: 'lettere-incarico-routes',
       action: 'delete',
-      error: error.message,
-      personId: req.person?.id
+      error: 'Operazione non riuscita',
+      personId: req.person?.id,
+      letteraId: req.params?.id
     });
-    res.status(500).json({ error: 'Failed to delete letter of engagement' });
+    res.status(500).json({ error: 'Errore nell\'eliminazione della lettera di incarico' });
   }
 });
 
@@ -642,29 +702,62 @@ router.delete('/:id', authenticateToken(), requirePermission('documents:delete')
  * GET /api/v1/lettere-incarico/:id/download
  * Download letter PDF
  */
-router.get('/:id/download', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
+router.get('/:id/download', authenticateToken, requirePermission('documents:read'), async (req, res) => {
   try {
     const { id } = req.params;
-    const tenantId = req.person.tenantId;
+    const tenantId = getEffectiveTenantId(req);
 
     const lettera = await prisma.letteraIncarico.findFirst({
       where: { id, tenantId, deletedAt: null }
     });
 
     if (!lettera) {
-      return res.status(404).json({ error: 'Lettera incarico not found' });
+      return res.status(404).json({ error: 'Lettera di incarico non trovata' });
     }
 
-    // Redirect to document download (managed by storage service)
+    if (!lettera.url) {
+      return res.status(404).json({ error: 'File lettera di incarico non trovato' });
+    }
+
+    // Resolve file path from /uploads/... URL
+    // __dirname is backend/routes/, so go up one level to backend/
+    const backendRoot = path.join(__dirname, '..');
+    const downloadFileName = lettera.nomeFile || `lettera-incarico-${id}.pdf`;
+
+    if (lettera.url.startsWith('/uploads/')) {
+      const filePath = path.join(backendRoot, lettera.url);
+
+      if (fs.existsSync(filePath)) {
+        return res.download(filePath, downloadFileName);
+      }
+
+      // Fallback: try uploads/documents/ base
+      const justFileName = path.basename(lettera.url);
+      const altPath = path.join(backendRoot, 'uploads', 'documents', justFileName);
+      if (fs.existsSync(altPath)) {
+        return res.download(altPath, downloadFileName);
+      }
+
+      logger.error('Letter file not found on disk', {
+        component: 'lettere-incarico-routes',
+        action: 'download',
+        letteraId: id,
+        primaryPath: filePath,
+        altPath
+      });
+      return res.status(404).json({ error: 'File non trovato su disco' });
+    }
+
+    // External URL fallback
     res.redirect(lettera.url);
   } catch (error) {
     logger.error('Failed to download letter of engagement', {
       component: 'lettere-incarico-routes',
       action: 'download',
-      error: error.message,
+      error: 'Operazione non riuscita',
       personId: req.person?.id
     });
-    res.status(500).json({ error: 'Failed to download letter of engagement' });
+    res.status(500).json({ error: 'Errore nel download della lettera di incarico' });
   }
 });
 
@@ -673,13 +766,13 @@ router.get('/:id/download', authenticateToken(), requirePermission('documents:re
  * Download multiple letters as ZIP for a schedule
  */
 router.get('/schedule/:scheduleId/download-zip',
-  authenticateToken(),
+  authenticateToken,
   requirePermission('documents:read'),
   async (req, res) => {
     try {
       const { scheduleId } = req.params;
       const { ids } = req.query;
-      const tenantId = req.person.tenantId;
+      const tenantId = getEffectiveTenantId(req);
 
       // Build where clause
       const where = {
@@ -704,7 +797,7 @@ router.get('/schedule/:scheduleId/download-zip',
       });
 
       if (lettere.length === 0) {
-        return res.status(404).json({ error: 'No letters found for this schedule' });
+        return res.status(404).json({ error: 'Nessuna lettera trovata per questa programmazione' });
       }
 
       // Import archiver for ZIP creation
@@ -740,7 +833,7 @@ router.get('/schedule/:scheduleId/download-zip',
           } catch (fileError) {
             logger.warn('Failed to add file to ZIP', {
               letterId: lettera.id,
-              error: fileError.message
+              error: 'Operazione non riuscita'
             });
           }
         }
@@ -759,10 +852,10 @@ router.get('/schedule/:scheduleId/download-zip',
       logger.error('Failed to create letters ZIP', {
         component: 'lettere-incarico-routes',
         action: 'download-zip',
-        error: error.message,
+        error: 'Operazione non riuscita',
         personId: req.person?.id
       });
-      res.status(500).json({ error: 'Failed to create ZIP file' });
+      res.status(500).json({ error: 'Errore nella creazione del file ZIP' });
     }
   }
 );
@@ -774,10 +867,10 @@ router.get('/schedule/:scheduleId/download-zip',
  * GET /api/v1/lettere-incarico/:id
  * Get single letter of engagement
  */
-router.get('/:id', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
+router.get('/:id', authenticateToken, requirePermission('documents:read'), async (req, res) => {
   try {
     const { id } = req.params;
-    const tenantId = req.person.tenantId;
+    const tenantId = getEffectiveTenantId(req);
 
     const lettera = await prisma.letteraIncarico.findFirst({
       where: { id, tenantId, deletedAt: null },
@@ -786,7 +879,7 @@ router.get('/:id', authenticateToken(), requirePermission('documents:read'), asy
           include: {
             course: true,
             companies: {
-              include: { company: true }
+              include: { companyTenantProfile: { include: { company: true } } }
             },
             sessions: {
               include: {
@@ -801,7 +894,7 @@ router.get('/:id', authenticateToken(), requirePermission('documents:read'), asy
     });
 
     if (!lettera) {
-      return res.status(404).json({ error: 'Lettera incarico not found' });
+      return res.status(404).json({ error: 'Lettera di incarico non trovata' });
     }
 
     res.json(lettera);
@@ -810,10 +903,150 @@ router.get('/:id', authenticateToken(), requirePermission('documents:read'), asy
       component: 'lettere-incarico-routes',
       action: 'get',
       id: req.params.id,
-      error: error.message,
+      error: 'Operazione non riuscita',
       personId: req.person?.id
     });
-    res.status(500).json({ error: 'Failed to fetch lettera incarico' });
+    res.status(500).json({ error: 'Errore nel recupero della lettera di incarico' });
+  }
+});
+
+/**
+ * GET /api/v1/lettere-incarico/:id/preview
+ * Serve lettera PDF inline for preview (used by SigningWorkflowModal)
+ */
+router.get('/:id/preview', authenticateToken, requirePermission('documents:read'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const tenantId = getEffectiveTenantId(req);
+
+    const lettera = await prisma.letteraIncarico.findFirst({
+      where: { id, tenantId, deletedAt: null }
+    });
+
+    if (!lettera) {
+      return res.status(404).json({ error: 'Lettera di incarico non trovata' });
+    }
+
+    if (!lettera.url) {
+      return res.status(404).json({ error: 'File lettera non trovato' });
+    }
+
+    const backendRoot = path.join(__dirname, '..');
+
+    if (lettera.url.startsWith('/uploads/')) {
+      const filePath = path.join(backendRoot, lettera.url);
+      if (fs.existsSync(filePath)) {
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', 'inline');
+        return fs.createReadStream(filePath).pipe(res);
+      }
+
+      const justFileName = path.basename(lettera.url);
+      const altPath = path.join(backendRoot, 'uploads', 'documents', justFileName);
+      if (fs.existsSync(altPath)) {
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', 'inline');
+        return fs.createReadStream(altPath).pipe(res);
+      }
+
+      return res.status(404).json({ error: 'File non trovato su disco' });
+    }
+
+    // External URL: proxy the file
+    const axios = await import('axios');
+    const fileResponse = await axios.default.get(lettera.url, { responseType: 'stream' });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline');
+    fileResponse.data.pipe(res);
+  } catch (error) {
+    logger.error('Failed to preview lettera', {
+      component: 'lettere-incarico-routes',
+      action: 'preview',
+      letteraId: req.params.id,
+      error: 'Operazione non riuscita'
+    });
+    res.status(500).json({ error: 'Errore nel caricamento dell\'anteprima' });
+  }
+});
+
+/**
+ * POST /api/v1/lettere-incarico/:id/sign
+ * Apply signature to lettera di incarico
+ */
+router.post('/:id/sign', authenticateToken, requirePermission('documents:write'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const tenantId = getEffectiveTenantId(req);
+    const { signatureData, placement } = req.body;
+
+    if (!signatureData) {
+      return res.status(400).json({ error: 'Dati firma mancanti' });
+    }
+
+    const result = await signDocument({
+      documentId: id,
+      signatureBase64: signatureData,
+      signedById: req.person?.id,
+      tenantId,
+      placement
+    });
+
+    logger.info('Lettera incarico signed', {
+      component: 'lettere-incarico-routes',
+      action: 'sign',
+      letteraId: id,
+      signerId: req.person?.id
+    });
+
+    res.json({ success: true, message: 'Firma applicata con successo', signedFileUrl: result.signedFileUrl });
+  } catch (error) {
+    logger.error('Failed to sign lettera', {
+      component: 'lettere-incarico-routes',
+      action: 'sign',
+      letteraId: req.params.id,
+      error: 'Operazione non riuscita'
+    });
+    res.status(500).json({ error: 'Errore nell\'applicazione della firma' });
+  }
+});
+
+/**
+ * POST /api/v1/lettere-incarico/bulk-sign
+ * Apply signature to multiple lettere di incarico
+ */
+router.post('/bulk-sign', authenticateToken, requirePermission('documents:write'), async (req, res) => {
+  try {
+    const tenantId = getEffectiveTenantId(req);
+    const { documentIds, signatureData, placement } = req.body;
+
+    if (!signatureData || !Array.isArray(documentIds) || documentIds.length === 0) {
+      return res.status(400).json({ error: 'Dati firma o ID documenti mancanti' });
+    }
+
+    const { succeeded, failed } = await signDocumentsBulk({
+      documentIds,
+      signatureBase64: signatureData,
+      signedById: req.person?.id,
+      tenantId,
+      placement
+    });
+
+    logger.info('Lettere incarico bulk signed', {
+      component: 'lettere-incarico-routes',
+      action: 'bulk-sign',
+      succeeded: succeeded.length,
+      failed: failed.length,
+      signerId: req.person?.id
+    });
+
+    res.json({ succeeded, failed });
+  } catch (error) {
+    logger.error('Failed to bulk sign lettere', {
+      component: 'lettere-incarico-routes',
+      action: 'bulk-sign',
+      error: 'Operazione non riuscita'
+    });
+    res.status(500).json({ error: 'Errore nella firma multipla' });
   }
 });
 

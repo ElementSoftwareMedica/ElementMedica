@@ -46,10 +46,10 @@ const DropdownContext = React.createContext<{
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
   triggerRef: React.RefObject<HTMLElement>;
-}>({ 
-  isOpen: false, 
-  setIsOpen: () => {}, 
-  triggerRef: { current: null } 
+}>({
+  isOpen: false,
+  setIsOpen: () => { },
+  triggerRef: { current: null }
 });
 
 /**
@@ -121,15 +121,15 @@ export const DropdownMenuContent: React.FC<DropdownMenuContentProps> = ({
       const triggerRect = triggerRef.current.getBoundingClientRect();
       const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
       const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
-      
+
       let left = triggerRect.left + scrollLeft;
-      
+
       if (align === 'end') {
         left = triggerRect.right + scrollLeft;
       } else if (align === 'center') {
         left = triggerRect.left + scrollLeft + triggerRect.width / 2;
       }
-      
+
       setPosition({
         top: triggerRect.bottom + scrollTop + 4,
         left
@@ -170,15 +170,16 @@ export const DropdownMenuContent: React.FC<DropdownMenuContentProps> = ({
     return null;
   }
 
-  const alignmentClass = align === 'end' ? '-translate-x-full' : 
-                        align === 'center' ? '-translate-x-1/2' : 
-                        '';
+  const alignmentClass = align === 'end' ? '-translate-x-full' :
+    align === 'center' ? '-translate-x-1/2' :
+      '';
 
   return createPortal(
     <div
       ref={contentRef}
       className={cn(
         'absolute z-50 min-w-[8rem] overflow-hidden rounded-md border bg-white p-1 shadow-md',
+        'dark:bg-gray-800 dark:border-gray-700',
         'animate-in fade-in-0 zoom-in-95',
         alignmentClass,
         className
@@ -208,7 +209,7 @@ export const DropdownMenuItem: React.FC<DropdownMenuItemProps> = ({
 
   const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
     if (disabled) return;
-    
+
     onClick?.(event);
     setIsOpen(false);
   };
@@ -218,7 +219,8 @@ export const DropdownMenuItem: React.FC<DropdownMenuItemProps> = ({
       className={cn(
         'relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none',
         'transition-colors focus:bg-gray-100 focus:text-gray-900',
-        disabled ? 'pointer-events-none opacity-50' : 'hover:bg-gray-100',
+        'dark:focus:bg-gray-700 dark:focus:text-gray-100 dark:text-gray-200',
+        disabled ? 'pointer-events-none opacity-50' : 'hover:bg-gray-100 dark:hover:bg-gray-700',
         className
       )}
       onClick={handleClick}
@@ -229,15 +231,15 @@ export const DropdownMenuItem: React.FC<DropdownMenuItemProps> = ({
   );
 };
 
-export const DropdownMenuSeparator: React.FC<{ className?: string }> = ({ 
-  className 
+export const DropdownMenuSeparator: React.FC<{ className?: string }> = ({
+  className
 }) => {
   return (
-    <div 
+    <div
       className={cn(
-        '-mx-1 my-1 h-px bg-gray-200',
+        '-mx-1 my-1 h-px bg-gray-200 dark:bg-gray-700',
         className
-      )} 
+      )}
     />
   );
 };

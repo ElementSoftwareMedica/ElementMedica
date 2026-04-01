@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useToast } from '../../../hooks/useToast';
 import { Role } from '../../../hooks/useRoles';
 import { Tenant } from '../../../hooks/useTenants';
-import { EntityDefinition, EntityPermission, advancedPermissionsService } from '../../../services/advancedPermissions';
+import { EntityDefinition, EntityPermission, advancedPermissionsService } from '../../../services/advanced-permissions';
 import {
   updatePermissionInArray,
   updatePermissionFields,
@@ -76,7 +76,6 @@ const OptimizedPermissionManagerRefactored: React.FC<OptimizedPermissionManagerR
       setEntities(entitiesData);
       setPermissions(permissionsData);
     } catch (err) {
-      console.error('Errore nel caricamento dei dati:', err);
       setError('Errore nel caricamento dei dati');
       showToast({ message: 'Errore nel caricamento dei dati', type: 'error' });
     } finally {
@@ -177,7 +176,17 @@ const OptimizedPermissionManagerRefactored: React.FC<OptimizedPermissionManagerR
   const handleDeniedFieldsChange = useCallback((entity: string, action: string, deniedFields: string[]) => {
     setPermissions(prev => {
       const permissionIndex = prev.findIndex(p => p.entity === entity && p.action === action);
-      if (permissionIndex === -1) return prev;
+
+      // P69: Se il permesso non esiste, crealo con scope 'tenant' e i deniedFields
+      if (permissionIndex === -1) {
+        return [...prev, {
+          entity,
+          action: action as 'create' | 'read' | 'update' | 'delete',
+          scope: 'tenant' as const,
+          deniedFields,
+          fields: []
+        }];
+      }
 
       const newPermissions = [...prev];
       newPermissions[permissionIndex] = {
@@ -192,7 +201,17 @@ const OptimizedPermissionManagerRefactored: React.FC<OptimizedPermissionManagerR
   const handleAllowedFieldsChange = useCallback((entity: string, action: string, allowedFields: string[]) => {
     setPermissions(prev => {
       const permissionIndex = prev.findIndex(p => p.entity === entity && p.action === action);
-      if (permissionIndex === -1) return prev;
+
+      // P69: Se il permesso non esiste, crealo con scope 'tenant' e i campi allowed
+      if (permissionIndex === -1) {
+        return [...prev, {
+          entity,
+          action: action as 'create' | 'read' | 'update' | 'delete',
+          scope: 'tenant' as const,
+          fields: allowedFields,
+          deniedFields: []
+        }];
+      }
 
       const newPermissions = [...prev];
       newPermissions[permissionIndex] = {
@@ -212,7 +231,6 @@ const OptimizedPermissionManagerRefactored: React.FC<OptimizedPermissionManagerR
       await advancedPermissionsService.updateRolePermissions(roleIdentifier, permissions);
       showToast({ message: 'Permessi aggiornati con successo', type: 'success' });
     } catch (err) {
-      console.error('Errore nel salvataggio:', err);
       showToast({ message: 'Errore nel salvataggio dei permessi', type: 'error' });
     } finally {
       setSaving(false);
@@ -250,7 +268,7 @@ const OptimizedPermissionManagerRefactored: React.FC<OptimizedPermissionManagerR
   }
 
   return (
-    <div className="h-full flex flex-col bg-gray-50">
+    <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-900 min-h-0">
       {/* Header principale */}
       <PermissionManagerHeader
         role={role}
@@ -269,60 +287,66 @@ const OptimizedPermissionManagerRefactored: React.FC<OptimizedPermissionManagerR
         onReload={loadData}
       />
 
-      {/* Layout principale a 3 colonne */}
-      <div className="flex-1 grid grid-cols-3 min-h-0">
-        {/* Colonna 1: Lista entità */}
-        <EntityList
-          entities={filteredEntities}
-          selectedEntity={selectedEntity}
-          searchTerm={searchTerm}
-          onSearchChange={setSearchTerm}
-          onEntitySelect={handleEntitySelect}
-        />
-
-        {/* Colonna 2: Gestione permessi CRUD */}
-        {selectedEntity ? (
-          <PermissionsSection
-            entity={selectedEntity}
-            permissions={permissions}
-            tenants={tenants}
-            bulkMode={bulkMode}
-            selectedActions={selectedActions}
-            selectedAction={selectedAction}
-            onPermissionUpdate={updatePermission}
-            onTenantChange={handleTenantChange}
-            onRelationTypeChange={handleRelationTypeChange}
-            onActionToggle={toggleActionSelection}
-            onActionSelect={setSelectedAction}
-            onSelectAllActions={selectAllActions}
-            onClearActionSelection={clearActionSelection}
-            onBulkScopeApply={applyBulkScope}
-            onBulkTenantsApply={applyBulkTenants}
+      {/* Layout principale a 3 colonne - P69: Independent scroll per colonna con altezza fissa */}
+      <div className="flex-1 grid grid-cols-3 gap-0 min-h-0 overflow-hidden">
+        {/* Colonna 1: Lista entità - scroll indipendente con altezza fissa */}
+        <div className="h-full min-h-0 max-h-full overflow-y-auto overflow-x-hidden border-r border-gray-200 dark:border-gray-700">
+          <EntityList
+            entities={filteredEntities}
+            selectedEntity={selectedEntity}
+            searchTerm={searchTerm}
+            onSearchChange={setSearchTerm}
+            onEntitySelect={handleEntitySelect}
           />
-        ) : (
-          <div className="bg-white border-r border-gray-200 flex items-center justify-center">
-            <p className="text-gray-500">Seleziona un'entità per gestire i permessi</p>
-          </div>
-        )}
+        </div>
 
-        {/* Colonna 3: Gestione campi specifici */}
-        {selectedEntity ? (
-          <FieldsSection
-            entity={selectedEntity}
-            selectedAction={selectedAction}
-            permissions={permissions}
-            bulkMode={bulkMode}
-            selectedActions={selectedActions}
-            onFieldToggle={handleFieldToggle}
-            onBulkFieldsApply={applyBulkFields}
-            onDeniedFieldsChange={handleDeniedFieldsChange}
-            onAllowedFieldsChange={handleAllowedFieldsChange}
-          />
-        ) : (
-          <div className="bg-white flex items-center justify-center">
-            <p className="text-gray-500">Seleziona un'entità per gestire i campi</p>
-          </div>
-        )}
+        {/* Colonna 2: Gestione permessi CRUD - scroll indipendente */}
+        <div className="min-h-0 overflow-y-auto overflow-x-hidden border-r border-gray-200 dark:border-gray-700">
+          {selectedEntity ? (
+            <PermissionsSection
+              entity={selectedEntity}
+              permissions={permissions}
+              tenants={tenants}
+              bulkMode={bulkMode}
+              selectedActions={selectedActions}
+              selectedAction={selectedAction}
+              onPermissionUpdate={updatePermission}
+              onTenantChange={handleTenantChange}
+              onRelationTypeChange={handleRelationTypeChange}
+              onActionToggle={toggleActionSelection}
+              onActionSelect={setSelectedAction}
+              onSelectAllActions={selectAllActions}
+              onClearActionSelection={clearActionSelection}
+              onBulkScopeApply={applyBulkScope}
+              onBulkTenantsApply={applyBulkTenants}
+            />
+          ) : (
+            <div className="min-h-0 bg-white border-r border-gray-200 flex items-center justify-center">
+              <p className="text-gray-500">Seleziona un'entità per gestire i permessi</p>
+            </div>
+          )}
+        </div>
+
+        {/* Colonna 3: Gestione campi specifici - scroll indipendente */}
+        <div className="min-h-0 overflow-y-auto overflow-x-hidden">
+          {selectedEntity ? (
+            <FieldsSection
+              entity={selectedEntity}
+              selectedAction={selectedAction}
+              permissions={permissions}
+              bulkMode={bulkMode}
+              selectedActions={selectedActions}
+              onFieldToggle={handleFieldToggle}
+              onBulkFieldsApply={applyBulkFields}
+              onDeniedFieldsChange={handleDeniedFieldsChange}
+              onAllowedFieldsChange={handleAllowedFieldsChange}
+            />
+          ) : (
+            <div className="min-h-0 bg-white flex items-center justify-center">
+              <p className="text-gray-500">Seleziona un'entità per gestire i campi</p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

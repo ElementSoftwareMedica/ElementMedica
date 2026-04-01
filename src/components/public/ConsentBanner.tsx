@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { 
+import {
   Cookie,
   Settings,
   X
@@ -45,10 +45,10 @@ export const ConsentBanner: React.FC = () => {
       marketing: true,
       timestamp: new Date().toISOString()
     };
-    
+
     localStorage.setItem('cookie-consent', JSON.stringify(allAccepted));
     setIsVisible(false);
-    
+
     // Qui potresti inizializzare i servizi di analytics/marketing
     initializeServices(allAccepted);
   };
@@ -58,10 +58,10 @@ export const ConsentBanner: React.FC = () => {
       ...preferences,
       timestamp: new Date().toISOString()
     };
-    
+
     localStorage.setItem('cookie-consent', JSON.stringify(selectedPreferences));
     setIsVisible(false);
-    
+
     initializeServices(selectedPreferences);
   };
 
@@ -72,26 +72,23 @@ export const ConsentBanner: React.FC = () => {
       marketing: false,
       timestamp: new Date().toISOString()
     };
-    
+
     localStorage.setItem('cookie-consent', JSON.stringify(onlyNecessary));
     setIsVisible(false);
   };
 
   const initializeServices = (consent: CookiePreferences & { timestamp?: string }) => {
-    // Qui inizializzeresti i servizi basati sui consensi
     if (consent.analytics) {
-      // Inizializza Google Analytics, etc.
-      console.log('Analytics enabled');
+      // TODO: Inizializzare Google Analytics / servizi analytics
     }
     if (consent.marketing) {
-      // Inizializza pixel di marketing, etc.
-      console.log('Marketing enabled');
+      // TODO: Inizializzare pixel marketing / retargeting
     }
   };
 
   const togglePreference = (key: keyof CookiePreferences) => {
     if (key === 'necessary') return; // Non modificabile
-    
+
     setPreferences(prev => ({
       ...prev,
       [key]: !prev[key]
@@ -118,9 +115,9 @@ export const ConsentBanner: React.FC = () => {
                   <PublicBadge variant="blue" size="sm">GDPR</PublicBadge>
                 </div>
                 <p className="text-sm text-gray-600 leading-relaxed">
-                  Utilizziamo cookie tecnici necessari per il funzionamento del sito e, 
+                  Utilizziamo cookie tecnici necessari per il funzionamento del sito e,
                   con il tuo consenso, cookie di analisi e marketing per migliorare i nostri servizi.
-                  <button 
+                  <button
                     onClick={() => setShowSettings(true)}
                     className="text-gray-700 hover:text-gray-900 underline ml-1 font-medium"
                   >
@@ -129,7 +126,7 @@ export const ConsentBanner: React.FC = () => {
                 </p>
               </div>
             </div>
-            
+
             <div className="flex flex-col sm:flex-row gap-2 lg:flex-shrink-0">
               <PublicButton
                 variant="outline"
@@ -168,7 +165,7 @@ export const ConsentBanner: React.FC = () => {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            
+
             <div className="space-y-3">
               {/* Cookie necessari */}
               <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
@@ -180,12 +177,12 @@ export const ConsentBanner: React.FC = () => {
                 </div>
                 <div className="flex items-center">
                   <span className="text-sm text-gray-500 mr-2">Sempre attivi</span>
-                  <div className="w-10 h-6 bg-green-600 rounded-full flex items-center justify-end px-1">
+                  <div className="w-10 h-6 bg-primary-600 rounded-full flex items-center justify-end px-1">
                     <div className="w-4 h-4 bg-white rounded-full shadow-sm"></div>
                   </div>
                 </div>
               </div>
-              
+
               {/* Cookie analytics */}
               <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
                 <div>
@@ -196,16 +193,15 @@ export const ConsentBanner: React.FC = () => {
                 </div>
                 <button
                   onClick={() => togglePreference('analytics')}
-                  className={`w-10 h-6 rounded-full flex items-center transition-colors ${
-                    preferences.analytics 
-                      ? 'bg-green-600 justify-end' 
+                  className={`w-10 h-6 rounded-full flex items-center transition-colors ${preferences.analytics
+                      ? 'bg-primary-600 justify-end'
                       : 'bg-gray-300 justify-start'
-                  }`}
+                    }`}
                 >
                   <div className="w-4 h-4 bg-white rounded-full mx-1 shadow-sm"></div>
                 </button>
               </div>
-              
+
               {/* Cookie marketing */}
               <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
                 <div>
@@ -216,17 +212,16 @@ export const ConsentBanner: React.FC = () => {
                 </div>
                 <button
                   onClick={() => togglePreference('marketing')}
-                  className={`w-10 h-6 rounded-full flex items-center transition-colors ${
-                    preferences.marketing 
-                      ? 'bg-green-600 justify-end' 
+                  className={`w-10 h-6 rounded-full flex items-center transition-colors ${preferences.marketing
+                      ? 'bg-primary-600 justify-end'
                       : 'bg-gray-300 justify-start'
-                  }`}
+                    }`}
                 >
                   <div className="w-4 h-4 bg-white rounded-full mx-1 shadow-sm"></div>
                 </button>
               </div>
             </div>
-            
+
             <div className="flex flex-col sm:flex-row gap-2 pt-2">
               <PublicButton
                 variant="outline"

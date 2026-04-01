@@ -1,13 +1,15 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { apiGet } from '../../../services/api';
 import { getLoadingErrorMessage } from '../../../utils/errorUtils';
 import { useToast } from '../../../hooks/useToast';
-import { useTenantFilter } from '../../../context/TenantFilterContext';
+import { useTenantModeOptional } from '../../../contexts/TenantModeContext';
 
 export interface GDPREntityDataConfig {
   apiEndpoint: string;
   entityNamePlural: string;
   entityDisplayNamePlural: string;
+  // Parametri di query statici da aggiungere sempre alle richieste (es. roleType)
+  staticQueryParams?: Record<string, string | number | boolean>;
   // Se true, non applica il filtro tenant (per pagine admin globali)
   skipTenantFilter?: boolean;
 }
@@ -17,6 +19,7 @@ export interface GDPREntityDataState<T> {
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
+  setEntities: React.Dispatch<React.SetStateAction<T[]>>;
 }
 
 /**
@@ -28,6 +31,7 @@ export function useGDPREntityData<T extends Record<string, unknown>>({
   apiEndpoint,
   entityNamePlural,
   entityDisplayNamePlural,
+  staticQueryParams,
   skipTenantFilter = false
 }: GDPREntityDataConfig): GDPREntityDataState<T> {
   const [entities, setEntities] = useState<T[]>([]);
@@ -35,8 +39,13 @@ export function useGDPREntityData<T extends Record<string, unknown>>({
   const [error, setError] = useState<string | null>(null);
   const { showToast } = useToast();
 
-  // Get tenant filter from global context
-  const { getTenantFilterParams, isReady, tenantFilterKey } = useTenantFilter();
+  // TenantMode is the single source of truth for which tenant(s) to display
+  const tenantMode = useTenantModeOptional();
+
+  // Stable key that changes when tenant view changes — triggers refetch
+  const tenantViewKey = tenantMode
+    ? `${tenantMode.viewMode}:${tenantMode.viewTenantIds.join(',')}`
+    : 'no-tenant-mode';
 
   // Use ref to avoid recreating loadEntities on every showToast change
   const showToastRef = useRef(showToast);
@@ -44,102 +53,112 @@ export function useGDPREntityData<T extends Record<string, unknown>>({
     showToastRef.current = showToast;
   }, [showToast]);
 
-  const loadEntities = useCallback(async () => {
-    // Wait for tenant filter to be ready (unless skipped)
-    if (!skipTenantFilter && !isReady) {
-      return;
-    }
+  // Use ref for staticQueryParams to avoid recreating loadEntities
+  const staticQueryParamsRef = useRef(staticQueryParams);
+  useEffect(() => {
+    staticQueryParamsRef.current = staticQueryParams;
+  }, [staticQueryParams]);
 
+  const loadEntities = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      console.log(`🔄 Caricamento ${entityDisplayNamePlural}...`);
+      // Build tenant query params from TenantMode (source of truth)
+      const tenantQueryParams = new URLSearchParams();
+      const requestHeaders: Record<string, string> = {};
 
-      // Get tenant filter params
-      const tenantParams = skipTenantFilter ? {} : getTenantFilterParams();
+      if (!skipTenantFilter && tenantMode) {
+        if (tenantMode.viewMode === 'all') {
+          tenantQueryParams.append('allTenants', 'true');
+        } else if (tenantMode.viewTenantIds.length === 1) {
+          // Single tenant: pass as tenantIds param AND as X-Operate-Tenant-Id header
+          tenantQueryParams.append('tenantIds', tenantMode.viewTenantIds[0]);
+          const operateHeaders = tenantMode.getOperateHeaders();
+          Object.assign(requestHeaders, operateHeaders);
+        } else if (tenantMode.viewTenantIds.length > 1) {
+          tenantQueryParams.append('tenantIds', tenantMode.viewTenantIds.join(','));
+        }
+        // If viewTenantIds is empty → no filter → backend uses person.tenantId (correct for single-tenant)
+      }
 
-      // Costruisci i parametri di query per l'endpoint delle persone
+      // Build full URL
       let apiUrl = apiEndpoint;
+
       if (apiEndpoint === '/api/persons' || apiEndpoint === '/api/v1/persons') {
-        // Per l'endpoint delle persone, aggiungi i parametri necessari
         const params = new URLSearchParams();
-        // Non forzare roleType per mostrare tutti gli utenti
         params.append('page', '1');
         params.append('limit', '50');
-        params.append('sortBy', 'lastLogin');
-        params.append('sortOrder', 'desc');
 
-        // Apply tenant filter params
-        if (tenantParams.tenantIds) {
-          params.append('tenantIds', tenantParams.tenantIds.join(','));
+        const currentStaticParams = staticQueryParamsRef.current || {};
+        const sortBy = currentStaticParams.sortBy || 'lastLogin';
+        const sortOrder = currentStaticParams.sortOrder || 'desc';
+        params.append('sortBy', String(sortBy));
+        params.append('sortOrder', String(sortOrder));
+
+        // Extra static query params (skip sortBy/sortOrder already added)
+        if (staticQueryParamsRef.current) {
+          Object.entries(staticQueryParamsRef.current).forEach(([key, value]) => {
+            if (key !== 'sortBy' && key !== 'sortOrder' && value !== undefined && value !== null) {
+              params.append(key, String(value));
+            }
+          });
         }
-        if (tenantParams.allTenants) {
-          params.append('allTenants', 'true');
-        }
+
+        // Merge tenant params
+        tenantQueryParams.forEach((value, key) => params.append(key, value));
 
         apiUrl = `${apiEndpoint}?${params.toString()}`;
       } else {
-        // For other endpoints, add tenant filter as query params
-        const params = new URLSearchParams();
-
-        // Apply tenant filter params
-        if (tenantParams.tenantIds) {
-          params.append('tenantIds', tenantParams.tenantIds.join(','));
-        }
-        if (tenantParams.allTenants) {
-          params.append('allTenants', 'true');
-        }
-
-        const queryString = params.toString();
+        // For all other endpoints
+        const queryString = tenantQueryParams.toString();
         if (queryString) {
           apiUrl = `${apiEndpoint}${apiEndpoint.includes('?') ? '&' : '?'}${queryString}`;
         }
       }
 
-      console.log(`📡 Chiamata API: ${apiUrl}`);
-      const response = await apiGet<unknown>(apiUrl);
-      console.log(`📊 Risposta API ${entityNamePlural}:`, response);
+      const response = await apiGet<unknown>(
+        apiUrl,
+        {},
+        Object.keys(requestHeaders).length > 0 ? { headers: requestHeaders } : undefined
+      );
 
-      // Gestisci la risposta paginata per l'endpoint delle persone
-      if ((apiEndpoint === '/api/persons' || apiEndpoint === '/api/v1/persons') && response && typeof response === 'object' && 'persons' in response && Array.isArray((response as { persons: T[] }).persons)) {
-        const typedResponse = response as { persons: T[] };
-        setEntities(typedResponse.persons);
-        console.log(`✅ ${entityDisplayNamePlural} caricate:`, typedResponse.persons.length);
+      if (
+        (apiEndpoint === '/api/persons' || apiEndpoint === '/api/v1/persons') &&
+        response && typeof response === 'object' && 'persons' in response &&
+        Array.isArray((response as { persons: T[] }).persons)
+      ) {
+        setEntities((response as { persons: T[] }).persons);
       } else if (Array.isArray(response)) {
         setEntities(response);
-        console.log(`✅ ${entityDisplayNamePlural} caricate:`, response.length);
       } else {
-        console.warn(`⚠️ Risposta API non è un array:`, response);
         setEntities([]);
       }
     } catch (err: unknown) {
-      console.error(`❌ Errore caricamento ${entityDisplayNamePlural}:`, err);
       setError(getLoadingErrorMessage(
         (entityNamePlural as keyof typeof import('../../../utils/errorUtils').errorMessages.loading) || 'generic',
         err
       ));
       setEntities([]);
       showToastRef.current({
-        message: `Errore durante il caricamento dei ${entityDisplayNamePlural.toLowerCase()}: ${err instanceof Error ? err.message : 'Errore sconosciuto'}`,
+        message: `Errore durante il caricamento dei ${entityDisplayNamePlural.toLowerCase()}`,
         type: 'error'
       });
     } finally {
       setLoading(false);
     }
-  }, [apiEndpoint, entityNamePlural, entityDisplayNamePlural, skipTenantFilter, isReady, getTenantFilterParams]);
+  }, [apiEndpoint, entityNamePlural, entityDisplayNamePlural, skipTenantFilter, tenantMode, tenantViewKey]);
 
-  // Reload when tenant filter changes
+  // Reload when tenant view changes
   useEffect(() => {
-    if (skipTenantFilter || isReady) {
-      loadEntities();
-    }
-  }, [loadEntities, skipTenantFilter, isReady, tenantFilterKey]);
+    loadEntities();
+  }, [loadEntities, tenantViewKey]);
 
   return {
     entities,
     loading,
     error,
-    refetch: loadEntities
+    refetch: loadEntities,
+    setEntities
   };
 }

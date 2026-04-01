@@ -3,9 +3,11 @@
  * Week 8 Implementation - Component Library
  */
 
-/* Import Inter font from Google Fonts */
+/* Import fonts from Google Fonts */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@100;200;300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,500;1,600&display=swap');
 
 :root {
   /* Color Tokens */
@@ -47,7 +49,7 @@
   --color-medical-700: #0e7490;
   --color-medical-800: #155e75;
   --color-medical-900: #164e63;
-  
+
   /* Verde Salute - Accenti wellness */
   --color-health-50: #f0fdf4;
   --color-health-100: #dcfce7;
@@ -59,7 +61,7 @@
   --color-health-700: #15803d;
   --color-health-800: #166534;
   --color-health-900: #14532d;
-  
+
   /* === SAFETY COLORS (per Corsi) === */
   /* Rosso Sicurezza - Alto Rischio */
   --color-safety-high-50: #fef2f2;
@@ -67,21 +69,21 @@
   --color-safety-high-500: #ef4444;
   --color-safety-high-600: #dc2626;
   --color-safety-high-700: #b91c1c;
-  
+
   /* Arancione - Medio Rischio */
   --color-safety-medium-50: #fff7ed;
   --color-safety-medium-100: #ffedd5;
   --color-safety-medium-500: #f97316;
   --color-safety-medium-600: #ea580c;
   --color-safety-medium-700: #c2410c;
-  
+
   /* Verde - Basso Rischio */
   --color-safety-low-50: #f0fdf4;
   --color-safety-low-100: #dcfce7;
   --color-safety-low-500: #22c55e;
   --color-safety-low-600: #16a34a;
   --color-safety-low-700: #15803d;
-  
+
   /* === CATEGORY COLORS (per tipologie corsi) === */
   --color-category-antincendio: #f59e0b;
   --color-category-primo-soccorso: #ec4899;
@@ -126,6 +128,8 @@
   --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
   --font-serif: Georgia, Cambria, 'Times New Roman', Times, serif;
+  --font-heading: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  --font-body: 'Montserrat', 'Inter', system-ui, sans-serif;
 
   /* Font Sizes */
   --text-xs: 0.75rem;
@@ -236,65 +240,197 @@ body {
 }
 
 /* Typography classes using design tokens */
-.ds-text-xs { font-size: var(--text-xs); }
-.ds-text-sm { font-size: var(--text-sm); }
-.ds-text-base { font-size: var(--text-base); }
-.ds-text-lg { font-size: var(--text-lg); }
-.ds-text-xl { font-size: var(--text-xl); }
-.ds-text-2xl { font-size: var(--text-2xl); }
-.ds-text-3xl { font-size: var(--text-3xl); }
-.ds-text-4xl { font-size: var(--text-4xl); }
+.ds-text-xs {
+  font-size: var(--text-xs);
+}
 
-.ds-font-light { font-weight: var(--font-light); }
-.ds-font-normal { font-weight: var(--font-normal); }
-.ds-font-medium { font-weight: var(--font-medium); }
-.ds-font-semibold { font-weight: var(--font-semibold); }
-.ds-font-bold { font-weight: var(--font-bold); }
+.ds-text-sm {
+  font-size: var(--text-sm);
+}
 
-.ds-leading-tight { line-height: var(--leading-tight); }
-.ds-leading-normal { line-height: var(--leading-normal); }
-.ds-leading-relaxed { line-height: var(--leading-relaxed); }
+.ds-text-base {
+  font-size: var(--text-base);
+}
+
+.ds-text-lg {
+  font-size: var(--text-lg);
+}
+
+.ds-text-xl {
+  font-size: var(--text-xl);
+}
+
+.ds-text-2xl {
+  font-size: var(--text-2xl);
+}
+
+.ds-text-3xl {
+  font-size: var(--text-3xl);
+}
+
+.ds-text-4xl {
+  font-size: var(--text-4xl);
+}
+
+.ds-font-light {
+  font-weight: var(--font-light);
+}
+
+.ds-font-normal {
+  font-weight: var(--font-normal);
+}
+
+.ds-font-medium {
+  font-weight: var(--font-medium);
+}
+
+.ds-font-semibold {
+  font-weight: var(--font-semibold);
+}
+
+.ds-font-bold {
+  font-weight: var(--font-bold);
+}
+
+.ds-leading-tight {
+  line-height: var(--leading-tight);
+}
+
+.ds-leading-normal {
+  line-height: var(--leading-normal);
+}
+
+.ds-leading-relaxed {
+  line-height: var(--leading-relaxed);
+}
 
 /* Color classes using design tokens */
-.ds-text-primary { color: var(--color-text-primary); }
-.ds-text-secondary { color: var(--color-text-secondary); }
-.ds-text-tertiary { color: var(--color-text-tertiary); }
-.ds-text-success { color: var(--color-success); }
-.ds-text-warning { color: var(--color-warning); }
-.ds-text-error { color: var(--color-error); }
-.ds-text-info { color: var(--color-info); }
+.ds-text-primary {
+  color: var(--color-text-primary);
+}
 
-.ds-bg-primary { background-color: var(--color-bg-primary); }
-.ds-bg-secondary { background-color: var(--color-bg-secondary); }
-.ds-bg-tertiary { background-color: var(--color-bg-tertiary); }
+.ds-text-secondary {
+  color: var(--color-text-secondary);
+}
+
+.ds-text-tertiary {
+  color: var(--color-text-tertiary);
+}
+
+.ds-text-success {
+  color: var(--color-success);
+}
+
+.ds-text-warning {
+  color: var(--color-warning);
+}
+
+.ds-text-error {
+  color: var(--color-error);
+}
+
+.ds-text-info {
+  color: var(--color-info);
+}
+
+.ds-bg-primary {
+  background-color: var(--color-bg-primary);
+}
+
+.ds-bg-secondary {
+  background-color: var(--color-bg-secondary);
+}
+
+.ds-bg-tertiary {
+  background-color: var(--color-bg-tertiary);
+}
 
 /* Spacing classes using design tokens */
-.ds-p-xs { padding: var(--spacing-xs); }
-.ds-p-sm { padding: var(--spacing-sm); }
-.ds-p-md { padding: var(--spacing-md); }
-.ds-p-lg { padding: var(--spacing-lg); }
-.ds-p-xl { padding: var(--spacing-xl); }
+.ds-p-xs {
+  padding: var(--spacing-xs);
+}
 
-.ds-m-xs { margin: var(--spacing-xs); }
-.ds-m-sm { margin: var(--spacing-sm); }
-.ds-m-md { margin: var(--spacing-md); }
-.ds-m-lg { margin: var(--spacing-lg); }
-.ds-m-xl { margin: var(--spacing-xl); }
+.ds-p-sm {
+  padding: var(--spacing-sm);
+}
+
+.ds-p-md {
+  padding: var(--spacing-md);
+}
+
+.ds-p-lg {
+  padding: var(--spacing-lg);
+}
+
+.ds-p-xl {
+  padding: var(--spacing-xl);
+}
+
+.ds-m-xs {
+  margin: var(--spacing-xs);
+}
+
+.ds-m-sm {
+  margin: var(--spacing-sm);
+}
+
+.ds-m-md {
+  margin: var(--spacing-md);
+}
+
+.ds-m-lg {
+  margin: var(--spacing-lg);
+}
+
+.ds-m-xl {
+  margin: var(--spacing-xl);
+}
 
 /* Border radius classes using design tokens */
-.ds-rounded-sm { border-radius: var(--radius-sm); }
-.ds-rounded { border-radius: var(--radius-base); }
-.ds-rounded-md { border-radius: var(--radius-md); }
-.ds-rounded-lg { border-radius: var(--radius-lg); }
-.ds-rounded-xl { border-radius: var(--radius-xl); }
-.ds-rounded-full { border-radius: var(--radius-full); }
+.ds-rounded-sm {
+  border-radius: var(--radius-sm);
+}
+
+.ds-rounded {
+  border-radius: var(--radius-base);
+}
+
+.ds-rounded-md {
+  border-radius: var(--radius-md);
+}
+
+.ds-rounded-lg {
+  border-radius: var(--radius-lg);
+}
+
+.ds-rounded-xl {
+  border-radius: var(--radius-xl);
+}
+
+.ds-rounded-full {
+  border-radius: var(--radius-full);
+}
 
 /* Shadow classes using design tokens */
-.ds-shadow-sm { box-shadow: var(--shadow-sm); }
-.ds-shadow { box-shadow: var(--shadow-base); }
-.ds-shadow-md { box-shadow: var(--shadow-md); }
-.ds-shadow-lg { box-shadow: var(--shadow-lg); }
-.ds-shadow-xl { box-shadow: var(--shadow-xl); }
+.ds-shadow-sm {
+  box-shadow: var(--shadow-sm);
+}
+
+.ds-shadow {
+  box-shadow: var(--shadow-base);
+}
+
+.ds-shadow-md {
+  box-shadow: var(--shadow-md);
+}
+
+.ds-shadow-lg {
+  box-shadow: var(--shadow-lg);
+}
+
+.ds-shadow-xl {
+  box-shadow: var(--shadow-xl);
+}
 
 /* Focus styles */
 .ds-focus-ring:focus {

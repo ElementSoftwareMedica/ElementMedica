@@ -40,3 +40,4 @@ coverage/
 
 # Docker
 **/.docker/docs/10_project_managemnt/0_Progetti_passati/13_riordino_e_ottimizzazione_sistema/backend_cleanup/file_temporanei/credentials.json
+dist-public/

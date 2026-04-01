@@ -25,7 +25,7 @@ import {
   LineChart,
   Line
 } from 'recharts';
-import { 
+import {
   AlertTriangle,
   CheckCircle,
   Clock,
@@ -51,10 +51,10 @@ const getComplianceColor = (score: number): string => {
 };
 
 const getComplianceStatus = (score: number): { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' } => {
-  if (score >= 90) return { label: 'Excellent', variant: 'default' };
-  if (score >= 70) return { label: 'Good', variant: 'secondary' };
-  if (score >= 50) return { label: 'Needs Improvement', variant: 'outline' };
-  return { label: 'Critical', variant: 'destructive' };
+  if (score >= 90) return { label: 'Eccellente', variant: 'default' };
+  if (score >= 70) return { label: 'Buono', variant: 'secondary' };
+  if (score >= 50) return { label: 'Da migliorare', variant: 'outline' };
+  return { label: 'Critico', variant: 'destructive' };
 };
 
 export const ComplianceReport: React.FC<ComplianceReportProps> = ({
@@ -86,22 +86,22 @@ export const ComplianceReport: React.FC<ComplianceReportProps> = ({
       <Alert>
         <AlertTriangle className="h-4 w-4" />
         <AlertDescription>
-          No compliance report available. Click refresh to generate a new report.
+          Nessun report di conformità disponibile. Clicca aggiorna per generare un nuovo report.
         </AlertDescription>
       </Alert>
     );
   }
 
   const complianceStatus = getComplianceStatus(report.overallScore ?? 0);
-  
+
   // Prepare chart data
-  const consentData = report.consentStats 
+  const consentData = report.consentStats
     ? Object.entries(report.consentStats).map(([type, stats]) => ({
-        name: type.replace('_', ' ').toUpperCase(),
-        active: stats.active,
-        withdrawn: stats.withdrawn,
-        total: stats.total
-      }))
+      name: type.replace('_', ' ').toUpperCase(),
+      active: stats.active,
+      withdrawn: stats.withdrawn,
+      total: stats.total
+    }))
     : [];
 
   const trendsData = report.trends?.map(trend => ({
@@ -115,9 +115,9 @@ export const ComplianceReport: React.FC<ComplianceReportProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">Compliance Report</h2>
+          <h2 className="text-2xl font-bold tracking-tight">Report di conformità</h2>
           <p className="text-muted-foreground">
-            Generated on {new Date(report.generatedAt).toLocaleString()}
+            Generato il {new Date(report.generatedAt).toLocaleString()}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -128,7 +128,7 @@ export const ComplianceReport: React.FC<ComplianceReportProps> = ({
             <button
               onClick={onRefresh}
               className="p-2 hover:bg-gray-100 rounded-md transition-colors"
-              title="Refresh Report"
+              title="Aggiorna report"
             >
               <Download className="h-4 w-4" />
             </button>
@@ -141,14 +141,14 @@ export const ComplianceReport: React.FC<ComplianceReportProps> = ({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <CheckCircle className="h-5 w-5" />
-            Overall Compliance Score
+            Punteggio conformità complessivo
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-4">
             <div className="flex-1">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">Compliance Level</span>
+                <span className="text-sm font-medium">Livello di conformità</span>
                 <span className={`text-2xl font-bold ${getComplianceColor(report.overallScore ?? 0)}`}>
                   {report.overallScore ?? 0}%
                 </span>
@@ -163,52 +163,52 @@ export const ComplianceReport: React.FC<ComplianceReportProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Users</CardTitle>
+            <CardTitle className="text-sm font-medium">Utenti totali</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{(report.totalUsers ?? 0).toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
-              Active user accounts
+              Account utenti attivi
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Consents</CardTitle>
+            <CardTitle className="text-sm font-medium">Consensi attivi</CardTitle>
             <CheckCircle className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{(report.totalConsents ?? 0).toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
-              Valid consent records
+              Record di consenso validi
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending Deletions</CardTitle>
+            <CardTitle className="text-sm font-medium">Eliminazioni in attesa</CardTitle>
             <Clock className="h-4 w-4 text-yellow-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{report.pendingDeletions}</div>
             <p className="text-xs text-muted-foreground">
-              Awaiting processing
+              In attesa di elaborazione
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Data Exports</CardTitle>
+            <CardTitle className="text-sm font-medium">Esportazioni dati</CardTitle>
             <FileText className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{report.dataExports}</div>
             <p className="text-xs text-muted-foreground">
-              Completed this month
+              Completate questo mese
             </p>
           </CardContent>
         </Card>
@@ -219,17 +219,17 @@ export const ComplianceReport: React.FC<ComplianceReportProps> = ({
         {/* Consent Statistics */}
         <Card>
           <CardHeader>
-            <CardTitle>Consent Statistics by Type</CardTitle>
+            <CardTitle>Statistiche consensi per tipo</CardTitle>
             <CardDescription>
-              Active vs withdrawn consents across different categories
+              Consensi attivi vs revocati per le diverse categorie
             </CardDescription>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={consentData}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis 
-                  dataKey="name" 
+                <XAxis
+                  dataKey="name"
                   tick={{ fontSize: 12 }}
                   angle={-45}
                   textAnchor="end"
@@ -237,8 +237,8 @@ export const ComplianceReport: React.FC<ComplianceReportProps> = ({
                 />
                 <YAxis />
                 <Tooltip />
-                <Bar dataKey="active" fill="#10b981" name="Active" />
-                <Bar dataKey="withdrawn" fill="#ef4444" name="Withdrawn" />
+                <Bar dataKey="active" fill="#10b981" name="Attivi" />
+                <Bar dataKey="withdrawn" fill="#ef4444" name="Revocati" />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -250,10 +250,10 @@ export const ComplianceReport: React.FC<ComplianceReportProps> = ({
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <TrendingUp className="h-5 w-5" />
-                Compliance Trends
+                Andamento conformità
               </CardTitle>
               <CardDescription>
-                Compliance score evolution over time
+                Evoluzione del punteggio di conformità nel tempo
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -263,12 +263,12 @@ export const ComplianceReport: React.FC<ComplianceReportProps> = ({
                   <XAxis dataKey="date" tick={{ fontSize: 12 }} />
                   <YAxis domain={[0, 100]} />
                   <Tooltip />
-                  <Line 
-                    type="monotone" 
-                    dataKey="score" 
-                    stroke="#6366f1" 
+                  <Line
+                    type="monotone"
+                    dataKey="score"
+                    stroke="#6366f1"
                     strokeWidth={2}
-                    name="Compliance Score"
+                    name="Punteggio conformità"
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -283,7 +283,7 @@ export const ComplianceReport: React.FC<ComplianceReportProps> = ({
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-yellow-600" />
-              Issues & Recommendations
+              Problemi e raccomandazioni
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -295,7 +295,7 @@ export const ComplianceReport: React.FC<ComplianceReportProps> = ({
                     <strong>{issue.type}:</strong> {issue.description}
                     {issue.recommendation && (
                       <div className="mt-1 text-sm text-muted-foreground">
-                        <strong>Recommendation:</strong> {issue.recommendation}
+                        <strong>Raccomandazione:</strong> {issue.recommendation}
                       </div>
                     )}
                   </AlertDescription>

@@ -55,7 +55,6 @@ export default function ScheduleLettersCard({
       const result = await lettereIncaricoService.list({ scheduleId });
       setLetters(result);
     } catch (error) {
-      console.error('Failed to load letters:', error);
     } finally {
       setLoading(false);
     }
@@ -69,7 +68,6 @@ export default function ScheduleLettersCard({
       await lettereIncaricoService.delete(id);
       await loadLetters();
     } catch (error) {
-      console.error('Failed to delete letter:', error);
       showToast({ message: 'Errore durante l\'eliminazione della lettera', type: 'error' });
     }
   };
@@ -78,7 +76,6 @@ export default function ScheduleLettersCard({
     try {
       await lettereIncaricoService.download(id);
     } catch (error) {
-      console.error('Failed to download letter:', error);
       showToast({ message: 'Errore durante il download della lettera', type: 'error' });
     }
   };

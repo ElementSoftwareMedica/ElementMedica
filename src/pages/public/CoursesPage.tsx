@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Filter, ChevronDown, GraduationCap, Award, Users, Clock, Calendar, ArrowRight } from 'lucide-react';
 import { PublicLayout } from '../../components/public/PublicLayout';
 import { PublicButton } from '../../components/public/PublicButton';
@@ -9,6 +9,8 @@ import { useNavigate } from 'react-router-dom';
 import { trackCtaEvent } from '../../services/logs';
 import { CourseCalendarSection } from '../../components/public/CourseCalendarSection';
 import { getCurrentBrand } from '../../config/brands.config';
+import SEOHead from '../../components/seo/SEOHead';
+import { generateEducationalOrganizationSchema, generateParentOrganizationSchema } from '../../components/seo/MedicalSchemas';
 
 interface Course {
   id: string;
@@ -89,7 +91,6 @@ export const CoursesPage: React.FC = () => {
         setFilteredCourses(allCourses);
 
       } catch (error) {
-        console.error('Error loading courses:', error);
 
         // Fallback con dati mock in caso di errore
         const mockCourses: Course[] = [
@@ -203,32 +204,56 @@ export const CoursesPage: React.FC = () => {
     return type ? type.label : courseType;
   };
 
+  // JSON-LD structured data per corsi sicurezza
+  const jsonLdSchema = useMemo(() => ({
+    '@context': 'https://schema.org',
+    '@graph': [
+      generateEducationalOrganizationSchema({
+        courses: [
+          { name: 'Corso Lavoratori Sicurezza', description: 'Formazione per lavoratori D.Lgs 81/08', url: '/corsi' },
+          { name: 'Antincendio', description: 'Corso antincendio rischio basso/medio/alto', url: '/corsi' },
+          { name: 'Primo Soccorso', description: 'Corso primo soccorso Grupo A e B/C', url: '/corsi' },
+          { name: 'RSPP Datore di Lavoro', description: 'Per datori di lavoro che svolgono il ruolo RSPP', url: '/corsi' },
+        ],
+      }),
+      generateParentOrganizationSchema(),
+    ].map(({ '@context': _, ...rest }) => rest),
+  }), []);
+
   return (
     <PublicLayout>
+      <SEOHead
+        title="Corsi Sicurezza sul Lavoro | D.Lgs 81/08 | Padova - Element Sicurezza"
+        description="Catalogo completo corsi sicurezza sul lavoro a Padova: lavoratori, preposti, dirigenti, antincendio, primo soccorso. Ente accreditato Regione Veneto. Attestati riconosciuti."
+        keywords={['corsi sicurezza', 'corsi sicurezza sul lavoro', 'formazione sicurezza padova', 'corsi sicurezza padova', 'corso lavoratori', 'antincendio', 'primo soccorso', 'RSPP', 'D.Lgs 81/08', 'ente accreditato veneto']}
+        canonicalUrl={`${window.location.origin}/corsi`}
+        structuredData={jsonLdSchema}
+        ogType="website"
+      />
       {/* Hero Section - Elegant Navy Blue Design */}
-      <section className="relative bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 text-white py-20 overflow-hidden">
+      <section className="relative text-white py-20 overflow-hidden" style={{ backgroundImage: 'linear-gradient(135deg, var(--color-primary-800), var(--color-primary-700), var(--color-primary-600))' }}>
         {/* Decorative Elements */}
         <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute -top-20 -right-20 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl" />
-          <div className="absolute top-40 -left-20 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl" />
-          <div className="absolute bottom-0 right-1/3 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl" />
+          <div className="absolute -top-20 -right-20 w-96 h-96 bg-primary-500/10 rounded-full blur-3xl" />
+          <div className="absolute top-40 -left-20 w-80 h-80 bg-primary-500/10 rounded-full blur-3xl" />
+          <div className="absolute bottom-0 right-1/3 w-64 h-64 bg-primary-500/10 rounded-full blur-3xl" />
         </div>
 
         <div className="container mx-auto px-4 relative z-10">
           <div className="max-w-4xl mx-auto text-center">
-            <div className="inline-flex items-center px-4 py-2 bg-white/10 backdrop-blur-sm rounded-full text-sm font-medium text-blue-200 mb-6 border border-white/10">
+            <div className="inline-flex items-center px-4 py-2 bg-white/10 backdrop-blur-sm rounded-full text-sm font-medium text-white/80 mb-6 border border-white/10">
               <GraduationCap className="w-4 h-4 mr-2" />
               Formazione Certificata D.Lgs. 81/08
             </div>
 
             <h1 className="text-4xl lg:text-6xl font-bold mb-6 leading-tight">
               Catalogo Corsi di
-              <span className="block bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
+              <span className="block bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(to right, var(--color-primary-400), var(--color-primary-500))' }}>
                 Formazione
               </span>
             </h1>
 
-            <p className="text-xl text-blue-100 max-w-3xl mx-auto mb-10 leading-relaxed">
+            <p className="text-xl text-white/80 max-w-3xl mx-auto mb-10 leading-relaxed">
               Scopri la nostra offerta completa di corsi sulla sicurezza sul lavoro,
               certificati e riconosciuti a norma di legge
             </p>
@@ -237,31 +262,31 @@ export const CoursesPage: React.FC = () => {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-12 pt-8 border-t border-white/10">
               <div className="text-center">
                 <div className="flex items-center justify-center mb-2">
-                  <GraduationCap className="w-6 h-6 text-cyan-400" />
+                  <GraduationCap className="w-6 h-6 text-primary-400" />
                 </div>
                 <div className="text-3xl font-bold text-white">50+</div>
-                <div className="text-sm text-blue-200">Corsi Disponibili</div>
+                <div className="text-sm text-white/80">Corsi Disponibili</div>
               </div>
               <div className="text-center">
                 <div className="flex items-center justify-center mb-2">
-                  <Award className="w-6 h-6 text-cyan-400" />
+                  <Award className="w-6 h-6 text-primary-400" />
                 </div>
                 <div className="text-3xl font-bold text-white">100%</div>
-                <div className="text-sm text-blue-200">Certificati</div>
+                <div className="text-sm text-white/80">Certificati</div>
               </div>
               <div className="text-center">
                 <div className="flex items-center justify-center mb-2">
-                  <Users className="w-6 h-6 text-cyan-400" />
+                  <Users className="w-6 h-6 text-primary-400" />
                 </div>
                 <div className="text-3xl font-bold text-white">10.000+</div>
-                <div className="text-sm text-blue-200">Persone Formate</div>
+                <div className="text-sm text-white/80">Persone Formate</div>
               </div>
               <div className="text-center">
                 <div className="flex items-center justify-center mb-2">
-                  <Clock className="w-6 h-6 text-cyan-400" />
+                  <Clock className="w-6 h-6 text-primary-400" />
                 </div>
                 <div className="text-3xl font-bold text-white">15+</div>
-                <div className="text-sm text-blue-200">Anni Esperienza</div>
+                <div className="text-sm text-white/80">Anni Esperienza</div>
               </div>
             </div>
           </div>
@@ -340,7 +365,7 @@ export const CoursesPage: React.FC = () => {
                   <select
                     value={selectedRiskLevel}
                     onChange={(e) => setSelectedRiskLevel(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                   >
                     <option value="">Tutti i livelli</option>
                     {riskLevels.map(level => (
@@ -359,7 +384,7 @@ export const CoursesPage: React.FC = () => {
                   <select
                     value={selectedCourseType}
                     onChange={(e) => setSelectedCourseType(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                   >
                     <option value="">Tutti i tipi</option>
                     {courseTypes.map(type => (
@@ -395,8 +420,8 @@ export const CoursesPage: React.FC = () => {
                   <button
                     onClick={() => setIsGroupedView(true)}
                     className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${isGroupedView
-                        ? 'bg-primary-600 text-white'
-                        : 'text-gray-600 hover:text-gray-800'
+                      ? 'bg-primary-600 text-white'
+                      : 'text-gray-600 hover:text-gray-800'
                       }`}
                   >
                     Vista Raggruppata
@@ -404,8 +429,8 @@ export const CoursesPage: React.FC = () => {
                   <button
                     onClick={() => setIsGroupedView(false)}
                     className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${!isGroupedView
-                        ? 'bg-primary-600 text-white'
-                        : 'text-gray-600 hover:text-gray-800'
+                      ? 'bg-primary-600 text-white'
+                      : 'text-gray-600 hover:text-gray-800'
                       }`}
                   >
                     Vista Dettagliata
@@ -456,24 +481,24 @@ export const CoursesPage: React.FC = () => {
       </section>
 
       {/* Course Calendar Section */}
-      <section className="py-20 bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 relative overflow-hidden">
+      <section className="py-20 relative overflow-hidden" style={{ backgroundImage: 'linear-gradient(135deg, var(--color-primary-800), var(--color-primary-700), var(--color-primary-600))' }}>
         {/* Decorative Elements */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-20 left-10 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl" />
-          <div className="absolute top-40 right-20 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl" />
-          <div className="absolute bottom-20 left-1/4 w-56 h-56 bg-indigo-500/10 rounded-full blur-3xl" />
+          <div className="absolute top-20 left-10 w-64 h-64 bg-primary-500/10 rounded-full blur-3xl" />
+          <div className="absolute top-40 right-20 w-48 h-48 bg-primary-500/10 rounded-full blur-3xl" />
+          <div className="absolute bottom-20 left-1/4 w-56 h-56 bg-primary-500/10 rounded-full blur-3xl" />
         </div>
 
         <div className="container mx-auto px-4 relative z-10">
           <div className="text-center mb-12">
-            <div className="inline-flex items-center px-4 py-2 bg-white/10 backdrop-blur-sm rounded-full text-sm font-medium text-cyan-300 mb-4 border border-white/10">
+            <div className="inline-flex items-center px-4 py-2 bg-white/10 backdrop-blur-sm rounded-full text-sm font-medium text-primary-300 mb-4 border border-white/10">
               <Calendar className="w-4 h-4 mr-2" />
               Prossime Date
             </div>
             <h2 className="text-3xl lg:text-4xl font-bold text-white mb-4">
               Calendario Corsi in Programmazione
             </h2>
-            <p className="text-xl text-blue-200 max-w-2xl mx-auto">
+            <p className="text-xl text-white/80 max-w-2xl mx-auto">
               Scopri le prossime date disponibili e prenota il tuo posto
             </p>
           </div>

@@ -34,7 +34,7 @@ class ScheduleModalErrorBoundary extends Component<Props, State> {
   static getDerivedStateFromError(error: Error): Partial<State> {
     // Genera un ID univoco per l'errore
     const errorId = `schedule-modal-error-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
+
     return {
       hasError: true,
       error,
@@ -44,13 +44,6 @@ class ScheduleModalErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     // Log dell'errore per debugging
-    console.error('ScheduleModalErrorBoundary caught an error:', {
-      error: error.message,
-      stack: error.stack,
-      componentStack: errorInfo.componentStack,
-      errorId: this.state.errorId,
-      timestamp: new Date().toISOString()
-    });
 
     this.setState({
       error,
@@ -123,18 +116,18 @@ class ScheduleModalErrorBoundary extends Component<Props, State> {
       // UI di errore di default per il modal
       return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+          <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
             {/* Header */}
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center space-x-2">
                 <AlertTriangle className="h-6 w-6 text-red-500" />
-                <h2 className="text-lg font-semibold text-gray-900">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                   Errore nel Modal
                 </h2>
               </div>
               <button
                 onClick={() => window.history.back()}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
                 aria-label="Chiudi"
               >
                 <X className="h-5 w-5" />
@@ -143,17 +136,17 @@ class ScheduleModalErrorBoundary extends Component<Props, State> {
 
             {/* Messaggio di errore */}
             <div className="mb-6">
-              <p className="text-gray-600 mb-3">
+              <p className="text-gray-600 dark:text-gray-400 mb-3">
                 Si è verificato un errore imprevisto durante il caricamento del modal di pianificazione.
               </p>
-              
+
               {/* Dettagli errore (solo in development) */}
               {process.env.NODE_ENV === 'development' && error && (
                 <details className="mt-4">
-                  <summary className="cursor-pointer text-sm text-gray-500 hover:text-gray-700">
+                  <summary className="cursor-pointer text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300">
                     Dettagli tecnici (sviluppo)
                   </summary>
-                  <div className="mt-2 p-3 bg-gray-50 rounded text-xs font-mono text-gray-700 overflow-auto max-h-32">
+                  <div className="mt-2 p-3 bg-gray-50 dark:bg-gray-800 rounded text-xs font-mono text-gray-700 dark:text-gray-300 overflow-auto max-h-32">
                     <div className="mb-2">
                       <strong>Errore:</strong> {error.message}
                     </div>
@@ -182,10 +175,10 @@ class ScheduleModalErrorBoundary extends Component<Props, State> {
                 <RefreshCw className="h-4 w-4" />
                 <span>Riprova</span>
               </button>
-              
+
               <button
                 onClick={() => window.location.reload()}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors flex-1"
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors flex-1"
               >
                 Ricarica Pagina
               </button>
@@ -195,7 +188,7 @@ class ScheduleModalErrorBoundary extends Component<Props, State> {
             <div className="mt-4 text-center">
               <button
                 onClick={this.handleAutoRetry}
-                className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+                className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
               >
                 Oppure riprova automaticamente tra 3 secondi
               </button>
@@ -220,7 +213,6 @@ export const useScheduleModalErrorHandler = () => {
 
   const handleAsyncError = (asyncFn: () => Promise<any>) => {
     return asyncFn().catch((error) => {
-      console.error('Async error in ScheduleModal:', error);
       throwError(error);
     });
   };

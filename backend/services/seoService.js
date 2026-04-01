@@ -25,15 +25,15 @@ class SEOService {
 
       // Verifica che l'entità esista
       if (entityType === 'page') {
-        const page = await prisma.cMSPage.findUnique({
-          where: { id: entityId }
+        const page = await prisma.cMSPage.findFirst({
+          where: { id: entityId, deletedAt: null }
         });
         if (!page) {
           throw new Error(`CMSPage with id ${entityId} not found`);
         }
       } else if (entityType === 'course') {
-        const course = await prisma.course.findUnique({
-          where: { id: entityId }
+        const course = await prisma.course.findFirst({
+          where: { id: entityId, deletedAt: null }
         });
         if (!course) {
           throw new Error(`Course with id ${entityId} not found`);

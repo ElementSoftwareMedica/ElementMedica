@@ -12,8 +12,8 @@ export { AgendaDashboard } from './AgendaDashboard';
 export { default as AgendaDashboardDefault } from './AgendaDashboard';
 
 // Calendario
-export { AgendaCalendar } from './AgendaCalendar';
-export { default as AgendaCalendarDefault } from './AgendaCalendar';
+export { CalendarioPage } from './CalendarioPage';
+export { default as CalendarioPageDefault } from './CalendarioPage';
 
 // Appuntamenti
 export { AppuntamentiPage } from './AppuntamentiPage';
@@ -23,10 +23,6 @@ export { default as AppuntamentiPageDefault } from './AppuntamentiPage';
 export { AppuntamentoForm } from './AppuntamentoForm';
 export { default as AppuntamentoFormDefault } from './AppuntamentoForm';
 
-// Accettazione
-export { AccettazionePage } from './AccettazionePage';
-export { default as AccettazionePageDefault } from './AccettazionePage';
-
-// Disponibilità
-export { DisponibilitaPage } from './DisponibilitaPage';
-export { default as DisponibilitaPageDefault } from './DisponibilitaPage';
+// Disponibilità (refactored modular structure)
+export { DisponibilitaPage } from './disponibilita';
+export { DisponibilitaPage as DisponibilitaPageDefault } from './disponibilita';

@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { GDPREntityTemplate } from '../../templates/gdpr-entity-page/GDPREntityTemplate';
-import { DataTableColumn } from '../../components/shared/tables/DataTable';
+import { DataTableColumn } from '../../templates/gdpr-entity-page/GDPREntityTemplate';
 import { Badge, Modal, Select, Button } from '../../design-system';
 import { Building2, MapPin, Phone, Mail, Globe, AlertTriangle, Users, ArrowRight } from 'lucide-react';
 import CompanyImport from '../../components/companies/company-import/CompanyImportRefactored';
 import { apiGet, apiPost, apiDelete } from '../../services/api';
+import { useTenantMode } from '../../contexts/TenantModeContext';
 import { getPersons, updatePerson, deleteMultiplePersons } from '../../services/persons';
 import { CompanyData } from '../../components/companies/company-import/types';
 import type { CompanySite } from '../../types';
+import { useToast } from '../../hooks/ui/useToast';
+import { selfCompanyApi } from '../management/hr/api';
 
 interface Company {
   id: string;
@@ -46,20 +49,28 @@ interface Company {
   vatNumber?: string;
   taxCode?: string;
   website?: string;
-  status?: 'Active' | 'Inactive' | 'Pending';
+  profileStatus?: 'PROSPECT' | 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'CHURNED';
   // Aggiunta: includi le sedi per il rilevamento duplicati nel modal import
   sites?: CompanySite[];
 }
 
 // Configurazione colonne per la tabella
-const getCompaniesColumns = (): DataTableColumn<Company>[] => [
+// P69: Accetta selfCompanyProfileId per mostrare badge "La tua azienda"
+const getCompaniesColumns = (selfCompanyProfileId?: string): DataTableColumn<Company>[] => [
   {
     key: 'ragioneSociale',
     label: 'Nome',
     sortable: true,
     renderCell: (company: Company) => (
-      <div className="font-medium text-gray-900">
-        {company.ragioneSociale || 'N/A'}
+      <div className="flex items-center gap-2">
+        <span className="font-medium text-gray-900">
+          {company.ragioneSociale || 'N/A'}
+        </span>
+        {selfCompanyProfileId && company.id === selfCompanyProfileId && (
+          <Badge variant="secondary" className="text-xs bg-violet-100 text-violet-800">
+            La tua azienda
+          </Badge>
+        )}
       </div>
     )
   },
@@ -132,16 +143,18 @@ const getCompaniesColumns = (): DataTableColumn<Company>[] => [
     )
   },
   {
-    key: 'status',
+    key: 'profileStatus',
     label: 'Stato',
     sortable: true,
     renderCell: (company) => {
       const statusConfig = {
-        Active: { label: 'Attiva', color: 'default' as const },
-        Inactive: { label: 'Inattiva', color: 'destructive' as const },
-        Pending: { label: 'In attesa', color: 'outline' as const }
+        ACTIVE: { label: 'Attiva', color: 'default' as const },
+        INACTIVE: { label: 'Inattiva', color: 'destructive' as const },
+        PROSPECT: { label: 'Prospect', color: 'outline' as const },
+        SUSPENDED: { label: 'Sospesa', color: 'destructive' as const },
+        CHURNED: { label: 'Persa', color: 'secondary' as const }
       };
-      const config = (company.status && statusConfig[company.status]) || { label: company.status || 'Sconosciuto', color: 'secondary' as const };
+      const config = (company.profileStatus && statusConfig[company.profileStatus]) || { label: company.profileStatus || 'Sconosciuto', color: 'secondary' as const };
       return <Badge variant={config.color}>{config.label}</Badge>;
     }
   }
@@ -151,18 +164,20 @@ const getCompaniesColumns = (): DataTableColumn<Company>[] => [
 const getCompanyCardConfig = () => ({
   titleField: 'ragioneSociale' as keyof Company,
   subtitleField: 'citta' as keyof Company,
-  badgeField: 'status' as keyof Company,
+  badgeField: 'profileStatus' as keyof Company,
   descriptionField: 'website' as keyof Company,
   // Configurazione dinamica per compatibilità
   title: (company: Company) => company.ragioneSociale || 'N/A',
   subtitle: (company: Company) => company.citta || 'Località non specificata',
   badge: (company: Company) => {
     const statusConfig = {
-      Active: { label: 'Attiva', variant: 'default' as const },
-      Inactive: { label: 'Inattiva', variant: 'destructive' as const },
-      Pending: { label: 'In attesa', variant: 'outline' as const }
+      ACTIVE: { label: 'Attiva', variant: 'default' as const },
+      INACTIVE: { label: 'Inattiva', variant: 'destructive' as const },
+      PROSPECT: { label: 'Prospect', variant: 'outline' as const },
+      SUSPENDED: { label: 'Sospesa', variant: 'destructive' as const },
+      CHURNED: { label: 'Persa', variant: 'secondary' as const }
     };
-    const config = (company.status && statusConfig[company.status]) || { label: company.status || 'Sconosciuto', variant: 'secondary' as const };
+    const config = (company.profileStatus && statusConfig[company.profileStatus]) || { label: company.profileStatus || 'Sconosciuto', variant: 'secondary' as const };
     return { text: config.label, variant: config.variant };
   },
   icon: () => <Building2 className="h-5 w-5" />,
@@ -329,10 +344,14 @@ const csvHeaders = [
 ];
 
 export const CompaniesPage: React.FC = () => {
+  const toast = useToast();
   const [showImportModal, setShowImportModal] = useState(false);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [, setLoadingCompanies] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0); // Key per forzare refresh del template
+  const [refreshTrigger, setRefreshTrigger] = useState(0); // P51: Trigger per refresh lista
+
+  // P69: Self-company per mostrare badge "La tua azienda"
+  const [selfCompanyProfileId, setSelfCompanyProfileId] = useState<string | undefined>(undefined);
 
   // Stati per migrazione persone e eliminazione azienda
   const [showMigrateModal, setShowMigrateModal] = useState(false);
@@ -341,46 +360,57 @@ export const CompaniesPage: React.FC = () => {
   const [targetCompanyId, setTargetCompanyId] = useState('');
   const [migrationLoading, setMigrationLoading] = useState(false);
   const [deleteEmployeesWithoutMigration, setDeleteEmployeesWithoutMigration] = useState(false);
+  const { getOperateHeaders, operateTenantId } = useTenantMode();
 
-  // Carica i dati delle aziende per l'import
+  // Carica i dati delle aziende per l'import (e per existingCompanies nel conflict detection)
   const loadCompanies = async () => {
     try {
       setLoadingCompanies(true);
-      const response = await apiGet('/api/v1/companies') as Company[];
-      console.log('Aziende caricate per import:', response?.length || 0, response?.[0]); // Debug log
+      // Usa gli headers del tenant operato per caricare le aziende corrette
+      const response = await apiGet('/api/v1/companies', {}, { headers: getOperateHeaders() }) as Company[];
 
-      // Prefetch delle sedi per ogni azienda, necessario per il rilevamento duplicati nel modal di import
-      const companiesWithSites = await Promise.all(
-        (response || []).map(async (company) => {
-          try {
-            const sitesResp = await apiGet(`/api/v1/company-sites/company/${company.id}`) as { sites: CompanySite[] };
-            return { ...company, sites: Array.isArray(sitesResp?.sites) ? sitesResp.sites : [] } as Company;
-          } catch (e) {
-            console.warn('Impossibile caricare le sedi per azienda', company.id, e);
-            return { ...company, sites: [] } as Company;
-          }
-        })
-      );
+      // P49: La lista companies già include sites nel response (flatten backend)
+      const companiesWithSites = (response || []).map((company) => ({
+        ...company,
+        sites: Array.isArray(company.sites) ? company.sites : []
+      })) as Company[];
 
       setCompanies(companiesWithSites);
-    } catch (error) {
-      console.error('Errore nel caricamento delle aziende:', error);
+    } catch {
       setCompanies([]);
     } finally {
       setLoadingCompanies(false);
     }
   };
 
-  // Carica le aziende al mount del componente
+  // Ricarica le aziende al mount E ogni volta che cambia il tenant operativo
+  // Questo assicura che existingCompanies nel modal di import sia sempre aggiornato
   useEffect(() => {
     loadCompanies();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [operateTenantId]);
+
+  // P69: Carica self-company per mostrare badge
+  useEffect(() => {
+    const loadSelfCompany = async () => {
+      try {
+        const response = await selfCompanyApi.get();
+        if (response?.data?.profile?.id) {
+          setSelfCompanyProfileId(response.data.profile.id);
+        }
+      } catch {
+        // Self-company non configurata, ignora
+      }
+    };
+    loadSelfCompany();
   }, []);
 
   // Gestione eliminazione singola con verifica persone collegate e migrazione
   const handleDeleteCompany = async (id: string) => {
     try {
       // Verifica quante persone sono collegate a questa azienda (conteggio rapido)
-      const resp = await getPersons({ companyId: Number(id), page: 1, limit: 1 });
+      // P49: companyId accetta UUID string (viene mappato a companyTenantProfileId nel backend)
+      const resp = await getPersons({ companyId: id, page: 1, limit: 1 });
       const total = resp?.total ?? 0;
       if (total > 0) {
         // Mostra modal di migrazione
@@ -391,10 +421,11 @@ export const CompaniesPage: React.FC = () => {
         return;
       }
       // Nessuna persona collegata: elimina direttamente
-      await apiDelete(`/api/v1/companies/${id}`);
+      await apiDelete(`/api/v1/companies/${id}`, { headers: getOperateHeaders() });
+      toast.success('Azienda eliminata con successo');
       await loadCompanies();
     } catch (e) {
-      console.error('Errore nell\'eliminazione azienda:', e);
+      toast.error('Errore durante l\'eliminazione dell\'azienda');
       throw e;
     }
   };
@@ -414,7 +445,8 @@ export const CompaniesPage: React.FC = () => {
         const deletions: Array<Promise<unknown>> = [];
 
         while (processed < total || page === 1) {
-          const resp = await getPersons({ companyId: Number(companyToDeleteId), page, limit: pageSize });
+          // P49: companyId accetta UUID string
+          const resp = await getPersons({ companyId: companyToDeleteId, page, limit: pageSize });
           const persons = resp?.persons || [];
           total = resp?.total ?? persons.length;
           if (persons.length === 0) break;
@@ -426,7 +458,7 @@ export const CompaniesPage: React.FC = () => {
           }
           for (const chunk of chunks) {
             deletions.push(
-              deleteMultiplePersons(chunk.map(p => p.id))
+              deleteMultiplePersons(chunk.map(p => p.id), 'Eliminazione dipendenti per dismissione azienda')
             );
           }
           processed += persons.length;
@@ -446,7 +478,8 @@ export const CompaniesPage: React.FC = () => {
         const updates: Array<Promise<unknown>> = [];
 
         while (processed < total || page === 1) {
-          const resp = await getPersons({ companyId: Number(companyToDeleteId), page, limit: pageSize });
+          // P49: companyId accetta UUID string (companyTenantProfileId)
+          const resp = await getPersons({ companyId: companyToDeleteId, page, limit: pageSize });
           const persons = resp?.persons || [];
           total = resp?.total ?? persons.length;
           if (persons.length === 0) break;
@@ -458,7 +491,8 @@ export const CompaniesPage: React.FC = () => {
           for (const chunk of chunks) {
             updates.push(
               Promise.all(
-                chunk.map((p) => updatePerson(p.id, { companyId: Number(targetCompanyId) }))
+                // P49: companyTenantProfileId è UUID string
+                chunk.map((p) => updatePerson(p.id, { companyTenantProfileId: targetCompanyId }))
               )
             );
           }
@@ -473,7 +507,13 @@ export const CompaniesPage: React.FC = () => {
       }
 
       // Elimina ora l'azienda origine
-      await apiDelete(`/api/v1/companies/${companyToDeleteId}`);
+      await apiDelete(`/api/v1/companies/${companyToDeleteId}`, { headers: getOperateHeaders() });
+
+      // Mostra toast di successo
+      const successMessage = deleteEmployeesWithoutMigration
+        ? `Azienda e ${linkedPersonsCount} dipendenti eliminati con successo`
+        : `Azienda eliminata e ${linkedPersonsCount} dipendenti migrati con successo`;
+      toast.success(successMessage);
 
       // Pulizia stato e refresh elenco aziende
       setShowMigrateModal(false);
@@ -482,9 +522,8 @@ export const CompaniesPage: React.FC = () => {
       setDeleteEmployeesWithoutMigration(false);
       await loadCompanies();
     } catch (e) {
-      console.error('Errore nella migrazione/eliminazione azienda:', e);
+      toast.error('Errore durante l\'operazione');
       // Lascia il modal aperto per permettere retry o cambio target
-      throw e;
     } finally {
       setMigrationLoading(false);
     }
@@ -496,7 +535,7 @@ export const CompaniesPage: React.FC = () => {
     setShowImportModal(true);
 
     // Aggiorna i dati in background senza bloccare l'UI
-    loadCompanies().catch(console.error);
+    loadCompanies().catch(() => { /* handled inside loadCompanies */ });
   };
 
   // Funzione per gestire la creazione di una nuova azienda
@@ -507,33 +546,32 @@ export const CompaniesPage: React.FC = () => {
 
   const handleImportCompanies = async (importedCompanies: CompanyData[], overwriteIds?: string[]): Promise<import('../../components/companies/company-import/types').ImportResults> => {
     try {
-      // Invia i dati al backend
+      // Invia i dati al backend (headers chiamati al momento della richiesta, non in cache)
+      const currentHeaders = getOperateHeaders();
       const response = await apiPost('/api/v1/companies/import', {
         companies: importedCompanies,
         overwriteIds: overwriteIds || []
-      });
-
-      // Aggiorna la lista locale (il template si ricaricherà automaticamente)
-      console.log('Import completato:', response);
+      }, { headers: currentHeaders });
 
       // Ricarica i dati delle aziende per aggiornare la lista
       await loadCompanies();
 
-      // Chiudi il modal (la chiusura ora è gestita dal componente figlio in base ai conteggi)
-      // setShowImportModal(false);
-
       // Ritorna la risposta per permettere il conteggio nel figlio
       return response as import('../../components/companies/company-import/types').ImportResults;
-    } catch (error) {
-      console.error('Errore durante l\'import:', error);
-      throw error; // Rilancia l'errore per permettere al modal di gestirlo
+    } catch (error: unknown) {
+      // Per 409 (conflitti) e 400 con results, restituisci la risposta per permettere la gestione conflitti
+      const axiosResponse = (error as { response?: { data?: { results?: unknown } } })?.response?.data;
+      if (axiosResponse?.results) {
+        return axiosResponse as import('../../components/companies/company-import/types').ImportResults;
+      }
+      throw error;
     }
   };
 
   return (
     <>
       <GDPREntityTemplate<Company>
-        key={refreshKey} // Forza re-mount quando refreshKey cambia
+        refreshTrigger={refreshTrigger} // P51: Trigger refetch quando cambia
         entityName="company"
         entityNamePlural="companies"
         entityDisplayName="Azienda"
@@ -543,16 +581,18 @@ export const CompaniesPage: React.FC = () => {
         deletePermission="companies:delete"
         exportPermission="companies:export"
         apiEndpoint="/api/v1/companies"
-        columns={getCompaniesColumns()}
+        columns={getCompaniesColumns(selfCompanyProfileId)}
         searchFields={['ragioneSociale', 'mail', 'citta', 'piva']}
         filterOptions={[
           {
-            key: 'status',
+            key: 'profileStatus',
             label: 'Stato',
             options: [
-              { value: 'Active', label: 'Attiva' },
-              { value: 'Inactive', label: 'Inattiva' },
-              { value: 'Pending', label: 'In attesa' }
+              { value: 'ACTIVE', label: 'Attiva' },
+              { value: 'INACTIVE', label: 'Inattiva' },
+              { value: 'PROSPECT', label: 'Prospect' },
+              { value: 'SUSPENDED', label: 'Sospesa' },
+              { value: 'CHURNED', label: 'Persa' }
             ]
           }
         ]}
@@ -560,7 +600,7 @@ export const CompaniesPage: React.FC = () => {
           { key: 'ragioneSociale', label: 'Nome' },
           { key: 'mail', label: 'Email' },
           { key: 'citta', label: 'Città' },
-          { key: 'status', label: 'Stato' },
+          { key: 'profileStatus', label: 'Stato' },
           { key: 'createdAt', label: 'Data creazione' }
         ]}
         defaultSort={{ field: 'ragioneSociale', direction: 'asc' }}
@@ -776,8 +816,8 @@ export const CompaniesPage: React.FC = () => {
           onImport={handleImportCompanies}
           onClose={() => {
             setShowImportModal(false);
-            // Forza refresh del GDPREntityTemplate incrementando la key
-            setRefreshKey(prev => prev + 1);
+            // P51: Forza refresh del GDPREntityTemplate tramite refreshTrigger
+            setRefreshTrigger(prev => prev + 1);
           }}
           existingCompanies={companies as unknown as CompanyData[]}
         />

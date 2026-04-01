@@ -11,9 +11,10 @@
  * @project 43 - Tenant Roles Management System
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useTenantFilter } from '../../context/TenantFilterContext';
 import { apiGet } from '../../services/api';
 import {
     Building2,
@@ -31,7 +32,9 @@ import {
     ChevronRight,
     RefreshCcw,
     Plus,
-    Euro
+    Euro,
+    Settings2,
+    MessageCircle
 } from 'lucide-react';
 
 interface StatCard {
@@ -62,6 +65,7 @@ interface ActivityItem {
 
 const ManagementDashboard: React.FC = () => {
     const { user } = useAuth();
+    const { getTenantFilterParams, tenantFilterKey, isReady } = useTenantFilter();
     const [loading, setLoading] = useState(true);
     const [stats, setStats] = useState({
         totalTenants: 0,
@@ -79,16 +83,34 @@ const ManagementDashboard: React.FC = () => {
         user?.roles?.includes('SUPER_ADMIN');
 
     useEffect(() => {
-        loadDashboardData();
-    }, []);
+        if (isReady) {
+            loadDashboardData();
+        }
+    }, [isReady, tenantFilterKey]);
 
     const loadDashboardData = async () => {
         setLoading(true);
         try {
+            // P57: Build tenant filter params for API calls
+            const tenantParams = getTenantFilterParams();
+            const queryParams = new URLSearchParams();
+            if (tenantParams.tenantIds) {
+                queryParams.set('tenantIds', tenantParams.tenantIds.join(','));
+            }
+            if (tenantParams.allTenants) {
+                queryParams.set('allTenants', 'true');
+            }
+            const queryString = queryParams.toString();
+            const tenantQuery = queryString ? `?${queryString}` : '';
+            const personsQuery = queryString ? `&${queryString}` : '';
+
             // Fetch real data from API endpoints using apiGet (includes auth token)
+            // Only fetch tenants if user is admin (endpoint requires SUPER_ADMIN/ADMIN)
             const [tenantsRes, personsRes, rolesRes] = await Promise.allSettled([
-                apiGet<{ success: boolean; data: any[]; total?: number }>('/api/v1/tenants'),
-                apiGet<{ success: boolean; data: any[]; total?: number }>('/api/v1/persons?limit=1'),
+                isAdmin
+                    ? apiGet<{ success: boolean; data: any[]; total?: number }>('/api/v1/tenants')
+                    : Promise.resolve({ data: [], total: 3 } as any),
+                apiGet<{ success: boolean; data: any[]; total?: number }>(`/api/v1/persons?limit=1${personsQuery}`),
                 apiGet<{ success: boolean; data: { data: any[] } | any[] }>('/api/v1/roles')
             ]);
 
@@ -144,7 +166,7 @@ const ManagementDashboard: React.FC = () => {
                             id: '1',
                             action: 'Accesso concesso',
                             user: 'Admin',
-                            target: 'Mario Rossi → Element Formazione',
+                            target: 'Mario Rossi → Element Sicurezza',
                             timestamp: new Date(Date.now() - 1000 * 60 * 5),
                             type: 'access'
                         },
@@ -180,7 +202,6 @@ const ManagementDashboard: React.FC = () => {
                 ]);
             }
         } catch (error) {
-            console.error('Error loading dashboard data:', error);
             // Fallback to default values
             setStats({
                 totalTenants: 3,
@@ -215,7 +236,7 @@ const ManagementDashboard: React.FC = () => {
             value: stats.totalRoles,
             icon: <Shield className="h-6 w-6" />,
             color: 'green',
-            href: '/management/roles',
+            href: '/management/role-hierarchy',
             change: 2
         },
         {
@@ -240,7 +261,7 @@ const ManagementDashboard: React.FC = () => {
             label: 'Configura Ruolo',
             description: 'Definisci un nuovo ruolo',
             icon: <Shield className="h-5 w-5" />,
-            href: '/management/roles/new',
+            href: '/management/role-hierarchy',
             color: 'green'
         },
         {
@@ -261,8 +282,22 @@ const ManagementDashboard: React.FC = () => {
             label: 'Tariffari MDL',
             description: 'Gestisci tariffari medicina lavoro',
             icon: <Euro className="h-5 w-5" />,
-            href: '/management/tariffari-aziende',
+            href: '/poliambulatorio/mdl/tariffari-aziende',
             color: 'emerald'
+        },
+        {
+            label: 'Messaggistica',
+            description: 'Configura SMTP, WhatsApp e PEC',
+            icon: <MessageCircle className="h-5 w-5" />,
+            href: '/management/config#messaging',
+            color: 'violet'
+        },
+        {
+            label: 'Configurazione',
+            description: 'Widget pubblici, preferenze e sistema',
+            icon: <Settings2 className="h-5 w-5" />,
+            href: '/management/config',
+            color: 'slate'
         }
     ];
 

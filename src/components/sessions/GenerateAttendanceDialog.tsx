@@ -83,14 +83,13 @@ export default function GenerateAttendanceDialog({
         isActive: true
       });
       setTemplates(result.data);
-      
+
       // Seleziona automaticamente il template di default
       const defaultTemplate = result.data.find((t: Template) => t.isDefault);
       if (defaultTemplate) {
         setSelectedTemplateId(defaultTemplate.id);
       }
     } catch (err) {
-      console.error('Failed to load templates:', err);
       setError('Impossibile caricare i template disponibili');
     } finally {
       setLoadingTemplates(false);
@@ -164,7 +163,7 @@ export default function GenerateAttendanceDialog({
       };
 
       const result = await registriPresenzeService.generate(params);
-      
+
       setDownloadUrl(result.downloadUrl);
       setSuccess(true);
 
@@ -173,9 +172,8 @@ export default function GenerateAttendanceDialog({
         onSuccess?.();
         onOpenChange(false);
       }, 2000);
-    } catch (err: any) {
-      console.error('Failed to generate attendance register:', err);
-      setError(err.response?.data?.message || 'Errore durante la generazione del registro');
+    } catch {
+      setError('Errore durante la generazione del registro. Verifica template e presenze, poi riprova.');
     } finally {
       setLoading(false);
     }

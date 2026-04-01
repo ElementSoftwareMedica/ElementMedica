@@ -41,9 +41,9 @@ export const HEALTH_CHECK_CONFIG = {
   retries: 3,              // Tentativi per check falliti
   thresholds: {
     responseTime: 1000,    // Soglia response time (ms)
-    memoryUsage: 0.95,     // Soglia utilizzo memoria (95%) - Aumentata per sviluppo
-    diskUsage: 0.95,       // Soglia utilizzo disco (95%) - Aumentata per sviluppo
-    cpuUsage: 0.90         // Soglia utilizzo CPU (90%) - Aumentata per sviluppo
+    memoryUsage: 0.85,     // Soglia utilizzo memoria (85%)
+    diskUsage: 0.90,       // Soglia utilizzo disco (90%)
+    cpuUsage: 0.80         // Soglia utilizzo CPU (80%)
   }
 };
 
@@ -57,16 +57,16 @@ export class HealthCheckManager {
     this.results = new Map();
     this.intervalId = null;
     this.isRunning = false;
-    
+
     // Registra check di sistema di default
     this.registerDefaultChecks();
-    
+
     logger.info('Health Check Manager initialized', {
       service: 'health',
       config: this.config
     });
   }
-  
+
   /**
    * Registra un health check
    */
@@ -81,19 +81,19 @@ export class HealthCheckManager {
       tags: options.tags || [],
       description: options.description || `Health check for ${name}`
     };
-    
+
     this.checks.set(name, checkConfig);
-    
+
     logger.info('Health check registered', {
       service: 'health',
       checkName: name,
       criticality: checkConfig.criticality,
       enabled: checkConfig.enabled
     });
-    
+
     return this;
   }
-  
+
   /**
    * Registra check di sistema di default
    */
@@ -104,36 +104,36 @@ export class HealthCheckManager {
       description: 'System memory usage',
       enabled: false // Disabilitato per ambiente di sviluppo
     });
-    
+
     // Check CPU
     this.registerCheck('cpu', this.checkCPU.bind(this), {
       criticality: CRITICALITY.MEDIUM,
       description: 'System CPU usage'
     });
-    
+
     // Check disco
     this.registerCheck('disk', this.checkDisk.bind(this), {
       criticality: CRITICALITY.HIGH,
       description: 'System disk usage'
     });
-    
+
     // Check uptime
     this.registerCheck('uptime', this.checkUptime.bind(this), {
       criticality: CRITICALITY.LOW,
       description: 'System uptime'
     });
   }
-  
+
   /**
    * Esegue un singolo health check
    */
   async runCheck(name) {
     const checkConfig = this.checks.get(name);
-    
+
     if (!checkConfig) {
       throw new Error(`Health check '${name}' not found`);
     }
-    
+
     if (!checkConfig.enabled) {
       return {
         name,
@@ -142,21 +142,21 @@ export class HealthCheckManager {
         timestamp: new Date().toISOString()
       };
     }
-    
+
     const startTime = performance.now();
     let attempt = 0;
-    
+
     while (attempt < checkConfig.retries) {
       try {
         const result = await Promise.race([
           checkConfig.check(),
-          new Promise((_, reject) => 
+          new Promise((_, reject) =>
             setTimeout(() => reject(new Error('Health check timeout')), checkConfig.timeout)
           )
         ]);
-        
+
         const responseTime = performance.now() - startTime;
-        
+
         const healthResult = {
           name,
           status: result.status || HEALTH_STATUS.HEALTHY,
@@ -168,15 +168,15 @@ export class HealthCheckManager {
           tags: checkConfig.tags,
           details: result.details || {}
         };
-        
+
         // Verifica soglie
         if (responseTime > this.config.thresholds.responseTime) {
           healthResult.status = HEALTH_STATUS.DEGRADED;
           healthResult.message += ` (slow response: ${Math.round(responseTime)}ms)`;
         }
-        
+
         this.results.set(name, healthResult);
-        
+
         logger.debug('Health check completed', {
           service: 'health',
           checkName: name,
@@ -184,15 +184,15 @@ export class HealthCheckManager {
           responseTime: healthResult.responseTime,
           attempt: attempt + 1
         });
-        
+
         return healthResult;
-        
+
       } catch (error) {
         attempt++;
-        
+
         if (attempt >= checkConfig.retries) {
           const responseTime = performance.now() - startTime;
-          
+
           const healthResult = {
             name,
             status: HEALTH_STATUS.UNHEALTHY,
@@ -207,42 +207,42 @@ export class HealthCheckManager {
               stack: error.stack
             }
           };
-          
+
           this.results.set(name, healthResult);
-          
+
           logger.warn('Health check failed', {
             service: 'health',
             checkName: name,
             error: error.message,
             attempts: attempt
           });
-          
+
           return healthResult;
         }
-        
+
         // Attesa prima del retry
         await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
       }
     }
   }
-  
+
   /**
    * Esegue tutti gli health checks
    */
   async runAllChecks() {
     const startTime = performance.now();
     const checkNames = Array.from(this.checks.keys());
-    
+
     logger.info('Running all health checks', {
       service: 'health',
       totalChecks: checkNames.length
     });
-    
+
     // Esegue i check in parallelo
     const results = await Promise.allSettled(
       checkNames.map(name => this.runCheck(name))
     );
-    
+
     const healthResults = results.map((result, index) => {
       if (result.status === 'fulfilled') {
         return result.value;
@@ -256,12 +256,12 @@ export class HealthCheckManager {
         };
       }
     });
-    
+
     const totalTime = performance.now() - startTime;
-    
+
     // Calcola stato generale
     const overallStatus = this.calculateOverallStatus(healthResults);
-    
+
     const summary = {
       status: overallStatus,
       timestamp: new Date().toISOString(),
@@ -269,7 +269,7 @@ export class HealthCheckManager {
       checks: healthResults,
       summary: this.generateSummary(healthResults)
     };
-    
+
     logger.info('Health checks completed', {
       service: 'health',
       overallStatus,
@@ -279,32 +279,32 @@ export class HealthCheckManager {
       degraded: healthResults.filter(r => r.status === HEALTH_STATUS.DEGRADED).length,
       unhealthy: healthResults.filter(r => r.status === HEALTH_STATUS.UNHEALTHY).length
     });
-    
+
     return summary;
   }
-  
+
   /**
    * Calcola lo stato generale
    */
   calculateOverallStatus(results) {
-    const criticalUnhealthy = results.some(r => 
+    const criticalUnhealthy = results.some(r =>
       r.status === HEALTH_STATUS.UNHEALTHY && r.criticality === CRITICALITY.CRITICAL
     );
-    
+
     if (criticalUnhealthy) {
       return HEALTH_STATUS.UNHEALTHY;
     }
-    
+
     const hasUnhealthy = results.some(r => r.status === HEALTH_STATUS.UNHEALTHY);
     const hasDegraded = results.some(r => r.status === HEALTH_STATUS.DEGRADED);
-    
+
     if (hasUnhealthy || hasDegraded) {
       return HEALTH_STATUS.DEGRADED;
     }
-    
+
     return HEALTH_STATUS.HEALTHY;
   }
-  
+
   /**
    * Genera summary dei risultati
    */
@@ -318,10 +318,10 @@ export class HealthCheckManager {
       byCategory: {},
       criticalIssues: []
     };
-    
+
     results.forEach(result => {
       summary[result.status]++;
-      
+
       // Raggruppa per criticità
       if (!summary.byCategory[result.criticality]) {
         summary.byCategory[result.criticality] = {
@@ -332,10 +332,10 @@ export class HealthCheckManager {
           unknown: 0
         };
       }
-      
+
       summary.byCategory[result.criticality].total++;
       summary.byCategory[result.criticality][result.status]++;
-      
+
       // Identifica problemi critici
       if (result.status === HEALTH_STATUS.UNHEALTHY && result.criticality === CRITICALITY.CRITICAL) {
         summary.criticalIssues.push({
@@ -345,10 +345,10 @@ export class HealthCheckManager {
         });
       }
     });
-    
+
     return summary;
   }
-  
+
   /**
    * Check memoria sistema
    */
@@ -357,17 +357,17 @@ export class HealthCheckManager {
     const freeMemory = os.freemem();
     const usedMemory = totalMemory - freeMemory;
     const usagePercentage = usedMemory / totalMemory;
-    
+
     const details = {
       total: Math.round(totalMemory / 1024 / 1024), // MB
       used: Math.round(usedMemory / 1024 / 1024),   // MB
       free: Math.round(freeMemory / 1024 / 1024),   // MB
       usagePercentage: Math.round(usagePercentage * 100)
     };
-    
+
     let status = HEALTH_STATUS.HEALTHY;
     let message = `Memory usage: ${details.usagePercentage}%`;
-    
+
     if (usagePercentage > this.config.thresholds.memoryUsage) {
       status = HEALTH_STATUS.UNHEALTHY;
       message = `High memory usage: ${details.usagePercentage}%`;
@@ -375,20 +375,20 @@ export class HealthCheckManager {
       status = HEALTH_STATUS.DEGRADED;
       message = `Elevated memory usage: ${details.usagePercentage}%`;
     }
-    
+
     return { status, message, details };
   }
-  
+
   /**
    * Check CPU sistema
    */
   async checkCPU() {
     const cpus = os.cpus();
     const loadAvg = os.loadavg();
-    
+
     // Calcola utilizzo CPU medio
     const cpuUsage = loadAvg[0] / cpus.length;
-    
+
     const details = {
       cores: cpus.length,
       loadAverage: {
@@ -398,10 +398,10 @@ export class HealthCheckManager {
       },
       usagePercentage: Math.round(cpuUsage * 100)
     };
-    
+
     let status = HEALTH_STATUS.HEALTHY;
     let message = `CPU usage: ${details.usagePercentage}%`;
-    
+
     if (cpuUsage > this.config.thresholds.cpuUsage) {
       status = HEALTH_STATUS.UNHEALTHY;
       message = `High CPU usage: ${details.usagePercentage}%`;
@@ -409,10 +409,10 @@ export class HealthCheckManager {
       status = HEALTH_STATUS.DEGRADED;
       message = `Elevated CPU usage: ${details.usagePercentage}%`;
     }
-    
+
     return { status, message, details };
   }
-  
+
   /**
    * Check spazio disco
    */
@@ -421,10 +421,10 @@ export class HealthCheckManager {
       const { stdout } = await execAsync('df -h /');
       const lines = stdout.trim().split('\n');
       const diskInfo = lines[1].split(/\s+/);
-      
+
       const usageStr = diskInfo[4];
       const usagePercentage = parseInt(usageStr.replace('%', '')) / 100;
-      
+
       const details = {
         filesystem: diskInfo[0],
         size: diskInfo[1],
@@ -433,10 +433,10 @@ export class HealthCheckManager {
         usagePercentage: Math.round(usagePercentage * 100),
         mountPoint: diskInfo[5]
       };
-      
+
       let status = HEALTH_STATUS.HEALTHY;
       let message = `Disk usage: ${details.usagePercentage}%`;
-      
+
       if (usagePercentage > this.config.thresholds.diskUsage) {
         status = HEALTH_STATUS.UNHEALTHY;
         message = `High disk usage: ${details.usagePercentage}%`;
@@ -444,9 +444,9 @@ export class HealthCheckManager {
         status = HEALTH_STATUS.DEGRADED;
         message = `Elevated disk usage: ${details.usagePercentage}%`;
       }
-      
+
       return { status, message, details };
-      
+
     } catch (error) {
       return {
         status: HEALTH_STATUS.UNKNOWN,
@@ -455,14 +455,14 @@ export class HealthCheckManager {
       };
     }
   }
-  
+
   /**
    * Check uptime sistema
    */
   async checkUptime() {
     const uptime = os.uptime();
     const processUptime = process.uptime();
-    
+
     const details = {
       system: {
         seconds: Math.round(uptime),
@@ -473,14 +473,14 @@ export class HealthCheckManager {
         formatted: this.formatUptime(processUptime)
       }
     };
-    
+
     return {
       status: HEALTH_STATUS.HEALTHY,
       message: `System uptime: ${details.system.formatted}, Process uptime: ${details.process.formatted}`,
       details
     };
   }
-  
+
   /**
    * Formatta uptime in formato leggibile
    */
@@ -488,15 +488,15 @@ export class HealthCheckManager {
     const days = Math.floor(seconds / 86400);
     const hours = Math.floor((seconds % 86400) / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
-    
+
     const parts = [];
     if (days > 0) parts.push(`${days}d`);
     if (hours > 0) parts.push(`${hours}h`);
     if (minutes > 0) parts.push(`${minutes}m`);
-    
+
     return parts.length > 0 ? parts.join(' ') : '< 1m';
   }
-  
+
   /**
    * Avvia monitoring automatico
    */
@@ -504,9 +504,9 @@ export class HealthCheckManager {
     if (this.isRunning) {
       return;
     }
-    
+
     this.isRunning = true;
-    
+
     this.intervalId = setInterval(async () => {
       try {
         await this.runAllChecks();
@@ -517,13 +517,13 @@ export class HealthCheckManager {
         });
       }
     }, this.config.interval);
-    
+
     logger.info('Health check monitoring started', {
       service: 'health',
       interval: this.config.interval
     });
   }
-  
+
   /**
    * Ferma monitoring automatico
    */
@@ -532,21 +532,21 @@ export class HealthCheckManager {
       clearInterval(this.intervalId);
       this.intervalId = null;
     }
-    
+
     this.isRunning = false;
-    
+
     logger.info('Health check monitoring stopped', {
       service: 'health'
     });
   }
-  
+
   /**
    * Ottieni risultati cached
    */
   getCachedResults() {
     return Array.from(this.results.values());
   }
-  
+
   /**
    * Ottieni configurazione
    */
@@ -561,13 +561,13 @@ export class HealthCheckManager {
 export const createDatabaseHealthCheck = (dbClient, name = 'database') => {
   return async () => {
     const startTime = performance.now();
-    
+
     try {
       // Test connessione con query semplice
       await dbClient.$queryRaw`SELECT 1`;
-      
+
       const responseTime = performance.now() - startTime;
-      
+
       return {
         status: HEALTH_STATUS.HEALTHY,
         message: 'Database connection OK',
@@ -595,13 +595,13 @@ export const createDatabaseHealthCheck = (dbClient, name = 'database') => {
 export const createRedisHealthCheck = (redisClient, name = 'redis') => {
   return async () => {
     const startTime = performance.now();
-    
+
     try {
       // Test connessione con ping
       const result = await redisClient.ping();
-      
+
       const responseTime = performance.now() - startTime;
-      
+
       return {
         status: result === 'PONG' ? HEALTH_STATUS.HEALTHY : HEALTH_STATUS.UNHEALTHY,
         message: result === 'PONG' ? 'Redis connection OK' : 'Redis ping failed',
@@ -629,18 +629,18 @@ export const createRedisHealthCheck = (redisClient, name = 'redis') => {
 export const createExternalServiceHealthCheck = (url, name, options = {}) => {
   return async () => {
     const startTime = performance.now();
-    
+
     try {
       const response = await fetch(url, {
         method: options.method || 'GET',
         timeout: options.timeout || 5000,
         headers: options.headers || {}
       });
-      
+
       const responseTime = performance.now() - startTime;
-      
+
       const isHealthy = response.ok || (options.expectedStatus && response.status === options.expectedStatus);
-      
+
       return {
         status: isHealthy ? HEALTH_STATUS.HEALTHY : HEALTH_STATUS.UNHEALTHY,
         message: isHealthy ? `${name} service OK` : `${name} service returned ${response.status}`,

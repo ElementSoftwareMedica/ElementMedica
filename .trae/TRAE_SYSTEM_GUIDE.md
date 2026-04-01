@@ -79,10 +79,13 @@
 
 ---
 
-### Architettura 3-Server
+### Architettura 2-Server
+
+> **P64**: Proxy server (4003) ELIMINATO - In dev Vite proxy, in prod Nginx routing.
+
 ```
-Frontend (5173) → Proxy Server (4003) → API Server (4001)
-                                     → Documents Server (4002)
+Frontend (5173) → Vite Proxy (dev) / Nginx (prod) → API Server (4001)
+                                                  → Documents Server (4002)
 ```
 
 ### Credenziali Test OBBLIGATORIE
@@ -105,9 +108,10 @@ Frontend (5173) → Proxy Server (4003) → API Server (4001)
 
 ### 3. Porte Server FISSE
 - **API Server**: 4001 (NON MODIFICARE MAI)
-- **Proxy Server**: 4003 (NON MODIFICARE MAI)
+- **Documents Server**: 4002 (NON MODIFICARE MAI)
 - **Frontend**: 5173
-- **Documents**: 4002 (opzionale)
+
+> **P64**: Proxy Server (4003) ELIMINATO
 
 ### 4. Component Size Limits (NEW - Nov 2025)
 - ✅ **MAX 500 lines** per component/service/route file
@@ -530,65 +534,28 @@ await prisma.person.delete({
 
 ---
 
-## 🔄 SISTEMA ROUTING AVANZATO (Progetto 19)
+## 🔄 SISTEMA ROUTING (P64 UPDATE)
 
-### RouterMap Centralizzata
-```javascript
-// File: backend/proxy/config/RouterMap.js
-const ROUTER_MAP = {
-  versions: ['v1', 'v2'],
-  services: {
-    api: { host: 'localhost', port: 4001, protocol: 'http' },
-    documents: { host: 'localhost', port: 4002, protocol: 'http' },
-    auth: { host: 'localhost', port: 4001, protocol: 'http' }
-  },
-  routes: {
-    v1: { /* route v1 */ },
-    v2: { /* route v2 */ }
-  }
-};
-```
+> **P64**: Proxy server (4003) ELIMINATO. Il routing è ora gestito da:
+> - **Sviluppo**: Vite proxy (vite.config.ts) → API Server (4001)
+> - **Produzione**: Nginx reverse proxy → API Server (4001)
 
 ### Endpoint Principali
-- **Frontend**: `http://localhost:4003`
-- **API v1**: `http://localhost:4003/api/v1/*`
-- **API v2**: `http://localhost:4003/api/v2/*`
-- **Diagnostica**: `http://localhost:4003/routes` (solo admin)
+- **Frontend**: `http://localhost:5173` (dev)
+- **API v1**: `http://localhost:4001/api/v1/*`
+- **API v2**: `http://localhost:4001/api/v2/*`
+- **Documents**: `http://localhost:4002`
 
-### Legacy Redirects Automatici
-```
-/login → /api/v1/auth/login
-/logout → /api/v1/auth/logout
-/dashboard → /api/v1/dashboard
-```
-
-### Endpoint Diagnostici
-```bash
-GET /routes/health    # Stato sistema routing
-GET /routes/stats     # Statistiche routing
-GET /routes/config    # Configurazione completa
-GET /routes           # Lista tutte le route
-```
+### Note
+Gli endpoint diagnostici `/routes/health`, `/routes/stats`, `/routes/config` NON sono più disponibili.
 
 ## 🛠️ MIDDLEWARE STACK (Ordine Critico)
 
-### Proxy Server (12 middleware)
-1. **Request ID** - Tracking richieste
-2. **Security Headers** - Helmet, CSP
-3. **CORS Dinamico** - Basato su pattern
-4. **Rate Limiting** - Dinamico per endpoint
-5. **Request Logging** - Audit trail
-6. **Body Parser** - JSON/URL-encoded
-7. **Static Files** - Servizio file statici
-8. **Version Manager** - Header x-api-version
-9. **Route Logger** - Logging route specifico
-10. **Legacy Redirects** - Redirect automatici
-11. **Advanced Routing** - Sistema routing principale
-12. **Dynamic Proxy** - Proxy verso backend
-
-### API Server (Ottimizzato)
+### API Server (include funzionalità ex-Proxy)
+- **CORS** - Gestito direttamente da API Server
+- **Security Headers** - Helmet, CSP
+- **Rate Limiting** - Dinamico per endpoint
 - **Body Parser V38** - Applicato a router versionati
-- **Security** - Helmet, rate limiting
 - **Validation** - Input validation centralizzata
 - **Versioning** - Supporto v1/v2
 
@@ -596,38 +563,31 @@ GET /routes           # Lista tutte le route
 
 ### Test Base (Sempre)
 ```bash
-# Health check server
+# Health check server (P64: solo API e Documents)
 curl http://localhost:4001/health
-curl http://localhost:4003/health
+curl http://localhost:4002/health
 
-# Test login (CRITICO)
-curl -X POST http://localhost:4003/api/auth/login \
+# Test login (CRITICO - diretto su API)
+curl -X POST http://localhost:4001/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"identifier":"admin@example.com","password":"Admin123!"}'
 ```
 
-### Test Routing Avanzato
+### Test API
 ```bash
-# Sistema routing
-curl http://localhost:4003/routes/health
-curl http://localhost:4003/routes/stats
-
-# Legacy redirects
-curl -I http://localhost:4003/login
-
-# Versioning API
-curl -H "x-api-version: v1" http://localhost:4003/api/v1/health
-curl -H "x-api-version: v2" http://localhost:4003/api/v2/health
+# Test versioning API
+curl http://localhost:4001/api/v1/health
+curl http://localhost:4001/api/v2/health
 
 # Body parsing V38
-curl -X POST http://localhost:4003/api/v1/auth/login \
+curl -X POST http://localhost:4001/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"identifier":"admin@example.com","password":"Admin123!"}' -v
 ```
 
-### Test CORS
+### Test CORS (P64: diretto su API)
 ```bash
-curl -X OPTIONS http://localhost:4003/api/auth/login \
+curl -X OPTIONS http://localhost:4001/api/v1/auth/login \
   -H "Origin: http://localhost:5173" \
   -H "Access-Control-Request-Method: POST"
 ```
@@ -642,24 +602,26 @@ pm2 logs api-server | grep "Body parser applied to versioned routers"
 ```
 
 ### 2. Routing Non Funziona
-**Causa**: RouterMap non caricata
-**Soluzione**: Verificare configurazione
+**Causa**: Vite proxy non configurato correttamente
+**Soluzione**: Verificare vite.config.ts proxy settings
 ```bash
-curl http://localhost:4003/routes/config | jq '.services'
+# P64: Verificare che /api/* sia proxied a localhost:4001
+cat vite.config.ts | grep -A 10 "proxy"
 ```
 
 ### 3. CORS Errors
-**Causa**: Configurazione CORS dinamico
-**Soluzione**: Verificare pattern CORS
+**Causa**: Configurazione CORS in API Server
+**Soluzione**: Verificare CORS settings in API Server
 ```bash
-curl http://localhost:4003/routes/config | jq '.cors'
+# P64: CORS ora gestito da API Server
+pm2 logs api-server | grep -i "cors"
 ```
 
 ### 4. Rate Limiting Issues
-**Causa**: Configurazione rate limiting dinamico
-**Soluzione**: Verificare esenzioni
+**Causa**: Configurazione rate limiting in API Server
+**Soluzione**: Verificare rate limiting config
 ```bash
-curl -I http://localhost:4003/routes/health  # Dovrebbe essere esente
+pm2 logs api-server | grep -i "rate"
 ```
 
 ### 5. Curl Restituisce Solo Path (Trae AI)
@@ -742,54 +704,47 @@ console.log('🔍 Persons permissions:', {
 
 ## 🔍 DEBUGGING AVANZATO
 
-### Log Analysis
+### Log Analysis (P64 Update)
 ```bash
-# Proxy server logs
-pm2 logs proxy-server | grep -E "(ROUTING|MIDDLEWARE|ERROR)"
+# API server logs (include CORS e routing)
+pm2 logs api-server | grep -E "(V38|BODY|LOGIN|CORS)"
 
-# API server logs
-pm2 logs api-server | grep -E "(V38|BODY|LOGIN)"
-
-# Routing specifico
-pm2 logs proxy-server | grep -E "(RouterMap|VersionManager)"
+# Documents server logs
+pm2 logs documents-server | grep -E "(PDF|ERROR)"
 ```
 
-### Diagnostica Sistema
+### Diagnostica Sistema (P64)
 ```bash
 # Stato processi
 pm2 status
 
-# Configurazione routing
-curl http://localhost:4003/routes | jq '.'
-
-# Statistiche performance
-curl http://localhost:4003/routes/stats | jq '.performance'
+# Health check
+curl http://localhost:4001/health
+curl http://localhost:4002/health
 ```
+
+> **P64**: Endpoint `/routes`, `/routes/stats` NON più disponibili.
 
 ## 📁 STRUTTURA FILE CRITICI
 
-### Routing System
-```
-backend/proxy/
-├── config/RouterMap.js          # Configurazione centralizzata
-├── middleware/
-│   ├── advancedRouting.js       # Sistema routing principale
-│   ├── versionManager.js        # Gestione versioni API
-│   └── proxyManager.js          # Proxy dinamico
-├── utils/
-│   └── routeLogger.js           # Logging route
-└── index.js                     # Entry point proxy
-```
-
-### API Server
+### API Server (P64: include funzionalità ex-Proxy)
 ```
 backend/
-├── servers/api-server.js        # Server API ottimizzato
+├── servers/api-server.js        # Server API ottimizzato (CORS, rate limiting)
 ├── middleware/
-│   └── bodyParsingMiddleware.js # Body parsing V38
+│   ├── bodyParsingMiddleware.js # Body parsing V38
+│   ├── cors.js                  # CORS handling (ex-Proxy)
+│   └── rateLimiting.js          # Rate limiting (ex-Proxy)
 └── routes/
     ├── v1/                      # Route API v1
     └── v2/                      # Route API v2
+```
+
+### Documents Server
+```
+backend/
+├── servers/documents-server.js  # Server documenti
+└── documents/                   # Template e generazione PDF
 ```
 
 ## 🚫 COMANDI VIETATI
@@ -797,7 +752,7 @@ backend/
 ### Server Management
 - `pm2 restart` (senza autorizzazione)
 - `kill -9` (sui processi server)
-- Modifica porte 4001/4003
+- Modifica porte 4001/4002
 - Riavvio server senza planning
 
 ### Sviluppo
@@ -811,28 +766,27 @@ backend/
 ### Diagnostica
 - `pm2 status`
 - `pm2 logs [server-name]`
-- `curl` per health check
+- `curl http://localhost:4001/health`
+- `curl http://localhost:4002/health`
 - `ps aux | grep node`
 
 ### Test
-- Tutti i curl di test sopra indicati
-- Test login con credenziali standard
-- Verifica endpoint diagnostici
+- Test login su API Server diretto
+- Test CORS su API Server
+- Verifica build frontend
 
 ## 🎯 IDENTIFICAZIONE PROBLEMI
 
-### Sintomi Comuni
-1. **404 su API**: Problema routing → Test `/routes/health`
+### Sintomi Comuni (P64 Update)
+1. **404 su API**: Problema routing Vite/Nginx → Check vite.config.ts
 2. **401 su login**: Problema body parsing → Test V38
-3. **CORS errors**: Problema configurazione → Test OPTIONS
-4. **429 errors**: Rate limiting → Verificare esenzioni
+3. **CORS errors**: Problema CORS in API Server → Check API Server logs
+4. **429 errors**: Rate limiting → Check API Server config
 5. **Timeout**: Middleware performance → Check logs
-6. **Curl restituisce path**: Limitazione Trae AI → Usare Node.js
-7. **Permessi mancanti ADMIN**: Sezione admin incompleta → Test permessi
 
 ### Escalation
 - **Body parsing issues**: Sistema V38 non attivo
-- **Routing down**: RouterMap non caricata
+- **CORS down**: Config API Server errata
 - **Server down**: Health check fallito
 - **Performance**: Middleware timeout
 
@@ -840,20 +794,16 @@ backend/
 
 ### Performance Target
 - **Response time**: < 200ms (API)
-- **Routing overhead**: < 10ms
 - **Memory usage**: < 512MB per server
 - **CPU usage**: < 50% normale
 
-### Monitoring
+### Monitoring (P64)
 ```bash
-# Performance routing
-curl http://localhost:4003/routes/stats | jq '.performance'
-
 # Memory usage
 ps aux | grep node | awk '{print $4, $11}'
 
 # Response times
-curl -w "@curl-format.txt" http://localhost:4003/api/v1/health
+curl -w "@curl-format.txt" http://localhost:4001/api/v1/health
 ```
 
 ---

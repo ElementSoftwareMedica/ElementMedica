@@ -148,7 +148,6 @@ export const getColor = (token: string): string => {
   for (const key of keys) {
     value = value[key];
     if (value === undefined) {
-      console.warn(`Color token '${token}' not found`);
       return '#000000';
     }
   }

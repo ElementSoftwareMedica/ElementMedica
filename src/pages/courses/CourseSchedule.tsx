@@ -5,7 +5,7 @@ import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import { PDFDownloadLink } from '@react-pdf/renderer';
-import { 
+import {
   Clock,
   Download,
   MapPin,
@@ -25,7 +25,7 @@ export default function CourseSchedule() {
   const [showScheduleForm, setShowScheduleForm] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
-  
+
   const course = courses.find(c => c.id === id);
 
   if (!course) {
@@ -47,7 +47,6 @@ export default function CourseSchedule() {
       setShowScheduleForm(false);
       // Refresh calendar data
     } catch (error) {
-      console.error('Failed to schedule course:', error);
     }
   };
 
@@ -55,8 +54,8 @@ export default function CourseSchedule() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">{course.title}</h1>
-          <p className="text-gray-500">Schedule and manage course sessions</p>
+          <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-50">{course.title}</h1>
+          <p className="text-gray-500 dark:text-gray-400">Schedule and manage course sessions</p>
         </div>
         <button
           onClick={() => setShowScheduleForm(true)}
@@ -68,7 +67,7 @@ export default function CourseSchedule() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
-          <div className="bg-white rounded-2xl shadow p-6">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow dark:shadow-black/30 p-6">
             <FullCalendar
               plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
               initialView="dayGridMonth"
@@ -90,26 +89,26 @@ export default function CourseSchedule() {
 
         <div className="space-y-6">
           {selectedEvent ? (
-            <div className="bg-white rounded-2xl shadow p-6">
-              <h2 className="text-lg font-semibold text-gray-800 mb-4">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow dark:shadow-black/30 p-6">
+              <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-50 mb-4">
                 Session Details
               </h2>
               <div className="space-y-4">
                 <div className="flex items-center">
-                  <Clock className="h-5 w-5 text-gray-400" />
-                  <span className="ml-2 text-gray-600">
+                  <Clock className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+                  <span className="ml-2 text-gray-600 dark:text-gray-400">
                     {selectedEvent.start.toLocaleString()}
                   </span>
                 </div>
                 <div className="flex items-center">
-                  <MapPin className="h-5 w-5 text-gray-400" />
-                  <span className="ml-2 text-gray-600">
+                  <MapPin className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+                  <span className="ml-2 text-gray-600 dark:text-gray-400">
                     {selectedEvent.extendedProps.location}
                   </span>
                 </div>
                 <div className="flex items-center">
-                  <Users className="h-5 w-5 text-gray-400" />
-                  <span className="ml-2 text-gray-600">
+                  <Users className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+                  <span className="ml-2 text-gray-600 dark:text-gray-400">
                     {selectedEvent.extendedProps.participants} participants
                   </span>
                 </div>
@@ -125,8 +124,8 @@ export default function CourseSchedule() {
               </div>
             </div>
           ) : (
-            <div className="bg-white rounded-2xl shadow p-6">
-              <p className="text-gray-500 text-center">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow dark:shadow-black/30 p-6">
+              <p className="text-gray-500 dark:text-gray-400 text-center">
                 Select a session to view details
               </p>
             </div>

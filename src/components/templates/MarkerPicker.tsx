@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, ChevronDown, ChevronRight, Copy } from 'lucide-react';
+import { Search, ChevronDown, ChevronRight, Copy, Move, Maximize2 } from 'lucide-react';
 
 // Definizione marker organizzati per categoria (allineato con backend markerResolver.js)
 const MARKER_CATEGORIES = {
@@ -101,6 +101,23 @@ const MARKER_CATEGORIES = {
       { key: 'trainer.specialties', label: 'Specializzazioni', example: '{{trainer.specialties}}' },
     ]
   },
+  // P65: Categoria firma per tutti i tipi di firmatari
+  signatures: {
+    label: 'Firme Digitali',
+    icon: '✍️',
+    markers: [
+      { key: 'dipendente.firma', label: 'Firma Dipendente (immagine)', example: '{{{dipendente.firma}}}' },
+      { key: 'formatore.firma', label: 'Firma Formatore (immagine)', example: '{{{formatore.firma}}}' },
+      { key: 'datore.firma', label: 'Firma Datore Lavoro (immagine)', example: '{{{datore.firma}}}' },
+      // P65 Fase 2: Nuovi ruoli sicurezza sul lavoro
+      { key: 'rspp.firma', label: 'Firma RSPP (immagine)', example: '{{{rspp.firma}}}' },
+      { key: 'mc.firma', label: 'Firma Medico Competente (immagine)', example: '{{{mc.firma}}}' },
+      { key: 'rls.firma', label: 'Firma RLS (immagine)', example: '{{{rls.firma}}}' },
+      { key: 'partecipante.firma', label: 'Firma Partecipante (immagine)', example: '{{{partecipante.firma}}}' },
+      { key: 'operatore.firma', label: 'Firma Operatore (immagine)', example: '{{{operatore.firma}}}' },
+      { key: 'cliente.firma', label: 'Firma Cliente (immagine)', example: '{{{cliente.firma}}}' },
+    ]
+  },
   system: {
     label: 'Sistema',
     icon: '⚙️',
@@ -120,7 +137,10 @@ const MARKER_CATEGORIES = {
     markers: [
       { key: 'tenant.id', label: 'ID tenant', example: '{{tenant.id}}' },
       { key: 'tenant.name', label: 'Nome ente', example: '{{tenant.name}}' },
-      { key: 'tenant.logo', label: 'Logo ente (URL)', example: '{{tenant.logo}}' },
+      { key: 'tenant.logo', label: 'Logo ente (per img src)', example: '{{tenant.logo}}' },
+      { key: 'tenant.logoHtml', label: 'Logo ente (tag HTML)', example: '{{tenant.logoHtml}}' },
+      { key: 'tenant.branchLogo', label: 'Logo sede (per img src)', example: '{{tenant.branchLogo}}' },
+      { key: 'tenant.branchLogoHtml', label: 'Logo sede (tag HTML)', example: '{{tenant.branchLogoHtml}}' },
       { key: 'tenant.address', label: 'Indirizzo ente', example: '{{tenant.address}}' },
       { key: 'tenant.phone', label: 'Telefono ente', example: '{{tenant.phone}}' },
       { key: 'tenant.email', label: 'Email ente', example: '{{tenant.email}}' },
@@ -141,6 +161,64 @@ const FORMATTERS = [
   { key: 'default', label: 'Default', description: 'Valore di fallback se vuoto', example: '|default:N/A' },
 ];
 
+/**
+ * Placeholder visivi — blocchi HTML con dimensioni configurabili
+ * per firme, logo e QR code. Vengono inseriti come HTML nel template
+ * e rendono visibile l'ingombro nel PDF.
+ */
+const VISUAL_PLACEHOLDERS = [
+  {
+    key: 'firma-medico',
+    label: 'Firma Medico',
+    icon: '✍️',
+    description: 'Blocco visivo firma medico con dimensione configurabile',
+    defaultWidth: 200,
+    defaultHeight: 80,
+    getHtml: (w: number, h: number) =>
+      `<div class="placeholder-firma" style="width:${w}px;height:${h}px;border:1px dashed #999;display:inline-block;text-align:center;line-height:${h}px;font-size:10px;color:#999;overflow:hidden;"><img src="{{firma.medico}}" style="max-width:100%;max-height:100%;object-fit:contain;" alt="Firma medico"></div>`
+  },
+  {
+    key: 'firma-paziente',
+    label: 'Firma Paziente',
+    icon: '✍️',
+    description: 'Blocco visivo firma paziente con dimensione configurabile',
+    defaultWidth: 200,
+    defaultHeight: 80,
+    getHtml: (w: number, h: number) =>
+      `<div class="placeholder-firma" style="width:${w}px;height:${h}px;border:1px dashed #999;display:inline-block;text-align:center;line-height:${h}px;font-size:10px;color:#999;overflow:hidden;"><img src="{{firma.paziente}}" style="max-width:100%;max-height:100%;object-fit:contain;" alt="Firma paziente"></div>`
+  },
+  {
+    key: 'tenant-logo',
+    label: 'Logo Ente',
+    icon: '🏛️',
+    description: 'Blocco visivo logo ente con dimensione configurabile',
+    defaultWidth: 150,
+    defaultHeight: 80,
+    getHtml: (w: number, h: number) =>
+      `<div class="placeholder-logo" style="width:${w}px;height:${h}px;border:1px dashed #999;display:inline-block;text-align:center;line-height:${h}px;font-size:10px;color:#999;overflow:hidden;"><img src="{{tenant.logo}}" style="max-width:100%;max-height:100%;object-fit:contain;" alt="Logo ente"></div>`
+  },
+  {
+    key: 'branch-logo',
+    label: 'Logo Sede',
+    icon: '🏢',
+    description: 'Blocco visivo logo sede (branch) con dimensione configurabile',
+    defaultWidth: 150,
+    defaultHeight: 80,
+    getHtml: (w: number, h: number) =>
+      `<div class="placeholder-logo-branch" style="width:${w}px;height:${h}px;border:1px dashed #0d9488;display:inline-block;text-align:center;line-height:${h}px;font-size:10px;color:#0d9488;overflow:hidden;"><img src="{{tenant.branchLogo}}" style="max-width:100%;max-height:100%;object-fit:contain;" alt="Logo sede"></div>`
+  },
+  {
+    key: 'qr-code',
+    label: 'QR Code',
+    icon: '📱',
+    description: 'Blocco visivo QR code con dimensione configurabile',
+    defaultWidth: 100,
+    defaultHeight: 100,
+    getHtml: (w: number, h: number) =>
+      `<div class="placeholder-qrcode" style="width:${w}px;height:${h}px;border:1px dashed #999;display:inline-block;text-align:center;line-height:${h}px;font-size:10px;color:#999;overflow:hidden;"><img src="{{document.qrCode}}" style="max-width:100%;max-height:100%;object-fit:contain;" alt="QR Code"></div>`
+  }
+];
+
 interface MarkerPickerProps {
   onInsert: (marker: string) => void;
   className?: string;
@@ -150,6 +228,10 @@ const MarkerPicker: React.FC<MarkerPickerProps> = ({ onInsert, className = '' })
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['person']));
   const [showFormatters, setShowFormatters] = useState(false);
+  const [showVisualPlaceholders, setShowVisualPlaceholders] = useState(false);
+  const [placeholderSizes, setPlaceholderSizes] = useState<Record<string, { w: number; h: number }>>(
+    () => Object.fromEntries(VISUAL_PLACEHOLDERS.map(p => [p.key, { w: p.defaultWidth, h: p.defaultHeight }]))
+  );
 
   const toggleCategory = (categoryKey: string) => {
     setExpandedCategories(prev => {
@@ -165,7 +247,7 @@ const MarkerPicker: React.FC<MarkerPickerProps> = ({ onInsert, className = '' })
 
   const handleInsert = (example: string) => {
     onInsert(example);
-    
+
     // Visual feedback
     navigator.clipboard.writeText(example);
   };
@@ -174,8 +256,8 @@ const MarkerPicker: React.FC<MarkerPickerProps> = ({ onInsert, className = '' })
   const filteredCategories = Object.entries(MARKER_CATEGORIES).map(([key, category]) => ({
     key,
     category,
-    markers: category.markers.filter(m => 
-      searchTerm === '' || 
+    markers: category.markers.filter(m =>
+      searchTerm === '' ||
       m.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
       m.key.toLowerCase().includes(searchTerm.toLowerCase())
     )
@@ -189,7 +271,7 @@ const MarkerPicker: React.FC<MarkerPickerProps> = ({ onInsert, className = '' })
         <p className="text-sm text-gray-600 mb-3">
           Clicca su un marker per inserirlo nel template
         </p>
-        
+
         {/* Search */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -222,7 +304,7 @@ const MarkerPicker: React.FC<MarkerPickerProps> = ({ onInsert, className = '' })
                 <ChevronRight className="h-4 w-4" />
               )}
             </button>
-            
+
             {expandedCategories.has(key) && (
               <div className="border-t">
                 {markers.map((marker) => (
@@ -266,7 +348,7 @@ const MarkerPicker: React.FC<MarkerPickerProps> = ({ onInsert, className = '' })
             <ChevronRight className="h-4 w-4" />
           )}
         </button>
-        
+
         {showFormatters && (
           <div className="border-t max-h-64 overflow-y-auto">
             {FORMATTERS.map((formatter) => (
@@ -285,6 +367,104 @@ const MarkerPicker: React.FC<MarkerPickerProps> = ({ onInsert, className = '' })
                 </code>
               </div>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* Visual Placeholders Section */}
+      <div className="border-t">
+        <button
+          onClick={() => setShowVisualPlaceholders(!showVisualPlaceholders)}
+          className="w-full flex items-center justify-between p-4 hover:bg-gray-50"
+        >
+          <div className="flex items-center gap-2">
+            <Maximize2 className="h-4 w-4 text-teal-600" />
+            <span className="font-medium">Placeholder Visivi</span>
+            <span className="text-xs text-gray-400">(ridimensionabili)</span>
+          </div>
+          {showVisualPlaceholders ? (
+            <ChevronDown className="h-4 w-4" />
+          ) : (
+            <ChevronRight className="h-4 w-4" />
+          )}
+        </button>
+
+        {showVisualPlaceholders && (
+          <div className="border-t max-h-96 overflow-y-auto">
+            <div className="p-3 bg-teal-50 text-xs text-teal-700 border-b">
+              <p className="font-medium flex items-center gap-1">
+                <Move className="h-3 w-3" />
+                Imposta le dimensioni e clicca per inserire
+              </p>
+              <p className="mt-1 text-teal-600">
+                Nel PDF il blocco conterrà l'immagine reale. Modifica larghezza/altezza direttamente nell'HTML dopo l'inserimento.
+              </p>
+            </div>
+            {VISUAL_PLACEHOLDERS.map((placeholder) => {
+              const size = placeholderSizes[placeholder.key] || { w: placeholder.defaultWidth, h: placeholder.defaultHeight };
+              return (
+                <div key={placeholder.key} className="p-3 border-b last:border-b-0">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span>{placeholder.icon}</span>
+                    <span className="font-medium text-sm text-gray-900">{placeholder.label}</span>
+                  </div>
+                  <div className="text-xs text-gray-500 mb-2">{placeholder.description}</div>
+                  {/* Size inputs */}
+                  <div className="flex items-center gap-2 mb-2">
+                    <label className="text-xs text-gray-600">L:</label>
+                    <input
+                      type="number"
+                      value={size.w}
+                      onChange={(e) => setPlaceholderSizes(prev => ({
+                        ...prev,
+                        [placeholder.key]: { ...prev[placeholder.key], w: Math.max(30, Number(e.target.value) || 30) }
+                      }))}
+                      className="w-16 px-1.5 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
+                      min={30}
+                      max={600}
+                    />
+                    <span className="text-xs text-gray-400">px</span>
+                    <label className="text-xs text-gray-600 ml-2">A:</label>
+                    <input
+                      type="number"
+                      value={size.h}
+                      onChange={(e) => setPlaceholderSizes(prev => ({
+                        ...prev,
+                        [placeholder.key]: { ...prev[placeholder.key], h: Math.max(20, Number(e.target.value) || 20) }
+                      }))}
+                      className="w-16 px-1.5 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
+                      min={20}
+                      max={400}
+                    />
+                    <span className="text-xs text-gray-400">px</span>
+                  </div>
+                  {/* Preview + insert button */}
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="border border-dashed border-gray-400 bg-gray-50 flex items-center justify-center text-[9px] text-gray-400 flex-shrink-0"
+                      style={{
+                        width: `${Math.min(size.w, 120)}px`,
+                        height: `${Math.min(size.h, 50)}px`
+                      }}
+                    >
+                      {size.w}×{size.h}
+                    </div>
+                    <button
+                      onClick={() => {
+                        const html = placeholder.getHtml(size.w, size.h);
+                        onInsert(html);
+                        navigator.clipboard.writeText(html);
+                      }}
+                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium
+                               bg-teal-600 text-white rounded hover:bg-teal-700 transition-colors"
+                    >
+                      <Copy className="h-3 w-3" />
+                      Inserisci
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

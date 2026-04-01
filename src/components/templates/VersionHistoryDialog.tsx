@@ -46,8 +46,8 @@ const VersionHistoryDialog: React.FC<VersionHistoryDialogProps> = ({
     try {
       const data = await templateService.getVersions(templateId);
       setVersions(data);
-    } catch (err: any) {
-      setError(err.message || 'Errore nel caricamento della cronologia');
+    } catch (err: unknown) {
+      setError('Errore nel caricamento della cronologia');
     } finally {
       setLoading(false);
     }
@@ -75,23 +75,23 @@ const VersionHistoryDialog: React.FC<VersionHistoryDialogProps> = ({
 
     try {
       const result: RollbackVersionResponse = await templateService.rollbackToVersion(templateId, version);
-      
+
       // Success
       setConfirmRollback(null);
-      
+
       // Notify parent
       if (onRollbackSuccess) {
         onRollbackSuccess();
       }
-      
+
       // Reload versions
       await loadVersions();
-      
+
       // Show success message
       showToast({ message: `Rollback completato! Ripristinata versione ${result.rolledBackTo}. Nuova versione: ${result.newVersion}`, type: 'success' });
-      
-    } catch (err: any) {
-      setError(err.message || 'Errore durante il rollback');
+
+    } catch (err: unknown) {
+      setError('Errore durante il rollback');
     } finally {
       setRollbackingTo(null);
     }
@@ -182,11 +182,10 @@ const VersionHistoryDialog: React.FC<VersionHistoryDialogProps> = ({
                 return (
                   <div
                     key={version.id}
-                    className={`border rounded-lg transition-all ${
-                      isCurrent
+                    className={`border rounded-lg transition-all ${isCurrent
                         ? 'border-green-300 bg-green-50'
                         : 'border-gray-200 bg-white hover:border-gray-300'
-                    }`}
+                      }`}
                   >
                     {/* Version Header */}
                     <div className="p-4">

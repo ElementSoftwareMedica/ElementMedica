@@ -7,6 +7,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { AlertTriangle, CheckCircle, Eye, EyeOff, RefreshCw, Users, BookOpen, Calendar, Building2, UserCog } from 'lucide-react';
+import { sanitizeRichHtml } from '../../utils/sanitize';
 import { templateService } from '../../services/templateService';
 import type { MarkerPreviewResult, MarkerValidationResult } from '../../types/templates';
 
@@ -190,11 +191,11 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
       const html = previewSection === 'all'
         ? `${header}\n\n${content}\n\n${footer}`
         : previewSection === 'header'
-        ? header
-        : previewSection === 'content'
-        ? content
-        : footer;
-      
+          ? header
+          : previewSection === 'content'
+            ? content
+            : footer;
+
       setPreviewHtml(html || '<p class="text-gray-400 italic">Nessun contenuto da visualizzare</p>');
       return;
     }
@@ -208,7 +209,7 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
 
       // Call preview API
       const result: MarkerPreviewResult = await templateService.preview(templateId, mockData);
-      
+
       // Extract HTML based on section
       let html = result.html;
       if (previewSection === 'header') {
@@ -225,13 +226,13 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
       // Also validate markers
       const validationResult = await templateService.validate(templateId, mockData);
       setValidation(validationResult);
-      
+
       if (onValidationChange) {
         onValidationChange(validationResult.valid);
       }
 
-    } catch (err: any) {
-      setError(err.message || 'Errore durante la generazione dell\'anteprima');
+    } catch (err: unknown) {
+      setError('Errore durante la generazione dell\'anteprima');
       setPreviewHtml('<p class="text-red-500">Errore nel caricamento dell\'anteprima</p>');
     } finally {
       setLoading(false);
@@ -273,16 +274,15 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
       <div className="flex-shrink-0 bg-white border-b p-4 space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-gray-900">Anteprima Live</h3>
-          
+
           <div className="flex items-center gap-2">
             {/* Auto-refresh toggle */}
             <button
               onClick={() => setAutoRefresh(!autoRefresh)}
-              className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                autoRefresh
+              className={`px-3 py-1 rounded text-sm font-medium transition-colors ${autoRefresh
                   ? 'bg-blue-100 text-blue-700'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
+                }`}
               title={autoRefresh ? 'Disabilita aggiornamento automatico' : 'Abilita aggiornamento automatico'}
             >
               {autoRefresh ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
@@ -304,41 +304,37 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
         <div className="flex gap-2">
           <button
             onClick={() => setPreviewSection('all')}
-            className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-              previewSection === 'all'
+            className={`px-3 py-1 rounded text-sm font-medium transition-colors ${previewSection === 'all'
                 ? 'bg-blue-600 text-white'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
+              }`}
           >
             Completo
           </button>
           <button
             onClick={() => setPreviewSection('header')}
-            className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-              previewSection === 'header'
+            className={`px-3 py-1 rounded text-sm font-medium transition-colors ${previewSection === 'header'
                 ? 'bg-blue-600 text-white'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
+              }`}
           >
             Header
           </button>
           <button
             onClick={() => setPreviewSection('content')}
-            className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-              previewSection === 'content'
+            className={`px-3 py-1 rounded text-sm font-medium transition-colors ${previewSection === 'content'
                 ? 'bg-blue-600 text-white'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
+              }`}
           >
             Contenuto
           </button>
           <button
             onClick={() => setPreviewSection('footer')}
-            className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-              previewSection === 'footer'
+            className={`px-3 py-1 rounded text-sm font-medium transition-colors ${previewSection === 'footer'
                 ? 'bg-blue-600 text-white'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
+              }`}
           >
             Footer
           </button>
@@ -351,11 +347,10 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
             <button
               key={type}
               onClick={() => setMockDataType(type)}
-              className={`px-3 py-1 rounded text-sm font-medium transition-colors flex items-center gap-1 ${
-                mockDataType === type
+              className={`px-3 py-1 rounded text-sm font-medium transition-colors flex items-center gap-1 ${mockDataType === type
                   ? 'bg-green-600 text-white'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
+                }`}
               title={type}
             >
               {getMockDataIcon(type)}
@@ -370,11 +365,10 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
 
         {/* Validation status */}
         {validation && (
-          <div className={`p-2 rounded flex items-start gap-2 text-sm ${
-            validation.valid
+          <div className={`p-2 rounded flex items-start gap-2 text-sm ${validation.valid
               ? 'bg-green-50 text-green-800'
               : 'bg-yellow-50 text-yellow-800'
-          }`}>
+            }`}>
             {validation.valid ? (
               <>
                 <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
@@ -446,7 +440,7 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
             <div className="max-w-4xl mx-auto p-8">
               <div
                 className="prose max-w-none"
-                dangerouslySetInnerHTML={{ __html: previewHtml }}
+                dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(previewHtml) }}
               />
             </div>
           </div>

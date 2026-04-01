@@ -88,7 +88,6 @@ export const DataExportTab: React.FC<DataExportTabProps> = ({ hook }) => {
         includeConsents: true
       });
     } catch (error) {
-      console.error('Error requesting export:', error);
     } finally {
       setProcessingRequest(null);
     }
@@ -99,7 +98,6 @@ export const DataExportTab: React.FC<DataExportTabProps> = ({ hook }) => {
       setProcessingRequest(requestId);
       await downloadExport(requestId);
     } catch (error) {
-      console.error('Error downloading export:', error);
     } finally {
       setProcessingRequest(null);
     }
@@ -110,7 +108,6 @@ export const DataExportTab: React.FC<DataExportTabProps> = ({ hook }) => {
       setProcessingRequest(requestId);
       await cancelExport(requestId);
     } catch (error) {
-      console.error('Error cancelling export:', error);
     } finally {
       setProcessingRequest(null);
     }
@@ -146,6 +143,16 @@ export const DataExportTab: React.FC<DataExportTabProps> = ({ hook }) => {
     }
   };
 
+  const getStatusLabel = (status: DataExportRequest['status']) => {
+    switch (status) {
+      case 'completed': return 'Completata';
+      case 'failed': return 'Non riuscita';
+      case 'processing': return 'In elaborazione';
+      case 'pending': return 'In attesa';
+      default: return status;
+    }
+  };
+
   const isExpired = (request: DataExportRequest) => {
     return request.expiryDate && new Date() > new Date(request.expiryDate);
   };
@@ -163,29 +170,29 @@ export const DataExportTab: React.FC<DataExportTabProps> = ({ hook }) => {
       {/* Header */}
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
         <Typography variant="h6" component="h2">
-          Data Export
+          Esportazione dati
         </Typography>
-        
+
         <Stack direction="row" spacing={1} alignItems="center">
           <Chip
-            label={`${stats.available} Available`}
+            label={`${stats.available} Disponibili`}
             color={stats.available > 0 ? 'success' : 'default'}
             size="small"
           />
-          
-          <Tooltip title="Refresh export requests">
+
+          <Tooltip title="Aggiorna richieste di esportazione">
             <IconButton onClick={refreshRequests} disabled={loading} size="small">
               <RefreshIcon />
             </IconButton>
           </Tooltip>
-          
+
           <Button
             variant="contained"
             startIcon={<AddIcon />}
             onClick={() => setNewExportDialog(true)}
             disabled={!canRequestNewExport() || loading}
           >
-            New Export
+            Nuova esportazione
           </Button>
         </Stack>
       </Stack>
@@ -200,8 +207,8 @@ export const DataExportTab: React.FC<DataExportTabProps> = ({ hook }) => {
       {/* Cannot Request Alert */}
       {!canRequestNewExport() && (
         <Alert severity="warning" sx={{ mb: 3 }}>
-          You have reached the maximum number of concurrent export requests. 
-          Please wait for existing requests to complete or cancel them.
+          Hai raggiunto il numero massimo di richieste di esportazione simultanee.
+          Attendi il completamento delle richieste esistenti o annullale.
         </Alert>
       )}
 
@@ -220,40 +227,40 @@ export const DataExportTab: React.FC<DataExportTabProps> = ({ hook }) => {
               {stats.total}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Total Requests
+              Richieste totali
             </Typography>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent>
             <Typography variant="h6" color="success.main" gutterBottom>
               {stats.completed}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Completed
+              Completate
             </Typography>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent>
             <Typography variant="h6" color="info.main" gutterBottom>
               {stats.processing + stats.pending}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              In Progress
+              In elaborazione
             </Typography>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent>
             <Typography variant="h6" color="warning.main" gutterBottom>
               {stats.expired}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Expired
+              Scadute
             </Typography>
           </CardContent>
         </Card>
@@ -266,22 +273,22 @@ export const DataExportTab: React.FC<DataExportTabProps> = ({ hook }) => {
             <Stack direction="row" justifyContent="space-between" alignItems="center">
               <Box>
                 <Typography variant="subtitle1" gutterBottom>
-                  Latest Export Ready
+                  Ultima esportazione pronta
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Requested {formatDistanceToNow(new Date(latestExport.requestDate))} ago • 
-                  Format: {latestExport.format.toUpperCase()} • 
-                  Expires {formatDistanceToNow(new Date(latestExport.expiryDate!))}
+                  Richiesta {formatDistanceToNow(new Date(latestExport.requestDate))} fa •
+                  Formato: {latestExport.format.toUpperCase()} •
+                  Scade tra {formatDistanceToNow(new Date(latestExport.expiryDate!))}
                 </Typography>
               </Box>
-              
+
               <Button
                 variant="contained"
                 startIcon={<DownloadIcon />}
                 onClick={() => handleDownload(latestExport.id)}
                 disabled={processingRequest === latestExport.id}
               >
-                Download
+                Scarica
               </Button>
             </Stack>
           </CardContent>
@@ -292,23 +299,23 @@ export const DataExportTab: React.FC<DataExportTabProps> = ({ hook }) => {
       <Card>
         <CardContent>
           <Typography variant="h6" gutterBottom>
-            Export History
+            Storico esportazioni
           </Typography>
-          
+
           {loading && exportRequests.length === 0 ? (
             <Box sx={{ py: 3 }}>
               <LinearProgress />
               <Typography variant="body2" sx={{ mt: 2, textAlign: 'center' }}>
-                Loading export requests...
+                Caricamento richieste di esportazione...
               </Typography>
             </Box>
           ) : exportRequests.length === 0 ? (
             <Box sx={{ py: 6, textAlign: 'center' }}>
               <Typography variant="body1" color="text.secondary" gutterBottom>
-                No export requests found
+                Nessuna richiesta di esportazione trovata
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Create your first data export to download your personal information.
+                Crea la tua prima esportazione dati per scaricare le tue informazioni personali.
               </Typography>
             </Box>
           ) : (
@@ -316,12 +323,12 @@ export const DataExportTab: React.FC<DataExportTabProps> = ({ hook }) => {
               <Table>
                 <TableHead>
                   <TableRow>
-                    <TableCell>Status</TableCell>
-                    <TableCell>Format</TableCell>
-                    <TableCell>Requested</TableCell>
-                    <TableCell>Expires</TableCell>
-                    <TableCell>Size</TableCell>
-                    <TableCell align="right">Actions</TableCell>
+                    <TableCell>Stato</TableCell>
+                    <TableCell>Formato</TableCell>
+                    <TableCell>Richiesta</TableCell>
+                    <TableCell>Scadenza</TableCell>
+                    <TableCell>Dimensione</TableCell>
+                    <TableCell align="right">Azioni</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -331,14 +338,14 @@ export const DataExportTab: React.FC<DataExportTabProps> = ({ hook }) => {
                         <Stack direction="row" spacing={1} alignItems="center">
                           {getStatusIcon(request.status)}
                           <Chip
-                            label={request.status}
+                            label={getStatusLabel(request.status)}
                             color={getStatusColor(request.status)}
                             size="small"
                             variant="outlined"
                           />
                           {isExpired(request) && (
                             <Chip
-                              label="Expired"
+                              label="Scaduta"
                               color="error"
                               size="small"
                               variant="outlined"
@@ -346,38 +353,38 @@ export const DataExportTab: React.FC<DataExportTabProps> = ({ hook }) => {
                           )}
                         </Stack>
                       </TableCell>
-                      
+
                       <TableCell>
                         <Typography variant="body2" sx={{ textTransform: 'uppercase' }}>
                           {request.format}
                         </Typography>
                       </TableCell>
-                      
+
                       <TableCell>
                         <Typography variant="body2">
                           {format(new Date(request.requestDate), 'PPp')}
                         </Typography>
                       </TableCell>
-                      
+
                       <TableCell>
                         <Typography variant="body2">
-                          {request.expiryDate 
+                          {request.expiryDate
                             ? format(new Date(request.expiryDate), 'PPp')
                             : 'N/A'
                           }
                         </Typography>
                       </TableCell>
-                      
+
                       <TableCell>
                         <Typography variant="body2">
                           {request.fileSize ? `${(request.fileSize / 1024 / 1024).toFixed(2)} MB` : 'N/A'}
                         </Typography>
                       </TableCell>
-                      
+
                       <TableCell align="right">
                         <Stack direction="row" spacing={1} justifyContent="flex-end">
                           {canDownload(request) && (
-                            <Tooltip title="Download export">
+                            <Tooltip title="Scarica esportazione">
                               <IconButton
                                 size="small"
                                 onClick={() => handleDownload(request.id)}
@@ -388,9 +395,9 @@ export const DataExportTab: React.FC<DataExportTabProps> = ({ hook }) => {
                               </IconButton>
                             </Tooltip>
                           )}
-                          
+
                           {canCancel(request) && (
-                            <Tooltip title="Cancel export">
+                            <Tooltip title="Annulla esportazione">
                               <IconButton
                                 size="small"
                                 onClick={() => handleCancel(request.id)}
@@ -415,13 +422,13 @@ export const DataExportTab: React.FC<DataExportTabProps> = ({ hook }) => {
       {/* Information */}
       <Alert severity="info" sx={{ mt: 3 }}>
         <Typography variant="subtitle2" gutterBottom>
-          Data Export Information
+          Informazioni sull'esportazione dati
         </Typography>
         <Typography variant="body2">
-          • Export files are available for download for 7 days after completion<br/>
-          • You can have up to 3 concurrent export requests<br/>
-          • Exports include your personal data, consent history, and audit trail (if selected)<br/>
-          • Large exports may take several minutes to process
+          • I file esportati sono disponibili per il download per 7 giorni dopo il completamento<br />
+          • Puoi avere fino a 3 richieste di esportazione simultanee<br />
+          • Le esportazioni includono i tuoi dati personali, lo storico consensi e il registro attività (se selezionati)<br />
+          • Le esportazioni di grandi dimensioni potrebbero richiedere alcuni minuti
         </Typography>
       </Alert>
 
@@ -433,16 +440,16 @@ export const DataExportTab: React.FC<DataExportTabProps> = ({ hook }) => {
         fullWidth
       >
         <DialogTitle>
-          Request Data Export
+          Richiedi esportazione dati
         </DialogTitle>
-        
+
         <DialogContent>
           <Box sx={{ mt: 2 }}>
             <Typography variant="body1" gutterBottom>
-              Request an export of your personal data. You will receive a downloadable file 
-              containing all your information stored in our system.
+              Richiedi un'esportazione dei tuoi dati personali. Riceverai un file scaricabile
+              contenente tutte le informazioni memorizzate nel nostro sistema.
             </Typography>
-            
+
             <Box
               sx={{
                 mt: 2,
@@ -452,73 +459,73 @@ export const DataExportTab: React.FC<DataExportTabProps> = ({ hook }) => {
               }}
             >
               <FormControl component="fieldset">
-                <FormLabel component="legend">Export Format</FormLabel>
+                <FormLabel component="legend">Formato esportazione</FormLabel>
                 <RadioGroup
                   value={exportForm.format}
                   onChange={(e) => setExportForm(prev => ({ ...prev, format: e.target.value as 'json' | 'csv' | 'pdf' }))}
                 >
-                  <FormControlLabel value="json" control={<Radio />} label="JSON (Structured data)" />
-                  <FormControlLabel value="csv" control={<Radio />} label="CSV (Spreadsheet format)" />
-                  <FormControlLabel value="pdf" control={<Radio />} label="PDF (Human readable)" />
+                  <FormControlLabel value="json" control={<Radio />} label="JSON (Dati strutturati)" />
+                  <FormControlLabel value="csv" control={<Radio />} label="CSV (Formato foglio di calcolo)" />
+                  <FormControlLabel value="pdf" control={<Radio />} label="PDF (Leggibile)" />
                 </RadioGroup>
               </FormControl>
-              
+
               <FormControl component="fieldset">
-                <FormLabel component="legend">Include Additional Data</FormLabel>
+                <FormLabel component="legend">Includi dati aggiuntivi</FormLabel>
                 <Box sx={{ mt: 1 }}>
                   <FormControlLabel
                     control={
                       <Checkbox
                         checked={exportForm.includeAuditTrail}
-                        onChange={(e) => setExportForm(prev => ({ 
-                          ...prev, 
-                          includeAuditTrail: e.target.checked 
+                        onChange={(e) => setExportForm(prev => ({
+                          ...prev,
+                          includeAuditTrail: e.target.checked
                         }))}
                       />
                     }
-                    label="Audit Trail (Activity logs)"
-                    />
-                    
-                    <FormControlLabel
-                      control={
-                        <Checkbox
-                          checked={exportForm.includeConsents}
-                          onChange={(e) => setExportForm(prev => ({ 
-                            ...prev, 
-                            includeConsents: e.target.checked 
-                          }))}
-                        />
-                      }
-                      label="Consent History"
-                    />
-                  </Box>
-                </FormControl>
-              </Box>
-            
+                    label="Registro attività (Audit Trail)"
+                  />
+
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={exportForm.includeConsents}
+                        onChange={(e) => setExportForm(prev => ({
+                          ...prev,
+                          includeConsents: e.target.checked
+                        }))}
+                      />
+                    }
+                    label="Storico consensi"
+                  />
+                </Box>
+              </FormControl>
+            </Box>
+
             <Alert severity="info" sx={{ mt: 3 }}>
               <Typography variant="body2">
-                Processing time depends on the amount of data and selected format. 
-                You will be notified when your export is ready for download.
+                Il tempo di elaborazione dipende dalla quantità di dati e dal formato scelto.
+                Riceverai una notifica quando l'esportazione sarà pronta per il download.
               </Typography>
             </Alert>
           </Box>
         </DialogContent>
-        
+
         <DialogActions>
-          <Button 
+          <Button
             onClick={() => setNewExportDialog(false)}
             disabled={processingRequest === 'new'}
           >
-            Cancel
+            Annulla
           </Button>
-          
-          <Button 
+
+          <Button
             onClick={handleRequestExport}
             variant="contained"
             disabled={processingRequest === 'new'}
             startIcon={processingRequest === 'new' ? <LinearProgress /> : <DownloadIcon />}
           >
-            {processingRequest === 'new' ? 'Requesting...' : 'Request Export'}
+            {processingRequest === 'new' ? 'Richiesta in corso...' : 'Richiedi esportazione'}
           </Button>
         </DialogActions>
       </Dialog>

@@ -5,6 +5,7 @@ import { Input } from '../../design-system/atoms/Input';
 import { Label } from '../../design-system/atoms/Label';
 import { Badge } from '../../design-system/atoms/Badge';
 import { apiGet, apiDelete, apiPost, apiPut } from '../../services/api';
+import { useTenantMode } from '../../contexts/TenantModeContext';
 import { useToast } from '../../hooks/useToast';
 import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
 
@@ -40,6 +41,8 @@ interface RepartoManagerProps {
 }
 
 const RepartoManager: React.FC<RepartoManagerProps> = ({ siteId, siteName }) => {
+  const { getOperateHeaders } = useTenantMode();
+  const operateHeaders = getOperateHeaders();
   const [reparti, setReparti] = useState<Reparto[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -61,7 +64,6 @@ const RepartoManager: React.FC<RepartoManagerProps> = ({ siteId, siteName }) => 
       const response = await apiGet(`/api/v1/reparto/site/${siteId}`) as { reparti?: Reparto[] };
       setReparti(response.reparti || []);
     } catch (error) {
-      console.error('Error loading reparti:', error);
       showToast({ message: 'Errore nel caricamento dei reparti', type: 'error' });
     } finally {
       setLoading(false);
@@ -74,18 +76,17 @@ const RepartoManager: React.FC<RepartoManagerProps> = ({ siteId, siteName }) => 
     try {
       if (editingReparto) {
         // Update existing reparto
-        await apiPut(`/api/v1/reparto/${editingReparto.id}`, formData);
+        await apiPut(`/api/v1/reparto/${editingReparto.id}`, formData, { headers: operateHeaders });
         showToast({ message: 'Reparto aggiornato con successo', type: 'success' });
       } else {
         // Create new reparto
-        await apiPost(`/api/v1/reparto/site/${siteId}`, formData);
+        await apiPost(`/api/v1/reparto/site/${siteId}`, formData, { headers: operateHeaders });
         showToast({ message: 'Reparto creato con successo', type: 'success' });
       }
 
       resetForm();
       loadReparti();
     } catch (error) {
-      console.error('Error saving reparto:', error);
       showToast({ message: 'Errore nel salvataggio del reparto', type: 'error' });
     }
   };
@@ -106,11 +107,10 @@ const RepartoManager: React.FC<RepartoManagerProps> = ({ siteId, siteName }) => 
     }
 
     try {
-      await apiDelete(`/api/v1/reparto/${repartoId}`);
+      await apiDelete(`/api/v1/reparto/${repartoId}`, { headers: operateHeaders });
       showToast({ message: 'Reparto eliminato con successo', type: 'success' });
       loadReparti();
     } catch (error) {
-      console.error('Error deleting reparto:', error);
       showToast({ message: 'Errore nell\'eliminazione del reparto', type: 'error' });
     }
   };

@@ -97,7 +97,6 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
       setPreview(compressedDataUrl);
       onChange(compressedDataUrl);
     } catch (error) {
-      console.error('Errore nella compressione dell\'immagine:', error);
       showToast({ message: 'Errore nel processamento dell\'immagine', type: 'error' });
     } finally {
       setIsUploading(false);

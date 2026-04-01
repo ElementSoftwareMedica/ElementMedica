@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import Sidebar from './Sidebar';
 import Header from './Header';
+import NotificationPopup from '../notifications/NotificationPopup';
 
 // Import Formazione theme
 import '../../styles/formazione-theme.css';
@@ -62,6 +63,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           </div>
         </footer>
       </div>
+
+      {/* Real-time notification popups */}
+      <NotificationPopup position="top-right" />
     </div>
   );
 };

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
-import EmployeeFormNew from '../../components/employees/EmployeeFormNew';
+import EmployeeForm from '../../components/employees/EmployeeForm';
 import { useToast } from '../../hooks/useToast';
 import { apiGet } from '../../services/api';
 import { Company } from '../../types';
@@ -24,7 +24,7 @@ const EmployeeCreate: React.FC = () => {
 
     if (attemptsRef.current >= MAX_RETRY_ATTEMPTS) {
       showToast({
-        message: `Failed to load companies after ${MAX_RETRY_ATTEMPTS} attempts. You can continue, but won't be able to select a company.`,
+        message: `Impossibile caricare le aziende dopo ${MAX_RETRY_ATTEMPTS} tentativi. Puoi procedere, ma non potrai selezionare un'azienda.`,
         type: 'error'
       });
       setLoading(false);
@@ -39,13 +39,12 @@ const EmployeeCreate: React.FC = () => {
       setLoading(false);
       hasFetchedRef.current = true; // Mark as successfully fetched
     } catch (error) {
-      console.error('Error fetching companies:', error);
 
       attemptsRef.current += 1;
 
       if (attemptsRef.current >= MAX_RETRY_ATTEMPTS) {
         showToast({
-          message: `Error: ${error instanceof Error ? error.message : 'Failed to load companies'}`,
+          message: 'Errore nel caricamento delle aziende',
           type: 'error'
         });
         setLoading(false);
@@ -99,7 +98,7 @@ const EmployeeCreate: React.FC = () => {
         </Link>
       </div>
 
-      <EmployeeFormNew
+      <EmployeeForm
         companies={companies}
         onSuccess={handleSuccess}
         onClose={handleClose}

@@ -59,7 +59,7 @@ export function useCourses() {
       const data = await getCourses();
       setCourses(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load courses');
+      setError('Errore nel caricamento dei corsi');
     } finally {
       setLoading(false);
     }
@@ -72,7 +72,7 @@ export function useCourses() {
       setCourses(prev => [...prev, newCourse]);
       return newCourse;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create course');
+      setError('Errore nella creazione del corso');
       throw err;
     }
   }
@@ -84,7 +84,7 @@ export function useCourses() {
       setCourses(prev => prev.map(c => c.id === id ? updatedCourse : c));
       return updatedCourse;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update course');
+      setError('Errore nell\'aggiornamento del corso');
       throw err;
     }
   }
@@ -95,7 +95,7 @@ export function useCourses() {
       const newSchedule = await createCourseSchedule(schedule);
       return newSchedule;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to schedule course');
+      setError('Errore nella programmazione del corso');
       throw err;
     }
   }
@@ -106,7 +106,7 @@ export function useCourses() {
       const enrollments = await enrollEmployees(scheduleId, employeeIds);
       return enrollments;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to enroll employees');
+      setError('Errore nell\'iscrizione dei dipendenti');
       throw err;
     }
   }

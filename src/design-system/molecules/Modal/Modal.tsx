@@ -134,7 +134,7 @@ export const Modal: React.FC<ModalProps> = ({
       document.body.style.position = 'fixed';
       document.body.style.top = `-${scrollY}px`;
       document.body.style.width = '100%';
-      
+
       return () => {
         // Restore scroll position
         const scrollY = document.body.style.top;
@@ -151,7 +151,7 @@ export const Modal: React.FC<ModalProps> = ({
     if (modalIsOpen) {
       // Store previously focused element
       previousActiveElement.current = document.activeElement as HTMLElement;
-      
+
       // Robust initial focus: try in microtask, rAF, and macrotask
       const focusTarget = () => {
         const modal = modalRef.current;
@@ -263,14 +263,14 @@ export const Modal: React.FC<ModalProps> = ({
       style={{ zIndex }}
       onClick={handleOverlayClick}
     >
-      {/* Backdrop */}
-      <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" />
-      
-      {/* Modal (role=dialog on content) */}
+      {/* Backdrop with dark mode */}
+      <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-70 transition-opacity" />
+
+      {/* Modal (role=dialog on content) with dark mode */}
       <div
         ref={modalRef}
         className={cn(
-          'relative bg-white rounded-2xl shadow-xl w-full overflow-hidden',
+          'relative bg-white dark:bg-gray-800 rounded-2xl shadow-xl dark:shadow-black/30 w-full overflow-hidden',
           'transform transition-all duration-200 focus:outline-none',
           'animate-in zoom-in-95',
           // pointer-events disabled while loading
@@ -290,27 +290,27 @@ export const Modal: React.FC<ModalProps> = ({
         onKeyDown={handleKeyDown}
         {...props}
       >
-        {/* Header */}
+        {/* Header with dark mode */}
         {(title || showCloseButton) && (
           <div
             className={cn(
-              'flex items-center justify-between p-6 border-b border-gray-200',
+              'flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700',
               headerClassName
             )}
           >
             {title && (
-              <h2 id={`modal-title-${titleId}`} className="text-lg font-semibold text-gray-900">
+              <h2 id={`modal-title-${titleId}`} className="text-lg font-semibold text-gray-900 dark:text-gray-50">
                 {title}
               </h2>
             )}
-            
+
             {showCloseButton && (
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={onClose}
                 className="ml-auto -mr-2"
-                aria-label="Close modal"
+                aria-label="Chiudi finestra"
                 disabled={loading}
               >
                 <X className="h-4 w-4" />
@@ -318,7 +318,7 @@ export const Modal: React.FC<ModalProps> = ({
             )}
           </div>
         )}
-        
+
         {/* Body */}
         <div
           className={cn(
@@ -334,22 +334,23 @@ export const Modal: React.FC<ModalProps> = ({
         >
           {loading ? (
             <div className="flex items-center justify-center gap-3 py-8">
-              <svg className="animate-spin h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+              <svg className="animate-spin h-5 w-5 text-blue-600 dark:text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
               </svg>
-              <span>Loading...</span>
+              <span className="dark:text-gray-200">Loading...</span>
             </div>
           ) : (
             children
           )}
         </div>
-        
-        {/* Footer */}
+
+        {/* Footer with dark mode */}
         {footer && (
           <div
             className={cn(
               'flex items-center justify-end gap-3 p-6 border-t border-gray-200 bg-gray-50 sticky bottom-0',
+              'dark:border-gray-700 dark:bg-gray-900',
               footerClassName
             )}
           >
@@ -390,76 +391,76 @@ export const ConfirmModal: React.FC<{
   size = 'sm',
   className
 }) => {
-  const variantStyles = {
-    danger: 'destructive',
-    warning: 'outline',
-    info: 'primary'
-  } as const;
+    const variantStyles = {
+      danger: 'destructive',
+      warning: 'outline',
+      info: 'primary'
+    } as const;
 
-  const variantClasses = {
-    danger: 'bg-red-600 hover:bg-red-700',
-    warning: 'bg-yellow-600 hover:bg-yellow-700',
-    info: 'bg-blue-600 hover:bg-blue-700'
-  } as const;
+    const variantClasses = {
+      danger: 'bg-red-600 hover:bg-red-700',
+      warning: 'bg-yellow-600 hover:bg-yellow-700',
+      info: 'bg-blue-600 hover:bg-blue-700'
+    } as const;
 
-  // Focus is handled by Modal via [data-autofocus]
-  const confirmRef = useRef<HTMLButtonElement>(null);
-  useLayoutEffect(() => {
-    if (open && !loading) {
-      // Focus synchronously after layout
-      confirmRef.current?.focus();
-      // Fallback in next macrotask
-      setTimeout(() => {
+    // Focus is handled by Modal via [data-autofocus]
+    const confirmRef = useRef<HTMLButtonElement>(null);
+    useLayoutEffect(() => {
+      if (open && !loading) {
+        // Focus synchronously after layout
         confirmRef.current?.focus();
-      }, 0);
-    }
-  }, [open, loading]);
-
-  // If the title equals the confirm button label exactly, append a suffix
-  // to avoid ambiguous getByText('Confirm') queries in tests (targets the button instead of title)
-  const effectiveTitle = title === confirmLabel ? `${title} action` : title;
-  
-  return (
-    <Modal
-      open={open}
-      onClose={onCancel}
-      title={effectiveTitle}
-      size={size}
-      variant="centered"
-      // Do NOT set Modal loading to keep message/body visible while loading actions occur
-      className={className}
-      closeOnEscape={true}
-      closeOnOverlayClick={true}
-      footer={
-        <>
-          <Button
-            variant="ghost"
-            onClick={onCancel}
-            disabled={loading}
-          >
-            {cancelLabel}
-          </Button>
-          <Button
-            ref={confirmRef}
-            variant={variantStyles[variant]}
-            onClick={onConfirm}
-            loading={loading}
-            disabled={loading}
-            className={cn(
-              variantClasses[variant],
-              loading && 'opacity-75'
-            )}
-            autoFocus
-            data-autofocus
-          >
-            {confirmLabel}
-          </Button>
-        </>
+        // Fallback in next macrotask
+        setTimeout(() => {
+          confirmRef.current?.focus();
+        }, 0);
       }
-    >
-      <p className="text-gray-600">{message}</p>
-    </Modal>
-  );
-};
+    }, [open, loading]);
+
+    // If the title equals the confirm button label exactly, append a suffix
+    // to avoid ambiguous getByText('Confirm') queries in tests (targets the button instead of title)
+    const effectiveTitle = title === confirmLabel ? `${title} action` : title;
+
+    return (
+      <Modal
+        open={open}
+        onClose={onCancel}
+        title={effectiveTitle}
+        size={size}
+        variant="centered"
+        // Do NOT set Modal loading to keep message/body visible while loading actions occur
+        className={className}
+        closeOnEscape={true}
+        closeOnOverlayClick={true}
+        footer={
+          <>
+            <Button
+              variant="ghost"
+              onClick={onCancel}
+              disabled={loading}
+            >
+              {cancelLabel}
+            </Button>
+            <Button
+              ref={confirmRef}
+              variant={variantStyles[variant]}
+              onClick={onConfirm}
+              loading={loading}
+              disabled={loading}
+              className={cn(
+                variantClasses[variant],
+                loading && 'opacity-75'
+              )}
+              autoFocus
+              data-autofocus
+            >
+              {confirmLabel}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-gray-600">{message}</p>
+      </Modal>
+    );
+  };
 
 export default Modal;

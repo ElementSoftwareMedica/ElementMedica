@@ -46,7 +46,6 @@ export const PreferencesProvider: React.FC<PreferencesProviderProps> = ({ childr
     // Verifica che il token sia presente prima di fare la chiamata API
     const token = getToken();
     if (!token) {
-      console.log('🚫 PreferencesContext: No token available, skipping preferences fetch');
       return;
     }
 
@@ -54,7 +53,6 @@ export const PreferencesProvider: React.FC<PreferencesProviderProps> = ({ childr
     setError(null);
 
     try {
-      console.log('🔍 PreferencesContext: Fetching preferences for user:', user.id);
       const preferences = await apiGet<UserPreferences>(
         `/api/v1/persons/preferences`
       );
@@ -96,13 +94,11 @@ export const PreferencesProvider: React.FC<PreferencesProviderProps> = ({ childr
         }
       };
 
-      console.log('✅ PreferencesContext: Preferences loaded and merged with defaults');
       setPreferences(mergedPreferences);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch preferences';
+      const errorMessage = 'Errore nel recupero delle preferenze';
       setError(errorMessage);
-      console.error('❌ PreferencesContext: Error fetching preferences:', err);
-      
+
       // Create default preferences if none exist
       const defaultPrefs: UserPreferences = {
         ...DEFAULT_USER_PREFERENCES,
@@ -111,7 +107,6 @@ export const PreferencesProvider: React.FC<PreferencesProviderProps> = ({ childr
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
-      console.log('🔧 PreferencesContext: Using default preferences due to error');
       setPreferences(defaultPrefs);
     } finally {
       setLoading(false);
@@ -127,7 +122,6 @@ export const PreferencesProvider: React.FC<PreferencesProviderProps> = ({ childr
     // Verifica che il token sia presente prima di fare la chiamata API
     const token = getToken();
     if (!token) {
-      console.log('🚫 PreferencesContext: No token available, skipping preferences update');
       setError('Errore di autenticazione. Effettua nuovamente il login.');
       return;
     }
@@ -150,9 +144,8 @@ export const PreferencesProvider: React.FC<PreferencesProviderProps> = ({ childr
       setPreferences(updatedPrefs);
       // Toast gestito dal componente che chiama updatePreferences
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to update preferences';
+      const errorMessage = 'Errore nell\'aggiornamento delle preferenze';
       setError(errorMessage);
-      console.error('Error updating preferences:', err);
       // Toast gestito dal componente che chiama updatePreferences
     } finally {
       setLoading(false);
@@ -168,7 +161,6 @@ export const PreferencesProvider: React.FC<PreferencesProviderProps> = ({ childr
     // Verifica che il token sia presente prima di fare la chiamata API
     const token = getToken();
     if (!token) {
-      console.log('🚫 PreferencesContext: No token available, skipping preferences reset');
       setError('Errore di autenticazione. Effettua nuovamente il login.');
       return;
     }
@@ -184,9 +176,8 @@ export const PreferencesProvider: React.FC<PreferencesProviderProps> = ({ childr
       setPreferences(resetPrefs);
       // Toast gestito dal componente che chiama resetPreferences
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to reset preferences';
+      const errorMessage = 'Errore nel ripristino delle preferenze';
       setError(errorMessage);
-      console.error('Error resetting preferences:', err);
       // Toast gestito dal componente che chiama resetPreferences
     } finally {
       setLoading(false);
@@ -195,42 +186,24 @@ export const PreferencesProvider: React.FC<PreferencesProviderProps> = ({ childr
 
   // Load preferences when user changes and auth is complete
   useEffect(() => {
-    // Aspetta che l'autenticazione sia completata
-    if (authLoading) {
-      console.log('🔄 PreferencesContext: Waiting for auth to complete...');
-      return;
-    }
+    if (authLoading) return;
 
     if (user?.id) {
-      console.log('👤 PreferencesContext: User authenticated, loading preferences...');
       fetchPreferences();
     } else {
-      console.log('🚫 PreferencesContext: No user, clearing preferences...');
       setPreferences(null);
       setError(null);
     }
   }, [user?.id, authLoading, fetchPreferences]);
 
-  // Apply theme changes to document
+  // Apply accessibility settings to document
+  // NOTE: Theme is managed by ThemeContext (localStorage-based) as source of truth.
+  // PreferencesContext stores theme preferences for backend sync but does NOT apply them directly.
+  // This avoids race conditions between localStorage (immediate) and API (delayed) theme settings.
   useEffect(() => {
     if (!preferences) return;
 
-    const { theme, themeColor } = preferences;
     const root = document.documentElement;
-
-    // Remove existing theme classes
-    root.classList.remove('light', 'dark');
-    
-    // Apply theme
-    if (theme === 'auto') {
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      root.classList.add(prefersDark ? 'dark' : 'light');
-    } else {
-      root.classList.add(theme);
-    }
-
-    // Apply theme color
-    root.setAttribute('data-theme-color', themeColor);
 
     // Apply accessibility settings with safety checks
     if (preferences.accessibility?.highContrast) {
@@ -248,27 +221,11 @@ export const PreferencesProvider: React.FC<PreferencesProviderProps> = ({ childr
     root.setAttribute('data-font-size', preferences.accessibility?.fontSize || 'medium');
   }, [preferences]);
 
-  // Listen for system theme changes
-  useEffect(() => {
-    if (!preferences || preferences.theme !== 'auto') return;
-
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    const handleChange = () => {
-      const root = document.documentElement;
-      root.classList.remove('light', 'dark');
-      root.classList.add(mediaQuery.matches ? 'dark' : 'light');
-    };
-
-    mediaQuery.addEventListener('change', handleChange);
-    return () => mediaQuery.removeEventListener('change', handleChange);
-  }, [preferences]);
-
   /**
    * Export preferences to JSON file
    */
   const exportPreferences = useCallback(() => {
     if (!preferences) {
-      console.error('Nessuna preferenza da esportare');
       return;
     }
 
@@ -276,18 +233,17 @@ export const PreferencesProvider: React.FC<PreferencesProviderProps> = ({ childr
       const dataStr = JSON.stringify(preferences, null, 2);
       const dataBlob = new Blob([dataStr], { type: 'application/json' });
       const url = URL.createObjectURL(dataBlob);
-      
+
       const link = document.createElement('a');
       link.href = url;
       link.download = `user-preferences-${new Date().toISOString().split('T')[0]}.json`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
+
       URL.revokeObjectURL(url);
       // Toast gestito dal componente che chiama exportPreferences
     } catch (err) {
-      console.error('Error exporting preferences:', err);
       // Toast gestito dal componente che chiama exportPreferences
     }
   }, [preferences]);
@@ -301,7 +257,7 @@ export const PreferencesProvider: React.FC<PreferencesProviderProps> = ({ childr
     try {
       const text = await file.text();
       const importedPrefs = JSON.parse(text) as UserPreferences;
-      
+
       // Validate imported preferences
       if (!importedPrefs.userId || !importedPrefs.theme) {
         throw new Error('File di preferenze non valido');
@@ -318,7 +274,6 @@ export const PreferencesProvider: React.FC<PreferencesProviderProps> = ({ childr
       await updatePreferences(updatedPrefs);
       // Toast gestito dal componente che chiama importPreferences
     } catch (err) {
-      console.error('Error importing preferences:', err);
       // Toast gestito dal componente che chiama importPreferences
     }
   }, [user?.id, preferences?.id, updatePreferences]);
@@ -354,7 +309,7 @@ export const PreferencesProvider: React.FC<PreferencesProviderProps> = ({ childr
    */
   const getThemePreferences = useCallback(() => {
     if (!preferences) return null;
-    
+
     return {
       theme: preferences.theme,
       themeColor: preferences.themeColor,

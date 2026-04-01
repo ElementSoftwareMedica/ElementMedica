@@ -24,13 +24,11 @@ export const useTenants = () => {
   const loadTenants = useCallback(async (forceRefresh = false) => {
     // Evita richieste multiple simultanee
     if (loadingRef.current && !forceRefresh) {
-      console.log('🔄 useTenants: Request already in progress, skipping');
       return;
     }
 
     // Controlla cache se non è un refresh forzato
     if (!forceRefresh && tenantsCache && Date.now() - tenantsCache.timestamp < CACHE_DURATION) {
-      console.log('📦 useTenants: Using cached data');
       setTenants(tenantsCache.data);
       return;
     }
@@ -46,7 +44,6 @@ export const useTenants = () => {
         setLoading(true);
         setError(null);
 
-        console.log('🔄 useTenants: Loading tenants...');
         const response = await apiGet<{ tenants: Tenant[] }>('/api/v1/tenants');
         const tenantsData = response.tenants || [];
 
@@ -57,9 +54,7 @@ export const useTenants = () => {
         };
 
         setTenants(tenantsData);
-        console.log('✅ useTenants: Tenants loaded successfully', { count: tenantsData.length });
       } catch (err: unknown) {
-        console.error('❌ useTenants: Error loading tenants:', err);
 
         const error = err as { code?: string; message?: string; response?: { status?: number } };
 
@@ -79,7 +74,6 @@ export const useTenants = () => {
 
           // Usa cache se disponibile
           if (tenantsCache && Date.now() - tenantsCache.timestamp < CACHE_DURATION * 2) {
-            console.log('📦 useTenants: Using cached data due to error');
             setTenants(tenantsCache.data);
           } else {
             // Tenant di default come fallback
@@ -92,7 +86,6 @@ export const useTenants = () => {
               updatedAt: new Date().toISOString()
             };
             setTenants([defaultTenant]);
-            console.log('📦 useTenants: Using default tenant as fallback');
           }
         } else {
           setTenants([]);

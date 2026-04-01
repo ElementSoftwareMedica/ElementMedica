@@ -159,19 +159,60 @@ const createStorage = (options = {}) => {
 };
 
 /**
- * File filter function
+ * Safe file extensions mapped to their allowed MIME types.
+ * Extensions NOT in this map are always rejected regardless of MIME type.
+ * This prevents extension spoofing (e.g. sending .html with MIME image/jpeg).
+ */
+const SAFE_EXTENSIONS = new Map([
+  ['.jpg', ['image/jpeg']],
+  ['.jpeg', ['image/jpeg']],
+  ['.png', ['image/png']],
+  ['.gif', ['image/gif']],
+  ['.webp', ['image/webp']],
+  ['.pdf', ['application/pdf']],
+  ['.txt', ['text/plain']],
+  ['.csv', ['text/csv', 'application/vnd.ms-excel', 'text/plain']],
+  ['.xls', ['application/vnd.ms-excel']],
+  ['.xlsx', ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']],
+  ['.doc', ['application/msword']],
+  ['.docx', ['application/vnd.openxmlformats-officedocument.wordprocessingml.document']],
+  ['.dcm', ['application/dicom', 'application/octet-stream']],
+]);
+
+/**
+ * File filter function — validates both MIME type (server-side) and file extension.
+ * Double validation prevents extension spoofing attacks where a malicious file
+ * (e.g. shell.html) is uploaded with a spoofed MIME type (e.g. image/jpeg).
+ *
  * @param {array} allowedMimeTypes - Array of allowed MIME types
  * @returns {function} Multer file filter function
  */
 const createFileFilter = (allowedMimeTypes = defaultConfig.allowedMimeTypes) => {
   return (req, file, cb) => {
-    if (allowedMimeTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      const error = new Error(`File type ${file.mimetype} not allowed`);
+    // 1. MIME type check (Content-Type header — client-supplied but first gate)
+    if (!allowedMimeTypes.includes(file.mimetype)) {
+      const error = new Error(`Tipo di file ${file.mimetype} non consentito`);
       error.code = 'INVALID_FILE_TYPE';
-      cb(error, false);
+      return cb(error, false);
     }
+
+    // 2. Extension check — prevent stored XSS / extension spoofing
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!ext || !SAFE_EXTENSIONS.has(ext)) {
+      const error = new Error(`Estensione file ${ext || '(nessuna)'} non consentita`);
+      error.code = 'INVALID_FILE_TYPE';
+      return cb(error, false);
+    }
+
+    // 3. Cross-check: extension must be consistent with the MIME type
+    const extAllowedMimes = SAFE_EXTENSIONS.get(ext);
+    if (!extAllowedMimes.includes(file.mimetype)) {
+      const error = new Error(`Estensione file ${ext} non corrisponde al tipo MIME ${file.mimetype}`);
+      error.code = 'INVALID_FILE_TYPE';
+      return cb(error, false);
+    }
+
+    cb(null, true);
   };
 };
 
@@ -257,31 +298,31 @@ export const multerErrorHandler = (err, req, res, next) => {
     switch (err.code) {
       case 'LIMIT_FILE_SIZE':
         return res.status(413).json({
-          error: 'File too large',
-          message: 'File size exceeds the allowed limit'
+          error: 'File troppo grande',
+          message: 'La dimensione del file supera il limite consentito'
         });
       case 'LIMIT_FILE_COUNT':
         return res.status(400).json({
-          error: 'Too many files',
-          message: 'Number of files exceeds the allowed limit'
+          error: 'Troppi file',
+          message: 'Il numero di file supera il limite consentito'
         });
       case 'LIMIT_UNEXPECTED_FILE':
         return res.status(400).json({
-          error: 'Unexpected file',
-          message: 'Unexpected file field'
+          error: 'File imprevisto',
+          message: 'Campo file imprevisto'
         });
       default:
         return res.status(400).json({
-          error: 'Upload error',
-          message: err.message
+          error: 'Errore di caricamento',
+          message: 'Si è verificato un errore durante il caricamento del file'
         });
     }
   }
 
   if (err.code === 'INVALID_FILE_TYPE') {
     return res.status(400).json({
-      error: 'Invalid file type',
-      message: err.message
+      error: 'Tipo di file non valido',
+      message: 'Il tipo di file caricato non è consentito'
     });
   }
 

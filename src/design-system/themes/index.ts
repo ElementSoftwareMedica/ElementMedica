@@ -2,6 +2,9 @@
  * Design System - Themes Index
  * Week 8 Implementation - Component Library
  * Aggiornato per supportare temi pubblico/privato
+ * 
+ * NOTA: ThemeProvider e useTheme sono consolidati in context/ThemeContext.tsx
+ * Questo file esporta solo i temi e i colori per il design system
  */
 
 // Import themes first
@@ -10,9 +13,9 @@ import { darkTheme, darkThemeCSSVars } from './dark';
 import { publicTheme, publicThemeCSSVars } from './public';
 import { privateTheme, privateThemeCSSVars } from './private';
 
-// Export theme provider
-export { ThemeProvider, useTheme } from './ThemeProvider';
-export type { ThemeMode, ThemeContextType, ThemeProviderProps } from './ThemeProvider';
+// Re-export theme provider from context (source of truth)
+export { ThemeProvider, useTheme } from '../../context/ThemeContext';
+export type { ThemeMode, ResolvedTheme as ResolvedThemeType } from '../../context/ThemeContext';
 
 // Export individual themes
 export { lightTheme, lightThemeCSSVars } from './light';

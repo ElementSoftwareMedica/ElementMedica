@@ -5,7 +5,7 @@
 // Types
 export interface SlideElement {
     id: string;
-    type: 'text' | 'image' | 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'qrcode';
+    type: 'text' | 'image' | 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'qrcode' | 'logo';
     x: number;
     y: number;
     width: number;
@@ -13,6 +13,7 @@ export interface SlideElement {
     rotation: number;
     content?: string;
     src?: string;
+    logoType?: 'tenant' | 'branch';
     style?: SlideElementStyle;
     locked?: boolean;
     zIndex: number;
@@ -106,6 +107,12 @@ export const DEFAULT_STYLES: Record<SlideElement['type'], Partial<SlideElementSt
         backgroundColor: 'transparent',
         borderColor: '#e2e8f0',
         borderWidth: 1,
+    },
+    logo: {
+        backgroundColor: 'transparent',
+        borderColor: '#e2e8f0',
+        borderWidth: 1,
+        borderRadius: 0,
     },
 };
 

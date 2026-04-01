@@ -119,7 +119,7 @@ router.use('/audit-logs', auditComplianceRouter);
 router.use((error, req, res, next) => {
     logger.error('GDPR Router Error', {
         component: 'gdpr-main-router',
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         path: req.path,
         method: req.method,

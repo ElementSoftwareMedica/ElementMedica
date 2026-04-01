@@ -10,7 +10,7 @@
 
 import express from 'express';
 import logger from '../../utils/logger.js';
-import middleware from '../../auth/middleware.js';
+import middleware from '../../middleware/auth.js';
 import { checkAdvancedPermission } from '../../middleware/advanced-permissions.js';
 import { clinicalValidators } from '../../config/validation-clinical.js';
 import { getEffectiveTenantId } from '../../utils/tenantHelper.js';
@@ -68,7 +68,7 @@ const auditClinico = (azione) => {
  * @access Authenticated + VIEW_POLIAMBULATORIO
  */
 router.get('/',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('poliambulatorio', 'read'),
     clinicalValidators.poliambulatorio.query,
     auditClinico('list_poliambulatori'),
@@ -86,7 +86,6 @@ router.get('/',
                 action: 'list_poliambulatori_debug',
                 personId,
                 personTenantId: req.person?.tenantId,
-                brandTenantId: req.brandTenantId,
                 effectiveTenantId: tenantId,
                 globalRole,
                 accessibleTenantIds,
@@ -117,14 +116,13 @@ router.get('/',
         } catch (error) {
             logger.error('Failed to list poliambulatori', {
                 component: 'poliambulatori-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero dei poliambulatori',
-                message: error.message
             });
         }
     }
@@ -136,7 +134,7 @@ router.get('/',
  * @access Authenticated + VIEW_POLIAMBULATORIO
  */
 router.get('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('poliambulatorio', 'read'),
     clinicalValidators.params.id,
     auditClinico('get_poliambulatorio'),
@@ -161,7 +159,7 @@ router.get('/:id',
         } catch (error) {
             logger.error('Failed to get poliambulatorio', {
                 component: 'poliambulatori-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 poliambulatorioId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -169,7 +167,6 @@ router.get('/:id',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero del poliambulatorio',
-                message: error.message
             });
         }
     }
@@ -181,7 +178,7 @@ router.get('/:id',
  * @access Authenticated + CREATE_POLIAMBULATORIO
  */
 router.post('/',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('poliambulatorio', 'write'),
     clinicalValidators.poliambulatorio.create,
     auditClinico('create_poliambulatorio'),
@@ -198,7 +195,7 @@ router.post('/',
         } catch (error) {
             logger.error('Failed to create poliambulatorio', {
                 component: 'poliambulatori-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
@@ -213,7 +210,6 @@ router.post('/',
             res.status(500).json({
                 success: false,
                 error: 'Errore nella creazione del poliambulatorio',
-                message: error.message
             });
         }
     }
@@ -225,7 +221,7 @@ router.post('/',
  * @access Authenticated + EDIT_POLIAMBULATORIO
  */
 router.put('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('poliambulatorio', 'write'),
     clinicalValidators.params.id,
     clinicalValidators.poliambulatorio.update,
@@ -245,7 +241,7 @@ router.put('/:id',
         } catch (error) {
             logger.error('Failed to update poliambulatorio', {
                 component: 'poliambulatori-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 poliambulatorioId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -260,7 +256,6 @@ router.put('/:id',
             res.status(500).json({
                 success: false,
                 error: 'Errore nell\'aggiornamento del poliambulatorio',
-                message: error.message
             });
         }
     }
@@ -272,7 +267,7 @@ router.put('/:id',
  * @access Authenticated + DELETE_POLIAMBULATORIO
  */
 router.delete('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('poliambulatorio', 'delete'),
     clinicalValidators.params.id,
     auditClinico('delete_poliambulatorio'),
@@ -290,7 +285,7 @@ router.delete('/:id',
         } catch (error) {
             logger.error('Failed to delete poliambulatorio', {
                 component: 'poliambulatori-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 poliambulatorioId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -305,7 +300,6 @@ router.delete('/:id',
             res.status(500).json({
                 success: false,
                 error: 'Errore nell\'eliminazione del poliambulatorio',
-                message: error.message
             });
         }
     }
@@ -317,7 +311,7 @@ router.delete('/:id',
  * @access Authenticated + MANAGE_POLIAMBULATORIO
  */
 router.post('/:id/direttore',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('poliambulatorio', 'write'),
     clinicalValidators.params.id,
     clinicalValidators.poliambulatorio.assignDirettore,
@@ -338,7 +332,7 @@ router.post('/:id/direttore',
         } catch (error) {
             logger.error('Failed to assign direttore sanitario', {
                 component: 'poliambulatori-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 poliambulatorioId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -360,7 +354,6 @@ router.post('/:id/direttore',
             res.status(500).json({
                 success: false,
                 error: 'Errore nell\'assegnazione del direttore sanitario',
-                message: error.message
             });
         }
     }
@@ -372,7 +365,7 @@ router.post('/:id/direttore',
  * @access Authenticated + VIEW_POLIAMBULATORIO
  */
 router.get('/:id/statistics',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('poliambulatorio', 'read'),
     clinicalValidators.params.id,
     auditClinico('get_poliambulatorio_statistics'),
@@ -390,7 +383,7 @@ router.get('/:id/statistics',
         } catch (error) {
             logger.error('Failed to get poliambulatorio statistics', {
                 component: 'poliambulatori-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 poliambulatorioId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -398,7 +391,6 @@ router.get('/:id/statistics',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero delle statistiche',
-                message: error.message
             });
         }
     }

@@ -260,11 +260,11 @@ export class TariffarioService {
                 attivo: true,
                 deletedAt: null,
                 validoDa: { lte: now },
-                OR: [
-                    { validoA: null },
-                    { validoA: { gte: now } }
-                ],
-                ...(orConditions.length > 0 ? { OR: orConditions } : {})
+                // P52 Session #11: Fix duplicate OR keys — wrap in AND
+                AND: [
+                    { OR: [{ validoA: null }, { validoA: { gte: now } }] },
+                    ...(orConditions.length > 0 ? [{ OR: orConditions }] : [])
+                ]
             },
             orderBy: [
                 { priorita: 'desc' },  // Higher priority first
@@ -287,14 +287,10 @@ export class TariffarioService {
                 attivo: true,
                 deletedAt: null,
                 dataInizio: { lte: now },
-                OR: [
-                    { dataFine: null },
-                    { dataFine: { gte: now } }
-                ],
-                // Check if applicable to this prestazione
-                OR: [
-                    { prestazioniIds: { isEmpty: true } },  // Applies to all
-                    { prestazioniIds: { has: prestazioneId } }  // Specific prestazione
+                // P52 Session #11: Fix duplicate OR keys — wrap in AND
+                AND: [
+                    { OR: [{ dataFine: null }, { dataFine: { gte: now } }] },
+                    { OR: [{ prestazioniIds: { isEmpty: true } }, { prestazioniIds: { has: prestazioneId } }] }
                 ]
             }
         });
@@ -303,14 +299,14 @@ export class TariffarioService {
             return null;
         }
 
-        // Check usage limits
-        if (codiceSconto.utilizziMassimi && codiceSconto.utilizziAttuali >= codiceSconto.utilizziMassimi) {
+        // Check usage limits (P52 Session #11: Fix field names da schema Prisma)
+        if (codiceSconto.utilizzoMassimo && codiceSconto.utilizzoCorrente >= codiceSconto.utilizzoMassimo) {
             return null;
         }
 
-        // Calculate discount
+        // Calculate discount (P52 Session #11: Fix campo tipo → tipoSconto da schema)
         let importoSconto;
-        if (codiceSconto.tipo === 'PERCENTUALE') {
+        if (codiceSconto.tipoSconto === 'PERCENTUALE') {
             importoSconto = prezzoBase * (Number(codiceSconto.valore) / 100);
         } else {
             // VALORE_ASSOLUTO
@@ -319,7 +315,7 @@ export class TariffarioService {
 
         return {
             importoSconto: Math.round(importoSconto * 100) / 100,
-            descrizione: `Sconto ${codiceSconto.nome || codice}: ${codiceSconto.tipo === 'PERCENTUALE' ? `${codiceSconto.valore}%` : `€${codiceSconto.valore}`}`
+            descrizione: `Sconto ${codiceSconto.nome || codice}: ${codiceSconto.tipoSconto === 'PERCENTUALE' ? `${codiceSconto.valore}%` : `€${codiceSconto.valore}`}`
         };
     }
 
@@ -427,7 +423,25 @@ export class TariffarioService {
         let config = compensoOverride;
         let fonte = 'LISTINO';
 
-        // If no override, check MedicoAbilitato
+        // If no override, check TariffarioMedico first (priorità assoluta), then MedicoAbilitato
+        if (!config && medicoId) {
+            // Livello 1: TariffarioMedico generale del medico (priorità assoluta)
+            const tariffarioMedico = await prisma.tariffarioMedico.findFirst({
+                where: { medicoId, tenantId, attivo: true, deletedAt: null },
+                orderBy: { validoDa: 'desc' },
+            });
+            if (tariffarioMedico) {
+                config = {
+                    tipo: tariffarioMedico.compensoMedicoTipo,
+                    valore: Number(tariffarioMedico.compensoMedicoValore),
+                    minimo: tariffarioMedico.compensoMedicoMinimo ? Number(tariffarioMedico.compensoMedicoMinimo) : null,
+                    massimo: tariffarioMedico.compensoMedicoMassimo ? Number(tariffarioMedico.compensoMedicoMassimo) : null
+                };
+                fonte = 'TARIFFARIO_MEDICO';
+            }
+        }
+
+        // Livello 2: MedicoAbilitato per-prestazione
         if (!config && medicoId) {
             const medicoAbilitato = await prisma.medicoAbilitato.findFirst({
                 where: {

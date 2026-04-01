@@ -38,7 +38,7 @@ class EnhancedRoleService {
     this.utils = RoleUtils;
     this.stats = RoleStats;
     this.middleware = RoleMiddleware;
-    
+
     logger.info('[ENHANCED_ROLE_SERVICE] Service initialized with modular architecture');
   }
 
@@ -290,26 +290,6 @@ class EnhancedRoleService {
    */
   getDefaultPermissions(roleType) {
     return this.types.getDefaultPermissions(roleType);
-  }
-
-  // ==================== LEGACY COMPATIBILITY ====================
-
-  /**
-   * Metodo legacy per compatibilità con il codice esistente
-   * @deprecated Usa getUserRoles invece
-   */
-  async getPersonRoles(personId, tenantId) {
-    logger.warn('[ENHANCED_ROLE_SERVICE] Using deprecated method getPersonRoles, use getUserRoles instead');
-    return this.getUserRoles(personId, tenantId);
-  }
-
-  /**
-   * Metodo legacy per compatibilità
-   * @deprecated Usa hasPermission invece
-   */
-  async checkPermission(personId, permission, tenantId) {
-    logger.warn('[ENHANCED_ROLE_SERVICE] Using deprecated method checkPermission, use hasPermission instead');
-    return this.hasPermission(personId, permission, tenantId);
   }
 }
 

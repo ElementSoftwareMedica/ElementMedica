@@ -1,12 +1,12 @@
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
-import middleware from '../auth/middleware.js';
+import prisma from '../config/prisma-optimization.js';
+import middleware from '../middleware/auth.js';
 import logger from '../utils/logger.js';
 import { body, validationResult } from 'express-validator';
+import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 
-const { authenticate: authenticateToken, authorize: requirePermission } = middleware;
+const { authenticate: authenticateToken, requirePermission } = middleware;
 const router = express.Router();
-const prisma = new PrismaClient();
 
 /**
  * Settings Routes - Gestione completa ruoli e permessi
@@ -21,39 +21,39 @@ const SYSTEM_PERMISSIONS = {
   'users.update': { label: 'Modificare utenti', category: 'users', scope: ['all', 'own'] },
   'users.delete': { label: 'Eliminare utenti', category: 'users', scope: ['all', 'own'] },
   'users.manage_roles': { label: 'Gestire ruoli utenti', category: 'users', scope: ['all'] },
-  
+
   // Company Management
   'companies.create': { label: 'Creare aziende', category: 'companies', scope: ['all'] },
   'companies.read': { label: 'Visualizzare aziende', category: 'companies', scope: ['all', 'own'] },
   'companies.update': { label: 'Modificare aziende', category: 'companies', scope: ['all', 'own'] },
   'companies.delete': { label: 'Eliminare aziende', category: 'companies', scope: ['all'] },
   'companies.manage_settings': { label: 'Gestire impostazioni azienda', category: 'companies', scope: ['all', 'own'] },
-  
+
   // Course Management
   'courses.create': { label: 'Creare corsi', category: 'courses', scope: ['all', 'own'] },
   'courses.read': { label: 'Visualizzare corsi', category: 'courses', scope: ['all', 'own'] },
   'courses.update': { label: 'Modificare corsi', category: 'courses', scope: ['all', 'own'] },
   'courses.delete': { label: 'Eliminare corsi', category: 'courses', scope: ['all', 'own'] },
   'courses.assign': { label: 'Assegnare corsi', category: 'courses', scope: ['all', 'own'] },
-  
+
   // Employee Management
   'employees.create': { label: 'Creare dipendenti', category: 'employees', scope: ['all', 'own'] },
   'employees.read': { label: 'Visualizzare dipendenti', category: 'employees', scope: ['all', 'own'] },
   'employees.update': { label: 'Modificare dipendenti', category: 'employees', scope: ['all', 'own'] },
   'employees.delete': { label: 'Eliminare dipendenti', category: 'employees', scope: ['all', 'own'] },
-  
+
   // Training Management
   'training.create': { label: 'Creare sessioni formative', category: 'training', scope: ['all', 'own'] },
   'training.read': { label: 'Visualizzare formazioni', category: 'training', scope: ['all', 'own'] },
   'training.update': { label: 'Modificare formazioni', category: 'training', scope: ['all', 'own'] },
   'training.delete': { label: 'Eliminare formazioni', category: 'training', scope: ['all', 'own'] },
   'training.conduct': { label: 'Condurre formazioni', category: 'training', scope: ['all', 'own'] },
-  
+
   // Reports and Analytics
   'reports.view': { label: 'Visualizzare report', category: 'reports', scope: ['all', 'own'] },
   'reports.export': { label: 'Esportare report', category: 'reports', scope: ['all', 'own'] },
   'analytics.view': { label: 'Visualizzare analytics', category: 'analytics', scope: ['all', 'own'] },
-  
+
   // System Administration
   'system.settings': { label: 'Gestire impostazioni sistema', category: 'system', scope: ['all'] },
   'system.billing': { label: 'Gestire fatturazione', category: 'system', scope: ['all'] },
@@ -119,17 +119,17 @@ const ENTITY_FIELDS = {
  * @desc Ottieni tutti i ruoli del sistema
  * @access Admin
  */
-router.get('/roles', 
-  authenticateToken(),
+router.get('/roles',
+  authenticateToken,
   requirePermission(['roles:manage', 'system:settings']),
   async (req, res) => {
     try {
       // Ottieni tutti i tipi di ruolo disponibili dall'enum RoleType
       const roleTypes = [
-        'EMPLOYEE', 'MANAGER', 'HR_MANAGER', 'DEPARTMENT_HEAD', 'TRAINER', 
-        'SENIOR_TRAINER', 'TRAINER_COORDINATOR', 'EXTERNAL_TRAINER', 
-        'SUPER_ADMIN', 'ADMIN', 'COMPANY_ADMIN', 'TENANT_ADMIN', 
-        'VIEWER', 'OPERATOR', 'COORDINATOR', 'SUPERVISOR', 'GUEST', 
+        'EMPLOYEE', 'MANAGER', 'HR_MANAGER', 'DEPARTMENT_HEAD', 'TRAINER',
+        'SENIOR_TRAINER', 'TRAINER_COORDINATOR', 'EXTERNAL_TRAINER',
+        'SUPER_ADMIN', 'ADMIN', 'COMPANY_ADMIN', 'TENANT_ADMIN',
+        'VIEWER', 'OPERATOR', 'COORDINATOR', 'SUPERVISOR', 'GUEST',
         'CONSULTANT', 'AUDITOR'
       ];
 
@@ -158,7 +158,7 @@ router.get('/roles',
 
       // Ottieni i ruoli attualmente assegnati con i loro permessi
       const assignedRoles = await prisma.personRole.findMany({
-        where: {},
+        where: { tenantId: getEffectiveTenantId(req) },
         include: {
           permissions: true,
           advancedPermissions: true,
@@ -166,8 +166,7 @@ router.get('/roles',
             select: {
               id: true,
               firstName: true,
-              lastName: true,
-              email: true
+              lastName: true
             }
           }
         },
@@ -178,7 +177,7 @@ router.get('/roles',
       const allRoles = roleTypes.map(roleType => {
         const roleInfo = roleDescriptions[roleType] || { name: roleType, description: '' };
         const assignedRole = assignedRoles.find(ar => ar.roleType === roleType);
-        
+
         return {
           id: roleType,
           name: roleInfo.name,
@@ -198,13 +197,13 @@ router.get('/roles',
       logger.error('Failed to fetch roles', {
         component: 'settings-routes',
         action: 'getRoles',
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         personId: req.person?.id
       });
       res.status(500).json({
         success: false,
-        error: 'Failed to fetch roles'
+        error: 'Errore nel recupero dei ruoli'
       });
     }
   }
@@ -216,7 +215,7 @@ router.get('/roles',
  * @access Admin
  */
 router.get('/permissions',
-  authenticateToken(),
+  authenticateToken,
   requirePermission(['roles:manage', 'system:settings']),
   async (req, res) => {
     try {
@@ -331,13 +330,13 @@ router.get('/permissions',
       logger.error('Failed to fetch permissions', {
         component: 'settings-routes',
         action: 'getPermissions',
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         personId: req.person?.id
       });
       res.status(500).json({
         success: false,
-        error: 'Failed to fetch permissions'
+        error: 'Errore nel recupero dei permessi'
       });
     }
   }
@@ -349,7 +348,7 @@ router.get('/permissions',
  * @access Admin
  */
 router.get('/entity-fields',
-  authenticateToken(),
+  authenticateToken,
   requirePermission(['roles:manage', 'system:settings']),
   async (req, res) => {
     try {
@@ -361,13 +360,13 @@ router.get('/entity-fields',
       logger.error('Failed to fetch entity fields', {
         component: 'settings-routes',
         action: 'getEntityFields',
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         personId: req.person?.id
       });
       res.status(500).json({
         success: false,
-        error: 'Failed to fetch entity fields'
+        error: 'Errore nel recupero dei campi entità'
       });
     }
   }
@@ -379,7 +378,7 @@ router.get('/entity-fields',
  * @access Admin
  */
 router.post('/roles/:roleType/permissions',
-  authenticateToken(),
+  authenticateToken,
   requirePermission(['roles:manage', 'users:manage']),
   [
     body('personId').notEmpty().withMessage('ID persona richiesto'),
@@ -400,22 +399,35 @@ router.post('/roles/:roleType/permissions',
       const { roleType } = req.params;
       const { personId, permissions, scope = 'global' } = req.body;
 
-      // Verifica che la persona esista
-      const person = await prisma.person.findUnique({
-        where: { id: personId }
+      // Verifica che la persona esista e appartenga al tenant
+      const person = await prisma.person.findFirst({
+        where: {
+          id: personId,
+          deletedAt: null,
+          tenantProfiles: {
+            some: {
+              tenantId: getEffectiveTenantId(req),
+              deletedAt: null
+            }
+          }
+        }
       });
 
       if (!person) {
         return res.status(404).json({
           success: false,
-          error: 'Person not found'
+          error: 'Persona non trovata'
         });
       }
 
       // Trova o crea il PersonRole
       let personRole = await prisma.personRole.findFirst({
-        where: {personId,
-          roleType,}
+        where: {
+          personId,
+          roleType,
+          tenantId: getEffectiveTenantId(req),
+          deletedAt: null
+        }
       });
 
       if (!personRole) {
@@ -425,8 +437,8 @@ router.post('/roles/:roleType/permissions',
             roleType,
             isActive: true,
             assignedBy: req.person.id,
-            companyId: req.person.companyId,
-            tenantId: req.person.tenantId
+            companyTenantProfileId: req.person.companyTenantProfileId || null,
+            tenantId: getEffectiveTenantId(req)
           }
         });
       }
@@ -463,13 +475,13 @@ router.post('/roles/:roleType/permissions',
       logger.error('Failed to assign role permissions', {
         component: 'settings-routes',
         action: 'assignRolePermissions',
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         personId: req.person?.id
       });
       res.status(500).json({
         success: false,
-        error: 'Failed to assign role permissions'
+        error: 'Errore nell\'assegnazione dei permessi del ruolo'
       });
     }
   }
@@ -481,7 +493,7 @@ router.post('/roles/:roleType/permissions',
  * @access Admin
  */
 router.put('/users/:personId/role',
-  authenticateToken(),
+  authenticateToken,
   requirePermission(['roles:manage', 'users:manage']),
   [
     body('roleType').notEmpty().withMessage('Tipo ruolo richiesto'),
@@ -511,13 +523,13 @@ router.put('/users/:personId/role',
       if (!user) {
         return res.status(404).json({
           success: false,
-          error: 'User not found'
+          error: 'Utente non trovato'
         });
       }
 
       // Disattiva i ruoli esistenti
       await prisma.personRole.updateMany({
-        where: {personId: personId,},
+        where: { personId: personId, },
         data: {
           isActive: false
         }
@@ -531,8 +543,8 @@ router.put('/users/:personId/role',
           isActive: true,
           isPrimary: true,
           assignedBy: req.person.id,
-          companyId: companyId || req.person.companyId,
-          tenantId: req.person.tenantId,
+          companyTenantProfileId: req.person.companyTenantProfileId || null,
+          tenantId: getEffectiveTenantId(req),
           validUntil: validUntil ? new Date(validUntil) : null
         }
       });
@@ -565,14 +577,14 @@ router.put('/users/:personId/role',
       logger.error('Failed to update user role', {
         component: 'settings-routes',
         action: 'updateUserRole',
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         personId: req.person?.id,
         targetPersonId: req.params.personId
       });
       res.status(500).json({
         success: false,
-        error: 'Failed to update user role'
+        error: 'Errore nell\'aggiornamento del ruolo utente'
       });
     }
   }
@@ -584,7 +596,7 @@ router.put('/users/:personId/role',
  * @access Admin
  */
 router.delete('/users/:personId/role/:roleId',
-  authenticateToken(),
+  authenticateToken,
   requirePermission(['roles:manage', 'users:manage']),
   async (req, res) => {
     try {
@@ -592,14 +604,18 @@ router.delete('/users/:personId/role/:roleId',
 
       // Verifica che il ruolo esista e appartenga all'utente
       const personRole = await prisma.personRole.findFirst({
-        where: {id: roleId,
-          personId: personId,}
+        where: {
+          id: roleId,
+          personId: personId,
+          tenantId: getEffectiveTenantId(req),
+          deletedAt: null
+        }
       });
 
       if (!personRole) {
         return res.status(404).json({
           success: false,
-          error: 'Role assignment not found'
+          error: 'Assegnazione ruolo non trovata'
         });
       }
 
@@ -625,7 +641,7 @@ router.delete('/users/:personId/role/:roleId',
       logger.error('Failed to remove user role', {
         component: 'settings-routes',
         action: 'removeUserRole',
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         personId: req.person?.id,
         targetPersonId: req.params.personId,
@@ -633,7 +649,7 @@ router.delete('/users/:personId/role/:roleId',
       });
       res.status(500).json({
         success: false,
-        error: 'Failed to remove user role'
+        error: 'Errore nell\'eliminazione del ruolo utente'
       });
     }
   }
@@ -645,17 +661,40 @@ router.delete('/users/:personId/role/:roleId',
  * @access Admin
  */
 router.get('/users',
-  authenticateToken(),
+  authenticateToken,
   requirePermission(['users:manage', 'roles:manage']),
   async (req, res) => {
     try {
+      const tenantId = getEffectiveTenantId(req);
       const users = await prisma.person.findMany({
         where: {
-          status: 'ACTIVE'
+          tenantProfiles: {
+            some: {
+              tenantId,
+              status: 'ACTIVE',
+              deletedAt: null
+            }
+          }
         },
         include: {
+          tenantProfiles: {
+            where: { tenantId, deletedAt: null },
+            select: {
+              email: true,
+              status: true,
+              companyTenantProfile: {
+                select: {
+                  id: true,
+                  company: {
+                    select: { id: true, ragioneSociale: true }
+                  }
+                }
+              }
+            },
+            take: 1
+          },
           personRoles: {
-            where: {},
+            where: { tenantId },
             include: {
               permissions: {
                 where: {
@@ -663,18 +702,14 @@ router.get('/users',
                 }
               },
               advancedPermissions: true,
-              company: {
+              companyTenantProfile: {
                 select: {
                   id: true,
-                  name: true
+                  company: {
+                    select: { id: true, ragioneSociale: true }
+                  }
                 }
               }
-            }
-          },
-          company: {
-            select: {
-              id: true,
-              name: true
             }
           }
         },
@@ -683,24 +718,28 @@ router.get('/users',
         }
       });
 
-      const formattedUsers = users.map(user => ({
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        status: user.status,
-        company: user.company,
-        roles: user.personRoles.map(personRole => ({
-          id: personRole.id,
-          roleType: personRole.roleType,
-          company: personRole.company,
-          assignedAt: personRole.assignedAt,
-          validUntil: personRole.validUntil,
-          isPrimary: personRole.isPrimary,
-          permissions: personRole.permissions.map(p => p.permission),
-          advancedPermissions: personRole.advancedPermissions
-        }))
-      }));
+      const formattedUsers = users.map(user => {
+        const profile = user.tenantProfiles?.[0];
+        const companyProfile = profile?.companyTenantProfile;
+        return {
+          id: user.id,
+          email: profile?.email || '',
+          firstName: user.firstName,
+          lastName: user.lastName,
+          status: profile?.status || 'PENDING',
+          company: companyProfile ? { id: companyProfile.company?.id, name: companyProfile.company?.ragioneSociale } : null,
+          roles: user.personRoles.map(personRole => ({
+            id: personRole.id,
+            roleType: personRole.roleType,
+            company: personRole.companyTenantProfile ? { id: personRole.companyTenantProfile.company?.id, name: personRole.companyTenantProfile.company?.ragioneSociale } : null,
+            assignedAt: personRole.assignedAt,
+            validUntil: personRole.validUntil,
+            isPrimary: personRole.isPrimary,
+            permissions: personRole.permissions.map(p => p.permission),
+            advancedPermissions: personRole.advancedPermissions
+          }))
+        };
+      });
 
       res.json({
         success: true,
@@ -710,13 +749,13 @@ router.get('/users',
       logger.error('Failed to fetch users', {
         component: 'settings-routes',
         action: 'getUsers',
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         personId: req.person?.id
       });
       res.status(500).json({
         success: false,
-        error: 'Failed to fetch users'
+        error: 'Errore nel recupero degli utenti'
       });
     }
   }

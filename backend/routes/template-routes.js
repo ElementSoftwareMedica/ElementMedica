@@ -7,21 +7,21 @@
  */
 
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
-import middleware from '../auth/middleware.js';
+import prisma from '../config/prisma-optimization.js';
+import middleware from '../middleware/auth.js';
 import { parseGoogleUrl, getGoogleFieldForUrl } from '../utils/google-url-parser.js';
 import logger from '../utils/logger.js';
+import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 // Middleware destructuring
-const { authenticate: authenticateToken, authorize: requirePermission } = middleware;
+const { authenticate: authenticateToken, requirePermission } = middleware;
 
 // Helper to get authenticated user info
 const getAuthUser = (req) => ({
   userId: req.person.id,
-  tenantId: req.person.tenantId
+  tenantId: getEffectiveTenantId(req)
 });
 
 /**
@@ -33,7 +33,7 @@ const getAuthUser = (req) => ({
  * GET /api/v1/templates
  * List all templates with filtering and pagination
  */
-router.get('/', authenticateToken(), requirePermission('templates:read'), async (req, res) => {
+router.get('/', authenticateToken, requirePermission('templates:read'), async (req, res) => {
   try {
     const { tenantId, userId } = getAuthUser(req);
     const {
@@ -72,8 +72,7 @@ router.get('/', authenticateToken(), requirePermission('templates:read'), async 
           select: {
             id: true,
             firstName: true,
-            lastName: true,
-            email: true
+            lastName: true
           }
         },
         versions: {
@@ -112,8 +111,33 @@ router.get('/', authenticateToken(), requirePermission('templates:read'), async 
     logger.error({ component: 'templates', error: error.message }, 'Error listing templates');
     res.status(500).json({
       success: false,
-      error: 'Failed to fetch templates',
-      message: error.message
+      error: 'Errore nel recupero dei template',
+    });
+  }
+});
+
+/**
+ * POST /api/v1/templates/seed-defaults
+ * Genera i template predefiniti per il tenant corrente
+ */
+router.post('/seed-defaults', authenticateToken, requirePermission('templates:create'), async (req, res) => {
+  try {
+    const { tenantId } = getAuthUser(req);
+    const { DefaultTemplateService } = await import('../services/templates/DefaultTemplateService.js');
+    const results = await DefaultTemplateService.createDefaultTemplates(tenantId);
+
+    res.json({
+      success: true,
+      data: {
+        created: results.created,
+        skipped: results.skipped
+      }
+    });
+  } catch (error) {
+    logger.error({ component: 'templates', error: error.message }, 'Errore generazione template predefiniti');
+    res.status(500).json({
+      success: false,
+      error: 'Errore nella generazione dei template predefiniti'
     });
   }
 });
@@ -122,7 +146,7 @@ router.get('/', authenticateToken(), requirePermission('templates:read'), async 
  * GET /api/v1/templates/default/:type
  * Get default template for a specific type
  */
-router.get('/default/:type', authenticateToken(), requirePermission('templates:read'), async (req, res) => {
+router.get('/default/:type', authenticateToken, requirePermission('templates:read'), async (req, res) => {
   try {
     const { tenantId } = getAuthUser(req);
     const { type } = req.params;
@@ -139,8 +163,7 @@ router.get('/default/:type', authenticateToken(), requirePermission('templates:r
           select: {
             id: true,
             firstName: true,
-            lastName: true,
-            email: true
+            lastName: true
           }
         }
       }
@@ -149,7 +172,7 @@ router.get('/default/:type', authenticateToken(), requirePermission('templates:r
     if (!template) {
       return res.status(404).json({
         success: false,
-        error: `No default template found for type ${type}`
+        error: `Nessun template predefinito trovato per il tipo ${type}`
       });
     }
 
@@ -158,8 +181,7 @@ router.get('/default/:type', authenticateToken(), requirePermission('templates:r
     logger.error({ component: 'templates', error: error.message }, 'Error getting default template');
     res.status(500).json({
       success: false,
-      error: 'Failed to fetch default template',
-      message: error.message
+      error: 'Errore nel recupero del template predefinito',
     });
   }
 });
@@ -169,7 +191,7 @@ router.get('/default/:type', authenticateToken(), requirePermission('templates:r
  * Get a single template by ID
  * IMPORTANT: This route MUST come AFTER /default/:type to avoid route conflicts
  */
-router.get('/:id', authenticateToken(), requirePermission('templates:read'), async (req, res) => {
+router.get('/:id', authenticateToken, requirePermission('templates:read'), async (req, res) => {
   try {
     const { tenantId } = getAuthUser(req);
     const { id } = req.params;
@@ -186,8 +208,7 @@ router.get('/:id', authenticateToken(), requirePermission('templates:read'), asy
           select: {
             id: true,
             firstName: true,
-            lastName: true,
-            email: true
+            lastName: true
           }
         },
         ...(includeVersions === 'true' && {
@@ -218,7 +239,7 @@ router.get('/:id', authenticateToken(), requirePermission('templates:read'), asy
     if (!template) {
       return res.status(404).json({
         success: false,
-        error: 'Template not found'
+        error: 'Template non trovato'
       });
     }
 
@@ -230,8 +251,7 @@ router.get('/:id', authenticateToken(), requirePermission('templates:read'), asy
     logger.error({ component: 'templates', error: error.message }, 'Error fetching template');
     res.status(500).json({
       success: false,
-      error: 'Failed to fetch template',
-      message: error.message
+      error: 'Errore nel recupero del template',
     });
   }
 });
@@ -244,7 +264,7 @@ router.get('/:id', authenticateToken(), requirePermission('templates:read'), asy
  * POST /api/v1/templates
  * Create a new template
  */
-router.post('/', authenticateToken(), requirePermission('templates:create'), async (req, res) => {
+router.post('/', authenticateToken, requirePermission('templates:create'), async (req, res) => {
   try {
     const { tenantId, userId } = getAuthUser(req);
     const {
@@ -272,7 +292,7 @@ router.post('/', authenticateToken(), requirePermission('templates:create'), asy
     if (!name || !type) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: name, type'
+        error: 'Campi obbligatori mancanti: name, type'
       });
     }
 
@@ -281,7 +301,7 @@ router.post('/', authenticateToken(), requirePermission('templates:create'), asy
     if (fileFormat && !validFormats.includes(fileFormat)) {
       return res.status(400).json({
         success: false,
-        error: `Invalid fileFormat. Expected one of: ${validFormats.join(', ')}`
+        error: `Formato file non valido. Deve essere uno tra: ${validFormats.join(', ')}`
       });
     }
 
@@ -311,7 +331,7 @@ router.post('/', authenticateToken(), requirePermission('templates:create'), asy
         // Invalid URL format
         return res.status(400).json({
           success: false,
-          error: 'Invalid Google Docs/Slides URL format. Expected format: https://docs.google.com/document/d/{id} or https://docs.google.com/presentation/d/{id}'
+          error: 'Formato URL Google Docs/Slides non valido. Formato atteso: https://docs.google.com/document/d/{id} o https://docs.google.com/presentation/d/{id}'
         });
       }
     }
@@ -360,7 +380,7 @@ router.post('/', authenticateToken(), requirePermission('templates:create'), asy
         version: 1,
         isActive: true,
         tenantId,
-        companyId,
+        companyTenantProfileId: companyId || null,
         createdBy: userId,
         url: '', // Will be generated after file creation if needed
         googleDocsUrl: googleDocsUrl || null,
@@ -398,14 +418,13 @@ router.post('/', authenticateToken(), requirePermission('templates:create'), asy
     res.status(201).json({
       success: true,
       data: template,
-      message: 'Template created successfully'
+      message: 'Template creato con successo'
     });
   } catch (error) {
     logger.error({ component: 'templates', error: error.message }, 'Error creating template');
     res.status(500).json({
       success: false,
-      error: 'Failed to create template',
-      message: error.message
+      error: 'Errore nella creazione del template',
     });
   }
 });
@@ -418,7 +437,7 @@ router.post('/', authenticateToken(), requirePermission('templates:create'), asy
  * PUT /api/v1/templates/:id
  * Update an existing template
  */
-router.put('/:id', authenticateToken(), requirePermission('templates:update'), async (req, res) => {
+router.put('/:id', authenticateToken, requirePermission('templates:update'), async (req, res) => {
   try {
     const { tenantId, userId } = getAuthUser(req);
     const { id } = req.params;
@@ -454,7 +473,7 @@ router.put('/:id', authenticateToken(), requirePermission('templates:update'), a
     if (!existing) {
       return res.status(404).json({
         success: false,
-        error: 'Template not found'
+        error: 'Template non trovato'
       });
     }
 
@@ -463,7 +482,7 @@ router.put('/:id', authenticateToken(), requirePermission('templates:update'), a
     if (fileFormat !== undefined && !validFormats.includes(fileFormat)) {
       return res.status(400).json({
         success: false,
-        error: `Invalid fileFormat. Expected one of: ${validFormats.join(', ')}`
+        error: `Formato file non valido. Deve essere uno tra: ${validFormats.join(', ')}`
       });
     }
 
@@ -636,25 +655,24 @@ router.put('/:id', authenticateToken(), requirePermission('templates:update'), a
       success: true,
       data: template,
       message: shouldCreateVersion
-        ? `Template updated to version ${newVersion}`
-        : 'Template metadata updated'
+        ? `Template aggiornato alla versione ${newVersion}`
+        : 'Metadati template aggiornati'
     });
   } catch (error) {
     logger.error('Template update failed', {
       action: 'updateTemplate',
       templateId: id,
-      error: error.message,
+      error: 'Operazione non riuscita',
       errorCode: error.code,
       errorMeta: error.meta,
       stack: error.stack,
       userId,
       tenantId
     });
-    logger.error({ component: 'templates', error: error.message, userId, tenantId }, 'Error updating template');
+    logger.error({ component: 'templates', error: 'Operazione non riuscita', userId, tenantId }, 'Error updating template');
     res.status(500).json({
       success: false,
-      error: 'Failed to update template',
-      message: error.message
+      error: 'Errore nell\'aggiornamento del template',
     });
   }
 });
@@ -663,7 +681,7 @@ router.put('/:id', authenticateToken(), requirePermission('templates:update'), a
  * PUT /api/v1/templates/:id/set-default
  * Set a template as the default for its type
  */
-router.put('/:id/set-default', authenticateToken(), requirePermission('templates:update'), async (req, res) => {
+router.put('/:id/set-default', authenticateToken, requirePermission('templates:update'), async (req, res) => {
   try {
     const { tenantId, userId } = getAuthUser(req);
     const { id } = req.params;
@@ -676,7 +694,7 @@ router.put('/:id/set-default', authenticateToken(), requirePermission('templates
     if (!template) {
       return res.status(404).json({
         success: false,
-        error: 'Template not found'
+        error: 'Template non trovato'
       });
     }
 
@@ -700,15 +718,14 @@ router.put('/:id/set-default', authenticateToken(), requirePermission('templates
 
     res.json({
       success: true,
-      message: `Template set as default for ${template.type} type`,
+      message: `Template impostato come predefinito per il tipo ${template.type}`,
       data: { id, type: template.type }
     });
   } catch (error) {
     logger.error({ component: 'templates', error: error.message }, 'Error setting default template');
     res.status(500).json({
       success: false,
-      error: 'Failed to set default template',
-      message: error.message
+      error: 'Errore nell\'impostazione del template predefinito',
     });
   }
 });
@@ -717,7 +734,7 @@ router.put('/:id/set-default', authenticateToken(), requirePermission('templates
  * DELETE /api/v1/templates/:id
  * Soft delete a template
  */
-router.delete('/:id', authenticateToken(), requirePermission('templates:delete'), async (req, res) => {
+router.delete('/:id', authenticateToken, requirePermission('templates:delete'), async (req, res) => {
   try {
     const { tenantId } = getAuthUser(req);
     const { id } = req.params;
@@ -729,13 +746,13 @@ router.delete('/:id', authenticateToken(), requirePermission('templates:delete')
     if (!template) {
       return res.status(404).json({
         success: false,
-        error: 'Template not found'
+        error: 'Template non trovato'
       });
     }
 
     // Check if template is in use
     const usageCount = await prisma.generatedDocument.count({
-      where: { templateId: id }
+      where: { templateId: id, tenantId }
     });
 
     // Soft delete
@@ -749,7 +766,7 @@ router.delete('/:id', authenticateToken(), requirePermission('templates:delete')
 
     res.json({
       success: true,
-      message: 'Template deleted successfully',
+      message: 'Template eliminato con successo',
       warning: usageCount > 0
         ? `This template has ${usageCount} generated documents`
         : null
@@ -758,8 +775,7 @@ router.delete('/:id', authenticateToken(), requirePermission('templates:delete')
     logger.error({ component: 'templates', error: error.message }, 'Error deleting template');
     res.status(500).json({
       success: false,
-      error: 'Failed to delete template',
-      message: error.message
+      error: 'Errore nell\'eliminazione del template',
     });
   }
 });
@@ -772,7 +788,7 @@ router.delete('/:id', authenticateToken(), requirePermission('templates:delete')
  * POST /api/v1/templates/:id/duplicate
  * Duplicate an existing template
  */
-router.post('/:id/duplicate', authenticateToken(), requirePermission('templates:create'), async (req, res) => {
+router.post('/:id/duplicate', authenticateToken, requirePermission('templates:create'), async (req, res) => {
   try {
     const { tenantId, userId } = getAuthUser(req);
     const { id } = req.params;
@@ -781,7 +797,7 @@ router.post('/:id/duplicate', authenticateToken(), requirePermission('templates:
     if (!name) {
       return res.status(400).json({
         success: false,
-        error: 'New template name is required'
+        error: 'Nome del nuovo template obbligatorio'
       });
     }
 
@@ -793,7 +809,7 @@ router.post('/:id/duplicate', authenticateToken(), requirePermission('templates:
     if (!source) {
       return res.status(404).json({
         success: false,
-        error: 'Template not found'
+        error: 'Template non trovato'
       });
     }
 
@@ -819,7 +835,7 @@ router.post('/:id/duplicate', authenticateToken(), requirePermission('templates:
         isActive: true,
         isDefault: false,
         tenantId,
-        companyId: source.companyId,
+        companyTenantProfileId: source.companyTenantProfileId || null,
         createdBy: userId,
         url: '',
         versions: {
@@ -856,14 +872,13 @@ router.post('/:id/duplicate', authenticateToken(), requirePermission('templates:
     res.status(201).json({
       success: true,
       data: duplicate,
-      message: 'Template duplicated successfully'
+      message: 'Template duplicato con successo'
     });
   } catch (error) {
     logger.error({ component: 'templates', error: error.message }, 'Error duplicating template');
     res.status(500).json({
       success: false,
-      error: 'Failed to duplicate template',
-      message: error.message
+      error: 'Errore nella duplicazione del template',
     });
   }
 });
@@ -872,7 +887,7 @@ router.post('/:id/duplicate', authenticateToken(), requirePermission('templates:
  * GET /api/templates/:id/versions
  * Get all versions of a template
  */
-router.get('/:id/versions', authenticateToken(), requirePermission('templates:read'), async (req, res) => {
+router.get('/:id/versions', authenticateToken, requirePermission('templates:read'), async (req, res) => {
   try {
     const { tenantId } = getAuthUser(req);
     const { id } = req.params;
@@ -902,8 +917,7 @@ router.get('/:id/versions', authenticateToken(), requirePermission('templates:re
     logger.error({ component: 'templates', error: error.message }, 'Error fetching versions');
     res.status(500).json({
       success: false,
-      error: 'Failed to fetch versions',
-      message: error.message
+      error: 'Errore nel recupero delle versioni',
     });
   }
 });
@@ -912,7 +926,7 @@ router.get('/:id/versions', authenticateToken(), requirePermission('templates:re
  * POST /api/templates/:id/restore-version
  * Restore a specific version (creates new version with old content)
  */
-router.post('/:id/restore-version', authenticateToken(), requirePermission('templates:update'), async (req, res) => {
+router.post('/:id/restore-version', authenticateToken, requirePermission('templates:update'), async (req, res) => {
   try {
     const { tenantId, userId } = getAuthUser(req);
     const { id } = req.params;
@@ -921,7 +935,7 @@ router.post('/:id/restore-version', authenticateToken(), requirePermission('temp
     if (!versionNumber) {
       return res.status(400).json({
         success: false,
-        error: 'Version number is required'
+        error: 'Numero versione obbligatorio'
       });
     }
 
@@ -937,7 +951,7 @@ router.post('/:id/restore-version', authenticateToken(), requirePermission('temp
     if (!version) {
       return res.status(404).json({
         success: false,
-        error: 'Version not found'
+        error: 'Versione non trovata'
       });
     }
 
@@ -949,7 +963,7 @@ router.post('/:id/restore-version', authenticateToken(), requirePermission('temp
     if (!template) {
       return res.status(404).json({
         success: false,
-        error: 'Template not found'
+        error: 'Template non trovato'
       });
     }
 
@@ -997,14 +1011,13 @@ router.post('/:id/restore-version', authenticateToken(), requirePermission('temp
     res.json({
       success: true,
       data: updated,
-      message: `Restored to version ${versionNumber} (saved as version ${newVersion})`
+      message: `Ripristinato alla versione ${versionNumber} (salvato come versione ${newVersion})`
     });
   } catch (error) {
     logger.error({ component: 'templates', error: error.message }, 'Error restoring version');
     res.status(500).json({
       success: false,
-      error: 'Failed to restore version',
-      message: error.message
+      error: 'Errore nel ripristino della versione',
     });
   }
 });

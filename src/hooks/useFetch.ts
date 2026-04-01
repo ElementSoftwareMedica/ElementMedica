@@ -28,7 +28,6 @@ function useFetch<T = unknown>(
     setError(null);
     
     try {
-      console.log(`Fetching from: ${url}`);
       
       const response = await apiGet<T>(url);
       
@@ -36,13 +35,11 @@ function useFetch<T = unknown>(
       setUsingFallback(false);
       fetchOptions?.onSuccess?.(response);
     } catch (err: unknown) {
-      console.warn(`Fetch error:`, err);
       
-      const errorMessage = err instanceof Error ? err.message : 'An error occurred';
+      const errorMessage = 'Si è verificato un errore';
       
       // Handle fallback data if provided
       if (fetchOptions?.fallbackData !== undefined) {
-        console.log(`Using fallback data for ${url}`);
         setData(fetchOptions.fallbackData);
         setUsingFallback(true);
         setError(`Using demo data (${errorMessage})`);

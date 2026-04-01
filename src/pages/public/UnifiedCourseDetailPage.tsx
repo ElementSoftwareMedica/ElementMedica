@@ -22,6 +22,8 @@ import {
   getCourseTypeLabel,
   getCourseTypeColor
 } from '../../utils/courseLabels';
+import { getCurrentBrand } from '@/config/brands.config';
+import SEOHead from '../../components/seo/SEOHead';
 
 interface CourseVariant {
   id: string;
@@ -97,7 +99,7 @@ export const UnifiedCourseDetailPage: React.FC = () => {
         setRequestForm(prev => ({ ...prev, selectedVariant: data.variants[0].id }));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Errore nel caricamento del corso');
+      setError('Errore nel caricamento del corso');
     } finally {
       setLoading(false);
     }
@@ -230,8 +232,36 @@ export const UnifiedCourseDetailPage: React.FC = () => {
     );
   }
 
+  const brand = getCurrentBrand();
+
   return (
     <div className="min-h-screen bg-gray-50">
+      <SEOHead
+        title={`${unifiedCourse.baseTitle} - Tutti i Livelli di Rischio | ${brand.displayName}`}
+        description={`Corso ${unifiedCourse.baseTitle}: ${unifiedCourse.variants.length} varianti per diversi livelli di rischio. Formazione sicurezza sul lavoro D.Lgs. 81/08 a Selvazzano Dentro (PD).`}
+        keywords={['corso sicurezza lavoro', unifiedCourse.baseTitle, unifiedCourse.category, 'formazione D.Lgs. 81/08', 'rischio alto', 'rischio medio', 'rischio basso', 'Padova']}
+        canonicalUrl={`${brand.contacts.website}/corsi/unified/${encodeURIComponent(unifiedCourse.baseTitle)}`}
+        ogType="article"
+        ogImage={unifiedCourse.image1Url || undefined}
+        structuredData={{
+          '@context': 'https://schema.org',
+          '@type': 'ItemList',
+          name: unifiedCourse.baseTitle,
+          description: `Varianti del corso ${unifiedCourse.baseTitle}`,
+          numberOfItems: unifiedCourse.variants.length,
+          itemListElement: unifiedCourse.variants.map((v, i) => ({
+            '@type': 'ListItem',
+            position: i + 1,
+            item: {
+              '@type': 'Course',
+              name: `${v.title} - ${getLabel(v.riskLevel)}`,
+              description: v.shortDescription,
+              provider: { '@type': 'Organization', name: brand.displayName },
+              hasCourseInstance: { '@type': 'CourseInstance', duration: `PT${v.duration}H` },
+            }
+          }))
+        }}
+      />
       <PublicHeader />
 
       {/* Course Header */}
@@ -248,7 +278,7 @@ export const UnifiedCourseDetailPage: React.FC = () => {
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-500 to-blue-600">
+                  <div className="w-full h-full flex items-center justify-center" style={{ backgroundImage: 'linear-gradient(to bottom right, var(--color-primary-700), var(--color-primary-600))' }}>
                     <Award className="w-24 h-24 text-white/80" />
                   </div>
                 )}
@@ -258,7 +288,7 @@ export const UnifiedCourseDetailPage: React.FC = () => {
             {/* Course Info */}
             <div>
               <div className="flex flex-wrap gap-2 mb-4">
-                <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-600 text-white">
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-primary-700 text-white">
                   {unifiedCourse.category}
                 </span>
                 {unifiedCourse.subcategory && (
@@ -397,9 +427,9 @@ export const UnifiedCourseDetailPage: React.FC = () => {
                   {/* Group Header */}
                   <div className="flex items-center gap-3 mb-4">
                     {courseType === 'PRIMO_CORSO' ? (
-                      <GraduationCap className="w-5 h-5 text-blue-600" />
+                      <GraduationCap className="w-5 h-5 text-primary-600" />
                     ) : (
-                      <RefreshCw className="w-5 h-5 text-purple-600" />
+                      <RefreshCw className="w-5 h-5 text-primary-600" />
                     )}
                     <h3 className="text-lg font-semibold text-gray-800">
                       {getCourseTypeLabel(courseType)}
@@ -420,7 +450,7 @@ export const UnifiedCourseDetailPage: React.FC = () => {
                           document.getElementById('contact-form')?.scrollIntoView({ behavior: 'smooth' });
                         }}
                         className={`bg-white rounded-xl shadow-sm border-2 overflow-hidden cursor-pointer transition-all hover:shadow-md ${selectedVariant?.id === variant.id
-                          ? 'border-blue-500 ring-2 ring-blue-200'
+                          ? 'border-primary-500 ring-2 ring-primary-200'
                           : 'border-gray-200 hover:border-gray-300'
                           }`}
                       >
@@ -481,7 +511,7 @@ export const UnifiedCourseDetailPage: React.FC = () => {
               <p className="text-gray-600">Nessuna variante corrisponde ai filtri selezionati.</p>
               <button
                 onClick={() => { setFilterRiskLevel(null); setFilterCourseType(null); }}
-                className="mt-4 text-blue-600 hover:text-blue-700 text-sm font-medium"
+                className="mt-4 text-primary-600 hover:text-primary-700 text-sm font-medium"
               >
                 Rimuovi filtri
               </button>
@@ -491,7 +521,7 @@ export const UnifiedCourseDetailPage: React.FC = () => {
       </section>
 
       {/* Contact Form */}
-      <section id="contact-form" className="py-12 bg-gradient-to-br from-blue-50 to-indigo-100">
+      <section id="contact-form" className="py-12" style={{ backgroundImage: 'linear-gradient(to bottom right, var(--color-accent-50), var(--color-accent-100))' }}>
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="bg-white rounded-2xl shadow-xl p-8">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Richiedi Informazioni</h2>
@@ -504,7 +534,7 @@ export const UnifiedCourseDetailPage: React.FC = () => {
                   name="requestType"
                   value={requestForm.requestType}
                   onChange={handleInputChange}
-                  className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-4 py-3 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20"
+                  className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-4 py-3 shadow-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-500 focus:ring-opacity-20"
                 >
                   <option value="info">Richiesta Informazioni</option>
                   <option value="preventivo">Richiesta Preventivo</option>
@@ -523,7 +553,7 @@ export const UnifiedCourseDetailPage: React.FC = () => {
                     onChange={handleInputChange}
                     required
                     placeholder="Mario Rossi"
-                    className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-4 py-3 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20"
+                    className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-4 py-3 shadow-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-500 focus:ring-opacity-20"
                   />
                 </div>
                 <div>
@@ -536,7 +566,7 @@ export const UnifiedCourseDetailPage: React.FC = () => {
                     onChange={handleInputChange}
                     required
                     placeholder="mario.rossi@email.com"
-                    className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-4 py-3 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20"
+                    className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-4 py-3 shadow-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-500 focus:ring-opacity-20"
                   />
                 </div>
               </div>
@@ -551,7 +581,7 @@ export const UnifiedCourseDetailPage: React.FC = () => {
                     value={requestForm.phone}
                     onChange={handleInputChange}
                     placeholder="+39 333 1234567"
-                    className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-4 py-3 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20"
+                    className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-4 py-3 shadow-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-500 focus:ring-opacity-20"
                   />
                 </div>
                 <div>
@@ -563,7 +593,7 @@ export const UnifiedCourseDetailPage: React.FC = () => {
                     value={requestForm.company}
                     onChange={handleInputChange}
                     placeholder="Nome Azienda S.r.l."
-                    className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-4 py-3 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20"
+                    className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-4 py-3 shadow-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-500 focus:ring-opacity-20"
                   />
                 </div>
               </div>
@@ -577,7 +607,7 @@ export const UnifiedCourseDetailPage: React.FC = () => {
                   value={requestForm.message}
                   onChange={handleInputChange}
                   placeholder="Scrivi qui la tua richiesta..."
-                  className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-4 py-3 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20 resize-none"
+                  className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-4 py-3 shadow-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-500 focus:ring-opacity-20 resize-none"
                 />
               </div>
 
@@ -588,7 +618,7 @@ export const UnifiedCourseDetailPage: React.FC = () => {
                   name="selectedVariant"
                   value={requestForm.selectedVariant}
                   onChange={handleInputChange}
-                  className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-4 py-3 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20"
+                  className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-4 py-3 shadow-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-500 focus:ring-opacity-20"
                 >
                   {unifiedCourse.variants.map((variant) => (
                     <option key={variant.id} value={variant.id}>

@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { apiDelete } from '../../../services/api';
 import { useToast } from '../../../hooks/useToast';
+import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 
 /**
  * Hook per la gestione delle operazioni CRUD sulle entità
@@ -31,23 +32,30 @@ export const useEntityOperations = ({
   refreshData
 }: UseEntityOperationsProps): UseEntityOperationsReturn => {
   const { showToast } = useToast();
+  const { confirm: showConfirmDialog } = useConfirmDialog();
 
   // Conferma eliminazione singola
   const confirmDelete = useCallback(async (id: string, entityName?: string): Promise<boolean> => {
     const displayName = entityName || `${entityDisplayNameSingular} con ID ${id}`;
-    return window.confirm(`Sei sicuro di voler eliminare ${displayName}?`);
-  }, [entityDisplayNameSingular]);
+    return showConfirmDialog({
+      title: 'Conferma eliminazione',
+      message: `Sei sicuro di voler eliminare ${displayName}?`,
+      variant: 'danger'
+    });
+  }, [entityDisplayNameSingular, showConfirmDialog]);
 
   // Conferma eliminazione multipla
   const confirmDeleteMultiple = useCallback(async (count: number): Promise<boolean> => {
-    return window.confirm(`Sei sicuro di voler eliminare ${count} ${entityDisplayNamePlural.toLowerCase()}?`);
-  }, [entityDisplayNamePlural]);
+    return showConfirmDialog({
+      title: 'Conferma eliminazione',
+      message: `Sei sicuro di voler eliminare ${count} ${entityDisplayNamePlural.toLowerCase()}?`,
+      variant: 'danger'
+    });
+  }, [entityDisplayNamePlural, showConfirmDialog]);
 
   // Eliminazione singola
   const handleDelete = useCallback(async (id: string): Promise<void> => {
     try {
-      console.log(`🗑️ Eliminazione ${entityDisplayNameSingular} con ID:`, id);
-      
       // Conferma eliminazione
       const confirmed = await confirmDelete(id);
       if (!confirmed) return;
@@ -67,20 +75,19 @@ export const useEntityOperations = ({
 
       // Ricarica i dati
       await refreshData();
-      
-    } catch (error: any) {
-      console.error(`❌ Errore eliminazione ${entityDisplayNameSingular}:`, error);
+
+    } catch (error: unknown) {
       showToast({
-        message: `Errore durante l'eliminazione: ${error instanceof Error ? error.message : 'Errore sconosciuto'}`,
+        message: `Errore durante l'eliminazione: ${'Errore sconosciuto'}`,
         type: 'error'
       });
     }
   }, [
-    entityDisplayNameSingular, 
-    confirmDelete, 
-    onDeleteEntity, 
-    apiEndpoint, 
-    showToast, 
+    entityDisplayNameSingular,
+    confirmDelete,
+    onDeleteEntity,
+    apiEndpoint,
+    showToast,
     refreshData
   ]);
 
@@ -89,8 +96,6 @@ export const useEntityOperations = ({
     if (selectedIds.length === 0) return;
 
     try {
-      console.log(`🗑️ Eliminazione multipla ${entityDisplayNamePlural}:`, selectedIds);
-      
       // Conferma eliminazione
       const confirmed = await confirmDeleteMultiple(selectedIds.length);
       if (!confirmed) return;
@@ -113,20 +118,19 @@ export const useEntityOperations = ({
 
       // Ricarica i dati
       await refreshData();
-      
-    } catch (error: any) {
-      console.error(`❌ Errore eliminazione multipla ${entityDisplayNamePlural}:`, error);
+
+    } catch (error: unknown) {
       showToast({
-        message: `Errore durante l'eliminazione multipla: ${error instanceof Error ? error.message : 'Errore sconosciuto'}`,
+        message: `Errore durante l'eliminazione multipla: ${'Errore sconosciuto'}`,
         type: 'error'
       });
     }
   }, [
-    entityDisplayNamePlural, 
-    confirmDeleteMultiple, 
-    onDeleteEntity, 
-    apiEndpoint, 
-    showToast, 
+    entityDisplayNamePlural,
+    confirmDeleteMultiple,
+    onDeleteEntity,
+    apiEndpoint,
+    showToast,
     refreshData
   ]);
 

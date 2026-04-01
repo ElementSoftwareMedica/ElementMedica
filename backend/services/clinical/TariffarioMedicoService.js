@@ -97,7 +97,11 @@ export class TariffarioMedicoService {
                             firstName: true,
                             lastName: true,
                             taxCode: true,
-                            specialties: true
+                            tenantProfiles: {
+                                where: { deletedAt: null, isActive: true },
+                                select: { specialties: true, isPrimary: true },
+                                take: 1
+                            }
                         }
                     },
                     convenzione: {
@@ -360,8 +364,11 @@ export class TariffarioMedicoService {
 
     /**
      * Ottiene tutti i tariffari per tenant con paginazione
-     * @param {string} tenantId - ID del tenant
+     * @param {string} tenantId - Primary tenant ID (fallback)
      * @param {Object} options - Opzioni di query
+     * @param {string} options.tenantIds - Comma-separated list of tenant IDs (multi-tenant support)
+     * @param {boolean} options.allTenants - If true and accessibleTenantIds provided, show all
+     * @param {string[]} options.accessibleTenantIds - Array of tenant IDs the user can access
      * @returns {Promise<Object>} Lista con paginazione
      */
     static async getAll(tenantId, options = {}) {
@@ -372,7 +379,10 @@ export class TariffarioMedicoService {
                 medicoId,
                 brancaSpecialistica,
                 convenzioneId,
-                attivo
+                attivo,
+                tenantIds = null,
+                allTenants = false,
+                accessibleTenantIds = []
             } = options;
 
             // Converti in numeri interi (query params arrivano come stringhe)
@@ -380,9 +390,33 @@ export class TariffarioMedicoService {
             const limit = parseInt(limitStr, 10) || 20;
             const skip = (page - 1) * limit;
 
+            // Determine tenant filter based on user's access (multi-tenant support)
+            let tenantFilter = {};
+
+            if (tenantIds) {
+                const requestedIds = Array.isArray(tenantIds)
+                    ? tenantIds
+                    : (typeof tenantIds === 'string' ? tenantIds.split(',').map(id => id.trim()) : []);
+                const allowedIds = accessibleTenantIds.length > 0
+                    ? requestedIds.filter(id => accessibleTenantIds.includes(id))
+                    : requestedIds;
+
+                if (allowedIds.length > 0) {
+                    tenantFilter = allowedIds.length === 1
+                        ? { tenantId: allowedIds[0] }
+                        : { tenantId: { in: allowedIds } };
+                } else {
+                    tenantFilter = tenantId ? { tenantId } : {};
+                }
+            } else if (allTenants && accessibleTenantIds.length > 0) {
+                tenantFilter = { tenantId: { in: accessibleTenantIds } };
+            } else if (tenantId) {
+                tenantFilter = { tenantId };
+            }
+
             const where = {
-                tenantId,
-                deletedAt: null
+                deletedAt: null,
+                ...tenantFilter
             };
 
             if (medicoId) where.medicoId = medicoId;
@@ -400,7 +434,11 @@ export class TariffarioMedicoService {
                                 firstName: true,
                                 lastName: true,
                                 taxCode: true,
-                                specialties: true
+                                tenantProfiles: {
+                                    where: { deletedAt: null, isActive: true },
+                                    select: { specialties: true, isPrimary: true },
+                                    take: 1
+                                }
                             }
                         },
                         convenzione: {

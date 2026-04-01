@@ -19,6 +19,11 @@ class RequestThrottler {
   private lastRequestTime = new Map<string, number>();
   private readonly minInterval = 100; // Minimo 100ms tra richieste dello stesso tipo
 
+  /** Log solo in development — R26: no console.log in produzione */
+  private log(message: string): void {
+    if (import.meta.env.DEV) console.debug(message);
+  }
+
   /**
    * Aggiunge una richiesta alla coda con throttling
    */
@@ -31,79 +36,107 @@ class RequestThrottler {
 
     // Le richieste di autenticazione hanno priorità massima e non vengono mai throttled
     if (requestKey.startsWith('auth-')) {
-      console.log(`🔐 RequestThrottler: Auth request detected for ${url}, executing immediately`);
+      this.log(`🔐 RequestThrottler: Auth request detected for ${url}, executing immediately`);
+      return this.executeRequest(url, requestFn);
+    }
+
+    // ✅ FIX: Clinica requests are critical for calendar, execute immediately
+    // Slots, appuntamenti, ambulatori, medici - evita problemi di refresh calendario
+    if (requestKey.includes('clinica') || requestKey.includes('slots') || requestKey.includes('appuntamenti')) {
+      this.log(`🏥 RequestThrottler: Clinica request detected for ${url}, executing immediately`);
       return this.executeRequest(url, requestFn);
     }
 
     // Le richieste di permessi e ruoli sono critiche e non devono essere throttled
     if (requestKey.startsWith('roles-') || requestKey.startsWith('permissions-') || requestKey.includes('permissions')) {
-      console.log(`🔑 RequestThrottler: Critical permissions request detected for ${url}, executing immediately`);
+      this.log(`🔑 RequestThrottler: Critical permissions request detected for ${url}, executing immediately`);
       return this.executeRequest(url, requestFn);
     }
 
     // Batch delete operations should not be throttled
     if (url.includes('/batch-delete') || url.includes('/persons/batch')) {
-      console.log(`🗑️ RequestThrottler: Batch delete request detected for ${url}, executing immediately`);
+      this.log(`🗑️ RequestThrottler: Batch delete request detected for ${url}, executing immediately`);
       return this.executeRequest(url, requestFn);
     }
 
     // Eccezione specifica: bulk import corsi non deve essere throttled
     if (requestKey === 'courses-bulk-import') {
-      console.log(`📦 RequestThrottler: Bulk import request detected for ${url}, executing immediately`);
+      this.log(`📦 RequestThrottler: Bulk import request detected for ${url}, executing immediately`);
+      return this.executeRequest(url, requestFn);
+    }
+
+    // ✅ FIX: Courses requests are critical for import modal and course pages, execute immediately
+    // Evita timeout durante l'import corsi
+    if (requestKey.includes('courses')) {
+      this.log(`📚 RequestThrottler: Courses request detected for ${url}, executing immediately`);
       return this.executeRequest(url, requestFn);
     }
 
     // ✅ FIX: Schedules requests are critical for page rendering, execute immediately
     // Evita race conditions tra preloader e componente che causano dati intermittenti
     if (requestKey.includes('schedules')) {
-      console.log(`📅 RequestThrottler: Schedules request detected for ${url}, executing immediately`);
+      this.log(`📅 RequestThrottler: Schedules request detected for ${url}, executing immediately`);
       return this.executeRequest(url, requestFn);
     }
 
     // ✅ FIX: Templates requests are critical for editor, execute immediately
     // Evita timeout quando si apre l'editor dei template
     if (requestKey.includes('templates')) {
-      console.log(`📄 RequestThrottler: Templates request detected for ${url}, executing immediately`);
+      this.log(`📄 RequestThrottler: Templates request detected for ${url}, executing immediately`);
       return this.executeRequest(url, requestFn);
     }
 
     // ✅ FIX: Companies, company-sites and persons requests are critical for forms/modals, execute immediately
     // Evita timeout quando si aprono modali con selezione dipendenti/aziende o caricamento sedi
     if (requestKey.includes('companies') || requestKey.includes('company-sites') || requestKey.includes('persons')) {
-      console.log(`👥 RequestThrottler: Companies/CompanySites/Persons request detected for ${url}, executing immediately`);
+      this.log(`👥 RequestThrottler: Companies/CompanySites/Persons request detected for ${url}, executing immediately`);
       return this.executeRequest(url, requestFn);
     }
 
     // ✅ FIX: Preventivi requests are critical for finance section, execute immediately
     // Evita timeout quando si caricano i preventivi
     if (requestKey.includes('preventivi')) {
-      console.log(`💰 RequestThrottler: Preventivi request detected for ${url}, executing immediately`);
+      this.log(`💰 RequestThrottler: Preventivi request detected for ${url}, executing immediately`);
       return this.executeRequest(url, requestFn);
     }
 
     // ✅ FIX: Codici sconto requests are critical for discount management, execute immediately
     // Evita timeout quando si caricano/validano i codici sconto
     if (requestKey.includes('codici-sconto')) {
-      console.log(`🏷️ RequestThrottler: Codici sconto request detected for ${url}, executing immediately`);
+      this.log(`🏷️ RequestThrottler: Codici sconto request detected for ${url}, executing immediately`);
       return this.executeRequest(url, requestFn);
     }
 
     // ✅ FIX: Logs and activity requests are critical for system monitoring, execute immediately
     // Evita timeout nella pagina SystemLogsPage
     if (requestKey.includes('logs') || requestKey.includes('activity')) {
-      console.log(`📊 RequestThrottler: Logs/Activity request detected for ${url}, executing immediately`);
+      this.log(`📊 RequestThrottler: Logs/Activity request detected for ${url}, executing immediately`);
+      return this.executeRequest(url, requestFn);
+    }
+
+    // ✅ FIX: Submissions requests are critical for contact form notifications, execute immediately
+    // Evita timeout nel badge di notifiche header (useNewSubmissionsCount)
+    if (requestKey.includes('submissions')) {
+      this.log(`📬 RequestThrottler: Submissions request detected for ${url}, executing immediately`);
+      return this.executeRequest(url, requestFn);
+    }
+
+    // ✅ FIX: Tenants requests are critical for multi-tenant context initialization, execute immediately
+    // Evita timeout nel TenantFilterContext e TenantModeContext
+    if (requestKey.includes('tenants')) {
+      this.log(`🏢 RequestThrottler: Tenants request detected for ${url}, executing immediately`);
       return this.executeRequest(url, requestFn);
     }
 
     // Controlla se c'è già una richiesta identica in corso
     if (this.activeRequests.has(requestKey)) {
-      console.log(`🔄 RequestThrottler: Duplicate request detected for ${url}, waiting...`);
+      this.log(`🔄 RequestThrottler: Duplicate request detected for ${url}, waiting...`);
       await this.waitForRequest(requestKey);
     }
 
     // Controlla rate limiting per tipo di richiesta
     if (this.shouldThrottle(requestKey)) {
-      console.log(`⏳ RequestThrottler: Rate limiting ${url}, queuing...`);
+      this.log(`⏳ RequestThrottler: Rate limiting ${url}, queuing...`);
       return this.queueRequest(url, requestFn, priority);
     }
 
@@ -120,11 +153,11 @@ class RequestThrottler {
       this.activeRequests.add(requestKey);
       this.updateRequestStats(requestKey);
 
-      console.log(`🚀 RequestThrottler: Executing ${url} (active: ${this.activeRequests.size})`);
+      this.log(`🚀 RequestThrottler: Executing ${url} (active: ${this.activeRequests.size})`);
 
       const result = await requestFn();
 
-      console.log(`✅ RequestThrottler: Completed ${url}`);
+      this.log(`✅ RequestThrottler: Completed ${url}`);
       return result;
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -181,7 +214,7 @@ class RequestThrottler {
         this.pendingQueue.splice(insertIndex, 0, request);
       }
 
-      console.log(`📋 RequestThrottler: Queued ${url} (queue size: ${this.pendingQueue.length})`);
+      this.log(`📋 RequestThrottler: Queued ${url} (queue size: ${this.pendingQueue.length})`);
     });
   }
 
@@ -272,7 +305,7 @@ class RequestThrottler {
     // Ripristina dopo 10 secondi
     setTimeout(() => {
       this.maxConcurrentRequests = Math.min(3, this.maxConcurrentRequests + 1);
-      console.log(`🔄 RequestThrottler: Restored concurrent requests to ${this.maxConcurrentRequests}`);
+      this.log(`🔄 RequestThrottler: Restored concurrent requests to ${this.maxConcurrentRequests}`);
     }, 10000);
   }
 
@@ -364,7 +397,7 @@ class RequestThrottler {
     this.requestCounts.clear();
     this.lastRequestTime.clear();
     this.maxConcurrentRequests = 3;
-    console.log('🔄 RequestThrottler: Reset completed');
+    this.log('🔄 RequestThrottler: Reset completed');
   }
 }
 

@@ -30,8 +30,11 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('ErrorBoundary caught an error:', error, errorInfo);
-    
+    // Log to console always (visible in browser DevTools in production)
+    console.error('[ErrorBoundary] Caught error:', error.name, error.message);
+    console.error('[ErrorBoundary] Stack:', error.stack);
+    console.error('[ErrorBoundary] Component stack:', errorInfo.componentStack);
+
     // Call optional error handler
     if (this.props.onError) {
       this.props.onError(error, errorInfo);
@@ -57,37 +60,37 @@ export class ErrorBoundary extends Component<Props, State> {
         )}>
           <div className="text-red-600 mb-4">
             <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
-                strokeWidth={2} 
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" 
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
               />
             </svg>
           </div>
-          
+
           <h3 className="text-lg font-semibold text-red-800 mb-2">
-            Something went wrong
+            Si è verificato un errore
           </h3>
-          
+
           <p className="text-red-600 text-center mb-4 max-w-md">
-            We encountered an error while loading this component. Please try again.
+            Si è verificato un errore durante il caricamento di questo componente. Riprova.
           </p>
-          
-          {process.env.NODE_ENV === 'development' && this.state.error && (
+
+          {this.state.error && (
             <details className="mb-4 p-3 bg-red-100 rounded text-sm text-red-800 max-w-full overflow-auto">
-              <summary className="cursor-pointer font-medium">Error Details</summary>
+              <summary className="cursor-pointer font-medium">Dettagli errore (copia per il supporto)</summary>
               <pre className="mt-2 whitespace-pre-wrap">
-                {sanitizeErrorMessage(this.state.error, 'Si è verificato un errore nell\'applicazione')}\n{process.env.NODE_ENV === 'development' ? this.state.error.stack : ''}
+                {this.state.error.name}: {this.state.error.message}{process.env.NODE_ENV === 'development' && this.state.error.stack ? `\n${this.state.error.stack}` : ''}
               </pre>
             </details>
           )}
-          
+
           <button
             onClick={this.handleRetry}
             className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
           >
-            Try Again
+            Riprova
           </button>
         </div>
       );
@@ -109,9 +112,9 @@ export const withErrorBoundary = <P extends object>(
       <Component {...props} />
     </ErrorBoundary>
   );
-  
+
   WrappedComponent.displayName = `withErrorBoundary(${Component.displayName || Component.name})`;
-  
+
   return WrappedComponent;
 };
 

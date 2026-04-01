@@ -67,7 +67,8 @@ La configurazione delle API è centralizzata in `src/config/api/index.ts`. Tutti
 
 ```typescript
 // src/config/api/index.ts
-export const API_BASE_URL = 'http://localhost:4003'; // Proxy server
+// P64: Direct connection to API server (proxy eliminated)
+export const API_BASE_URL = 'http://localhost:4001'; // API server direct
 
 export const API_ENDPOINTS = {
   EMPLOYEES: '/employees',
@@ -106,13 +107,14 @@ const fetchData = async () => {
 
 ## Architettura del Server
 
-I servizi comunicano con i server attraverso un proxy centralizzato:
+I servizi comunicano direttamente con i server backend:
 
 - **API Server** (porta 4001): operazioni CRUD principali
 - **Documents Server** (porta 4002): generazione di documenti
-- **Proxy Server** (porta 4003): punto di ingresso centralizzato
 
-Tutte le chiamate dal frontend passano per il Proxy Server, che si occupa dell'instradamento.
+> **P64**: Proxy server (4003) eliminato - In development Vite proxy route direttamente a 4001, in production Nginx gestisce il routing.
+
+Tutte le chiamate dal frontend vanno direttamente all'API Server tramite il proxy Vite (dev) o Nginx (production).
 
 ## Aggiungere un Nuovo Servizio
 

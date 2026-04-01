@@ -194,16 +194,22 @@ const backupService = {
 
     /**
      * Esegue restore
+     * @param tempPath - Path del file backup uploadato
+     * @param entities - Entità da ripristinare (opzionale, tutte se non specificato)
+     * @param overwrite - Sovrascrivi record esistenti
+     * @param useCurrentTenant - Se true, forza tutti i dati sul tenant corrente
      */
     async restoreBackup(
         tempPath: string,
         entities?: string[],
-        overwrite = false
+        overwrite = false,
+        useCurrentTenant = true
     ): Promise<RestoreResult> {
         const response = await api.post<ApiResponse<RestoreResult>>('/api/v1/backup/restore', {
             tempPath,
             entities,
-            overwrite
+            overwrite,
+            useCurrentTenant
         });
         return response.data.data;
     },

@@ -7,11 +7,11 @@ import express from 'express';
 import { JWTService, PasswordService } from './jwt.js';
 import middleware from './middleware.js';
 const { authenticate, authorize, rateLimit, auditLog } = middleware;
-import { authenticateTest } from './middleware-test.js';
 import prisma from '../config/prisma-optimization.js';
 import crypto from 'crypto';
 import { body, validationResult } from 'express-validator';
 import logger from '../utils/logger.js';
+import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 
 const router = express.Router();
 
@@ -24,7 +24,7 @@ const validateRequest = (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
         return res.status(400).json({
-            error: 'Validation failed',
+            error: 'Validazione fallita',
             code: 'VALIDATION_ERROR',
             details: errors.array()
         });
@@ -50,31 +50,18 @@ function getDeviceInfo(req) {
  */
 // Debug middleware rimosso per evitare problemi
 
-router.post('/login', 
-    rateLimit({ maxRequests: 100, windowMs: 15 * 60 * 1000 }), // 100 attempts per 15 minutes (temporary for testing)
-    // Debug middleware specifico per login
-    (req, res, next) => {
-        console.log('🔍 [LOGIN HANDLER] Request body debug:', {
-            bodyExists: !!req.body,
-            bodyType: typeof req.body,
-            bodyKeys: req.body ? Object.keys(req.body) : 'N/A',
-            bodyContent: req.body,
-            contentType: req.get('Content-Type'),
-            method: req.method,
-            url: req.url
-        });
-        next();
-    },
+router.post('/login',
+    rateLimit({ maxRequests: 10, windowMs: 15 * 60 * 1000 }), // 10 attempts per 15 minutes - SECURITY HARDENED
     [
-        body('identifier').isLength({ min: 1 }).withMessage('Email, username, or tax code is required'),
-        body('password').isLength({ min: 1 }).withMessage('Password must be at least 6 characters long')
+        body('identifier').isLength({ min: 1 }).withMessage('Email, username o codice fiscale obbligatorio'),
+        body('password').isLength({ min: 1 }).withMessage('La password deve essere di almeno 6 caratteri')
     ],
     (req, res, next) => {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
-            console.log('🔍 [LOGIN HANDLER] Validation errors:', errors.array());
+            // Security: No debug logging in production
             return res.status(400).json({
-                error: 'Validation failed',
+                error: 'Validazione fallita',
                 code: 'VALIDATION_ERROR',
                 details: errors.array()
             });
@@ -87,37 +74,75 @@ router.post('/login',
             const { identifier, password, rememberMe = false } = req.body;
             const deviceInfo = getDeviceInfo(req);
 
-            // Find person with roles by identifier (email, username, or taxCode)
-            const person = await prisma.person.findFirst({
+            // P48: Prima cerca per username o taxCode (campi globali in Person)
+            let person = await prisma.person.findFirst({
                 where: {
                     OR: [
-                        { email: identifier },
                         { username: identifier },
                         { taxCode: identifier }
-                    ]
+                    ],
+                    deletedAt: null
                 },
                 include: {
                     personRoles: {
-                        where: { isActive: true },
+                        where: { isActive: true, deletedAt: null },
                         include: {
                             permissions: true
                         }
                     },
-                    company: true
+                    tenantProfiles: {
+                        where: { deletedAt: null, isActive: true },
+                        select: { email: true, phone: true, status: true, isPrimary: true, tenantId: true, companyTenantProfileId: true }
+                    }
                 }
             });
 
+            // P48: Se non trovato, cerca per email in PersonTenantProfile
+            if (!person) {
+                const profile = await prisma.personTenantProfile.findFirst({
+                    where: {
+                        email: identifier.toLowerCase(),
+                        deletedAt: null,
+                        isActive: true,
+                        status: 'ACTIVE'
+                    },
+                    include: {
+                        person: {
+                            include: {
+                                personRoles: {
+                                    where: { isActive: true, deletedAt: null },
+                                    include: {
+                                        permissions: true
+                                    }
+                                },
+                                tenantProfiles: {
+                                    where: { deletedAt: null, isActive: true },
+                                    select: { email: true, phone: true, status: true, isPrimary: true, tenantId: true, companyTenantProfileId: true }
+                                }
+                            }
+                        }
+                    }
+                });
+                if (profile?.person) {
+                    person = profile.person;
+                }
+            }
+
             if (!person) {
                 return res.status(401).json({
-                    error: 'Invalid credentials',
+                    error: 'Credenziali non valide',
                     code: 'AUTH_INVALID_CREDENTIALS'
                 });
             }
 
-            // Check if person is active
-            if (person.status !== 'ACTIVE') {
+            // P48: Flatten email/status da tenantProfiles
+            const primaryProfile = person.tenantProfiles?.find(p => p.isPrimary) || person.tenantProfiles?.[0] || {};
+            const personStatus = primaryProfile.status || 'PENDING';
+
+            // Check if person is active (P48: usa status da profile)
+            if (personStatus !== 'ACTIVE') {
                 return res.status(401).json({
-                    error: 'Account is deactivated',
+                    error: 'Account disattivato',
                     code: 'AUTH_ACCOUNT_DEACTIVATED'
                 });
             }
@@ -125,7 +150,7 @@ router.post('/login',
             // Check if account is locked
             if (person.lockedUntil && person.lockedUntil > new Date()) {
                 return res.status(423).json({
-                    error: 'Account is temporarily locked',
+                    error: 'Account temporaneamente bloccato',
                     code: 'AUTH_ACCOUNT_LOCKED',
                     lockedUntil: person.lockedUntil
                 });
@@ -133,7 +158,7 @@ router.post('/login',
 
             // Verify password
             const isValidPassword = await PasswordService.verifyPassword(password, person.password);
-            
+
             if (!isValidPassword) {
                 // Increment failed login attempts
                 const failedAttempts = (person.failedAttempts || 0) + 1;
@@ -152,7 +177,7 @@ router.post('/login',
                 });
 
                 return res.status(401).json({
-                    error: 'Invalid credentials',
+                    error: 'Credenziali non valide',
                     code: 'AUTH_INVALID_CREDENTIALS',
                     attemptsRemaining: Math.max(0, 5 - failedAttempts)
                 });
@@ -171,14 +196,20 @@ router.post('/login',
             // Prepare person data with roles and permissions
             const roles = person.personRoles.map(pr => pr.roleType);
             const permissions = person.personRoles.flatMap(pr => pr.permissions || []);
-            
+
             // Add global role if present
             if (person.globalRole) {
                 roles.push(person.globalRole);
             }
 
+            // P63: tenantId SOLO da PersonTenantProfile (Person.tenantId RIMOSSO)
+            const effectiveTenantId = primaryProfile.tenantId ||
+                person.personRoles?.find(r => r.tenantId)?.tenantId ||
+                null;
+
             const personWithRoles = {
                 ...person,
+                tenantId: effectiveTenantId, // Override with effective tenantId
                 roles,
                 permissions
             };
@@ -203,20 +234,22 @@ router.post('/login',
             res.cookie('refreshToken', tokens.refreshToken, cookieOptions);
             res.cookie('sessionToken', tokens.sessionToken, cookieOptions);
 
-            // Return person info and tokens
+            // Return person info and tokens (P49: usa companyTenantProfileId da primaryProfile)
             res.json({
                 success: true,
+                mustChangePassword: person.mustChangePassword || false,
                 user: {
                     id: person.id,
-                    email: person.email,
+                    email: primaryProfile.email || null,
                     firstName: person.firstName,
                     lastName: person.lastName,
-                    companyId: person.companyId,
-                    company: person.company,
+                    companyTenantProfileId: primaryProfile.companyTenantProfileId || null,
+                    companyId: primaryProfile.companyTenantProfileId || null, // backward compatibility alias
                     roles,
                     permissions,
                     globalRole: person.globalRole,
-                    lastLogin: person.lastLogin
+                    lastLogin: person.lastLogin,
+                    mustChangePassword: person.mustChangePassword || false
                 },
                 tokens: {
                     accessToken: tokens.accessToken,
@@ -236,7 +269,7 @@ router.post('/login',
                 ip: req.ip
             });
             res.status(500).json({
-                error: 'Login failed',
+                error: 'Accesso fallito',
                 code: 'AUTH_LOGIN_FAILED'
             });
         }
@@ -252,10 +285,10 @@ router.post('/logout',
     auditLog('LOGOUT', 'auth'),
     async (req, res) => {
         try {
-            const sessionToken = req.cookies?.sessionToken;
-            
-            if (sessionToken) {
-                await JWTService.revokeSession(sessionToken);
+            // F299: revoke the refresh token (stored in DB), NOT the sessionToken which is never persisted
+            const refreshToken = req.body.refreshToken || req.cookies?.refreshToken;
+            if (refreshToken) {
+                await JWTService.revokeSession(refreshToken);
             }
 
             // Clear cookies
@@ -265,7 +298,7 @@ router.post('/logout',
 
             res.json({
                 success: true,
-                message: 'Logged out successfully'
+                message: 'Disconnessione effettuata con successo'
             });
 
         } catch (error) {
@@ -277,7 +310,7 @@ router.post('/logout',
                 personId: req.person?.id
             });
             res.status(500).json({
-                error: 'Logout failed',
+                error: 'Disconnessione fallita',
                 code: 'AUTH_LOGOUT_FAILED'
             });
         }
@@ -302,7 +335,7 @@ router.post('/logout-all',
 
             res.json({
                 success: true,
-                message: 'Logged out from all devices'
+                message: 'Disconnessione da tutti i dispositivi effettuata'
             });
 
         } catch (error) {
@@ -314,7 +347,7 @@ router.post('/logout-all',
                 personId: req.person?.id
             });
             res.status(500).json({
-                error: 'Logout failed',
+                error: 'Disconnessione fallita',
                 code: 'AUTH_LOGOUT_ALL_FAILED'
             });
         }
@@ -333,20 +366,31 @@ router.post('/refresh',
 
             if (!refreshToken) {
                 return res.status(401).json({
-                    error: 'Refresh token required',
+                    error: 'Token di refresh obbligatorio',
                     code: 'AUTH_REFRESH_TOKEN_MISSING'
                 });
             }
 
             const tokens = await JWTService.refreshAccessToken(refreshToken);
 
-            // Update access token cookie
-            res.cookie('accessToken', tokens.accessToken, {
+            const isProd = process.env.NODE_ENV === 'production';
+            const cookieBase = {
                 httpOnly: true,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax', // lax in development for cross-port requests
-                maxAge: 15 * 60 * 1000, // 15 minutes
-                path: '/' // align cookie path with login
+                secure: isProd,
+                sameSite: isProd ? 'strict' : 'lax',
+                path: '/'
+            };
+
+            // Update access token cookie (short-lived)
+            res.cookie('accessToken', tokens.accessToken, {
+                ...cookieBase,
+                maxAge: 15 * 60 * 1000 // 15 minutes
+            });
+
+            // Rotate refresh token cookie (new token issued, old one revoked in JWTService)
+            res.cookie('refreshToken', tokens.refreshToken, {
+                ...cookieBase,
+                maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
             });
 
             res.json({
@@ -356,20 +400,20 @@ router.post('/refresh',
 
         } catch (error) {
             logger.error('Token refresh failed', {
-            component: 'auth-routes',
-            action: 'refreshToken',
-            error: error.message,
-            stack: error.stack,
-            personId: req.person?.id
-        });
-            
+                component: 'auth-routes',
+                action: 'refreshToken',
+                error: error.message,
+                stack: error.stack,
+                personId: req.person?.id
+            });
+
             // Clear invalid cookies
             res.clearCookie('accessToken', { path: '/' });
             res.clearCookie('refreshToken', { path: '/' });
             res.clearCookie('sessionToken', { path: '/' });
-            
+
             res.status(401).json({
-                error: 'Token refresh failed',
+                error: 'Aggiornamento token fallito',
                 code: 'AUTH_REFRESH_FAILED'
             });
         }
@@ -410,20 +454,24 @@ router.post('/register',
             const passwordValidation = PasswordService.validatePasswordStrength(password);
             if (!passwordValidation.isValid) {
                 return res.status(400).json({
-                    error: 'Password does not meet requirements',
+                    error: 'La password non soddisfa i requisiti',
                     code: 'AUTH_WEAK_PASSWORD',
                     details: passwordValidation.errors
                 });
             }
 
-            // Check if person already exists
-            const existingPerson = await prisma.person.findUnique({
-                where: { email }
+            // P48: Check if email already exists in PersonTenantProfile
+            const existingProfile = await prisma.personTenantProfile.findFirst({
+                where: {
+                    email: email.toLowerCase(),
+                    deletedAt: null,
+                    isActive: true
+                }
             });
 
-            if (existingPerson) {
+            if (existingProfile) {
                 return res.status(409).json({
-                    error: 'Person already exists',
+                    error: 'Persona già esistente',
                     code: 'AUTH_USER_EXISTS'
                 });
             }
@@ -432,19 +480,34 @@ router.post('/register',
             const passwordHash = await PasswordService.hashPassword(password);
 
             // Use requester's company if not specified (unless global admin)
-            const targetCompanyId = companyId || 
-                (req.person.roles.includes('global_admin') ? null : req.person.companyId);
+            // P49: usa companyTenantProfileId da req.person (impostato dal middleware auth)
+            const targetCompanyId = companyId ||
+                (req.person.roles.includes('global_admin') ? null : req.person.companyTenantProfileId);
+            const targetTenantId = getEffectiveTenantId(req);
 
-            // Create person
+            // P49: Create person with nested PersonTenantProfile
             const person = await prisma.person.create({
                 data: {
-                    email,
                     passwordHash: passwordHash,
                     firstName: firstName,
-                     lastName: lastName,
-                    companyId: targetCompanyId,
-                     employeeId: employeeId,
-                    createdBy: req.person.id
+                    lastName: lastName,
+                    createdBy: req.person.id,
+                    // P49: Crea PersonTenantProfile per email e dati tenant-specific
+                    tenantProfiles: {
+                        create: {
+                            tenantId: targetTenantId,
+                            email: email.toLowerCase(),
+                            companyTenantProfileId: targetCompanyId,
+                            status: 'ACTIVE',
+                            isPrimary: true,
+                            isActive: true
+                        }
+                    }
+                },
+                include: {
+                    tenantProfiles: {
+                        where: { deletedAt: null, isActive: true }
+                    }
                 }
             });
 
@@ -457,35 +520,40 @@ router.post('/register',
                         data: {
                             personId: person.id,
                             roleType: roleType,
-                            companyId: targetCompanyId,
+                            tenantId: targetTenantId,
+                            companyTenantProfileId: targetCompanyId,
                             assignedBy: req.person.id
                         }
                     });
                 }
             }
 
+            // P49: Flatten da tenantProfiles
+            const primaryProfile = person.tenantProfiles?.[0] || {};
+
             res.status(201).json({
                 success: true,
                 user: {
                     id: person.id,
-                    email: person.email,
+                    email: primaryProfile.email || null,
                     firstName: person.firstName,
                     lastName: person.lastName,
-                    companyId: person.companyId,
+                    companyTenantProfileId: primaryProfile.companyTenantProfileId || targetCompanyId,
+                    companyId: primaryProfile.companyTenantProfileId || targetCompanyId, // backward compatibility alias
                     roles
                 }
             });
 
         } catch (error) {
             logger.error('Registration failed', {
-            component: 'auth-routes',
-            action: 'register',
-            error: error.message,
-            stack: error.stack,
-            email: req.body?.email
-        });
+                component: 'auth-routes',
+                action: 'register',
+                error: error.message,
+                stack: error.stack,
+                email: req.body?.email
+            });
             res.status(500).json({
-                error: 'Registration failed',
+                error: 'Registrazione fallita',
                 code: 'AUTH_REGISTRATION_FAILED'
             });
         }
@@ -500,46 +568,54 @@ router.get('/me',
     authenticate(),
     async (req, res) => {
         try {
-            const person = await prisma.person.findUnique({
-                where: { id: req.person.id },
+            // P49: Include tenantProfiles per email/phone/status (company rimosso da Person)
+            const person = await prisma.person.findFirst({ // F232: findFirst+deletedAt
+                where: { id: req.person.id, deletedAt: null },
                 include: {
                     personRoles: {
-                        where: { isActive: true },
+                        where: { isActive: true, deletedAt: null },
                         include: {
-                            role: true
+                            customRole: true
                         }
                     },
-                    company: true
+                    tenantProfiles: {
+                        where: { deletedAt: null, isActive: true },
+                        select: { email: true, phone: true, status: true, isPrimary: true, companyTenantProfileId: true }
+                    }
                 }
             });
 
             if (!person) {
                 return res.status(404).json({
-                    error: 'Person not found',
+                    error: 'Persona non trovata',
                     code: 'AUTH_USER_NOT_FOUND'
                 });
             }
 
-            const roles = person.personRoles.map(pr => pr.role.name);
-            const permissions = person.personRoles.flatMap(pr => pr.role.permissions || []);
+            // P48: Flatten da tenantProfiles
+            const primaryProfile = person.tenantProfiles?.find(p => p.isPrimary) || person.tenantProfiles?.[0] || {};
+
+            // P69: Use roleType consistently (not customRole.name which is a display name)
+            const roles = person.personRoles.map(pr => pr.roleType).filter(Boolean);
+            const permissions = person.personRoles.flatMap(pr => pr.role?.permissions || []);
 
             res.json({
                 success: true,
                 user: {
                     id: person.id,
-                    email: person.email,
+                    email: primaryProfile.email || null,
                     firstName: person.firstName,
-                     lastName: person.lastName,
-                    phone: person.phone,
+                    lastName: person.lastName,
+                    phone: primaryProfile.phone || null,
                     avatarUrl: person.avatarUrl,
                     language: person.language,
                     timezone: person.timezone,
-                    companyId: person.companyId,
-                     employeeId: person.employeeId,
-                    company: person.company,
+                    companyTenantProfileId: primaryProfile.companyTenantProfileId || null,
+                    companyId: primaryProfile.companyTenantProfileId || null, // backward compatibility alias
+                    employeeId: person.employeeId,
                     roles,
                     permissions,
-                    isActive: person.status === 'ACTIVE',
+                    isActive: (primaryProfile.status || 'PENDING') === 'ACTIVE',
                     isVerified: person.isVerified,
                     lastLogin: person.lastLogin,
                     createdAt: person.createdAt
@@ -548,14 +624,14 @@ router.get('/me',
 
         } catch (error) {
             logger.error('Failed to get user profile', {
-            component: 'auth-routes',
-            action: 'getUser',
-            error: error.message,
-            stack: error.stack,
-            personId: req.person?.id
-        });
+                component: 'auth-routes',
+                action: 'getUser',
+                error: error.message,
+                stack: error.stack,
+                personId: req.person?.id
+            });
             res.status(500).json({
-                error: 'Failed to get user info',
+                error: 'Impossibile recuperare le informazioni utente',
                 code: 'AUTH_GET_USER_FAILED'
             });
         }
@@ -565,6 +641,7 @@ router.get('/me',
 /**
  * PUT /auth/me
  * Update current user profile
+ * P48: phone va in PersonTenantProfile, firstName/lastName su Person
  */
 router.put('/me',
     authenticate(),
@@ -587,28 +664,52 @@ router.put('/me',
                 timezone
             } = req.body;
 
-            const updateData = {};
-            if (firstName !== undefined) updateData.firstName = firstName;
-             if (lastName !== undefined) updateData.lastName = lastName;
-            if (phone !== undefined) updateData.phone = phone;
-            if (language !== undefined) updateData.language = language;
-            if (timezone !== undefined) updateData.timezone = timezone;
-            
-            updateData.updatedBy = req.person.id;
+            // P48: Separa campi Person (globali) da ProfileTenant (tenant-specific)
+            const personUpdateData = {};
+            if (firstName !== undefined) personUpdateData.firstName = firstName;
+            if (lastName !== undefined) personUpdateData.lastName = lastName;
+            if (language !== undefined) personUpdateData.language = language;
+            if (timezone !== undefined) personUpdateData.timezone = timezone;
+            personUpdateData.updatedBy = req.person.id;
 
             const person = await prisma.person.update({
                 where: { id: req.person.id },
-                data: updateData
+                data: personUpdateData,
+                include: {
+                    tenantProfiles: {
+                        where: { deletedAt: null, isActive: true },
+                        select: { id: true, email: true, phone: true, isPrimary: true, tenantId: true }
+                    }
+                }
             });
+
+            // P48: Aggiorna phone in PersonTenantProfile
+            let updatedPhone = null;
+            if (phone !== undefined) {
+                const primaryProfile = person.tenantProfiles?.find(p => p.isPrimary) || person.tenantProfiles?.[0];
+                if (primaryProfile) {
+                    await prisma.personTenantProfile.update({
+                        where: { id: primaryProfile.id },
+                        data: { phone }
+                    });
+                    updatedPhone = phone;
+                }
+            } else {
+                const primaryProfile = person.tenantProfiles?.find(p => p.isPrimary) || person.tenantProfiles?.[0] || {};
+                updatedPhone = primaryProfile.phone || null;
+            }
+
+            // P48: Flatten da tenantProfiles
+            const primaryProfile = person.tenantProfiles?.find(p => p.isPrimary) || person.tenantProfiles?.[0] || {};
 
             res.json({
                 success: true,
                 user: {
                     id: person.id,
-                    email: person.email,
+                    email: primaryProfile.email || null,
                     firstName: person.firstName,
-                 lastName: person.lastName,
-                    phone: person.phone,
+                    lastName: person.lastName,
+                    phone: phone !== undefined ? phone : (primaryProfile.phone || null),
                     language: person.language,
                     timezone: person.timezone
                 }
@@ -616,14 +717,14 @@ router.put('/me',
 
         } catch (error) {
             logger.error('Failed to update profile', {
-            component: 'auth-routes',
-            action: 'updateProfile',
-            error: error.message,
-            stack: error.stack,
-            personId: req.person?.id
-        });
+                component: 'auth-routes',
+                action: 'updateProfile',
+                error: error.message,
+                stack: error.stack,
+                personId: req.person?.id
+            });
             res.status(500).json({
-                error: 'Failed to update profile',
+                error: 'Impossibile aggiornare il profilo',
                 code: 'AUTH_UPDATE_PROFILE_FAILED'
             });
         }
@@ -648,15 +749,15 @@ router.post('/change-password',
             const { currentPassword, newPassword } = req.body;
 
             // Get current person
-            const person = await prisma.person.findUnique({
-                where: { id: req.person.id }
+            const person = await prisma.person.findFirst({ // F232: findFirst+deletedAt
+                where: { id: req.person.id, deletedAt: null }
             });
 
             // Verify current password
-            const isValidPassword = await PasswordService.verifyPassword(currentPassword, person.passwordHash);
+            const isValidPassword = await PasswordService.verifyPassword(currentPassword, person.password);
             if (!isValidPassword) {
                 return res.status(401).json({
-                    error: 'Current password is incorrect',
+                    error: 'Password corrente non corretta',
                     code: 'AUTH_INVALID_CURRENT_PASSWORD'
                 });
             }
@@ -665,7 +766,7 @@ router.post('/change-password',
             const passwordValidation = PasswordService.validatePasswordStrength(newPassword);
             if (!passwordValidation.isValid) {
                 return res.status(400).json({
-                    error: 'New password does not meet requirements',
+                    error: 'La nuova password non soddisfa i requisiti',
                     code: 'AUTH_WEAK_PASSWORD',
                     details: passwordValidation.errors
                 });
@@ -678,9 +779,8 @@ router.post('/change-password',
             await prisma.person.update({
                 where: { id: req.person.id },
                 data: {
-                    passwordHash: newPasswordHash,
-                    passwordChangedAt: new Date(),
-                    updatedBy: req.person.id
+                    password: newPasswordHash,
+                    mustChangePassword: false
                 }
             });
 
@@ -701,19 +801,19 @@ router.post('/change-password',
 
             res.json({
                 success: true,
-                message: 'Password changed successfully'
+                message: 'Password cambiata con successo'
             });
 
         } catch (error) {
             logger.error('Failed to change password', {
-            component: 'auth-routes',
-            action: 'changePassword',
-            error: error.message,
-            stack: error.stack,
-            personId: req.person?.id
-        });
+                component: 'auth-routes',
+                action: 'changePassword',
+                error: error.message,
+                stack: error.stack,
+                personId: req.person?.id
+            });
             res.status(500).json({
-                error: 'Failed to change password',
+                error: 'Impossibile cambiare la password',
                 code: 'AUTH_CHANGE_PASSWORD_FAILED'
             });
         }
@@ -732,6 +832,7 @@ router.get('/sessions',
                 where: {
                     personId: req.person.id,
                     isActive: true,
+                    deletedAt: null, // F255: exclude soft-deleted sessions
                     expiresAt: {
                         gt: new Date()
                     }
@@ -761,14 +862,14 @@ router.get('/sessions',
 
         } catch (error) {
             logger.error('Failed to get sessions', {
-            component: 'auth-routes',
-            action: 'getSessions',
-            error: error.message,
-            stack: error.stack,
-            personId: req.person?.id
-        });
+                component: 'auth-routes',
+                action: 'getSessions',
+                error: error.message,
+                stack: error.stack,
+                personId: req.person?.id
+            });
             res.status(500).json({
-                error: 'Failed to get sessions',
+                error: 'Impossibile recuperare le sessioni',
                 code: 'AUTH_GET_SESSIONS_FAILED'
             });
         }
@@ -799,20 +900,20 @@ router.delete('/sessions/:sessionId',
 
             res.json({
                 success: true,
-                message: 'Session revoked successfully'
+                message: 'Sessione revocata con successo'
             });
 
         } catch (error) {
             logger.error('Failed to revoke session', {
-            component: 'auth-routes',
-            action: 'revokeSession',
-            error: error.message,
-            stack: error.stack,
-            personId: req.person?.id,
-            sessionId: req.params?.sessionId
-        });
+                component: 'auth-routes',
+                action: 'revokeSession',
+                error: error.message,
+                stack: error.stack,
+                personId: req.person?.id,
+                sessionId: req.params?.sessionId
+            });
             res.status(500).json({
-                error: 'Failed to revoke session',
+                error: 'Impossibile revocare la sessione',
                 code: 'AUTH_REVOKE_SESSION_FAILED'
             });
         }
@@ -824,7 +925,7 @@ router.delete('/sessions/:sessionId',
  * GET /verify
  * Verifies if the provided token is valid
  */
-router.get('/verify', authenticateTest, async (req, res) => {
+router.get('/verify', authenticate, async (req, res) => {
     try {
         // If we reach here, the token is valid (authenticate middleware passed)
         res.json({
@@ -835,7 +936,8 @@ router.get('/verify', authenticateTest, async (req, res) => {
                 globalRole: req.person.globalRole,
                 roles: req.person.roles,
                 permissions: req.person.permissions,
-                companyId: req.person.companyId,
+                companyTenantProfileId: req.person.companyTenantProfileId,
+                companyId: req.person.companyTenantProfileId, // backward compatibility alias
                 tenantId: req.person.tenantId
             },
             timestamp: new Date().toISOString()
@@ -849,7 +951,7 @@ router.get('/verify', authenticateTest, async (req, res) => {
         });
         res.status(401).json({
             valid: false,
-            error: 'Token verification failed',
+            error: 'Verifica token fallita',
             code: 'TOKEN_VERIFICATION_FAILED'
         });
     }

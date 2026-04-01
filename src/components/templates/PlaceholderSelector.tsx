@@ -122,11 +122,14 @@ const PLACEHOLDER_CATEGORIES: PlaceholderCategory[] = [
       { key: 'current.year', label: 'Anno Corrente', description: 'Anno corrente', example: '2025' },
       { key: 'current.time', label: 'Ora Corrente', description: 'Ora attuale', example: '14:30' },
       { key: 'tenant.name', label: 'Nome Ente', description: 'Nome dell\'ente/organizzazione', example: 'ElementMedica' },
-      { key: 'tenant.logo', label: 'Logo Ente', description: 'Logo dell\'ente', example: '[LOGO]' },
-      { key: 'tenant.address', label: 'Indirizzo Ente', description: 'Indirizzo dell\'ente', example: 'Via Roma 1, Milano' },
-      { key: 'tenant.phone', label: 'Telefono Ente', description: 'Telefono dell\'ente', example: '02 12345678' },
-      { key: 'tenant.email', label: 'Email Ente', description: 'Email dell\'ente', example: 'info@ente.it' },
-      { key: 'tenant.website', label: 'Sito Web Ente', description: 'Sito web dell\'ente', example: 'www.ente.it' },
+      { key: 'tenant.logo', label: 'Logo Ente (src)', description: 'Data URL del logo ente (per attributo img src)', example: '[LOGO]' },
+      { key: 'tenant.logoHtml', label: 'Logo Ente (HTML)', description: 'Tag img completo del logo ente', example: '[LOGO IMG]' },
+      { key: 'tenant.branchLogo', label: 'Logo Sede (src)', description: 'Data URL del logo sede (per attributo img src)', example: '[LOGO SEDE]' },
+      { key: 'tenant.branchLogoHtml', label: 'Logo Sede (HTML)', description: 'Tag img completo del logo sede', example: '[LOGO SEDE IMG]' },
+      { key: 'tenant.address', label: 'Indirizzo Ente', description: 'Indirizzo dell\'ente', example: 'Via Esempio 1, Padova' },
+      { key: 'tenant.phone', label: 'Telefono Ente', description: 'Telefono dell\'ente', example: '049 1234567' },
+      { key: 'tenant.email', label: 'Email Ente', description: 'Email dell\'ente', example: 'info@ente.com' },
+      { key: 'tenant.website', label: 'Sito Web Ente', description: 'Sito web dell\'ente', example: 'www.ente.com' },
     ]
   }
 ];
@@ -163,7 +166,6 @@ const PlaceholderSelector: React.FC<PlaceholderSelectorProps> = ({
       setCopiedKey(placeholder);
       setTimeout(() => setCopiedKey(null), 2000);
     } catch (err) {
-      console.error('Failed to copy:', err);
     }
   };
 

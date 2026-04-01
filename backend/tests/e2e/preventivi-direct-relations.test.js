@@ -24,8 +24,13 @@ describe('Phase 7.2 - E2E Tests: Preventivi Direct Relations', () => {
   beforeAll(async () => {
     // Get existing tenant and company
     testTenant = await prisma.tenant.findFirst();
-    testCompany = await prisma.company.findFirst({ where: { tenantId: testTenant.id } });
-    testPerson = await prisma.person.findFirst({ where: { tenantId: testTenant.id } });
+    testCompany = await prisma.company.findFirst();
+    // P63: Person.tenantId RIMOSSO - trovare la persona tramite PersonTenantProfile
+    const profile = await prisma.personTenantProfile.findFirst({
+      where: { tenantId: testTenant.id, deletedAt: null },
+      include: { person: true }
+    });
+    testPerson = profile?.person;
 
     if (!testCompany || !testPerson) {
       throw new Error('Test requires at least one company and one person in database');
@@ -89,7 +94,7 @@ describe('Phase 7.2 - E2E Tests: Preventivi Direct Relations', () => {
   describe('Database Operations - Direct Relations', () => {
     test('should create preventivo with aziendaId (direct relation)', async () => {
       const anno = new Date().getFullYear();
-      
+
       const preventivo = await prisma.preventivo.create({
         data: {
           numero: `PREV-${anno}-TEST-001`,
@@ -132,7 +137,7 @@ describe('Phase 7.2 - E2E Tests: Preventivi Direct Relations', () => {
 
     test('should create preventivo with personaId (direct relation)', async () => {
       const anno = new Date().getFullYear();
-      
+
       const preventivo = await prisma.preventivo.create({
         data: {
           numero: `PREV-${anno}-TEST-002`,
@@ -225,7 +230,7 @@ describe('Phase 7.2 - E2E Tests: Preventivi Direct Relations', () => {
       }
 
       const prevId = createdPreventiviIds[0];
-      
+
       const updated = await prisma.preventivo.update({
         where: { id: prevId },
         data: {
@@ -322,7 +327,7 @@ describe('Phase 7.2 - E2E Tests: Preventivi Direct Relations', () => {
   describe('Performance - Direct Relations vs M2M', () => {
     test('should perform single query with direct relation (no JOIN needed)', async () => {
       const startTime = Date.now();
-      
+
       // Direct relation - single query!
       const preventivi = await prisma.preventivo.findMany({
         where: {
@@ -332,13 +337,13 @@ describe('Phase 7.2 - E2E Tests: Preventivi Direct Relations', () => {
         },
         take: 10
       });
-      
+
       const duration = Date.now() - startTime;
-      
+
       expect(Array.isArray(preventivi)).toBe(true);
       // Should be very fast (< 100ms) since it's a direct FK lookup
       expect(duration).toBeLessThan(100);
-      
+
       console.log(`✅ Direct relation query: ${duration}ms (vs M2M would require JOIN)`);
     });
   });
@@ -347,7 +352,7 @@ describe('Phase 7.2 - E2E Tests: Preventivi Direct Relations', () => {
     test('should handle preventivo with both aziendaId and personaId null', async () => {
       // This should be prevented by validation, but test schema allows it
       const anno = new Date().getFullYear();
-      
+
       const preventivo = await prisma.preventivo.create({
         data: {
           numero: `PREV-${anno}-TEST-003`,

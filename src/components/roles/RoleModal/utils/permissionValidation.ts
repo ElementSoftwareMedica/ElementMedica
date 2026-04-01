@@ -40,7 +40,6 @@ export const prepareRoleDataForSubmit = (
       fieldRestrictions: []
     }));
 
-  console.log('🔧 [prepareRoleDataForSubmit] Sending permissions:', permissions);
 
   // Extract role type - handle both Role (type) and RoleEditData (roleType)
   const roleType = role && 'type' in role ? role.type : role && 'roleType' in role ? role.roleType : 'CUSTOM';

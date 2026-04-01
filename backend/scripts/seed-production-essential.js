@@ -9,7 +9,7 @@
  */
 
 import { PrismaClient } from '@prisma/client';
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
@@ -64,7 +64,7 @@ async function main() {
         let defaultTenant = await prisma.tenant.findFirst({
             where: {
                 OR: [
-                    { slug: 'element-formazione' },
+                    { slug: 'element-sicurezza' },
                     { slug: 'default' }
                 ]
             }
@@ -74,8 +74,8 @@ async function main() {
             console.log('   Creating default tenant...');
             defaultTenant = await prisma.tenant.create({
                 data: {
-                    name: 'Element Formazione',
-                    slug: 'element-formazione',
+                    name: 'Element Sicurezza',
+                    slug: 'element-sicurezza',
                     isActive: true,
                     settings: {}
                 }
@@ -85,25 +85,34 @@ async function main() {
 
         // Step 2: Check/Create Admin User
         console.log('👤 Step 2: Checking Admin User...');
-        let adminUser = await prisma.person.findFirst({
-            where: { email: 'admin@example.com' }
+        // P48: Cerca per email nel PersonTenantProfile
+        const existingProfile = await prisma.personTenantProfile.findFirst({
+            where: { email: 'admin@example.com', tenantId: defaultTenant.id, deletedAt: null },
+            include: { person: true }
         });
+        let adminUser = existingProfile?.person;
 
         if (!adminUser) {
             console.log('   Creating admin user...');
             const hashedPassword = await bcrypt.hash('Admin123!', 12);
             adminUser = await prisma.person.create({
                 data: {
-                    email: 'admin@example.com',
                     firstName: 'Admin',
                     lastName: 'User',
+                    username: 'admin',
                     password: hashedPassword,
-                    status: 'ACTIVE',
-                    tenantId: defaultTenant.id
+                    tenantProfiles: {
+                        create: {
+                            tenantId: defaultTenant.id,
+                            email: 'admin@example.com',
+                            status: 'ACTIVE',
+                            isPrimary: true
+                        }
+                    }
                 }
             });
         }
-        console.log(`   ✅ Admin: ${adminUser.email} (${adminUser.id})\n`);
+        console.log(`   ✅ Admin: admin@example.com (${adminUser.id})\n`);
 
         // Step 3: Create/Update Admin PersonRole
         console.log('🔑 Step 3: Setting up Admin Role...');

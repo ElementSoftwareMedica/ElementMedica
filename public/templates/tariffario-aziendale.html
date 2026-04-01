@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tariffario {{TARIFFARIO_CODICE}} - {{TARIFFARIO_NOME}}</title>
+    <style>
+        /* ============================================
+           TARIFFARIO AZIENDALE - ELEMENT SRL
+           Template HTML per generazione PDF
+           P44 Enhancement - Medicina del Lavoro
+           ============================================ */
+
+        /* Reset & Base */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 9pt;
+            line-height: 1.4;
+            color: #333333;
+            background: #ffffff;
+            padding: 12mm;
+        }
+
+        /* Typography */
+        h1 {
+            font-size: 20pt;
+            font-weight: 700;
+            color: #7FB3AB;
+            /* teal-600 - Element srl brand (#A1C8C1 scale) */
+            margin-bottom: 4px;
+            letter-spacing: -0.5px;
+        }
+
+        h2 {
+            font-size: 14pt;
+            font-weight: 600;
+            color: #2d3748;
+            margin-top: 16px;
+            margin-bottom: 8px;
+            border-bottom: 2px solid #7FB3AB;
+            padding-bottom: 4px;
+        }
+
+        h3 {
+            font-size: 11pt;
+            font-weight: 600;
+            color: #4a5568;
+            margin-top: 8px;
+            margin-bottom: 4px;
+        }
+
+        p {
+            margin-bottom: 4px;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 3px solid #7FB3AB;
+        }
+
+        .header-logo {
+            flex: 0 0 150px;
+        }
+
+        .header-logo img {
+            max-width: 100%;
+            height: auto;
+        }
+
+        .header-info {
+            flex: 1;
+            text-align: right;
+        }
+
+        .header-info .codice {
+            font-size: 12pt;
+            color: #7FB3AB;
+            font-weight: 600;
+        }
+
+        .header-info .data {
+            font-size: 9pt;
+            color: #718096;
+        }
+
+        /* Info Grid */
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 25px;
+            padding: 15px;
+            background: #f7f7f7;
+            border-radius: 6px;
+        }
+
+        .info-section h3 {
+            color: #7FB3AB;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 4px;
+            margin-bottom: 8px;
+        }
+
+        .info-section p {
+            font-size: 9pt;
+            margin-bottom: 2px;
+        }
+
+        .info-section .label {
+            color: #718096;
+            font-weight: 500;
+        }
+
+        .info-section .value {
+            color: #2d3748;
+            font-weight: 600;
+        }
+
+        /* Voci Table */
+        .voci-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            font-size: 8pt;
+        }
+
+        .voci-table thead {
+            background: #7FB3AB;
+            color: white;
+        }
+
+        .voci-table th {
+            padding: 8px 6px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 8pt;
+        }
+
+        .voci-table th.center {
+            text-align: center;
+        }
+
+        .voci-table th.right {
+            text-align: right;
+        }
+
+        .voci-table tbody tr {
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .voci-table tbody tr:nth-child(even) {
+            background: #f8fafc;
+        }
+
+        .voci-table td {
+            padding: 6px;
+            vertical-align: top;
+        }
+
+        .voci-table td.center {
+            text-align: center;
+        }
+
+        .voci-table td.right {
+            text-align: right;
+        }
+
+        .voci-table .voce-nome {
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .voci-table .voce-descrizione {
+            font-size: 7pt;
+            color: #718096;
+            margin-top: 2px;
+        }
+
+        /* Badge per tipo voce - COMPATTO */
+        .tipo-badge {
+            display: inline-block;
+            padding: 1px 4px;
+            border-radius: 3px;
+            font-size: 6pt;
+            font-weight: 600;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .tipo-prestazione {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .tipo-spesa-fissa {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .tipo-spesa-ricorrente {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .tipo-sopralluogo {
+            background: #ede9fe;
+            color: #5b21b6;
+        }
+
+        .tipo-dvr {
+            background: #fce7f3;
+            color: #9d174d;
+        }
+
+        .tipo-nomina {
+            background: #e0e7ff;
+            color: #3730a3;
+        }
+
+        /* Fasce dipendenti */
+        .fasce-container {
+            margin-top: 4px;
+            padding: 4px;
+            background: #f1f5f9;
+            border-radius: 4px;
+            font-size: 7pt;
+        }
+
+        .fasce-title {
+            font-weight: 600;
+            color: #475569;
+            margin-bottom: 2px;
+        }
+
+        .fascia-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 1px 0;
+        }
+
+        .fascia-range {
+            color: #64748b;
+        }
+
+        .fascia-prezzo {
+            font-weight: 600;
+            color: #7FB3AB;
+        }
+
+        /* Logo text fallback (shown when no logo image) */
+        .logo-text {
+            font-size: 14pt;
+            font-weight: 700;
+            color: #7FB3AB;
+            letter-spacing: -0.5px;
+            line-height: 1.2;
+        }
+
+        /* Footer */
+        .footer {
+            margin-top: 30px;
+            padding-top: 15px;
+            border-top: 1px solid #e2e8f0;
+            font-size: 8pt;
+            color: #718096;
+        }
+
+        .footer .note {
+            margin-bottom: 10px;
+            font-style: italic;
+        }
+
+        .footer .legal {
+            font-size: 7pt;
+        }
+
+        /* Print styles */
+        @media print {
+            body {
+                padding: 10mm;
+            }
+
+            .header {
+                page-break-after: avoid;
+            }
+
+            .voci-table {
+                page-break-inside: auto;
+            }
+
+            .voci-table tr {
+                page-break-inside: avoid;
+            }
+        }
+
+        /* Page break helper */
+        .page-break {
+            page-break-before: always;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Header -->
+    <div class="header">
+        <div class="header-logo">
+            {{#if LOGO_URL}}
+            <img src="{{LOGO_URL}}" alt="Logo">
+            {{else}}
+            <div class="logo-text">{{TENANT_NOME}}</div>
+            {{/if}}
+        </div>
+        <div class="header-info">
+            <h1>{{TARIFFARIO_NOME}}</h1>
+            <div class="codice">Codice: {{TARIFFARIO_CODICE}}</div>
+            <div class="data">Validità: {{VALIDO_DA}} {{#if VALIDO_A}}- {{VALIDO_A}}{{else}}- In corso{{/if}}</div>
+        </div>
+    </div>
+
+    <!-- Info Grid -->
+    <div class="info-grid">
+        <div class="info-section">
+            <h3>Informazioni Tariffario</h3>
+            <p><span class="label">Tipo:</span> <span class="value">{{TARIFFARIO_TIPO}}</span></p>
+            <p><span class="label">Stato:</span> <span class="value">{{#if ATTIVO}}Attivo{{else}}Non
+                    attivo{{/if}}</span></p>
+            {{#if CONVENZIONE_NOME}}
+            <p><span class="label">Convenzione:</span> <span class="value">{{CONVENZIONE_NOME}}</span></p>
+            {{/if}}
+        </div>
+        {{#if AZIENDA_NOME}}
+        <div class="info-section">
+            <h3>Azienda</h3>
+            <p><span class="label">Ragione Sociale:</span> <span class="value">{{AZIENDA_NOME}}</span></p>
+            {{#if AZIENDA_PIVA}}
+            <p><span class="label">P.IVA:</span> <span class="value">{{AZIENDA_PIVA}}</span></p>
+            {{/if}}
+        </div>
+        {{/if}}
+    </div>
+
+    <!-- Descrizione -->
+    {{#if DESCRIZIONE}}
+    <div style="margin-bottom: 20px;">
+        <h3>Descrizione</h3>
+        <p>{{DESCRIZIONE}}</p>
+    </div>
+    {{/if}}
+
+    <!-- Voci Tariffario -->
+    <h2>Voci del Tariffario</h2>
+
+    <table class="voci-table">
+        <thead>
+            <tr>
+                <th style="width: 4%">#</th>
+                <th style="width: 40%">Voce</th>
+                <th style="width: 10%" class="center">Tipo</th>
+                <th style="width: 10%" class="center">Freq.</th>
+                <th style="width: 10%" class="center">Unità</th>
+                <th style="width: 12%" class="right">Prezzo</th>
+                <th style="width: 6%" class="center">IVA</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{#each VOCI}}
+            <tr>
+                <td>{{ordine}}</td>
+                <td>
+                    <div class="voce-nome">{{nome}}</div>
+                    {{#if descrizione}}
+                    <div class="voce-descrizione">{{descrizione}}</div>
+                    {{/if}}
+                    {{#if usaFasceDipendenti}}
+                    <div class="fasce-container">
+                        <div class="fasce-title">Fasce:</div>
+                        {{#each fasceDipendenti}}
+                        <div class="fascia-row">
+                            <span class="fascia-range">{{range}}</span>
+                            <span class="fascia-prezzo">€{{prezzo}}</span>
+                        </div>
+                        {{/each}}
+                    </div>
+                    {{/if}}
+                </td>
+                <td class="center">
+                    <span class="tipo-badge {{tipoBadgeClass}}">{{tipoAbbr}}</span>
+                </td>
+                <td class="center">{{frequenzaAbbr}}</td>
+                <td class="center">{{unitaAbbr}}</td>
+                <td class="right">€{{prezzoBase}}</td>
+                <td class="center">{{ivaAliquota}}%</td>
+            </tr>
+            {{/each}}
+        </tbody>
+    </table>
+
+    <!-- Note -->
+    {{#if NOTE}}
+    <div style="margin-top: 20px;">
+        <h3>Note</h3>
+        <p style="white-space: pre-wrap;">{{NOTE}}</p>
+    </div>
+    {{/if}}
+
+    <!-- Footer -->
+    <div class="footer">
+        <div class="note">
+            I prezzi indicati sono al netto dell'IVA dove specificato.
+            Le condizioni di pagamento sono definite nel contratto di servizio.
+        </div>
+        <div class="legal">
+            Documento generato il {{DATA_GENERAZIONE}} | {{TENANT_NOME}}
+        </div>
+    </div>
+</body>
+
+</html>

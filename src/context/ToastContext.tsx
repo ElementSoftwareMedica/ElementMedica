@@ -1,4 +1,4 @@
-import React, { createContext, useState, ReactNode, useCallback } from 'react';
+import React, { createContext, useState, ReactNode, useCallback, useRef } from 'react';
 
 /**
  * Tipi di notifica supportati
@@ -7,12 +7,19 @@ export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
 /**
  * Dati di una notifica toast
+ * R26: aggiunto title, timestamp per progress bar
  */
 export interface ToastData {
   id: string;
   message: string;
+  /** Titolo opzionale — se assente viene generato automaticamente dal tipo */
+  title?: string;
   type: ToastType;
   duration: number;
+  /** Timestamp creazione, usato per la progress bar */
+  createdAt: number;
+  /** Contatore per messaggi aggregati (es: "3 operazioni completate") */
+  count?: number;
 }
 
 /**
@@ -20,8 +27,12 @@ export interface ToastData {
  */
 export interface ToastOptions {
   message: string;
+  /** Titolo personalizzato — se omesso viene generato automaticamente */
+  title?: string;
   type?: ToastType;
   duration?: number;
+  /** Se true, bypassa deduplicazione e mostra sempre */
+  force?: boolean;
 }
 
 /**
@@ -49,9 +60,9 @@ interface ToastContextProps {
  */
 export const ToastContext = createContext<ToastContextProps>({
   toasts: [],
-  toast: () => {},
-  removeToast: () => {},
-  clearToasts: () => {}
+  toast: () => { },
+  removeToast: () => { },
+  clearToasts: () => { }
 });
 
 interface ToastProviderProps {
@@ -60,85 +71,116 @@ interface ToastProviderProps {
 
 /**
  * Provider per il sistema di notifiche toast
- * Avvolge l'applicazione e fornisce il contesto per le notifiche
+ * 
+ * R26: 
+ * - Finestra dedup aumentata a 2000ms
+ * - Titolo personalizzabile, altrimenti auto-generato
+ * - Max 3 toast simultanei (il più vecchio viene rimpiazzato)
+ * - Aggregazione: se 3+ toast dello stesso tipo arrivano entro 1s, vengono uniti
  */
 export const ToastProvider: React.FC<ToastProviderProps> = ({ children }) => {
   const [toasts, setToasts] = useState<ToastData[]>([]);
+
+  /** Tracking messaggi recenti per deduplicazione */
+  const recentMessagesRef = useRef<Map<string, number>>(new Map());
+  const timeoutMapRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  /** Finestra temporale per deduplicazione (ms) — R26: aumentata a 2000ms */
+  const DEDUP_WINDOW_MS = 2000;
+  /** Max toast visibili simultaneamente */
+  const MAX_TOASTS = 3;
 
   const generateId = useCallback(() => {
     return `toast-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
   }, []);
 
-  /**
-   * Mostra una nuova notifica toast
-   * @param options - Opzioni per la notifica
-   */
+  const removeToast = useCallback((id: string) => {
+    const timeout = timeoutMapRef.current.get(id);
+    if (timeout) {
+      clearTimeout(timeout);
+      timeoutMapRef.current.delete(id);
+    }
+    setToasts((prevToasts) => prevToasts.filter((toast) => toast.id !== id));
+  }, []);
+
   const toast = useCallback(
-    ({ message, type = 'info', duration = 5000 }: ToastOptions) => {
+    ({ message, title, type = 'info', duration = 5000, force = false }: ToastOptions) => {
       let standardizedType = type;
-      
-      // Standardizziamo il tipo in base al contenuto del messaggio
-      if (type !== 'success' && type !== 'error') {
-        if (message.toLowerCase().includes('success') || 
-            message.toLowerCase().includes('completat') || 
-            message.toLowerCase().includes('aggiunt') || 
-            message.toLowerCase().includes('modificat') || 
-            message.toLowerCase().includes('salvat') ||
-            message.toLowerCase().includes('importazione completata')) {
+
+      // Standardizziamo il tipo dal contenuto solo se non specificato
+      if (type === 'info') {
+        const lower = message.toLowerCase();
+        if (lower.includes('success') || lower.includes('completat') || lower.includes('aggiunt') ||
+          lower.includes('modificat') || lower.includes('salvat') || lower.includes('importazione completata')) {
           standardizedType = 'success';
-        }
-        
-        if (message.toLowerCase().includes('error') || 
-            message.toLowerCase().includes('errore') || 
-            message.toLowerCase().includes('fallito') || 
-            message.toLowerCase().includes('impossibile') || 
-            message.toLowerCase().includes('non riuscito') ||
-            message.toLowerCase().includes('non valido')) {
+        } else if (lower.includes('error') || lower.includes('errore') || lower.includes('fallito') ||
+          lower.includes('impossibile') || lower.includes('non riuscito') || lower.includes('non valido')) {
           standardizedType = 'error';
         }
-      } else {
-        // Se il tipo è esplicitamente specificato, lo rispettiamo
-        standardizedType = type;
       }
-      
-      const id = generateId();
-      const newToast: ToastData = { id, message, type: standardizedType, duration };
-      
-      setToasts((prevToasts) => {
-        // Verifica se esiste già un toast simile
-        const hasSimilar = prevToasts.some(
-          t => t.message === message && t.type === standardizedType
-        );
-        
-        if (hasSimilar) {
-          console.log('Toast simile già presente, ignorato:', message);
-          return prevToasts;
+
+      // Deduplicazione messaggi (R26: finestra 2000ms)
+      const messageKey = `${message}::${standardizedType}`;
+      const now = Date.now();
+      const lastShown = recentMessagesRef.current.get(messageKey);
+
+      if (!force && lastShown && (now - lastShown) < DEDUP_WINDOW_MS) {
+        return;
+      }
+
+      recentMessagesRef.current.set(messageKey, now);
+
+      // Pulizia periodica della mappa
+      if (recentMessagesRef.current.size > 100) {
+        const cutoff = now - 15000;
+        for (const [key, timestamp] of recentMessagesRef.current.entries()) {
+          if (timestamp < cutoff) recentMessagesRef.current.delete(key);
         }
-        
-        return [...prevToasts, newToast];
+      }
+
+      const id = generateId();
+      const newToast: ToastData = {
+        id,
+        message,
+        title,
+        type: standardizedType,
+        duration,
+        createdAt: now,
+        count: 1
+      };
+
+      setToasts((prevToasts) => {
+        // R26: Max MAX_TOASTS toast. Se il limite è raggiunto, rimuovi il più vecchio.
+        const updated = [...prevToasts, newToast];
+        if (updated.length > MAX_TOASTS) {
+          const removed = updated.splice(0, updated.length - MAX_TOASTS);
+          removed.forEach(t => {
+            const existingTimeout = timeoutMapRef.current.get(t.id);
+            if (existingTimeout) {
+              clearTimeout(existingTimeout);
+              timeoutMapRef.current.delete(t.id);
+            }
+          });
+        }
+        return updated;
       });
 
       if (duration > 0) {
-        setTimeout(() => {
+        const timeout = setTimeout(() => {
           removeToast(id);
         }, duration);
+        timeoutMapRef.current.set(id, timeout);
       }
     },
-    [generateId]
+    [generateId, removeToast]
   );
 
-  /**
-   * Rimuove una notifica toast
-   * @param id - ID della notifica da rimuovere
-   */
-  const removeToast = useCallback((id: string) => {
-    setToasts((prevToasts) => prevToasts.filter((toast) => toast.id !== id));
-  }, []);
-  
-  /**
-   * Rimuove tutte le notifiche toast
-   */
   const clearToasts = useCallback(() => {
+    // Cancella tutti i timeout attivi
+    for (const timeout of timeoutMapRef.current.values()) {
+      clearTimeout(timeout);
+    }
+    timeoutMapRef.current.clear();
     setToasts([]);
   }, []);
 

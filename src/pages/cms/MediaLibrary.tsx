@@ -30,6 +30,7 @@ import {
 import { useMediaLibrary, MediaListFilters } from '../../hooks/cms/useMediaLibrary';
 import cmsMediaService, { MediaFile } from '../../services/cmsMediaService';
 import { Button } from '../../components/ui/button';
+import { CRUDPrimaryButton } from '../../components/shared/CRUDButton';
 import { Input } from '../../components/ui/input';
 import {
   Dialog,
@@ -83,7 +84,6 @@ export const MediaLibrary: React.FC = () => {
 
       if (invalid.length > 0) {
         invalid.forEach(({ file, error }) => {
-          console.error(`${file.name}: ${error}`);
         });
       }
 
@@ -583,9 +583,9 @@ export const MediaLibrary: React.FC = () => {
             <Button variant="outline" onClick={() => setIsCreatingFolder(false)}>
               Annulla
             </Button>
-            <Button onClick={handleCreateFolder} disabled={!newFolderName.trim()}>
+            <CRUDPrimaryButton operation="create" onClick={handleCreateFolder} disabled={!newFolderName.trim()}>
               Crea
-            </Button>
+            </CRUDPrimaryButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>

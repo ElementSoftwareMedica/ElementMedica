@@ -1,8 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useToast } from '../../hooks/useToast';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { apiGet, apiPost, apiPut, apiDelete } from '../../services/api';
 import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
 import { GoogleIntegrationPanel } from './templates/components/google/GoogleIntegrationPanel';
+import { CRUDButton } from '../../components/shared/CRUDButton';
+import { useTenantFilter } from '../../context/TenantFilterContext';
+import { useTenantMode } from '../../contexts/TenantModeContext';
 import {
   FileText,
   Plus,
@@ -16,7 +20,15 @@ import {
   Globe,
   ChevronDown,
   Info,
-  Sparkles
+  Sparkles,
+  Wand2,
+  Loader2,
+  Mail,
+  Shield,
+  ClipboardList,
+  Stethoscope,
+  LayoutTemplate,
+  ExternalLink,
 } from 'lucide-react';
 
 interface Template {
@@ -62,6 +74,13 @@ const TEMPLATE_TYPES = [
     color: 'green'
   },
   {
+    value: 'COURSE_PROGRAM',
+    label: 'Programma Corso',
+    icon: '📚',
+    description: 'Programmi e piani didattici dei corsi di formazione',
+    color: 'cyan'
+  },
+  {
     value: 'PREVENTIVO',
     label: 'Preventivo',
     icon: '💰',
@@ -69,19 +88,26 @@ const TEMPLATE_TYPES = [
     color: 'amber'
   },
   {
-    value: 'SLIDES',
-    label: 'Presentazione',
-    icon: '📊',
-    description: 'Slide e materiali didattici per i corsi',
-    color: 'indigo'
+    value: 'INVOICE',
+    label: 'Fattura',
+    icon: '🧾',
+    description: 'Fatture per corsi, visite mediche e servizi professionali',
+    color: 'emerald'
   },
   {
-    value: 'CUSTOM',
-    label: 'Personalizzato',
+    value: 'VISITA_MEDICA',
+    label: 'Visita Medica',
+    icon: '🩺',
+    description: 'Template per referti e documentazione visite mediche',
+    color: 'teal'
+  },
+  {
+    value: 'VERBALE_RIUNIONE',
+    label: 'Verbale Riunione Periodica',
     icon: '📄',
-    description: 'Template personalizzati per altri documenti',
-    color: 'gray'
-  }
+    description: 'Verbale riunione periodica Art. 35 D.Lgs 81/08 con dati sorveglianza',
+    color: 'teal'
+  },
 ];
 
 // Helper per ottenere i placeholder disponibili per tipo
@@ -99,15 +125,50 @@ const getPlaceholdersForType = (type: string): string[] => {
       'corso.titolo', 'corso.data', 'azienda.nome',
       'partecipanti.lista', 'sessione.data', 'sessione.orario'
     ],
+    'COURSE_PROGRAM': [
+      'corso.titolo', 'corso.codice', 'corso.descrizione',
+      'corso.durataOre', 'corso.moduli', 'formatore.nome',
+      'formatore.cognome', 'azienda.nome'
+    ],
     'PREVENTIVO': [
       'azienda.ragioneSociale', 'azienda.indirizzo', 'azienda.pIva',
       'corso.titolo', 'corso.durata', 'corso.prezzo',
       'preventivo.numero', 'preventivo.data', 'preventivo.totale',
       'preventivo.iva', 'preventivo.imponibile', 'partecipanti.numero'
     ],
+    'INVOICE': [
+      'fattura.numero', 'fattura.data', 'fattura.scadenza',
+      'cliente.ragioneSociale', 'cliente.pIva', 'cliente.codiceFiscale',
+      'cliente.indirizzo', 'cliente.sdi', 'cliente.pec',
+      'voci.lista', 'fattura.imponibile', 'fattura.iva', 'fattura.totale',
+      'tenant.name', 'tenant.piva', 'tenant.iban'
+    ],
     'SLIDES': [
       'corso.titolo', 'corso.descrizione', 'formatore.nome',
       'azienda.logo', 'data.corrente'
+    ],
+    'VISITA_MEDICA': [
+      'paziente.nome', 'paziente.cognome', 'paziente.codiceFiscale',
+      'paziente.dataNascita', 'paziente.indirizzo', 'paziente.telefono',
+      'visita.data', 'visita.ora', 'visita.tipo',
+      'medico.nome', 'medico.cognome', 'medico.titolo',
+      'prestazione.nome', 'prestazione.codice',
+      'anamnesi.familiare', 'anamnesi.patologica', 'anamnesi.lavorativa',
+      'vitali.peso', 'vitali.altezza', 'vitali.bmi',
+      'vitali.pressioneSistolica', 'vitali.pressioneDiastolica',
+      'vitali.frequenzaCardiaca', 'vitali.saturazioneO2', 'vitali.temperatura',
+      'esameObiettivo', 'diagnosi.principale', 'diagnosi.secondarie',
+      'terapia', 'prescrizioni', 'prossimoControllo', 'noteFollowup'
+    ],
+    'VERBALE_RIUNIONE': [
+      'azienda.ragioneSociale', 'azienda.codiceFiscale', 'azienda.partitaIva',
+      'azienda.settoreAttivita', 'azienda.sedi',
+      'annoRiferimento', 'periodo.da', 'periodo.a',
+      'sorveglianza.totaleVisite', 'sorveglianza.lavoratoriDistinti',
+      'sorveglianza.giudizi', 'sorveglianza.esami', 'sorveglianza.prescrizioni',
+      'partecipanti.datoreLavoro', 'partecipanti.medicoCompetente',
+      'partecipanti.rspp', 'partecipanti.rls',
+      'rischi', 'protocolliSanitari', 'delibere'
     ],
     'CUSTOM': []
   };
@@ -120,10 +181,18 @@ type ViewMode = 'cards' | 'table';
 
 const TemplatesSettingsPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { confirmDelete } = useConfirmDialog();
+  const { getTenantFilterParams, tenantFilterKey, isReady } = useTenantFilter();
+  const { getOperateHeaders } = useTenantMode();
+  const operateHeaders = getOperateHeaders();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(false);
-  const [notification, setNotification] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+  const { showToast } = useToast();
+
+  // Determine the base path for navigation (management or settings)
+  const isInManagement = location.pathname.startsWith('/management');
+  const basePath = isInManagement ? '/management/templates' : '/settings/templates';
 
   // View mode toggle
   const [viewMode, setViewMode] = useState<ViewMode>('cards');
@@ -150,9 +219,36 @@ const TemplatesSettingsPage: React.FC = () => {
   // Dropdown menu
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
+  // Seed defaults state
+  const [seedingDefaults, setSeedingDefaults] = useState(false);
+
+  const fetchTemplates = useCallback(async (): Promise<void> => {
+    try {
+      setLoading(true);
+      const tenantParams = getTenantFilterParams();
+      const queryParams = new URLSearchParams();
+      if (tenantParams.tenantIds) {
+        queryParams.append('tenantIds', tenantParams.tenantIds.join(','));
+      }
+      if (tenantParams.allTenants) {
+        queryParams.append('allTenants', 'true');
+      }
+      const url = `/api/v1/templates${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+      const response = await apiGet<any>(url);
+      setTemplates(response?.data || []);
+    } catch (err) {
+      showToast({ message: 'Errore nel recupero dei template', type: 'error' });
+      if (import.meta.env.DEV) console.error('Error fetching templates:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [getTenantFilterParams, tenantFilterKey]);
+
   useEffect(() => {
-    fetchTemplates();
-  }, []);
+    if (isReady) {
+      fetchTemplates();
+    }
+  }, [fetchTemplates, isReady]);
 
   // Filtered templates
   const filteredTemplates = templates.filter(template => {
@@ -168,70 +264,80 @@ const TemplatesSettingsPage: React.FC = () => {
     certificate: templates.filter(t => t.type === 'CERTIFICATE').length,
     letterOfEngagement: templates.filter(t => t.type === 'LETTER_OF_ENGAGEMENT').length,
     attendanceRegister: templates.filter(t => t.type === 'ATTENDANCE_REGISTER').length,
+    courseProgram: templates.filter(t => t.type === 'COURSE_PROGRAM').length,
     preventivo: templates.filter(t => t.type === 'PREVENTIVO').length,
+    invoice: templates.filter(t => t.type === 'INVOICE').length,
+    visitaMedica: templates.filter(t => t.type === 'VISITA_MEDICA').length,
     slides: templates.filter(t => t.type === 'SLIDES' || t.googleSlidesId).length,
     custom: templates.filter(t => t.type === 'CUSTOM').length
   };
 
-  const fetchTemplates = async (): Promise<void> => {
+  const handleSeedDefaults = async () => {
     try {
-      setLoading(true);
-      const response = await apiGet<any>('/api/v1/templates');
-      setTemplates(response?.data || []);
-    } catch (err) {
-      showNotification('error', 'Errore nel recupero dei template');
-      console.error('Error fetching templates:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+      setSeedingDefaults(true);
+      const response = await apiPost<any>('/api/v1/templates/seed-defaults', {}, { headers: operateHeaders });
+      const { created, skipped } = response?.data || {};
 
-  const showNotification = (type: 'success' | 'error', message: string) => {
-    setNotification({ type, message });
-    setTimeout(() => setNotification(null), 5000);
+      if (created > 0) {
+        showToast({
+          message: `${created} template predefiniti creati con successo${skipped > 0 ? ` (${skipped} già presenti)` : ''}`,
+          type: 'success'
+        });
+        await fetchTemplates();
+      } else {
+        showToast({
+          message: 'Tutti i template predefiniti sono già presenti',
+          type: 'info'
+        });
+      }
+    } catch (err) {
+      showToast({ message: 'Errore nella creazione dei template predefiniti', type: 'error' });
+    } finally {
+      setSeedingDefaults(false);
+    }
   };
 
   const handleCreateTemplate = async () => {
     if (!newTemplate.name.trim()) {
-      showNotification('error', 'Il nome del template è obbligatorio');
+      showToast({ message: 'Il nome del template è obbligatorio', type: 'error' });
       return;
     }
 
     try {
       setLoading(true);
-      const response = await apiPost<any>('/api/v1/templates', newTemplate);
+      const response = await apiPost<any>('/api/v1/templates', newTemplate, { headers: operateHeaders });
       const createdTemplate = response?.data;
 
-      showNotification('success', 'Template creato con successo');
+      showToast({ message: 'Template creato con successo', type: 'success' });
       setShowCreateModal(false);
       setNewTemplate({ name: '', type: 'CERTIFICATE', description: '', content: '<h1>Nuovo Template</h1>', fileFormat: 'HTML' });
 
-      // Redirect to template editor
+      // Redirect to template editor using dynamic base path
       if (createdTemplate?.id) {
-        navigate(`/settings/templates/${createdTemplate.id}/edit?format=${newTemplate.fileFormat || 'HTML'}`);
+        navigate(`${basePath}/${createdTemplate.id}?format=${newTemplate.fileFormat || 'HTML'}`);
       } else {
         await fetchTemplates();
       }
     } catch (err) {
-      showNotification('error', 'Errore nella creazione del template');
-      console.error('Error creating template:', err);
+      showToast({ message: 'Errore nella creazione del template', type: 'error' });
+      if (import.meta.env.DEV) console.error('Error creating template:', err);
     } finally {
       setLoading(false);
     }
   };
 
   const handleEditTemplate = (template: Template) => {
-    navigate(`/settings/templates/${template.id}/edit`);
+    navigate(`${basePath}/${template.id}`);
   };
 
   const handleSetAsDefault = async (templateId: string) => {
     try {
-      await apiPut(`/api/v1/templates/${templateId}/set-default`, {});
-      showNotification('success', 'Template predefinito impostato');
+      await apiPut(`/api/v1/templates/${templateId}/set-default`, {}, { headers: operateHeaders });
+      showToast({ message: 'Template predefinito impostato', type: 'success' });
       await fetchTemplates();
     } catch (err) {
-      showNotification('error', 'Errore nell\'impostare il template predefinito');
-      console.error('Error setting default template:', err);
+      showToast({ message: 'Errore nell\'impostare il template predefinito', type: 'error' });
+      if (import.meta.env.DEV) console.error('Error setting default template:', err);
     }
   };
 
@@ -239,7 +345,7 @@ const TemplatesSettingsPage: React.FC = () => {
     const template = templates.find(t => t.id === templateId);
 
     if (template?.isDefault) {
-      showNotification('error', 'Non puoi eliminare un template predefinito. Imposta prima un altro template come predefinito.');
+      showToast({ message: 'Non puoi eliminare un template predefinito. Imposta prima un altro template come predefinito.', type: 'error' });
       return;
     }
 
@@ -247,12 +353,12 @@ const TemplatesSettingsPage: React.FC = () => {
     if (!shouldDelete) return;
 
     try {
-      await apiDelete(`/api/v1/templates/${templateId}`);
-      showNotification('success', 'Template eliminato con successo');
+      await apiDelete(`/api/v1/templates/${templateId}`, { headers: operateHeaders });
+      showToast({ message: 'Template eliminato con successo', type: 'success' });
       await fetchTemplates();
     } catch (err) {
-      showNotification('error', 'Errore nell\'eliminazione del template');
-      console.error('Error deleting template:', err);
+      showToast({ message: 'Errore nell\'eliminazione del template', type: 'error' });
+      if (import.meta.env.DEV) console.error('Error deleting template:', err);
     }
   };
 
@@ -260,22 +366,21 @@ const TemplatesSettingsPage: React.FC = () => {
     try {
       await apiPost(`/api/v1/templates/${template.id}/duplicate`, {
         name: `${template.name} (Copia)`
-      });
-      showNotification('success', 'Template duplicato con successo');
+      }, { headers: operateHeaders });
+      showToast({ message: 'Template duplicato con successo', type: 'success' });
       await fetchTemplates();
     } catch (err) {
-      showNotification('error', 'Errore nella duplicazione del template');
-      console.error('Error duplicating template:', err);
+      showToast({ message: 'Errore nella duplicazione del template', type: 'error' });
+      if (import.meta.env.DEV) console.error('Error duplicating template:', err);
     }
   };
 
   const handleViewVersions = (template: Template) => {
-    navigate(`/settings/templates/${template.id}/versions`);
+    navigate(`${basePath}/${template.id}/versions`);
   };
 
   const handleGoogleImport = (templateData: any) => {
-    console.log('Template imported:', templateData);
-    showNotification('success', `Template "${templateData.name}" importato da Google`);
+    showToast({ message: `Template "${templateData.name}" importato da Google`, type: 'success' });
     fetchTemplates();
   };
 
@@ -303,43 +408,57 @@ const TemplatesSettingsPage: React.FC = () => {
 
   return (
     <div className="space-y-6 p-6">
-      {/* Header with View Toggle */}
-      <div className="flex justify-between items-center">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Gestione Template</h1>
-          <p className="text-gray-600 mt-1">
-            Crea e gestisci i template per attestati, lettere e presentazioni
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Gestione Template</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Crea e gestisci template per attestati, fatture, preventivi e documentazione clinica
           </p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 flex-wrap">
           {/* View Mode Toggle */}
           <div className="flex items-center bg-gray-100 rounded-lg p-1">
             <button
               onClick={() => setViewMode('cards')}
-              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${viewMode === 'cards'
-                  ? 'bg-white text-blue-600 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${viewMode === 'cards'
+                  ? 'bg-white text-violet-600 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-800'
                 }`}
             >
               Cards
             </button>
             <button
               onClick={() => setViewMode('table')}
-              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${viewMode === 'table'
-                  ? 'bg-white text-blue-600 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${viewMode === 'table'
+                  ? 'bg-white text-violet-600 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-800'
                 }`}
             >
               Tabella
             </button>
           </div>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="inline-flex items-center px-6 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors shadow-sm"
+          <CRUDButton
+            operation="create"
+            onClick={handleSeedDefaults}
+            disabled={seedingDefaults}
+            className="inline-flex items-center px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-50 transition-colors text-sm font-medium shadow-sm"
           >
-            <Plus className="w-5 h-5 mr-2" />
+            {seedingDefaults ? (
+              <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+            ) : (
+              <Wand2 className="w-4 h-4 mr-1.5" />
+            )}
+            {seedingDefaults ? 'Generazione...' : 'Genera Predefiniti'}
+          </CRUDButton>
+          <CRUDButton
+            operation="create"
+            onClick={() => setShowCreateModal(true)}
+            className="inline-flex items-center px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium shadow-sm"
+          >
+            <Plus className="w-4 h-4 mr-1.5" />
             Crea Template
-          </button>
+          </CRUDButton>
         </div>
       </div>
 
@@ -348,15 +467,7 @@ const TemplatesSettingsPage: React.FC = () => {
         <TemplateListPage />
       ) : (
         <>
-          {/* Notification */}
-          {notification && (
-            <div className={`p-4 rounded-lg ${notification.type === 'success'
-              ? 'bg-green-50 border border-green-200 text-green-800'
-              : 'bg-red-50 border border-red-200 text-red-800'
-              }`}>
-              <p className="text-sm font-medium">{notification.message}</p>
-            </div>
-          )}
+
 
           {/* Stats Cards */}
           <div className="bg-white border border-gray-200 rounded-lg p-6">
@@ -365,20 +476,20 @@ const TemplatesSettingsPage: React.FC = () => {
               <div className="text-sm text-gray-500">Totale: {stats.total}</div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
               {TEMPLATE_TYPES.map((type) => {
-                const count = type.value === 'CERTIFICATE' ? stats.certificate :
-                  type.value === 'LETTER_OF_ENGAGEMENT' ? stats.letterOfEngagement :
-                    type.value === 'ATTENDANCE_REGISTER' ? stats.attendanceRegister :
-                      type.value === 'PREVENTIVO' ? stats.preventivo :
-                        type.value === 'SLIDES' ? stats.slides :
-                          stats.custom;
+                const count = templates.filter(t =>
+                  t.type === type.value || (type.value === 'SLIDES' && t.googleSlidesId)
+                ).length;
 
                 const colorClasses = {
                   blue: 'bg-blue-50 border-blue-200 text-blue-700',
                   purple: 'bg-purple-50 border-purple-200 text-purple-700',
                   green: 'bg-green-50 border-green-200 text-green-700',
+                  cyan: 'bg-cyan-50 border-cyan-200 text-cyan-700',
                   amber: 'bg-amber-50 border-amber-200 text-amber-700',
+                  emerald: 'bg-emerald-50 border-emerald-200 text-emerald-700',
+                  teal: 'bg-teal-50 border-teal-200 text-teal-700',
                   indigo: 'bg-indigo-50 border-indigo-200 text-indigo-700',
                   gray: 'bg-gray-50 border-gray-200 text-gray-700'
                 }[type.color] || 'bg-gray-50 border-gray-200 text-gray-700';
@@ -386,12 +497,12 @@ const TemplatesSettingsPage: React.FC = () => {
                 return (
                   <div
                     key={type.value}
-                    className={`border rounded-lg p-4 transition-all hover:shadow-md cursor-pointer ${colorClasses}`}
+                    className={`border rounded-lg p-3 transition-all hover:shadow-md cursor-pointer ${colorClasses}`}
                     onClick={() => setSelectedType(type.value)}
                   >
-                    <div className="text-3xl mb-2">{type.icon}</div>
-                    <div className="text-2xl font-bold mb-1">{count}</div>
-                    <div className="text-xs font-medium opacity-90">{type.label}</div>
+                    <div className="text-2xl mb-1">{type.icon}</div>
+                    <div className="text-xl font-bold mb-0.5">{count}</div>
+                    <div className="text-xs font-medium opacity-90 leading-tight">{type.label}</div>
                   </div>
                 );
               })}
@@ -466,6 +577,95 @@ const TemplatesSettingsPage: React.FC = () => {
                   </div>
                 );
               })}
+            </div>
+          </div>
+
+          {/* Template Systems — by Module */}
+          <div className="bg-white border border-gray-200 rounded-xl p-6">
+            <div className="flex items-center gap-2 mb-1">
+              <LayoutTemplate className="w-5 h-5 text-violet-500" />
+              <h2 className="text-base font-semibold text-gray-900">Sistemi Template Specializzati</h2>
+            </div>
+            <p className="text-xs text-gray-500 mb-5">Accedi alle pagine dedicate per ogni modulo</p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+
+              {/* --- CLINICA --- */}
+              <div className="col-span-full text-xs font-semibold uppercase tracking-wider text-gray-400 pb-1 border-b border-gray-100">Clinica (ElementMedica)</div>
+
+              <button
+                onClick={() => navigate('/poliambulatorio/impostazioni/visit-templates')}
+                className="group text-left p-4 rounded-xl border border-gray-200 hover:border-teal-400 hover:bg-teal-50/60 transition-all"
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🩺</span>
+                    <span className="font-medium text-sm text-gray-800 group-hover:text-teal-700">Template Visite</span>
+                  </div>
+                  <ExternalLink className="w-3.5 h-3.5 text-gray-300 group-hover:text-teal-500" />
+                </div>
+                <p className="text-xs text-gray-400">Layout, campi e sezioni per le visite mediche di idoneità e specialistiche</p>
+              </button>
+
+              <button
+                onClick={() => navigate('/poliambulatorio/impostazioni/modulistica')}
+                className="group text-left p-4 rounded-xl border border-gray-200 hover:border-blue-400 hover:bg-blue-50/60 transition-all"
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-2">
+                    <ClipboardList className="w-4.5 h-4.5 text-blue-500" style={{ width: '1.1rem', height: '1.1rem' }} />
+                    <span className="font-medium text-sm text-gray-800 group-hover:text-blue-700">Modulistica (P53)</span>
+                  </div>
+                  <ExternalLink className="w-3.5 h-3.5 text-gray-300 group-hover:text-blue-500" />
+                </div>
+                <p className="text-xs text-gray-400">Moduli compilabili: anamnesi, questionari MDL, schede sorveglianza sanitaria</p>
+              </button>
+
+              <button
+                onClick={() => navigate('/poliambulatorio/impostazioni/consensi-firma')}
+                className="group text-left p-4 rounded-xl border border-gray-200 hover:border-teal-400 hover:bg-teal-50/60 transition-all"
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-teal-600" />
+                    <span className="font-medium text-sm text-gray-800 group-hover:text-teal-700">Consensi Firma</span>
+                  </div>
+                  <ExternalLink className="w-3.5 h-3.5 text-gray-300 group-hover:text-teal-500" />
+                </div>
+                <p className="text-xs text-gray-400">Privacy GDPR, consenso al trattamento, prestazioni chirurgiche — firma tablet</p>
+              </button>
+
+              <button
+                onClick={() => navigate('/poliambulatorio/impostazioni/email-template')}
+                className="group text-left p-4 rounded-xl border border-gray-200 hover:border-indigo-400 hover:bg-indigo-50/60 transition-all"
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-2">
+                    <Mail className="w-4 h-4 text-indigo-500" />
+                    <span className="font-medium text-sm text-gray-800 group-hover:text-indigo-700">Template Email</span>
+                  </div>
+                  <ExternalLink className="w-3.5 h-3.5 text-gray-300 group-hover:text-indigo-500" />
+                </div>
+                <p className="text-xs text-gray-400">Email automatiche: conferma appuntamento, promemoria, esiti visita</p>
+              </button>
+
+              {/* --- FORMAZIONE --- */}
+              <div className="col-span-full text-xs font-semibold uppercase tracking-wider text-gray-400 pb-1 border-b border-gray-100 mt-3">Formazione (ElementSicurezza)</div>
+
+              <button
+                onClick={() => navigate('/test')}
+                className="group text-left p-4 rounded-xl border border-gray-200 hover:border-blue-400 hover:bg-blue-50/60 transition-all"
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">📝</span>
+                    <span className="font-medium text-sm text-gray-800 group-hover:text-blue-700">Questionari e Moduli</span>
+                  </div>
+                  <ExternalLink className="w-3.5 h-3.5 text-gray-300 group-hover:text-blue-500" />
+                </div>
+                <p className="text-xs text-gray-400">Test formativi, valutazioni corsi, formulari personalizzati compilabili</p>
+              </button>
+
             </div>
           </div>
 
@@ -619,7 +819,10 @@ const TemplatesSettingsPage: React.FC = () => {
                                 blue: 'bg-blue-100 text-blue-800 border-blue-200',
                                 purple: 'bg-purple-100 text-purple-800 border-purple-200',
                                 green: 'bg-green-100 text-green-800 border-green-200',
+                                cyan: 'bg-cyan-100 text-cyan-800 border-cyan-200',
                                 amber: 'bg-amber-100 text-amber-800 border-amber-200',
+                                emerald: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+                                teal: 'bg-teal-100 text-teal-800 border-teal-200',
                                 indigo: 'bg-indigo-100 text-indigo-800 border-indigo-200',
                                 gray: 'bg-gray-100 text-gray-800 border-gray-200'
                               }[typeInfo.color] || 'bg-gray-100 text-gray-800 border-gray-200';

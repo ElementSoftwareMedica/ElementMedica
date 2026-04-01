@@ -170,7 +170,6 @@ export function BatchOperations({
       await operation.action(selectedIds);
       onClearSelection();
     } catch (error) {
-      console.error(`Errore nell'operazione ${operation.key}:`, error);
     } finally {
       setIsProcessing(false);
       setShowConfirmModal(false);

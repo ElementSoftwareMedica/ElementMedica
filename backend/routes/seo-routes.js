@@ -14,6 +14,7 @@ import logger from '../utils/logger.js';
 import seoService from '../services/seoService.js';
 import sitemapService from '../services/sitemapService.js';
 import prisma from '../config/prisma-optimization.js';
+import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 
 const { authenticate } = authMiddleware;
 const router = express.Router();
@@ -41,14 +42,14 @@ router.get('/config/:entityType/:entityId',
       }
 
       const { entityType, entityId } = req.params;
-      const tenantId = req.person.tenantId;
+      const tenantId = getEffectiveTenantId(req);
 
       const seoConfig = await seoService.getSEOConfig(entityType, entityId, tenantId);
 
       if (!seoConfig) {
         return res.status(404).json({
           success: false,
-          error: 'SEO config not found'
+          error: 'Configurazione SEO non trovata'
         });
       }
 
@@ -110,7 +111,7 @@ router.post('/config',
 
       const data = {
         ...req.body,
-        tenantId: req.person.tenantId
+        tenantId: getEffectiveTenantId(req)
       };
 
       // Valida dati SEO
@@ -135,19 +136,19 @@ router.post('/config',
             url: `${baseUrl}/${page.slug}`,
             entityType: 'page',
             entityId: page.id,
-            tenantId: req.person.tenantId,
+            tenantId: getEffectiveTenantId(req),
             changefreq: 'weekly',
             priority: page.slug === 'home' ? 1.0 : 0.8
           });
         }
       } else if (data.entityType === 'course') {
-        const course = await prisma.course.findUnique({ where: { id: data.entityId } });
+        const course = await prisma.course.findFirst({ where: { id: data.entityId, tenantId: getEffectiveTenantId(req), deletedAt: null } });
         if (course && course.isPublic && course.status === 'PUBLISHED') {
           await sitemapService.upsertSitemapEntry({
             url: `${baseUrl}/courses/${course.slug}`,
             entityType: 'course',
             entityId: course.id,
-            tenantId: req.person.tenantId,
+            tenantId: getEffectiveTenantId(req),
             changefreq: 'monthly',
             priority: 0.7
           });
@@ -196,14 +197,14 @@ router.delete('/config/:seoConfigId',
       const seoConfig = await prisma.sEOConfig.findFirst({
         where: {
           id: seoConfigId,
-          tenantId: req.person.tenantId
+          tenantId: getEffectiveTenantId(req)
         }
       });
 
       if (!seoConfig) {
         return res.status(404).json({
           success: false,
-          error: 'SEO config not found'
+          error: 'Configurazione SEO non trovata'
         });
       }
 
@@ -211,7 +212,7 @@ router.delete('/config/:seoConfigId',
 
       res.json({
         success: true,
-        message: 'SEO config deleted successfully'
+        message: 'Configurazione SEO eliminata con successo'
       });
     } catch (error) {
       logger.error('Error deleting SEO config:', error);
@@ -272,13 +273,13 @@ router.get('/structured-data/organization',
   async (req, res) => {
     try {
       const tenant = await prisma.tenant.findUnique({
-        where: { id: req.person.tenantId }
+        where: { id: getEffectiveTenantId(req) }
       });
 
       if (!tenant) {
         return res.status(404).json({
           success: false,
-          error: 'Tenant not found'
+          error: 'Tenant non trovato'
         });
       }
 
@@ -322,7 +323,7 @@ router.get('/structured-data/course/:courseId',
       const course = await prisma.course.findFirst({
         where: {
           id: req.params.courseId,
-          tenantId: req.person.tenantId
+          tenantId: getEffectiveTenantId(req)
         },
         include: {
           CourseSchedule: true,
@@ -333,7 +334,7 @@ router.get('/structured-data/course/:courseId',
       if (!course) {
         return res.status(404).json({
           success: false,
-          error: 'Course not found'
+          error: 'Corso non trovato'
         });
       }
 

@@ -37,10 +37,12 @@ class TemplateService {
 
   /**
    * List templates with pagination and filters
+   * @param params - Query parameters for filtering
+   * @param options - Additional options including custom headers for cross-tenant access
    */
-  async list(params?: TemplateListParams): Promise<TemplateListResponse> {
+  async list(params?: TemplateListParams, options?: { headers?: Record<string, string> }): Promise<TemplateListResponse> {
     const queryParams = new URLSearchParams();
-    
+
     if (params) {
       if (params.page) queryParams.append('page', String(params.page));
       if (params.limit) queryParams.append('limit', String(params.limit));
@@ -53,8 +55,8 @@ class TemplateService {
 
     const query = queryParams.toString();
     const url = query ? `${this.basePath}?${query}` : this.basePath;
-    
-    return await apiGet<TemplateListResponse>(url);
+
+    return await apiGet<TemplateListResponse>(url, {}, options);
   }
 
   /**
@@ -155,7 +157,7 @@ class TemplateService {
       isDefault: true,
       limit: 1,
     });
-    
+
     return response.data.length > 0 ? response.data[0] : null;
   }
 
@@ -190,7 +192,7 @@ class TemplateService {
    */
   async duplicate(id: string, newName?: string): Promise<Template> {
     const original = await this.get(id);
-    
+
     const duplicateData: TemplateCreateData = {
       name: newName || `${original.name} (Copia)`,
       type: original.type,

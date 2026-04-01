@@ -6,6 +6,7 @@
 import { z } from 'zod';
 import courseTestsService from '../services/course-tests-service.js';
 import logger from '../utils/logger.js';
+import { activityService, ActivityType } from '../services/activity/index.js';
 
 // Schema di validazione per CourseTestAssignment
 const courseTestAssignmentSchema = z.object({
@@ -62,7 +63,7 @@ export const getCourseTestAssignments = async (req, res) => {
         logger.error('Failed to get course test assignments', {
             component: 'course-tests-controller',
             action: 'getCourseTestAssignments',
-            error: error.message
+            error: 'Errore interno del server'
         });
         res.status(500).json({
             success: false,
@@ -98,7 +99,7 @@ export const getCourseTestAssignment = async (req, res) => {
             component: 'course-tests-controller',
             action: 'getCourseTestAssignment',
             id: req.params.id,
-            error: error.message
+            error: 'Errore interno del server'
         });
         res.status(500).json({
             success: false,
@@ -133,7 +134,7 @@ export const getTestsForCourse = async (req, res) => {
             component: 'course-tests-controller',
             action: 'getTestsForCourse',
             courseId: req.params.courseId,
-            error: error.message
+            error: 'Errore interno del server'
         });
         res.status(500).json({
             success: false,
@@ -171,11 +172,11 @@ export const createCourseTestAssignment = async (req, res) => {
         logger.error('Failed to create course test assignment', {
             component: 'course-tests-controller',
             action: 'createCourseTestAssignment',
-            error: error.message
+            error: 'Errore interno del server'
         });
         res.status(500).json({
             success: false,
-            error: error.message || 'Errore nella creazione dell\'associazione test'
+            error: 'Errore nella creazione dell\'associazione test'
         });
     }
 };
@@ -210,7 +211,7 @@ export const updateCourseTestAssignment = async (req, res) => {
         if (error.message === 'Associazione test-corso non trovata') {
             return res.status(404).json({
                 success: false,
-                error: error.message
+                error: 'Errore interno del server'
             });
         }
 
@@ -218,11 +219,11 @@ export const updateCourseTestAssignment = async (req, res) => {
             component: 'course-tests-controller',
             action: 'updateCourseTestAssignment',
             id,
-            error: error.message
+            error: 'Errore interno del server'
         });
         res.status(500).json({
             success: false,
-            error: error.message || 'Errore nell\'aggiornamento dell\'associazione test'
+            error: 'Errore nell\'aggiornamento dell\'associazione test'
         });
     }
 };
@@ -246,7 +247,7 @@ export const deleteCourseTestAssignment = async (req, res) => {
         if (error.message === 'Associazione test-corso non trovata') {
             return res.status(404).json({
                 success: false,
-                error: error.message
+                error: 'Errore interno del server'
             });
         }
 
@@ -254,7 +255,7 @@ export const deleteCourseTestAssignment = async (req, res) => {
             component: 'course-tests-controller',
             action: 'deleteCourseTestAssignment',
             id: req.params.id,
-            error: error.message
+            error: 'Errore interno del server'
         });
         res.status(500).json({
             success: false,
@@ -277,6 +278,25 @@ export const saveTestResult = async (req, res) => {
 
         const result = await courseTestsService.saveTestResult(validatedData, tenantId);
 
+        // Activity log specifico per risultato test
+        const passed = result?.passed ?? (result?.score >= (result?.passingScore || 0));
+        activityService.log({
+            personId: req.person.id,
+            action: passed ? ActivityType.TEST_PASSED : ActivityType.TEST_FAILED,
+            resource: 'CourseTest',
+            resourceId: result?.id,
+            metadata: {
+                scheduleId: validatedData.scheduleId,
+                score: result?.score,
+                passingScore: result?.passingScore,
+                passed
+            },
+            ipAddress: req.ip,
+            userAgent: req.get('User-Agent'),
+            tenantId,
+            success: true
+        });
+
         res.status(201).json({
             success: true,
             data: result,
@@ -294,11 +314,11 @@ export const saveTestResult = async (req, res) => {
         logger.error('Failed to save test result', {
             component: 'course-tests-controller',
             action: 'saveTestResult',
-            error: error.message
+            error: 'Errore interno del server'
         });
         res.status(500).json({
             success: false,
-            error: error.message || 'Errore nel salvataggio del risultato'
+            error: 'Errore nel salvataggio del risultato'
         });
     }
 };
@@ -323,7 +343,7 @@ export const getTestResultsForSchedule = async (req, res) => {
             component: 'course-tests-controller',
             action: 'getTestResultsForSchedule',
             scheduleId: req.params.scheduleId,
-            error: error.message
+            error: 'Errore interno del server'
         });
         res.status(500).json({
             success: false,
@@ -352,7 +372,7 @@ export const getTestStatsForSchedule = async (req, res) => {
             component: 'course-tests-controller',
             action: 'getTestStatsForSchedule',
             scheduleId: req.params.scheduleId,
-            error: error.message
+            error: 'Errore interno del server'
         });
         res.status(500).json({
             success: false,
@@ -385,7 +405,7 @@ export const getTestResultForPerson = async (req, res) => {
         logger.error('Failed to get test result for person', {
             component: 'course-tests-controller',
             action: 'getTestResultForPerson',
-            error: error.message
+            error: 'Errore interno del server'
         });
         res.status(500).json({
             success: false,

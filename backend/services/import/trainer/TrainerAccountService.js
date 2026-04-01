@@ -1,14 +1,13 @@
 /**
  * @file TrainerAccountService.js
  * @description Service per creazione automatica account formatori
- * Genera username (nome.cognome con contatore) e password (Password123!)
+ * Genera username (nome.cognome con contatore) e password temporanea (da DEFAULT_TEMP_PASSWORD env)
  */
 
-import { PrismaClient } from '@prisma/client';
+import prisma from '../../../config/prisma-optimization.js';
 import bcrypt from 'bcrypt';
 import logger from '../../../utils/logger.js';
 
-const prisma = new PrismaClient();
 
 class TrainerAccountService {
   /**
@@ -34,13 +33,17 @@ class TrainerAccountService {
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '');
 
-    const baseUsername = `${normalizedFirstName}.${normalizedLastName}`;
+    // Max 47 chars base to leave room for numeric suffix (VarChar(50))
+    const MAX_BASE = 47;
+    const rawBase = `${normalizedFirstName}.${normalizedLastName}`;
+    const baseUsername = rawBase.length > MAX_BASE ? rawBase.substring(0, MAX_BASE) : rawBase;
     let username = baseUsername;
     let counter = 1;
 
     // Loop fino a trovare username univoco
     while (await this.usernameExists(username, tenantId)) {
-      username = `${baseUsername}${counter}`;
+      const suffix = `${counter}`;
+      username = `${baseUsername.substring(0, 50 - suffix.length)}${suffix}`;
       counter++;
     }
 
@@ -55,11 +58,9 @@ class TrainerAccountService {
    * @returns {Promise<boolean>}
    */
   async usernameExists(username, tenantId) {
+    // P63: Person è globale — cerca per username senza tenantId
     const existing = await prisma.person.findFirst({
-      where: {
-        username,
-        tenantId
-      }
+      where: { username }
     });
 
     return !!existing;
@@ -67,10 +68,13 @@ class TrainerAccountService {
 
   /**
    * Genera password standard per tutti i trainer
-   * @returns {string} - Password fissa "Password123!"
+   * @returns {string} - Password temporanea da process.env.DEFAULT_TEMP_PASSWORD (con fallback)
    */
   generateSecurePassword() {
-    return 'Password123!';
+    // DEFAULT_TEMP_PASSWORD obbligatorio — nessun fallback hardcoded per sicurezza
+    const pwd = process.env.DEFAULT_TEMP_PASSWORD;
+    if (!pwd) throw new Error('[CONFIG] DEFAULT_TEMP_PASSWORD env var is required');
+    return pwd;
   }
 
   /**
@@ -158,7 +162,7 @@ class TrainerAccountService {
    */
   generateCredentialsCSV(credentials) {
     const headers = 'Nome;Cognome;Email;Username;Password';
-    const rows = credentials.map(c => 
+    const rows = credentials.map(c =>
       `${c.firstName};${c.lastName};${c.email};${c.username};${c.password}`
     );
 

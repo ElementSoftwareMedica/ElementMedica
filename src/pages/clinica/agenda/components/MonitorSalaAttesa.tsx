@@ -187,7 +187,6 @@ const useChiamataWebSocket = (
                 setConnected(false);
             };
         } catch (error) {
-            console.error('WebSocket connection error:', error);
             setConnected(false);
 
             // Riprova connessione dopo 5 secondi

@@ -62,7 +62,7 @@ const AmbulatorioDetailPage: React.FC = () => {
                         Errore nel caricamento
                     </h3>
                     <p className="text-red-600 text-sm mb-4">
-                        {error instanceof Error ? error.message : 'Ambulatorio non trovato'}
+                        {'Ambulatorio non trovato'}
                     </p>
                     <button
                         onClick={() => navigate('/poliambulatorio/ambulatori')}

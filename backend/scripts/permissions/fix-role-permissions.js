@@ -58,20 +58,21 @@ const ALL_PERMISSIONS = [
 
 async function getDefaultPermissionsForRole(roleType) {
   const defaultPermissions = EnhancedRoleService.getDefaultPermissions(roleType);
-  
+
   // Converte da formato entity.action a PersonPermission enum
   const enumPermissions = defaultPermissions
     .map(perm => PERMISSION_MAPPING[perm])
     .filter(perm => perm && ALL_PERMISSIONS.includes(perm));
-  
+
   return enumPermissions;
 }
 
 async function fixRolePermissions() {
   console.log('🔧 Iniziando correzione permessi ruoli...\n');
-  
+
   try {
     // 1. Verifica PersonRole esistenti
+    // P48: Include tenantProfiles per email
     const personRoles = await prisma.personRole.findMany({
       where: {
         deletedAt: null,
@@ -79,40 +80,51 @@ async function fixRolePermissions() {
       },
       include: {
         person: {
-          select: { email: true }
+          select: {
+            firstName: true,
+            lastName: true,
+            tenantProfiles: {
+              where: { deletedAt: null, isActive: true },
+              select: { email: true, isPrimary: true }
+            }
+          }
         }
       }
     });
-    
+
     console.log(`📋 Trovati ${personRoles.length} PersonRole attivi:`);
     personRoles.forEach(pr => {
-      console.log(`  - ${pr.person.email}: ${pr.roleType} (ID: ${pr.id})`);
+      const profile = pr.person?.tenantProfiles?.find(p => p.isPrimary) || pr.person?.tenantProfiles?.[0] || {};
+      const email = profile.email || 'N/A';
+      console.log(`  - ${email}: ${pr.roleType} (ID: ${pr.id})`);
     });
     console.log();
-    
+
     // 2. Verifica RolePermission esistenti
     const existingRolePermissions = await prisma.rolePermission.findMany({
       where: { deletedAt: null }
     });
-    
+
     console.log(`📋 RolePermission esistenti: ${existingRolePermissions.length}`);
     existingRolePermissions.forEach(rp => {
       console.log(`  - PersonRole ${rp.personRoleId}: ${rp.permission} (granted: ${rp.isGranted})`);
     });
     console.log();
-    
+
     // 3. Per ogni PersonRole, assegna i permessi di default
     for (const personRole of personRoles) {
-      console.log(`🔄 Processando ${personRole.person.email} - ${personRole.roleType}...`);
-      
+      const roleProfile = personRole.person?.tenantProfiles?.find(p => p.isPrimary) || personRole.person?.tenantProfiles?.[0] || {};
+      const roleEmail = roleProfile.email || 'N/A';
+      console.log(`🔄 Processando ${roleEmail} - ${personRole.roleType}...`);
+
       const defaultPermissions = await getDefaultPermissionsForRole(personRole.roleType);
       console.log(`  📝 Permessi di default: ${defaultPermissions.length}`);
-      
+
       if (defaultPermissions.length === 0) {
         console.log(`  ⚠️  Nessun permesso di default per ${personRole.roleType}`);
         continue;
       }
-      
+
       // Verifica permessi già esistenti per questo PersonRole
       const existingPermissions = await prisma.rolePermission.findMany({
         where: {
@@ -120,10 +132,10 @@ async function fixRolePermissions() {
           deletedAt: null
         }
       });
-      
+
       const existingPermissionNames = existingPermissions.map(ep => ep.permission);
       console.log(`  📋 Permessi esistenti: ${existingPermissionNames.length}`);
-      
+
       // Aggiungi permessi mancanti
       let addedCount = 0;
       for (const permission of defaultPermissions) {
@@ -143,18 +155,18 @@ async function fixRolePermissions() {
           console.log(`    ⏭️  Già presente: ${permission}`);
         }
       }
-      
+
       console.log(`  ✅ Aggiunti ${addedCount} nuovi permessi\n`);
     }
-    
+
     // 4. Verifica finale
     console.log('📊 Verifica finale...');
     const finalRolePermissions = await prisma.rolePermission.findMany({
       where: { deletedAt: null }
     });
-    
+
     console.log(`✅ Totale RolePermission dopo correzione: ${finalRolePermissions.length}`);
-    
+
     // Raggruppa per PersonRole
     const permissionsByRole = {};
     for (const rp of finalRolePermissions) {
@@ -163,13 +175,15 @@ async function fixRolePermissions() {
       }
       permissionsByRole[rp.personRoleId].push(rp.permission);
     }
-    
+
     console.log('\n📋 Riepilogo permessi per ruolo:');
     for (const personRole of personRoles) {
       const permissions = permissionsByRole[personRole.id] || [];
-      console.log(`  ${personRole.person.email} (${personRole.roleType}): ${permissions.length} permessi`);
+      const personRoleProfile = personRole.person?.tenantProfiles?.find(p => p.isPrimary) || personRole.person?.tenantProfiles?.[0] || {};
+      const personRoleEmail = personRoleProfile.email || 'N/A';
+      console.log(`  ${personRoleEmail} (${personRole.roleType}): ${permissions.length} permessi`);
     }
-    
+
   } catch (error) {
     console.error('❌ Errore durante la correzione:', error);
     throw error;

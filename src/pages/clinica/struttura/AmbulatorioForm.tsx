@@ -36,6 +36,7 @@ import {
 import { ambulatoriApi, poliambulatoriApi, sediApi } from '../../../services/clinicaApi';
 import type { Ambulatorio, Poliambulatorio, SedePoliambulatorio } from '../../../services/clinicaApi';
 import { useToast } from '../../../hooks/useToast';
+import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
 
 // Import Element Medica theme
 import '../../../styles/clinica-theme.css';
@@ -114,6 +115,7 @@ const AmbulatorioForm: React.FC = () => {
     const [searchParams] = useSearchParams();
     const queryClient = useQueryClient();
     const { showToast } = useToast();
+    const { confirmWarning } = useConfirmDialog();
     const isEditing = Boolean(id);
 
     // Pre-fill from query params
@@ -175,7 +177,7 @@ const AmbulatorioForm: React.FC = () => {
             navigate('/poliambulatorio/ambulatori');
         },
         onError: (error: Error) => {
-            showToast({ type: 'error', message: error.message || 'Errore durante la creazione' });
+            showToast({ type: 'error', message: 'Errore durante la creazione' });
         }
     });
 
@@ -188,7 +190,7 @@ const AmbulatorioForm: React.FC = () => {
             navigate('/poliambulatorio/ambulatori');
         },
         onError: (error: Error) => {
-            showToast({ type: 'error', message: error.message || "Errore durante l'aggiornamento" });
+            showToast({ type: 'error', message: "Errore durante l'aggiornamento" });
         }
     });
 
@@ -279,8 +281,8 @@ const AmbulatorioForm: React.FC = () => {
         }
     };
 
-    const handleCancel = () => {
-        if (isDirty && !confirm('Hai modifiche non salvate. Sei sicuro di voler uscire?')) {
+    const handleCancel = async () => {
+        if (isDirty && !(await confirmWarning('Modifiche non salvate', 'Hai modifiche non salvate. Sei sicuro di voler uscire?'))) {
             return;
         }
         navigate('/poliambulatorio/ambulatori');

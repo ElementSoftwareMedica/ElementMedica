@@ -1,0 +1,58 @@
+{
+  "name": "@elementmedica/medical-device-bridge",
+  "version": "1.0.0",
+  "description": "Local Bridge server for medical device integration (Edan ECG, MIR Spirometer, Oscilla Audiometer) via GDT 2.1 standard",
+  "main": "dist/index.js",
+  "bin": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src/",
+    "pkg:win": "npx pkg package.json --targets node18-win-x64 --output dist/medical-bridge-win.exe",
+    "pkg:mac": "npx pkg package.json --targets node18-macos-x64 --output dist/medical-bridge-mac",
+    "pkg:all": "npm run build && npm run pkg:win && npm run pkg:mac"
+  },
+  "pkg": {
+    "scripts": [
+      "dist/**/*.js"
+    ],
+    "assets": [
+      "dist/**/*.json"
+    ]
+  },
+  "keywords": [
+    "medical-devices",
+    "gdt",
+    "ecg",
+    "spirometer",
+    "audiometer",
+    "elementmedica"
+  ],
+  "author": "ElementMedica",
+  "license": "PROPRIETARY",
+  "dependencies": {
+    "express": "^4.21.0",
+    "cors": "^2.8.5",
+    "chokidar": "^4.0.0",
+    "winston": "^3.14.0",
+    "iconv-lite": "^0.6.3",
+    "dotenv": "^16.4.0",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/cors": "^2.8.17",
+    "@types/node": "^22.0.0",
+    "@types/uuid": "^10.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0",
+    "eslint": "^9.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

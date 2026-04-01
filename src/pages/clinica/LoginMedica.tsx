@@ -11,6 +11,7 @@ import React, { useState, useEffect } from 'react';
 import { Navigate, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Eye, EyeOff, Lock, User, Stethoscope, Building2, Phone, Mail } from 'lucide-react';
+import ForceChangePasswordModal from '../../components/auth/ForceChangePasswordModal';
 
 // Import Element Medica theme
 import '../../styles/clinica-theme.css';
@@ -23,12 +24,12 @@ const LoginMedica: React.FC = () => {
     const [error, setError] = useState('');
     const [loginSuccess, setLoginSuccess] = useState(false);
 
-    const { login, isAuthenticated } = useAuth();
+    const { login, isAuthenticated, mustChangePassword, pendingPassword, clearMustChangePassword, logout } = useAuth();
     const navigate = useNavigate();
 
     // Redirect quando isAuthenticated diventa true dopo login
     useEffect(() => {
-        if (loginSuccess && isAuthenticated) {
+        if (loginSuccess && isAuthenticated && !mustChangePassword) {
             const savedRedirect = sessionStorage.getItem('redirectAfterLogin');
             if (savedRedirect &&
                 savedRedirect !== '/login' &&
@@ -42,7 +43,7 @@ const LoginMedica: React.FC = () => {
                 navigate('/poliambulatorio', { replace: true });
             }
         }
-    }, [loginSuccess, isAuthenticated, navigate]);
+    }, [loginSuccess, isAuthenticated, mustChangePassword, navigate]);
 
     // Se già autenticato, reindirizza alla dashboard poliambulatorio
     if (isAuthenticated && !loginSuccess) {
@@ -59,15 +60,31 @@ const LoginMedica: React.FC = () => {
             // Setta il flag di successo, il useEffect farà il redirect quando isAuthenticated è true
             setLoginSuccess(true);
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Errore durante il login');
+            setError('Errore durante il login');
             setIsLoading(false);
         }
     };
 
     return (
         <div className="min-h-screen flex clinica-theme" data-brand="element-medica">
+            {/* Modal forzato cambio password */}
+            {mustChangePassword && pendingPassword && (
+                <ForceChangePasswordModal
+                    currentPassword={pendingPassword}
+                    onSuccess={() => {
+                        clearMustChangePassword();
+                        setLoginSuccess(true);
+                    }}
+                    onLogout={async () => {
+                        clearMustChangePassword();
+                        await logout();
+                        setError('');
+                        setPassword('');
+                    }}
+                />
+            )}
             {/* Left Panel - Branding */}
-            <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-teal-600 via-teal-700 to-teal-800 relative overflow-hidden">
+            <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden" style={{ backgroundImage: 'linear-gradient(to bottom right, var(--color-primary-600), var(--color-primary-700), var(--color-primary-800))' }}>
                 {/* Background Pattern */}
                 <div className="absolute inset-0 opacity-10">
                     <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
@@ -88,7 +105,7 @@ const LoginMedica: React.FC = () => {
                         </div>
                         <div>
                             <h1 className="text-3xl font-bold">ElementMedica</h1>
-                            <p className="text-teal-200">Poliambulatorio</p>
+                            <p className="text-white/70">Poliambulatorio</p>
                         </div>
                     </div>
 
@@ -100,7 +117,7 @@ const LoginMedica: React.FC = () => {
                             </div>
                             <div>
                                 <h3 className="text-lg font-semibold mb-1">Gestione Completa</h3>
-                                <p className="text-teal-100 text-sm">
+                                <p className="text-white/80 text-sm">
                                     Ambulatori, agende, pazienti e visite in un'unica piattaforma integrata.
                                 </p>
                             </div>
@@ -112,7 +129,7 @@ const LoginMedica: React.FC = () => {
                             </div>
                             <div>
                                 <h3 className="text-lg font-semibold mb-1">Referti Digitali</h3>
-                                <p className="text-teal-100 text-sm">
+                                <p className="text-white/80 text-sm">
                                     Firma digitale, versioning e audit trail per la massima conformità.
                                 </p>
                             </div>
@@ -124,7 +141,7 @@ const LoginMedica: React.FC = () => {
                             </div>
                             <div>
                                 <h3 className="text-lg font-semibold mb-1">GDPR Compliant</h3>
-                                <p className="text-teal-100 text-sm">
+                                <p className="text-white/80 text-sm">
                                     Sicurezza dei dati sanitari e conformità normativa garantita.
                                 </p>
                             </div>
@@ -132,7 +149,7 @@ const LoginMedica: React.FC = () => {
                     </div>
 
                     {/* Footer */}
-                    <div className="text-sm text-teal-200">
+                    <div className="text-sm text-white/70">
                         <p>© 2025 ElementMedica - Poliambulatorio</p>
                         <p className="mt-1">Un prodotto Element Software</p>
                     </div>
@@ -144,7 +161,7 @@ const LoginMedica: React.FC = () => {
                 <div className="w-full max-w-md">
                     {/* Mobile Logo */}
                     <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
-                        <div className="w-12 h-12 bg-teal-600 rounded-xl flex items-center justify-center">
+                        <div className="w-12 h-12 bg-primary-600 rounded-xl flex items-center justify-center">
                             <Stethoscope className="h-7 w-7 text-white" />
                         </div>
                         <div>
@@ -222,11 +239,11 @@ const LoginMedica: React.FC = () => {
                                 <label className="flex items-center">
                                     <input
                                         type="checkbox"
-                                        className="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
+                                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
                                     />
                                     <span className="ml-2 text-sm text-gray-600">Ricordami</span>
                                 </label>
-                                <Link to="/forgot-password" className="text-sm text-teal-600 hover:text-teal-700 font-medium">
+                                <Link to="/forgot-password" className="text-sm text-primary-600 hover:text-primary-700 font-medium">
                                     Password dimenticata?
                                 </Link>
                             </div>
@@ -255,12 +272,12 @@ const LoginMedica: React.FC = () => {
                     <div className="mt-8 text-center">
                         <p className="text-sm text-gray-500 mb-3">Hai bisogno di assistenza?</p>
                         <div className="flex items-center justify-center gap-4 text-sm">
-                            <a href="tel:+390123456789" className="flex items-center gap-1 text-gray-600 hover:text-teal-600">
+                            <a href="tel:+393513181574" className="flex items-center gap-1 text-gray-600 hover:text-primary-600">
                                 <Phone className="h-4 w-4" />
                                 <span>Supporto</span>
                             </a>
                             <span className="text-gray-300">|</span>
-                            <a href="mailto:support@elementmedica.it" className="flex items-center gap-1 text-gray-600 hover:text-teal-600">
+                            <a href="mailto:info@elementmedica.com" className="flex items-center gap-1 text-gray-600 hover:text-primary-600">
                                 <Mail className="h-4 w-4" />
                                 <span>Email</span>
                             </a>

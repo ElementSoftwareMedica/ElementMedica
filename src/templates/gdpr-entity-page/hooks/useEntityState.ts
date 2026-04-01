@@ -96,7 +96,7 @@ export function useEntityState<T extends { id: string }>(
       }
       
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Errore sconosciuto';
+      const errorMessage = 'Errore sconosciuto';
       setError(errorMessage);
       // Toast handled by calling component - error state available via hook return
     } finally {

@@ -14,3 +14,13 @@ export { TenantProvider, useTenant } from './TenantContext';
 export { TenantFilterProvider, useTenantFilter } from './TenantFilterContext';
 export { ToastProvider } from './ToastContext';
 export { PreferencesProvider, usePreferences } from './PreferencesContext';
+// Project 47 - Advanced Notification System
+export { NotificationProvider, useNotifications } from './NotificationContext';
+export type {
+  Notification,
+  NotificationType,
+  NotificationPriority,
+  NotificationCategory,
+  NotificationFilters,
+  UnreadCount
+} from './NotificationContext';

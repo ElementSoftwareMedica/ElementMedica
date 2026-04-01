@@ -23,7 +23,9 @@ import {
     XCircle,
     AlertCircle,
     PlayCircle,
-    MoreVertical
+    MoreVertical,
+    Receipt,
+    RotateCcw
 } from 'lucide-react';
 import { Appuntamento, Paziente, Prestazione, Ambulatorio } from '../../services/clinicaApi';
 import { formatDate } from '@/utils/dateUtils';
@@ -101,6 +103,18 @@ const statusConfig: Record<Appuntamento['stato'], {
         color: 'text-gray-700',
         bgColor: 'bg-gray-100',
         icon: <AlertCircle className="w-4 h-4" />
+    },
+    FATTURATO: {
+        label: 'Fatturato',
+        color: 'text-purple-700',
+        bgColor: 'bg-purple-100',
+        icon: <Receipt className="w-4 h-4" />
+    },
+    RINVIATO: {
+        label: 'Rinviato',
+        color: 'text-orange-700',
+        bgColor: 'bg-orange-100',
+        icon: <RotateCcw className="w-4 h-4" />
     }
 };
 

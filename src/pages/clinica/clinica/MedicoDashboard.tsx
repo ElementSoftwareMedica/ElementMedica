@@ -36,15 +36,14 @@ import {
     refertiApi,
     Appuntamento,
     Visita,
-    Referto
+    Referto,
+    StatoAppuntamento
 } from '../../../services/clinicaApi';
 import { formatDate, formatTime } from '../../../utils/dateUtils';
 
 // ============================================
 // TYPES
 // ============================================
-
-type StatoAppuntamento = 'PRENOTATO' | 'CONFERMATO' | 'IN_ATTESA' | 'IN_CORSO' | 'COMPLETATO' | 'ANNULLATO' | 'NO_SHOW';
 
 interface Notifica {
     id: string;
@@ -63,10 +62,12 @@ const STATO_COLORS: Record<StatoAppuntamento, { bg: string; text: string; dot: s
     'PRENOTATO': { bg: 'bg-blue-100', text: 'text-blue-700', dot: 'bg-blue-500' },
     'CONFERMATO': { bg: 'bg-indigo-100', text: 'text-indigo-700', dot: 'bg-indigo-500' },
     'IN_ATTESA': { bg: 'bg-amber-100', text: 'text-amber-700', dot: 'bg-amber-500' },
-    'IN_CORSO': { bg: 'bg-teal-100', text: 'text-teal-700', dot: 'bg-teal-500' },
+    'IN_CORSO': { bg: 'bg-purple-100', text: 'text-purple-700', dot: 'bg-purple-500' },
     'COMPLETATO': { bg: 'bg-green-100', text: 'text-green-700', dot: 'bg-green-500' },
+    'FATTURATO': { bg: 'bg-teal-100', text: 'text-teal-700', dot: 'bg-teal-500' },
     'ANNULLATO': { bg: 'bg-gray-100', text: 'text-gray-700', dot: 'bg-gray-500' },
-    'NO_SHOW': { bg: 'bg-red-100', text: 'text-red-700', dot: 'bg-red-500' }
+    'NO_SHOW': { bg: 'bg-red-100', text: 'text-red-700', dot: 'bg-red-500' },
+    'RINVIATO': { bg: 'bg-yellow-100', text: 'text-yellow-700', dot: 'bg-yellow-500' }
 };
 
 // ============================================
@@ -127,7 +128,7 @@ const AppointmentItem: React.FC<{
                 <p className={`text-lg font-bold ${isPast ? 'text-gray-400' : 'text-gray-900'}`}>
                     {formatTime(dataOra)}
                 </p>
-                <p className="text-xs text-gray-400">{appuntamento.durataPrevista} min</p>
+                <p className="text-xs text-gray-400">{appuntamento.durataMinuti || 30} min</p>
             </div>
 
             {/* Timeline Dot */}
@@ -429,7 +430,6 @@ export const MedicoDashboard: React.FC = () => {
 
     const handleCallPatient = async (appuntamentoId: string) => {
         // TODO: Implement WebSocket call
-        console.log('Chiama paziente:', appuntamentoId);
         // For now, just navigate to start visit
         handleStartVisit(appuntamentoId);
     };

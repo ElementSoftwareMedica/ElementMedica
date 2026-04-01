@@ -25,7 +25,7 @@
 import express from 'express';
 import logger from '../../utils/logger.js';
 import { OrarioAmbulatorioService } from '../../services/clinical/OrarioAmbulatorioService.js';
-import middleware from '../../auth/middleware.js';
+import middleware from '../../middleware/auth.js';
 import { checkAdvancedPermission } from '../../middleware/advanced-permissions.js';
 import { clinicalValidators } from '../../config/validation-clinical.js';
 import { auditClinico, getEffectiveTenantId } from './utils/clinica-utils.js';
@@ -43,7 +43,7 @@ const { authenticate: authenticateToken } = middleware;
  * @access Authenticated + VIEW_AMBULATORI
  */
 router.get('/',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('ambulatori', 'read'),
     clinicalValidators.orarioAmbulatorio.query,
     auditClinico('list_orari_ambulatorio'),
@@ -59,14 +59,13 @@ router.get('/',
         } catch (error) {
             logger.error('Failed to list orari ambulatorio', {
                 component: 'orari-ambulatorio-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero degli orari',
-                message: error.message
             });
         }
     }
@@ -82,7 +81,7 @@ router.get('/',
  * @access Authenticated + VIEW_AMBULATORI
  */
 router.get('/ambulatorio/:ambulatorioId',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('ambulatori', 'read'),
     auditClinico('get_orari_by_ambulatorio'),
     async (req, res) => {
@@ -98,7 +97,7 @@ router.get('/ambulatorio/:ambulatorioId',
         } catch (error) {
             logger.error('Failed to get orari by ambulatorio', {
                 component: 'orari-ambulatorio-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 ambulatorioId: req.params.ambulatorioId,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -106,7 +105,6 @@ router.get('/ambulatorio/:ambulatorioId',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero degli orari',
-                message: error.message
             });
         }
     }
@@ -118,7 +116,7 @@ router.get('/ambulatorio/:ambulatorioId',
  * @access Authenticated + VIEW_AMBULATORI
  */
 router.get('/ambulatorio/:ambulatorioId/weekly',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('ambulatori', 'read'),
     auditClinico('get_weekly_schedule'),
     async (req, res) => {
@@ -133,7 +131,7 @@ router.get('/ambulatorio/:ambulatorioId/weekly',
         } catch (error) {
             logger.error('Failed to get weekly schedule', {
                 component: 'orari-ambulatorio-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 ambulatorioId: req.params.ambulatorioId,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -141,7 +139,6 @@ router.get('/ambulatorio/:ambulatorioId/weekly',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero degli orari',
-                message: error.message
             });
         }
     }
@@ -153,7 +150,7 @@ router.get('/ambulatorio/:ambulatorioId/weekly',
  * @access Authenticated + VIEW_AMBULATORI
  */
 router.get('/ambulatorio/:ambulatorioId/hours',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('ambulatori', 'read'),
     auditClinico('get_weekly_hours'),
     async (req, res) => {
@@ -168,7 +165,7 @@ router.get('/ambulatorio/:ambulatorioId/hours',
         } catch (error) {
             logger.error('Failed to get weekly hours', {
                 component: 'orari-ambulatorio-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 ambulatorioId: req.params.ambulatorioId,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -176,7 +173,6 @@ router.get('/ambulatorio/:ambulatorioId/hours',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel calcolo delle ore',
-                message: error.message
             });
         }
     }
@@ -188,7 +184,7 @@ router.get('/ambulatorio/:ambulatorioId/hours',
  * @access Authenticated
  */
 router.get('/ambulatorio/:ambulatorioId/next-open',
-    authenticateToken(),
+    authenticateToken,
     auditClinico('get_next_open_time'),
     async (req, res) => {
         try {
@@ -208,7 +204,7 @@ router.get('/ambulatorio/:ambulatorioId/next-open',
         } catch (error) {
             logger.error('Failed to get next open time', {
                 component: 'orari-ambulatorio-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 ambulatorioId: req.params.ambulatorioId,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -216,7 +212,6 @@ router.get('/ambulatorio/:ambulatorioId/next-open',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel calcolo della prossima apertura',
-                message: error.message
             });
         }
     }
@@ -228,7 +223,7 @@ router.get('/ambulatorio/:ambulatorioId/next-open',
  * @access Authenticated + MANAGE_AMBULATORI
  */
 router.delete('/ambulatorio/:ambulatorioId',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('ambulatori', 'update'),
     auditClinico('delete_all_orari_ambulatorio'),
     async (req, res) => {
@@ -244,7 +239,7 @@ router.delete('/ambulatorio/:ambulatorioId',
         } catch (error) {
             logger.error('Failed to delete orari by ambulatorio', {
                 component: 'orari-ambulatorio-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 ambulatorioId: req.params.ambulatorioId,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -252,7 +247,6 @@ router.delete('/ambulatorio/:ambulatorioId',
             res.status(500).json({
                 success: false,
                 error: 'Errore nell\'eliminazione degli orari',
-                message: error.message
             });
         }
     }
@@ -268,7 +262,7 @@ router.delete('/ambulatorio/:ambulatorioId',
  * @access Authenticated + MANAGE_AMBULATORI
  */
 router.post('/',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('ambulatori', 'update'),
     clinicalValidators.orarioAmbulatorio.create,
     auditClinico('create_orario_ambulatorio'),
@@ -285,7 +279,7 @@ router.post('/',
         } catch (error) {
             logger.error('Failed to create orario ambulatorio', {
                 component: 'orari-ambulatorio-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
@@ -294,7 +288,6 @@ router.post('/',
             res.status(statusCode).json({
                 success: false,
                 error: 'Errore nella creazione dell\'orario',
-                message: error.message
             });
         }
     }
@@ -306,7 +299,7 @@ router.post('/',
  * @access Authenticated + MANAGE_AMBULATORI
  */
 router.post('/bulk',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('ambulatori', 'update'),
     auditClinico('create_orari_bulk'),
     async (req, res) => {
@@ -331,14 +324,13 @@ router.post('/bulk',
         } catch (error) {
             logger.error('Failed to create orari bulk', {
                 component: 'orari-ambulatorio-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nella creazione degli orari',
-                message: error.message
             });
         }
     }
@@ -350,7 +342,7 @@ router.post('/bulk',
  * @access Authenticated + MANAGE_AMBULATORI
  */
 router.post('/copy',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('ambulatori', 'update'),
     clinicalValidators.orarioAmbulatorio.copySchedule,
     auditClinico('copy_schedule'),
@@ -373,7 +365,7 @@ router.post('/copy',
         } catch (error) {
             logger.error('Failed to copy schedule', {
                 component: 'orari-ambulatorio-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
@@ -381,7 +373,6 @@ router.post('/copy',
             res.status(statusCode).json({
                 success: false,
                 error: 'Errore nella copia degli orari',
-                message: error.message
             });
         }
     }
@@ -393,7 +384,7 @@ router.post('/copy',
  * @access Authenticated
  */
 router.post('/check-hours',
-    authenticateToken(),
+    authenticateToken,
     auditClinico('check_within_hours'),
     async (req, res) => {
         try {
@@ -416,14 +407,13 @@ router.post('/check-hours',
         } catch (error) {
             logger.error('Failed to check within hours', {
                 component: 'orari-ambulatorio-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nella verifica degli orari',
-                message: error.message
             });
         }
     }
@@ -439,7 +429,7 @@ router.post('/check-hours',
  * @access Authenticated + VIEW_AMBULATORI
  */
 router.get('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('ambulatori', 'read'),
     clinicalValidators.params.id,
     auditClinico('get_orario_ambulatorio'),
@@ -462,7 +452,7 @@ router.get('/:id',
         } catch (error) {
             logger.error('Failed to get orario ambulatorio', {
                 component: 'orari-ambulatorio-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 orarioId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -470,7 +460,6 @@ router.get('/:id',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero dell\'orario',
-                message: error.message
             });
         }
     }
@@ -482,7 +471,7 @@ router.get('/:id',
  * @access Authenticated + MANAGE_AMBULATORI
  */
 router.put('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('ambulatori', 'update'),
     clinicalValidators.params.id,
     clinicalValidators.orarioAmbulatorio.update,
@@ -500,7 +489,7 @@ router.put('/:id',
         } catch (error) {
             logger.error('Failed to update orario ambulatorio', {
                 component: 'orari-ambulatorio-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 orarioId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -510,7 +499,6 @@ router.put('/:id',
             res.status(statusCode).json({
                 success: false,
                 error: 'Errore nell\'aggiornamento dell\'orario',
-                message: error.message
             });
         }
     }
@@ -522,7 +510,7 @@ router.put('/:id',
  * @access Authenticated + MANAGE_AMBULATORI
  */
 router.post('/:id/toggle',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('ambulatori', 'update'),
     clinicalValidators.params.id,
     auditClinico('toggle_orario_ambulatorio'),
@@ -539,7 +527,7 @@ router.post('/:id/toggle',
         } catch (error) {
             logger.error('Failed to toggle orario ambulatorio', {
                 component: 'orari-ambulatorio-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 orarioId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -548,7 +536,6 @@ router.post('/:id/toggle',
             res.status(statusCode).json({
                 success: false,
                 error: 'Errore nel cambio stato dell\'orario',
-                message: error.message
             });
         }
     }
@@ -560,7 +547,7 @@ router.post('/:id/toggle',
  * @access Authenticated + MANAGE_AMBULATORI
  */
 router.delete('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('ambulatori', 'update'),
     clinicalValidators.params.id,
     auditClinico('delete_orario_ambulatorio'),
@@ -576,7 +563,7 @@ router.delete('/:id',
         } catch (error) {
             logger.error('Failed to delete orario ambulatorio', {
                 component: 'orari-ambulatorio-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 orarioId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -585,7 +572,6 @@ router.delete('/:id',
             res.status(statusCode).json({
                 success: false,
                 error: 'Errore nell\'eliminazione dell\'orario',
-                message: error.message
             });
         }
     }

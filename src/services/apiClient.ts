@@ -62,8 +62,8 @@ apiClient.interceptors.request.use(
     } catch (e) { }
 
     // CRITICAL: Add X-Frontend-Id header for brand detection
-    // The backend uses this to filter CMS content by brand (element-medica or element-formazione)
-    const brandId = import.meta.env.VITE_BRAND_ID || 'element-formazione';
+    // The backend uses this to filter CMS content by brand (element-medica or element-sicurezza)
+    const brandId = import.meta.env.VITE_BRAND_ID || 'element-sicurezza';
     (config.headers as any)['X-Frontend-Id'] = brandId;
 
     return config;
@@ -105,7 +105,7 @@ directApiClient.interceptors.request.use(
     } catch (e) { }
 
     // CRITICAL: Add X-Frontend-Id header for brand detection
-    const brandId = import.meta.env.VITE_BRAND_ID || 'element-formazione';
+    const brandId = import.meta.env.VITE_BRAND_ID || 'element-sicurezza';
     (config.headers as any)['X-Frontend-Id'] = brandId;
 
     return config;
@@ -144,8 +144,8 @@ export function setupInterceptors(
         return Promise.reject(error);
       }
 
-      const errorMessage = error.response?.data?.message || error.message;
-      console.error('API Error:', errorMessage);
+      const errorMessage = 'Errore nella richiesta API';
+      console.error('API Error:', error.response?.status, error.config?.url);
       return Promise.reject(error);
     }
   );
@@ -163,7 +163,6 @@ export async function getOne<T>(endpoint: string, id: string | number, config?: 
 }
 
 export async function create<T, D = Partial<T>>(endpoint: string, data: D, config?: any): Promise<T> {
-  console.log(`Creating ${endpoint} with data:`, JSON.stringify(data).substring(0, 100) + '...');
 
   // Standardizzazione endpoint schedules su API v1 tramite proxy
   if (endpoint === 'schedules') {
@@ -183,8 +182,6 @@ export async function update<T, D = Partial<T>>(
   data: D,
   config?: any
 ): Promise<T> {
-  console.log(`Updating ${endpoint}/${id} with data:`, JSON.stringify(data).substring(0, 100) + '...');
-
   // Standardizzazione endpoint schedules su API v1 tramite proxy
   if (endpoint === 'schedules') {
     const url = `/api/v1/schedules/${id}`;
@@ -198,8 +195,6 @@ export async function update<T, D = Partial<T>>(
 }
 
 export async function remove(endpoint: string, id: string | number, config?: any): Promise<void> {
-  console.log(`Deleting ${endpoint}/${id}`);
-
   // Standardizzazione endpoint schedules su API v1 tramite proxy
   if (endpoint === 'schedules') {
     const url = `/api/v1/schedules/${id}`;

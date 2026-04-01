@@ -24,3 +24,7 @@ export * from './employees';
 
 // Export all trainer services
 export * from './trainers';
+
+// === PROGETTO 48 - PERSON MULTI-TENANT ===
+export { PersonTenantProfileService } from './personTenantProfile';
+export { PersonDataShareConsentService } from './personDataShareConsent';

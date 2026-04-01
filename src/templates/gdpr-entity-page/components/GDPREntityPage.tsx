@@ -2,7 +2,7 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { Button } from '../../../design-system/atoms/Button';
 import { Input } from '../../../design-system/atoms/Input';
 import { Dropdown } from '../../../design-system/molecules/Dropdown';
-import { 
+import {
   Download,
   Filter,
   Plus,
@@ -23,10 +23,10 @@ export interface GDPREntityPageProps<T> {
   entityType: string;
   entityName: string;
   entityNamePlural: string;
-  
+
   // API endpoints
   apiEndpoint: string;
-  
+
   // Configurazione colonne
   columns: Array<{
     key: string;
@@ -35,7 +35,7 @@ export interface GDPREntityPageProps<T> {
     width?: number;
     render?: (value: any, entity: T) => React.ReactNode;
   }>;
-  
+
   // Azioni personalizzate
   actions?: {
     onView?: (entity: T) => void;
@@ -52,7 +52,7 @@ export interface GDPREntityPageProps<T> {
       permission?: string;
     }>;
   };
-  
+
   // Configurazione permessi
   permissions?: {
     read?: string;
@@ -61,13 +61,13 @@ export interface GDPREntityPageProps<T> {
     delete?: string;
     export?: string;
   };
-  
+
   // Opzioni di visualizzazione
   defaultViewMode?: ViewMode;
   showBatchOperations?: boolean;
   showFilters?: boolean;
   showColumnSettings?: boolean;
-  
+
   // Personalizzazione UI
   className?: string;
   headerActions?: React.ReactNode;
@@ -77,7 +77,7 @@ export interface GDPREntityPageProps<T> {
  * Componente principale ottimizzato per la gestione delle entità GDPR
  * Sostituisce il monolitico GDPREntityTemplate con un approccio modulare
  */
-export function GDPREntityPage<T extends { id: string; [key: string]: any }>({
+export function GDPREntityPage<T extends { id: string;[key: string]: any }>({
   entityType,
   entityName,
   entityNamePlural,
@@ -92,13 +92,13 @@ export function GDPREntityPage<T extends { id: string; [key: string]: any }>({
   className,
   headerActions
 }: GDPREntityPageProps<T>) {
-  
+
   // Stati locali per UI
   const [viewMode, setViewMode] = useState<ViewMode>(defaultViewMode);
   const [searchQuery, setSearchQuery] = useState('');
   const [showFiltersPanel, setShowFiltersPanel] = useState(false);
   const [showColumnPanel, setShowColumnPanel] = useState(false);
-  
+
   // Hook personalizzati per la logica di business
   const gdprPermissions = useGDPRPermissions({
     entityName,
@@ -108,21 +108,21 @@ export function GDPREntityPage<T extends { id: string; [key: string]: any }>({
     deletePermission: permissions.delete || `${entityType}:delete`,
     exportPermission: permissions.export || `${entityType}:export`
   });
-  
+
   const [entityState, entityActions] = useEntityState<T>({
     apiEndpoint,
     pageSize: 10,
     enableSearch: true,
     enablePagination: true
   });
-  
+
   const [columnState, columnActions] = useTableColumns(columns as import('../types').ColumnConfig[]);
-  
+
   // Gestori di eventi
   const handleSearch = useCallback((query: string) => {
     entityActions.setSearchTerm(query);
   }, [entityActions]);
-  
+
   const handleEntityAction = useCallback((action: string, entity: T) => {
     switch (action) {
       case 'view':
@@ -143,7 +143,7 @@ export function GDPREntityPage<T extends { id: string; [key: string]: any }>({
         customAction?.onClick(entity);
     }
   }, [actions]);
-  
+
   const handleBatchAction = useCallback(async (action: string, entityIds: string[]) => {
     switch (action) {
       case 'delete':
@@ -151,16 +151,14 @@ export function GDPREntityPage<T extends { id: string; [key: string]: any }>({
         entityIds.forEach(id => entityActions.removeEntity(id));
         break;
       case 'export':
-        // Logica di esportazione batch
-        console.log('Esportazione batch:', entityIds);
+        // TODO: Logica di esportazione batch
         break;
       case 'archive':
-        // Logica di archiviazione batch
-        console.log('Archiviazione batch:', entityIds);
+        // TODO: Logica di archiviazione batch
         break;
     }
   }, [entityActions]);
-  
+
   // Preparazione delle azioni del dropdown "Aggiungi" - memorizzate per evitare re-render
   const addActions = useMemo(() => [
     ...(gdprPermissions.canCreate ? [{
@@ -176,7 +174,7 @@ export function GDPREntityPage<T extends { id: string; [key: string]: any }>({
       variant: 'secondary' as const
     }] : [])
   ], [gdprPermissions.canCreate, entityName, entityNamePlural, actions.onCreate, actions.onImport]);
-  
+
   return (
     <div className={cn('space-y-6', className)}>
       {/* Header della pagina */}
@@ -189,10 +187,10 @@ export function GDPREntityPage<T extends { id: string; [key: string]: any }>({
             Gestisci {entityNamePlural.toLowerCase()} conformi al GDPR
           </p>
         </div>
-        
+
         <div className="flex items-center gap-2">
           {headerActions}
-          
+
           {/* Dropdown per aggiungere entità */}
           {addActions.length > 0 && (
             <Dropdown
@@ -203,7 +201,7 @@ export function GDPREntityPage<T extends { id: string; [key: string]: any }>({
           )}
         </div>
       </div>
-      
+
       {/* Barra di ricerca e filtri */}
       <div className="flex flex-col sm:flex-row gap-4">
         {/* Campo di ricerca */}
@@ -217,7 +215,7 @@ export function GDPREntityPage<T extends { id: string; [key: string]: any }>({
             className="pl-10"
           />
         </div>
-        
+
         {/* Controlli aggiuntivi */}
         <div className="flex items-center gap-2">
           {/* Filtri avanzati */}
@@ -231,7 +229,7 @@ export function GDPREntityPage<T extends { id: string; [key: string]: any }>({
               <span className="ml-1 hidden sm:inline">Filtri</span>
             </Button>
           )}
-          
+
           {/* Impostazioni colonne */}
           {showColumnSettings && viewMode === 'table' && (
             <Button
@@ -245,7 +243,7 @@ export function GDPREntityPage<T extends { id: string; [key: string]: any }>({
           )}
         </div>
       </div>
-      
+
       {/* Operazioni batch */}
       {showBatchOperations && entityState.selectedEntities.size > 0 && (
         <BatchOperations
@@ -256,50 +254,50 @@ export function GDPREntityPage<T extends { id: string; [key: string]: any }>({
           entityNamePlural={entityNamePlural}
         />
       )}
-      
+
       {/* Visualizzazione entità */}
-        <EntityView
-          entities={entityState.entities}
-          viewMode={viewMode}
-          onViewModeChange={setViewMode}
-          columns={columnActions.getVisibleColumns()}
-          permissions={gdprPermissions}
-          selectedEntities={entityState.selectedEntities}
-          onEntitySelect={entityActions.toggleEntitySelection}
-          onSelectAll={entityActions.selectAllEntities}
-          onClearSelection={entityActions.clearSelection}
-          onEntityAction={handleEntityAction}
-          loading={entityState.loading}
-          error={entityState.error}
-          emptyMessage={`Nessun ${entityName.toLowerCase()} trovato`}
-        />
-      
+      <EntityView
+        entities={entityState.entities}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+        columns={columnActions.getVisibleColumns()}
+        permissions={gdprPermissions}
+        selectedEntities={entityState.selectedEntities}
+        onEntitySelect={entityActions.toggleEntitySelection}
+        onSelectAll={entityActions.selectAllEntities}
+        onClearSelection={entityActions.clearSelection}
+        onEntityAction={handleEntityAction}
+        loading={entityState.loading}
+        error={entityState.error}
+        emptyMessage={`Nessun ${entityName.toLowerCase()} trovato`}
+      />
+
       {/* Paginazione */}
-        {entityState.totalPages > 1 && (
-          <div className="flex justify-center">
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                disabled={entityState.currentPage === 1}
-                onClick={() => entityActions.setCurrentPage(entityState.currentPage - 1)}
-              >
-                Precedente
-              </Button>
-              
-              <span className="text-sm text-gray-600">
-                Pagina {entityState.currentPage} di {entityState.totalPages}
-              </span>
-              
-              <Button
-                variant="outline"
-                disabled={entityState.currentPage === entityState.totalPages}
-                onClick={() => entityActions.setCurrentPage(entityState.currentPage + 1)}
-              >
-                Successiva
-              </Button>
-            </div>
+      {entityState.totalPages > 1 && (
+        <div className="flex justify-center">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              disabled={entityState.currentPage === 1}
+              onClick={() => entityActions.setCurrentPage(entityState.currentPage - 1)}
+            >
+              Precedente
+            </Button>
+
+            <span className="text-sm text-gray-600">
+              Pagina {entityState.currentPage} di {entityState.totalPages}
+            </span>
+
+            <Button
+              variant="outline"
+              disabled={entityState.currentPage === entityState.totalPages}
+              onClick={() => entityActions.setCurrentPage(entityState.currentPage + 1)}
+            >
+              Successiva
+            </Button>
           </div>
-        )}
+        </div>
+      )}
     </div>
   );
 }

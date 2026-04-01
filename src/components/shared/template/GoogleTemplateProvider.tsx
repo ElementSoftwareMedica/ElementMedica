@@ -175,9 +175,8 @@ const GoogleTemplateProvider: React.FC<GoogleTemplateProviderProps> = ({
         setError(response.error || 'Nessun template predefinito trovato');
         setSuccess(false);
       }
-    } catch (err: any) {
-      console.error('Error getting default template:', err);
-      setError(err.message || 'Impossibile ottenere il template');
+    } catch (err: unknown) {
+      setError('Impossibile ottenere il template');
       setSuccess(false);
     } finally {
       setLoading(false);
@@ -205,9 +204,8 @@ const GoogleTemplateProvider: React.FC<GoogleTemplateProviderProps> = ({
         setSuccess(false);
         return null;
       }
-    } catch (err: any) {
-      console.error('Error generating document:', err);
-      setError(err.message || 'Impossibile generare il documento');
+    } catch (err: unknown) {
+      setError('Impossibile generare il documento');
       setSuccess(false);
       return null;
     } finally {
@@ -310,7 +308,6 @@ const PlaceholderPanels: React.FC = () => {
       setCopiedPlaceholder(placeholder);
       setTimeout(() => setCopiedPlaceholder(null), 1500);
     } catch (err) {
-      console.error('Failed to copy:', err);
     }
   };
 

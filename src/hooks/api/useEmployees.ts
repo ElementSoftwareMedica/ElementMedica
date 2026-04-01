@@ -98,7 +98,7 @@ export function useEmployees() {
       // Use fallback data
       setEmployees(MOCK_EMPLOYEES);
       setFilteredEmployees(MOCK_EMPLOYEES);
-      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch employees';
+      const errorMessage = 'Errore nel recupero dei dipendenti';
       setError(errorMessage);
       setUsingFallback(true);
     } finally {

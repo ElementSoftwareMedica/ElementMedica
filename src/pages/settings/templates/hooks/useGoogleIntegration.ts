@@ -41,9 +41,8 @@ export function useGoogleIntegration() {
       const status = await googleService.getConnectionStatus();
       setConnectionStatus(status);
       return status;
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.message || err.message || 'Failed to check connection';
-      setError(errorMessage);
+    } catch (err: unknown) {
+      setError('Errore durante il controllo della connessione');
       setConnectionStatus({
         connected: false,
         expiresAt: null,
@@ -62,21 +61,21 @@ export function useGoogleIntegration() {
     try {
       setIsLoading(true);
       setError(null);
-      
+
       const authUrl = await googleService.getAuthUrl();
-      
+
       // Open auth URL in popup window
       const width = 600;
       const height = 700;
       const left = window.screen.width / 2 - width / 2;
       const top = window.screen.height / 2 - height / 2;
-      
+
       const popup = window.open(
         authUrl,
         'Google Authorization',
         `width=${width},height=${height},left=${left},top=${top}`
       );
-      
+
       // Listen for OAuth callback
       return new Promise<boolean>((resolve) => {
         const checkPopup = setInterval(() => {
@@ -89,9 +88,8 @@ export function useGoogleIntegration() {
           }
         }, 1000);
       });
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.message || err.message || 'Failed to connect to Google';
-      setError(errorMessage);
+    } catch (err: unknown) {
+      setError('Errore durante la connessione a Google');
       return false;
     } finally {
       setIsLoading(false);
@@ -112,9 +110,8 @@ export function useGoogleIntegration() {
         scopes: []
       });
       return true;
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.message || err.message || 'Failed to disconnect';
-      setError(errorMessage);
+    } catch (err: unknown) {
+      setError('Errore durante la disconnessione');
       return false;
     } finally {
       setIsLoading(false);
@@ -140,15 +137,15 @@ export function useGoogleIntegration() {
       const documentId = extractDocumentId(documentUrlOrId);
       const result = await googleService.importDocs(documentId, convertToHtml);
       return result;
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.message || err.message || 'Failed to import document';
-      setError(errorMessage);
-      
+    } catch (err: unknown) {
+      setError('Errore durante l\'importazione del documento');
+
       // Handle specific errors
-      if (err.response?.data?.code === 'GOOGLE_NOT_CONNECTED') {
+      const axiosErr = err as { response?: { data?: { code?: string } } };
+      if (axiosErr.response?.data?.code === 'GOOGLE_NOT_CONNECTED') {
         setConnectionStatus(prev => ({ ...prev, connected: false }));
       }
-      
+
       return null;
     } finally {
       setIsLoading(false);
@@ -174,15 +171,15 @@ export function useGoogleIntegration() {
       const presentationId = extractPresentationId(presentationUrlOrId);
       const result = await googleService.importSlides(presentationId, convertToHtml);
       return result;
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.message || err.message || 'Failed to import presentation';
-      setError(errorMessage);
-      
+    } catch (err: unknown) {
+      setError('Errore durante l\'importazione della presentazione');
+
       // Handle specific errors
-      if (err.response?.data?.code === 'GOOGLE_NOT_CONNECTED') {
+      const axiosErr = err as { response?: { data?: { code?: string } } };
+      if (axiosErr.response?.data?.code === 'GOOGLE_NOT_CONNECTED') {
         setConnectionStatus(prev => ({ ...prev, connected: false }));
       }
-      
+
       return null;
     } finally {
       setIsLoading(false);

@@ -1,5 +1,27 @@
 import { apiGet } from './api';
 
+export interface EmailCheckResult {
+  available: boolean;
+  existsInCurrentTenant?: boolean;
+  existingPerson?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    fullName: string;
+  };
+}
+
+export interface TaxCodeCheckResult {
+  available: boolean;
+  existsInCurrentTenant?: boolean;
+  existingPerson?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    fullName: string;
+  };
+}
+
 /**
  * Verifica se un'email è disponibile (non già in uso)
  */
@@ -9,13 +31,31 @@ export async function checkEmailAvailability(email: string): Promise<boolean> {
   }
 
   try {
-    const response = await apiGet<{ available: boolean }>('/api/v1/persons/check-email', { 
-      email: email.toLowerCase().trim() 
+    const response = await apiGet<EmailCheckResult>('/api/v1/persons/check-email', {
+      email: email.toLowerCase().trim()
     });
     return response.available;
   } catch (error) {
-    console.error('Error checking email availability:', error);
     return true; // In caso di errore, non bloccare l'utente
+  }
+}
+
+/**
+ * Verifica dettagliata disponibilità email con info sulla persona esistente
+ * P59: Usato per warning (non bloccante) in TrainerForm
+ */
+export async function checkEmailAvailabilityDetails(email: string): Promise<EmailCheckResult> {
+  if (!email || !email.trim()) {
+    return { available: true };
+  }
+
+  try {
+    const response = await apiGet<EmailCheckResult>('/api/v1/persons/check-email', {
+      email: email.toLowerCase().trim()
+    });
+    return response;
+  } catch (error) {
+    return { available: true }; // In caso di errore, non bloccare l'utente
   }
 }
 
@@ -28,13 +68,38 @@ export async function checkTaxCodeAvailability(taxCode: string): Promise<boolean
   }
 
   try {
-    const response = await apiGet<{ available: boolean }>('/api/v1/persons/check-taxcode', { 
-      taxCode: taxCode.toUpperCase().trim() 
+    const response = await apiGet<TaxCodeCheckResult>('/api/v1/persons/check-taxcode', {
+      taxCode: taxCode.toUpperCase().trim()
     });
     return response.available;
   } catch (error) {
-    console.error('Error checking tax code availability:', error);
     return true; // In caso di errore, non bloccare l'utente
+  }
+}
+
+/**
+ * P59: Verifica dettagliata disponibilità CF con supporto cross-tenant import
+ */
+export async function checkTaxCodeAvailabilityDetails(taxCode: string): Promise<TaxCodeCheckResult & {
+  existsInOtherTenant?: boolean;
+  canImport?: boolean;
+  message?: string;
+}> {
+  if (!taxCode || !taxCode.trim()) {
+    return { available: true };
+  }
+
+  try {
+    const response = await apiGet<TaxCodeCheckResult & {
+      existsInOtherTenant?: boolean;
+      canImport?: boolean;
+      message?: string;
+    }>('/api/v1/persons/check-taxcode', {
+      taxCode: taxCode.toUpperCase().trim()
+    });
+    return response;
+  } catch (error) {
+    return { available: true };
   }
 }
 
@@ -47,12 +112,11 @@ export async function checkUsernameAvailability(username: string): Promise<boole
   }
 
   try {
-    const response = await apiGet<{ available: boolean }>('/api/v1/persons/check-username', { 
-      username: username.trim() 
+    const response = await apiGet<{ available: boolean }>('/api/v1/persons/check-username', {
+      username: username.trim()
     });
     return response.available;
   } catch (error) {
-    console.error('Error checking username availability:', error);
     return true;
   }
 }

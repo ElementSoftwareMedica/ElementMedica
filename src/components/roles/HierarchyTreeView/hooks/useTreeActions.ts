@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { TreeNode, RoleFormData, TreeActionCallbacks, UserRoleHierarchy } from '../types';
 import { Role } from '../../../../hooks/useRoles';
+import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 
 interface UseTreeActionsOptions {
   currentUserHierarchy: UserRoleHierarchy | null;
@@ -32,6 +33,7 @@ export const useTreeActions = ({
   callbacks,
   onReload
 }: UseTreeActionsOptions): UseTreeActionsReturn => {
+  const { confirmDelete } = useConfirmDialog();
   const [editingNode, setEditingNode] = useState<string | null>(null);
   const [creatingChild, setCreatingChild] = useState<string | null>(null);
   const [formData, setFormData] = useState<RoleFormData>({
@@ -66,11 +68,8 @@ export const useTreeActions = ({
   };
 
   const hasPermission = (permission: string): boolean => {
-    console.log('🔍 Checking permission:', permission);
-    console.log('📊 currentUserHierarchy:', currentUserHierarchy);
 
     if (!currentUserHierarchy) {
-      console.log('❌ No currentUserHierarchy found');
       return false;
     }
 
@@ -78,20 +77,16 @@ export const useTreeActions = ({
     if (currentUserHierarchy.assignablePermissions?.includes('ALL_PERMISSIONS') ||
       currentUserHierarchy.userRoles?.includes('SUPER_ADMIN') ||
       currentUserHierarchy.userRoles?.includes('ADMIN')) {
-      console.log('✅ User has ALL_PERMISSIONS or SUPER_ADMIN/ADMIN role');
       return true;
     }
 
     // Fallback: se l'utente ha globalRole ADMIN, permettiamo tutto
     const userPersonInfo2 = (currentUserHierarchy as any).personRoles?.[0]?.person || currentUserHierarchy;
     if (userPersonInfo2?.globalRole === 'ADMIN' || userPersonInfo2?.globalRole === 'SUPER_ADMIN') {
-      console.log('✅ User has globalRole ADMIN/SUPER_ADMIN, granting permission');
       return true;
     }
 
     const hasPermissionResult = currentUserHierarchy.assignablePermissions?.includes(permission) || false;
-    console.log(`🎯 Permission ${permission} result:`, hasPermissionResult);
-    console.log('📋 Available permissions:', currentUserHierarchy.assignablePermissions);
 
     return hasPermissionResult;
   };
@@ -119,7 +114,7 @@ export const useTreeActions = ({
   };
 
   const startCreating = (parentId: string | null, parentNode?: TreeNode | null) => {
-    if (!hasPermission('CREATE_ROLES')) return;
+    if (!hasPermission('roles:create')) return;
 
     const newLevel = parentNode ? parentNode.level + 1 : 1;
 
@@ -159,14 +154,14 @@ export const useTreeActions = ({
       }
       cancelEditing();
     } catch (error) {
-      console.error('Error saving role:', error);
     }
   };
 
   const deleteRole = async (nodeId: string) => {
-    if (!canEditRole(nodeId) || !hasPermission('DELETE_ROLES')) return;
+    if (!canEditRole(nodeId) || !hasPermission('roles:delete')) return;
 
-    if (window.confirm('Sei sicuro di voler eliminare questo ruolo? Questa azione non può essere annullata.')) {
+    const confirmed = await confirmDelete('ruolo');
+    if (confirmed) {
       try {
         if (callbacks?.onDelete) {
           await callbacks.onDelete(nodeId);
@@ -175,7 +170,6 @@ export const useTreeActions = ({
           await onReload();
         }
       } catch (error) {
-        console.error('Error deleting role:', error);
       }
     }
   };

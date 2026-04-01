@@ -8,6 +8,7 @@ import { User, Mail, Briefcase, CreditCard, Award, Star } from 'lucide-react';
 import type { PersonData, Company, Site } from './types';
 import { STATUS_OPTIONS } from './types';
 import { formatDate, formatDateForInput, formatCurrency, getStatusBadge, joinArrayField, parseArrayField } from './utils';
+import { DatePickerElegante } from '../../../../components/ui/DatePickerElegante';
 
 // Common input classes
 const inputClasses = "w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500";
@@ -66,11 +67,10 @@ export const PersonalInfoCard: React.FC<InfoCardProps> = ({
                 <div>
                     <label className={labelClasses}>Data di Nascita</label>
                     {isEditing ? (
-                        <input
-                            type="date"
+                        <DatePickerElegante
                             value={formatDateForInput(editedPerson.birthDate)}
-                            onChange={(e) => onFieldChange('birthDate', e.target.value)}
-                            className={inputClasses}
+                            onChange={(date) => onFieldChange('birthDate', date ? date.toISOString().split('T')[0] : '')}
+                            theme="blue"
                         />
                     ) : (
                         <p className={valueClasses}>{formatDate(person.birthDate)}</p>
@@ -248,11 +248,11 @@ export const WorkInfoCard: React.FC<InfoCardProps> = ({
                         >
                             <option value="">-- Nessuna azienda --</option>
                             {companies.map(c => (
-                                <option key={c.id} value={c.id}>{c.ragioneSociale || c.name}</option>
+                                <option key={c.id} value={c.id}>{c.ragioneSociale || 'N/A'}</option>
                             ))}
                         </select>
                     ) : (
-                        <p className={valueClasses}>{person.company?.ragioneSociale || person.company?.name || 'N/A'}</p>
+                        <p className={valueClasses}>{person.company?.ragioneSociale || 'N/A'}</p>
                     )}
                 </div>
                 <div>
@@ -291,11 +291,10 @@ export const WorkInfoCard: React.FC<InfoCardProps> = ({
                 <div>
                     <label className={labelClasses}>Data Assunzione</label>
                     {isEditing ? (
-                        <input
-                            type="date"
+                        <DatePickerElegante
                             value={formatDateForInput(editedPerson.hiredDate)}
-                            onChange={(e) => onFieldChange('hiredDate', e.target.value)}
-                            className={inputClasses}
+                            onChange={(date) => onFieldChange('hiredDate', date ? date.toISOString().split('T')[0] : '')}
+                            theme="blue"
                         />
                     ) : (
                         <p className={valueClasses}>{formatDate(person.hiredDate)}</p>

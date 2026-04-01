@@ -18,6 +18,7 @@ import { requireRoles } from '../../middleware/rbac.js';
 import prisma from '../../config/prisma-optimization.js';
 import { GDPRService } from '../../services/gdpr-service.js';
 import { logger } from '../../utils/logger.js';
+import { getEffectiveTenantId } from '../../utils/tenantHelper.js';
 
 const router = express.Router();
 
@@ -53,7 +54,7 @@ router.get('/',
                 endDate
             } = req.query;
 
-            const tenantId = req.person.tenantId;
+            const tenantId = getEffectiveTenantId(req);
 
             // Check if user can access other person's data
             if (personId !== req.person.id && !req.person.roles.includes('global_admin')) {
@@ -130,13 +131,13 @@ router.get('/',
             logger.error('Failed to get audit history', {
                 component: 'gdpr-audit-compliance',
                 action: 'getAuditHistory',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 personId: req.person?.id,
                 query: req.query
             });
 
             res.status(500).json({
-                error: 'Failed to get audit history',
+                error: 'Errore nel recupero della cronologia audit',
                 code: 'GDPR_AUDIT_GET_FAILED'
             });
         }
@@ -169,12 +170,12 @@ router.get('/export',
                 format = 'json'
             } = req.query;
 
-            const tenantId = req.person.tenantId;
+            const tenantId = getEffectiveTenantId(req);
 
             // Check if user can access other person's data
             if (personId !== req.person.id && !req.person.roles.includes('global_admin')) {
                 return res.status(403).json({
-                    error: 'Access denied to other person data',
+                    error: 'Accesso negato ai dati di un\'altra persona',
                     code: 'GDPR_ACCESS_DENIED'
                 });
             }
@@ -245,13 +246,13 @@ router.get('/export',
             logger.error('Failed to export audit history', {
                 component: 'gdpr-audit-compliance',
                 action: 'exportAuditHistory',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 personId: req.person?.id,
                 query: req.query
             });
 
             res.status(500).json({
-                error: 'Failed to export audit history',
+                error: 'Errore nell\'esportazione della cronologia audit',
                 code: 'GDPR_AUDIT_EXPORT_FAILED'
             });
         }
@@ -281,7 +282,7 @@ router.post('/',
 
             const { action, entityType, entityId, details } = req.body;
             const personId = req.person.id;
-            const tenantId = req.person.tenantId;
+            const tenantId = getEffectiveTenantId(req);
 
             // Map frontend field names to schema field names
             const auditEntry = await prisma.gdprAuditLog.create({
@@ -327,13 +328,13 @@ router.post('/',
             logger.error('Failed to create audit entry', {
                 component: 'gdpr-audit-compliance',
                 action: 'createAuditEntry',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 personId: req.person?.id,
                 body: req.body
             });
 
             res.status(500).json({
-                error: 'Failed to create audit entry',
+                error: 'Errore nella creazione della voce audit',
                 code: 'GDPR_AUDIT_CREATE_FAILED'
             });
         }
@@ -364,7 +365,7 @@ router.post('/batch',
 
             const { entries } = req.body;
             const personId = req.person.id;
-            const tenantId = req.person.tenantId;
+            const tenantId = getEffectiveTenantId(req);
 
             // Map frontend field names to schema field names
             const auditEntries = await prisma.gdprAuditLog.createMany({
@@ -397,13 +398,13 @@ router.post('/batch',
             logger.error('Failed to create batch audit entries', {
                 component: 'gdpr-audit-compliance',
                 action: 'createBatchAuditEntries',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 personId: req.person?.id,
                 body: req.body
             });
 
             res.status(500).json({
-                error: 'Failed to create batch audit entries',
+                error: 'Errore nella creazione delle voci audit batch',
                 code: 'GDPR_AUDIT_BATCH_CREATE_FAILED'
             });
         }
@@ -455,13 +456,13 @@ router.get('/trail',
             logger.error('Failed to get audit trail', {
                 component: 'gdpr-audit-compliance',
                 action: 'getAuditTrail',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 personId: req.person?.id,
                 query: req.query
             });
 
             res.status(500).json({
-                error: 'Failed to get audit trail',
+                error: 'Errore nel recupero dell\'audit trail',
                 code: 'GDPR_AUDIT_TRAIL_FAILED'
             });
         }
@@ -490,9 +491,9 @@ router.get('/compliance-report',
             const { companyId } = req.query;
 
             // Check if user can access company data
-            if (companyId && req.person.companyId !== companyId && !req.person.roles.includes('global_admin')) {
+            if (companyId && req.person.companyTenantProfileId !== companyId && !req.person.roles.includes('global_admin')) {
                 return res.status(403).json({
-                    error: 'Access denied to company data',
+                    error: 'Accesso negato ai dati aziendali',
                     code: 'GDPR_COMPANY_ACCESS_DENIED'
                 });
             }
@@ -513,13 +514,13 @@ router.get('/compliance-report',
             logger.error('Failed to generate compliance report', {
                 component: 'gdpr-audit-compliance',
                 action: 'generateComplianceReport',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 adminPersonId: req.person?.id,
                 query: req.query
             });
 
             res.status(500).json({
-                error: 'Failed to generate compliance report',
+                error: 'Errore nella generazione del report di conformità',
                 code: 'GDPR_COMPLIANCE_REPORT_FAILED'
             });
         }

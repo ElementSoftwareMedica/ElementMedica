@@ -1,31 +1,35 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
-  Bell,
   ChevronRight,
   HelpCircle,
   Home,
   LogOut,
-  Menu,
   Settings,
   User
 } from 'lucide-react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/auth/useAuth';
+import { useTenantAccess } from '../../hooks/useTenantAccess';
+import { getCurrentBrand } from '../../config/brands.config';
+import { getTenantBranding } from '../../utils/tenantBranding';
 import Notifications from '../shared/Notifications';
-import { DashboardSwitcher } from '../shared/DashboardSwitcher';
-import { TenantSelector as TenantSwitcher } from '../shared/TenantSelector';
-import { TenantSelector as TenantFilterSelector } from '../common/TenantSelector';
+import { TenantModeSelector } from '../shared/TenantModeSelector';
+import NotificationBell from '../notifications/NotificationBell';
+import { ThemeToggle } from '../ui/ThemeToggle';
 
-interface HeaderProps {
-  sidebarOpen: boolean;
-  setSidebarOpen: (open: boolean) => void;
-}
-
-const Header: React.FC<HeaderProps> = ({ sidebarOpen, setSidebarOpen }) => {
+const Header: React.FC = () => {
   const { user, logout } = useAuth();
+  const { currentTenant, currentTenantId, loading: tenantLoading } = useTenantAccess();
+  const brand = getCurrentBrand();
+  const isResolvingTenant = Boolean(currentTenantId) && !currentTenant && tenantLoading;
+  const tenantBranding = getTenantBranding(
+    currentTenant,
+    brand.id,
+    isResolvingTenant ? undefined : brand.displayName,
+    brand.logoIcon
+  );
   const navigate = useNavigate();
   const location = useLocation();
-  const [showUserMenu, setShowUserMenu] = useState(false);
 
   // Genera le iniziali dell'utente
   const getUserInitials = () => {
@@ -79,9 +83,66 @@ const Header: React.FC<HeaderProps> = ({ sidebarOpen, setSidebarOpen }) => {
     try {
       await logout();
       navigate('/login');
-    } catch (error) {
-      console.error('Errore durante il logout:', error);
+    } catch {
+      navigate('/login');
     }
+  };
+
+  /**
+   * Generate smart breadcrumb title from path
+   * Handles UUIDs by showing parent segment with proper singular form
+   */
+  const getBreadcrumbTitle = (): string => {
+    if (location.pathname === '/dashboard') return 'Dashboard';
+
+    const segments = location.pathname.split('/').filter(Boolean);
+    if (segments.length === 0) return 'Dashboard';
+
+    const lastSegment = segments[segments.length - 1];
+
+    // Check if last segment is a UUID
+    const isUuid = /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i.test(lastSegment);
+
+    // Path label mapping
+    const pathLabels: Record<string, string> = {
+      'dashboard': 'Dashboard',
+      'companies': 'Aziende',
+      'aziende': 'Aziende',
+      'courses': 'Corsi',
+      'schedules': 'Programmazioni',
+      'trainers': 'Formatori',
+      'employees': 'Dipendenti',
+      'persons': 'Persone',
+      'settings': 'Impostazioni',
+      'reports': 'Report',
+      'documents': 'Documenti',
+      'modifica': 'Modifica',
+      'nuovo': 'Nuovo',
+      'nuova': 'Nuova'
+    };
+
+    // Singular form mapping
+    const singularLabels: Record<string, string> = {
+      'companies': 'Azienda',
+      'aziende': 'Azienda',
+      'courses': 'Corso',
+      'schedules': 'Programmazione',
+      'trainers': 'Formatore',
+      'employees': 'Dipendente',
+      'persons': 'Persona',
+      'documents': 'Documento'
+    };
+
+    if (isUuid && segments.length > 1) {
+      const parentSegment = segments[segments.length - 2];
+      const singularLabel = singularLabels[parentSegment] ||
+        pathLabels[parentSegment] ||
+        parentSegment.replace(/-/g, ' ').replace(/^\w/, c => c.toUpperCase());
+      return `Dettaglio ${singularLabel}`;
+    }
+
+    return pathLabels[lastSegment] ||
+      lastSegment.replace(/-/g, ' ').replace(/^\w/, c => c.toUpperCase());
   };
 
   return (
@@ -91,30 +152,32 @@ const Header: React.FC<HeaderProps> = ({ sidebarOpen, setSidebarOpen }) => {
         <div className="flex items-center gap-4">
           {/* Breadcrumb / Title - Uniform style */}
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-blue-600">ElementSicurezza</span>
+            <span className="text-sm font-semibold text-blue-600">{tenantBranding.displayName}</span>
             <ChevronRight className="h-4 w-4 text-gray-400" />
             <span className="text-sm font-medium text-gray-900 dark:text-white">
-              {location.pathname === '/dashboard'
-                ? 'Dashboard'
-                : location.pathname.split('/').pop()?.replace(/-/g, ' ').replace(/^\w/, c => c.toUpperCase()) || 'Dashboard'}
+              {getBreadcrumbTitle()}
             </span>
           </div>
         </div>
 
-        {/* Header: Center - Tenant Filter Selector (visible for multi-tenant users) */}
-        <div className="flex-1 flex justify-center">
-          <TenantFilterSelector variant="compact" />
+        {/* Header: Center - Available for inline notifications */}
+        <div className="flex-1 flex justify-center px-4">
+          {/* Spazio riservato per notifiche inline o altre info */}
         </div>
 
         {/* Header: Right side */}
-        <div className="flex items-center gap-4">
-          {/* Sistema di notifiche */}
+        <div className="flex items-center gap-3">
+          {/* TenantMode Selector - compatto e elegante */}
+          <TenantModeSelector compact />
+
+          {/* Sistema di notifiche legacy */}
           <Notifications />
 
-          {/* Notifications bell */}
-          <button className="relative p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
-            <Bell className="h-5 w-5 text-gray-500" />
-          </button>
+          {/* Advanced Notification System */}
+          <NotificationBell />
+
+          {/* P60: Theme Toggle (Dark Mode) */}
+          <ThemeToggle variant="dropdown" size="md" />
 
           {/* Help */}
           <button className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">

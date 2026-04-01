@@ -34,6 +34,10 @@ interface ResizableTableProps<T = { id?: string | number }> {
   columnOrder?: Record<string, number>;
   tableName?: string;
   zebra?: boolean;
+  /** Override the thead background/text classes for brand theming */
+  theadClassName?: string;
+  /** Accent color theme for sort indicators (default: 'blue') */
+  accentColor?: 'blue' | 'teal' | 'violet';
 }
 
 const ResizableTable = <T extends { id?: string | number } = { id?: string | number }>({
@@ -53,8 +57,34 @@ const ResizableTable = <T extends { id?: string | number } = { id?: string | num
   columnOrder = {},
   tableName = 'table',
   zebra = false,
+  theadClassName,
+  accentColor = 'blue',
 }: ResizableTableProps<T>) => {
-  // Utility helpers to prevent unnecessary state updates
+  // Theme-aware accent classes
+  const accentColorClasses = {
+    blue: {
+      thead: 'bg-gray-50 dark:bg-gray-700/50 text-gray-500 dark:text-gray-400',
+      sortedTh: 'bg-blue-50 dark:bg-blue-900/20',
+      sortIcon: 'text-blue-600 dark:text-blue-400',
+      resizeHandle: 'hover:bg-blue-400 dark:hover:bg-blue-600',
+      resizeBar: 'bg-gray-300 dark:bg-gray-600',
+    },
+    teal: {
+      thead: 'bg-gray-50 dark:bg-gray-700/50 text-gray-500 dark:text-gray-400',
+      sortedTh: 'bg-teal-50 dark:bg-teal-900/20',
+      sortIcon: 'text-teal-600 dark:text-teal-400',
+      resizeHandle: 'hover:bg-teal-400 dark:hover:bg-teal-600',
+      resizeBar: 'bg-gray-300 dark:bg-gray-600',
+    },
+    violet: {
+      thead: 'bg-gray-50 dark:bg-gray-700/50 text-gray-500 dark:text-gray-400',
+      sortedTh: 'bg-violet-50 dark:bg-violet-900/20',
+      sortIcon: 'text-violet-600 dark:text-violet-400',
+      resizeHandle: 'hover:bg-violet-400 dark:hover:bg-violet-600',
+      resizeBar: 'bg-gray-300 dark:bg-gray-600',
+    },
+  };
+  const accent = accentColorClasses[accentColor];
   const arraysShallowEqual = (a: string[] = [], b: string[] = []) => {
     if (a === b) return true;
     if (a.length !== b.length) return false;
@@ -100,7 +130,6 @@ const ResizableTable = <T extends { id?: string | number } = { id?: string | num
         loadedColumnOrder: Record<string, number>;
       };
     } catch (e) {
-      console.error("Error parsing localStorage:", e);
       return {
         loadedWidths: {},
         loadedHiddenColumns: [],
@@ -211,7 +240,6 @@ const ResizableTable = <T extends { id?: string | number } = { id?: string | num
       }
     } catch (error) {
       // Silent error handling
-      console.error('Failed to save preferences to localStorage:', error);
     }
   };
 
@@ -367,9 +395,9 @@ const ResizableTable = <T extends { id?: string | number } = { id?: string | num
           minWidth: `${width}px`,
         }}
         className={cn(
-          'relative px-4 py-3 select-none border-b border-blue-100',
-          'font-medium text-left text-sm',
-          isSorted ? 'bg-blue-100' : '',
+          'relative px-4 py-3 select-none border-b border-gray-200 dark:border-gray-700',
+          'text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap',
+          isSorted ? accent.sortedTh : '',
         )}
       >
         <div
@@ -384,7 +412,7 @@ const ResizableTable = <T extends { id?: string | number } = { id?: string | num
           {col.sortable && (
             <div className={cn(
               'flex-shrink-0 h-4 w-4 opacity-0 group-hover:opacity-70',
-              isSorted ? 'opacity-100 text-blue-600' : ''
+              isSorted ? `opacity-100 ${accent.sortIcon}` : ''
             )}>
               {isSorted ? (
                 sortDirection === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
@@ -393,16 +421,16 @@ const ResizableTable = <T extends { id?: string | number } = { id?: string | num
           )}
         </div>
 
-        {/* Resize handle */}
+        {/* Resize handle with dark mode */}
         {!isLastVisibleColumn(col) && (
           <div
             className={cn(
-              "absolute right-0 top-0 bottom-0 w-3 cursor-col-resize z-20 hover:bg-blue-400 hover:opacity-50",
-              "flex items-center justify-center group"
+              `absolute right-0 top-0 bottom-0 w-3 cursor-col-resize z-20 ${accent.resizeHandle} hover:opacity-50`,
+              'flex items-center justify-center group'
             )}
             onMouseDown={(e) => handleResizeStart(col.key, e)}
           >
-            <div className="w-px h-4/5 bg-blue-200 group-hover:bg-white"></div>
+            <div className={`w-px h-4/5 ${accent.resizeBar} group-hover:bg-white`}></div>
           </div>
         )}
       </th>
@@ -420,8 +448,6 @@ const ResizableTable = <T extends { id?: string | number } = { id?: string | num
     const isLastColumn = isLastVisibleColumn(col);
     const isFirstColumn = col.key === 'actions';
 
-    const rowBgClass = zebra && rowIndex % 2 === 1 ? 'bg-gray-50' : 'bg-white';
-
     return (
       <td
         key={`${rowIndex}-${col.key}`}
@@ -431,9 +457,8 @@ const ResizableTable = <T extends { id?: string | number } = { id?: string | num
           maxWidth: `${width}px`,
         }}
         className={cn(
-          'px-4 py-3 overflow-hidden text-sm text-gray-700 align-middle',
-          isFirstColumn ? 'sticky left-0 z-20' : '',
-          rowBgClass
+          'px-4 py-3.5 overflow-hidden text-sm text-gray-800 dark:text-gray-200 align-middle',
+          isFirstColumn ? 'sticky left-0 z-20' : ''
         )}
       >
         {col.renderCell ? (
@@ -452,47 +477,49 @@ const ResizableTable = <T extends { id?: string | number } = { id?: string | num
   // Se necessario, esporre un controllo esplicito fuori da questo componente per pulire le preferenze
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm" ref={tableContainerRef}>
-      <table
-        {...tableProps}
-        className={cn(
-          'w-full border-collapse border-spacing-0',
-          tableProps?.className
-        )}
-      >
-        <thead className="bg-blue-50 text-blue-900 sticky top-0 z-10">
-          <tr>
-            {sortedColumns.map(col => renderHeaderCell(col))}
-          </tr>
-        </thead>
-        <tbody {...tbodyProps}>
-          {data.map((row, rowIndex) => (
-            <tr
-              key={row.id || rowIndex}
-              onClick={onRowClick ? () => onRowClick(row) : undefined}
-              className={cn(
-                'border-b border-gray-200 last:border-0 whitespace-nowrap',
-                zebra && rowIndex % 2 === 1 ? 'bg-gray-50' : 'bg-white',
-                rowClassName ? rowClassName(row, rowIndex) : '',
-                onRowClick ? 'cursor-pointer hover:bg-gray-50' : ''
-              )}
-            >
-              {sortedColumns.map((col) => renderCell(row, col, rowIndex))}
-            </tr>
-          ))}
-
-          {data.length === 0 && (
-            <tr>
-              <td
-                colSpan={sortedColumns.length}
-                className="p-6 text-center text-gray-500"
-              >
-                Nessun dato disponibile
-              </td>
-            </tr>
+    <div className="rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-black/20 bg-white dark:bg-gray-800 overflow-hidden">
+      <div className="overflow-x-auto" ref={tableContainerRef}>
+        <table
+          {...tableProps}
+          className={cn(
+            'w-full border-collapse border-spacing-0',
+            tableProps?.className
           )}
-        </tbody>
-      </table>
+        >
+          <thead className={cn(theadClassName ?? accent.thead, 'sticky top-0 z-10')}>
+            <tr>
+              {sortedColumns.map(col => renderHeaderCell(col))}
+            </tr>
+          </thead>
+          <tbody {...tbodyProps}>
+            {data.map((row, rowIndex) => (
+              <tr
+                key={row.id || rowIndex}
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
+                className={cn(
+                  'border-b border-gray-100 dark:border-gray-700/50 last:border-0 whitespace-nowrap',
+                  zebra && rowIndex % 2 === 1 ? 'bg-gray-50/50 dark:bg-gray-800/50' : '',
+                  rowClassName ? rowClassName(row, rowIndex) : '',
+                  onRowClick ? 'cursor-pointer hover:bg-gray-50/80 dark:hover:bg-gray-700/30 transition-colors' : ''
+                )}
+              >
+                {sortedColumns.map((col) => renderCell(row, col, rowIndex))}
+              </tr>
+            ))}
+
+            {data.length === 0 && (
+              <tr>
+                <td
+                  colSpan={sortedColumns.length}
+                  className="p-6 text-center text-gray-500 dark:text-gray-400"
+                >
+                  Nessun dato disponibile
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };

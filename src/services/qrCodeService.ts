@@ -93,7 +93,7 @@ export async function generateQRCodeDataUrl(config: QRCodeConfig): Promise<strin
     const rawData = await qrCode.getRawData('png');
 
     if (!rawData) {
-        throw new Error('Failed to generate QR code blob');
+        throw new Error('Errore nella generazione del QR code');
     }
 
     // Handle both Blob and Buffer types
@@ -123,7 +123,7 @@ export async function generateQRCodeBlob(config: QRCodeConfig, format: 'png' | '
     const rawData = await qrCode.getRawData(format);
 
     if (!rawData) {
-        throw new Error('Failed to generate QR code blob');
+        throw new Error('Errore nella generazione del QR code');
     }
 
     // Handle both Blob and Buffer types
@@ -213,7 +213,7 @@ export async function generateQRCodeSVG(config: QRCodeConfig): Promise<string> {
 
     const svg = container.querySelector('svg');
     if (!svg) {
-        throw new Error('Failed to generate QR code SVG');
+        throw new Error('Errore nella generazione del QR code SVG');
     }
 
     const svgString = svg.outerHTML;

@@ -156,14 +156,14 @@ const DEFAULT_CONFIG_CATEGORIES: ConfigCategory[] = [
                 label: 'Email Mittente',
                 description: 'Indirizzo email mittente',
                 type: 'text',
-                value: 'noreply@elementsoftware.it'
+                value: 'noreply@elementsoftware.com'
             },
             {
                 key: 'email.replyTo',
                 label: 'Reply-To',
                 description: 'Indirizzo per le risposte',
                 type: 'text',
-                value: 'support@elementsoftware.it'
+                value: 'support@elementsoftware.com'
             }
         ]
     },
@@ -259,7 +259,7 @@ const SystemConfigPage: React.FC = () => {
         setError(null);
         try {
             const response = await apiGet<{ data: Record<string, any> }>('/api/v1/settings/config');
-            
+
             if (response?.data) {
                 // Update categories with loaded values
                 setCategories(prev => prev.map(category => ({
@@ -277,8 +277,7 @@ const SystemConfigPage: React.FC = () => {
                 });
                 setOriginalValues(originals);
             }
-        } catch (err: any) {
-            console.error('Error loading config:', err);
+        } catch (err: unknown) {
             // Use defaults if API fails
         } finally {
             setLoading(false);
@@ -310,7 +309,7 @@ const SystemConfigPage: React.FC = () => {
         setSaving(true);
         setError(null);
         setSuccess(null);
-        
+
         try {
             // Collect all settings
             const config: Record<string, any> = {};
@@ -321,12 +320,12 @@ const SystemConfigPage: React.FC = () => {
             });
 
             await apiPut('/api/v1/settings/config', config);
-            
+
             setSuccess('Configurazione salvata con successo');
             setHasChanges(false);
             setOriginalValues(config);
-        } catch (err: any) {
-            setError(err.message || 'Errore nel salvataggio della configurazione');
+        } catch (err: unknown) {
+            setError('Errore nel salvataggio della configurazione');
         } finally {
             setSaving(false);
         }
@@ -354,24 +353,22 @@ const SystemConfigPage: React.FC = () => {
                 return (
                     <button
                         onClick={() => updateSetting(categoryId, setting.key, !setting.value)}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                            setting.value ? 'bg-purple-600' : 'bg-gray-200'
-                        }`}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${setting.value ? 'bg-purple-600' : 'bg-gray-200 dark:bg-gray-600'
+                            }`}
                     >
                         <span
-                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                setting.value ? 'translate-x-6' : 'translate-x-1'
-                            }`}
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${setting.value ? 'translate-x-6' : 'translate-x-1'
+                                }`}
                         />
                     </button>
                 );
-            
+
             case 'select':
                 return (
                     <select
                         value={setting.value}
                         onChange={(e) => updateSetting(categoryId, setting.key, e.target.value)}
-                        className="w-64 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                        className="w-64 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-50"
                     >
                         {setting.options?.map(option => (
                             <option key={option.value} value={option.value}>
@@ -380,7 +377,7 @@ const SystemConfigPage: React.FC = () => {
                         ))}
                     </select>
                 );
-            
+
             case 'number':
                 return (
                     <input
@@ -389,27 +386,27 @@ const SystemConfigPage: React.FC = () => {
                         onChange={(e) => updateSetting(categoryId, setting.key, parseInt(e.target.value))}
                         min={setting.validation?.min}
                         max={setting.validation?.max}
-                        className="w-32 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                        className="w-32 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-50"
                     />
                 );
-            
+
             case 'textarea':
                 return (
                     <textarea
                         value={setting.value}
                         onChange={(e) => updateSetting(categoryId, setting.key, e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-50"
                         rows={3}
                     />
                 );
-            
+
             default:
                 return (
                     <input
                         type="text"
                         value={setting.value}
                         onChange={(e) => updateSetting(categoryId, setting.key, e.target.value)}
-                        className="w-64 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                        className="w-64 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-50"
                     />
                 );
         }
@@ -420,11 +417,11 @@ const SystemConfigPage: React.FC = () => {
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+                    <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-50 flex items-center gap-3">
                         <Settings className="w-7 h-7 text-purple-600" />
                         Configurazioni Sistema
                     </h1>
-                    <p className="text-gray-500 mt-1">
+                    <p className="text-gray-500 dark:text-gray-400 mt-1">
                         Gestione impostazioni globali e feature flags
                     </p>
                 </div>
@@ -432,7 +429,7 @@ const SystemConfigPage: React.FC = () => {
                     <button
                         onClick={loadConfig}
                         disabled={loading}
-                        className="px-3 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                        className="px-3 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-50 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                         title="Ricarica"
                     >
                         <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
@@ -440,7 +437,7 @@ const SystemConfigPage: React.FC = () => {
                     {hasChanges && (
                         <button
                             onClick={resetChanges}
-                            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                            className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                         >
                             Annulla modifiche
                         </button>
@@ -482,18 +479,17 @@ const SystemConfigPage: React.FC = () => {
             <div className="flex gap-6">
                 {/* Category Sidebar */}
                 <div className="w-64 flex-shrink-0">
-                    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                         {categories.map(category => {
                             const Icon = category.icon;
                             return (
                                 <button
                                     key={category.id}
                                     onClick={() => setActiveCategory(category.id)}
-                                    className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                                        activeCategory === category.id
-                                            ? 'bg-purple-50 border-l-4 border-purple-600 text-purple-700'
-                                            : 'hover:bg-gray-50 text-gray-700'
-                                    }`}
+                                    className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${activeCategory === category.id
+                                        ? 'bg-purple-50 dark:bg-purple-900/30 border-l-4 border-purple-600 text-purple-700 dark:text-purple-400'
+                                        : 'hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'
+                                        }`}
                                 >
                                     <Icon className="w-5 h-5" />
                                     <span className="font-medium">{category.label}</span>
@@ -506,21 +502,21 @@ const SystemConfigPage: React.FC = () => {
                 {/* Settings Panel */}
                 <div className="flex-1">
                     {loading ? (
-                        <div className="bg-white rounded-xl border border-gray-200 p-12 flex items-center justify-center">
+                        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-12 flex items-center justify-center">
                             <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
                         </div>
                     ) : activeCategoryData && (
-                        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                            <div className="px-6 py-4 border-b border-gray-200">
-                                <h2 className="text-lg font-semibold text-gray-900">{activeCategoryData.label}</h2>
-                                <p className="text-sm text-gray-500">{activeCategoryData.description}</p>
+                        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-50">{activeCategoryData.label}</h2>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">{activeCategoryData.description}</p>
                             </div>
-                            <div className="divide-y divide-gray-200">
+                            <div className="divide-y divide-gray-200 dark:divide-gray-700">
                                 {activeCategoryData.settings.map(setting => (
                                     <div key={setting.key} className="px-6 py-4 flex items-center justify-between">
                                         <div className="flex-1 pr-8">
-                                            <div className="font-medium text-gray-900">{setting.label}</div>
-                                            <div className="text-sm text-gray-500">{setting.description}</div>
+                                            <div className="font-medium text-gray-900 dark:text-gray-50">{setting.label}</div>
+                                            <div className="text-sm text-gray-500 dark:text-gray-400">{setting.description}</div>
                                             <div className="text-xs text-gray-400 mt-1">{setting.key}</div>
                                         </div>
                                         <div>

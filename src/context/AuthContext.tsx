@@ -6,20 +6,59 @@ import React, {
   ReactNode
 } from 'react';
 import { useLocation } from 'react-router-dom';
-import authService from '../services/auth';
-import { AuthResponse } from '../types';
-import { hasBackendPermission, convertBackendToFrontendPermissions } from '../utils/permissionMapping';
+import authService, { IdentifyResponse, IdentifyAccount } from '../services/auth';
+import { AuthResponse, Person } from '../types';
+import { convertBackendToFrontendPermissions } from '../utils/permissionMapping';
+
+/**
+ * Maps backend roles array to frontend display role
+ * P52: Added clinical roles (MEDICO, PAZIENTE, INFERMIERE, SEGRETERIA_CLINICA)
+ * 
+ * Priority: SUPER_ADMIN > ADMIN > COMPANY_ADMIN/TENANT_ADMIN > MEDICO > PAZIENTE > INFERMIERE > EMPLOYEE > User
+ */
+const mapRolesToDisplayRole = (roles: string[] | undefined): string => {
+  if (!roles || roles.length === 0) return 'User';
+
+  // Admin roles
+  if (roles.includes('SUPER_ADMIN')) return 'Admin';
+  if (roles.includes('ADMIN')) return 'Admin';
+  if (roles.includes('COMPANY_ADMIN')) return 'Administrator';
+  if (roles.includes('TENANT_ADMIN')) return 'Administrator';
+
+  // Clinical roles (P52)
+  if (roles.includes('MEDICO')) return 'Medico';
+  if (roles.includes('PAZIENTE')) return 'Paziente';
+  if (roles.includes('INFERMIERE')) return 'Infermiere';
+  if (roles.includes('SEGRETERIA_CLINICA')) return 'Segreteria';
+
+  // Standard roles
+  if (roles.includes('MANAGER')) return 'Manager';
+  if (roles.includes('TRAINER')) return 'Formatore';
+  if (roles.includes('EMPLOYEE')) return 'Employee';
+
+  // Fallback: use first role or User
+  return roles[0] || 'User';
+};
 
 interface AuthContextType {
   user: AuthResponse['user'] | null;
   permissions: Record<string, boolean>;
   isAuthenticated: boolean;
   isLoading: boolean;
+  mustChangePassword: boolean;
+  pendingPassword: string | null;
   login: (identifier: string, password: string) => Promise<void>;
+  loginWithPersonId: (personId: string, password: string) => Promise<void>;
+  identify: (identifier: string) => Promise<IdentifyResponse>;
   logout: () => Promise<void>;
+  clearMustChangePassword: () => void;
   hasPermission: (resourceOrPermission: string, action?: string) => boolean;
+  refreshUser: () => Promise<void>;
   // Nessun bypass: autenticazione obbligatoria
 }
+
+// Re-export types for convenience
+export type { IdentifyResponse, IdentifyAccount };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -28,6 +67,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [user, setUser] = useState<AuthResponse['user'] | null>(null);
   const [permissions, setPermissions] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [mustChangePassword, setMustChangePassword] = useState<boolean>(false);
+  const [pendingPassword, setPendingPassword] = useState<string | null>(null);
   // Dev bypass rimosso
 
   // Verifica lo stato di autenticazione all'avvio
@@ -70,6 +111,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         '/quotes',
         '/invoices',
         '/forms',
+        '/test',
         '/templates',
         '/profile',
         '/users',
@@ -83,7 +125,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const isProtectedRoute = protectedRoutes.some(route => location.pathname.startsWith(route));
 
       if (isProtectedRoute) {
-        console.log('🔒 Protected route detected, verifying authentication:', location.pathname);
         // Continua con la verifica auth
       } else {
         // Verifica se è route pubblica esplicita
@@ -91,7 +132,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           publicRoutes.some(route => location.pathname.startsWith(route));
 
         if (isExplicitPublicRoute) {
-          console.log('🌐 Public route detected, skipping auth verification:', location.pathname);
           setIsLoading(false);
           return;
         }
@@ -99,68 +139,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // Fallback: route dinamiche CMS (es. /chi-siamo, /qualita, ecc.)
         // Solo se NON è già una route protetta
         if (location.pathname.match(/^\/[^/]+$/) && !isProtectedRoute) {
-          console.log('📄 CMS dynamic page detected, skipping auth verification:', location.pathname);
           setIsLoading(false);
           return;
         }
       }
 
-      console.log('🔍 AuthContext: Verifying authentication on startup for protected route...');
 
       // Nessun bypass in dev: esegui sempre verifica standard
 
       try {
-        // Migrazione chiavi storage per compatibilità con versioni legacy
-        authService.migrateStorageKeys();
-
         let token = authService.getToken();
         if (!token) {
-          // Primo tentativo: verifica basata su cookie di sessione (withCredentials)
-          console.log('🚫 No access token found. Trying cookie-based verify...');
-          try {
-            const res = await authService.verifyToken();
-            console.log('📋 Cookie verify response:', { valid: res.valid, hasUser: !!res.user, hasPermissions: !!res.permissions });
-            if (res.valid && res.user) {
-              // Map backend roles array to frontend single role
-              // IMPORTANTE: Manteniamo roleType per il role-based filtering
-              const primaryRoleType = res.user.roles?.[0] || res.user.roleType || undefined;
-              const mappedUser = {
-                ...res.user,
-                roleType: primaryRoleType, // Per useRoleBasedData hook
-                role: res.user.roles?.includes('SUPER_ADMIN') ? 'Admin' :
-                  res.user.roles?.includes('ADMIN') ? 'Admin' :
-                    res.user.roles?.includes('COMPANY_ADMIN') ? 'Administrator' : 'User'
-              };
-              console.log('✅ AuthContext: Cookie session authenticated:', { id: mappedUser.id, role: mappedUser.role, roleType: mappedUser.roleType, roles: mappedUser.roles });
-
-              if (res.permissions && typeof res.permissions === 'object') {
-                setUser(mappedUser);
-                const convertedPermissions = convertBackendToFrontendPermissions(res.permissions);
-                setPermissions(convertedPermissions);
-              } else {
-                setUser(mappedUser);
-                setPermissions({});
-              }
-              // Autenticazione valida via cookie, termina qui
-              return;
-            }
-          } catch (e) {
-            // Debug only: Cookie verify failure is expected for public users
-            if (process.env.NODE_ENV === 'development') {
-              console.debug('🔍 Cookie verify failed (expected for public users)');
-            }
-          }
-
-          // Secondo tentativo: prova refresh con refresh token client-side
+          // Il backend supporta SOLO Bearer token (no cookie auth).
+          // Se non c'è access token in memory, si tenta direttamente il refresh.
+          // Questo evita un 401 inutile dal cookie-verify che sporcherebbe la console.
           const refreshed = await authService.refreshAccess();
           if (refreshed) {
-            console.log('✅ Access token obtained via refresh');
             token = refreshed;
           } else {
-            // Debug only: No refresh token is expected for public users
-            if (process.env.NODE_ENV === 'development') {
-              console.debug('🔍 No refresh token (expected for public users)');
-            }
+            // Nessun refresh token disponibile → utente non autenticato (normale per pagine pubbliche)
             setUser(null);
             setPermissions({});
             return;
@@ -169,7 +166,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         const performVerify = async () => {
           const res = await authService.verifyToken();
-          console.log('📋 AuthContext: Verify response:', { valid: res.valid, hasUser: !!res.user, hasPermissions: !!res.permissions });
 
           if (res.valid && res.user) {
             // Map backend roles array to frontend single role
@@ -178,12 +174,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const mappedUser = {
               ...res.user,
               roleType: primaryRoleType, // Per useRoleBasedData hook
-              role: res.user.roles?.includes('SUPER_ADMIN') ? 'Admin' :
-                res.user.roles?.includes('ADMIN') ? 'Admin' :
-                  res.user.roles?.includes('COMPANY_ADMIN') ? 'Administrator' : 'User'
+              role: mapRolesToDisplayRole(res.user.roles)
             };
-            console.log('✅ AuthContext: User authenticated:', { id: mappedUser.id, role: mappedUser.role, roleType: mappedUser.roleType, roles: mappedUser.roles });
-            console.log('🔐 AuthContext: Raw permissions from backend:', res.permissions);
 
             // Verifica che i permessi siano validi
             if (res.permissions && typeof res.permissions === 'object') {
@@ -191,53 +183,48 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               // Converti i permessi dal formato backend al formato frontend per compatibilità
               const convertedPermissions = convertBackendToFrontendPermissions(res.permissions);
               setPermissions(convertedPermissions);
-              console.log('🔐 AuthContext: Permissions set:', Object.keys(convertedPermissions).length, 'permissions');
             } else {
-              console.error('❌ AuthContext: Invalid permissions object:', res.permissions);
+              if (import.meta.env.DEV) console.error('❌ AuthContext: Invalid permissions object:', res.permissions);
               setUser(mappedUser);
               setPermissions({});
             }
           } else {
-            console.log('❌ AuthContext: Invalid token response');
-            throw new Error('Invalid token response');
+            throw new Error('Risposta token non valida');
           }
         };
 
         try {
           await performVerify();
-        } catch (error: any) {
+        } catch (error: unknown) {
           const status = error?.response?.status;
-          console.warn('⚠️ Verify failed', { status, message: error?.message });
+          if (import.meta.env.DEV) console.warn('⚠️ Verify failed', { status });
 
           if (status === 401 || status === 403) {
-            console.log('🔄 Trying refresh then retry verify...');
             const refreshed = await authService.refreshAccess();
             if (refreshed) {
               try {
                 await performVerify();
               } catch (e2) {
-                console.error('❌ Verify retry after refresh failed:', e2);
+                if (import.meta.env.DEV) console.error('❌ Verify retry after refresh failed:', e2);
                 authService.removeToken();
                 authService.removeRefreshToken();
                 setUser(null);
                 setPermissions({});
               }
             } else {
-              console.log('❌ Refresh failed, clearing auth state');
               authService.removeToken();
               authService.removeRefreshToken();
               setUser(null);
               setPermissions({});
             }
           } else {
-            console.error('❌ AuthContext: Error verifying token:', error);
+            if (import.meta.env.DEV) console.error('❌ AuthContext: Error verifying token:', error);
             authService.removeToken();
             setUser(null);
             setPermissions({});
           }
         }
       } finally {
-        console.log('🏁 AuthContext: Setting isLoading to false');
         setIsLoading(false);
       }
     };
@@ -248,20 +235,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // Login
   const login = async (identifier: string, password: string) => {
     try {
-      console.log('🔐 Starting login process...');
       const response = await authService.login(identifier, password);
-      console.log('📋 Login response structure:', {
-        hasData: !!response,
-        hasTokens: !!response.tokens,
-        hasAccessToken: !!(response as any)?.tokens && (("access_token" in (response as any).tokens) || ("accessToken" in (response as any).tokens)),
-        hasUser: !!response.user,
-        userRoles: response.user?.roles,
-        tenantId: response.user?.tenantId
-      });
 
-      // Normalizza le chiavi dei token per supportare sia snake_case che camelCase dal backend
-      const accessToken = (response as any)?.tokens?.access_token || (response as any)?.tokens?.accessToken;
-      const refreshToken = (response as any)?.tokens?.refresh_token || (response as any)?.tokens?.refreshToken;
+      // Backend restituisce snake_case (access_token, refresh_token) come da AuthResponse
+      const accessToken = response.tokens?.access_token;
+      const refreshToken = response.tokens?.refresh_token;
 
       if (accessToken) {
         authService.saveToken(accessToken);
@@ -279,29 +257,27 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // Verifica che il token sia stato salvato correttamente
         const savedToken = authService.getToken();
         if (!savedToken) {
-          console.error('🚨 CRITICAL: Token not available after save - this will cause auth/verify to fail');
+          if (import.meta.env.DEV) console.error('🚨 CRITICAL: Token not available after save - this will cause auth/verify to fail');
           throw new Error('Token not saved properly');
         }
 
-        // Map backend roles array to frontend single role
-        // IMPORTANTE: Manteniamo roleType per il role-based filtering
-        // Fallback mapping in case backend doesn't provide role field
-        let mappedRole = 'User';
-        if (response.user.roles?.includes('SUPER_ADMIN') || response.user.roles?.includes('ADMIN')) {
-          mappedRole = 'Admin';
-        } else if (response.user.roles?.includes('COMPANY_ADMIN')) {
-          mappedRole = 'Administrator';
-        }
-
+        // Map backend roles array to frontend single role using centralized function
+        // P52: Includes clinical roles (MEDICO, PAZIENTE, INFERMIERE, etc.)
         const primaryRoleType = response.user.roles?.[0] || response.user.roleType || undefined;
         const mappedUser = {
           ...response.user,
           roleType: primaryRoleType, // Per useRoleBasedData hook
-          role: response.user.role || mappedRole // Use backend role if available, otherwise use mapped role
+          role: mapRolesToDisplayRole(response.user.roles) // Use centralized role mapping
         };
 
-        console.log('✅ AuthContext: Login successful:', { id: mappedUser.id, role: mappedUser.role, roleType: mappedUser.roleType, roles: mappedUser.roles });
         setUser(mappedUser);
+
+        // Controlla se è richiesto il cambio password al primo accesso
+        if (response.mustChangePassword) {
+          setMustChangePassword(true);
+          setPendingPassword(password);
+          return; // Non caricare permessi - l'utente deve prima cambiare password
+        }
 
         // Get permissions after login - con retry
         let permissionsLoaded = false;
@@ -326,7 +302,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
       } else {
         // Fallback: autenticazione basata su cookie (token non presente nel body)
-        console.warn('⚠️ No access token in login response body. Attempting cookie-based session verification...');
+        if (import.meta.env.DEV) console.warn('⚠️ No access token in login response body. Attempting cookie-based session verification...');
 
         // Salva il tenant ID se presente
         if (response.user?.tenantId) {
@@ -342,11 +318,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const mappedUser = {
               ...verifyRes.user,
               roleType: primaryRoleType, // Per useRoleBasedData hook
-              role: verifyRes.user.roles?.includes('SUPER_ADMIN') ? 'Admin' :
-                verifyRes.user.roles?.includes('ADMIN') ? 'Admin' :
-                  verifyRes.user.roles?.includes('COMPANY_ADMIN') ? 'Administrator' : 'User'
+              role: mapRolesToDisplayRole(verifyRes.user.roles)
             };
-            console.log('✅ AuthContext: Cookie login authenticated:', { id: mappedUser.id, role: mappedUser.role, roleType: mappedUser.roleType, roles: mappedUser.roles });
             setUser(mappedUser);
 
             if (verifyRes.permissions && typeof verifyRes.permissions === 'object') {
@@ -356,16 +329,101 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               setPermissions({});
             }
           } else {
-            console.error('❌ Cookie-based verify failed after login.');
+            if (import.meta.env.DEV) console.error('❌ Cookie-based verify failed after login.');
             throw new Error('Login response missing access token and cookie verification failed');
           }
         } catch (e) {
-          console.error('❌ AuthContext: Cookie-based verification error:', e);
+          if (import.meta.env.DEV) console.error('❌ AuthContext: Cookie-based verification error:', e);
           throw e;
         }
       }
     } catch (error) {
-      console.error('❌ AuthContext: Login error:', error);
+      if (import.meta.env.DEV) console.error('❌ AuthContext: Login error:', error);
+      throw error;
+    }
+  };
+
+  // PROGETTO 49: Identify - Step 1 del multi-step login
+  const identify = async (identifier: string): Promise<IdentifyResponse> => {
+    try {
+      const response = await authService.identify(identifier);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  // PROGETTO 49: Login with personId - Step 2 del multi-step login
+  const loginWithPersonId = async (personId: string, password: string) => {
+    try {
+      const response = await authService.loginWithPersonId(personId, password);
+
+      // Backend restituisce snake_case (access_token, refresh_token) come da AuthResponse
+      const accessToken = response.tokens?.access_token;
+      const refreshToken = response.tokens?.refresh_token;
+
+      if (accessToken) {
+        authService.saveToken(accessToken);
+        if (refreshToken) {
+          authService.saveRefreshToken(refreshToken);
+        }
+        if (response.user?.tenantId) {
+          localStorage.setItem('tenantId', response.user.tenantId);
+        }
+
+        const savedToken = authService.getToken();
+        if (!savedToken) {
+          if (import.meta.env.DEV) console.error('🚨 CRITICAL: Token not available after save');
+          throw new Error('Token not saved properly');
+        }
+
+        let mappedRole = 'User';
+        if (response.user.roles?.includes('SUPER_ADMIN') || response.user.roles?.includes('ADMIN')) {
+          mappedRole = 'Admin';
+        } else if (response.user.roles?.includes('COMPANY_ADMIN')) {
+          mappedRole = 'Administrator';
+        }
+
+        const primaryRoleType = response.user.roles?.[0] || response.user.roleType || undefined;
+        const mappedUser = {
+          ...response.user,
+          roleType: primaryRoleType,
+          role: response.user.role || mappedRole
+        };
+
+        setUser(mappedUser);
+
+        // Controlla se è richiesto il cambio password al primo accesso
+        if (response.mustChangePassword) {
+          setMustChangePassword(true);
+          setPendingPassword(password);
+          return;
+        }
+
+        // Get permissions after login
+        let permissionsLoaded = false;
+        let retryCount = 0;
+        const maxRetries = 3;
+
+        while (!permissionsLoaded && retryCount < maxRetries) {
+          try {
+            const verifyRes = await authService.verifyToken();
+            if (verifyRes.valid && verifyRes.permissions) {
+              const convertedPermissions = convertBackendToFrontendPermissions(verifyRes.permissions);
+              setPermissions(convertedPermissions);
+              permissionsLoaded = true;
+            } else {
+              retryCount++;
+            }
+          } catch (e) {
+            retryCount++;
+          }
+        }
+      } else {
+        throw new Error('No access token in response');
+      }
+    } catch (error) {
+      if (import.meta.env.DEV) console.error('❌ AuthContext: Login with personId error:', error);
       throw error;
     }
   };
@@ -376,29 +434,44 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // Prova a revocare la sessione lato backend usando il refresh token
       await authService.logout();
     } catch (error) {
-      console.warn('⚠️ Logout backend failed, proceeding with client cleanup:', error);
+      if (import.meta.env.DEV) console.warn('⚠️ Logout backend failed, proceeding with client cleanup:', error);
     } finally {
       authService.removeToken();
       authService.removeRefreshToken();
       localStorage.removeItem('tenantId'); // Rimuovi anche il tenant ID
       setUser(null);
       setPermissions({});
+      setMustChangePassword(false);
+      setPendingPassword(null);
       window.location.href = '/login'; // Redirect al login
     }
   };
 
+  // Ascolta eventi di errore abbonamento dal API interceptor (mid-session subscription expiry)
+  useEffect(() => {
+    const handleSubscriptionError = (event: Event) => {
+      const detail = (event as CustomEvent).detail as { code: string; message: string };
+      if (import.meta.env.DEV) console.warn('⚠️ Subscription error intercepted:', detail.code);
+      // Salva il messaggio per mostrarlo nella LoginPage dopo il redirect
+      sessionStorage.setItem('subscriptionError', detail.message);
+      sessionStorage.setItem('subscriptionErrorCode', detail.code);
+      // Cleanup locale e redirect
+      authService.removeToken();
+      authService.removeRefreshToken();
+      localStorage.removeItem('tenantId');
+      setUser(null);
+      setPermissions({});
+      window.location.href = '/login';
+    };
+    window.addEventListener('subscription-error', handleSubscriptionError);
+    return () => window.removeEventListener('subscription-error', handleSubscriptionError);
+  }, []);
+
   // Funzione di test per hasPermission (per debug)
-  const hasPermissionTest = (resource: string, action: string, testUser: any, testPermissions: Record<string, boolean>): boolean => {
-    console.log(`🔐 Testing permission: ${resource}:${action}`, {
-      userRole: testUser?.role,
-      isAuthenticated: !!testUser,
-      permissionsCount: Object.keys(testPermissions).length,
-      hasSpecificPermission: testPermissions[`${resource}:${action}`]
-    });
+  const hasPermissionTest = (resource: string, action: string, testUser: Person | null, testPermissions: Record<string, boolean>): boolean => {
 
     // Se non c'è utente, nega l'accesso
     if (!testUser) {
-      console.log('❌ Access denied: no user');
       return false;
     }
 
@@ -408,13 +481,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     // Verifica permesso all:* (permesso universale)
     if (testPermissions['all:' + action] === true) {
-      console.log('✅ Access granted: user has all:' + action + ' permission');
       return true;
     }
 
     // Verifica permesso resource:all (permesso per tutte le azioni sulla risorsa)
     if (testPermissions[resource + ':all'] === true) {
-      console.log('✅ Access granted: user has ' + resource + ':all permission');
       return true;
     }
 
@@ -429,12 +500,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         .some(key => key.startsWith(resource + ':') && testPermissions[key] === true);
 
       if (hasAnyPermissionForResource) {
-        console.log('✅ Access granted: user has some permission for ' + resource);
         return true;
       }
     }
 
-    console.log(`${hasSpecificPermission ? '✅' : '❌'} Permission check result:`, hasSpecificPermission);
     return hasSpecificPermission;
   };
 
@@ -446,24 +515,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (action) {
       // Formato con due parametri: resource e action
       permissionToCheck = `${resourceOrPermission}:${action}`;
-      console.log(`🔐 Checking permission (two params): ${resourceOrPermission}:${action}`);
     } else {
       // Formato con un parametro: permesso diretto
       permissionToCheck = resourceOrPermission;
-      console.log(`🔐 Checking permission (single param): ${resourceOrPermission}`);
     }
 
-    console.log(`🔐 Permission check details:`, {
-      userRole: user?.role,
-      isAuthenticated: !!user,
-      permissionsCount: Object.keys(permissions).length,
-      hasSpecificPermission: permissions[permissionToCheck],
-      allPermissions: Object.keys(permissions).filter(key => permissions[key] === true)
-    });
 
     // Se non c'è utente, nega l'accesso
     if (!user) {
-      console.log('❌ Access denied: no user');
       return false;
     }
 
@@ -471,15 +530,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // Ora tutti gli utenti, inclusi gli admin, devono avere permessi esplicitamente assegnati
     // Questo garantisce un controllo granulare dei permessi conforme al GDPR
 
-    // Verifica permesso all:* (permesso universale)
-    if (permissions['all:' + (action || '')] === true) {
-      console.log('✅ Access granted: user has all:' + (action || '') + ' permission');
+    // Verifica permesso universale *:* o all:*
+    if (permissions['*:*'] === true || permissions['all:*'] === true) {
       return true;
     }
 
-    // Verifica permesso resource:all (permesso per tutte le azioni sulla risorsa)
-    if (permissions[(resourceOrPermission + ':all')] === true) {
-      console.log('✅ Access granted: user has ' + resourceOrPermission + ':all permission');
+    // Verifica permesso resource:* (tutte le azioni sulla risorsa)
+    if (permissions[(resourceOrPermission + ':*')] === true) {
       return true;
     }
 
@@ -492,13 +549,39 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const hasAnyPermissionForResource = Object.keys(permissions)
         .some(key => key.startsWith(resourceOrPermission + ':') && permissions[key] === true);
       if (hasAnyPermissionForResource) {
-        console.log('✅ Access granted: user has some permission for ' + resourceOrPermission);
         return true;
       }
     }
 
-    console.log(`${hasSpecificPermission ? '✅' : '❌'} Permission check result:`, hasSpecificPermission);
     return hasSpecificPermission;
+  };
+
+  const clearMustChangePassword = () => {
+    setMustChangePassword(false);
+    setPendingPassword(null);
+  };
+
+  // Ricarica utente e permessi dal server per il tenant corrente (X-Tenant-ID da localStorage)
+  // Chiamato dopo switchTenant() per aggiornare ruoli e permessi nella sidebar
+  const refreshUser = async (): Promise<void> => {
+    try {
+      const res = await authService.verifyToken();
+      if (res.valid && res.user) {
+        const primaryRoleType = res.user.roles?.[0] || res.user.roleType || undefined;
+        const mappedUser = {
+          ...res.user,
+          roleType: primaryRoleType,
+          role: mapRolesToDisplayRole(res.user.roles)
+        };
+        setUser(mappedUser);
+        if (res.permissions && typeof res.permissions === 'object') {
+          const convertedPermissions = convertBackendToFrontendPermissions(res.permissions);
+          setPermissions(convertedPermissions);
+        }
+      }
+    } catch {
+      // Fallback silenzioso: l'utente rimane con i permessi precedenti
+    }
   };
 
   return (
@@ -507,9 +590,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       permissions,
       isAuthenticated: !!user,
       isLoading,
+      mustChangePassword,
+      pendingPassword,
       login,
+      loginWithPersonId,
+      identify,
       logout,
-      hasPermission
+      clearMustChangePassword,
+      hasPermission,
+      refreshUser
     }}>
       {children}
     </AuthContext.Provider>
@@ -527,3 +616,11 @@ export const useAuth = (): AuthContextType => {
 export { AuthContext };
 
 export default useAuth;
+
+// Force full page reload on HMR changes to prevent stale context reference
+// (avoids "useAuth must be used within an AuthProvider" during development)
+if (import.meta.hot) {
+  import.meta.hot.accept(() => {
+    import.meta.hot!.invalidate('AuthContext changed — full reload required to prevent stale context');
+  });
+}

@@ -25,6 +25,7 @@ import {
     Loader2,
     RefreshCw,
     Edit2,
+    KeyRound,
     X,
     Check
 } from 'lucide-react';
@@ -46,11 +47,20 @@ import {
 import SystemRolesCard from './SystemRolesCard';
 import MultiTenantAccessSection from './MultiTenantAccessSection';
 import { GdprSection, NotesSection, Timestamps } from './GdprNotesSection';
+// Progetto 48: Widget per profili tenant e consensi GDPR
+import { PersonTenantProfilesWidget } from '../../../../components/person/PersonTenantProfilesWidget';
+import { PersonDataShareConsentWidget } from '../../../../components/person/PersonDataShareConsentWidget';
+import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
+import { PersonCredentialsModal } from '../../../../components/persons/PersonCredentialsModal';
+import { useTenantMode } from '../../../../contexts/TenantModeContext';
 
 const PersonDetails: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const { hasPermission } = useAuth();
+    const { confirm: confirmDialog } = useConfirmDialog();
+    const { getOperateHeaders } = useTenantMode();
+    const operateHeaders = getOperateHeaders();
 
     // State
     const [person, setPerson] = useState<PersonData | null>(null);
@@ -63,6 +73,7 @@ const PersonDetails: React.FC = () => {
     const [companies, setCompanies] = useState<Company[]>([]);
     const [sites, setSites] = useState<Site[]>([]);
     const [tenants, setTenants] = useState<Tenant[]>([]);
+    const [showCredentialsModal, setShowCredentialsModal] = useState(false);
 
     // Permissions
     const canEdit = hasPermission('persons', 'write') || hasPermission('persons', 'update');
@@ -90,17 +101,19 @@ const PersonDetails: React.FC = () => {
             setTenants(tenantsRes.data || []);
 
             // Fetch sites for person's company (if they have one)
-            if (response.companyId) {
+            // P48: companyId in flatten is actually companyTenantProfileId, use actual Company.id from tenantProfiles
+            const actualCompanyId = (response as any).tenantProfiles?.[0]?.companyTenantProfile?.company?.id;
+            if (actualCompanyId) {
                 try {
-                    const sitesRes = await apiGet<{ sites: Site[] }>(`/api/v1/company-sites/company/${response.companyId}`);
+                    const sitesRes = await apiGet<{ sites: Site[] }>(`/api/v1/company-sites/company/${actualCompanyId}`);
                     setSites(sitesRes.sites || []);
                 } catch {
                     setSites([]);
                 }
             }
-        } catch (err: any) {
-            console.error('Error fetching person:', err);
-            setError(err.message || 'Errore nel caricamento dei dati');
+        } catch (err: unknown) {
+            if (import.meta.env.DEV) console.error('Error fetching person:', err);
+            setError('Errore nel caricamento dei dati');
         } finally {
             setLoading(false);
         }
@@ -149,7 +162,7 @@ const PersonDetails: React.FC = () => {
                 }
             });
 
-            await apiPut(`/api/v1/persons/${id}`, updateData);
+            await apiPut(`/api/v1/persons/${id}`, updateData, { headers: operateHeaders });
 
             setSuccess('Modifiche salvate con successo');
             setIsEditing(false);
@@ -158,9 +171,9 @@ const PersonDetails: React.FC = () => {
             await fetchPerson();
 
             setTimeout(() => setSuccess(null), 3000);
-        } catch (err: any) {
-            console.error('Error saving person:', err);
-            setError(err.message || 'Errore nel salvataggio');
+        } catch (err: unknown) {
+            if (import.meta.env.DEV) console.error('Error saving person:', err);
+            setError('Errore nel salvataggio');
         } finally {
             setSaving(false);
         }
@@ -180,15 +193,15 @@ const PersonDetails: React.FC = () => {
             setSaving(true);
             setError(null);
 
-            await apiPost(`/api/v1/persons/${id}/roles`, { roleType });
+            await apiPost(`/api/v1/persons/${id}/roles`, { roleType }, { headers: operateHeaders });
 
             setSuccess('Ruolo aggiunto con successo');
             await fetchPerson();
 
             setTimeout(() => setSuccess(null), 3000);
-        } catch (err: any) {
-            console.error('Error adding role:', err);
-            setError(err.message || 'Errore nell\'aggiunta del ruolo');
+        } catch (err: unknown) {
+            if (import.meta.env.DEV) console.error('Error adding role:', err);
+            setError('Errore nell\'aggiunta del ruolo');
         } finally {
             setSaving(false);
         }
@@ -196,21 +209,21 @@ const PersonDetails: React.FC = () => {
 
     // Remove role
     const handleRemoveRole = async (roleId: string, roleType: string) => {
-        if (!confirm('Sei sicuro di voler rimuovere questo ruolo?')) return;
+        if (!(await confirmDialog({ title: 'Rimuovi ruolo', message: 'Sei sicuro di voler rimuovere questo ruolo?', variant: 'warning', confirmLabel: 'Rimuovi' }))) return;
 
         try {
             setSaving(true);
             setError(null);
 
-            await apiDelete(`/api/v1/persons/${id}/roles/${roleType}`);
+            await apiDelete(`/api/v1/persons/${id}/roles/${roleType}`, { headers: operateHeaders });
 
             setSuccess('Ruolo rimosso con successo');
             await fetchPerson();
 
             setTimeout(() => setSuccess(null), 3000);
-        } catch (err: any) {
-            console.error('Error removing role:', err);
-            setError(err.message || 'Errore nella rimozione del ruolo');
+        } catch (err: unknown) {
+            if (import.meta.env.DEV) console.error('Error removing role:', err);
+            setError('Errore nella rimozione del ruolo');
         } finally {
             setSaving(false);
         }
@@ -228,15 +241,15 @@ const PersonDetails: React.FC = () => {
                 tenantId: access.tenantId,
                 accessLevel: access.accessLevel,
                 defaultRoleType: access.defaultRoleType || undefined,
-            });
+            }, { headers: operateHeaders });
 
             setSuccess('Accesso al tenant aggiunto con successo');
             await fetchPerson();
 
             setTimeout(() => setSuccess(null), 3000);
-        } catch (err: any) {
-            console.error('Error adding tenant access:', err);
-            setError(err.message || 'Errore nell\'aggiunta dell\'accesso al tenant');
+        } catch (err: unknown) {
+            if (import.meta.env.DEV) console.error('Error adding tenant access:', err);
+            setError('Errore nell\'aggiunta dell\'accesso al tenant');
         } finally {
             setSaving(false);
         }
@@ -244,21 +257,21 @@ const PersonDetails: React.FC = () => {
 
     // Remove tenant access
     const handleRemoveTenantAccess = async (tenantId: string) => {
-        if (!confirm('Sei sicuro di voler rimuovere l\'accesso a questo tenant?')) return;
+        if (!(await confirmDialog({ title: 'Rimuovi accesso tenant', message: 'Sei sicuro di voler rimuovere l\'accesso a questo tenant?', variant: 'warning', confirmLabel: 'Rimuovi' }))) return;
 
         try {
             setSaving(true);
             setError(null);
 
-            await apiDelete(`/api/v1/person-tenant-access/persons/${id}/tenants/${tenantId}`);
+            await apiDelete(`/api/v1/person-tenant-access/persons/${id}/tenants/${tenantId}`, { headers: operateHeaders });
 
             setSuccess('Accesso al tenant rimosso con successo');
             await fetchPerson();
 
             setTimeout(() => setSuccess(null), 3000);
-        } catch (err: any) {
-            console.error('Error removing tenant access:', err);
-            setError(err.message || 'Errore nella rimozione dell\'accesso al tenant');
+        } catch (err: unknown) {
+            if (import.meta.env.DEV) console.error('Error removing tenant access:', err);
+            setError('Errore nella rimozione dell\'accesso al tenant');
         } finally {
             setSaving(false);
         }
@@ -270,15 +283,15 @@ const PersonDetails: React.FC = () => {
             setSaving(true);
             setError(null);
 
-            await apiPut(`/api/v1/person-tenant-access/persons/${id}/primary-tenant`, { tenantId });
+            await apiPut(`/api/v1/person-tenant-access/persons/${id}/primary-tenant`, { tenantId }, { headers: operateHeaders });
 
             setSuccess('Tenant primario impostato con successo');
             await fetchPerson();
 
             setTimeout(() => setSuccess(null), 3000);
-        } catch (err: any) {
-            console.error('Error setting primary tenant:', err);
-            setError(err.message || 'Errore nell\'impostazione del tenant primario');
+        } catch (err: unknown) {
+            if (import.meta.env.DEV) console.error('Error setting primary tenant:', err);
+            setError('Errore nell\'impostazione del tenant primario');
         } finally {
             setSaving(false);
         }
@@ -349,6 +362,15 @@ const PersonDetails: React.FC = () => {
                     >
                         <RefreshCw className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                     </button>
+                    {canEdit && !isEditing && (
+                        <button
+                            onClick={() => setShowCredentialsModal(true)}
+                            className="flex items-center gap-2 px-4 py-2 border border-blue-200 dark:border-blue-700 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                        >
+                            <KeyRound className="w-4 h-4" />
+                            Credenziali
+                        </button>
+                    )}
                     {canEdit && !isEditing && (
                         <button
                             onClick={() => setIsEditing(true)}
@@ -455,6 +477,28 @@ const PersonDetails: React.FC = () => {
                 onSetPrimaryTenant={handleSetPrimaryTenant}
             />
 
+            {/* Progetto 48: Profili Tenant - Dati specifici per tenant */}
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                <PersonTenantProfilesWidget
+                    personId={person.id}
+                    editable={canEdit}
+                    theme="violet"
+                    onProfileSelect={(_profile) => {
+                        // Opzionale: navigare al tenant specifico o mostrare dettagli
+                    }}
+                />
+            </div>
+
+            {/* Progetto 48: Consensi Condivisione Dati GDPR */}
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                <PersonDataShareConsentWidget
+                    personId={person.id}
+                    currentTenantId={person.tenantId}
+                    editable={canEdit}
+                    theme="violet"
+                />
+            </div>
+
             {/* GDPR Section */}
             <GdprSection
                 person={person}
@@ -473,6 +517,18 @@ const PersonDetails: React.FC = () => {
 
             {/* Timestamps */}
             <Timestamps person={person} />
+
+            {/* Modal Credenziali */}
+            <PersonCredentialsModal
+                open={showCredentialsModal}
+                onOpenChange={setShowCredentialsModal}
+                persons={[{
+                    id: person.id,
+                    firstName: person.firstName || '',
+                    lastName: person.lastName || '',
+                    email: person.email ?? undefined,
+                }]}
+            />
         </div>
     );
 };

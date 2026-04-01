@@ -10,7 +10,7 @@
 
 import express from 'express';
 import logger from '../../utils/logger.js';
-import middleware from '../../auth/middleware.js';
+import middleware from '../../middleware/auth.js';
 import { checkAdvancedPermission } from '../../middleware/advanced-permissions.js';
 import { clinicalValidators } from '../../config/validation-clinical.js';
 import { getEffectiveTenantId } from '../../utils/tenantHelper.js';
@@ -63,7 +63,7 @@ const auditClinico = (azione) => {
  * @access Authenticated + VIEW_AMBULATORI
  */
 router.get('/specializations',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('ambulatori', 'read'),
     auditClinico('get_specializations'),
     async (req, res) => {
@@ -78,14 +78,13 @@ router.get('/specializations',
         } catch (error) {
             logger.error('Failed to get specializations', {
                 component: 'ambulatori-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero delle specializzazioni',
-                message: error.message
             });
         }
     }
@@ -97,7 +96,7 @@ router.get('/specializations',
  * @access Authenticated + VIEW_AMBULATORI
  */
 router.get('/',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('ambulatori', 'read'),
     clinicalValidators.ambulatorio.query,
     auditClinico('list_ambulatori'),
@@ -113,14 +112,13 @@ router.get('/',
         } catch (error) {
             logger.error('Failed to list ambulatori', {
                 component: 'ambulatori-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero degli ambulatori',
-                message: error.message
             });
         }
     }
@@ -132,7 +130,7 @@ router.get('/',
  * @access Authenticated + VIEW_AMBULATORI
  */
 router.get('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('ambulatori', 'read'),
     clinicalValidators.params.id,
     auditClinico('get_ambulatorio'),
@@ -157,7 +155,7 @@ router.get('/:id',
         } catch (error) {
             logger.error('Failed to get ambulatorio', {
                 component: 'ambulatori-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 ambulatorioId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -165,7 +163,6 @@ router.get('/:id',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero dell\'ambulatorio',
-                message: error.message
             });
         }
     }
@@ -177,7 +174,7 @@ router.get('/:id',
  * @access Authenticated + CREATE_AMBULATORI
  */
 router.post('/',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('ambulatori', 'write'),
     clinicalValidators.ambulatorio.create,
     auditClinico('create_ambulatorio'),
@@ -194,7 +191,7 @@ router.post('/',
         } catch (error) {
             logger.error('Failed to create ambulatorio', {
                 component: 'ambulatori-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
@@ -216,7 +213,6 @@ router.post('/',
             res.status(500).json({
                 success: false,
                 error: 'Errore nella creazione dell\'ambulatorio',
-                message: error.message
             });
         }
     }
@@ -228,7 +224,7 @@ router.post('/',
  * @access Authenticated + EDIT_AMBULATORI
  */
 router.put('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('ambulatori', 'write'),
     clinicalValidators.params.id,
     clinicalValidators.ambulatorio.update,
@@ -248,7 +244,7 @@ router.put('/:id',
         } catch (error) {
             logger.error('Failed to update ambulatorio', {
                 component: 'ambulatori-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 ambulatorioId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -263,7 +259,6 @@ router.put('/:id',
             res.status(500).json({
                 success: false,
                 error: 'Errore nell\'aggiornamento dell\'ambulatorio',
-                message: error.message
             });
         }
     }
@@ -275,7 +270,7 @@ router.put('/:id',
  * @access Authenticated + DELETE_AMBULATORI
  */
 router.delete('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('ambulatori', 'delete'),
     clinicalValidators.params.id,
     auditClinico('delete_ambulatorio'),
@@ -293,7 +288,7 @@ router.delete('/:id',
         } catch (error) {
             logger.error('Failed to delete ambulatorio', {
                 component: 'ambulatori-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 ambulatorioId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -309,14 +304,12 @@ router.delete('/:id',
                 return res.status(409).json({
                     success: false,
                     error: 'Impossibile eliminare l\'ambulatorio',
-                    message: error.message
                 });
             }
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nell\'eliminazione dell\'ambulatorio',
-                message: error.message
             });
         }
     }
@@ -328,7 +321,7 @@ router.delete('/:id',
  * @access Authenticated + MANAGE_AMBULATORI
  */
 router.post('/:id/prestazioni',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('ambulatori', 'write'),
     clinicalValidators.params.id,
     clinicalValidators.ambulatorio.assignPrestazione,
@@ -349,7 +342,7 @@ router.post('/:id/prestazioni',
         } catch (error) {
             logger.error('Failed to assign prestazione', {
                 component: 'ambulatori-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 ambulatorioId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -357,14 +350,13 @@ router.post('/:id/prestazioni',
             if (error.message.includes('not found')) {
                 return res.status(404).json({
                     success: false,
-                    error: error.message
+                    error: 'Errore interno del server'
                 });
             }
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nell\'assegnazione della prestazione',
-                message: error.message
             });
         }
     }
@@ -376,7 +368,7 @@ router.post('/:id/prestazioni',
  * @access Authenticated + MANAGE_AMBULATORI
  */
 router.delete('/:id/prestazioni/:prestazioneId',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('ambulatori', 'write'),
     auditClinico('remove_prestazione_from_ambulatorio'),
     async (req, res) => {
@@ -393,7 +385,7 @@ router.delete('/:id/prestazioni/:prestazioneId',
         } catch (error) {
             logger.error('Failed to remove prestazione', {
                 component: 'ambulatori-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 ambulatorioId: req.params.id,
                 prestazioneId: req.params.prestazioneId,
                 tenantId: getEffectiveTenantId(req)
@@ -409,7 +401,6 @@ router.delete('/:id/prestazioni/:prestazioneId',
             res.status(500).json({
                 success: false,
                 error: 'Errore nella rimozione della prestazione',
-                message: error.message
             });
         }
     }
@@ -421,7 +412,7 @@ router.delete('/:id/prestazioni/:prestazioneId',
  * @access Authenticated + VIEW_AMBULATORI
  */
 router.get('/:id/availability/:date',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('ambulatori', 'read'),
     clinicalValidators.params.id,
     auditClinico('get_ambulatorio_availability'),
@@ -439,7 +430,7 @@ router.get('/:id/availability/:date',
         } catch (error) {
             logger.error('Failed to get ambulatorio availability', {
                 component: 'ambulatori-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 ambulatorioId: req.params.id,
                 date: req.params.date,
                 tenantId: getEffectiveTenantId(req)
@@ -448,7 +439,6 @@ router.get('/:id/availability/:date',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero della disponibilità',
-                message: error.message
             });
         }
     }

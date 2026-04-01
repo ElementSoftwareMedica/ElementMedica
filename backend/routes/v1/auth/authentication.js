@@ -7,7 +7,8 @@ import express from 'express';
 import { body, validationResult } from 'express-validator';
 import bcrypt from 'bcrypt';
 import rateLimit from 'express-rate-limit';
-import { authenticate } from '../../../auth/middleware.js';
+import authMiddleware from '../../../middleware/auth.js';
+const { authenticate } = authMiddleware;
 import authService from '../../../services/authService.js';
 import { activityService, ActivityType } from '../../../services/activity/index.js';
 import logger from '../../../utils/logger.js';
@@ -42,8 +43,8 @@ const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 50, // Increased from 5 to 50 (reasonable for production behind proxy)
   message: {
-    error: 'Too many authentication attempts',
-    message: 'Please try again in 15 minutes'
+    error: 'Troppi tentativi di autenticazione',
+    message: 'Riprovare tra 15 minuti'
   },
   standardHeaders: true,
   legacyHeaders: false,
@@ -56,8 +57,8 @@ const registerLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 10, // Increased from 3 to 10 registrations per hour
   message: {
-    error: 'Too many registration attempts',
-    message: 'Please try again later'
+    error: 'Troppi tentativi di registrazione',
+    message: 'Riprovare più tardi'
   },
   keyGenerator: getClientIp, // Use custom IP getter to handle proxy
   validate: { ip: false } // Disable IP validation to prevent errors with proxy
@@ -66,8 +67,8 @@ const registerLimiter = rateLimit({
 // Handle all other HTTP methods for /login endpoint with 405 Method Not Allowed
 const methodNotAllowedHandler = (req, res) => {
   res.status(405).json({
-    error: 'Method Not Allowed',
-    message: `Method ${req.method} is not allowed for this endpoint. Only POST is supported.`,
+    error: 'Metodo non consentito',
+    message: 'Solo il metodo POST è supportato per questo endpoint',
     allowedMethods: ['POST']
   });
 };
@@ -77,6 +78,52 @@ router.put('/login', methodNotAllowedHandler);
 router.patch('/login', methodNotAllowedHandler);
 router.delete('/login', methodNotAllowedHandler);
 router.head('/login', methodNotAllowedHandler);
+
+/**
+ * POST /auth/identify
+ * Step 1 del multi-step login: identifica l'utente tramite email/username/CF
+ */
+router.post('/identify',
+  authLimiter,
+  [
+    body('identifier')
+      .notEmpty()
+      .withMessage('Identificativo obbligatorio')
+      .isLength({ min: 2 })
+      .withMessage('Identificativo troppo corto')
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          error: 'Validazione fallita',
+          message: 'Dati di input non validi'
+        });
+      }
+
+      const { identifier } = req.body;
+      const result = await authService.identifyPerson(identifier);
+
+      if (!result.success) {
+        return res.status(404).json({
+          success: false,
+          message: result.message || 'Account non trovato'
+        });
+      }
+
+      res.json(result);
+    } catch (error) {
+      logger.error('[AUTH] Identify error:', { error: error.message });
+      res.status(500).json({
+        success: false,
+        error: 'Errore interno del server',
+        message: 'Si è verificato un errore durante l\'identificazione'
+      });
+    }
+  }
+);
 
 /**
  * @swagger
@@ -89,22 +136,32 @@ router.head('/login', methodNotAllowedHandler);
 router.post('/login',
   authLimiter,
   [
+    // Accetta identifier OPPURE personId (per multi-step login)
     body('identifier')
-      .notEmpty()
-      .withMessage('Email, username, or tax code is required')
+      .optional()
       .custom((value) => {
-        // Verifica che sia email, username o codice fiscale
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         const taxCodeRegex = /^[A-Z]{6}[0-9]{2}[A-Z][0-9]{2}[A-Z][0-9]{3}[A-Z]$/i;
 
         if (emailRegex.test(value) || taxCodeRegex.test(value) || value.length >= 3) {
           return true;
         }
-        throw new Error('Must be a valid email, tax code, or username');
+        throw new Error('Deve essere un\'email, codice fiscale o username valido');
       }),
+    body('personId')
+      .optional()
+      .isUUID()
+      .withMessage('personId non valido'),
     body('password')
       .isLength({ min: 6 })
-      .withMessage('Password must be at least 6 characters long')
+      .withMessage('La password deve essere di almeno 6 caratteri'),
+    // Custom: almeno uno tra identifier e personId
+    body().custom((value) => {
+      if (!value.identifier && !value.personId) {
+        throw new Error('Email, username, codice fiscale o personId obbligatorio');
+      }
+      return true;
+    })
   ],
   async (req, res) => {
     try {
@@ -135,16 +192,18 @@ router.post('/login',
           hasPassword: !!req.body?.password
         });
         return res.status(400).json({
-          error: 'Validation failed',
-          message: 'Invalid input data',
+          error: 'Validazione fallita',
+          message: 'Dati di input non validi',
           details: errors.array()
         });
       }
 
-      const { identifier, password, remember_me = false } = req.body;
+      const { identifier, personId, password, remember_me = false } = req.body;
 
-      // Verify credentials using AuthService
-      const credentialsResult = await authService.verifyCredentials(identifier, password);
+      // Verify credentials using AuthService (supporta identifier o personId per multi-step login)
+      const credentialsResult = personId
+        ? await authService.verifyCredentialsByPersonId(personId, password)
+        : await authService.verifyCredentials(identifier, password);
 
       if (!credentialsResult.success) {
         logger.warn('🔐 [LOGIN CREDENTIALS FAILED]', { identifier, error: credentialsResult.error });
@@ -154,12 +213,154 @@ router.post('/login',
         // Non logghiamo in ActivityLog senza personId per rispettare la struttura dati
 
         return res.status(401).json({
-          error: 'Invalid credentials',
-          message: 'Identifier or password is incorrect'
+          error: 'Credenziali non valide',
+          message: 'Identificativo o password non corretti'
         });
       }
 
       const person = credentialsResult.person;
+
+      // P63: tenantId da PersonTenantProfile (Person non ha più tenantId)
+      let sessionTenantId =
+        person._loginProfile?.tenantId ||
+        person.tenantProfiles?.find(p => p.isPrimary)?.tenantId ||
+        person.tenantProfiles?.[0]?.tenantId;
+
+      // P48: Per utenti multi-tenant, preferisci il tenant che corrisponde al brand/dominio
+      // Se l'utente accede da elementsicurezza.com (X-Frontend-Id: element-sicurezza),
+      // seleziona il profilo tenant corretto anziché il primary
+      const loginFrontendId = req.headers['x-frontend-id'];
+      if (loginFrontendId && person.tenantProfiles?.length > 1) {
+        const brandTenant = await prisma.tenant.findFirst({
+          where: { slug: loginFrontendId, deletedAt: null },
+          select: { id: true }
+        });
+        if (brandTenant) {
+          const matchingProfile = person.tenantProfiles.find(p => p.tenantId === brandTenant.id);
+          if (matchingProfile) {
+            sessionTenantId = brandTenant.id;
+            person._loginProfile = matchingProfile;
+          }
+        }
+      }
+
+      // Verifica Tenant attivo e abbonamento valido
+      if (sessionTenantId) {
+        const tenant = await prisma.tenant.findFirst({
+          where: { id: sessionTenantId, deletedAt: null },
+          select: {
+            id: true,
+            isActive: true,
+            subscriptionStatus: true,
+            subscriptionExpiresAt: true,
+            gracePeriodUntil: true,
+            trialEndsAt: true,
+            billingPlan: true,
+            name: true
+          }
+        });
+
+        if (!tenant) {
+          logger.warn('Login attempt for non-existent tenant', { personId: person.id, tenantId: sessionTenantId });
+          return res.status(403).json({
+            error: 'Tenant non trovato',
+            message: 'Il tenant associato al tuo account non è più disponibile. Contatta l\'amministratore.'
+          });
+        }
+
+        if (!tenant.isActive) {
+          logger.warn('Login attempt for inactive tenant', { personId: person.id, tenantId: sessionTenantId });
+          return res.status(403).json({
+            error: 'TENANT_INACTIVE',
+            code: 'TENANT_INACTIVE',
+            message: 'L\'abbonamento del tuo tenant non è attivo. Contatta l\'amministratore per rinnovare.'
+          });
+        }
+
+        // Verifica stato abbonamento
+        const now = new Date();
+        const subStatus = tenant.subscriptionStatus || 'active';
+
+        if (subStatus === 'cancelled') {
+          logger.warn('Login attempt for cancelled subscription', { personId: person.id, tenantId: sessionTenantId });
+          return res.status(403).json({
+            error: 'SUBSCRIPTION_CANCELLED',
+            code: 'SUBSCRIPTION_CANCELLED',
+            message: 'L\'abbonamento è stato cancellato. Contatta l\'amministratore per riattivarlo.'
+          });
+        }
+
+        if (subStatus === 'suspended') {
+          logger.warn('Login attempt for suspended subscription', { personId: person.id, tenantId: sessionTenantId });
+          return res.status(403).json({
+            error: 'SUBSCRIPTION_SUSPENDED',
+            code: 'SUBSCRIPTION_SUSPENDED',
+            message: 'L\'abbonamento è sospeso per mancato pagamento. Contatta l\'amministratore.'
+          });
+        }
+
+        // Verifica scadenza abbonamento (con grace period)
+        if (tenant.subscriptionExpiresAt && tenant.subscriptionExpiresAt < now) {
+          const gracePeriodEnd = tenant.gracePeriodUntil || tenant.subscriptionExpiresAt;
+          if (gracePeriodEnd < now) {
+            logger.warn('Login attempt with expired subscription', {
+              personId: person.id,
+              tenantId: sessionTenantId,
+              expiredAt: tenant.subscriptionExpiresAt
+            });
+            return res.status(403).json({
+              error: 'SUBSCRIPTION_EXPIRED',
+              code: 'SUBSCRIPTION_EXPIRED',
+              message: 'L\'abbonamento è scaduto. Contatta l\'amministratore per rinnovare.'
+            });
+          }
+          // In grace period — login consentito con warning nel log
+          logger.info('Login during grace period', {
+            personId: person.id,
+            tenantId: sessionTenantId,
+            gracePeriodUntil: gracePeriodEnd
+          });
+        }
+
+        // Verifica scadenza trial
+        if (subStatus === 'trial' && tenant.trialEndsAt && tenant.trialEndsAt < now) {
+          logger.warn('Login attempt with expired trial', { personId: person.id, tenantId: sessionTenantId });
+          return res.status(403).json({
+            error: 'TRIAL_EXPIRED',
+            code: 'TRIAL_EXPIRED',
+            message: 'Il periodo di prova è terminato. Scegli un piano per continuare ad utilizzare la piattaforma.'
+          });
+        }
+
+        // Verifica scadenza feature principali del tenant (se validUntil è scaduto su tutte le feature)
+        const activeFeatures = await prisma.tenantFeature.count({
+          where: {
+            tenantId: sessionTenantId,
+            isEnabled: true,
+            deletedAt: null,
+            OR: [
+              { validUntil: null },
+              { validUntil: { gte: now } }
+            ]
+          }
+        });
+
+        if (activeFeatures === 0) {
+          // Verifica se il tenant HA feature configurate ma tutte scadute
+          const totalFeatures = await prisma.tenantFeature.count({
+            where: { tenantId: sessionTenantId, deletedAt: null }
+          });
+
+          if (totalFeatures > 0) {
+            logger.warn('Login attempt with all features expired', { personId: person.id, tenantId: sessionTenantId });
+            return res.status(403).json({
+              error: 'SUBSCRIPTION_EXPIRED',
+              message: 'Tutte le funzionalità del tuo abbonamento sono scadute. Contatta l\'amministratore per rinnovare.',
+              code: 'SUBSCRIPTION_EXPIRED'
+            });
+          }
+        }
+      }
 
       // Genera e salva token usando il servizio centralizzato (gestisce anche il DB)
       const { accessToken, refreshToken, expiresIn } = await JWTService.generateTokenPair(
@@ -176,6 +377,8 @@ router.post('/login',
         }
       });
 
+      // P63: sessionTenantId già calcolato sopra
+
       // Create new session (using hash instead of full token to avoid index size limit)
       const crypto = await import('crypto');
       const sessionTokenHash = crypto.createHash('sha256').update(accessToken).digest('hex');
@@ -189,7 +392,7 @@ router.post('/login',
           expiresAt: sessionExpiresAt,
           userAgent: req.get('User-Agent') || 'Unknown',
           ipAddress: req.ip,
-          tenantId: person.tenantId
+          tenantId: sessionTenantId
         }
       });
 
@@ -199,52 +402,26 @@ router.post('/login',
         data: { lastLogin: new Date() }
       });
 
-      // Check if user has access to brandTenantId (cross-tenant login)
-      const brandTenantId = req.brandTenantId;
-      let tenantAccess = null;
-      let effectiveRoleType = null;
-
-      if (brandTenantId && brandTenantId !== person.tenantId) {
-        // User is logging into a different tenant - check PersonTenantAccess
-        tenantAccess = await prisma.personTenantAccess.findFirst({
-          where: {
-            personId: person.id,
-            tenantId: brandTenantId,
-            isActive: true,
-            deletedAt: null
-          }
-        });
-
-        if (tenantAccess) {
-          effectiveRoleType = tenantAccess.defaultRoleType;
-          logger.info('Cross-tenant login via PersonTenantAccess', {
-            personId: person.id,
-            primaryTenantId: person.tenantId,
-            brandTenantId,
-            roleType: effectiveRoleType,
-            accessLevel: tenantAccess.accessLevel
-          });
-        } else {
-          logger.warn('Cross-tenant login attempt without PersonTenantAccess', {
-            personId: person.id,
-            brandTenantId
-          });
-        }
-      }
+      // P48/P63: Estrai dati dal profilo tenant (Person non ha più email/status/tenantId)
+      const primaryProfile = person._loginProfile ||
+        person.tenantProfiles?.find(p => p.isPrimary) ||
+        person.tenantProfiles?.[0];
+      const profileEmail = primaryProfile?.email || person.username;
+      const profileStatus = primaryProfile?.status || 'ACTIVE';
+      const profileTenantId = sessionTenantId;
 
       logger.info('Login successful', {
         personId: person.id,
-        email: person.email,
-        tenantId: person.tenantId,
-        brandTenantId: brandTenantId || null,
-        effectiveRoleType
+        tenantId: profileTenantId
       });
 
-      const userRoles = authService.getPersonRoles(person);
-      // Add effective role from tenant access if available
-      if (effectiveRoleType && !userRoles.includes(effectiveRoleType)) {
-        userRoles.push(effectiveRoleType);
-      }
+      // Filtra ruoli per il tenant della sessione per evitare duplicati cross-tenant
+      const allRoles = authService.getPersonRoles(person);
+      const tenantRoles = (person.personRoles || [])
+        .filter(pr => !pr.deletedAt && pr.tenantId === sessionTenantId)
+        .map(pr => pr.roleType)
+        .filter(Boolean);
+      const userRoles = tenantRoles.length > 0 ? [...new Set(tenantRoles)] : [...new Set(allRoles)];
 
       let primaryRole = 'User';
       if (userRoles.includes('SUPER_ADMIN') || userRoles.includes('ADMIN')) primaryRole = 'Admin';
@@ -252,8 +429,10 @@ router.post('/login',
       else if (userRoles.includes('MANAGER')) primaryRole = 'Manager';
       else if (userRoles.includes('EMPLOYEE')) primaryRole = 'Employee';
 
-      // Estrai permessi dai PersonRoles
-      const permissions = (person.personRoles || [])
+      // Estrai permessi dai PersonRoles filtrati per tenant
+      const tenantPersonRoles = (person.personRoles || [])
+        .filter(pr => !pr.deletedAt && pr.tenantId === sessionTenantId);
+      const permissions = tenantPersonRoles
         .flatMap(pr => pr.permissions || [])
         .filter(rp => rp.isGranted)
         .map(rp => rp.permission);
@@ -294,13 +473,11 @@ router.post('/login',
       await activityService.logImmediate({
         personId: person.id,
         action: ActivityType.AUTH_LOGIN_SUCCESS,
-        tenantId: person.tenantId,
+        tenantId: profileTenantId,
         ipAddress: getClientIp(req),
         userAgent: req.get('User-Agent'),
         metadata: {
-          loginMethod: remember_me ? 'remember_me' : 'standard',
-          crossTenant: !!tenantAccess,
-          brandTenantId: brandTenantId || null
+          loginMethod: remember_me ? 'remember_me' : 'standard'
         },
         success: true
       });
@@ -309,24 +486,18 @@ router.post('/login',
         success: true,
         user: {
           id: person.id,
-          email: person.email,
+          email: profileEmail,
           firstName: person.firstName,
           lastName: person.lastName,
           globalRole: person.globalRole,
           role: primaryRole,
-          roleType: effectiveRoleType || (userRoles[0] || null),
+          roleType: userRoles[0] || null,
           roles: userRoles,
           permissions: permissions,
-          status: person.status,
-          companyId: person.companyId,
-          tenantId: person.tenantId,
-          company: person.company ? { id: person.company.id, name: person.company.name } : null,
-          tenantAccess: tenantAccess ? {
-            tenantId: tenantAccess.tenantId,
-            accessLevel: tenantAccess.accessLevel,
-            roleType: tenantAccess.defaultRoleType,
-            enabledFeatures: tenantAccess.enabledFeatures
-          } : null
+          status: profileStatus,
+          companyId: primaryProfile?.companyTenantProfileId || null,
+          tenantId: profileTenantId,
+          company: null
         },
         tokens: {
           access_token: accessToken,
@@ -337,14 +508,14 @@ router.post('/login',
       });
     } catch (error) {
       logger.error('Login error', {
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
-        identifier: req.body.identifier
+        identifier: req.body?.identifier ? `${req.body.identifier.substring(0, 3)}***` : 'missing'
       });
 
       res.status(500).json({
-        error: 'Internal server error',
-        message: 'An error occurred during login'
+        error: 'Errore interno del server',
+        message: 'Si è verificato un errore durante l\'accesso'
       });
     }
   }
@@ -364,81 +535,123 @@ router.post('/register',
     body('email')
       .isEmail()
       .normalizeEmail()
-      .withMessage('Valid email is required'),
+      .withMessage('Email valida obbligatoria'),
     body('password')
       .isLength({ min: 8 })
       .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
-      .withMessage('Password must be at least 8 characters with uppercase, lowercase, and number'),
+      .withMessage('La password deve avere almeno 8 caratteri con maiuscole, minuscole e un numero'),
     body('firstName')
       .isLength({ min: 2 })
       .trim()
-      .withMessage('First name must be at least 2 characters'),
+      .withMessage('Il nome deve essere di almeno 2 caratteri'),
     body('lastName')
       .isLength({ min: 2 })
       .trim()
-      .withMessage('Last name must be at least 2 characters')
+      .withMessage('Il cognome deve essere di almeno 2 caratteri'),
+    body('tenantId')
+      .isUUID()
+      .withMessage('TenantId UUID valido obbligatorio')
   ],
   async (req, res) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({
-          error: 'Validation failed',
-          message: 'Invalid input data',
+          error: 'Validazione fallita',
+          message: 'Dati di input non validi',
           details: errors.array()
         });
       }
 
-      const { email, password, firstName, lastName, companyId } = req.body;
+      const { email, password, firstName, lastName, tenantId, companyTenantProfileId } = req.body;
 
-      // Check if person exists
-      const existingPerson = await prisma.person.findUnique({
-        where: { email }
+      // P48: Verifica tenant attivo
+      const tenant = await prisma.tenant.findFirst({
+        where: { id: tenantId, isActive: true, deletedAt: null }
       });
-
-      if (existingPerson) {
-        return res.status(409).json({
-          error: 'Email already exists',
-          message: 'An account with this email already exists'
+      if (!tenant) {
+        return res.status(400).json({
+          error: 'Tenant non valido',
+          message: 'Il tenant specificato non esiste o non è attivo'
         });
       }
 
-      // Hash password
+      // P48: email è in PersonTenantProfile, non in Person.
+      // Cerca se esiste già un profilo con questa email nello stesso tenant.
+      const existingProfile = await prisma.personTenantProfile.findFirst({
+        where: { email, tenantId, deletedAt: null }
+      });
+      if (existingProfile) {
+        return res.status(409).json({
+          error: 'Email già esistente',
+          message: 'Un account con questa email esiste già per questo tenant'
+        });
+      }
+
       const hashedPassword = await bcrypt.hash(password, 12);
 
-      // Create person
-      const person = await prisma.person.create({
-        data: {
-          email,
-          password: hashedPassword,
-          firstName,
-          lastName,
-          companyId: companyId || null,
-          status: 'ACTIVE'
-        },
-        include: {
-          company: true
-        }
-      });
+      // P48: Crea Person + PersonTenantProfile + PersonRole in transazione
+      const result = await prisma.$transaction(async (tx) => {
+        // Crea Person con solo campi globali (NO email, NO status, NO companyId)
+        const person = await tx.person.create({
+          data: {
+            username: email,
+            password: hashedPassword,
+            firstName,
+            lastName
+          }
+        });
 
-      // Assign default person role
-      await prisma.personRole.create({
-        data: {
-          personId: person.id,
-          roleType: 'EMPLOYEE', // Default role type
-          companyId: person.companyId,
-          permissions: ['VIEW_EMPLOYEES', 'EDIT_EMPLOYEES'] // Basic permissions
-        }
+        // P48: Crea PersonTenantProfile per il tenant specificato
+        const profile = await tx.personTenantProfile.create({
+          data: {
+            personId: person.id,
+            tenantId,
+            email,
+            status: 'ACTIVE',
+            isPrimary: true,
+            isActive: true,
+            companyTenantProfileId: companyTenantProfileId || null
+          }
+        });
+
+        // Crea PersonRole con tenantId (required) e companyTenantProfileId
+        const personRole = await tx.personRole.create({
+          data: {
+            personId: person.id,
+            tenantId,
+            roleType: 'EMPLOYEE',
+            isActive: true,
+            isPrimary: true,
+            companyTenantProfileId: companyTenantProfileId || null
+          }
+        });
+
+        // Crea RolePermissions di base per il ruolo
+        await tx.rolePermission.createMany({
+          data: [
+            { personRoleId: personRole.id, permission: 'employees:read', isGranted: true },
+            { personRoleId: personRole.id, permission: 'employees:update', isGranted: true }
+          ]
+        });
+
+        return { person, profile, personRole };
       });
 
       logger.info('Person registered successfully', {
-        personId: person.id,
-        email: person.email
+        personId: result.person.id,
+        tenantId
       });
 
-      // Genera e salva i token in modo centralizzato tramite JWTService
-      const { accessToken, refreshToken, expiresIn, tokenType } = await JWTService.generateTokenPair(
-        person,
+      // Prepara person con tenantProfiles per JWTService
+      const personForJwt = {
+        ...result.person,
+        tenantProfiles: [result.profile],
+        personRoles: [result.personRole]
+      };
+
+      const { accessToken, refreshToken, expiresIn } = await JWTService.generateTokenPair(
+        personForJwt,
         { userAgent: req.get('User-Agent') || 'Unknown', ip: req.ip || '0.0.0.0' },
         { rememberMe: false }
       );
@@ -446,16 +659,13 @@ router.post('/register',
       return res.status(201).json({
         success: true,
         user: {
-          id: person.id,
-          email: person.email,
-          firstName: person.firstName,
-          lastName: person.lastName,
-          status: person.status,
-          companyId: person.companyId,
-          company: person.company ? {
-            id: person.company.id,
-            name: person.company.name
-          } : null
+          id: result.person.id,
+          email: result.profile.email,
+          firstName: result.person.firstName,
+          lastName: result.person.lastName,
+          status: result.profile.status,
+          tenantId,
+          companyTenantProfileId: result.profile.companyTenantProfileId || null
         },
         tokens: {
           access_token: accessToken,
@@ -466,14 +676,13 @@ router.post('/register',
       });
     } catch (error) {
       logger.error('Registration error', {
-        error: error.message,
-        stack: error.stack,
-        email: req.body.email
+        error: 'Operazione non riuscita',
+        stack: error.stack
       });
 
       res.status(500).json({
-        error: 'Internal server error',
-        message: 'An error occurred during registration'
+        error: 'Errore interno del server',
+        message: 'Si è verificato un errore durante la registrazione'
       });
     }
   }
@@ -493,13 +702,13 @@ router.post('/refresh', async (req, res) => {
 
     if (!refreshToken) {
       return res.status(401).json({
-        error: 'Refresh token required',
-        message: 'No refresh token provided'
+        error: 'Token di refresh obbligatorio',
+        message: 'Nessun token di refresh fornito'
       });
     }
 
     // Centralizza su JWTService: verifica refresh token, controlla DB e genera nuovo access token
-    const { accessToken, expiresIn, tokenType } = await JWTService.refreshAccessToken(refreshToken);
+    const { accessToken, refreshToken: newRefreshToken, expiresIn, tokenType } = await JWTService.refreshAccessToken(refreshToken);
 
     // Converti expiresIn (stringa tipo '15m', '1h', '7d') in secondi per compatibilità di risposta
     let expiresInSeconds = 60 * 60; // default fallback 1h
@@ -527,18 +736,19 @@ router.post('/refresh', async (req, res) => {
 
     res.json({
       access_token: accessToken,
+      refresh_token: newRefreshToken,
       expires_in: expiresInSeconds,
       token_type: tokenType || 'Bearer'
     });
   } catch (error) {
     logger.error('Token refresh error', {
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack
     });
 
     res.status(401).json({
-      error: 'Invalid refresh token',
-      message: 'Unable to refresh token'
+      error: 'Token di refresh non valido',
+      message: 'Impossibile aggiornare il token'
     });
   }
 });
@@ -551,7 +761,7 @@ router.post('/refresh', async (req, res) => {
  *     description: Revoke refresh token and logout person
  *     tags: [Authentication]
  */
-router.post('/logout', authenticate(), async (req, res) => {
+router.post('/logout', authenticate, async (req, res) => {
   try {
     // Estrai refresh token da header o body per il logout
     const refreshToken = req.headers['x-refresh-token'] || req.body.refresh_token || req.body?.refreshToken;
@@ -583,18 +793,18 @@ router.post('/logout', authenticate(), async (req, res) => {
 
     return res.json({
       success: true,
-      message: 'Logged out successfully'
+      message: 'Disconnessione effettuata con successo'
     });
   } catch (error) {
     logger.error('Logout error', {
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       personId: req.person?.id
     });
 
     res.status(500).json({
-      error: 'Internal server error',
-      message: 'An error occurred during logout'
+      error: 'Errore interno del server',
+      message: 'Si è verificato un errore durante la disconnessione'
     });
   }
 });

@@ -21,11 +21,14 @@ import {
     UserCheck,
     Download,
     Eye,
-    AlertCircle
+    AlertCircle,
+    ArrowDownLeft,
+    ArrowUpRight
 } from 'lucide-react';
 import { apiGet } from '../../services/api';
 import { PersonData, Company } from '../../types';
 import { getRiskLevelLabel, getCourseTypeLabel } from '../../utils/courseLabels';
+import { PersonTenantProfilesWidget } from '../../components/person/PersonTenantProfilesWidget';
 
 /**
  * Pagina di dettaglio formatore elegante - stile EmployeeDetails
@@ -40,7 +43,8 @@ export default function TrainerDetail() {
     // Stati per dati reali
     const [completedCourses, setCompletedCourses] = useState<any[]>([]);
     const [upcomingCourses, setUpcomingCourses] = useState<any[]>([]);
-    const [compensi, setCompensi] = useState<any[]>([]);
+    const [compensiCorsi, setCompensiCorsi] = useState<any[]>([]);
+    const [movimentiPassivi, setMovimentiPassivi] = useState<any[]>([]);
     const [documenti, setDocumenti] = useState<{ lettereIncarico: any[], registriPresenze: any[] }>({
         lettereIncarico: [],
         registriPresenze: []
@@ -70,17 +74,16 @@ export default function TrainerDetail() {
                         ? schedulesResponse
                         : schedulesResponse?.data || schedulesResponse?.schedules || [];
 
-                    // Corsi completati: status = COMPLETED
-                    const completed = schedules.filter((s: any) => s.status === 'COMPLETED');
-                    // Corsi programmati: status = PENDING, CONFIRMED, ACTIVE
+                    // Corsi completati: status = COMPLETATO
+                    const completed = schedules.filter((s: any) => s.status === 'COMPLETATO');
+                    // Corsi programmati: status = PREVENTIVO, ACCETTATO
                     const upcoming = schedules.filter((s: any) =>
-                        ['PENDING', 'CONFIRMED', 'ACTIVE'].includes(s.status)
+                        ['PREVENTIVO', 'ACCETTATO'].includes(s.status)
                     );
 
                     setCompletedCourses(completed);
                     setUpcomingCourses(upcoming);
                 } catch (err) {
-                    console.warn('Error fetching schedules:', err);
                 }
 
                 // Fetch documenti (lettere incarico e registri presenze) per questo trainer
@@ -104,21 +107,64 @@ export default function TrainerDetail() {
                         }))
                     });
                 } catch (err) {
-                    console.warn('Error fetching documents:', err);
                 }
 
                 // Fetch preventivi di tipo COMPENSO_FORMATORE per questo formatore
+                // AND movimenti contabili USCITA — split into compensi corsi vs spettanze servizi
                 try {
-                    const preventiviResponse = await apiGet(`/api/v1/preventivi?clienteId=${id}&clienteType=persona&tipoServizio=COMPENSO_FORMATORE`) as any;
-                    const preventivi = Array.isArray(preventiviResponse)
-                        ? preventiviResponse
-                        : preventiviResponse?.data || preventiviResponse?.preventivi || [];
-                    setCompensi(preventivi);
+                    const [preventiviResponse, movResponse] = await Promise.all([
+                        apiGet(`/api/v1/preventivi?clienteId=${id}&clienteType=persona&tipoServizio=COMPENSO_FORMATORE`).catch(() => null),
+                        apiGet(`/api/v1/movimenti-contabili`, {
+                            personId: id,
+                            direzione: 'USCITA',
+                            pageSize: '50'
+                        }).catch(() => null)
+                    ]) as any[];
+
+                    // Parse preventivi
+                    const preventivi = preventiviResponse
+                        ? (Array.isArray(preventiviResponse)
+                            ? preventiviResponse
+                            : preventiviResponse?.data?.preventivi || preventiviResponse?.preventivi || [])
+                        : [];
+
+                    // Parse movimenti
+                    const allItems = movResponse?.data || movResponse?.movimenti || [];
+                    const items = Array.isArray(allItems) ? allItems : [];
+
+                    // COMPENSO_FORMATORE movimenti → show as "Compensi Corsi"
+                    const compensoFormatoreMovimenti = items.filter(
+                        (m: any) => m.tipo === 'COMPENSO_FORMATORE'
+                    );
+
+                    // Merge: preventivi + COMPENSO_FORMATORE movimenti (dedup by courseScheduleId)
+                    const preventiviIds = new Set(preventivi.map((p: any) => p.courseScheduleId).filter(Boolean));
+                    const extraMovimenti = compensoFormatoreMovimenti.filter(
+                        (m: any) => !m.courseScheduleId || !preventiviIds.has(m.courseScheduleId)
+                    );
+
+                    // Normalize compenso movimenti to preventivo-like shape for rendering
+                    const normalizedMovimenti = extraMovimenti.map((m: any) => ({
+                        id: m.id,
+                        numero: null,
+                        descrizione: m.descrizione || 'Compenso formatore',
+                        stato: m.stato,
+                        importoFinale: m.importoNetto,
+                        prezzoTotale: m.importoNetto,
+                        dataEsecuzione: m.dataEsecuzione,
+                        _isMovimento: true // marker to differentiate rendering
+                    }));
+
+                    setCompensiCorsi([...preventivi, ...normalizedMovimenti]);
+
+                    // Non-COMPENSO_FORMATORE → show as "Spettanze Servizi"
+                    const spettanzeServizi = items.filter(
+                        (m: any) => m.tipo !== 'COMPENSO_FORMATORE'
+                    );
+                    setMovimentiPassivi(spettanzeServizi);
                 } catch (err) {
-                    console.warn('Error fetching compensi:', err);
                 }
             } catch (err) {
-                console.error('Error fetching trainer data:', err);
                 setTrainer(null);
             } finally {
                 setLoading(false);
@@ -172,7 +218,7 @@ export default function TrainerDetail() {
             </div>
 
             {/* Header Card */}
-            <div className="bg-white rounded-lg shadow p-6">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-black/30 p-6">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between">
                     <div className="flex items-center">
                         {/* Avatar */}
@@ -184,15 +230,15 @@ export default function TrainerDetail() {
 
                         {/* Name & Info */}
                         <div className="ml-4">
-                            <h1 className="text-2xl font-bold text-gray-800">
+                            <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">
                                 {trainer.lastName} {trainer.firstName}
                             </h1>
-                            <p className="text-gray-600">
+                            <p className="text-gray-600 dark:text-gray-400">
                                 {trainer.title || 'Formatore'}
                                 {company && (
                                     <>
                                         <span className="mx-2 text-gray-400">•</span>
-                                        <span>{company.ragioneSociale || company.name}</span>
+                                        <span>{company.ragioneSociale}</span>
                                     </>
                                 )}
                             </p>
@@ -215,10 +261,10 @@ export default function TrainerDetail() {
                 </div>
 
                 {/* Info Grid 3 Colonne */}
-                <div className="mt-4 border-t border-gray-200 pt-4 grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="mt-4 border-t border-gray-200 dark:border-gray-700 pt-4 grid grid-cols-1 md:grid-cols-3 gap-6">
                     {/* Colonna 1: Informazioni Personali */}
                     <div>
-                        <h2 className="text-lg font-semibold text-gray-800 mb-3">Informazioni Personali</h2>
+                        <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3">Informazioni Personali</h2>
                         <ul className="space-y-2">
                             <li className="flex items-start">
                                 <User className="h-4 w-4 text-gray-400 mt-0.5" />
@@ -259,13 +305,13 @@ export default function TrainerDetail() {
 
                     {/* Colonna 2: Informazioni Professionali */}
                     <div>
-                        <h2 className="text-lg font-semibold text-gray-800 mb-3">Informazioni Professionali</h2>
+                        <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3">Informazioni Professionali</h2>
                         <ul className="space-y-2">
                             <li className="flex items-start">
                                 <GraduationCap className="h-4 w-4 text-gray-400 mt-0.5" />
                                 <div className="ml-2">
                                     <span className="block text-xs font-medium text-gray-800">Specializzazione</span>
-                                    <span className="block text-sm text-gray-600">{trainer.title || 'Non specificata'}</span>
+                                    <span className="block text-sm text-gray-600">{trainer.specialties?.join(', ') || 'Non specificata'}</span>
                                 </div>
                             </li>
                             <li className="flex items-start">
@@ -303,7 +349,7 @@ export default function TrainerDetail() {
 
                     {/* Colonna 3: Residenza */}
                     <div>
-                        <h2 className="text-lg font-semibold text-gray-800 mb-3">Residenza</h2>
+                        <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3">Residenza</h2>
                         <ul className="space-y-2">
                             <li className="flex items-start">
                                 <MapPin className="h-4 w-4 text-gray-400 mt-0.5" />
@@ -342,15 +388,15 @@ export default function TrainerDetail() {
             {/* Sezioni Corsi - Layout affiancato come EmployeeDetails */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Corsi Svolti */}
-                <div className="bg-white rounded-lg shadow p-6 h-96">
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-black/30 p-6 h-96">
                     <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-xl font-semibold text-gray-900 flex items-center">
+                        <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 flex items-center">
                             <CheckCircle className="h-5 w-5 mr-2 text-green-600" />
                             Corsi Svolti
                         </h2>
                         <Link
                             to={`/schedules?trainerId=${id}&status=COMPLETED`}
-                            className="text-green-600 hover:text-green-800 flex items-center rounded-full px-3 py-1 hover:bg-green-50 transition-colors"
+                            className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 flex items-center rounded-full px-3 py-1 hover:bg-green-50 dark:hover:bg-green-900/30 transition-colors"
                         >
                             Vedi Tutti
                             <ChevronRight className="h-4 w-4 ml-1" />
@@ -368,8 +414,8 @@ export default function TrainerDetail() {
                                     <div className="flex items-center">
                                         <GraduationCap className="h-5 w-5 text-green-600 mr-3" />
                                         <div>
-                                            <p className="font-medium text-gray-900">{schedule.course?.title || 'Corso'}</p>
-                                            <p className="text-sm text-gray-600">
+                                            <p className="font-medium text-gray-900 dark:text-gray-100">{schedule.course?.title || 'Corso'}</p>
+                                            <p className="text-sm text-gray-600 dark:text-gray-400">
                                                 {schedule.course?.duration || '-'}h
                                                 {schedule.course?.riskLevel && (
                                                     <span className="ml-2">• {getRiskLevelLabel(schedule.course.riskLevel, schedule.course.title)}</span>
@@ -398,15 +444,15 @@ export default function TrainerDetail() {
                 </div>
 
                 {/* Corsi Programmati */}
-                <div className="bg-white rounded-lg shadow p-6 h-96">
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-black/30 p-6 h-96">
                     <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-xl font-semibold text-gray-900 flex items-center">
+                        <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 flex items-center">
                             <Clock className="h-5 w-5 mr-2 text-orange-600" />
                             Corsi Programmati
                         </h2>
                         <Link
                             to={`/schedules?trainerId=${id}&status=PENDING,CONFIRMED,ACTIVE`}
-                            className="text-orange-600 hover:text-orange-800 flex items-center rounded-full px-3 py-1 hover:bg-orange-50 transition-colors"
+                            className="text-orange-600 hover:text-orange-800 dark:text-orange-400 dark:hover:text-orange-300 flex items-center rounded-full px-3 py-1 hover:bg-orange-50 dark:hover:bg-orange-900/30 transition-colors"
                         >
                             Vedi Tutti
                             <ChevronRight className="h-4 w-4 ml-1" />
@@ -416,10 +462,8 @@ export default function TrainerDetail() {
                     <div className="space-y-3 overflow-y-auto h-80">
                         {upcomingCourses.length > 0 ? (
                             upcomingCourses.slice(0, 5).map((schedule: any) => {
-                                const statusColor = schedule.status === 'CONFIRMED' ? 'blue' :
-                                    schedule.status === 'ACTIVE' ? 'green' : 'orange';
-                                const statusLabel = schedule.status === 'PENDING' ? 'Preventivo' :
-                                    schedule.status === 'CONFIRMED' ? 'Confermato' : 'Attivo';
+                                const statusColor = schedule.status === 'ACCETTATO' ? 'blue' : 'orange';
+                                const statusLabel = schedule.status === 'PREVENTIVO' ? 'Preventivo' : 'Accettato';
                                 return (
                                     <Link
                                         key={schedule.id}
@@ -463,81 +507,155 @@ export default function TrainerDetail() {
             {/* Sezioni Aggiuntive - Grid 2 colonne */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Spettanze */}
-                <div className="bg-white rounded-lg shadow p-6 h-96">
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-black/30 p-6">
                     <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-xl font-semibold text-gray-900 flex items-center">
+                        <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 flex items-center">
                             <Euro className="h-5 w-5 mr-2 text-purple-600" />
                             Spettanze e Compensi
                         </h2>
-                        <Link
-                            to={`/preventivi?clienteId=${id}&clienteType=persona&tipoServizio=COMPENSO_FORMATORE`}
-                            className="text-purple-600 hover:text-purple-800 flex items-center rounded-full px-3 py-1 hover:bg-purple-50 transition-colors"
-                        >
-                            Vedi Tutti
-                            <ChevronRight className="h-4 w-4 ml-1" />
-                        </Link>
                     </div>
 
-                    <div className="space-y-3 overflow-y-auto h-80">
-                        {compensi.length > 0 ? (
-                            compensi.slice(0, 5).map((preventivo: any) => {
-                                const statusColor = preventivo.stato === 'ACCETTATO' ? 'green' :
-                                    preventivo.stato === 'ARCHIVIATO' ? 'blue' :
-                                        preventivo.stato === 'FATTURATO' ? 'purple' :
-                                            preventivo.stato === 'INVIATO' ? 'yellow' : 'gray';
-                                const statusLabel = preventivo.stato === 'ACCETTATO' ? 'Accettato' :
-                                    preventivo.stato === 'ARCHIVIATO' ? 'Archiviato' :
-                                        preventivo.stato === 'FATTURATO' ? 'Fatturato' :
-                                            preventivo.stato === 'INVIATO' ? 'Inviato' :
-                                                preventivo.stato === 'BOZZA' ? 'Bozza' : preventivo.stato;
-                                return (
-                                    <Link
-                                        key={preventivo.id}
-                                        to={`/preventivi/${preventivo.id}`}
-                                        className={`flex items-center justify-between p-3 bg-${statusColor}-50 rounded-lg border-l-4 border-${statusColor}-400 hover:bg-${statusColor}-100 transition-colors`}
-                                    >
-                                        <div className="flex items-center">
-                                            <CreditCard className={`h-5 w-5 text-${statusColor}-600 mr-3`} />
-                                            <div>
-                                                <p className="font-medium text-gray-900">
-                                                    {preventivo.numero || `Preventivo #${preventivo.id?.substring(0, 8)}`}
+                    {/* Compensi per Corsi */}
+                    <div className="mb-4">
+                        <div className="flex items-center justify-between mb-2">
+                            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center">
+                                <ArrowUpRight className="h-4 w-4 mr-1.5 text-green-500" />
+                                Compensi Corsi
+                            </h3>
+                            <Link
+                                to={`/preventivi?clienteId=${id}&clienteType=persona&tipoServizio=COMPENSO_FORMATORE`}
+                                className="text-xs text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300 flex items-center"
+                            >
+                                Vedi Tutti
+                                <ChevronRight className="h-3 w-3 ml-0.5" />
+                            </Link>
+                        </div>
+                        <div className="space-y-2">
+                            {compensiCorsi.length > 0 ? (
+                                compensiCorsi.slice(0, 5).map((preventivo: any) => {
+                                    const statusColor = preventivo.stato === 'ACCETTATO' ? 'green' :
+                                        preventivo.stato === 'ARCHIVIATO' ? 'blue' :
+                                            preventivo.stato === 'FATTURATO' || preventivo.stato === 'PAGATO' ? 'purple' :
+                                                preventivo.stato === 'INVIATO' || preventivo.stato === 'CONFERMATO' ? 'yellow' :
+                                                    preventivo.stato === 'DA_FATTURARE' ? 'yellow' : 'gray';
+                                    const statusLabel = preventivo.stato === 'ACCETTATO' ? 'Accettato' :
+                                        preventivo.stato === 'ARCHIVIATO' ? 'Archiviato' :
+                                            preventivo.stato === 'FATTURATO' ? 'Fatturato' :
+                                                preventivo.stato === 'PAGATO' ? 'Pagato' :
+                                                    preventivo.stato === 'INVIATO' ? 'Inviato' :
+                                                        preventivo.stato === 'DA_FATTURARE' ? 'Da fatturare' :
+                                                            preventivo.stato === 'CONFERMATO' ? 'Confermato' :
+                                                                preventivo.stato === 'BOZZA' ? 'Bozza' : preventivo.stato;
+
+                                    // Movimenti (from lettere-incarico) are not linkable to preventivi
+                                    const isMovimento = preventivo._isMovimento;
+                                    const Wrapper: any = isMovimento ? 'div' : Link;
+                                    const wrapperProps = isMovimento
+                                        ? {}
+                                        : { to: `/preventivi/${preventivo.id}` };
+
+                                    return (
+                                        <Wrapper
+                                            key={preventivo.id}
+                                            {...wrapperProps}
+                                            className={`flex items-center justify-between p-3 bg-${statusColor}-50 dark:bg-${statusColor}-900/20 rounded-lg border-l-4 border-${statusColor}-400 hover:bg-${statusColor}-100 dark:hover:bg-${statusColor}-900/30 transition-colors`}
+                                        >
+                                            <div className="flex items-center">
+                                                <CreditCard className={`h-4 w-4 text-${statusColor}-600 mr-2`} />
+                                                <div>
+                                                    <p className="font-medium text-sm text-gray-900 dark:text-gray-100">
+                                                        {preventivo.numero || `Preventivo #${preventivo.id?.substring(0, 8)}`}
+                                                    </p>
+                                                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                                                        {preventivo.schedule?.course?.title || preventivo.descrizione || 'Compenso formatore'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className={`text-xs font-medium text-${statusColor}-600`}>{statusLabel}</p>
+                                                <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                                                    €{Number(preventivo.importoFinale || preventivo.prezzoTotale || 0).toFixed(2)}
                                                 </p>
-                                                <p className="text-sm text-gray-600">
-                                                    {preventivo.schedule?.course?.title || preventivo.descrizione || 'Compenso formatore'}
+                                            </div>
+                                        </Wrapper>
+                                    );
+                                })
+                            ) : (
+                                <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-3">Nessun compenso corso registrato</p>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Movimenti Passivi (Nomine, DVR, Sopralluoghi) */}
+                    <div>
+                        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center mb-2">
+                            <ArrowDownLeft className="h-4 w-4 mr-1.5 text-orange-500" />
+                            Spettanze Servizi (Nomine, DVR, Sopralluoghi)
+                        </h3>
+                        <div className="space-y-2">
+                            {movimentiPassivi.length > 0 ? (
+                                movimentiPassivi.slice(0, 5).map((mov: any) => {
+                                    const tipoLabels: Record<string, string> = {
+                                        NOMINA_RSPP: 'Nomina RSPP',
+                                        NOMINA_MC: 'Nomina MC',
+                                        DVR: 'DVR',
+                                        DVR_NUOVO: 'DVR Nuovo',
+                                        DVR_AGGIORNAMENTO_CON_MODIFICHE: 'DVR Aggiornamento (con modifiche)',
+                                        DVR_AGGIORNAMENTO_SENZA_MODIFICHE: 'DVR Aggiornamento (senza modifiche)',
+                                        SOPRALLUOGO: 'Sopralluogo',
+                                        CONSULENZA: 'Consulenza',
+                                    };
+                                    const statoColors: Record<string, string> = {
+                                        BOZZA: 'gray',
+                                        DA_FATTURARE: 'yellow',
+                                        CONFERMATO: 'blue',
+                                        FATTURATO: 'purple',
+                                        PAGATO: 'green',
+                                    };
+                                    const color = statoColors[mov.stato] || 'gray';
+                                    return (
+                                        <div
+                                            key={mov.id}
+                                            className={`flex items-center justify-between p-3 bg-${color}-50 dark:bg-${color}-900/20 rounded-lg border-l-4 border-${color}-400`}
+                                        >
+                                            <div>
+                                                <p className="font-medium text-sm text-gray-900 dark:text-gray-100">
+                                                    {tipoLabels[mov.tipo] || mov.tipo}
+                                                </p>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                    {mov.descrizione || ''}
+                                                    {mov.dataEsecuzione && ` · ${new Date(mov.dataEsecuzione).toLocaleDateString('it-IT')}`}
+                                                </p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                                                    €{Number(mov.importoNetto || 0).toFixed(2)}
                                                 </p>
                                             </div>
                                         </div>
-                                        <div className="text-right">
-                                            <p className={`text-sm font-medium text-${statusColor}-600`}>{statusLabel}</p>
-                                            <p className="text-sm font-bold text-gray-900">
-                                                €{Number(preventivo.importoFinale || preventivo.prezzoTotale || 0).toFixed(2)}
-                                            </p>
-                                        </div>
-                                    </Link>
-                                );
-                            })
-                        ) : (
-                            <div className="text-center py-12 text-gray-500">
-                                <CreditCard className="h-16 w-16 mx-auto mb-3 text-gray-300" />
-                                <p className="font-medium">Nessuna spettanza registrata</p>
-                                <p className="text-sm mt-1">
-                                    I compensi per questo formatore appariranno qui quando saranno registrati
-                                </p>
-                            </div>
-                        )}
+                                    );
+                                })
+                            ) : (
+                                <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-3">Nessuna spettanza servizi registrata</p>
+                            )}
+                        </div>
                     </div>
                 </div>
 
                 {/* Documenti */}
-                <div className="bg-white rounded-lg shadow p-6 h-96">
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-black/30 p-6 h-96">
                     <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-xl font-semibold text-gray-900 flex items-center">
+                        <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 flex items-center">
                             <FileCheck className="h-5 w-5 mr-2 text-blue-600" />
                             Documenti
                         </h2>
-                        <span className="text-sm text-gray-500">
-                            {allDocuments.length} documento/i
-                        </span>
+                        <Link
+                            to={`/documents-corsi?trainerId=${id}`}
+                            className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 flex items-center rounded-full px-3 py-1 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
+                        >
+                            Vedi Tutti
+                            <ChevronRight className="h-4 w-4 ml-1" />
+                        </Link>
                     </div>
 
                     <div className="space-y-3 overflow-y-auto h-80">
@@ -547,10 +665,13 @@ export default function TrainerDetail() {
                                 const docColor = isLettera ? 'indigo' : 'teal';
                                 const docIcon = isLettera ? FileText : FileCheck;
                                 const DocIcon = docIcon;
+                                const downloadUrl = isLettera
+                                    ? `/api/v1/lettere-incarico/${doc.id}/download`
+                                    : `/api/v1/registri-presenze/${doc.id}/download`;
                                 return (
                                     <div
                                         key={doc.id}
-                                        className={`flex items-center justify-between p-3 bg-${docColor}-50 rounded-lg border-l-4 border-${docColor}-400`}
+                                        className={`flex items-center justify-between p-3 bg-${docColor}-50 rounded-lg border-l-4 border-${docColor}-400 hover:bg-${docColor}-100 transition-colors`}
                                     >
                                         <div className="flex items-center flex-1 min-w-0">
                                             <DocIcon className={`h-5 w-5 text-${docColor}-600 mr-3 flex-shrink-0`} />
@@ -570,20 +691,28 @@ export default function TrainerDetail() {
                                             <span className="text-xs text-gray-500">
                                                 {doc.createdAt ? new Date(doc.createdAt).toLocaleDateString('it-IT') : '-'}
                                             </span>
-                                            {doc.fileUrl && (
-                                                <a
-                                                    href={doc.fileUrl}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className={`p-1 rounded hover:bg-${docColor}-100 text-${docColor}-600`}
-                                                    title="Scarica documento"
-                                                >
-                                                    <Download className="h-4 w-4" />
-                                                </a>
-                                            )}
-                                            {doc.scheduleId && (
+                                            <a
+                                                href={downloadUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className={`p-1 rounded hover:bg-${docColor}-100 text-${docColor}-600`}
+                                                title="Visualizza PDF"
+                                                onClick={(e) => e.stopPropagation()}
+                                            >
+                                                <Eye className="h-4 w-4" />
+                                            </a>
+                                            <a
+                                                href={downloadUrl}
+                                                download
+                                                className={`p-1 rounded hover:bg-${docColor}-100 text-${docColor}-600`}
+                                                title="Scarica documento"
+                                                onClick={(e) => e.stopPropagation()}
+                                            >
+                                                <Download className="h-4 w-4" />
+                                            </a>
+                                            {(doc.scheduledCourseId || doc.scheduleId) && (
                                                 <Link
-                                                    to={`/schedules/${doc.scheduleId}`}
+                                                    to={`/schedules/${doc.scheduledCourseId || doc.scheduleId}`}
                                                     className={`p-1 rounded hover:bg-${docColor}-100 text-${docColor}-600`}
                                                     title="Vai al corso"
                                                 >
@@ -607,12 +736,22 @@ export default function TrainerDetail() {
                 </div>
             </div>
 
+            {/* Progetto 48: Profili Multi-Tenant */}
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-black/30 p-6">
+                <PersonTenantProfilesWidget
+                    personId={id!}
+                    compactMode={false}
+                    editable={false}
+                    theme="blue"
+                />
+            </div>
+
             {/* Note Aggiuntive */}
             {trainer.notes && (
-                <div className="bg-white rounded-lg shadow p-6">
-                    <h2 className="text-lg font-semibold text-gray-800 mb-4">Note Aggiuntive</h2>
-                    <div className="bg-gray-50 rounded-lg p-4">
-                        <p className="text-sm text-gray-600">{trainer.notes}</p>
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-black/30 p-6">
+                    <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Note Aggiuntive</h2>
+                    <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                        <p className="text-sm text-gray-600 dark:text-gray-400">{trainer.notes}</p>
                     </div>
                 </div>
             )}

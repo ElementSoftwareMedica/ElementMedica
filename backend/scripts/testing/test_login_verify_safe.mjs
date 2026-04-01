@@ -4,8 +4,13 @@ import http from 'http';
 
 async function main() {
   try {
-    const email = 'admin@example.com'; // test identifier (no password used)
-    const admin = await prisma.person.findFirst({ where: { email }, include: { personRoles: true } });
+    const identifier = 'admin@example.com'; // test identifier
+    // P48: Cerca per email nel PersonTenantProfile, non in Person
+    const profile = await prisma.personTenantProfile.findFirst({
+      where: { email: identifier, deletedAt: null },
+      include: { person: { include: { personRoles: true } } }
+    });
+    const admin = profile?.person;
     if (!admin) {
       console.log('ADMIN_NOT_FOUND');
       return;
@@ -13,10 +18,10 @@ async function main() {
     // Generate token pair without login, using existing JWT secrets
     const { accessToken } = await JWTService.generateTokenPair(admin, { userAgent: 'safe-script', ip: '127.0.0.1' }, { rememberMe: false });
 
-    // Call verify via proxy using Authorization header
+    // P64: Call verify directly to API server (proxy eliminated)
     const opts = {
       hostname: 'localhost',
-      port: 4003,
+      port: 4001,
       path: '/api/v1/auth/verify',
       method: 'GET',
       headers: { 'Authorization': 'Bearer ' + accessToken }

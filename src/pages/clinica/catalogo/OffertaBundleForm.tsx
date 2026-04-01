@@ -54,6 +54,8 @@ import {
 import { apiGet } from '../../../services/api';
 import { useToast } from '../../../hooks/useToast';
 import { useTenantFilter } from '../../../context/TenantFilterContext';
+import { DatePickerElegante } from '../../../components/ui/DatePickerElegante';
+import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 import '../../../styles/clinica-theme.css';
 
 // =====================================================
@@ -165,6 +167,7 @@ const OffertaBundleForm: React.FC = () => {
     const queryClient = useQueryClient();
     const { showToast } = useToast();
     const { getTenantFilterParams, tenantFilterKey, isReady: isTenantFilterReady } = useTenantFilter();
+    const { confirmWarning } = useConfirmDialog();
     const isEditing = Boolean(id);
 
     // State
@@ -374,7 +377,6 @@ const OffertaBundleForm: React.FC = () => {
     // Mutations
     const createMutation = useMutation({
         mutationFn: (data: OffertaBundleInput) => {
-            console.log('📦 [BUNDLE CREATE] Submitting data:', JSON.stringify(data, null, 2));
             return bundleApi.create(data);
         },
         onSuccess: () => {
@@ -382,25 +384,19 @@ const OffertaBundleForm: React.FC = () => {
             showToast({ type: 'success', message: 'Bundle creato con successo' });
             navigate('/poliambulatorio/catalogo/bundles');
         },
-        onError: (error: Error & { response?: { data?: { error?: string; message?: string } } }) => {
-            console.error('📦 [BUNDLE CREATE] Error:', error);
+        onError: (error: Error & { response?: { data?: { error?: string; message?: string }; status?: number } }) => {
 
-            // Extract error message from response if available
-            const responseError = error.response?.data?.error || error.response?.data?.message;
-            let errorMessage = responseError || error.message || 'Errore durante la creazione';
-
-            // Handle specific error cases
-            if (errorMessage.includes('già esistente') || errorMessage.includes('already exists')) {
-                errorMessage = 'Il codice bundle è già in uso. Prova con un codice diverso.';
-            } else if (errorMessage.includes('not found') || errorMessage.includes('non trovata')) {
-                errorMessage = 'Una o più prestazioni selezionate non sono più disponibili. Ricarica la pagina.';
-            } else if (error.message?.includes('500') || error.message?.includes('Internal Server')) {
-                errorMessage = 'Errore del server. Riprova tra qualche secondo o contatta l\'assistenza.';
-            } else if (error.message?.includes('Network') || error.message?.includes('ECONNREFUSED')) {
-                errorMessage = 'Errore di connessione. Verifica la tua connessione internet.';
+            // Handle specific error cases via status code
+            const status = error.response?.status;
+            if (status === 409) {
+                showToast({ type: 'error', message: 'Il codice bundle è già in uso. Prova con un codice diverso.' });
+            } else if (status === 404) {
+                showToast({ type: 'error', message: 'Una o più prestazioni selezionate non sono più disponibili. Ricarica la pagina.' });
+            } else if (status === 500) {
+                showToast({ type: 'error', message: 'Errore del server. Riprova tra qualche secondo o contatta l\'assistenza.' });
+            } else {
+                showToast({ type: 'error', message: 'Errore durante la creazione del bundle' });
             }
-
-            showToast({ type: 'error', message: errorMessage });
         }
     });
 
@@ -412,23 +408,19 @@ const OffertaBundleForm: React.FC = () => {
             showToast({ type: 'success', message: 'Bundle aggiornato con successo' });
             navigate('/poliambulatorio/catalogo/bundles');
         },
-        onError: (error: Error & { response?: { data?: { error?: string; message?: string } } }) => {
-            console.error('📦 [BUNDLE UPDATE] Error:', error);
+        onError: (error: Error & { response?: { data?: { error?: string; message?: string }; status?: number } }) => {
 
-            // Extract error message from response if available
-            const responseError = error.response?.data?.error || error.response?.data?.message;
-            let errorMessage = responseError || error.message || 'Errore durante l\'aggiornamento';
-
-            // Handle specific error cases
-            if (errorMessage.includes('già esistente') || errorMessage.includes('already exists')) {
-                errorMessage = 'Il codice bundle è già in uso. Prova con un codice diverso.';
-            } else if (errorMessage.includes('not found') || errorMessage.includes('non trovato')) {
-                errorMessage = 'Il bundle non è stato trovato. Potrebbe essere stato eliminato.';
-            } else if (error.message?.includes('500') || error.message?.includes('Internal Server')) {
-                errorMessage = 'Errore del server. Riprova tra qualche secondo o contatta l\'assistenza.';
+            // Handle specific error cases via status code
+            const status = error.response?.status;
+            if (status === 409) {
+                showToast({ type: 'error', message: 'Il codice bundle è già in uso. Prova con un codice diverso.' });
+            } else if (status === 404) {
+                showToast({ type: 'error', message: 'Il bundle non è stato trovato. Potrebbe essere stato eliminato.' });
+            } else if (status === 500) {
+                showToast({ type: 'error', message: 'Errore del server. Riprova tra qualche secondo o contatta l\'assistenza.' });
+            } else {
+                showToast({ type: 'error', message: 'Errore durante l\'aggiornamento del bundle' });
             }
-
-            showToast({ type: 'error', message: errorMessage });
         }
     });
 
@@ -624,8 +616,8 @@ const OffertaBundleForm: React.FC = () => {
         }
     };
 
-    const handleCancel = () => {
-        if (isDirty && !window.confirm('Hai modifiche non salvate. Vuoi uscire?')) {
+    const handleCancel = async () => {
+        if (isDirty && !(await confirmWarning('Modifiche non salvate', 'Hai modifiche non salvate. Vuoi uscire?'))) {
             return;
         }
         navigate('/poliambulatorio/catalogo/bundles');
@@ -1324,11 +1316,10 @@ const OffertaBundleForm: React.FC = () => {
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                 Valido Da
                             </label>
-                            <input
-                                type="date"
+                            <DatePickerElegante
                                 value={formData.validoDa}
-                                onChange={(e) => handleChange('validoDa', e.target.value)}
-                                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-teal-500"
+                                onChange={(date) => handleChange('validoDa', date ? date.toISOString().split('T')[0] : '')}
+                                theme="teal"
                             />
                         </div>
 
@@ -1337,15 +1328,11 @@ const OffertaBundleForm: React.FC = () => {
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                 Valido Fino A <span className="text-gray-400">(opzionale)</span>
                             </label>
-                            <input
-                                type="date"
+                            <DatePickerElegante
                                 value={formData.validoA}
-                                onChange={(e) => handleChange('validoA', e.target.value)}
-                                min={formData.validoDa}
-                                className={`w-full px-4 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-teal-500 focus:border-transparent ${errors.validoA
-                                    ? 'border-red-500'
-                                    : 'border-gray-300 dark:border-gray-600'
-                                    }`}
+                                onChange={(date) => handleChange('validoA', date ? date.toISOString().split('T')[0] : '')}
+                                minDate={formData.validoDa ? new Date(formData.validoDa) : undefined}
+                                theme="teal"
                             />
                             {errors.validoA && (
                                 <p className="mt-1 text-sm text-red-500">{errors.validoA}</p>

@@ -18,7 +18,8 @@ import {
   Activity,
   Database,
   Globe,
-  Tag
+  Tag,
+  MessageCircle
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { TabNavigation } from '../../components/shared';
@@ -31,9 +32,11 @@ const DiscountCodesLazy = lazy(() => import('../settings/DiscountCodes'));
 const DiscountCodeFormLazy = lazy(() => import('../settings/DiscountCodeForm'));
 const DiscountCodeDetailLazy = lazy(() => import('../settings/DiscountCodeDetail'));
 
-// Lazy imports per componenti esistenti (se necessario migrarli da settings)
-// import UsersTab from '../settings/UsersTab';
-// import RolesTab from '../settings/RolesTab';
+// Lazy import for Messaging
+const MessagingConfigPageLazy = lazy(() => import('../settings/MessagingConfigPage'));
+
+// Lazy import for Public Brand Settings
+const PublicBrandSettingsPageLazy = lazy(() => import('./PublicBrandSettingsPage'));
 
 /**
  * Definizione dei tab disponibili
@@ -102,6 +105,21 @@ const MANAGEMENT_TABS = [
     permission: 'roles', // Uses roles:read permission check
     description: 'Gestisci codici promozionali e sconti'
   },
+  {
+    id: 'messaging',
+    label: 'Messaggistica',
+    icon: <MessageCircle className="h-4 w-4" />,
+    permission: 'settings',
+    description: 'Configura email SMTP, WhatsApp e PEC per invio comunicazioni'
+  },
+  {
+    id: 'public-brand',
+    label: 'Widget Pubblici',
+    icon: <Globe className="h-4 w-4" />,
+    permission: 'settings',
+    adminOnly: true,
+    description: 'Configura il tenant per i widget del frontend pubblico (medici, corsi, disponibilità)'
+  },
 ];
 
 const Management: React.FC = () => {
@@ -112,10 +130,10 @@ const Management: React.FC = () => {
   // Stato per tenant selezionato (per tab "tenant-users")
   const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
 
-  // Verifica admin
+  // Verifica admin - controllo più robusto per debug
   const isAdmin = user?.role === 'Admin' ||
-    user?.roles?.includes('ADMIN') ||
-    user?.roles?.includes('SUPER_ADMIN');
+    user?.role === 'Administrator' ||
+    (Array.isArray(user?.roles) && (user.roles.includes('ADMIN') || user.roles.includes('SUPER_ADMIN')));
 
   // Determina tab attivo dalla URL
   const getActiveTab = () => {
@@ -128,6 +146,8 @@ const Management: React.FC = () => {
     if (path.includes('/backup')) return 'backup';
     if (path.includes('/tenant-users')) return 'tenant-users';
     if (path.includes('/codici-sconto')) return 'codici-sconto';
+    if (path.includes('/messaging')) return 'messaging';
+    if (path.includes('/public-brand')) return 'public-brand';
     return 'my-tenants';
   };
 
@@ -169,7 +189,8 @@ const Management: React.FC = () => {
 
     // Tab con permesso specifico
     if (tab.permission) {
-      return hasPermission(tab.permission, 'read') || isAdmin;
+      const hasPerms = hasPermission(tab.permission, 'read') || isAdmin;
+      return hasPerms;
     }
 
     return true;
@@ -264,7 +285,7 @@ const Management: React.FC = () => {
         return (
           <div className="text-center py-12 bg-gray-50 rounded-lg">
             <Activity className="mx-auto h-12 w-12 text-gray-400" />
-            <h3 className="mt-2 text-sm font-medium text-gray-900">Activity Logs</h3>
+            <h3 className="mt-2 text-sm font-medium text-gray-900">Log Attività</h3>
             <p className="mt-1 text-sm text-gray-500">
               Visualizzazione log in arrivo
             </p>
@@ -276,7 +297,7 @@ const Management: React.FC = () => {
         return (
           <div className="text-center py-12 bg-gray-50 rounded-lg">
             <Database className="mx-auto h-12 w-12 text-gray-400" />
-            <h3 className="mt-2 text-sm font-medium text-gray-900">Backup & Restore</h3>
+            <h3 className="mt-2 text-sm font-medium text-gray-900">Backup e Ripristino</h3>
             <p className="mt-1 text-sm text-gray-500">
               Backup e ripristino in arrivo
             </p>
@@ -322,6 +343,28 @@ const Management: React.FC = () => {
         return (
           <Suspense fallback={Fallback}>
             <DiscountCodesLazy />
+          </Suspense>
+        );
+
+      case 'messaging':
+        return (
+          <Suspense fallback={
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            </div>
+          }>
+            <MessagingConfigPageLazy />
+          </Suspense>
+        );
+
+      case 'public-brand':
+        return (
+          <Suspense fallback={
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-violet-600"></div>
+            </div>
+          }>
+            <PublicBrandSettingsPageLazy />
           </Suspense>
         );
 

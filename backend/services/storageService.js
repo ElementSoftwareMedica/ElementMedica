@@ -32,19 +32,26 @@ const UPLOAD_PATH = process.env.UPLOAD_PATH || path.resolve(__dirname, '..', 'up
 let s3Client = null;
 const S3_BUCKET = process.env.AWS_S3_BUCKET;
 const S3_REGION = process.env.AWS_REGION || 'eu-central-1';
+const S3_ENDPOINT = process.env.AWS_S3_ENDPOINT;
 
 if (STORAGE_MODE === 's3' && process.env.AWS_ACCESS_KEY_ID) {
-  s3Client = new S3Client({
+  const s3Config = {
     region: S3_REGION,
     credentials: {
       accessKeyId: process.env.AWS_ACCESS_KEY_ID,
       secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
     },
-  });
+  };
+  if (S3_ENDPOINT) {
+    s3Config.endpoint = S3_ENDPOINT;
+    s3Config.forcePathStyle = true;
+  }
+  s3Client = new S3Client(s3Config);
   logger.info('S3 storage initialized', {
     service: 'storageService',
     bucket: S3_BUCKET,
     region: S3_REGION,
+    endpoint: S3_ENDPOINT || 'default AWS',
   });
 }
 
@@ -92,6 +99,7 @@ class StorageService {
       'lettere-incarico',
       'registri-presenze',
       'attestati',
+      'referti',
     ];
 
     try {

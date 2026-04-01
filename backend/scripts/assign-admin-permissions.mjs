@@ -10,24 +10,36 @@ async function assignAllPermissionsToAdmin() {
     try {
         console.log('=== Assegnazione Permessi Admin ===\n');
 
-        // 1. Trova l'utente admin
-        const adminPerson = await prisma.person.findFirst({
-            where: { email: 'admin@example.com' },
+        // 1. Trova l'utente admin cercando in PersonTenantProfile
+        // P48: email è in PersonTenantProfile, non in Person
+        const adminProfile = await prisma.personTenantProfile.findFirst({
+            where: {
+                email: 'admin@example.com',
+                deletedAt: null,
+                isActive: true
+            },
             include: {
-                personRoles: {
-                    where: { isActive: true }
+                person: {
+                    include: {
+                        personRoles: {
+                            where: { isActive: true }
+                        }
+                    }
                 }
             }
         });
 
-        if (!adminPerson) {
+        if (!adminProfile?.person) {
             console.error('❌ Admin user not found!');
             return;
         }
 
-        console.log('✅ Admin trovato:', adminPerson.email);
+        const adminPerson = adminProfile.person;
+        const adminEmail = adminProfile.email;
+
+        console.log('✅ Admin trovato:', adminEmail);
         console.log('   ID:', adminPerson.id);
-        console.log('   Tenant ID:', adminPerson.tenantId);
+        console.log('   Tenant ID:', adminProfile.tenantId || adminPerson.tenantId);
         console.log('   Global Role:', adminPerson.globalRole);
         console.log('   Existing Person Roles:', adminPerson.personRoles.length);
 

@@ -108,10 +108,11 @@ export class PoliambulatorioService {
                                     id: true,
                                     firstName: true,
                                     lastName: true,
-                                    email: true,
-                                    phone: true,
-                                    registerCode: true,
-                                    specialties: true
+                                    tenantProfiles: {
+                                        where: { deletedAt: null, isActive: true },
+                                        select: { email: true, phone: true, registerCode: true, specialties: true, isPrimary: true },
+                                        take: 1
+                                    }
                                 }
                             }
                         }
@@ -165,7 +166,10 @@ export class PoliambulatorioService {
 
             if (tenantIds) {
                 // Filter by specific tenant IDs (must be in user's accessible tenants)
-                const requestedIds = tenantIds.split(',').map(id => id.trim());
+                // Handle both array and comma-separated string formats
+                const requestedIds = Array.isArray(tenantIds)
+                    ? tenantIds.map(id => id.trim())
+                    : tenantIds.split(',').map(id => id.trim());
                 const allowedIds = accessibleTenantIds.length > 0
                     ? requestedIds.filter(id => accessibleTenantIds.includes(id))
                     : requestedIds;
@@ -360,8 +364,9 @@ export class PoliambulatorioService {
                 prisma.poliambulatorio.findFirst({
                     where: { id: poliambulatorioId, tenantId, deletedAt: null }
                 }),
+                // P63: Person non ha tenantId — filtra via tenantProfiles.some
                 prisma.person.findFirst({
-                    where: { id: direttoreId, tenantId, deletedAt: null }
+                    where: { id: direttoreId, deletedAt: null, tenantProfiles: { some: { tenantId, deletedAt: null } } }
                 })
             ]);
 
@@ -426,9 +431,10 @@ export class PoliambulatorioService {
             }
 
             // Verify direttore exists if provided
+            // P63: Person non ha tenantId — filtra via tenantProfiles.some
             if (direttoreId) {
                 const direttore = await prisma.person.findFirst({
-                    where: { id: direttoreId, tenantId, deletedAt: null }
+                    where: { id: direttoreId, deletedAt: null, tenantProfiles: { some: { tenantId, deletedAt: null } } }
                 });
 
                 if (!direttore) {
@@ -540,9 +546,10 @@ export class PoliambulatorioService {
             }
 
             // Verify direttore if provided
+            // P63: Person non ha tenantId — filtra via tenantProfiles.some
             if (data.direttoreSanitarioId) {
                 const direttore = await prisma.person.findFirst({
-                    where: { id: data.direttoreSanitarioId, tenantId, deletedAt: null }
+                    where: { id: data.direttoreSanitarioId, deletedAt: null, tenantProfiles: { some: { tenantId, deletedAt: null } } }
                 });
 
                 if (!direttore) {
@@ -653,9 +660,10 @@ export class PoliambulatorioService {
             }
 
             // Verify direttore if provided
+            // P63: Person non ha tenantId — filtra via tenantProfiles.some
             if (data.direttoreSanitarioId) {
                 const direttore = await prisma.person.findFirst({
-                    where: { id: data.direttoreSanitarioId, tenantId, deletedAt: null }
+                    where: { id: data.direttoreSanitarioId, deletedAt: null, tenantProfiles: { some: { tenantId, deletedAt: null } } }
                 });
 
                 if (!direttore) {

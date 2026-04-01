@@ -59,7 +59,6 @@ export function useGDPRColumns({
         return validColumns;
       }
     } catch (error) {
-      console.warn('Errore nel caricamento configurazione colonne:', error);
     }
     
     // Configurazione di default
@@ -82,7 +81,6 @@ export function useGDPRColumns({
     try {
       localStorage.setItem(storageKey, JSON.stringify(columnStates));
     } catch (error) {
-      console.warn('Errore nel salvataggio configurazione colonne:', error);
     }
   }, [storageKey, columnStates]);
 

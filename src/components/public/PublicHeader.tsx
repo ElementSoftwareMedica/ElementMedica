@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Menu, X, Phone, Mail } from 'lucide-react';
 import { PublicButton } from './PublicButton';
@@ -9,13 +9,21 @@ import { useBrandConfig } from '../../hooks/useBrandConfig';
 /**
  * Header pubblico multi-brand
  * Menu sempre visibile con navigazione responsive
- * Supporta Element Formazione e Element Medica
+ * Supporta Element Sicurezza e Element Medica
  */
 export const PublicHeader: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
   const location = useLocation();
   const { handleAreaRiservataClick, isAuthenticated } = useAuthRedirect();
   const brandConfig = useBrandConfig();
+
+  // Track scroll position for shadow behavior
+  useEffect(() => {
+    const handleScroll = () => setIsScrolled(window.scrollY > 10);
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   const navigationItems = brandConfig.navigation.map(item => ({
     ...item,
@@ -40,22 +48,22 @@ export const PublicHeader: React.FC = () => {
       details: { label, href: '/contatti', section: 'PublicHeader' }
     });
   };
-  
+
   // Gestione Area Riservata con redirect per Element Medica
   const handleAreaRiservata = () => {
     if (brandConfig.adminUrl) {
-      // Element Medica → redirect a Element Formazione admin
+      // Element Medica → redirect a Element Sicurezza admin
       window.location.href = brandConfig.adminUrl;
     } else {
-      // Element Formazione → comportamento standard
+      // Element Sicurezza → comportamento standard
       handleAreaRiservataClick();
     }
   };
 
   return (
-    <header className="bg-white shadow-md sticky top-0 z-50">
+    <header className={`bg-white sticky top-0 z-50 transition-shadow duration-300 ${isScrolled ? 'shadow-lg' : 'shadow-none'}`}>
       {/* Top bar con contatti */}
-      <div className="bg-gradient-to-r from-teal-600 via-teal-700 to-blue-600 text-white py-2">
+      <div className="text-white py-2" style={{ backgroundImage: 'linear-gradient(to right, var(--color-primary-800), var(--color-primary-700), var(--color-primary-800))' }}>
         <div className="container mx-auto px-4">
           <div className="flex justify-between items-center text-sm">
             <div className="flex items-center space-x-4">
@@ -65,11 +73,11 @@ export const PublicHeader: React.FC = () => {
               </div>
               <div className="flex items-center space-x-1">
                 <Mail className="w-4 h-4" />
-                <span>{brandConfig.contacts.email}</span> 
+                <span>{brandConfig.contacts.email}</span>
               </div>
             </div>
             <div className="hidden md:block">
-              <button 
+              <button
                 onClick={handleAreaRiservata}
                 className="hover:text-primary-200 transition-colors"
               >
@@ -83,23 +91,14 @@ export const PublicHeader: React.FC = () => {
       {/* Main header */}
       <div className="container mx-auto px-4">
         <div className="flex justify-between items-center py-4">
-          {/* Logo */}
-          <Link to="/" className="flex items-center space-x-3">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-              brandConfig.theme === 'medical' ? 'bg-cyan-600' : 'bg-primary-600'
-            }`}>
-              <span className="text-white font-bold text-lg">
-                {brandConfig.displayName.charAt(0)}
-              </span>
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900">
-                {brandConfig.displayName}
-              </h1>
-              <p className="text-sm text-gray-600">
-                {brandConfig.tagline}
-              </p>
-            </div>
+          {/* Logo — usa PNG reale dall'archivio loghi ufficiale */}
+          <Link to="/" className="flex items-center">
+            <img
+              src={brandConfig.logo}
+              alt={brandConfig.logoAlt}
+              className="h-10 w-auto object-contain"
+              loading="eager"
+            />
           </Link>
 
           {/* Desktop Navigation */}
@@ -108,11 +107,10 @@ export const PublicHeader: React.FC = () => {
               <Link
                 key={item.href}
                 to={item.href}
-                className={`font-medium transition-colors hover:text-primary-600 whitespace-nowrap text-sm xl:text-base ${
-                  isActiveRoute(item.href, item.exact)
-                    ? 'text-primary-600 border-b-2 border-primary-600 pb-1'
-                    : 'text-gray-700'
-                }`}
+                className={`font-medium transition-all duration-200 hover:text-primary-600 whitespace-nowrap text-sm xl:text-base pb-1 border-b-2 ${isActiveRoute(item.href, item.exact)
+                  ? 'text-primary-600 border-primary-600'
+                  : 'text-gray-700 border-transparent hover:border-primary-300'
+                  }`}
               >
                 {item.label}
               </Link>
@@ -121,8 +119,8 @@ export const PublicHeader: React.FC = () => {
 
           {/* CTA Button Desktop */}
           <div className="hidden lg:block ml-4 xl:ml-6 flex-shrink-0">
-            <PublicButton 
-              variant={brandConfig.cta.primary.variant} 
+            <PublicButton
+              variant={brandConfig.cta.primary.variant}
               size="md"
               to={brandConfig.cta.primary.href}
               onClick={() => trackContatti(`${brandConfig.cta.primary.text} (header desktop)`)}
@@ -147,51 +145,48 @@ export const PublicHeader: React.FC = () => {
       </div>
 
       {/* Mobile Navigation */}
-      {isMenuOpen && (
-        <div className="lg:hidden bg-white border-t border-gray-200">
-          <nav className="container mx-auto px-4 py-4">
-            <div className="flex flex-col space-y-4">
-              {navigationItems.map((item) => (
-                <Link
-                  key={item.href}
-                  to={item.href}
-                  onClick={() => setIsMenuOpen(false)}
-                  className={`font-medium py-2 transition-colors hover:text-primary-600 ${
-                    isActiveRoute(item.href, item.exact)
-                      ? 'text-primary-600'
-                      : 'text-gray-700'
+      <div className={`lg:hidden bg-white border-t border-gray-200 overflow-hidden transition-all duration-300 ease-in-out ${isMenuOpen ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}>
+        <nav className="container mx-auto px-4 py-4">
+          <div className="flex flex-col space-y-4">
+            {navigationItems.map((item) => (
+              <Link
+                key={item.href}
+                to={item.href}
+                onClick={() => setIsMenuOpen(false)}
+                className={`font-medium py-2 transition-colors hover:text-primary-600 ${isActiveRoute(item.href, item.exact)
+                  ? 'text-primary-600'
+                  : 'text-gray-700'
                   }`}
-                >
-                  {item.label}
-                </Link>
-              ))}
-              <div className="pt-4 border-t border-gray-200">
-                <PublicButton 
-                  variant={brandConfig.cta.primary.variant} 
-                  size="md" 
-                  className="w-full"
-                  to={brandConfig.cta.primary.href}
-                  onClick={() => {
-                    setIsMenuOpen(false);
-                    trackContatti(`${brandConfig.cta.primary.text} (header mobile)`);
-                  }}
-                >
-                  {brandConfig.cta.primary.text}
-                </PublicButton>
-              </div>
-              <button
+              >
+                {item.label}
+              </Link>
+            ))}
+            <div className="pt-4 border-t border-gray-200">
+              <PublicButton
+                variant={brandConfig.cta.primary.variant}
+                size="md"
+                className="w-full"
+                to={brandConfig.cta.primary.href}
                 onClick={() => {
                   setIsMenuOpen(false);
-                  handleAreaRiservata();
+                  trackContatti(`${brandConfig.cta.primary.text} (header mobile)`);
                 }}
-                className="text-sm text-gray-600 hover:text-primary-600 transition-colors text-left"
               >
-                {isAuthenticated ? 'Dashboard' : 'Area Riservata'}
-              </button>
+                {brandConfig.cta.primary.text}
+              </PublicButton>
             </div>
-          </nav>
-        </div>
-      )}
+            <button
+              onClick={() => {
+                setIsMenuOpen(false);
+                handleAreaRiservata();
+              }}
+              className="text-sm text-gray-600 hover:text-primary-600 transition-colors text-left"
+            >
+              {isAuthenticated ? 'Dashboard' : 'Area Riservata'}
+            </button>
+          </div>
+        </nav>
+      </div>
     </header>
   );
 };

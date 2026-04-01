@@ -1,15 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Button } from "../../design-system/atoms/Button";
-// Removed unused imports: create, update, toast
 import type { ScheduleEventModalProps } from './ScheduleEventModal.lazy';
-// import { Label } from "../../design-system/atoms/Label";
 import Modal from "../../design-system/molecules/Modal/Modal";
 import { ScheduleModalProvider, useScheduleModalContext } from './context/ScheduleModalContext';
 import ScheduleModalErrorBoundary from './components/ScheduleModalErrorBoundary';
-// import { ScheduleModalLoadingState } from './components/ScheduleModalLoadingStates';
-
-// Rimuovo import dei componenti grezzi non usati direttamente qui
-// import { CourseDetailsForm, CompanyEmployeeSelector, AttendanceManager, DocumentManager, DateTimeManager } from './components';
 
 import {
   StepCourseDetails,
@@ -23,15 +17,10 @@ import {
   expandTerms as expandTermsUtil,
   timeStringToMinutes as timeStringToMinutesUtil,
   formatDate as formatDateUtil,
-  // validateScheduleForm,  // non usato qui, gestito in useScheduleSave
   toIdString,
   getPersonIdsForCompanyUniversal
 } from './utils';
 
-// import { useFormData } from './hooks/useFormData';
-// import { useSelections } from './hooks/useSelections'; // non più usato
-// import { useScheduleModalStateOptimized } from './hooks/useScheduleModalStateOptimized'; // non usato qui
-// RIMOSSO: import { useAttendance } from './hooks/useAttendance';
 import { useDynamicRiskAndTypeOptions } from './hooks/useDynamicRiskAndTypeOptions';
 import { useAutoSelectVariant } from './hooks/useAutoSelectVariant';
 import { useRequiredCerts } from './hooks/useRequiredCerts';
@@ -39,15 +28,17 @@ import { useScheduleSteps } from './hooks/useScheduleSteps';
 import { useCourseVariants } from './hooks/useCourseVariants';
 import { useScheduleSave } from './hooks/useScheduleSave';
 import { useFormValidation } from './hooks/useFormValidation';
-import type { FormData as ValidationFormData } from './hooks/useFormData';
+import type { FormData as ValidationFormData } from './types';
 import { useNavigationHandlers } from './hooks/useNavigationHandlers';
 import { useDateTimeHandlers } from './hooks/useDateTimeHandlers';
-// import { useAdvancedMemoization } from './hooks/useAdvancedMemoization'; // non usato qui
 import { DELIVERY_MODES, RISK_LEVEL_OPTIONS, COURSE_TYPE_OPTIONS } from '../../constants/scheduleModal';
 import { isRLSCourse, getRiskLevelOptions } from '../../utils/courseLabels';
 import { useTrainerFilters } from './hooks/useTrainerFilters';
 import { getTrainers } from '../../services/trainers';
 import type { Training, Trainer, Option } from './types';
+// P51: Import useTenantMode for multi-tenant support
+import { useTenantMode } from '../../contexts/TenantModeContext';
+import { useTenantFilter } from '../../context/TenantFilterContext';
 
 // Costanti importate da constants/scheduleModal.ts
 
@@ -57,6 +48,11 @@ const expandTerms = expandTermsUtil;
 // Componente interno che utilizza il context
 function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element {
   const { onClose, onSuccess, existingEvent } = props;
+
+  // P51: Get headers for multi-tenant operations
+  const { getOperateHeaders } = useTenantMode();
+  const operateHeaders = getOperateHeaders();
+  const { getTenantFilterParams, isReady: tenantFilterReady } = useTenantFilter();
 
   // Utilizzo del context per accedere a stato e azioni
   const {
@@ -131,28 +127,19 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
       const hasPrice = courseAny.pricePerPerson || courseAny.price || courseAny.prezzo || courseAny.prezzoBase;
 
       if (hasPrice) {
-        console.log('[ScheduleEventModal] 💰 Price already available in context:', hasPrice);
         return;
       }
 
       try {
-        console.log('[ScheduleEventModal] 🔄 Loading course details from API for price...');
         const { getCourses } = await import('../../services/courses');
         const courses = await getCourses();
         const fullCourse = courses.find((c: any) => String(c.id) === String(selectedCourse.id));
 
         if (fullCourse) {
-          console.log('[ScheduleEventModal] ✅ Course details loaded:', {
-            id: fullCourse.id,
-            pricePerPerson: (fullCourse as any).pricePerPerson,
-            price: (fullCourse as any).price
-          });
           setSelectedCourseDetails(fullCourse as Training);
-        } else {
-          console.warn('[ScheduleEventModal] ⚠️ Course not found in API response');
         }
-      } catch (error) {
-        console.error('[ScheduleEventModal] ❌ Failed to load course details:', error);
+      } catch {
+        // Silenzioso: il corso non è stato trovato, il modal funziona comunque
       }
     };
 
@@ -163,17 +150,10 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
   const effectiveSelectedCourse = useMemo<Training | undefined>(() => {
     const base = selectedCourseDetails || selectedCourse;
     if (!base) {
-      console.log('[ScheduleEventModal] ⚠️ No course selected');
       return undefined;
     }
 
     // Debug: log both selectedCourseDetails and selectedCourse
-    console.log('[ScheduleEventModal] 🔍 Course data sources:', {
-      hasDetails: !!selectedCourseDetails,
-      hasBase: !!selectedCourse,
-      detailsPrice: (selectedCourseDetails as any)?.pricePerPerson,
-      basePrice: (selectedCourse as any)?.pricePerPerson
-    });
 
     // Extract price from various possible field names
     // Priority: selectedCourseDetails (from API) > selectedCourse (from context)
@@ -189,17 +169,6 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
       baseAny.prezzoBase ||
       0;
 
-    console.log('[ScheduleEventModal] 📊 effectiveSelectedCourse:', {
-      id: base.id,
-      name: base.title ?? base.name,
-      source: selectedCourseDetails ? 'API (selectedCourseDetails)' : 'Context (selectedCourse)',
-      pricePerPerson: baseAny.pricePerPerson,
-      price: baseAny.price,
-      prezzo: baseAny.prezzo,
-      prezzoBase: baseAny.prezzoBase,
-      extractedPrice,
-      willPrecompile: extractedPrice > 0
-    });
 
     // Normalize course fields for consistent access
     return {
@@ -233,10 +202,56 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
   const handleCompanyToggle = actions.toggleCompany;
   const handlePersonToggle = actions.togglePerson;
 
+  // Persons: usa dal context (SchedulesPage li carica in Promise.all)
+  // Fallback lazy load se il context non li fornisce
+  const [fallbackPersons, setFallbackPersons] = useState<any[]>([]);
+
+  useEffect(() => {
+    // Se il context fornisce già persons, non serve il fallback
+    if (Array.isArray(persons) && persons.length > 0) return;
+    // Se il fallback è già caricato, non ripetere
+    if (fallbackPersons.length > 0) return;
+    if (!tenantFilterReady) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const { getPersons } = await import('../../services/persons');
+        const tenantParams = getTenantFilterParams();
+        const filters: Record<string, any> = { limit: 1000, page: 1 };
+        if (tenantParams.tenantIds) {
+          filters.tenantIds = tenantParams.tenantIds.join(',');
+        } else if (tenantParams.allTenants) {
+          filters.allTenants = true;
+        }
+        const result = await getPersons(filters);
+        const fetched = result?.persons || [];
+        if (!cancelled && fetched.length > 0) {
+          setFallbackPersons(fetched);
+        }
+      } catch (err) {
+        if (import.meta.env.DEV) console.error('[SEM] Lazy loading persons fallito:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [persons, tenantFilterReady, fallbackPersons.length, getTenantFilterParams]);
+
+  // Persons effettivi: context ha priorità, poi fallback
+  const loadedPersons = (Array.isArray(persons) && persons.length > 0) ? persons : fallbackPersons;
+
   // Adapter locali per selezione/deselezione per azienda
+  // P49: Usa loadedPersons (non persons prop che potrebbe essere vuoto) e cerca anche con CTP ID
   const getPersonIdsForCompany = useCallback((companyId: string) => {
-    return getPersonIdsForCompanyUniversal(persons, companyId);
-  }, [persons]);
+    const byGlobal = getPersonIdsForCompanyUniversal(loadedPersons, companyId);
+    // P49: cerca anche con companyTenantProfileId per matchare person.companyId (=CTP ID)
+    const company = companies.find(c => String(c.id) === String(companyId));
+    const ctpId = company?.companyTenantProfileId;
+    const byCtp = ctpId ? getPersonIdsForCompanyUniversal(loadedPersons, ctpId) : [];
+    // Multi-tenant: match all CTP IDs
+    const allCtpIds = company?.allCompanyTenantProfileIds || [];
+    const byAllCtp = allCtpIds.flatMap(cId => getPersonIdsForCompanyUniversal(loadedPersons, cId));
+    return [...new Set([...byGlobal, ...byCtp, ...byAllCtp])];
+  }, [loadedPersons, companies]);
   const handleSelectAllPersonsByCompany = useCallback((companyId: string | number) => {
     const ids = getPersonIdsForCompany(String(companyId));
     actions.selectAllPersons(ids);
@@ -286,56 +301,9 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
     };
   }, [trainers]);
 
-  // ✅ LAZY LOADING PERSONS: Carica persons se non forniti dal context
-  const [loadedPersons, setLoadedPersons] = useState<any[]>(persons || []);
-  useEffect(() => {
-    // Se persons già forniti, usali
-    if (Array.isArray(persons) && persons.length > 0) {
-      console.log('[ScheduleEventModal] ✅ Using persons from context:', persons.length);
-      setLoadedPersons(persons);
-      return;
-    }
-
-    // Altrimenti carica lazy
-    console.log('[ScheduleEventModal] 🔄 Loading persons lazy...');
-    let cancelled = false;
-    (async () => {
-      try {
-        const { getPersons } = await import('../../services/persons');
-        const result = await getPersons({ limit: 1000, page: 1 });
-        const fetchedPersons = result?.persons || [];
-        if (!cancelled) {
-          console.log('[ScheduleEventModal] ✅ Loaded persons:', fetchedPersons.length);
-          setLoadedPersons(fetchedPersons);
-        }
-      } catch (err) {
-        console.error('[ScheduleEventModal] ❌ Failed to load persons:', err);
-        setLoadedPersons([]);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [persons]);
-
   // Trainers effettivi SENZA fallback - ora usiamo quelli del context
   const effectiveTrainers: Trainer[] = useMemo(() => {
-    const result = Array.isArray(trainers) && trainers.length > 0 ? trainers : [];
-
-    // 🔍 DEBUG: Verifica trainers ricevuti dal context
-    if (result.length > 0) {
-      console.debug('[ScheduleEventModal] 🔍 Trainers from context:', {
-        count: result.length,
-        sampleTrainer: {
-          id: result[0].id,
-          name: `${result[0].firstName} ${result[0].lastName}`,
-          certifications: result[0].certifications,
-          hasCertsField: 'certifications' in result[0]
-        }
-      });
-    }
-
-    return result;
+    return Array.isArray(trainers) && trainers.length > 0 ? trainers : [];
   }, [trainers]);
 
   // Correzione Rules of Hooks: chiamiamo direttamente l'hook, non dentro useMemo
@@ -362,25 +330,7 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
     setDynamicCourseTypeOptions(typeOpts);
   }, [riskOpts, typeOpts]);
 
-  // Log di diagnostica leggero (solo in sviluppo)
-  useEffect(() => {
-    if (import.meta?.env?.MODE === 'development') {
-      console.debug('[SCHEDULE MODAL DIAG] Stato dinamico', {
-        course: effectiveSelectedCourse?.title || effectiveSelectedCourse?.name || null,
-        variantsCount: Array.isArray(selectedCourseVariants) ? selectedCourseVariants.length : 0,
-        riskOptsCount: Array.isArray(dynamicRiskOptions) ? dynamicRiskOptions.length : 0,
-        typeOptsCount: Array.isArray(dynamicCourseTypeOptions) ? dynamicCourseTypeOptions.length : 0,
-        riskValid,
-        typeValid,
-        titleEmpty,
-        formSnapshot: {
-          training_id: formData.training_id,
-          risk_level: formData.risk_level,
-          course_type: formData.course_type,
-        },
-      });
-    }
-  }, [effectiveSelectedCourse, selectedCourseVariants, dynamicRiskOptions, dynamicCourseTypeOptions, riskValid, typeValid, titleEmpty, formData.training_id, formData.risk_level, formData.course_type]);
+
 
   // Auto-select the specific training variant when filters (risk/type) identify a unique match
   useAutoSelectVariant({
@@ -422,7 +372,7 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
   // Utility functions - Memoized
   const getCompanyName = useCallback((companyId: string | number) => {
     const company = companies.find(c => toIdString(c.id) === toIdString(companyId));
-    return (company?.ragioneSociale || company?.name) || 'Azienda sconosciuta';
+    return company?.ragioneSociale || 'Azienda sconosciuta';
   }, [companies]);
 
   // Derived hours for validation - Optimized calculations
@@ -493,7 +443,6 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
 
       if (hasChanges) {
         if (process.env.NODE_ENV === 'development') {
-          console.debug('[ScheduleModal] Auto-updating risk/type:', updates);
         }
         setFormData(updates);
 
@@ -593,6 +542,7 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
   });
 
   // Save function using the new hook
+  // P51: Pass operateHeaders for multi-tenant CRUD operations
   const { handleSave: saveSchedule } = useScheduleSave({
     isEditing,
     scheduleId: (existingEvent?.id as string | number) || scheduleId,
@@ -609,7 +559,8 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
     courseDuration,
     totalSelectedHours,
     selectedCompanies: Array.from(selectedCompanies),
-    status
+    status,
+    headers: operateHeaders
   });
 
   // Save handler
@@ -712,7 +663,7 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
                   hourlyRate: (t as any).hourlyRate
                 }))
             }
-            persons={persons.map(p => ({
+            persons={loadedPersons.map(p => ({
               ...p,
               companyId: p.companyId
             }))}
@@ -820,7 +771,7 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
       <div className="space-y-6">
         {/* Steps indicator - Pillola Unica */}
         <div className="flex justify-center">
-          <div className="inline-flex bg-gray-100 rounded-full p-1 shadow-sm">
+          <div className="inline-flex bg-gray-100 dark:bg-gray-800 rounded-full p-1 shadow-sm">
             {stepItems.map((step, index) => {
               const isClickable = actions.canNavigateToStep(index);
               return (
@@ -838,8 +789,8 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
                     ${index === currentStep
                       ? 'bg-blue-600 text-white shadow-md scale-105'
                       : index < currentStep
-                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200'
+                        ? 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/70'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                     }
                     ${isClickable ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}
                   `}
@@ -852,7 +803,7 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
                         ? 'bg-white text-blue-600'
                         : index < currentStep
                           ? 'bg-green-600 text-white'
-                          : 'bg-gray-300 text-gray-600'
+                          : 'bg-gray-300 dark:bg-gray-600 text-gray-600 dark:text-gray-300'
                       }
                     `}>
                       {index < currentStep ? '✓' : index + 1}
@@ -868,11 +819,11 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
 
         {/* Error display */}
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-md p-4">
+          <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-md p-4">
             <div className="flex">
               <div className="ml-3">
-                <h3 className="text-sm font-medium text-red-800">Errore</h3>
-                <div className="mt-2 text-sm text-red-700">{error}</div>
+                <h3 className="text-sm font-medium text-red-800 dark:text-red-400">Errore</h3>
+                <div className="mt-2 text-sm text-red-700 dark:text-red-300">{error}</div>
               </div>
             </div>
           </div>

@@ -11,7 +11,7 @@ export interface DropdownAction {
   /** Icona opzionale da mostrare accanto all'etichetta */
   icon?: ReactNode;
   /** Variante di stile (default, danger) */
-  variant?: 'default' | 'danger' | 'secondary' | 'primary';
+  variant?: 'default' | 'danger' | 'secondary' | 'primary' | 'warning' | 'success';
   /** Whether the action is disabled */
   disabled?: boolean;
 }
@@ -64,13 +64,13 @@ export const Dropdown: React.FC<DropdownProps> = ({
   // Memoizza le azioni per evitare re-render inutili
   const memoizedActions = useMemo(() => actions, [actions]);
 
-  // Varianti di stile per il bottone
+  // Varianti di stile per il bottone con dark mode
   const variantStyles = {
-    primary: 'bg-blue-600 text-white hover:bg-blue-700',
-    secondary: 'bg-gray-200 text-gray-800 hover:bg-gray-300',
-    outline: 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50',
-    ghost: 'bg-transparent text-gray-700 hover:bg-gray-100',
-    danger: 'bg-red-600 text-white hover:bg-red-700',
+    primary: 'bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-600',
+    secondary: 'bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600',
+    outline: 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700',
+    ghost: 'bg-transparent text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800',
+    danger: 'bg-red-600 text-white hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600',
   };
 
   return (
@@ -105,7 +105,7 @@ export const Dropdown: React.FC<DropdownProps> = ({
         <DropdownMenu.Content
           align="end"
           sideOffset={5}
-          className="z-[1000] min-w-[200px] overflow-hidden rounded-md border border-gray-200 bg-white p-1 shadow-lg animate-in fade-in-80 data-[side=right]:slide-in-from-left-2 data-[side=left]:slide-in-from-right-2 data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2"
+          className="z-[1000] min-w-[200px] overflow-hidden rounded-md border border-gray-200 bg-white p-1 shadow-lg animate-in fade-in-80 dark:bg-gray-800 dark:border-gray-700 data-[side=right]:slide-in-from-left-2 data-[side=left]:slide-in-from-right-2 data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2"
         >
           {memoizedActions.map((action, index) => (
             <DropdownMenu.Item
@@ -118,11 +118,13 @@ export const Dropdown: React.FC<DropdownProps> = ({
                 }
               }}
               className={cn(
-                'relative flex cursor-default select-none items-center rounded-sm px-3 py-1.5 text-sm outline-none transition-colors focus:bg-gray-100 focus:text-gray-900',
+                'relative flex cursor-default select-none items-center rounded-sm px-3 py-1.5 text-sm outline-none transition-colors',
+                'focus:bg-gray-100 focus:text-gray-900 dark:focus:bg-gray-700 dark:focus:text-gray-100',
+                'dark:text-gray-200',
                 action.disabled && 'pointer-events-none opacity-50',
-                action.variant === 'danger' && 'text-red-600',
-                action.variant === 'secondary' && 'text-gray-500',
-                action.variant === 'primary' && 'text-blue-600',
+                action.variant === 'danger' && 'text-red-600 dark:text-red-400',
+                action.variant === 'secondary' && 'text-gray-500 dark:text-gray-400',
+                action.variant === 'primary' && 'text-blue-600 dark:text-blue-400',
               )}
             >
               {action.icon && (

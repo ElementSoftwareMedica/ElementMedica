@@ -142,25 +142,19 @@
 ### 🚨 Configurazione Server CRITICA
 **PORTE FISSE - NON MODIFICARE MAI:**
 - **API Server**: Porta 4001 ✅ (Ottimizzato e Modulare)
-- **Proxy Server**: Porta 4003 ✅ (Ottimizzato con Middleware)
-- **Frontend**: Porta 5173 (Configurato per proxy 4003)
-- **Documents Server**: Porta 4002 (Opzionale - verificare necessità)
+- **Documents Server**: Porta 4002 ✅ (PDF Generation)
+- **Frontend**: Porta 5173 (Vite dev server)
+
+> **P64**: Proxy server (4003) ELIMINATO - Nginx gestisce routing in produzione
 
 ### 🔧 Architettura Modulare Implementata
-**Backend Ottimizzato (Progetti 16-17):**
+**Backend Ottimizzato (P64 - Architettura 2 Server):**
 ```
 backend/
 ├── servers/                    # Server principali
-│   ├── api-server.js          # API Server ottimizzato (195 righe)
-│   ├── proxy-server.js        # Proxy Server modulare
+│   ├── api-server.js          # API Server ottimizzato
 │   └── documents-server.js    # Documents Server
-├── proxy/                     # Moduli Proxy (Progetto 16)
-│   ├── config/               # Configurazioni centralizzate
-│   ├── middleware/           # Middleware modulari
-│   ├── handlers/             # Handler specializzati
-│   ├── routes/               # Route configuration
-│   └── utils/                # Utility condivise
-├── config/                   # Configurazioni API (Progetto 17)
+├── config/                   # Configurazioni API
 ├── middleware/               # Middleware API ottimizzati
 ├── services/                 # Servizi business logic
 └── utils/                    # Utility condivise
@@ -171,39 +165,37 @@ backend/
 - `pm2 restart` senza autorizzazione
 - `kill -9` sui processi server
 - Riavvio server senza planning
-- **NUOVO**: Modifica configurazioni proxy senza test
-- **NUOVO**: Cambio porte server (4001/4003 FISSE)
+- Cambio porte server (4001/4002 FISSE)
 
 **COMANDI PERMESSI (Solo Diagnostica):**
 - `pm2 status`
 - `pm2 logs`
 - `curl http://localhost:4001/health`
-- `curl http://localhost:4003/health` (NUOVO endpoint)
+- `curl http://localhost:4002/health`
 - `ps aux | grep node`
 
-### 🔧 Ottimizzazioni Implementate (Progetti 16-17)
+> **P64**: Proxy server (4003) eliminato - Non più testare
 
-#### ✅ Proxy Server Ottimizzato (Progetto 16)
-- **CORS Centralizzato**: Configurazione unificata per tutti gli endpoint
-- **Rate Limiting Modulare**: Con esenzioni per OPTIONS e health checks
-- **Middleware Modulari**: Security, logging, body parsing separati
-- **Health Check Avanzato**: `/healthz` con controlli multipli
-- **Graceful Shutdown**: Gestione unificata SIGTERM/SIGINT
-- **Testing Integrato**: Supertest, ESLint, Prettier
+### 🔧 Ottimizzazioni Implementate (Progetti 16-17, P64)
 
-#### ✅ API Server Ottimizzato (Progetto 17)
+#### ✅ P64: Proxy Server ELIMINATO
+- **CORS**: Ora gestito direttamente da API Server
+- **Rate Limiting**: Spostato su API Server
+- **Routing**: Vite proxy (dev) / Nginx (prod)
+- **Health Check**: Solo `/health` su API (4001) e Documents (4002)
+
+#### ✅ API Server Ottimizzato (Progetto 17 + P64)
 - **Riduzione Codice**: Da 527 a 195 righe (-63%)
 - **Architettura Modulare**: ServiceLifecycleManager, MiddlewareManager
 - **Performance**: Monitoring condizionale, cache ottimizzata
-- **Sicurezza**: Helmet, CSP, rate limiting specifico
+- **Sicurezza**: Helmet, CSP, rate limiting specifico, CORS
 - **Validazione**: Input validation centralizzata
 - **API Versioning**: Supporto v1/v2 con backward compatibility
 
-#### ✅ Sistema Routing Avanzato (Progetto 19)
-- **Routing Centralizzato**: RouterMap unificata con versioning API
-- **Legacy Redirects**: Trasparenti (`/login` → `/api/v1/auth/login`)
-- **Endpoint Diagnostici**: `/routes`, `/routes/health`, `/routes/stats`
-- **Rate Limiting Dinamico**: Configurazione per tipo endpoint
+#### ✅ Routing (P64 Update)
+- **Dev**: Vite proxy in vite.config.ts
+- **Prod**: Nginx reverse proxy diretto a API Server
+- **Note**: Endpoint `/routes/health`, `/routes/stats`, `/routes/config` NON disponibili
 - **CORS Dinamico**: Basato su pattern di route
 - **Logging Unificato**: Request ID tracking e audit trail
 - **Body Parsing V38**: Risolto problema POST requests
@@ -303,42 +295,39 @@ const AUDIT_ACTIONS = {
 4. **Test Funzionale** - Verificare ogni modifica
 5. **Documentazione** - Aggiornare documentazione
 6. **Validazione Finale** - Confermare funzionamento
-7. **NUOVO**: Test Health Check completo (API + Proxy)
-8. **NUOVO**: Verifica configurazioni porte
+7. **P64**: Test Health Check su API (4001) e Documents (4002)
+8. **P64**: Verifica configurazioni porte
 
-### 🧪 Test Obbligatori Post-Modifica
+### 🧪 Test Obbligatori Post-Modifica (P64 Update)
 ```bash
-# Test base sempre obbligatori
+# Test base sempre obbligatori (P64: solo API e Documents)
 curl http://localhost:4001/health
-curl http://localhost:4003/health
+curl http://localhost:4002/health
 
-# Test login sempre obbligatorio
-curl -X POST http://localhost:4003/api/auth/login \
+# Test login sempre obbligatorio (P64: diretto su API)
+curl -X POST http://localhost:4001/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"identifier":"admin@example.com","password":"Admin123!"}'
 
-# Test CORS se modificato
-curl -X OPTIONS http://localhost:4003/api/auth/login \
+# Test CORS se modificato (P64: diretto su API)
+curl -X OPTIONS http://localhost:4001/api/v1/auth/login \
   -H "Origin: http://localhost:5173" \
   -H "Access-Control-Request-Method: POST"
 
-# NUOVO - Test sistema routing avanzato
-curl http://localhost:4003/routes/health
-curl http://localhost:4003/routes/stats
-curl -I http://localhost:4003/login  # Test legacy redirect
+# Test versioning API
+curl http://localhost:4001/api/v1/health
+curl http://localhost:4001/api/v2/health
 
-# NUOVO - Test versioning API
-curl -H "x-api-version: v1" http://localhost:4003/api/v1/health
-curl -H "x-api-version: v2" http://localhost:4003/api/v2/health
-
-# NUOVO - Test body parsing V38
-curl -X POST http://localhost:4003/api/v1/auth/login \
+# Test body parsing V38
+curl -X POST http://localhost:4001/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"identifier":"admin@example.com","password":"Admin123!"}' \
   -v | grep -E "(200|400|401)"
 ```
 
-### Checklist Pre-Commit AGGIORNATA
+> **P64**: Endpoint `/routes/health`, `/routes/stats`, `/routes/config` NON più disponibili.
+
+### Checklist Pre-Commit AGGIORNATA (P64)
 - [ ] **Person entity** utilizzata (NO User/Employee)
 - [ ] **deletedAt** per soft delete (NO eliminato/isDeleted)
 - [ ] **PersonRole** per ruoli (NO UserRole/Role)
@@ -348,10 +337,10 @@ curl -X POST http://localhost:4003/api/v1/auth/login \
 - [ ] **Template GDPR** implementato se necessario
 - [ ] **Standard UI rispettati** (pulsanti a pillola, colori azzurri)
 - [ ] **Componenti documentati** con regole di utilizzo
-- [ ] **NUOVO**: Test health check proxy (`curl http://localhost:4003/health`)
-- [ ] **NUOVO**: Verifica porte server (4001/4003)
-- [ ] **NUOVO**: Test CORS se modificato
-- [ ] **NUOVO**: Validazione rate limiting se modificato
+- [ ] **P64**: Test health check API (`curl http://localhost:4001/health`)
+- [ ] **P64**: Verifica porte server (4001/4002)
+- [ ] **P64**: Test CORS se modificato (diretto su API)
+- [ ] **P64**: Validazione rate limiting se modificato
 
 ## 📁 Struttura Progetto Corretta
 

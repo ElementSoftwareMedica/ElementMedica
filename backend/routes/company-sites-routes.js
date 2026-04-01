@@ -1,46 +1,38 @@
 import express from 'express';
 import logger from '../utils/logger.js';
-import middleware from '../auth/middleware.js';
+import middleware from '../middleware/auth.js';
 import { checkAdvancedPermission, filterDataByPermissions, requireOwnCompany } from '../middleware/advanced-permissions.js';
 import prisma from '../config/prisma-optimization.js';
+import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 
 const router = express.Router();
 const { authenticate: authenticateToken } = middleware;
 
 // Get all sites for a company
 router.get('/company/:companyId',
-  authenticateToken(),
-  // checkAdvancedPermission('companies', 'read'), // Temporaneamente disabilitato per debug
-  // requireOwnCompany(), // Temporaneamente commentato per debug
-  // filterDataByPermissions(), // Temporaneamente disabilitato per debug
+  authenticateToken,
   async (req, res) => {
     try {
       const { companyId } = req.params;
-      const person = req.person;
+      const tenantId = getEffectiveTenantId(req);
 
-      // Verifica che la company esista e che l'utente abbia accesso
-      const company = await prisma.company.findUnique({
-        where: { id: companyId }
+      // P48: Verifica che la company esista e abbia un profilo nel tenant
+      const profile = await prisma.companyTenantProfile.findFirst({
+        where: { companyId, tenantId, deletedAt: null }
       });
 
-      if (!company) {
+      if (!profile) {
         return res.status(404).json({
-          error: 'Company not found',
-          message: `Company with ID ${companyId} does not exist`
+          error: 'Azienda non trovata',
+          message: 'Azienda non trovata'
         });
       }
 
-      // Se l'utente non è admin globale, verifica che appartenga alla company
-      if (person.globalRole !== 'ADMIN' && person.companyId !== companyId) {
-        return res.status(403).json({
-          error: 'Access denied',
-          message: 'You can only access sites of your own company'
-        });
-      }
-
+      // P48: CompanySite usa companyTenantProfileId
       const sites = await prisma.companySite.findMany({
         where: {
-          companyId,
+          companyTenantProfileId: profile.id,
+          tenantId,
           deletedAt: null
         },
         include: {
@@ -48,21 +40,19 @@ router.get('/company/:companyId',
             select: {
               id: true,
               firstName: true,
-              lastName: true,
-              email: true
+              lastName: true
             }
           },
           medicoCompetente: {
             select: {
               id: true,
               firstName: true,
-              lastName: true,
-              email: true
+              lastName: true
             }
           },
           _count: {
             select: {
-              persons: true
+              personProfiles: true
             }
           }
         },
@@ -75,13 +65,13 @@ router.get('/company/:companyId',
       logger.error('Failed to fetch company sites', {
         component: 'company-sites-routes',
         action: 'getCompanySites',
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         companyId: req.params?.companyId
       });
       res.status(500).json({
-        error: 'Internal server error',
-        message: 'Failed to fetch company sites'
+        error: 'Errore interno del server',
+        message: 'Errore nel recupero delle sedi aziendali'
       });
     }
   }
@@ -89,7 +79,7 @@ router.get('/company/:companyId',
 
 // Get site by ID
 router.get('/:id',
-  authenticateToken(),
+  authenticateToken,
   checkAdvancedPermission('companies', 'read', {
     getSiteId: (req) => req.params.id
   }),
@@ -97,42 +87,44 @@ router.get('/:id',
   async (req, res) => {
     try {
       const { id } = req.params;
-      const person = req.person;
+      const tenantId = getEffectiveTenantId(req);
 
       const site = await prisma.companySite.findUnique({
         where: {
           id,
+          tenantId,
           deletedAt: null
         },
         include: {
-          company: true,
+          companyTenantProfile: { include: { company: true } },
           rspp: {
             select: {
               id: true,
               firstName: true,
-              lastName: true,
-              email: true,
-              phone: true
+              lastName: true
             }
           },
           medicoCompetente: {
             select: {
               id: true,
               firstName: true,
-              lastName: true,
-              email: true,
-              phone: true
+              lastName: true
             }
           },
-          persons: {
+          personProfiles: {
             where: { deletedAt: null },
             select: {
               id: true,
-              firstName: true,
-              lastName: true,
               email: true,
               phone: true,
-              title: true
+              title: true,
+              person: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true
+                }
+              }
             }
           }
         }
@@ -140,8 +132,8 @@ router.get('/:id',
 
       if (!site) {
         return res.status(404).json({
-          error: 'Site not found',
-          message: `Site with ID ${id} does not exist`
+          error: 'Sede non trovata',
+          message: 'Sede non trovata'
         });
       }
 
@@ -153,13 +145,13 @@ router.get('/:id',
       logger.error('Failed to fetch site', {
         component: 'company-sites-routes',
         action: 'getSite',
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         siteId: req.params?.id
       });
       res.status(500).json({
-        error: 'Internal server error',
-        message: 'Failed to fetch site'
+        error: 'Errore interno del server',
+        message: 'Errore nel recupero della sede'
       });
     }
   }
@@ -167,59 +159,64 @@ router.get('/:id',
 
 // Create new site
 router.post('/',
-  authenticateToken(),
+  authenticateToken,
   // checkAdvancedPermission('companies', 'create'), // Temporaneamente disabilitato per debug
   async (req, res) => {
     try {
       const person = req.person;
+      const tenantId = getEffectiveTenantId(req);
       const { companyId, siteName, ...siteData } = req.body;
 
       // Validate required fields
       if (!companyId || !siteName) {
         return res.status(400).json({
-          error: 'Validation error',
-          message: 'companyId and siteName are required'
+          error: 'Errore di validazione',
+          message: 'companyId e nome sede sono obbligatori'
         });
       }
 
-      // Verifica che la company esista
-      const company = await prisma.company.findUnique({
-        where: { id: companyId }
+      // P48: Trova CompanyTenantProfile per la company nel tenant corrente
+      const profile = await prisma.companyTenantProfile.findFirst({
+        where: { companyId, tenantId, deletedAt: null }
       });
 
-      if (!company) {
+      if (!profile) {
         return res.status(404).json({
-          error: 'Company not found',
-          message: `Company with ID ${companyId} does not exist`
-        });
-      }
-
-      // Verifica permessi: admin globale o appartenenza alla company
-      if (person.globalRole !== 'ADMIN' && person.companyId !== companyId) {
-        return res.status(403).json({
-          error: 'Access denied',
-          message: 'You can only create sites for your own company'
+          error: 'Azienda non trovata',
+          message: 'Azienda non trovata nel tenant corrente'
         });
       }
 
       // Verifica che non esista già una sede con lo stesso nome per questa company
       const existingSite = await prisma.companySite.findFirst({
         where: {
-          companyId,
+          companyTenantProfileId: profile.id,
           siteName,
+          tenantId,
           deletedAt: null
         }
       });
 
       if (existingSite) {
         return res.status(409).json({
-          error: 'Conflict',
-          message: `A site with name "${siteName}" already exists for this company`
+          error: 'Conflitto',
+          message: 'Esiste già una sede con questo nome per questa azienda'
         });
       }
 
-      // Pulisci i dati prima di inviarli a Prisma
-      const cleanedSiteData = { ...siteData };
+      // Whitelist dei campi consentiti per CompanySite
+      const ALLOWED_FIELDS = [
+        'siteName', 'indirizzo', 'citta', 'cap', 'provincia', 'telefono', 'mail',
+        'personaRiferimento', 'numeroPAT', 'referenteId', 'rsppId', 'medicoCompetenteId',
+        'dvr', 'dvrDataAggiornamento',
+        'ultimoSopralluogo', 'prossimoSopralluogo', 'valutazioneSopralluogo', 'sopralluogoEseguitoDa',
+        'ultimoSopralluogoRSPP', 'prossimoSopralluogoRSPP', 'noteSopralluogoRSPP',
+        'ultimoSopralluogoMedico', 'prossimoSopralluogoMedico', 'noteSopralluogoMedico'
+      ];
+      const cleanedSiteData = {};
+      for (const key of ALLOWED_FIELDS) {
+        if (key in siteData) cleanedSiteData[key] = siteData[key];
+      }
 
       // Converti stringhe vuote in null per i campi DateTime
       const dateFields = [
@@ -246,27 +243,25 @@ router.post('/',
 
       const site = await prisma.companySite.create({
         data: {
-          companyId,
+          companyTenantProfileId: profile.id,
           siteName,
-          tenantId: person.tenantId,
+          tenantId,
           ...cleanedSiteData
         },
         include: {
-          company: true,
+          companyTenantProfile: { include: { company: true } },
           rspp: {
             select: {
               id: true,
               firstName: true,
-              lastName: true,
-              email: true
+              lastName: true
             }
           },
           medicoCompetente: {
             select: {
               id: true,
               firstName: true,
-              lastName: true,
-              email: true
+              lastName: true
             }
           }
         }
@@ -277,7 +272,7 @@ router.post('/',
       logger.error('Failed to create site', {
         component: 'company-sites-routes',
         action: 'createSite',
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         companyId: req.body?.companyId,
         siteName: req.body?.siteName
@@ -285,14 +280,14 @@ router.post('/',
 
       if (error.code === 'P2002') {
         return res.status(409).json({
-          error: 'Conflict',
-          message: 'A site with this information already exists'
+          error: 'Conflitto',
+          message: 'Esiste già una sede con queste informazioni'
         });
       }
 
       res.status(500).json({
-        error: 'Internal server error',
-        message: 'Failed to create site'
+        error: 'Errore interno del server',
+        message: 'Errore nella creazione della sede'
       });
     }
   }
@@ -300,37 +295,30 @@ router.post('/',
 
 // Update site
 router.put('/:id',
-  authenticateToken(),
+  authenticateToken,
   // checkAdvancedPermission('companies', 'update'), // Temporaneamente disabilitato per debug
   async (req, res) => {
     try {
       const { id } = req.params;
-      const person = req.person;
+      const tenantId = getEffectiveTenantId(req);
       const updateData = req.body;
 
       // Check if site exists
       const existingSite = await prisma.companySite.findUnique({
         where: {
           id,
+          tenantId,
           deletedAt: null
         },
         include: {
-          company: true
+          companyTenantProfile: true
         }
       });
 
       if (!existingSite) {
         return res.status(404).json({
-          error: 'Site not found',
-          message: `Site with ID ${id} does not exist`
-        });
-      }
-
-      // Verifica permessi: admin globale o appartenenza alla company
-      if (person.globalRole !== 'ADMIN' && person.companyId !== existingSite.companyId) {
-        return res.status(403).json({
-          error: 'Access denied',
-          message: 'You can only update sites of your own company'
+          error: 'Sede non trovata',
+          message: 'Sede non trovata'
         });
       }
 
@@ -338,8 +326,9 @@ router.put('/:id',
       if (updateData.siteName && updateData.siteName !== existingSite.siteName) {
         const duplicateSite = await prisma.companySite.findFirst({
           where: {
-            companyId: existingSite.companyId,
+            companyTenantProfileId: existingSite.companyTenantProfileId,
             siteName: updateData.siteName,
+            tenantId,
             deletedAt: null,
             id: { not: id }
           }
@@ -347,14 +336,25 @@ router.put('/:id',
 
         if (duplicateSite) {
           return res.status(409).json({
-            error: 'Conflict',
-            message: `A site with name "${updateData.siteName}" already exists for this company`
+            error: 'Conflitto',
+            message: 'Esiste già una sede con questo nome per questa azienda'
           });
         }
       }
 
-      // Pulisci i dati prima di inviarli a Prisma
-      const cleanedUpdateData = { ...updateData };
+      // Whitelist dei campi consentiti per CompanySite
+      const ALLOWED_FIELDS = [
+        'siteName', 'indirizzo', 'citta', 'cap', 'provincia', 'telefono', 'mail',
+        'personaRiferimento', 'numeroPAT', 'referenteId', 'rsppId', 'medicoCompetenteId',
+        'dvr', 'dvrDataAggiornamento',
+        'ultimoSopralluogo', 'prossimoSopralluogo', 'valutazioneSopralluogo', 'sopralluogoEseguitoDa',
+        'ultimoSopralluogoRSPP', 'prossimoSopralluogoRSPP', 'noteSopralluogoRSPP',
+        'ultimoSopralluogoMedico', 'prossimoSopralluogoMedico', 'noteSopralluogoMedico'
+      ];
+      const cleanedUpdateData = {};
+      for (const key of ALLOWED_FIELDS) {
+        if (key in updateData) cleanedUpdateData[key] = updateData[key];
+      }
 
       // Converti stringhe vuote in null per i campi DateTime
       const dateFields = [
@@ -383,21 +383,19 @@ router.put('/:id',
         where: { id },
         data: cleanedUpdateData,
         include: {
-          company: true,
+          companyTenantProfile: { include: { company: true } },
           rspp: {
             select: {
               id: true,
               firstName: true,
-              lastName: true,
-              email: true
+              lastName: true
             }
           },
           medicoCompetente: {
             select: {
               id: true,
               firstName: true,
-              lastName: true,
-              email: true
+              lastName: true
             }
           }
         }
@@ -408,21 +406,21 @@ router.put('/:id',
       logger.error('Failed to update site', {
         component: 'company-sites-routes',
         action: 'updateSite',
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         siteId: req.params?.id
       });
 
       if (error.code === 'P2002') {
         return res.status(409).json({
-          error: 'Conflict',
-          message: 'A site with this information already exists'
+          error: 'Conflitto',
+          message: 'Esiste già una sede con queste informazioni'
         });
       }
 
       res.status(500).json({
-        error: 'Internal server error',
-        message: 'Failed to update site'
+        error: 'Errore interno del server',
+        message: 'Errore nell\'aggiornamento della sede'
       });
     }
   }
@@ -430,48 +428,42 @@ router.put('/:id',
 
 // Delete site (soft delete)
 router.delete('/:id',
-  authenticateToken(),
+  authenticateToken,
   checkAdvancedPermission('companies', 'delete'),
   async (req, res) => {
     try {
       const { id } = req.params;
-      const person = req.person;
+      const tenantId = getEffectiveTenantId(req);
 
       // Check if site exists
       const existingSite = await prisma.companySite.findUnique({
         where: {
           id,
+          tenantId,
           deletedAt: null
         }
       });
 
       if (!existingSite) {
         return res.status(404).json({
-          error: 'Site not found',
-          message: `Site with ID ${id} does not exist`
+          error: 'Sede non trovata',
+          message: 'Sede non trovata'
         });
       }
 
-      // Verifica permessi: admin globale o appartenenza alla company
-      if (person.globalRole !== 'ADMIN' && person.companyId !== existingSite.companyId) {
-        return res.status(403).json({
-          error: 'Access denied',
-          message: 'You can only delete sites of your own company'
-        });
-      }
-
-      // Verifica che non ci siano dipendenti assegnati a questa sede
-      const assignedPersons = await prisma.person.count({
+      // P48: Verifica che non ci siano profili assegnati a questa sede
+      const assignedProfiles = await prisma.personTenantProfile.count({
         where: {
           siteId: id,
+          tenantId,
           deletedAt: null
         }
       });
 
-      if (assignedPersons > 0) {
+      if (assignedProfiles > 0) {
         return res.status(409).json({
-          error: 'Conflict',
-          message: `Cannot delete site: ${assignedPersons} employees are still assigned to this site`
+          error: 'Conflitto',
+          message: 'Impossibile eliminare la sede: ci sono ancora dipendenti assegnati'
         });
       }
 
@@ -488,13 +480,103 @@ router.delete('/:id',
       logger.error('Failed to delete site', {
         component: 'company-sites-routes',
         action: 'deleteSite',
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         siteId: req.params?.id
       });
       res.status(500).json({
-        error: 'Internal server error',
-        message: 'Failed to delete site'
+        error: 'Errore interno del server',
+        message: 'Errore nell\'eliminazione della sede'
+      });
+    }
+  }
+);
+
+// Migrate employees from one site to another and optionally delete the source site
+router.post('/:id/migrate-employees',
+  authenticateToken,
+  checkAdvancedPermission('companies', 'write'),
+  async (req, res) => {
+    try {
+      const { id: sourceSiteId } = req.params;
+      const { targetSiteId, deleteSourceSite } = req.body;
+      const tenantId = getEffectiveTenantId(req);
+
+      if (!targetSiteId) {
+        return res.status(400).json({
+          error: 'Parametri mancanti',
+          message: 'Specificare la sede di destinazione (targetSiteId)'
+        });
+      }
+
+      if (sourceSiteId === targetSiteId) {
+        return res.status(400).json({
+          error: 'Operazione non valida',
+          message: 'La sede di origine e destinazione devono essere diverse'
+        });
+      }
+
+      // Verify source site exists and belongs to tenant
+      const sourceSite = await prisma.companySite.findFirst({
+        where: { id: sourceSiteId, tenantId, deletedAt: null }
+      });
+      if (!sourceSite) {
+        return res.status(404).json({
+          error: 'Sede non trovata',
+          message: 'La sede di origine non esiste'
+        });
+      }
+
+      // Verify target site exists, belongs to same company and tenant
+      const targetSite = await prisma.companySite.findFirst({
+        where: { id: targetSiteId, companyId: sourceSite.companyId, tenantId, deletedAt: null }
+      });
+      if (!targetSite) {
+        return res.status(404).json({
+          error: 'Sede di destinazione non trovata',
+          message: 'La sede di destinazione non esiste o non appartiene alla stessa azienda'
+        });
+      }
+
+      // Migrate all employees
+      const result = await prisma.personTenantProfile.updateMany({
+        where: { siteId: sourceSiteId, tenantId, deletedAt: null },
+        data: { siteId: targetSiteId }
+      });
+
+      // Optionally soft-delete the source site
+      if (deleteSourceSite) {
+        await prisma.companySite.update({
+          where: { id: sourceSiteId },
+          data: { deletedAt: new Date() }
+        });
+      }
+
+      logger.info('Employees migrated between sites', {
+        component: 'company-sites-routes',
+        action: 'migrateEmployees',
+        sourceSiteId,
+        targetSiteId,
+        migratedCount: result.count,
+        sourceDeleted: !!deleteSourceSite
+      });
+
+      res.json({
+        success: true,
+        message: `${result.count} dipendenti migrati con successo`,
+        migratedCount: result.count
+      });
+    } catch (error) {
+      logger.error('Failed to migrate employees', {
+        component: 'company-sites-routes',
+        action: 'migrateEmployees',
+        error: 'Operazione non riuscita',
+        stack: error.stack,
+        siteId: req.params?.id
+      });
+      res.status(500).json({
+        error: 'Errore interno del server',
+        message: 'Errore nella migrazione dei dipendenti'
       });
     }
   }

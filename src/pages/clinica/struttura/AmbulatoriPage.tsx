@@ -26,10 +26,12 @@ import {
 import { ambulatoriApi, poliambulatoriApi } from '../../../services/clinicaApi';
 import type { Ambulatorio, Poliambulatorio } from '../../../services/clinicaApi';
 import { useToast } from '../../../hooks/useToast';
+import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
 import { useTenantFilter } from '../../../context/TenantFilterContext';
 import { useViewMode } from '../../../hooks/useViewMode';
 import { ViewModeToggle } from '../../../components/clinica/ViewModeToggle';
-import { ActionMenu, createCrudActions } from '../../../components/clinica/ActionMenu';
+import { ActionMenu, createCrudActions } from '@/components/ui/ActionMenu';
+import { CRUDButton } from '../../../components/shared/CRUDButton';
 
 // Import Element Medica theme
 import '../../../styles/clinica-theme.css';
@@ -39,6 +41,7 @@ const AmbulatoriPage: React.FC = () => {
     const [searchParams, setSearchParams] = useSearchParams();
     const queryClient = useQueryClient();
     const { showToast } = useToast();
+    const { confirmDelete } = useConfirmDialog();
 
     // Tenant filter from global context
     const { getTenantFilterParams, isReady, tenantFilterKey } = useTenantFilter();
@@ -156,11 +159,11 @@ const AmbulatoriPage: React.FC = () => {
         navigate(`/poliambulatorio/ambulatori/${id}`);
     }, [navigate]);
 
-    const handleDelete = useCallback((id: string) => {
-        if (confirm('Sei sicuro di voler eliminare questo ambulatorio?')) {
+    const handleDelete = useCallback(async (id: string) => {
+        if (await confirmDelete('questo ambulatorio')) {
             deleteMutation.mutate(id);
         }
-    }, [deleteMutation]);
+    }, [deleteMutation, confirmDelete]);
 
     const handlePoliambulatorioFilter = (value: string) => {
         if (value) {
@@ -237,10 +240,10 @@ const AmbulatoriPage: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-3">
                     <ViewModeToggle viewMode={viewMode} onViewModeChange={setViewMode} />
-                    <button onClick={handleCreate} className="btn-clinica-primary inline-flex items-center gap-2">
+                    <CRUDButton operation="create" onClick={handleCreate} className="btn-clinica-primary inline-flex items-center gap-2">
                         <Plus className="h-4 w-4" />
                         Nuovo Ambulatorio
-                    </button>
+                    </CRUDButton>
                 </div>
             </div>
 
@@ -298,9 +301,9 @@ const AmbulatoriPage: React.FC = () => {
                 <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
                     <DoorOpen className="h-12 w-12 mx-auto text-gray-300 mb-3" />
                     <p className="text-gray-500">Nessun ambulatorio trovato</p>
-                    <button onClick={handleCreate} className="btn-clinica-primary mt-4">
+                    <CRUDButton operation="create" onClick={handleCreate} className="btn-clinica-primary mt-4">
                         Crea il primo ambulatorio
-                    </button>
+                    </CRUDButton>
                 </div>
             ) : viewMode === 'grid' ? (
                 /* Grid View */

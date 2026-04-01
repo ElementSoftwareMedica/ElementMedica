@@ -1,6 +1,6 @@
 # Backend Scripts
 
-Questa cartella contiene tutti gli script di utilità per Element Formazione e Element Medica.
+Questa cartella contiene tutti gli script di utilità per Element Sicurezza e Element Medica.
 
 ## 📁 Struttura Cartelle
 
@@ -11,12 +11,10 @@ scripts/
 ├── permissions/     → Script per gestione permessi e ruoli
 ├── setup/           → Script di setup iniziale
 ├── maintenance/     → Script di manutenzione DB
-├── cms-redesign/    → Script di redesign pagine CMS (Element Formazione)
+├── cms-redesign/    → Script di redesign pagine CMS (Element Sicurezza)
 ├── cms-analysis/    → Script di verifica stato CMS
 ├── testing/         → Script di test e debug
 ├── debug/           → Script di debugging avanzato
-├── archived/        → Script archiviati (migrazioni completate)
-├── obsolete/        → Script obsoleti (mantenuti per riferimento)
 └── test/            → Test unitari
 ```
 
@@ -61,7 +59,7 @@ node scripts/templates/create-missing-templates.cjs
 
 ```bash
 # Assegna permessi admin
-node scripts/permissions/assign-companies-permissions-to-admin.js
+node scripts/setup/assign-companies-permissions-to-admin.js
 
 # Verifica permessi
 node scripts/permissions/check-permissions.js
@@ -71,12 +69,12 @@ node scripts/permissions/check-permissions.js
 
 | Brand | Tenant ID |
 |-------|-----------|
-| Element Formazione | `d2bbc5b0-344c-47c7-8ef5-f57755293372` |
+| Element Sicurezza | `d2bbc5b0-344c-47c7-8ef5-f57755293372` |
 | Element Medica | `tenant-element-medica-001` |
 
 ## 📄 Pagine CMS
 
-### Element Formazione (11 pagine)
+### Element Sicurezza (11 pagine)
 - `homepage` - Homepage principale
 - `corsi` - Catalogo corsi sicurezza
 - `medicina-del-lavoro` - Servizio medicina del lavoro

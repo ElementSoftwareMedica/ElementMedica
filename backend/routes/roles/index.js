@@ -6,7 +6,7 @@
  */
 
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../../config/prisma-optimization.js';
 import logger from '../../utils/logger.js';
 
 // Import dei middleware
@@ -20,19 +20,16 @@ import customRolesRoutes from './custom-roles.js';
 import assignmentRoutes from './assignment.js';
 import advancedPermissionsRoutes from './advanced-permissions.js';
 import permissionsRoutes from './permissions.js';
-import usersRoutes from './users.js';
-import analyticsRoutes from './analytics.js';
-import testUtilsRoutes from './test-utils.js';
+// Legacy files removed: users.js and analytics.js used prisma.role (non-existent model)
 
 // Inizializzazione
 const router = express.Router();
-const prisma = new PrismaClient();
 
 // Endpoint di test semplice
 router.get('/test-simple', (req, res) => {
   res.json({
     success: true,
-    message: 'Simple test endpoint working',
+    message: 'Endpoint di test semplice funzionante',
     timestamp: new Date().toISOString()
   });
 });
@@ -71,10 +68,10 @@ router.get('/public', async (req, res) => {
       data: systemRoles
     });
   } catch (error) {
-    console.error('Error fetching system roles:', error);
+    logger.error('Errore nel recupero dei ruoli di sistema', { error: error.message });
     res.status(500).json({
       success: false,
-      error: 'Internal server error'
+      error: 'Errore interno del server'
     });
   }
 });
@@ -94,7 +91,7 @@ router.get('/test-auth', async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Authentication successful',
+      message: 'Autenticazione riuscita',
       data: {
         user: {
           id: req.person?.id,
@@ -110,7 +107,7 @@ router.get('/test-auth', async (req, res) => {
     });
   } catch (error) {
     logger.error('Test auth endpoint error', {
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       userId: req.person?.id,
       tenantId: req.tenant?.id || req.person?.tenantId
@@ -118,7 +115,7 @@ router.get('/test-auth', async (req, res) => {
 
     res.status(500).json({
       success: false,
-      error: 'Internal server error during authentication test'
+      error: 'Errore interno del server durante il test di autenticazione'
     });
   }
 });
@@ -132,11 +129,7 @@ router.use('/hierarchy', hierarchyRoutes);
 // 2. Gestione dei ruoli personalizzati (route specifiche /custom/*)
 router.use('/custom', customRolesRoutes);
 
-// 3. Gestione degli utenti per ruolo (route specifiche /users/*)
-router.use('/users', usersRoutes);
-
-// 4. Statistiche sui ruoli (route specifiche /stats/*)
-router.use('/stats', analyticsRoutes);
+// 3-4. Legacy routes removed: /users and /stats used prisma.role (non-existent model)
 
 // 5. Gestione dei permessi dei ruoli (include /permissions)
 router.use('/', permissionsRoutes);
@@ -147,10 +140,7 @@ router.use('/', advancedPermissionsRoutes);
 // 7. Assegnazione e rimozione ruoli
 router.use('/', assignmentRoutes);
 
-// 8. Test e utility (route di test, cleanup, check)
-router.use('/', testUtilsRoutes);
-
-// 9. Gestione base dei ruoli (CRUD, listing) - DEVE essere ultimo per non intercettare altre route
+// 8. Gestione base dei ruoli (CRUD, listing) - DEVE essere ultimo per non intercettare altre route
 router.use('/', basicManagementRoutes);
 
 // Endpoint di health check per il sistema dei ruoli
@@ -158,7 +148,7 @@ router.get('/health', async (req, res) => {
   try {
     // Verifica la connessione al database
     await prisma.$queryRaw`SELECT 1`;
-    
+
     // Verifica che i servizi essenziali siano disponibili
     const healthStatus = {
       status: 'healthy',
@@ -176,8 +166,7 @@ router.get('/health', async (req, res) => {
         advancedPermissions: 'loaded',
         permissions: 'loaded',
         users: 'loaded',
-        statistics: 'loaded',
-        testUtils: 'loaded'
+        statistics: 'loaded'
       }
     };
 
@@ -187,14 +176,14 @@ router.get('/health', async (req, res) => {
     });
   } catch (error) {
     logger.error('Health check failed', {
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack
     });
 
     res.status(503).json({
       success: false,
-      error: 'Service unavailable',
-      details: 'Health check failed'
+      error: 'Servizio non disponibile',
+      code: 'SERVICE_UNAVAILABLE'
     });
   }
 });
@@ -279,16 +268,6 @@ router.get('/modules', (req, res) => {
           endpoints: [
             'GET /stats'
           ]
-        },
-        {
-          name: 'test-utils',
-          description: 'Test, utility e manutenzione',
-          endpoints: [
-            'GET /test-no-auth',
-            'GET /auth-test-debug',
-            'POST /cleanup',
-            'GET /check/:permission'
-          ]
         }
       ],
       refactoredFrom: 'roles.js (2627 lines)',
@@ -308,13 +287,13 @@ router.get('/modules', (req, res) => {
     });
   } catch (error) {
     logger.error('Module info endpoint error', {
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack
     });
 
     res.status(500).json({
       success: false,
-      error: 'Failed to retrieve module information'
+      error: 'Errore nel recupero delle informazioni modulo'
     });
   }
 });
@@ -333,8 +312,8 @@ router.use('*', (req, res) => {
 
   res.status(404).json({
     success: false,
-    error: 'Route not found',
-    message: `The requested role endpoint ${req.method} ${req.originalUrl} does not exist`,
+    error: 'Rotta non trovata',
+    code: 'NOT_FOUND',
     availableEndpoints: [
       'GET /api/roles/health',
       'GET /api/roles/modules',
@@ -356,7 +335,7 @@ process.on('beforeExit', async () => {
     logger.info('Prisma client disconnected successfully');
   } catch (error) {
     logger.error('Error disconnecting Prisma client', {
-      error: error.message
+      error: 'Operazione non riuscita'
     });
   }
 });

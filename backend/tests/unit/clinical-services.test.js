@@ -119,12 +119,14 @@ const mockPrisma = {
         delete: jest.fn(),
         count: jest.fn()
     },
-    templateCampoVisita: {
+    // P65.7: templateCampoVisita RIMOSSO - consolidato in visitTemplate con scope=CATALOGO
+    visitTemplate: {
         findMany: jest.fn(),
         findUnique: jest.fn(),
         findFirst: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn(),
         delete: jest.fn(),
         count: jest.fn()
     },
@@ -206,7 +208,8 @@ const {
     StrumentoService,
     ConvenzioneService,
     ScontoClinicoService,
-    TemplateCampoVisitaService,
+    // P65.7: TemplateCampoVisitaService RIMOSSO - consolidato in VisitTemplateService
+    VisitTemplateService,
     DocumentoClinicoService,
     OrarioAmbulatorioService
 } = await import('../../services/clinical/index.js');

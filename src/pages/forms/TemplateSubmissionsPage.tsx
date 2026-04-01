@@ -10,8 +10,8 @@
  * - Azioni rapide e cambio stato
  */
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   Download, ArrowLeft, RefreshCw, Eye, Table, LayoutGrid, Mail, User, Calendar,
   MoreVertical, ChevronDown, Check, Archive, X, BarChart3,
@@ -27,6 +27,7 @@ import { getContactSubmissions, ContactSubmission, updateContactSubmissionStatus
 import type { FormTemplate } from '../../services/formTemplates';
 import { useToast } from '../../hooks/useToast';
 import { useAuth } from '../../context/AuthContext';
+import { useTenantFilter } from '../../context/TenantFilterContext';
 import * as XLSX from 'xlsx';
 
 type ViewMode = 'table' | 'cards' | 'analytics';
@@ -197,8 +198,15 @@ const DetailPanel: React.FC<{
 const TemplateSubmissionsPage: React.FC = () => {
   const { templateId } = useParams<{ templateId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { showToast } = useToast();
   const { hasPermission } = useAuth();
+
+  // Detect context: CMS management or Test section
+  const contextBasePath = location.pathname.includes('/management/cms')
+    ? '/management/cms/forms'
+    : '/test';
+  const { getTenantFilterParams, tenantFilterKey, isReady } = useTenantFilter();
 
   const [loading, setLoading] = useState(true);
   const [template, setTemplate] = useState<FormTemplate | null>(null);
@@ -289,23 +297,27 @@ const TemplateSubmissionsPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (templateId) loadData();
-  }, [templateId]);
+    if (templateId && isReady) loadData();
+  }, [templateId, isReady, tenantFilterKey]);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!templateId) return;
     try {
       setLoading(true);
+
+      const tenantParams = getTenantFilterParams();
 
       // Carica template
       const tmpl = await formTemplatesService.getFormTemplate(templateId);
       setTemplate(tmpl);
 
-      // Carica submissions
+      // Carica submissions con tenant params
       const data = await getContactSubmissions({
         templateId,
         page: 1,
-        limit: 100
+        limit: 100,
+        ...(tenantParams.tenantIds && { tenantIds: tenantParams.tenantIds.join(',') }),
+        ...(tenantParams.allTenants && { allTenants: 'true' })
       });
       const fetchedSubmissions = data.submissions || [];
       setSubmissions(fetchedSubmissions);
@@ -383,12 +395,11 @@ const TemplateSubmissionsPage: React.FC = () => {
 
       setFields(dynamicFields);
     } catch (error) {
-      console.error('Error loading data:', error);
       showToast({ message: 'Errore nel caricamento dei dati', type: 'error' });
     } finally {
       setLoading(false);
     }
-  };
+  }, [templateId, getTenantFilterParams, tenantFilterKey, showToast]);
 
   const handleStatusChange = async (submissionId: string, newStatus: string) => {
     try {
@@ -406,7 +417,6 @@ const TemplateSubmissionsPage: React.FC = () => {
       setOpenActionMenu(null);
       showToast({ message: 'Stato aggiornato con successo', type: 'success' });
     } catch (error) {
-      console.error('Errore aggiornamento stato:', error);
       showToast({ message: 'Errore nell\'aggiornamento dello stato', type: 'error' });
     }
   };
@@ -481,7 +491,7 @@ const TemplateSubmissionsPage: React.FC = () => {
         <Card className="p-6 text-center">
           <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">Template non specificato</h3>
-          <Button onClick={() => navigate('/forms')}>Torna ai Forms</Button>
+          <Button onClick={() => navigate(contextBasePath)}>Torna ai Form</Button>
         </Card>
       </div>
     );
@@ -504,7 +514,7 @@ const TemplateSubmissionsPage: React.FC = () => {
       <div className="bg-white border-b border-gray-200 -mx-6 -mt-6 px-6 py-4 sticky top-0 z-40">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <Button variant="ghost" onClick={() => navigate('/forms')} className="flex items-center">
+            <Button variant="ghost" onClick={() => navigate(contextBasePath)} className="flex items-center">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Indietro
             </Button>

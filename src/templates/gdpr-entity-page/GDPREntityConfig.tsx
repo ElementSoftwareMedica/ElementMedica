@@ -1,8 +1,8 @@
 import React from 'react';
-import { DataTableColumn } from '../../components/shared/tables/DataTable';
+import { DataTableColumn } from './GDPREntityTemplate';
 import { GDPREntityTemplateProps } from './GDPREntityTemplate';
 import { Company } from '../../types';
-import { 
+import {
   Award,
   Clock,
   Download,
@@ -21,7 +21,7 @@ import { Course } from '../../types/courses';
  */
 
 // Tipo per configurazioni con campi obbligatori
-type GDPREntityConfig<T extends Record<string, any> & { id: string }> = 
+type GDPREntityConfig<T extends Record<string, any> & { id: string }> =
   Omit<GDPREntityTemplateProps<T>, 'columns'> & {
     columns?: DataTableColumn<T>[];
   };
@@ -39,20 +39,21 @@ export const companiesConfig: GDPREntityConfig<Company> = {
   apiEndpoint: '/api/v1/companies',
   searchFields: ['ragioneSociale', 'citta', 'piva', 'mail', 'personaRiferimento'] as (keyof Company)[],
   filterOptions: [
-      {
-        key: 'status',
-        label: 'Stato',
-        options: [
-          { label: 'Attiva', value: 'Active' },
-          { label: 'Inattiva', value: 'Inactive' }
-        ]
-      },
-      {
-        key: 'province',
-        label: 'Provincia',
-        options: [] // Sarà popolato dinamicamente
-      }
-    ],
+    {
+      key: 'profileStatus',
+      label: 'Stato',
+      options: [
+        { label: 'Attiva', value: 'ACTIVE' },
+        { label: 'Inattiva', value: 'INACTIVE' },
+        { label: 'Prospect', value: 'PROSPECT' }
+      ]
+    },
+    {
+      key: 'province',
+      label: 'Provincia',
+      options: [] // Sarà popolato dinamicamente
+    }
+  ],
   sortOptions: [
     { key: 'ragioneSociale', label: 'Nome (A-Z)' },
     { key: 'ragioneSociale', label: 'Nome (Z-A)' },
@@ -124,41 +125,41 @@ export const coursesConfig: GDPREntityConfig<Course> = {
   apiEndpoint: '/api/v1/courses',
   searchFields: ['title', 'description', 'category', 'code'],
   filterOptions: [
-      {
-        key: 'category',
-        label: 'Categoria',
-        options: [] // Sarà popolato dinamicamente
-      },
-      {
-        key: 'riskLevel',
-        label: 'Livello di Rischio',
-        options: [
-          { label: 'Alto', value: 'ALTO' },
-          { label: 'Medio', value: 'MEDIO' },
-          { label: 'Basso', value: 'BASSO' },
-          { label: 'A', value: 'A' },
-          { label: 'B', value: 'B' },
-          { label: 'C', value: 'C' }
-        ]
-      },
-      {
-        key: 'courseType',
-        label: 'Tipo Corso',
-        options: [
-          { label: 'Primo Corso', value: 'PRIMO_CORSO' },
-          { label: 'Aggiornamento', value: 'AGGIORNAMENTO' }
-        ]
-      },
-      {
-        key: 'duration',
-        label: 'Durata',
-        options: [
-          { label: '< 4 ore', value: 'short' },
-          { label: '4-8 ore', value: 'medium' },
-          { label: '> 8 ore', value: 'long' }
-        ]
-      }
-    ],
+    {
+      key: 'category',
+      label: 'Categoria',
+      options: [] // Sarà popolato dinamicamente
+    },
+    {
+      key: 'riskLevel',
+      label: 'Livello di Rischio',
+      options: [
+        { label: 'Alto', value: 'ALTO' },
+        { label: 'Medio', value: 'MEDIO' },
+        { label: 'Basso', value: 'BASSO' },
+        { label: 'A', value: 'A' },
+        { label: 'B', value: 'B' },
+        { label: 'C', value: 'C' }
+      ]
+    },
+    {
+      key: 'courseType',
+      label: 'Tipo Corso',
+      options: [
+        { label: 'Primo Corso', value: 'PRIMO_CORSO' },
+        { label: 'Aggiornamento', value: 'AGGIORNAMENTO' }
+      ]
+    },
+    {
+      key: 'duration',
+      label: 'Durata',
+      options: [
+        { label: '< 4 ore', value: 'short' },
+        { label: '4-8 ore', value: 'medium' },
+        { label: '> 8 ore', value: 'long' }
+      ]
+    }
+  ],
   sortOptions: [
     { key: 'title', label: 'Titolo (A-Z)' },
     { key: 'title', label: 'Titolo (Z-A)' },
@@ -251,20 +252,20 @@ export const employeesConfig: Partial<GDPREntityTemplateProps<Record<string, any
   apiEndpoint: '/api/v1/persons',
   searchFields: ['firstName', 'lastName', 'email', 'fiscalCode'],
   filterOptions: [
-      {
-        key: 'status',
-        label: 'Stato',
-        options: [
-          { label: 'Attivo', value: 'Active' },
-          { label: 'Inattivo', value: 'Inactive' }
-        ]
-      },
-      {
-        key: 'companyId',
-        label: 'Azienda',
-        options: [] // Sarà popolato dinamicamente
-      }
-    ],
+    {
+      key: 'status',
+      label: 'Stato',
+      options: [
+        { label: 'Attivo', value: 'ACTIVE' },
+        { label: 'Inattivo', value: 'INACTIVE' }
+      ]
+    },
+    {
+      key: 'companyId',
+      label: 'Azienda',
+      options: [] // Sarà popolato dinamicamente
+    }
+  ],
   sortOptions: [
     { key: 'firstName', label: 'Nome (A-Z)' },
     { key: 'firstName', label: 'Nome (Z-A)' },
@@ -289,7 +290,7 @@ export const employeesConfig: Partial<GDPREntityTemplateProps<Record<string, any
     'Telefono': '+39 333 1234567',
     'Data di Nascita': '1980-01-01',
     'Data Assunzione': '2020-01-15',
-    'Stato': 'Active'
+    'Stato': 'ACTIVE'
   }],
   cardConfig: {
     titleField: 'firstName',
@@ -379,7 +380,7 @@ export function generateFilterOptions<T extends Record<string, any> & { id: stri
       .filter(Boolean)
       .map(value => String(value))
   ));
-  
+
   return {
     key: String(field),
     label,

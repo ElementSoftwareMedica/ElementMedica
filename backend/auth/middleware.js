@@ -4,7 +4,6 @@
  */
 
 import { JWTService } from './jwt.js';
-// removed: import jwt from 'jsonwebtoken';
 import logger from '../utils/logger.js';
 import { matchPermission } from '../constants/permissions.js';
 import { getDefaultPermissions } from '../services/enhancedRole/utils/RoleTypes.js';
@@ -47,7 +46,7 @@ export function authenticate(options = {}) {
                     return next();
                 }
                 return res.status(401).json({
-                    error: 'Authentication required',
+                    error: 'Autenticazione richiesta',
                     code: 'AUTH_TOKEN_MISSING'
                 });
             }
@@ -55,44 +54,66 @@ export function authenticate(options = {}) {
             // Verify JWT token
             const decoded = JWTService.verifyAccessToken(token);
 
-            const person = await prisma.person.findUnique({
-                where: { id: decoded.personId },
+            // P48: Person ha solo dati globali, email/status/companyId sono in PersonTenantProfile
+            // P63: Person.tenantId RIMOSSO - tenant SEMPRE da PersonTenantProfile
+            // F211: findFirst with deletedAt:null — skip soft-deleted persons immediately
+            const person = await prisma.person.findFirst({
+                where: { id: decoded.personId, deletedAt: null },
                 select: {
                     id: true,
-                    email: true,
                     username: true,
                     firstName: true,
                     lastName: true,
-                    companyId: true,
-                    tenantId: true,
-                    globalRole: true,
-                    status: true,
+                    taxCode: true,
+                    // P63: tenantId RIMOSSO da Person - usa PersonTenantProfile.tenantId
                     deletedAt: true,
-                    lockedUntil: true
+                    lockedUntil: true,
+                    // P48: Include tenant profiles per email e status
+                    tenantProfiles: {
+                        where: { deletedAt: null, isActive: true },
+                        select: {
+                            id: true,
+                            tenantId: true,
+                            email: true,
+                            status: true,
+                            companyTenantProfileId: true,
+                            isPrimary: true
+                        }
+                    }
                 }
             });
 
             if (!person) {
                 return res.status(401).json({
-                    error: 'Person not found',
+                    error: 'Persona non trovata',
                     code: 'AUTH_USER_NOT_FOUND'
                 });
             }
 
+            // P48/P63: Trova il profilo primario (Person.tenantId rimosso in P63)
+            const currentTenantProfile = person.tenantProfiles.find(p => p.isPrimary)
+                || person.tenantProfiles[0];
+
+            const personStatus = currentTenantProfile?.status || 'INACTIVE';
+            const personEmail = currentTenantProfile?.email || null;
+            const personCompanyTenantProfileId = currentTenantProfile?.companyTenantProfileId || null;
+
             // Get roles separately with optimized query
+            // F211: add deletedAt:null to exclude soft-deleted role assignments
             const personRoles = await prisma.personRole.findMany({
                 where: {
                     personId: decoded.personId,
-                    isActive: true
+                    isActive: true,
+                    deletedAt: null
                 },
                 select: {
                     roleType: true
                 }
             });
 
-            if (person.status !== 'ACTIVE' || person.deletedAt) {
+            if (personStatus !== 'ACTIVE') {
                 return res.status(401).json({
-                    error: 'Person not found or inactive',
+                    error: 'Persona non trovata o non attiva',
                     code: 'AUTH_USER_INACTIVE'
                 });
             }
@@ -100,7 +121,7 @@ export function authenticate(options = {}) {
             // Check if person is locked
             if (person.lockedUntil && person.lockedUntil > new Date()) {
                 return res.status(423).json({
-                    error: 'Account is temporarily locked',
+                    error: 'Account temporaneamente bloccato',
                     code: 'AUTH_ACCOUNT_LOCKED',
                     lockedUntil: person.lockedUntil
                 });
@@ -121,10 +142,7 @@ export function authenticate(options = {}) {
             // Extract roles and permissions
             const roles = personRoles.map(pr => pr.roleType);
 
-            // Add globalRole if set (takes precedence)
-            if (person.globalRole && !roles.includes(person.globalRole)) {
-                roles.push(person.globalRole);
-            }
+            // P48: globalRole non esiste più, determinato dai personRoles
 
             // Load permissions for all users based on their roles
             let permissions = new Set();
@@ -140,7 +158,9 @@ export function authenticate(options = {}) {
             // Convert to array
             permissions = Array.from(permissions);
 
-            // Determine globalRole from roles
+            // Security: No debug logging of permissions in production
+
+            // Determine globalRole from roles (for backward compatibility)
             let globalRole = null;
             if (roles.includes('SUPER_ADMIN')) {
                 globalRole = 'SUPER_ADMIN';
@@ -154,21 +174,29 @@ export function authenticate(options = {}) {
                 globalRole = 'EMPLOYEE';
             }
 
-            // Attach person info to request
+            // P63: tenantId SOLO da PersonTenantProfile (Person.tenantId rimosso)
+            const effectiveTenantId = currentTenantProfile?.tenantId || null;
+
+            // Attach person info to request (P48: email/status/companyId from tenantProfile)
             req.person = {
                 id: person.id,
                 personId: person.id,
-                email: person.email,
+                email: personEmail,
                 username: person.username,
                 firstName: person.firstName,
                 lastName: person.lastName,
-                companyId: person.companyId,
-                tenantId: person.tenantId,
+                companyTenantProfileId: personCompanyTenantProfileId,
+                companyId: personCompanyTenantProfileId, // P49: alias for backward compatibility
+                tenantId: effectiveTenantId,  // P63: SOLO da PersonTenantProfile
                 roles: roles,
                 globalRole: globalRole,
                 permissions: permissions,
                 company: company,
-                tenant: tenant
+                tenant: tenant,
+                // P48: Include tenant profile info e tenantProfiles per validateUserTenant
+                currentTenantProfile: currentTenantProfile || null,
+                tenantProfiles: person.tenantProfiles || [],
+                _primaryProfile: currentTenantProfile || {}
             };
 
             next();
@@ -186,13 +214,13 @@ export function authenticate(options = {}) {
 
             if (error.message.includes('jwt expired')) {
                 return res.status(401).json({
-                    error: 'Token expired',
+                    error: 'Token scaduto',
                     code: 'AUTH_TOKEN_EXPIRED'
                 });
             }
 
             return res.status(401).json({
-                error: 'Authentication failed',
+                error: 'Autenticazione fallita',
                 code: 'AUTH_TOKEN_INVALID'
             });
         }
@@ -207,7 +235,7 @@ export function authorize(requiredPermissions = []) {
     return (req, res, next) => {
         if (!req.person) {
             return res.status(401).json({
-                error: 'Authentication required',
+                error: 'Autenticazione richiesta',
                 code: 'AUTH_REQUIRED'
             });
         }
@@ -238,7 +266,7 @@ export function authorize(requiredPermissions = []) {
             });
 
             return res.status(403).json({
-                error: 'Insufficient permissions',
+                error: 'Permessi insufficienti',
                 code: 'AUTH_INSUFFICIENT_PERMISSIONS',
                 required: permissions
             });
@@ -256,7 +284,7 @@ export function requireSameCompany() {
     return (req, res, next) => {
         if (!req.person) {
             return res.status(401).json({
-                error: 'Authentication required',
+                error: 'Autenticazione richiesta',
                 code: 'AUTH_REQUIRED'
             });
         }
@@ -268,7 +296,7 @@ export function requireSameCompany() {
 
         // Add company filter to query parameters
         req.companyFilter = {
-            companyId: req.person.companyId
+            companyId: req.person.companyTenantProfileId
         };
 
         next();
@@ -286,7 +314,7 @@ export function auditLog(action, resourceType) {
             action,
             resourceType,
             personId: req.person?.id,
-            companyId: req.person?.companyId,
+            companyId: req.person?.companyTenantProfileId,
             tenantId: req.person?.tenantId,
             timestamp: new Date(),
             ipAddress: req.ip,
@@ -306,10 +334,11 @@ export function auditLog(action, resourceType) {
                 }
 
                 // Verifica che personId sia valido (se presente)
+                // F211: use findFirst with deletedAt:null to avoid creating audit entries for deleted persons
                 let validPersonId = req.auditInfo.personId;
                 if (validPersonId) {
-                    const personExists = await prisma.person.findUnique({
-                        where: { id: validPersonId },
+                    const personExists = await prisma.person.findFirst({
+                        where: { id: validPersonId, deletedAt: null },
                         select: { id: true }
                     });
                     if (!personExists) {
@@ -323,8 +352,8 @@ export function auditLog(action, resourceType) {
                 // Verifica che tenantId sia valido
                 let validTenantId = req.auditInfo.tenantId || req.person?.tenantId;
                 if (validTenantId) {
-                    const tenantExists = await prisma.tenant.findUnique({
-                        where: { id: validTenantId },
+                    const tenantExists = await prisma.tenant.findFirst({
+                        where: { id: validTenantId, deletedAt: null },
                         select: { id: true }
                     });
                     if (!tenantExists) {
@@ -360,7 +389,7 @@ export function auditLog(action, resourceType) {
                     },
                     ipAddress: req.auditInfo.ipAddress,
                     userAgent: req.auditInfo.userAgent,
-                    companyId: req.auditInfo.companyId || req.person?.companyId || null
+                    companyId: req.auditInfo.companyId || req.person?.companyTenantProfileId || null
                 };
 
                 const result = await prisma.gdprAuditLog.create({
@@ -393,7 +422,7 @@ export function requireRoles(requiredRoles = []) {
     return (req, res, next) => {
         if (!req.person) {
             return res.status(401).json({
-                error: 'Authentication required',
+                error: 'Autenticazione richiesta',
                 code: 'AUTH_REQUIRED'
             });
         }
@@ -415,7 +444,7 @@ export function requireRoles(requiredRoles = []) {
             });
 
             return res.status(403).json({
-                error: 'Insufficient role permissions',
+                error: 'Permessi di ruolo insufficienti',
                 code: 'AUTH_INSUFFICIENT_ROLES',
                 required: requiredRoles
             });
@@ -454,7 +483,7 @@ export function rateLimit(options = {}) {
 
         if (validRequests.length >= maxRequests) {
             return res.status(429).json({
-                error: 'Too many requests',
+                error: 'Troppe richieste',
                 code: 'RATE_LIMIT_EXCEEDED',
                 retryAfter: Math.ceil((validRequests[0] + windowMs - now) / 1000)
             });
@@ -476,7 +505,7 @@ export function requireSameTenant() {
     return (req, res, next) => {
         if (!req.person) {
             return res.status(401).json({
-                error: 'Authentication required',
+                error: 'Autenticazione richiesta',
                 code: 'AUTH_REQUIRED'
             });
         }

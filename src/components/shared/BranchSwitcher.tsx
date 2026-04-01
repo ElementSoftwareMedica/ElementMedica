@@ -106,20 +106,26 @@ export function BranchSwitcher({
     const handleBranchSelect = (branch: BranchType) => {
         setIsOpen(false);
 
-        // Il branch è determinato dal frontend, non dallo switch
-        // Redirect all'altro frontend
         const protocol = window.location.protocol;
         const hostname = window.location.hostname;
-        const currentPort = parseInt(window.location.port, 10) || 80;
+        const port = window.location.port;
+        const isDev = hostname === 'localhost' || hostname === '127.0.0.1';
 
-        if (branch === 'MEDICA' && isFormazione) {
-            // Vai a Element Medica (porta 5174 in dev, o dominio in prod)
-            const newPort = currentPort === 5173 ? 5174 : currentPort;
-            window.location.href = `${protocol}//${hostname}:${newPort}/dashboard`;
-        } else if (branch === 'FORMAZIONE' && isMedica) {
-            // Vai a Element Formazione (porta 5173 in dev, o dominio in prod)
-            const newPort = currentPort === 5174 ? 5173 : currentPort;
-            window.location.href = `${protocol}//${hostname}:${newPort}/dashboard`;
+        if (isDev) {
+            // Dev: switch tra porte 5173 (sicurezza) e 5174 (medica)
+            const currentPort = parseInt(port, 10) || 80;
+            if (branch === 'MEDICA' && isFormazione) {
+                window.location.href = `${protocol}//${hostname}:5174/dashboard`;
+            } else if (branch === 'FORMAZIONE' && isMedica) {
+                window.location.href = `${protocol}//${hostname}:5173/dashboard`;
+            }
+        } else {
+            // Produzione: switch tra domini
+            if (branch === 'MEDICA' && isFormazione) {
+                window.location.href = `https://www.elementmedica.com/dashboard`;
+            } else if (branch === 'FORMAZIONE' && isMedica) {
+                window.location.href = `https://www.elementsicurezza.com/dashboard`;
+            }
         }
     };
 

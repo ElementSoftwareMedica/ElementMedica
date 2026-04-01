@@ -87,7 +87,6 @@ export const usePersonImport = () => {
       
       return { success: true };
     } catch (error) {
-      console.error('Errore durante il processamento del file:', error);
       return { 
         success: false, 
         message: 'Errore durante il processamento del file' 

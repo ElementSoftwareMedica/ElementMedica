@@ -57,6 +57,8 @@ import {
 import { useAuth } from '../../../hooks/auth/useAuth';
 import { apiGet, apiPost, apiPut, apiDelete } from '../../../services/api';
 import { managementApi } from '../api';
+import { CRUDButton } from '../../../components/shared/CRUDButton';
+import { ActionButton } from '../../../components/ui/ActionButton';
 import type { Tenant } from '../types';
 
 // Role hierarchy node structure
@@ -89,8 +91,8 @@ interface HierarchyRole {
 }
 
 // Complete role configurations with icons and colors for all 22 system roles
-const ROLE_DISPLAY_CONFIG: Record<string, { 
-    color: string; 
+const ROLE_DISPLAY_CONFIG: Record<string, {
+    color: string;
     icon: React.ComponentType<{ className?: string }>;
 }> = {
     SUPER_ADMIN: { color: 'bg-purple-100 text-purple-800 border-purple-300', icon: Crown },
@@ -128,7 +130,7 @@ interface DragState {
 }
 
 const RoleHierarchyPage: React.FC = () => {
-    const { user: currentUser } = useAuth();
+    const { user: currentUser, userRole } = useAuth();
     const navigate = useNavigate();
     const [roles, setRoles] = useState<RoleNode[]>([]);
     const [allRolesFlat, setAllRolesFlat] = useState<RoleNode[]>([]);
@@ -142,7 +144,10 @@ const RoleHierarchyPage: React.FC = () => {
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [showMoveModal, setShowMoveModal] = useState(false);
-    
+
+    // P69: Solo ADMIN/SUPER_ADMIN possono modificare la gerarchia
+    const canEditHierarchy = userRole === 'ADMIN' || userRole === 'SUPER_ADMIN';
+
     // Drag & drop state
     const [dragState, setDragState] = useState<DragState>({
         isDragging: false,
@@ -157,28 +162,26 @@ const RoleHierarchyPage: React.FC = () => {
         try {
             setLoading(true);
             setError(null);
-            
+
             // Use the correct endpoint that returns the full hierarchy
             const response = await apiGet<{ success: boolean; data: Record<string, HierarchyRole> }>('/api/v1/roles/hierarchy');
-            
+
             if (response?.success && response.data) {
                 const hierarchyNodes = buildHierarchyFromAPI(response.data);
                 setRoles(hierarchyNodes);
             } else {
                 throw new Error('Invalid response from hierarchy API');
             }
-            
+
             // Load tenants separately (non-blocking)
             try {
                 const tenantsResponse = await managementApi.getMyTenants();
                 setTenants(tenantsResponse.data || []);
             } catch (tenantErr) {
-                console.warn('Could not load tenants:', tenantErr);
                 // Continue without tenants data
             }
-        } catch (err: any) {
-            console.error('Error loading role hierarchy:', err);
-            setError(err.message || 'Errore nel caricamento della gerarchia ruoli');
+        } catch (err: unknown) {
+            setError('Errore nel caricamento della gerarchia ruoli');
         } finally {
             setLoading(false);
         }
@@ -193,13 +196,13 @@ const RoleHierarchyPage: React.FC = () => {
         // Create nodes from API data
         const nodesMap = new Map<string, RoleNode>();
         const allNodes: RoleNode[] = [];
-        
+
         Object.entries(hierarchyData).forEach(([roleType, roleData]) => {
-            const displayConfig = ROLE_DISPLAY_CONFIG[roleType] || { 
-                color: 'bg-gray-100 text-gray-700 border-gray-300', 
-                icon: Users 
+            const displayConfig = ROLE_DISPLAY_CONFIG[roleType] || {
+                color: 'bg-gray-100 text-gray-700 border-gray-300',
+                icon: Users
             };
-            
+
             const node: RoleNode = {
                 id: roleType,
                 roleType,
@@ -217,17 +220,17 @@ const RoleHierarchyPage: React.FC = () => {
                 color: displayConfig.color,
                 icon: displayConfig.icon
             };
-            
+
             nodesMap.set(roleType, node);
             allNodes.push(node);
         });
-        
+
         // Store flat list for stats and list view
         setAllRolesFlat(allNodes);
-        
+
         // Build parent-child relationships
         const rootNodes: RoleNode[] = [];
-        
+
         allNodes.forEach(node => {
             if (node.parentId && nodesMap.has(node.parentId)) {
                 const parent = nodesMap.get(node.parentId)!;
@@ -237,7 +240,7 @@ const RoleHierarchyPage: React.FC = () => {
                 rootNodes.push(node);
             }
         });
-        
+
         // Sort children by level for consistent display
         const sortChildren = (nodes: RoleNode[]) => {
             nodes.sort((a, b) => a.level - b.level);
@@ -247,9 +250,9 @@ const RoleHierarchyPage: React.FC = () => {
                 }
             });
         };
-        
+
         rootNodes.forEach(root => sortChildren(root.children));
-        
+
         return rootNodes;
     };
 
@@ -281,7 +284,7 @@ const RoleHierarchyPage: React.FC = () => {
     const filteredRoles = useMemo(() => {
         if (!searchTerm) return flattenedRoles;
         const term = searchTerm.toLowerCase();
-        return flattenedRoles.filter(role => 
+        return flattenedRoles.filter(role =>
             role.name.toLowerCase().includes(term) ||
             role.description?.toLowerCase().includes(term) ||
             role.roleType.toLowerCase().includes(term)
@@ -302,8 +305,9 @@ const RoleHierarchyPage: React.FC = () => {
     }, [allRolesFlat]);
 
     // Handlers
+    // P69: Updated to navigate to role detail page on row click
     const handleViewRole = (role: RoleNode) => {
-        setSelectedRole(role);
+        navigate(`/management/roles/${role.roleType}`);
     };
 
     const handleEditRole = (role: RoleNode) => {
@@ -333,10 +337,10 @@ const RoleHierarchyPage: React.FC = () => {
             e.preventDefault();
             return;
         }
-        
+
         e.dataTransfer.setData('text/plain', role.roleType);
         e.dataTransfer.effectAllowed = 'move';
-        
+
         setDragState({
             isDragging: true,
             draggedRole: role,
@@ -357,7 +361,7 @@ const RoleHierarchyPage: React.FC = () => {
     const handleDragOver = useCallback((e: React.DragEvent, targetRole: RoleNode) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
-        
+
         const { draggedRole } = dragState;
         if (!draggedRole || draggedRole.roleType === targetRole.roleType) {
             return;
@@ -368,7 +372,7 @@ const RoleHierarchyPage: React.FC = () => {
             if (parent.roleType === childType) return true;
             return parent.children.some(child => isDescendant(child, childType));
         };
-        
+
         if (isDescendant(draggedRole, targetRole.roleType)) {
             return;
         }
@@ -390,7 +394,7 @@ const RoleHierarchyPage: React.FC = () => {
 
     const handleDrop = useCallback(async (e: React.DragEvent, targetRole: RoleNode) => {
         e.preventDefault();
-        
+
         const { draggedRole } = dragState;
         if (!draggedRole || draggedRole.roleType === targetRole.roleType) {
             handleDragEnd();
@@ -402,7 +406,7 @@ const RoleHierarchyPage: React.FC = () => {
             if (parent.roleType === childType) return true;
             return parent.children.some(child => isDescendant(child, childType));
         };
-        
+
         if (isDescendant(draggedRole, targetRole.roleType)) {
             handleDragEnd();
             return;
@@ -417,9 +421,8 @@ const RoleHierarchyPage: React.FC = () => {
                 targetRole.level + 1
             );
             await loadData();
-        } catch (err: any) {
-            console.error('Error moving role:', err);
-            setError(err.message || 'Errore nello spostamento del ruolo');
+        } catch (err: unknown) {
+            setError('Errore nello spostamento del ruolo');
         } finally {
             setMovingRole(false);
             handleDragEnd();
@@ -429,12 +432,12 @@ const RoleHierarchyPage: React.FC = () => {
     // Handle move from modal
     const handleMoveRoleConfirm = async (newParentId: string | null) => {
         if (!selectedRole) return;
-        
+
         try {
             setMovingRole(true);
             const parentRole = newParentId ? allRolesFlat.find(r => r.roleType === newParentId) : null;
             const newLevel = parentRole ? parentRole.level + 1 : 1;
-            
+
             await managementApi.moveRoleInHierarchy(
                 selectedRole.roleType,
                 newParentId,
@@ -443,9 +446,8 @@ const RoleHierarchyPage: React.FC = () => {
             setShowMoveModal(false);
             setSelectedRole(null);
             await loadData();
-        } catch (err: any) {
-            console.error('Error moving role:', err);
-            setError(err.message || 'Errore nello spostamento del ruolo');
+        } catch (err: unknown) {
+            setError('Errore nello spostamento del ruolo');
         } finally {
             setMovingRole(false);
         }
@@ -458,19 +460,20 @@ const RoleHierarchyPage: React.FC = () => {
         const isExpanded = expandedNodes.has(node.roleType);
         const isDragTarget = dragState.dropTarget?.roleType === node.roleType;
         const isDragging = dragState.isDragging && dragState.draggedRole?.roleType === node.roleType;
-        const canDrag = !node.isSystemRole || node.roleType !== 'SUPER_ADMIN';
+        // P69: canDrag richiede permessi ADMIN + non essere SUPER_ADMIN
+        const canDrag = canEditHierarchy && (!node.isSystemRole || node.roleType !== 'SUPER_ADMIN');
 
         return (
             <div className="select-none group">
-                <div 
+                <div
                     className={`
-                        flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all
-                        ${selectedRole?.roleType === node.roleType 
-                            ? 'bg-purple-50 border border-purple-200' 
+                        flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all duration-200
+                        ${selectedRole?.roleType === node.roleType
+                            ? 'bg-purple-50 border border-purple-200'
                             : 'hover:bg-gray-50 border border-transparent'
                         }
-                        ${isDragTarget ? 'bg-blue-50 border-blue-300 border-2 border-dashed' : ''}
-                        ${isDragging ? 'opacity-50' : ''}
+                        ${isDragTarget ? 'bg-violet-100 border-violet-400 border-2 border-dashed shadow-lg ring-2 ring-violet-300 ring-offset-1' : ''}
+                        ${isDragging ? 'opacity-50 scale-95' : ''}
                     `}
                     style={{ paddingLeft: `${depth * 24 + 12}px` }}
                     onClick={() => handleViewRole(node)}
@@ -483,18 +486,18 @@ const RoleHierarchyPage: React.FC = () => {
                 >
                     {/* Drag handle */}
                     {canDrag && (
-                        <div className="opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing">
-                            <GripVertical className="w-4 h-4 text-gray-400" />
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing text-violet-500 hover:text-violet-700">
+                            <GripVertical className="w-4 h-4" />
                         </div>
                     )}
 
                     {/* Expand/Collapse */}
-                    <button 
+                    <button
                         onClick={(e) => { e.stopPropagation(); toggleNode(node.roleType); }}
                         className={`w-5 h-5 flex items-center justify-center rounded hover:bg-gray-200 transition-colors ${!hasChildren ? 'invisible' : ''}`}
                     >
                         {hasChildren && (
-                            isExpanded 
+                            isExpanded
                                 ? <ChevronDown className="w-4 h-4 text-gray-500" />
                                 : <ChevronRight className="w-4 h-4 text-gray-500" />
                         )}
@@ -541,31 +544,43 @@ const RoleHierarchyPage: React.FC = () => {
                         </div>
                     )}
 
-                    {/* Actions */}
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                            onClick={(e) => { e.stopPropagation(); handleNavigateToRole(node); }}
-                            className="p-1.5 rounded hover:bg-gray-200 text-gray-500 hover:text-blue-600"
-                            title="Visualizza dettagli"
-                        >
-                            <Eye className="w-4 h-4" />
-                        </button>
-                        <button
-                            onClick={(e) => { e.stopPropagation(); handleEditRole(node); }}
-                            className="p-1.5 rounded hover:bg-gray-200 text-gray-500 hover:text-purple-600"
-                            title="Modifica"
-                        >
-                            <Edit2 className="w-4 h-4" />
-                        </button>
-                        {canDrag && (
-                            <button
-                                onClick={(e) => { e.stopPropagation(); handleMoveRole(node); }}
-                                className="p-1.5 rounded hover:bg-gray-200 text-gray-500 hover:text-blue-600"
-                                title="Sposta (o trascina)"
-                            >
-                                <Move className="w-4 h-4" />
-                            </button>
-                        )}
+                    {/* Actions - P69: Use ActionButton for consistent UX */}
+                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                        <ActionButton
+                            theme="violet"
+                            actions={[
+                                {
+                                    label: 'Visualizza',
+                                    icon: <Eye className="w-4 h-4" />,
+                                    onClick: () => handleNavigateToRole(node)
+                                },
+                                {
+                                    label: 'Modifica',
+                                    icon: <Edit2 className="w-4 h-4" />,
+                                    onClick: () => handleEditRole(node)
+                                },
+                                ...(canDrag ? [
+                                    {
+                                        label: 'Sposta',
+                                        icon: <Move className="w-4 h-4" />,
+                                        onClick: () => handleMoveRole(node)
+                                    }
+                                ] : []),
+                                ...(canDrag && !node.isSystemRole ? [
+                                    {
+                                        label: 'Crea Ruolo Figlio',
+                                        icon: <Plus className="w-4 h-4" />,
+                                        onClick: () => handleCreateChild(node)
+                                    },
+                                    {
+                                        label: 'Elimina',
+                                        icon: <Trash2 className="w-4 h-4" />,
+                                        variant: 'danger' as const,
+                                        onClick: () => { /* delete handler */ }
+                                    }
+                                ] : [])
+                            ]}
+                        />
                     </div>
                 </div>
 
@@ -595,7 +610,7 @@ const RoleHierarchyPage: React.FC = () => {
                 <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
                 <h3 className="text-lg font-semibold text-red-700 mb-2">Errore</h3>
                 <p className="text-red-600 text-center">{error}</p>
-                <button 
+                <button
                     onClick={loadData}
                     className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
                 >
@@ -630,32 +645,31 @@ const RoleHierarchyPage: React.FC = () => {
                     <div className="flex bg-gray-100 rounded-lg p-1">
                         <button
                             onClick={() => setViewMode('tree')}
-                            className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                                viewMode === 'tree' 
-                                    ? 'bg-white text-purple-700 shadow' 
-                                    : 'text-gray-600 hover:text-gray-900'
-                            }`}
+                            className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${viewMode === 'tree'
+                                ? 'bg-white text-purple-700 shadow'
+                                : 'text-gray-600 hover:text-gray-900'
+                                }`}
                         >
                             <GitBranch className="w-4 h-4" />
                         </button>
                         <button
                             onClick={() => setViewMode('list')}
-                            className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                                viewMode === 'list' 
-                                    ? 'bg-white text-purple-700 shadow' 
-                                    : 'text-gray-600 hover:text-gray-900'
-                            }`}
+                            className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${viewMode === 'list'
+                                ? 'bg-white text-purple-700 shadow'
+                                : 'text-gray-600 hover:text-gray-900'
+                                }`}
                         >
                             <Layers className="w-4 h-4" />
                         </button>
                     </div>
-                    <button
+                    <CRUDButton
+                        operation="create"
                         onClick={() => setShowCreateModal(true)}
                         className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
                     >
                         <Plus className="w-5 h-5" />
                         Nuovo Ruolo
-                    </button>
+                    </CRUDButton>
                 </div>
             </div>
 
@@ -664,9 +678,21 @@ const RoleHierarchyPage: React.FC = () => {
                 <Info className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
                 <div>
                     <p className="text-sm text-blue-800">
-                        <strong>Come funziona la gerarchia:</strong> I ruoli di livello superiore possono gestire quelli inferiori. 
+                        <strong>Come funziona la gerarchia:</strong> I ruoli di livello superiore possono gestire quelli inferiori.
                         I permessi vengono ereditati lungo la catena gerarchica. I ruoli di sistema (🔒) non possono essere eliminati.
                     </p>
+                    {canEditHierarchy ? (
+                        <p className="text-sm text-blue-700 mt-1">
+                            <span className="inline-flex items-center gap-1">
+                                <GripVertical className="w-3 h-3" />
+                                <strong>Drag & Drop:</strong> Trascina i ruoli per modificare la gerarchia.
+                            </span>
+                        </p>
+                    ) : (
+                        <p className="text-sm text-amber-700 mt-1">
+                            <strong>Nota:</strong> Solo gli amministratori possono modificare la gerarchia dei ruoli.
+                        </p>
+                    )}
                 </div>
             </div>
 
@@ -699,7 +725,7 @@ const RoleHierarchyPage: React.FC = () => {
                         {dragState.isDragging && (
                             <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 text-sm flex items-center gap-2">
                                 <Move className="w-4 h-4" />
-                                Trascina "{dragState.draggedRole?.name}" su un altro ruolo per spostarlo. 
+                                Trascina "{dragState.draggedRole?.name}" su un altro ruolo per spostarlo.
                                 I ruoli figli verranno spostati automaticamente.
                             </div>
                         )}
@@ -708,104 +734,136 @@ const RoleHierarchyPage: React.FC = () => {
                         ))}
                     </div>
                 ) : (
-                    <table className="w-full">
-                        <thead className="bg-gray-50 border-b border-gray-200">
-                            <tr>
-                                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Ruolo</th>
-                                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Descrizione</th>
-                                <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Livello</th>
-                                <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Può Assegnare</th>
-                                <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Permessi</th>
-                                <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">Azioni</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200">
-                            {filteredRoles.map(role => {
-                                const Icon = role.icon;
-                                const canDrag = !role.isSystemRole || role.roleType !== 'SUPER_ADMIN';
-                                return (
-                                    <tr 
-                                        key={role.roleType} 
-                                        className={`hover:bg-gray-50 cursor-pointer ${
-                                            selectedRole?.roleType === role.roleType ? 'bg-purple-50' : ''
-                                        }`}
-                                        onClick={() => handleViewRole(role)}
-                                    >
-                                        <td className="px-4 py-3">
-                                            <div className="flex items-center gap-3" style={{ paddingLeft: `${role.depth * 20}px` }}>
-                                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${role.color.split(' ')[0]}`}>
-                                                    <Icon className={`w-4 h-4 ${role.color.split(' ')[1]}`} />
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); handleNavigateToRole(role); }}
-                                                        className="font-medium text-gray-900 hover:text-purple-600 hover:underline transition-colors"
-                                                    >
-                                                        {role.name}
-                                                    </button>
-                                                    {role.isSystemRole && (
-                                                        <Lock className="w-3 h-3 text-gray-400" />
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-4 py-3 text-sm text-gray-500 max-w-[300px] truncate">
-                                            {role.description}
-                                        </td>
-                                        <td className="px-4 py-3 text-center">
-                                            <span className={`px-2 py-1 rounded text-xs font-medium ${role.color}`}>
-                                                {role.level}
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-3 text-center text-sm text-gray-600">
-                                            {role.canAssignTo?.length || 0}
-                                        </td>
-                                        <td className="px-4 py-3 text-center text-sm text-gray-600">
-                                            {role.permissions.length}
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <div className="flex items-center justify-end gap-1">
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); handleNavigateToRole(role); }}
-                                                    className="p-1.5 rounded hover:bg-gray-200 text-gray-500 hover:text-blue-600"
-                                                    title="Visualizza dettagli"
-                                                >
-                                                    <Eye className="w-4 h-4" />
-                                                </button>
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); handleEditRole(role); }}
-                                                    className="p-1.5 rounded hover:bg-gray-200 text-gray-500 hover:text-purple-600"
-                                                    title="Modifica"
-                                                >
-                                                    <Edit2 className="w-4 h-4" />
-                                                </button>
-                                                {canDrag && (
-                                                    <>
+                    <div className="overflow-x-auto">
+                        <table className="w-full min-w-[900px]">
+                            <thead className="bg-gray-50 border-b border-gray-200">
+                                <tr>
+                                    <th className="px-3 py-3 text-left text-sm font-medium text-gray-700 w-[180px]">Ruolo</th>
+                                    <th className="px-3 py-3 text-left text-sm font-medium text-gray-700 w-[220px]">Descrizione</th>
+                                    <th className="px-3 py-3 text-center text-sm font-medium text-gray-700 w-[70px]">Livello</th>
+                                    <th className="px-3 py-3 text-center text-sm font-medium text-gray-700 w-[80px]" title="Numero di utenti con questo ruolo">
+                                        <div className="flex items-center justify-center gap-1">
+                                            <Users className="w-4 h-4" />
+                                            <span>Utenti</span>
+                                        </div>
+                                    </th>
+                                    <th className="px-3 py-3 text-center text-sm font-medium text-gray-700 w-[140px]" title="Ruoli che questo ruolo può assegnare ad altri utenti">
+                                        <div className="flex items-center justify-center gap-1">
+                                            <Key className="w-4 h-4" />
+                                            <span>Può Assegnare</span>
+                                        </div>
+                                    </th>
+                                    <th className="px-3 py-3 text-center text-sm font-medium text-gray-700 w-[80px]">Permessi</th>
+                                    <th className="px-3 py-3 text-right text-sm font-medium text-gray-700 w-[100px]">Azioni</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200">
+                                {filteredRoles.map(role => {
+                                    const Icon = role.icon;
+                                    // P69: canDrag richiede permessi ADMIN
+                                    const canDrag = canEditHierarchy && (!role.isSystemRole || role.roleType !== 'SUPER_ADMIN');
+                                    return (
+                                        <tr
+                                            key={role.roleType}
+                                            className={`hover:bg-gray-50 cursor-pointer ${selectedRole?.roleType === role.roleType ? 'bg-purple-50' : ''
+                                                }`}
+                                            onClick={() => handleViewRole(role)}
+                                        >
+                                            <td className="px-3 py-2">
+                                                <div className="flex items-center gap-2" style={{ paddingLeft: `${role.depth * 16}px` }}>
+                                                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${role.color.split(' ')[0]}`}>
+                                                        <Icon className={`w-3.5 h-3.5 ${role.color.split(' ')[1]}`} />
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5 min-w-0">
                                                         <button
-                                                            onClick={(e) => { e.stopPropagation(); handleMoveRole(role); }}
-                                                            className="p-1.5 rounded hover:bg-gray-200 text-gray-500 hover:text-blue-600"
-                                                            title="Sposta"
+                                                            onClick={(e) => { e.stopPropagation(); handleNavigateToRole(role); }}
+                                                            className="font-medium text-sm text-gray-900 hover:text-purple-600 hover:underline transition-colors truncate"
                                                         >
-                                                            <Move className="w-4 h-4" />
+                                                            {role.name}
                                                         </button>
-                                                        {!role.isSystemRole && (
-                                                            <button
-                                                                onClick={(e) => { e.stopPropagation(); /* delete */ }}
-                                                                className="p-1.5 rounded hover:bg-gray-200 text-gray-500 hover:text-red-600"
-                                                                title="Elimina"
-                                                            >
-                                                                <Trash2 className="w-4 h-4" />
-                                                            </button>
+                                                        {role.isSystemRole && (
+                                                            <Lock className="w-3 h-3 text-gray-400 flex-shrink-0" />
                                                         )}
-                                                    </>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-3 py-2 text-xs text-gray-500">
+                                                <span className="line-clamp-2">{role.description}</span>
+                                            </td>
+                                            <td className="px-3 py-2 text-center">
+                                                <span className={`px-2 py-0.5 rounded text-xs font-medium ${role.color}`}>
+                                                    {role.level}
+                                                </span>
+                                            </td>
+                                            <td className="px-3 py-2 text-center">
+                                                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                                                    {role.userCount || 0}
+                                                </span>
+                                            </td>
+                                            <td className="px-3 py-2 text-center">
+                                                {role.canAssignTo && role.canAssignTo.length > 0 ? (
+                                                    <div className="flex flex-wrap justify-center gap-0.5">
+                                                        {role.canAssignTo.slice(0, 2).map((r: string) => (
+                                                            <span key={r} className="px-1 py-0.5 rounded text-[10px] bg-gray-100 text-gray-600">
+                                                                {r.replace(/_/g, ' ').toLowerCase()}
+                                                            </span>
+                                                        ))}
+                                                        {role.canAssignTo.length > 2 && (
+                                                            <span className="px-1 py-0.5 rounded text-[10px] bg-gray-200 text-gray-700">
+                                                                +{role.canAssignTo.length - 2}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-xs text-gray-400">-</span>
                                                 )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
+                                            </td>
+                                            <td className="px-3 py-2 text-center text-xs text-gray-600">
+                                                {role.permissions.length}
+                                            </td>
+                                            <td className="px-3 py-2 text-right">
+                                                <ActionButton
+                                                    theme="violet"
+                                                    actions={[
+                                                        {
+                                                            label: 'Visualizza',
+                                                            icon: <Eye className="w-4 h-4" />,
+                                                            onClick: () => handleNavigateToRole(role)
+                                                        },
+                                                        {
+                                                            label: 'Gestisci Permessi',
+                                                            icon: <Key className="w-4 h-4" />,
+                                                            onClick: () => navigate(`/management/permissions?roleType=${role.roleType}`)
+                                                        },
+                                                        {
+                                                            label: 'Modifica',
+                                                            icon: <Edit2 className="w-4 h-4" />,
+                                                            onClick: () => handleEditRole(role)
+                                                        },
+                                                        ...(canDrag ? [
+                                                            {
+                                                                label: 'Sposta',
+                                                                icon: <Move className="w-4 h-4" />,
+                                                                onClick: () => handleMoveRole(role)
+                                                            }
+                                                        ] : []),
+                                                        ...(canDrag && !role.isSystemRole ? [
+                                                            {
+                                                                label: 'Elimina',
+                                                                icon: <Trash2 className="w-4 h-4" />,
+                                                                variant: 'danger' as const,
+                                                                onClick: () => { /* delete */ }
+                                                            }
+                                                        ] : [])
+                                                    ]}
+                                                />
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
                 )}
             </div>
 
@@ -872,8 +930,8 @@ const RoleHierarchyPage: React.FC = () => {
                                     const targetRole = allRolesFlat.find(r => r.roleType === roleType);
                                     const config = ROLE_DISPLAY_CONFIG[roleType] || { color: 'bg-gray-100 text-gray-700', icon: Users };
                                     return (
-                                        <span 
-                                            key={roleType} 
+                                        <span
+                                            key={roleType}
                                             className={`px-2 py-1 rounded text-xs cursor-pointer hover:opacity-80 ${config.color}`}
                                             onClick={() => targetRole && handleViewRole(targetRole)}
                                         >
@@ -890,8 +948,8 @@ const RoleHierarchyPage: React.FC = () => {
                             <h4 className="text-sm font-medium text-gray-700 mb-2">Permessi</h4>
                             <div className="flex flex-wrap gap-2">
                                 {selectedRole.permissions.slice(0, 10).map(perm => (
-                                    <span 
-                                        key={perm} 
+                                    <span
+                                        key={perm}
                                         className="px-2 py-1 bg-purple-50 text-purple-700 rounded text-xs"
                                     >
                                         {perm}
@@ -906,13 +964,20 @@ const RoleHierarchyPage: React.FC = () => {
                         </div>
                     )}
 
-                    <div className="mt-6 pt-4 border-t border-gray-200 flex gap-3">
+                    <div className="mt-6 pt-4 border-t border-gray-200 flex flex-wrap gap-3">
                         <button
                             onClick={() => handleNavigateToRole(selectedRole)}
                             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
                         >
                             <Eye className="w-4 h-4" />
                             Vedi Dettagli
+                        </button>
+                        <button
+                            onClick={() => navigate(`/management/permissions?roleType=${selectedRole.roleType}`)}
+                            className="px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition-colors flex items-center gap-2"
+                        >
+                            <Key className="w-4 h-4" />
+                            Gestisci Permessi
                         </button>
                         <button
                             onClick={() => handleEditRole(selectedRole)}
@@ -947,7 +1012,7 @@ const RoleHierarchyPage: React.FC = () => {
                     .map(role => {
                         const Icon = role.icon;
                         return (
-                            <div 
+                            <div
                                 key={role.roleType}
                                 className="bg-white rounded-xl border border-gray-200 p-4 cursor-pointer hover:border-purple-300 transition-colors"
                                 onClick={() => handleViewRole(role)}
@@ -1045,12 +1110,13 @@ const CreateRoleModal: React.FC<{
                 name: formData.name,
                 roleType: formData.roleType || formData.name.toUpperCase().replace(/\s/g, '_'),
                 displayName: formData.displayName || formData.name,
-                description: formData.description,
+                // P69: description is required by backend validation
+                description: formData.description || `Ruolo personalizzato: ${formData.name}`,
                 permissions: []
             });
             onSuccess();
-        } catch (err: any) {
-            setError(err.message || 'Errore nella creazione');
+        } catch (err: unknown) {
+            setError('Errore nella creazione');
         } finally {
             setSaving(false);
         }
@@ -1158,8 +1224,8 @@ const EditRoleModal: React.FC<{
                 description: formData.description
             });
             onSuccess();
-        } catch (err: any) {
-            setError(err.message || 'Errore nel salvataggio');
+        } catch (err: unknown) {
+            setError('Errore nel salvataggio');
         } finally {
             setSaving(false);
         }
@@ -1280,7 +1346,7 @@ const MoveRoleModal: React.FC<{
                             Spostando questo ruolo, tutti i ruoli figli ({role.children.length > 0 ? role.children.map(c => c.name).join(', ') : 'nessuno'}) verranno spostati automaticamente insieme.
                         </div>
                     </div>
-                    
+
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                             Seleziona il nuovo ruolo padre

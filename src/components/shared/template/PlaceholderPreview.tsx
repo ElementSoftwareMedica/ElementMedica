@@ -17,34 +17,34 @@ const PlaceholderPreview: React.FC<PlaceholderPreviewProps> = ({
   title = 'Anteprima Documento'
 }) => {
   const [processedContent, setProcessedContent] = useState<string>('');
-  
+
   useEffect(() => {
     if (isOpen) {
       // Replace all placeholders with their values
       let result = content;
-      
+
       // Find all placeholders in the format {{PLACEHOLDER}}
       const placeholderRegex = /{{([A-Za-z0-9_]+)}}/g;
       let match;
-      
+
       while ((match = placeholderRegex.exec(content)) !== null) {
         const fullMatch = match[0]; // {{PLACEHOLDER}}
         const placeholderName = match[1]; // PLACEHOLDER
-        
+
         const value = values[placeholderName] || `[${placeholderName}]`;
-        
+
         // Replace all instances of this placeholder
         result = result.replace(new RegExp(fullMatch, 'g'), value);
       }
-      
+
       setProcessedContent(result);
     }
   }, [content, values, isOpen]);
-  
+
   if (!isOpen) {
     return null;
   }
-  
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col">
@@ -54,12 +54,12 @@ const PlaceholderPreview: React.FC<PlaceholderPreviewProps> = ({
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600"
-            aria-label="Close"
+            aria-label="Chiudi"
           >
             <X size={20} />
           </button>
         </div>
-        
+
         {/* Preview content */}
         <div className="p-6 overflow-auto flex-grow">
           <div className="prose max-w-none">
@@ -71,7 +71,7 @@ const PlaceholderPreview: React.FC<PlaceholderPreviewProps> = ({
             ))}
           </div>
         </div>
-        
+
         {/* Footer */}
         <div className="border-t border-gray-200 p-4 flex justify-between items-center bg-gray-50">
           <div className="text-sm text-gray-500">

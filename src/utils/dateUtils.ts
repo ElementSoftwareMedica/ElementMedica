@@ -165,11 +165,97 @@ export function addDays(date: string | Date, days: number): Date {
 }
 
 /**
- * Get ISO date string (YYYY-MM-DD)
+ * Get ISO date string (YYYY-MM-DD) using LOCAL timezone
+ * 
+ * IMPORTANT: This uses local timezone, not UTC, to avoid
+ * date shift bugs when the user is in UTC+ timezones.
+ * 
+ * Example: In Italy (UTC+1), new Date("2025-01-03") at midnight local
+ * would become "2025-01-02" with toISOString().split('T')[0]
+ * This function correctly returns "2025-01-03"
  */
 export function toISODateString(date: string | Date = new Date()): string {
     const d = typeof date === 'string' ? new Date(date) : date;
-    return d.toISOString().split('T')[0];
+    // Use local date components to avoid timezone shift
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+/**
+ * Format a date range for API calls
+ * 
+ * Returns start and end dates in ISO format suitable for API filtering.
+ * Uses LOCAL timezone to ensure the user's selected date is respected.
+ * 
+ * @param start - Start date of range
+ * @param end - End date of range (if null, uses start as both)
+ * @returns Object with dataInizio and dataFine in YYYY-MM-DD format
+ * 
+ * Example: formatDateRangeForApi(new Date("2025-01-03"), new Date("2025-01-05"))
+ * Returns: { dataInizio: "2025-01-03", dataFine: "2025-01-05" }
+ */
+export function formatDateRangeForApi(
+    start: Date | null,
+    end: Date | null
+): { dataInizio: string | null; dataFine: string | null } {
+    if (!start) {
+        return { dataInizio: null, dataFine: null };
+    }
+
+    // Use the same date for both if end is not specified
+    const endDate = end || start;
+
+    return {
+        dataInizio: toISODateString(start),
+        dataFine: toISODateString(endDate)
+    };
+}
+
+/**
+ * Create a Date object set to start of day (00:00:00.000) in LOCAL timezone
+ * 
+ * @param date - Input date
+ * @returns New Date object at start of the same local day
+ */
+export function toStartOfDayLocal(date: Date): Date {
+    const result = new Date(date);
+    result.setHours(0, 0, 0, 0);
+    return result;
+}
+
+/**
+ * Create a Date object set to end of day (23:59:59.999) in LOCAL timezone
+ * 
+ * @param date - Input date
+ * @returns New Date object at end of the same local day
+ */
+export function toEndOfDayLocal(date: Date): Date {
+    const result = new Date(date);
+    result.setHours(23, 59, 59, 999);
+    return result;
+}
+
+/**
+ * Format a single date for API query with start/end of day
+ * 
+ * For a single day filter, returns the full day range in ISO format
+ * using local timezone.
+ * 
+ * @param date - The date to format
+ * @returns Object with dateFrom and dateTo as ISO strings
+ */
+export function formatSingleDateForApi(date: Date): {
+    dateFrom: string;
+    dateTo: string;
+} {
+    const dateStr = toISODateString(date);
+    // Return ISO date strings - backend will interpret as full day range
+    return {
+        dateFrom: dateStr,
+        dateTo: dateStr
+    };
 }
 
 /**
@@ -220,5 +306,9 @@ export default {
     addDays,
     toISODateString,
     parseItalianDate,
-    formatDuration
+    formatDuration,
+    formatDateRangeForApi,
+    toStartOfDayLocal,
+    toEndOfDayLocal,
+    formatSingleDateForApi
 };

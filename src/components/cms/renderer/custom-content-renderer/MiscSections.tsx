@@ -20,17 +20,17 @@ export const CaseStudiesSection: React.FC<{ content: any }> = ({ content }) => {
   if (!content.caseStudies) return null;
 
   const caseColors = [
-    { bg: 'bg-gradient-to-br from-blue-500 to-indigo-600', light: 'bg-blue-50' },
-    { bg: 'bg-gradient-to-br from-emerald-500 to-teal-600', light: 'bg-emerald-50' },
-    { bg: 'bg-gradient-to-br from-purple-500 to-violet-600', light: 'bg-purple-50' },
-    { bg: 'bg-gradient-to-br from-amber-500 to-orange-600', light: 'bg-amber-50' },
+    { style: { backgroundImage: 'linear-gradient(to bottom right, var(--color-primary-400), var(--color-primary-500))' } as React.CSSProperties, light: 'bg-primary-50' },
+    { style: { backgroundImage: 'linear-gradient(to bottom right, var(--color-primary-500), var(--color-primary-600))' } as React.CSSProperties, light: 'bg-secondary-50' },
+    { style: { backgroundImage: 'linear-gradient(to bottom right, var(--color-primary-600), var(--color-primary-700))' } as React.CSSProperties, light: 'bg-secondary-50' },
+    { style: { backgroundImage: 'linear-gradient(to bottom right, #c084fc, #a855f7)' } as React.CSSProperties, light: 'bg-purple-50' },
   ];
 
   return (
     <section className="py-20 bg-gradient-to-br from-slate-50 via-gray-50 to-zinc-50">
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
-          <span className="inline-block px-4 py-2 bg-indigo-100 text-indigo-700 rounded-full text-sm font-semibold mb-4">
+          <span className="inline-block px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-4">
             {content.caseStudies.badge || 'Case Studies'}
           </span>
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
@@ -52,7 +52,7 @@ export const CaseStudiesSection: React.FC<{ content: any }> = ({ content }) => {
                   className="group bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-all cursor-pointer"
                   onClick={() => caseStudy.href && navigate(caseStudy.href)}
                 >
-                  <div className={`${colors.bg} p-8 text-white relative overflow-hidden`}>
+                  <div className="p-8 text-white relative overflow-hidden" style={colors.style}>
                     <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full" />
                     <div className="relative z-10">
                       <span className="inline-block px-3 py-1 bg-white/20 backdrop-blur rounded-full text-sm font-medium mb-4">
@@ -75,14 +75,14 @@ export const CaseStudiesSection: React.FC<{ content: any }> = ({ content }) => {
                       </div>
                     )}
                     {caseStudy.testimonial && (
-                      <blockquote className="border-l-4 border-indigo-500 pl-4 italic text-gray-600 mb-4">
+                      <blockquote className="border-l-4 border-primary-500 pl-4 italic text-gray-600 mb-4">
                         "{caseStudy.testimonial.text}"
                         <div className="mt-2 text-sm font-medium text-gray-900">
                           — {caseStudy.testimonial.author}
                         </div>
                       </blockquote>
                     )}
-                    <div className="flex items-center text-indigo-600 font-semibold group-hover:text-indigo-700 transition-colors">
+                    <div className="flex items-center text-primary-600 font-semibold group-hover:text-primary-700 transition-colors">
                       Leggi il Case Study
                       <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
                     </div>
@@ -125,7 +125,7 @@ export const WorkflowProcessSection: React.FC<{ content: any }> = ({ content }) 
           <div className="max-w-5xl mx-auto">
             <div className="relative">
               {/* Connection line */}
-              <div className="hidden lg:block absolute top-24 left-0 right-0 h-0.5 bg-gradient-to-r from-slate-200 via-blue-200 to-slate-200" />
+              <div className="hidden lg:block absolute top-24 left-0 right-0 h-0.5 bg-gradient-to-r from-slate-200 via-primary-200 to-slate-200" />
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8">
                 {content.workflowProcess.steps.map((step: any, index: number) => {
@@ -320,12 +320,12 @@ export const FeaturesGridSection: React.FC<{ content: any }> = ({ content }) => 
   if (!content.featuresGrid) return null;
 
   const featureColors = [
-    { bg: 'bg-gradient-to-br from-blue-500 to-indigo-600', light: 'bg-blue-50', text: 'text-blue-600' },
-    { bg: 'bg-gradient-to-br from-emerald-500 to-teal-600', light: 'bg-emerald-50', text: 'text-emerald-600' },
-    { bg: 'bg-gradient-to-br from-purple-500 to-violet-600', light: 'bg-purple-50', text: 'text-purple-600' },
-    { bg: 'bg-gradient-to-br from-amber-500 to-orange-600', light: 'bg-amber-50', text: 'text-amber-600' },
-    { bg: 'bg-gradient-to-br from-rose-500 to-pink-600', light: 'bg-rose-50', text: 'text-rose-600' },
-    { bg: 'bg-gradient-to-br from-cyan-500 to-sky-600', light: 'bg-cyan-50', text: 'text-cyan-600' },
+    { style: { backgroundImage: 'linear-gradient(to bottom right, var(--color-primary-400), var(--color-primary-500))' } as React.CSSProperties, light: 'bg-primary-50', text: 'text-primary-600' },
+    { style: { backgroundImage: 'linear-gradient(to bottom right, var(--color-primary-500), var(--color-primary-600))' } as React.CSSProperties, light: 'bg-secondary-50', text: 'text-secondary-600' },
+    { style: { backgroundImage: 'linear-gradient(to bottom right, var(--color-primary-600), var(--color-primary-700))' } as React.CSSProperties, light: 'bg-secondary-50', text: 'text-secondary-600' },
+    { style: { backgroundImage: 'linear-gradient(to bottom right, #c084fc, #a855f7)' } as React.CSSProperties, light: 'bg-purple-50', text: 'text-purple-600' },
+    { style: { backgroundImage: 'linear-gradient(to bottom right, #34d399, #10b981)' } as React.CSSProperties, light: 'bg-emerald-50', text: 'text-emerald-600' },
+    { style: { backgroundImage: 'linear-gradient(to bottom right, #38bdf8, #0ea5e9)' } as React.CSSProperties, light: 'bg-sky-50', text: 'text-sky-600' },
   ];
 
   return (
@@ -333,7 +333,7 @@ export const FeaturesGridSection: React.FC<{ content: any }> = ({ content }) => 
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
           {content.featuresGrid.badge && (
-            <span className="inline-block px-4 py-2 bg-blue-100 text-blue-700 rounded-full text-sm font-semibold mb-4">
+            <span className="inline-block px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-4">
               {content.featuresGrid.badge}
             </span>
           )}
@@ -353,7 +353,7 @@ export const FeaturesGridSection: React.FC<{ content: any }> = ({ content }) => 
               const colors = featureColors[index % featureColors.length];
               return (
                 <div key={index} className={`group ${colors.light} rounded-2xl p-8 hover:shadow-xl transition-all`}>
-                  <div className={`w-14 h-14 ${colors.bg} rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-lg`}>
+                  <div className="w-14 h-14 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-lg" style={colors.style}>
                     <IconComponent className="w-7 h-7 text-white" />
                   </div>
                   <h3 className="text-xl font-bold text-gray-900 mb-3">{feature.title}</h3>
@@ -375,7 +375,7 @@ export const StatisticsSection: React.FC<{ content: any }> = ({ content }) => {
   if (!content.statistics) return null;
 
   return (
-    <section className="py-16 bg-gradient-to-br from-blue-600 via-indigo-700 to-purple-800 text-white">
+    <section className="py-16 text-white" style={{ backgroundImage: 'linear-gradient(135deg, var(--color-primary-800), var(--color-primary-700), var(--color-primary-600))' }}>
       <div className="container mx-auto px-4">
         <div className="text-center mb-12">
           {content.statistics.title && (
@@ -438,11 +438,11 @@ export const ResourcesSection: React.FC<{ content: any }> = ({ content }) => {
                   rel={resource.external ? 'noopener noreferrer' : undefined}
                   className="group bg-white rounded-xl p-6 shadow-md hover:shadow-lg transition-all flex items-center gap-4"
                 >
-                  <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center group-hover:bg-blue-100 transition-colors">
-                    <IconComponent className="w-6 h-6 text-gray-600 group-hover:text-blue-600 transition-colors" />
+                  <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center group-hover:bg-primary-100 transition-colors">
+                    <IconComponent className="w-6 h-6 text-gray-600 group-hover:text-primary-600 transition-colors" />
                   </div>
                   <div className="flex-grow">
-                    <h3 className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">{resource.title}</h3>
+                    <h3 className="font-semibold text-gray-900 group-hover:text-primary-600 transition-colors">{resource.title}</h3>
                     {resource.description && (
                       <p className="text-sm text-gray-500">{resource.description}</p>
                     )}
@@ -450,7 +450,7 @@ export const ResourcesSection: React.FC<{ content: any }> = ({ content }) => {
                       <span className="text-xs text-gray-400">{resource.fileSize}</span>
                     )}
                   </div>
-                  <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all" />
+                  <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-primary-600 group-hover:translate-x-1 transition-all" />
                 </a>
               );
             })}

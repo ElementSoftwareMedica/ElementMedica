@@ -23,8 +23,72 @@ import { getMarkerResolver } from './markerResolver.js';
 import pdfService from './pdfService.js';
 import storageService from './storageService.js';
 import { documentQueue } from './queueService.js';
+import SignaturePlaceholderService from './signature/SignaturePlaceholderService.js';
 import logger from '../utils/logger.js';
 import crypto from 'crypto';
+import { readFileSync, existsSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const BACKEND_DIR = join(__dirname, '..');
+
+/**
+ * Converte un path relativo del logo in data-URL base64 per Puppeteer.
+ * @param {string} logoPath
+ * @returns {string}
+ */
+function logoToDataUrl(logoPath) {
+  if (!logoPath) return '';
+  if (logoPath.startsWith('data:')) return logoPath;
+
+  let effectivePath = logoPath;
+  if (logoPath.startsWith('http://') || logoPath.startsWith('https://')) {
+    try {
+      const url = new URL(logoPath);
+      const isLocal = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '0.0.0.0';
+      if (isLocal) {
+        effectivePath = url.pathname;
+      } else {
+        return logoPath;
+      }
+    } catch { return logoPath; }
+  }
+
+  const cleanPath = effectivePath.startsWith('/') ? effectivePath.slice(1) : effectivePath;
+  const PROJECT_ROOT = join(BACKEND_DIR, '..');
+  const tryPaths = [join(BACKEND_DIR, cleanPath), join(BACKEND_DIR, 'public', cleanPath), join(PROJECT_ROOT, 'public', cleanPath), join(PROJECT_ROOT, cleanPath)];
+
+  for (const p of tryPaths) {
+    if (existsSync(p)) {
+      try {
+        const data = readFileSync(p);
+        const ext = p.split('.').pop().toLowerCase();
+        const mime = ext === 'png' ? 'image/png'
+          : (ext === 'jpg' || ext === 'jpeg') ? 'image/jpeg'
+            : ext === 'svg' ? 'image/svg+xml'
+              : 'image/png';
+        return `data:${mime};base64,${data.toString('base64')}`;
+      } catch { break; }
+    }
+  }
+
+  logger.warn('[documentService] Logo file non trovato', { logoPath, tried: tryPaths });
+  return logoPath;
+}
+
+/**
+ * Prova più percorsi logo in ordine, restituendo il primo che risolve a data URL.
+ */
+function resolveFirstValidLogo(...paths) {
+  for (const p of paths) {
+    if (!p) continue;
+    const result = logoToDataUrl(p);
+    if (result.startsWith('data:')) return result;
+  }
+  return '';
+}
 
 const prisma = optimizedPrisma.getClient();
 
@@ -44,6 +108,19 @@ class DocumentGenerationError extends Error {
  * 
  * Servizio principale per la generazione di documenti.
  */
+
+// Helper function to translate deliveryMode enum to Italian
+const deliveryModeTranslations = {
+  'IN_PERSON': 'In Presenza',
+  'ONLINE': 'Online',
+  'HYBRID': 'Mista (Presenza + Online)',
+  'BLENDED': 'Blended'
+};
+
+function translateDeliveryMode(mode) {
+  return deliveryModeTranslations[mode] || mode || '';
+}
+
 class DocumentService {
   constructor() {
     this.markerResolver = getMarkerResolver();
@@ -113,32 +190,12 @@ class DocumentService {
         options  // Passa options per permettere override dei participants
       );
 
-      // 3. Build context per marker resolution
-      const context = this._buildContext(entityData, template, options);
+      // 3. Build context per marker resolution (ora async per caricare tenant settings)
+      const context = await this._buildContext(entityData, template, options, tenantId);
 
       // 4. Valida marker nel template
       logger.debug('Template content length:', templateContent?.length);
-      logger.debug('Options:', JSON.stringify(options));
-
-      // Log context BEFORE marker resolution (critical for debugging)
-      // Using WARN level to ensure visibility in production
-      logger.warn('🔍 Context BEFORE marker resolution', {
-        component: 'documentService',
-        action: 'generateDocument-context',
-        templateType: template.type,
-        contextKeys: Object.keys(context),
-        sessionExists: !!context.session,
-        sessionKeys: context.session ? Object.keys(context.session) : [],
-        trainerExists: !!context.trainer,
-        trainerKeys: context.trainer ? Object.keys(context.trainer) : [],
-        // Critical values
-        'session.participantCompanies': context.session?.participantCompanies,
-        'trainer.totalHours': context.trainer?.totalHours,
-        'trainer.totalCompensation': context.trainer?.totalCompensation,
-        // Lettera incarico
-        'letteraIncarico': context.letteraIncarico,
-        'letteraIncarico.number': context.letteraIncarico?.number
-      });
+      logger.debug('Options length:', Object.keys(options || {}).length);
 
       const validation = this.markerResolver.validateMarkers(templateContent);
       logger.debug('Validation result:', JSON.stringify(validation));
@@ -202,13 +259,6 @@ class DocumentService {
         pdfOptions,
         isSlideEditor: slideEditorResult.isSlideEditor,
         htmlLength: fullHtml?.length
-      });
-
-      // DEBUG: Log HTML being sent to PDF service
-      logger.info('HTML being sent to PDF service', {
-        htmlLength: fullHtml?.length,
-        htmlPreview: fullHtml?.substring(0, 500),
-        htmlEnd: fullHtml?.substring(fullHtml?.length - 200)
       });
 
       const pdfBuffer = await pdfService.generatePDF(fullHtml, pdfOptions);
@@ -422,10 +472,14 @@ class DocumentService {
    * @param {string} batchId - ID del batch
    * @returns {Promise<Object>} - Stato batch
    */
-  async getBatchStatus(batchId) {
+  // F67: tenantId added to enforce tenant isolation on batch queries
+  async getBatchStatus(batchId, tenantId) {
     try {
+      if (!tenantId) {
+        throw new Error('tenantId is required for getBatchStatus');
+      }
       const documents = await prisma.generatedDocument.findMany({
-        where: { batchId },
+        where: { batchId, tenantId, deletedAt: null },
         select: {
           id: true,
           filename: true,
@@ -437,6 +491,8 @@ class DocumentService {
       });
 
       const total = documents.length;
+      // Return null to trigger 404 in route when batch not found for this tenant
+      if (total === 0) return null;
       const completed = documents.filter(d => d.status === 'GENERATED').length;
       const failed = documents.filter(d => d.status === 'DRAFT').length; // DRAFT = fallito
 
@@ -491,8 +547,18 @@ class DocumentService {
           where: { id: entityId, tenantId, deletedAt: null },
           include: {
             course: true,
-            trainer: true
-            // enrollments and sessions can be loaded separately if needed
+            // P48: Include trainer con tenantProfiles per email/phone
+            trainer: {
+              include: {
+                tenantProfiles: {
+                  where: { deletedAt: null, isActive: true },
+                  select: { email: true, phone: true, isPrimary: true }
+                }
+              }
+            },
+            _count: {
+              select: { sessions: true }
+            }
           }
         });
 
@@ -502,16 +568,16 @@ class DocumentService {
 
         data.schedule = {
           id: schedule.id,
-          code: schedule.code || '',
+          code: schedule.course?.code || '',  // FIX: use course.code, not schedule.code
           startDate: schedule.startDate,
           endDate: schedule.endDate,
           location: schedule.location || 'N/A',
           address: '',  // Will be populated from options.markers if provided
           maxParticipants: schedule.maxParticipants || 0,
-          sessionsCount: 0,  // Will be calculated separately if needed
+          sessionsCount: schedule._count?.sessions || 0,
           totalHours: schedule.course?.duration || 0,
           status: schedule.status,
-          deliveryMode: schedule.deliveryMode || ''
+          deliveryMode: translateDeliveryMode(schedule.deliveryMode)
         };
 
         data.course = {
@@ -530,32 +596,35 @@ class DocumentService {
         };
 
         // Trainer principale dal schedule
+        // P48: Extract email/phone from tenantProfiles
         if (schedule.trainer) {
           const trainer = schedule.trainer;
+          const trainerProfile = trainer.tenantProfiles?.find(p => p.isPrimary) || trainer.tenantProfiles?.[0] || {};
           data.trainer = {
             id: trainer.id,
             fullName: `${trainer.firstName} ${trainer.lastName}`,
             firstName: trainer.firstName,
             lastName: trainer.lastName,
-            email: trainer.email,
-            phone: trainer.phone || '',
-            qualifications: trainer.qualifications || '',
-            certifications: trainer.certifications || '',
-            specialties: trainer.specialties || ''
+            email: trainerProfile.email || '',
+            phone: trainerProfile.phone || '',
+            qualifications: (trainerProfile.certifications || []).join(', '),
+            certifications: (trainerProfile.certifications || []).join(', '),
+            specialties: (trainerProfile.specialties || []).join(', ')
           };
         }
 
         // Persona specifica se richiesta
         if (personId && schedule.enrollments?.length > 0) {
           const personData = schedule.enrollments[0].person;
+          const personProfile = personData?.tenantProfiles?.find(p => p.isPrimary) || personData?.tenantProfiles?.[0] || {};
           data.person = {
             id: personData.id,
             fullName: `${personData.firstName} ${personData.lastName}`,
             firstName: personData.firstName,
             lastName: personData.lastName,
-            email: personData.email,
-            cf: personData.cf || '',
-            phone: personData.phone || '',
+            email: personProfile.email || '',
+            cf: personData.taxCode || '',
+            phone: personProfile.phone || '',
             birthDate: personData.birthDate,
             birthPlace: personData.birthPlace || '',
             address: {
@@ -573,15 +642,24 @@ class DocumentService {
 
         // Azienda (se corso aziendale)
         if (schedule.companyId) {
-          const company = await prisma.company.findUnique({
-            where: { id: schedule.companyId }
+          const company = await prisma.company.findFirst({
+            where: { id: schedule.companyId, deletedAt: null },
+            include: {
+              tenantProfiles: {
+                where: { tenantId, deletedAt: null },
+                select: { emailGenerale: true, telefonoGenerale: true },
+                take: 1
+              }
+            }
           });
           if (company) {
+            const companyProfile = company.tenantProfiles?.[0];
             data.company = {
               id: company.id,
               name: company.ragioneSociale || company.name || '',
               vatNumber: company.piva || company.vatNumber || '',
               fiscalCode: company.codiceFiscale || company.fiscalCode || '',
+              codiceAteco: company.codiceAteco || '',
               address: {
                 street: company.sedeAzienda || company.address || '',
                 city: company.citta || company.city || '',
@@ -592,8 +670,8 @@ class DocumentService {
                   ''
               },
               legalRepresentative: company.personaRiferimento || company.legalRepresentative || '',
-              email: company.mail || company.email || '',
-              phone: company.telefono || company.phone || ''
+              email: companyProfile?.emailGenerale || '',
+              phone: companyProfile?.telefonoGenerale || ''
             };
           }
         }
@@ -601,32 +679,46 @@ class DocumentService {
 
       case 'PERSON':
         // Carica persona singola
+        // P48: Include tenantProfiles per email/phone
+        // P63: Person non ha tenantId — filtra via tenantProfiles.some
         const person = await prisma.person.findFirst({
-          where: { id: entityId, tenantId, deletedAt: null }
+          where: { id: entityId, deletedAt: null, tenantProfiles: { some: { tenantId, deletedAt: null } } },
+          include: {
+            tenantProfiles: {
+              where: { tenantId, deletedAt: null, isActive: true },
+              select: { email: true, phone: true, isPrimary: true, residenceAddress: true, residenceCity: true, province: true, postalCode: true }
+            }
+          }
         });
 
         if (!person) {
           throw new DocumentGenerationError('Persona non trovata');
         }
 
+        // P48: Extract email/phone from tenantProfiles
+        const personPrimaryProfile = person.tenantProfiles?.find(p => p.isPrimary) || person.tenantProfiles?.[0] || {};
+        const personEmail = personPrimaryProfile.email || '';
+        const personPhone = personPrimaryProfile.phone || '';
+
         data.person = {
           id: person.id,
           fullName: `${person.firstName} ${person.lastName}`,
           firstName: person.firstName,
           lastName: person.lastName,
-          email: person.email,
-          cf: person.cf || '',
-          phone: person.phone || '',
+          email: personEmail,
+          cf: person.taxCode || '',
+          phone: personPhone,
           birthDate: person.birthDate,
           birthPlace: person.birthPlace || '',
+          title: personPrimaryProfile.title || '',
           address: {
-            street: person.address || '',
-            city: person.city || '',
-            province: person.province || '',
-            postalCode: person.postalCode || '',
-            country: person.country || 'Italia',
-            full: person.address ?
-              `${person.address}, ${person.postalCode} ${person.city} (${person.province})` :
+            street: personPrimaryProfile.residenceAddress || '',
+            city: personPrimaryProfile.residenceCity || '',
+            province: personPrimaryProfile.province || '',
+            postalCode: personPrimaryProfile.postalCode || '',
+            country: 'Italia',
+            full: personPrimaryProfile.residenceAddress ?
+              `${personPrimaryProfile.residenceAddress}, ${personPrimaryProfile.postalCode || ''} ${personPrimaryProfile.residenceCity || ''} (${personPrimaryProfile.province || ''})` :
               ''
           }
         };
@@ -640,26 +732,41 @@ class DocumentService {
 
       case 'session':
         // Carica sessione con schedule, corso, trainer e partecipanti
+        // P49: ScheduleCompany ha companyTenantProfile, non company diretto
+        // FIX: CourseSchedule non ha campi 'code' e 'address' - usa solo campi esistenti
         const sessionData = await prisma.courseSession.findFirst({
           where: { id: entityId, tenantId, deletedAt: null },
           include: {
             schedule: {
-              include: {
+              select: {
+                id: true,
+                tenantId: true,  // P48 FIX: Include tenantId for proper profile filtering
+                startDate: true,
+                endDate: true,
+                location: true,
+                maxParticipants: true,
+                status: true,
+                deliveryMode: true,
                 course: true,
                 companies: {
                   include: {
-                    company: {
+                    companyTenantProfile: {
                       include: {
-                        persons: {
-                          where: { deletedAt: null }
-                        }
+                        company: true
                       }
                     }
                   }
                 }
               }
             },
-            trainer: true,
+            trainer: {
+              include: {
+                tenantProfiles: {
+                  where: { deletedAt: null },
+                  take: 2
+                }
+              }
+            },
             coTrainer: true
           }
         });
@@ -687,14 +794,21 @@ class DocumentService {
         };
 
         // Carica tutte le sessioni dello stesso schedule per tabelle presenze
+        // P48 FIX: Use schedule's tenantId to ensure cross-tenant admin access works
         const allSessions = await prisma.courseSession.findMany({
           where: {
             scheduleId: sessionData.scheduleId,
-            tenantId,
             deletedAt: null
           },
           include: {
-            trainer: true,
+            trainer: {
+              include: {
+                tenantProfiles: {
+                  where: { deletedAt: null },
+                  take: 2
+                }
+              }
+            },
             coTrainer: true
           },
           orderBy: { date: 'asc' }
@@ -703,8 +817,8 @@ class DocumentService {
         data.sessions = allSessions.map(s => ({
           id: s.id,
           date: s.date,
-          startTime: s.startTime,
-          endTime: s.endTime,
+          startTime: s.start,
+          endTime: s.end,
           duration: s.duration,
           topic: s.topic || '',
           trainerName: s.trainer ? `${s.trainer.firstName} ${s.trainer.lastName}` : '',
@@ -718,28 +832,43 @@ class DocumentService {
 
         // CORREZIONE: Raccogli SOLO i partecipanti iscritti tramite CourseEnrollment
         // NON tutti i dipendenti delle aziende
+        // P48 FIX: Use schedule's tenantId to filter tenantProfiles, not the requesting user's tenantId
+        const scheduleTenantId = sessionData.schedule?.tenantId || tenantId;
         const enrollments = await prisma.courseEnrollment.findMany({
           where: {
             scheduleId: sessionData.scheduleId,
-            tenantId,
             deletedAt: null
           },
           include: {
             person: {
               include: {
-                company: true
+                // P48: Person company comes from tenantProfiles - filtered by schedule's tenant
+                tenantProfiles: {
+                  where: { tenantId: scheduleTenantId, deletedAt: null, isActive: true },
+                  include: {
+                    companyTenantProfile: {
+                      include: { company: true }
+                    }
+                  },
+                  take: 1
+                }
               }
             }
           }
         });
 
-        const sessionParticipants = enrollments.map(enrollment => ({
-          id: enrollment.person?.id,
-          lastName: enrollment.person?.lastName || '',
-          firstName: enrollment.person?.firstName || '',
-          cf: enrollment.person?.cf || '',
-          companyName: enrollment.person?.company?.ragioneSociale || enrollment.person?.company?.name || ''
-        })).filter(p => p.id); // Filtra eventuali partecipanti senza id
+        const sessionParticipants = enrollments.map(enrollment => {
+          // P48: Estrai company da tenantProfiles
+          const profile = enrollment.person?.tenantProfiles?.[0];
+          const company = profile?.companyTenantProfile?.company;
+          return {
+            id: enrollment.person?.id,
+            lastName: enrollment.person?.lastName || '',
+            firstName: enrollment.person?.firstName || '',
+            cf: enrollment.person?.taxCode || enrollment.person?.cf || '',
+            companyName: company?.ragioneSociale || ''
+          };
+        }).filter(p => p.id); // Filtra eventuali partecipanti senza id
 
         // IMPORTANTE: Se options.participants è fornito, usa quelli invece dei sessionParticipants
         // Questo permette di avere solo i partecipanti specifici della sessione selezionata
@@ -780,16 +909,16 @@ class DocumentService {
         if (sessionData.schedule) {
           data.schedule = {
             id: sessionData.schedule.id,
-            code: sessionData.schedule.code || '',
+            code: sessionData.schedule.course?.code || '',  // FIX: use course.code
             startDate: sessionData.schedule.startDate,
             endDate: sessionData.schedule.endDate,
             location: sessionData.schedule.location || 'N/A',
-            address: sessionData.schedule.address || '',
+            address: '',  // CourseSchedule doesn't have address field
             maxParticipants: sessionData.schedule.maxParticipants || 0,
             sessionsCount: allSessions.length,
             totalHours: sessionData.schedule.course?.duration || 0,
             status: sessionData.schedule.status,
-            deliveryMode: sessionData.schedule.deliveryMode || ''
+            deliveryMode: translateDeliveryMode(sessionData.schedule.deliveryMode)
           };
         }
 
@@ -813,29 +942,34 @@ class DocumentService {
         }
 
         // Trainer della sessione
+        // P48: Extract fields from tenantProfiles, not directly from Person
         if (sessionData.trainer) {
           const sessionTrainer = sessionData.trainer;
+          const sessionTrainerProfile = sessionTrainer.tenantProfiles?.find(p => p.isPrimary) || sessionTrainer.tenantProfiles?.[0] || {};
           data.trainer = {
             id: sessionTrainer.id,
             fullName: `${sessionTrainer.firstName} ${sessionTrainer.lastName}`,
             firstName: sessionTrainer.firstName,
             lastName: sessionTrainer.lastName,
-            email: sessionTrainer.email || '',
-            phone: sessionTrainer.phone || '',
-            qualifications: sessionTrainer.qualifications || '',
-            certifications: sessionTrainer.certifications || '',
-            specialties: sessionTrainer.specialties || ''
+            email: sessionTrainerProfile.email || '',
+            phone: sessionTrainerProfile.phone || '',
+            qualifications: (sessionTrainerProfile.certifications || []).join(', '),
+            certifications: (sessionTrainerProfile.certifications || []).join(', '),
+            specialties: (sessionTrainerProfile.specialties || []).join(', ')
           };
         }
 
         // Prima azienda come company principale (se presente)
-        const firstCompany = sessionData.schedule?.companies?.[0]?.company;
+        // P49: ScheduleCompany ha companyTenantProfile.company, non company diretto
+        const firstScheduleCompany = sessionData.schedule?.companies?.[0]?.companyTenantProfile;
+        const firstCompany = firstScheduleCompany?.company;
         if (firstCompany) {
           data.company = {
             id: firstCompany.id,
             name: firstCompany.ragioneSociale || firstCompany.name || '',
             vatNumber: firstCompany.piva || firstCompany.vatNumber || '',
             fiscalCode: firstCompany.codiceFiscale || firstCompany.fiscalCode || '',
+            codiceAteco: firstCompany.codiceAteco || '',
             address: {
               street: firstCompany.sedeAzienda || firstCompany.address || '',
               city: firstCompany.citta || firstCompany.city || '',
@@ -846,8 +980,8 @@ class DocumentService {
                 ''
             },
             legalRepresentative: firstCompany.personaRiferimento || firstCompany.legalRepresentative || '',
-            email: firstCompany.mail || firstCompany.email || '',
-            phone: firstCompany.telefono || firstCompany.phone || ''
+            email: firstScheduleCompany?.emailGenerale || '',
+            phone: firstScheduleCompany?.telefonoGenerale || ''
           };
         }
         break;
@@ -880,6 +1014,11 @@ class DocumentService {
       });
 
       if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+        // Documento HTML completo (es. template preventivo) — non riwrappare
+        if (trimmed.startsWith('<!DOCTYPE') || trimmed.toLowerCase().startsWith('<html')) {
+          logger.debug('_convertSlideEditorToHtml: complete HTML document, treating as htmlEditor (no re-wrap)');
+          return { html: content, isSlideEditor: false, isHtmlEditor: true };
+        }
         // Non è JSON, ritorna come HTML
         logger.debug('_convertSlideEditorToHtml: not JSON, treating as HTML');
         return { html: content, isSlideEditor: false, isHtmlEditor: false };
@@ -1053,6 +1192,8 @@ class DocumentService {
         return this._renderLineElement(element, baseStyles);
       case 'qrcode':
         return this._renderQrcodeElement(element, baseStyles);
+      case 'logo':
+        return this._renderLogoElement(element, baseStyles);
       default:
         logger.warn('Unknown slide element type', { type, id });
         return '';
@@ -1107,9 +1248,29 @@ class DocumentService {
     ].filter(Boolean).join('; ');
 
     // Converti URL relativo in assoluto se necessario
-    const imgSrc = src?.startsWith('/') ? `${process.env.APP_URL || 'http://localhost:4001'}${src}` : src;
+    const imgSrc = src?.startsWith('/') ? `${process.env.APP_URL || `http://localhost:${process.env.API_PORT || 4001}`}${src}` : src;
 
     return `<div class="slide-element image" data-id="${id}" style="${imgStyles}"><img src="${imgSrc || ''}" alt="" /></div>`;
+  }
+
+  /**
+   * Renderizza elemento logo (tenant o branch) — usa marker {{tenant.logo}} o {{tenant.branchLogo}}
+   * che verranno risolti dal markerResolver con la data URL base64
+   * @private
+   */
+  _renderLogoElement(element, baseStyles) {
+    const { id, logoType } = element;
+
+    const logoStyles = [
+      ...baseStyles,
+      'overflow: hidden',
+    ].filter(Boolean).join('; ');
+
+    // Usa il marker appropriato: branch → tenant.branchLogo, tenant → tenant.logo
+    const marker = logoType === 'branch' ? '{{tenant.branchLogo}}' : '{{tenant.logo}}';
+    const alt = logoType === 'branch' ? 'Logo Sede' : 'Logo Ente';
+
+    return `<div class="slide-element" data-id="${id}" style="${logoStyles}"><img src="${marker}" alt="${alt}" style="width:100%;height:100%;object-fit:contain;" /></div>`;
   }
 
   /**
@@ -1223,26 +1384,123 @@ class DocumentService {
   }
 
   /**
+   * Inferisci branchType dal tipo di template
+   * Attestati/Certificati → FORMAZIONE (sicurezza)
+   * Giudizi idoneità/Visite mediche → MDL (medicina del lavoro)
+   * Registri/Lettere incarico/Programmi corso → FORMAZIONE
+   * @private
+   */
+  _inferBranchType(template) {
+    if (!template?.type) return null;
+    const typeMap = {
+      CERTIFICATE: 'FORMAZIONE',
+      ATTENDANCE_REGISTER: 'FORMAZIONE',
+      LETTER_OF_ENGAGEMENT: 'FORMAZIONE',
+      COURSE_PROGRAM: 'FORMAZIONE',
+      GIUDIZIO_IDONEITA: 'MDL',
+      VISITA_MEDICA: 'MEDICA',
+    };
+    return typeMap[template.type] || null;
+  }
+
+  /**
    * Build context per marker resolution
    * @private
    */
-  _buildContext(entityData, template, options) {
-    // Se markers sono forniti esplicitamente nelle options, usali direttamente
+  async _buildContext(entityData, template, options, tenantId) {
+    // Inferisci branchType dal tipo di template se non fornito esplicitamente
+    const branchType = options.branchType || this._inferBranchType(template) || null;
+
+    // Se markers sono forniti esplicitamente nelle options, arricchiscili con dati tenant
+    // (branchLogo, logoHtml, logo) che richiedono accesso al filesystem per la conversione base64
     if (options.markers) {
-      logger.debug('Using explicit markers from options');
+      logger.debug('Using explicit markers from options, enriching with tenant logos');
+
+      // Carica tenant settings per loghi e logoHtml
+      const effectiveTenantId = tenantId || template.tenantId;
+      const tenantData = await prisma.tenant.findFirst({
+        where: { id: effectiveTenantId, deletedAt: null },
+        select: { name: true, settings: true }
+      });
+      const tenantSettings = tenantData?.settings || {};
+
+      // Branch logo: branchType da options, inferito dal template, o chain di fallback
+      const branchLogoRaw = branchType
+        ? (tenantSettings.branches?.[branchType]?.logo || '')
+        : (tenantSettings.branches?.MEDICA?.logo || tenantSettings.branches?.FORMAZIONE?.logo || tenantSettings.branches?.MDL?.logo || '');
+
+      // Arricchisci tenant con loghi base64
+      const existingTenant = options.markers.tenant || {};
+      const embeddedLogoUrl = resolveFirstValidLogo(existingTenant.logoUrl, tenantSettings.branches?.MEDICA?.logo, tenantSettings.branches?.FORMAZIONE?.logo, tenantSettings.logoUrl);
+      const resolvedLogoUrl = existingTenant.logoUrl || tenantSettings.branches?.MEDICA?.logo || tenantSettings.branches?.FORMAZIONE?.logo || tenantSettings.logoUrl || '';
+      const tenantName = existingTenant.name || tenantData?.name || 'Element srl';
+
+      const branchLogoDataUrl = resolveFirstValidLogo(branchLogoRaw, tenantSettings.branches?.MEDICA?.logo, tenantSettings.branches?.FORMAZIONE?.logo, tenantSettings.logoUrl);
+
+      options.markers.tenant = {
+        ...existingTenant,
+        branchLogo: branchLogoDataUrl || '',
+        branchLogoHtml: branchLogoDataUrl
+          ? `<img src="${branchLogoDataUrl}" alt="Logo Branch" style="max-height:80px;max-width:220px;object-fit:contain;">`
+          : '',
+        logo: embeddedLogoUrl || '',
+        logoUrl: resolvedLogoUrl,
+        logoHtml: embeddedLogoUrl
+          ? `<img src="${embeddedLogoUrl}" alt="${tenantName}" style="max-height:80px;max-width:220px;object-fit:contain;">`
+          : `<span style="font-size: 14pt; font-weight: 700; color: #1e40af;">${tenantName}</span>`,
+      };
+
       return options.markers;
     }
 
-    // Altrimenti costruisci context standard
+    // Carica tenant con settings dal database se non passati nelle options
+    let tenantData = null;
+    let tenantSettings = {};
+
+    if (!options.tenantName) {
+      // Carica tenant dal database
+      tenantData = await prisma.tenant.findFirst({
+        where: { id: tenantId || template.tenantId, deletedAt: null }
+      });
+      tenantSettings = tenantData?.settings || {};
+    }
+
+    // Costruisci context tenant
+    // Priorità: options esplicite > tenant.settings > default vuoto
+    // Branch logo: usa branchType derivato (options > template type inference > fallback)
+    const branchLogoRaw = branchType
+      ? (tenantSettings.branches?.[branchType]?.logo || '')
+      : (tenantSettings.branches?.MEDICA?.logo || tenantSettings.branches?.FORMAZIONE?.logo || tenantSettings.branches?.MDL?.logo || '');
+
+    const branchLogoDataUrl = resolveFirstValidLogo(branchLogoRaw, tenantSettings.branches?.MEDICA?.logo, tenantSettings.branches?.FORMAZIONE?.logo, tenantSettings.logoUrl);
+
     const tenant = {
-      id: template.tenantId,
-      name: options.tenantName || 'Element Medica Training',
-      logo: options.tenantLogo || '/assets/logo.png',
-      address: options.tenantAddress || '',
-      phone: options.tenantPhone || '',
-      email: options.tenantEmail || '',
-      website: options.tenantWebsite || ''
+      id: tenantId || template.tenantId,
+      name: options.tenantName || tenantData?.name || 'Element srl',
+      logo: resolveFirstValidLogo(options.tenantLogo, tenantSettings.branches?.MEDICA?.logo, tenantSettings.branches?.FORMAZIONE?.logo, tenantSettings.logoUrl),
+      logoUrl: options.tenantLogo || tenantSettings.branches?.MEDICA?.logo || tenantSettings.branches?.FORMAZIONE?.logo || tenantSettings.logoUrl || '',
+      branchLogo: branchLogoDataUrl || '',
+      branchLogoHtml: branchLogoDataUrl
+        ? `<img src="${branchLogoDataUrl}" alt="Logo Branch" style="max-height:80px;max-width:220px;object-fit:contain;">`
+        : '',
+      address: options.tenantAddress || tenantSettings.address || '',
+      cap: tenantSettings.cap || '',
+      city: tenantSettings.city || '',
+      provincia: tenantSettings.provincia || '',
+      vatNumber: tenantSettings.vatNumber || '',
+      fiscalCode: tenantSettings.fiscalCode || '',
+      phone: options.tenantPhone || tenantSettings.phone || '',
+      email: options.tenantEmail || tenantSettings.email || '',
+      pec: tenantSettings.pec || '',
+      website: options.tenantWebsite || tenantSettings.website || '',
     };
+    // Logo HTML: converte in data-URL base64 per garantire visibilità in Puppeteer
+    const resolvedLogoUrl = tenant.logoUrl;
+    const resolvedTenantName = tenant.name;
+    const embeddedLogoUrl = tenant.logo || logoToDataUrl(resolvedLogoUrl);
+    tenant.logoHtml = embeddedLogoUrl
+      ? `<img src="${embeddedLogoUrl}" alt="${resolvedTenantName}" style="max-height:80px;max-width:220px;object-fit:contain;">`
+      : `<span style="font-size: 14pt; font-weight: 700; color: #1e40af;">${resolvedTenantName}</span>`;
 
     // Merge tutto nel context
     // NOTA IMPORTANTE: pageNumber e totalPages NON vanno nel context!
@@ -1336,6 +1594,30 @@ class DocumentService {
         expenses: trainerOverride.expenses,
         totalCompensation: trainerOverride.totalCompensation
       });
+    }
+
+    // P65: Enrich context with signature data based on document source
+    // This populates firma placeholders (medico.firma, paziente.firma, etc.)
+    if (options.customData?.documentoCompilato) {
+      SignaturePlaceholderService.enrichContextFromDocumentoCompilato({
+        context,
+        documento: options.customData.documentoCompilato
+      });
+      logger.debug('P65: Context enriched with DocumentoCompilato signatures');
+    }
+    if (options.customData?.attestato) {
+      SignaturePlaceholderService.enrichContextFromAttestato({
+        context,
+        attestato: options.customData.attestato
+      });
+      logger.debug('P65: Context enriched with Attestato signatures');
+    }
+    if (options.customData?.letteraIncarico) {
+      SignaturePlaceholderService.enrichContextFromLetteraIncarico({
+        context,
+        lettera: options.customData.letteraIncarico
+      });
+      logger.debug('P65: Context enriched with LetteraIncarico signatures');
     }
 
     // Final context debug log - using WARN to see in production
@@ -1586,8 +1868,13 @@ class DocumentService {
       ''
     );
 
-    // 2. Converti immagini con path relativi in URL assoluti
-    const baseUrl = options.baseUrl || process.env.FRONTEND_URL || 'http://localhost:5173';
+    // 2a. Converti immagini locali (/assets/logos/...) in data URI PRIMA della conversione URL
+    // Puppeteer non può accedere a /assets/ via HTTP (non servito da Express)
+    processedHtml = await this._convertImagesToDataUri(processedHtml);
+
+    // 2b. Converti immagini rimanenti con path relativi in URL assoluti
+    // Le immagini (uploads) sono servite dall'API server
+    const baseUrl = options.baseUrl || process.env.APP_URL || `http://localhost:${process.env.API_PORT || 4001}`;
 
     processedHtml = processedHtml.replace(
       /src="\/([^"]+)"/g,
@@ -1613,20 +1900,6 @@ class DocumentService {
     const hasDataPageBreak = processedHtml.includes('data-page-break');
     const hasPageBreakClass = processedHtml.includes('page-break');
     const hasInterruzioneText = processedHtml.includes('INTERRUZIONE');
-
-    logger.info('🔍 PAGE BREAK DEBUG - Before processing', {
-      hasDataPageBreak,
-      hasPageBreakClass,
-      hasInterruzioneText,
-      htmlLength: processedHtml.length
-    });
-
-    // Log del contenuto intorno a INTERRUZIONE se presente
-    if (hasInterruzioneText) {
-      const idx = processedHtml.indexOf('INTERRUZIONE');
-      const snippet = processedHtml.substring(Math.max(0, idx - 100), Math.min(processedHtml.length, idx + 100));
-      logger.info('🔍 PAGE BREAK DEBUG - Content around INTERRUZIONE:', { snippet });
-    }
 
     // Pattern 1: div con data-page-break attribute (nuovo formato) - cattura TUTTO il contenuto interno
     // Usa pattern non-greedy più ampio per catturare div nested
@@ -1701,17 +1974,6 @@ class DocumentService {
       ''
     );
 
-    // Log finale per debug
-    const pageBreakCount = (processedHtml.match(/page-break-after/gi) || []).length;
-    const hasPageBreakInline = processedHtml.includes('page-break-after: always');
-
-    logger.info('🔍 PAGE BREAK DEBUG - After processing', {
-      pageBreakCount,
-      hasPageBreakInline,
-      stillHasInterruzioneText: processedHtml.includes('INTERRUZIONE'),
-      htmlLength: processedHtml.length
-    });
-
     return processedHtml;
   }
 
@@ -1723,7 +1985,7 @@ class DocumentService {
    */
   async _buildPdfOptions(template, context = {}, options = {}) {
     const layout = template.layout || {};
-    const baseUrl = options.baseUrl || process.env.BACKEND_URL || 'http://localhost:4001';
+    const baseUrl = options.baseUrl || process.env.APP_URL || `http://localhost:${process.env.API_PORT || 4001}`;
 
     // Costruisci header template per Puppeteer
     let headerTemplate = '<span></span>'; // Default vuoto
@@ -1981,6 +2243,13 @@ class DocumentService {
             const url = new URL(imgSrc);
             const localPath = url.pathname;
 
+            // F176: SSRF protection — block requests to internal/private networks
+            const blockedHosts = /^(localhost|127\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|::1|0\.0\.0\.0)/i;
+            if (blockedHosts.test(url.hostname)) {
+              logger.warn('SSRF blocked: image URL points to internal network', { url: imgSrc });
+              continue;
+            }
+
             // Prova prima a leggere dal filesystem locale
             const possiblePaths = [
               path.join(process.cwd(), localPath),
@@ -2013,9 +2282,12 @@ class DocumentService {
         // Se è path relativo/assoluto, leggi dal filesystem
         else {
           const relativePath = imgSrc.startsWith('/') ? imgSrc.slice(1) : imgSrc;
+          const projectRoot = path.join(process.cwd(), '..');
           const possiblePaths = [
             path.join(process.cwd(), relativePath),
             path.join(process.cwd(), 'uploads', relativePath),
+            path.join(projectRoot, 'public', relativePath),
+            path.join(projectRoot, relativePath),
             path.join(process.cwd(), imgSrc),
           ];
 
@@ -2201,7 +2473,7 @@ class DocumentService {
 
           if (existingLettera) {
             await prisma.letteraIncarico.update({
-              where: { id: existingLettera.id },
+              where: { id: existingLettera.id, deletedAt: null },
               data: {
                 templateId: template.id,
                 templateVersion: template.version,
@@ -2225,7 +2497,7 @@ class DocumentService {
 
           if (existingRegistro) {
             await prisma.registroPresenze.update({
-              where: { id: existingRegistro.id },
+              where: { id: existingRegistro.id, deletedAt: null },
               data: {
                 templateId: template.id,
                 templateVersion: template.version,
@@ -2265,7 +2537,7 @@ class DocumentService {
 
     // Soft delete
     await prisma.generatedDocument.update({
-      where: { id: documentId },
+      where: { id: documentId, deletedAt: null },
       data: { deletedAt: new Date() }
     });
 

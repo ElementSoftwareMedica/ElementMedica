@@ -17,6 +17,7 @@ import authMiddleware from '../middleware/auth.js';
 import { requirePermissions } from '../middleware/rbac.js';
 import { auditLog } from '../middleware/audit.js';
 import logger from '../utils/logger.js';
+import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 
 const { authenticate } = authMiddleware;
 const router = express.Router();
@@ -60,7 +61,7 @@ router.get('/',
   validate,
   async (req, res) => {
     try {
-      const { tenantId } = req.person;
+      const tenantId = getEffectiveTenantId(req);
       const page = req.query.page || 1;
       const limit = req.query.limit || 20;
       const skip = (page - 1) * limit;
@@ -134,10 +135,15 @@ router.get('/',
           include: {
             aziende: {
               include: {
-                azienda: {
+                companyTenantProfile: {
                   select: {
                     id: true,
-                    ragioneSociale: true
+                    company: {
+                      select: {
+                        id: true,
+                        ragioneSociale: true
+                      }
+                    }
                   }
                 }
               }
@@ -148,8 +154,7 @@ router.get('/',
                   select: {
                     id: true,
                     firstName: true,
-                    lastName: true,
-                    email: true
+                    lastName: true
                   }
                 }
               }
@@ -210,7 +215,7 @@ router.get('/',
       logger.error('Failed to list codici sconto', {
         component: 'codici-sconto-routes',
         action: 'list',
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack
       });
       res.status(500).json({
@@ -233,7 +238,7 @@ router.get('/:id',
   validate,
   async (req, res) => {
     try {
-      const { tenantId } = req.person;
+      const tenantId = getEffectiveTenantId(req);
       const { id } = req.params;
 
       const codice = await prisma.codiceSconto.findFirst({
@@ -244,7 +249,7 @@ router.get('/:id',
         },
         include: {
           aziende: {
-            include: { azienda: true }
+            include: { companyTenantProfile: { include: { company: true } } }
           },
           persone: {
             include: { persona: true }
@@ -302,7 +307,7 @@ router.get('/:id',
         component: 'codici-sconto-routes',
         action: 'get',
         codiceId: req.params.id,
-        error: error.message
+        error: 'Operazione non riuscita'
       });
       res.status(500).json({
         success: false,
@@ -330,7 +335,7 @@ router.post('/',
     body('tipoSconto').isIn(['PERCENTUALE', 'VALORE_ASSOLUTO']),
     body('valore').isFloat({ min: 0 }),
     body('dataInizio').isISO8601().toDate(),
-    body('dataFine').isISO8601().toDate(),
+    body('dataFine').optional({ nullable: true }).isISO8601().toDate(),
     body('attivo').isBoolean(),
     body('utilizzoMassimo').optional({ nullable: true }).isInt({ min: 1 }).toInt(),
     body('utilizzoPerUtente').optional({ nullable: true }).isInt({ min: 1 }).toInt(),
@@ -362,7 +367,8 @@ router.post('/',
   validate,
   async (req, res) => {
     try {
-      const { tenantId, id: userId } = req.person;
+      const tenantId = getEffectiveTenantId(req);
+      const userId = req.person.id;
 
       // Validazioni custom
       if (req.body.tipoSconto === 'PERCENTUALE' && req.body.valore > 100) {
@@ -372,7 +378,7 @@ router.post('/',
         });
       }
 
-      if (req.body.dataFine < req.body.dataInizio) {
+      if (req.body.dataFine && req.body.dataFine < req.body.dataInizio) {
         return res.status(400).json({
           success: false,
           error: 'La data fine deve essere successiva alla data inizio'
@@ -442,7 +448,7 @@ router.post('/',
           ...(req.body.aziende?.length > 0 && {
             aziende: {
               create: req.body.aziende.map(aziendaId => ({
-                aziendaId,
+                companyTenantProfileId: aziendaId,
                 tenantId
               }))
             }
@@ -465,7 +471,7 @@ router.post('/',
           })
         },
         include: {
-          aziende: { include: { azienda: true } },
+          aziende: { include: { companyTenantProfile: { include: { company: true } } } },
           persone: { include: { persona: true } },
           corsi: { include: { corso: true } }
         }
@@ -490,7 +496,7 @@ router.post('/',
       logger.error('Failed to create codice sconto', {
         component: 'codici-sconto-routes',
         action: 'create',
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack
       });
       res.status(500).json({
@@ -568,7 +574,8 @@ router.put('/:id',
   validate,
   async (req, res) => {
     try {
-      const { tenantId, id: userId } = req.person;
+      const tenantId = getEffectiveTenantId(req);
+      const userId = req.person.id;
       const { id } = req.params;
 
       // Verifica esistenza
@@ -673,7 +680,7 @@ router.put('/:id',
             await tx.codiceAzienda.createMany({
               data: req.body.aziende.map(aziendaId => ({
                 codiceId: id,
-                aziendaId,
+                companyTenantProfileId: aziendaId,
                 tenantId
               }))
             });
@@ -710,7 +717,7 @@ router.put('/:id',
         return tx.codiceSconto.findUnique({
           where: { id },
           include: {
-            aziende: { include: { azienda: true } },
+            aziende: { include: { companyTenantProfile: { include: { company: true } } } },
             persone: { include: { persona: true } },
             corsi: { include: { corso: true } }
           }
@@ -737,7 +744,7 @@ router.put('/:id',
         component: 'codici-sconto-routes',
         action: 'update',
         codiceId: req.params.id,
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack
       });
       res.status(500).json({
@@ -761,7 +768,8 @@ router.delete('/:id',
   validate,
   async (req, res) => {
     try {
-      const { tenantId, id: userId } = req.person;
+      const tenantId = getEffectiveTenantId(req);
+      const userId = req.person.id;
       const { id } = req.params;
 
       // Verifica esistenza
@@ -826,7 +834,7 @@ router.delete('/:id',
         component: 'codici-sconto-routes',
         action: 'delete',
         codiceId: req.params.id,
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack
       });
       res.status(500).json({
@@ -857,7 +865,7 @@ router.post('/valida-preview',
   validate,
   async (req, res) => {
     try {
-      const { tenantId } = req.person;
+      const tenantId = getEffectiveTenantId(req);
       const { codice: codiceTesto, importo, tipoServizio = 'ALTRO' } = req.body;
 
       // Trova codice
@@ -956,7 +964,7 @@ router.post('/valida-preview',
       logger.error('Failed to validate codice sconto preview', {
         component: 'codici-sconto-routes',
         action: 'valida-preview',
-        error: error.message
+        error: 'Operazione non riuscita'
       });
       return res.status(500).json({
         valido: false,
@@ -991,7 +999,8 @@ router.post('/valida',
   validate,
   async (req, res) => {
     try {
-      const { tenantId, id: userId } = req.person;
+      const tenantId = getEffectiveTenantId(req);
+      const userId = req.person.id;
       const { codice: codiceTesto, prezzoBase, tipoServizio, clienteId, clienteType, corsoId } = req.body;
 
       // Trova codice
@@ -1045,7 +1054,7 @@ router.post('/valida',
             codiceId: codice.id,
             preventivo: {
               OR: [
-                { aziendaId: clienteType === 'azienda' ? clienteId : undefined },
+                { companyTenantProfileId: clienteType === 'azienda' ? clienteId : undefined },
                 { personaId: clienteType === 'persona' ? clienteId : undefined }
               ],
               deletedAt: null
@@ -1088,7 +1097,7 @@ router.post('/valida',
           break;
         case 'SPECIFICI':
           const isClienteSpecifico = clienteType === 'azienda'
-            ? codice.aziende.some(a => a.aziendaId === clienteId)
+            ? codice.aziende.some(a => a.companyTenantProfileId === clienteId)
             : codice.persone.some(p => p.personaId === clienteId);
 
           if (!isClienteSpecifico) {
@@ -1156,7 +1165,7 @@ router.post('/valida',
       logger.error('Failed to validate codice sconto', {
         component: 'codici-sconto-routes',
         action: 'valida',
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack
       });
       res.status(500).json({

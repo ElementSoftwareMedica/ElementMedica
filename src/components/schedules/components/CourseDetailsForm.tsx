@@ -137,12 +137,10 @@ export const CourseDetailsForm: React.FC<CourseDetailsFormProps> = ({
           const res = await apiGet(`/api/v1/courses/variants?search=${encodeURIComponent(q)}`);
           return extractCourses(res);
         } catch (e) {
-          console.warn('Variants search failed, falling back to public search:', e);
           try {
             const pubRes = await apiGet(`/api/public/courses?search=${encodeURIComponent(q)}&limit=50`);
             return extractCourses(pubRes);
           } catch (pubErr) {
-            console.warn('Public courses search failed:', pubErr);
             return [] as Training[];
           }
         }
@@ -153,7 +151,6 @@ export const CourseDetailsForm: React.FC<CourseDetailsFormProps> = ({
         // ✅ PRIORITY 1: Usa trainings props se disponibili (evita richieste duplicate)
         if (trainings && trainings.length > 0) {
           if (process.env.NODE_ENV === 'development') {
-            console.debug('[CourseDetailsForm] Using trainings from props:', trainings.length);
           }
           const map = new Map<string, Training>();
           const pushUnique = (arr: Training[]) => {
@@ -171,7 +168,6 @@ export const CourseDetailsForm: React.FC<CourseDetailsFormProps> = ({
         } else {
           // ✅ FALLBACK: Solo se trainings props è vuoto, allora ricarica
           if (process.env.NODE_ENV === 'development') {
-            console.debug('[CourseDetailsForm] No trainings props, loading from server...');
           }
           try {
             const { getCourses } = await import('../../../services/courses');
@@ -189,13 +185,11 @@ export const CourseDetailsForm: React.FC<CourseDetailsFormProps> = ({
               items = Array.from(map.values()).slice(0, 500);
             }
           } catch (serverError) {
-            console.warn('[CourseDetailsForm] Failed to load courses from server:', serverError);
             // Ultimo fallback: corsi pubblici
             try {
               const pubRes = await apiGet(`/api/public/courses?limit=100`);
               items = extractCourses(pubRes);
             } catch (apiError) {
-              console.warn('[CourseDetailsForm] Public courses also failed:', apiError);
               items = [];
             }
           }
@@ -227,10 +221,7 @@ export const CourseDetailsForm: React.FC<CourseDetailsFormProps> = ({
         }
       });
       return Array.from(groupedByTitle.values()).sort((a, b) => a.label.localeCompare(b.label));
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      console.warn('Errore durante la ricerca corsi:', errorMessage);
-
+    } catch {
       // Fallback migliorato: usa sempre i trainings passati come props
       if (trainings && trainings.length > 0) {
         const groupedByTitle = new Map<string, { value: string; label: string }>();
@@ -275,25 +266,6 @@ export const CourseDetailsForm: React.FC<CourseDetailsFormProps> = ({
   // Log di diagnostica leggero per le pillole (solo in sviluppo)
   useEffect(() => {
     if (typeof window !== 'undefined' && (import.meta?.env?.MODE === 'development')) {
-      console.debug('[CourseDetailsForm] Pillole', {
-        selectedCourse: selectedCourse ? (selectedCourse.title || selectedCourse.name) : null,
-        variantsCount: typeof variantsCount === 'number' ? variantsCount : null,
-        risk: {
-          disabled: riskDisabled,
-          selected: riskValue,
-          options: (RISK_LEVEL_OPTIONS || []).map(o => o.value),
-        },
-        type: {
-          disabled: typeDisabled,
-          selected: courseTypeValue,
-          options: (COURSE_TYPE_OPTIONS || []).map(o => o.value),
-        },
-        pillsVisibility: {
-          multipleVariants,
-          showRiskNonApplicable,
-          showTypeNonApplicable,
-        }
-      });
     }
   }, [
     selectedCourse,
@@ -311,7 +283,7 @@ export const CourseDetailsForm: React.FC<CourseDetailsFormProps> = ({
 
   return (
     <div className="space-y-6">
-      <h3 className="font-semibold text-gray-700">Dettagli del Corso</h3>
+      <h3 className="font-semibold text-gray-700 dark:text-gray-300">Dettagli del Corso</h3>
 
       {/* Course Selection - unique options by macro-corso */}
       <div className="mb-6">
@@ -393,7 +365,7 @@ export const CourseDetailsForm: React.FC<CourseDetailsFormProps> = ({
           <div>
             <Label>{`Livello di Rischio${hasRiskOptions ? ' *' : ''}`}</Label>
             {showRiskNonApplicable ? (
-              <div className="text-sm text-gray-500 py-2">Non applicabile per questo corso</div>
+              <div className="text-sm text-gray-500 dark:text-gray-400 py-2">Non applicabile per questo corso</div>
             ) : (
               hasRiskOptions ? <SelectionPills actions={riskActions} className="mt-1" /> : null
             )}
@@ -402,7 +374,7 @@ export const CourseDetailsForm: React.FC<CourseDetailsFormProps> = ({
           <div>
             <Label>{`Tipo Corso${hasTypeOptions ? ' *' : ''}`}</Label>
             {showTypeNonApplicable ? (
-              <div className="text-sm text-gray-500 py-2">Non applicabile per questo corso</div>
+              <div className="text-sm text-gray-500 dark:text-gray-400 py-2">Non applicabile per questo corso</div>
             ) : (
               hasTypeOptions ? <SelectionPills actions={typeActions} className="mt-1" /> : null
             )}
@@ -435,26 +407,26 @@ export const CourseDetailsForm: React.FC<CourseDetailsFormProps> = ({
         </div>
 
         {/* Public Calendar Toggle - Integrated with layout */}
-        <div className="flex items-center gap-3 p-4 bg-gradient-to-r from-indigo-50 to-blue-50 rounded-lg border border-indigo-200 shadow-sm">
+        <div className="flex items-center gap-3 p-4 bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-900/30 dark:to-blue-900/30 rounded-lg border border-indigo-200 dark:border-indigo-700 shadow-sm">
           <div className="flex-shrink-0">
             <input
               type="checkbox"
               id="isPublic"
               checked={formData.isPublic || false}
               onChange={(e) => onFormDataChange('isPublic', e.target.checked)}
-              className="w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 cursor-pointer"
+              className="w-5 h-5 text-indigo-600 border-gray-300 dark:border-gray-600 rounded focus:ring-indigo-500 cursor-pointer dark:bg-gray-700"
             />
           </div>
           <label htmlFor="isPublic" className="flex-1 cursor-pointer">
             <div className="flex items-center gap-2">
-              <span className="font-medium text-gray-900">🌐 Visibile nel Calendario Pubblico</span>
+              <span className="font-medium text-gray-900 dark:text-gray-100">🌐 Visibile nel Calendario Pubblico</span>
               {formData.isPublic && (
-                <span className="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded-full font-medium">
+                <span className="px-2 py-0.5 text-xs bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-400 rounded-full font-medium">
                   Attivo
                 </span>
               )}
             </div>
-            <span className="text-sm text-gray-500 mt-0.5 block">
+            <span className="text-sm text-gray-500 dark:text-gray-400 mt-0.5 block">
               Rendi questo corso visibile nel calendario pubblico del sito web
             </span>
           </label>

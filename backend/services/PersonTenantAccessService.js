@@ -22,7 +22,7 @@ const GLOBAL_ACCESS_ROLES = ['SUPER_ADMIN', 'ADMIN'];
  * Features disponibili nel sistema
  */
 export const AVAILABLE_FEATURES = [
-    'formazione',      // Element Formazione - corsi, attestati
+    'formazione',      // Element Sicurezza - corsi, attestati
     'medica',          // Element Medica - visite, poliambulatori
     'fatturazione',    // Sistema fatturazione
     'cms',             // Gestione contenuti
@@ -36,17 +36,17 @@ export const AVAILABLE_FEATURES = [
  * Preset di features per i diversi tipi di tenant/brand
  */
 export const FEATURE_PRESETS = {
-    // Element Formazione - Solo funzionalità formazione
+    // Element Sicurezza - Solo funzionalità formazione
     FORMAZIONE: {
         id: 'formazione',
-        name: 'Element Formazione',
+        name: 'Element Sicurezza',
         description: 'Solo funzionalità per la gestione della formazione',
         features: ['formazione', 'cms', 'gdpr', 'documents', 'reports'],
     },
     // Element Medica - Solo funzionalità mediche/cliniche
     MEDICA: {
         id: 'medica',
-        name: 'Element Medica',
+        name: 'Element srl',
         description: 'Solo funzionalità per poliambulatori e visite mediche',
         features: ['medica', 'cms', 'gdpr', 'documents', 'reports'],
     },
@@ -66,10 +66,119 @@ export const FEATURE_PRESETS = {
     },
 };
 
+const BILLING_FEATURES = [
+    'billing',
+    'fatturazione',
+    'FATTURAZIONE_ELETTRONICA',
+    'FATTURAZIONE_PA',
+    'FATTURAZIONE_SPLIT_PAYMENT'
+];
+
+const MEDICA_FEATURES = [
+    'medica',
+    'BRANCH_MEDICA',
+    'MDL_BASE',
+    'MDL_SORVEGLIANZA',
+    'MDL_ALLEGATO_3B',
+    'MDL_PROTOCOLLI'
+];
+
+const FORMAZIONE_FEATURES = [
+    'formazione',
+    'BRANCH_FORMAZIONE'
+];
+
+function parseTenantSettings(settings) {
+    if (!settings) {
+        return {};
+    }
+
+    try {
+        return typeof settings === 'string' ? JSON.parse(settings) : settings;
+    } catch {
+        return {};
+    }
+}
+
+function normalizeFeatureSet(features = []) {
+    const featureSet = new Set((features || []).filter(Boolean));
+
+    if (BILLING_FEATURES.some(feature => featureSet.has(feature))) {
+        BILLING_FEATURES.forEach(feature => featureSet.add(feature));
+    }
+
+    if (MEDICA_FEATURES.some(feature => featureSet.has(feature))) {
+        MEDICA_FEATURES.forEach(feature => featureSet.add(feature));
+    }
+
+    if (FORMAZIONE_FEATURES.some(feature => featureSet.has(feature))) {
+        FORMAZIONE_FEATURES.forEach(feature => featureSet.add(feature));
+    }
+
+    return Array.from(featureSet);
+}
+
+function getTenantLegacyFeatures(tenant) {
+    const settings = parseTenantSettings(tenant?.settings);
+    return Array.isArray(settings.enabledFeatures) ? settings.enabledFeatures.filter(Boolean) : [];
+}
+
+function buildTenantCommercialFeatures(tenant, rawTenantFeatures = []) {
+    return normalizeFeatureSet([
+        ...getTenantLegacyFeatures(tenant),
+        ...rawTenantFeatures
+    ]);
+}
+
+function intersectFeatures(tenantFeatures = [], allowedFeatures = []) {
+    const normalizedTenantFeatures = normalizeFeatureSet(tenantFeatures);
+
+    if (!allowedFeatures || allowedFeatures.length === 0) {
+        return normalizedTenantFeatures;
+    }
+
+    const normalizedAllowedFeatures = new Set(normalizeFeatureSet(allowedFeatures));
+    return normalizedTenantFeatures.filter(feature => normalizedAllowedFeatures.has(feature));
+}
+
 /**
  * PersonTenantAccessService
  */
 class PersonTenantAccessService {
+
+    async getTenantFeatureMap(tenantIds = []) {
+        const normalizedTenantIds = Array.from(new Set((tenantIds || []).filter(Boolean)));
+
+        if (normalizedTenantIds.length === 0) {
+            return new Map();
+        }
+
+        const tenantFeatures = await prisma.tenantFeature.findMany({
+            where: {
+                tenantId: { in: normalizedTenantIds },
+                isEnabled: true,
+                deletedAt: null,
+                OR: [
+                    { validUntil: null },
+                    { validUntil: { gte: new Date() } }
+                ]
+            },
+            select: {
+                tenantId: true,
+                featureKey: true
+            }
+        });
+
+        const featureMap = new Map();
+
+        tenantFeatures.forEach(({ tenantId, featureKey }) => {
+            const tenantFeatureList = featureMap.get(tenantId) || [];
+            tenantFeatureList.push(featureKey);
+            featureMap.set(tenantId, tenantFeatureList);
+        });
+
+        return featureMap;
+    }
 
     /**
      * Ottiene tutti i tenant accessibili da un utente
@@ -96,55 +205,133 @@ class PersonTenantAccessService {
                     orderBy: { name: 'asc' }
                 });
 
+                const featureMap = await this.getTenantFeatureMap(allTenants.map(tenant => tenant.id));
+
                 // Restituisci con accesso FULL per gli admin
                 return allTenants.map(tenant => ({
                     ...tenant,
                     accessLevel: 'FULL',
-                    enabledFeatures: AVAILABLE_FEATURES,
+                    enabledFeatures: buildTenantCommercialFeatures(tenant, featureMap.get(tenant.id) || []),
                     isPrimary: false,
                     isAdminAccess: true, // Flag per indicare accesso admin
                 }));
             }
 
-            // Per utenti normali, usa PersonTenantAccess
-            const accesses = await prisma.personTenantAccess.findMany({
-                where: {
-                    personId,
-                    isActive: true,
-                    deletedAt: null,
-                    OR: [
-                        { validUntil: null },
-                        { validUntil: { gt: new Date() } }
-                    ]
-                },
-                include: {
-                    tenant: {
-                        select: {
-                            id: true,
-                            name: true,
-                            slug: true,
-                            domain: true,
-                            billingPlan: true,
-                            settings: true,
-                            isActive: true,
+            // Per utenti normali, cerca in PersonTenantAccess E PersonTenantProfile (P48)
+            const [accesses, profiles] = await Promise.all([
+                // PersonTenantAccess - accessi cross-tenant espliciti
+                prisma.personTenantAccess.findMany({
+                    where: {
+                        personId,
+                        isActive: true,
+                        deletedAt: null,
+                        OR: [
+                            { validUntil: null },
+                            { validUntil: { gt: new Date() } }
+                        ]
+                    },
+                    include: {
+                        tenant: {
+                            select: {
+                                id: true,
+                                name: true,
+                                slug: true,
+                                domain: true,
+                                billingPlan: true,
+                                settings: true,
+                                isActive: true,
+                            }
                         }
-                    }
-                },
-                orderBy: [
-                    { isPrimary: 'desc' },
-                    { tenant: { name: 'asc' } }
-                ]
-            });
+                    },
+                    orderBy: [
+                        { isPrimary: 'desc' },
+                        { tenant: { name: 'asc' } }
+                    ]
+                }),
+                // P48: PersonTenantProfile - tenant di appartenenza dell'utente
+                prisma.personTenantProfile.findMany({
+                    where: {
+                        personId,
+                        isActive: true,
+                        deletedAt: null
+                    },
+                    include: {
+                        tenant: {
+                            select: {
+                                id: true,
+                                name: true,
+                                slug: true,
+                                domain: true,
+                                billingPlan: true,
+                                settings: true,
+                                isActive: true,
+                            }
+                        }
+                    },
+                    orderBy: [
+                        { isPrimary: 'desc' }
+                    ]
+                })
+            ]);
 
-            return accesses.map(access => ({
-                ...access.tenant,
-                accessLevel: access.accessLevel,
-                enabledFeatures: access.enabledFeatures,
-                isPrimary: access.isPrimary,
-                defaultRoleType: access.defaultRoleType,
-                validUntil: access.validUntil,
-                isAdminAccess: false,
-            }));
+            // Combina i risultati, evitando duplicati (tenantId già presente)
+            const tenantMap = new Map();
+
+            // Prima aggiungi i tenant da PersonTenantProfile (tenant primario dell'utente)
+            for (const profile of profiles) {
+                if (profile.tenant && profile.tenant.isActive) {
+                    tenantMap.set(profile.tenant.id, {
+                        ...profile.tenant,
+                        accessLevel: 'FULL', // L'utente ha accesso completo al proprio tenant
+                        enabledFeatures: [],
+                        isPrimary: profile.isPrimary,
+                        defaultRoleType: null,
+                        validUntil: null,
+                        isAdminAccess: false,
+                        isProfileAccess: true, // Flag per indicare accesso da profilo
+                        requestedFeatures: null,
+                    });
+                }
+            }
+
+            // Poi aggiungi/aggiorna con PersonTenantAccess (possono avere più restrizioni)
+            for (const access of accesses) {
+                if (access.tenant && access.tenant.isActive) {
+                    // Se già presente da profile, mantieni quello (accesso completo)
+                    if (!tenantMap.has(access.tenant.id)) {
+                        tenantMap.set(access.tenant.id, {
+                            ...access.tenant,
+                            accessLevel: access.accessLevel,
+                            enabledFeatures: [],
+                            isPrimary: access.isPrimary,
+                            defaultRoleType: access.defaultRoleType,
+                            validUntil: access.validUntil,
+                            isAdminAccess: false,
+                            isProfileAccess: false,
+                            requestedFeatures: access.enabledFeatures,
+                        });
+                    }
+                }
+            }
+
+            const tenantEntries = Array.from(tenantMap.values());
+            const featureMap = await this.getTenantFeatureMap(tenantEntries.map(tenant => tenant.id));
+
+            // Converti la mappa in array, ordinando per isPrimary e poi nome
+            return tenantEntries.map(tenant => ({
+                ...tenant,
+                enabledFeatures: tenant.requestedFeatures
+                    ? intersectFeatures(
+                        buildTenantCommercialFeatures(tenant, featureMap.get(tenant.id) || []),
+                        tenant.requestedFeatures
+                    )
+                    : buildTenantCommercialFeatures(tenant, featureMap.get(tenant.id) || []),
+                requestedFeatures: undefined
+            })).sort((a, b) => {
+                if (a.isPrimary && !b.isPrimary) return -1;
+                if (!a.isPrimary && b.isPrimary) return 1;
+                return a.name.localeCompare(b.name);
+            });
 
         } catch (error) {
             logger.error({
@@ -167,51 +354,18 @@ class PersonTenantAccessService {
      */
     async canAccessTenant(personId, tenantId, globalRole = null) {
         try {
-            // Admin ha accesso a tutti i tenant
-            if (GLOBAL_ACCESS_ROLES.includes(globalRole)) {
-                const tenant = await prisma.tenant.findUnique({
-                    where: { id: tenantId },
-                    select: { id: true, name: true, isActive: true }
-                });
+            const tenants = await this.getAccessibleTenants(personId, globalRole);
+            const tenantAccess = tenants.find(tenant => tenant.id === tenantId && tenant.isActive);
 
-                if (!tenant || !tenant.isActive) return null;
-
-                return {
-                    canAccess: true,
-                    accessLevel: 'FULL',
-                    enabledFeatures: AVAILABLE_FEATURES,
-                    isAdminAccess: true
-                };
-            }
-
-            // Controlla PersonTenantAccess
-            const access = await prisma.personTenantAccess.findFirst({
-                where: {
-                    personId,
-                    tenantId,
-                    isActive: true,
-                    deletedAt: null,
-                    OR: [
-                        { validUntil: null },
-                        { validUntil: { gt: new Date() } }
-                    ]
-                },
-                include: {
-                    tenant: {
-                        select: { isActive: true }
-                    }
-                }
-            });
-
-            if (!access || !access.tenant.isActive) return null;
+            if (!tenantAccess) return null;
 
             return {
                 canAccess: true,
-                accessLevel: access.accessLevel,
-                enabledFeatures: access.enabledFeatures,
-                isPrimary: access.isPrimary,
-                defaultRoleType: access.defaultRoleType,
-                isAdminAccess: false
+                accessLevel: tenantAccess.accessLevel,
+                enabledFeatures: tenantAccess.enabledFeatures,
+                isPrimary: tenantAccess.isPrimary,
+                defaultRoleType: tenantAccess.defaultRoleType,
+                isAdminAccess: tenantAccess.isAdminAccess === true
             };
 
         } catch (error) {
@@ -286,18 +440,18 @@ class PersonTenantAccessService {
     }) {
         try {
             // Verifica che la persona esista
-            const person = await prisma.person.findUnique({
-                where: { id: personId },
+            const person = await prisma.person.findFirst({ // F246: findFirst+deletedAt
+                where: { id: personId, deletedAt: null },
                 select: { id: true, firstName: true, lastName: true }
             });
 
             if (!person) {
-                throw new Error(`Person ${personId} not found`);
+                return normalizeFeatureSet(access.enabledFeatures).includes(feature);
             }
 
             // Verifica che il tenant esista
-            const tenant = await prisma.tenant.findUnique({
-                where: { id: tenantId },
+            const tenant = await prisma.tenant.findFirst({
+                where: { id: tenantId, deletedAt: null },
                 select: { id: true, name: true, isActive: true }
             });
 
@@ -348,10 +502,87 @@ class PersonTenantAccessService {
                         select: { id: true, name: true, slug: true }
                     },
                     person: {
-                        select: { id: true, firstName: true, lastName: true, email: true }
+                        select: {
+                            id: true,
+                            firstName: true,
+                            lastName: true,
+                            tenantProfiles: {
+                                where: { deletedAt: null, isActive: true },
+                                select: { email: true, isPrimary: true },
+                                take: 1
+                            }
+                        }
                     }
                 }
             });
+
+            // P48: Flatten email from tenantProfiles
+            const flattenedAccess = {
+                ...access,
+                person: access.person ? {
+                    id: access.person.id,
+                    firstName: access.person.firstName,
+                    lastName: access.person.lastName,
+                    email: access.person.tenantProfiles?.[0]?.email || null
+                } : null
+            };
+
+            // Se viene specificato un defaultRoleType, crea PersonTenantProfile e PersonRole
+            if (defaultRoleType) {
+                // Upsert PersonTenantProfile (richiesto dal middleware auth per la resoluzione del tenantId)
+                await prisma.personTenantProfile.upsert({
+                    where: { personId_tenantId: { personId, tenantId } },
+                    create: {
+                        personId,
+                        tenantId,
+                        status: 'ACTIVE',
+                        isActive: true,
+                        isPrimary: false,
+                    },
+                    update: {
+                        isActive: true,
+                        deletedAt: null,
+                        updatedAt: new Date(),
+                    },
+                });
+
+                // Crea PersonRole se non esiste già (findFirst + create per nullable fields nel unique)
+                const existingRole = await prisma.personRole.findFirst({
+                    where: {
+                        personId,
+                        tenantId,
+                        roleType: defaultRoleType,
+                        customRoleId: null,
+                        companyTenantProfileId: null,
+                        deletedAt: null,
+                    },
+                });
+
+                if (!existingRole) {
+                    await prisma.personRole.create({
+                        data: {
+                            personId,
+                            tenantId,
+                            roleType: defaultRoleType,
+                            isActive: true,
+                            assignedBy: grantedBy || null,
+                        },
+                    });
+                } else if (!existingRole.isActive) {
+                    await prisma.personRole.update({
+                        where: { id: existingRole.id },
+                        data: { isActive: true, deletedAt: null, updatedAt: new Date() },
+                    });
+                }
+
+                logger.info({
+                    component: 'PersonTenantAccessService',
+                    action: 'grantTenantAccess',
+                    personId,
+                    tenantId,
+                    defaultRoleType,
+                }, `PersonTenantProfile e PersonRole (${defaultRoleType}) creati per ${person.firstName} ${person.lastName} su ${tenant.name}`);
+            }
 
             logger.info({
                 component: 'PersonTenantAccessService',
@@ -363,7 +594,7 @@ class PersonTenantAccessService {
                 grantedBy
             }, `Tenant access granted: ${person.firstName} ${person.lastName} -> ${tenant.name}`);
 
-            return access;
+            return flattenedAccess;
 
         } catch (error) {
             logger.error({
@@ -501,10 +732,12 @@ class PersonTenantAccessService {
                             id: true,
                             firstName: true,
                             lastName: true,
-                            email: true,
-                            globalRole: true,
-                            status: true,
+                            // globalRole removed - field doesn't exist in schema
                             profileImage: true,
+                            personRoles: {
+                                where: { isActive: true },
+                                select: { roleType: true }
+                            }
                         }
                     },
                     grantedByPerson: {
@@ -636,18 +869,29 @@ class PersonTenantAccessService {
                 adminId
             }, 'Starting user migration to PersonTenantAccess');
 
-            // Trova tutti gli utenti senza PersonTenantAccess
+            // P63: Person.tenantId rimosso - usiamo PersonTenantProfile
+            // Trova tutti gli utenti senza PersonTenantAccess che hanno un profilo
             const personsWithoutAccess = await prisma.person.findMany({
                 where: {
                     deletedAt: null,
                     tenantAccesses: {
                         none: {}
+                    },
+                    tenantProfiles: {
+                        some: { deletedAt: null }
                     }
                 },
                 select: {
                     id: true,
-                    tenantId: true,
-                    globalRole: true,
+                    tenantProfiles: {
+                        where: { deletedAt: null },
+                        orderBy: { isPrimary: 'desc' },
+                        select: { tenantId: true }
+                    },
+                    personRoles: {
+                        where: { isActive: true },
+                        select: { roleType: true }
+                    }
                 }
             });
 
@@ -655,17 +899,27 @@ class PersonTenantAccessService {
             let skipped = 0;
 
             for (const person of personsWithoutAccess) {
-                // Salta admin globali (hanno già accesso a tutto)
-                if (GLOBAL_ACCESS_ROLES.includes(person.globalRole)) {
+                // P63: Ottieni tenantId dal profilo primario
+                const primaryTenantId = person.tenantProfiles?.[0]?.tenantId;
+                if (!primaryTenantId) {
                     skipped++;
                     continue;
                 }
 
-                // Crea accesso al tenant originale
+                // Salta admin globali (hanno già accesso a tutto)
+                // globalRole calcolato da personRoles (il campo globalRole non esiste nel modello)
+                const personRoles = (person.personRoles || []).map(r => r.roleType);
+                const hasGlobalAccess = personRoles.some(r => GLOBAL_ACCESS_ROLES.includes(r));
+                if (hasGlobalAccess) {
+                    skipped++;
+                    continue;
+                }
+
+                // Crea accesso al tenant dal profilo primario
                 await prisma.personTenantAccess.create({
                     data: {
                         personId: person.id,
-                        tenantId: person.tenantId,
+                        tenantId: primaryTenantId, // P63: da PersonTenantProfile
                         accessLevel: 'WRITE', // Accesso completo al proprio tenant
                         enabledFeatures: AVAILABLE_FEATURES, // Tutte le features
                         isPrimary: true,

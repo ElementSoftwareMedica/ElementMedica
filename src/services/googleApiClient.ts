@@ -83,7 +83,6 @@ const googleApiClient = {
       );
       return response;
     } catch (error: unknown) {
-      console.error('Error getting default template:', getErrorMessage(error));
       return {
         success: false,
         error: getErrorMessage(error, 'Impossibile ottenere il template predefinito')
@@ -106,7 +105,6 @@ const googleApiClient = {
       );
       return response;
     } catch (error: unknown) {
-      console.error('Error generating document:', getErrorMessage(error));
       return {
         success: false,
         error: getErrorMessage(error, 'Impossibile generare il documento'),
@@ -129,7 +127,6 @@ const googleApiClient = {
       );
       return response;
     } catch (error: unknown) {
-      console.error('Error generating attestato:', getErrorMessage(error));
       return {
         success: false,
         error: getErrorMessage(error, "Impossibile generare l'attestato"),

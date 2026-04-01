@@ -1,6 +1,9 @@
 import { apiGet, apiDelete, apiPost, apiPut } from './api';
 import { Person, CreatePersonDTO, UpdatePersonDTO, PersonsFilters, PersonsResponse } from './persons';
 
+// Tipo per opzioni API con headers multi-tenant
+type ApiOptions = Record<string, unknown> & { headers?: Record<string, string> };
+
 // Interfaccia estesa per Person con campi trainer opzionali
 interface PersonWithTrainerFields extends Person {
   specialties?: string[];
@@ -45,14 +48,14 @@ export class TrainersService {
    */
   static async getTrainers(filters: TrainersFilters = {}): Promise<Trainer[]> {
     const params = new URLSearchParams();
-    
+
     // Imposta ordinamento di default per nome
     const sortBy = filters.sortBy || 'firstName';
     const sortOrder = filters.sortOrder || 'asc';
-    
+
     params.append('sortBy', sortBy);
     params.append('sortOrder', sortOrder);
-    
+
     params.set('isActive', typeof filters.isActive === 'boolean' ? String(filters.isActive) : 'true');
     if (filters.companyId) params.append('companyId', filters.companyId.toString());
     if (filters.search) params.append('search', filters.search);
@@ -60,31 +63,18 @@ export class TrainersService {
     if (filters.limit) params.append('limit', filters.limit.toString());
     if (filters.specialization) params.append('specialization', filters.specialization);
     if (filters.status) params.append('status', filters.status);
-    
+
     // Endpoint unificato persons con filtro roleType=TRAINER
     const resp = await apiGet<any>(`/api/v1/persons?roleType=TRAINER&${params.toString()}`);
     const persons: Person[] = Array.isArray(resp?.data)
       ? resp.data
       : (Array.isArray(resp?.persons) ? resp.persons : (Array.isArray(resp) ? resp : []));
-    
+
     // 🔍 DEBUG: Verifica struttura dati backend
     if (process.env.NODE_ENV === 'development' && persons.length > 0) {
       const sample = persons[0] as any;
-      console.debug('[TrainersService] 🔍 Backend response structure:', {
-        totalPersons: persons.length,
-        samplePerson: {
-          id: sample.id,
-          name: `${sample.firstName} ${sample.lastName}`,
-          certifications: sample.certifications,
-          certificationsType: typeof sample.certifications,
-          certificationsIsArray: Array.isArray(sample.certifications),
-          specialties: sample.specialties,
-          specialtiesType: typeof sample.specialties,
-          rawKeys: Object.keys(sample).filter(k => k.toLowerCase().includes('cert') || k.toLowerCase().includes('spec'))
-        }
-      });
     }
-    
+
     const trainers: Trainer[] = persons.map((person: any) => {
       // Gestisci certifications come stringa CSV o array
       let certs: string[] = [];
@@ -93,7 +83,7 @@ export class TrainersService {
       } else if (typeof person?.certifications === 'string' && person.certifications.trim()) {
         certs = person.certifications.split(',').map((c: string) => c.trim()).filter(Boolean);
       }
-      
+
       // Gestisci specialties come stringa CSV o array
       let specs: string[] = [];
       if (Array.isArray(person?.specialties)) {
@@ -101,7 +91,7 @@ export class TrainersService {
       } else if (typeof person?.specialties === 'string' && person.specialties.trim()) {
         specs = person.specialties.split(',').map((s: string) => s.trim()).filter(Boolean);
       }
-      
+
       // 🔍 DEBUG: Verifica mapping finale
       if (process.env.NODE_ENV === 'development') {
         const trainer = {
@@ -110,21 +100,14 @@ export class TrainersService {
           specialties: specs,
           status: person.isActive ? 'ACTIVE' : 'INACTIVE' as 'ACTIVE' | 'INACTIVE'
         };
-        
+
         // Log solo per il primo trainer per debug
         if (person.id === persons[0].id) {
-          console.debug('[TrainersService] 🔍 Mapped trainer:', {
-            id: trainer.id,
-            name: `${trainer.firstName} ${trainer.lastName}`,
-            originalCerts: person.certifications,
-            mappedCerts: trainer.certifications,
-            hasCertsField: 'certifications' in trainer
-          });
         }
-        
+
         return trainer;
       }
-      
+
       return {
         ...person,
         certifications: certs,
@@ -132,7 +115,7 @@ export class TrainersService {
         status: person.isActive ? 'ACTIVE' : 'INACTIVE' as 'ACTIVE' | 'INACTIVE'
       };
     });
-    
+
     return trainers;
   }
 
@@ -153,10 +136,10 @@ export class TrainersService {
   /**
    * Crea un nuovo formatore
    */
-  static async createTrainer(trainerData: CreateTrainerDTO): Promise<Trainer> {
+  static async createTrainer(trainerData: CreateTrainerDTO, options?: ApiOptions): Promise<Trainer> {
     try {
       const { status, ...rest } = trainerData as any;
-      
+
       // Pulisci i dati rimuovendo campi vuoti che potrebbero causare problemi
       const cleanedData: any = {};
       Object.keys(rest).forEach(key => {
@@ -170,7 +153,7 @@ export class TrainersService {
           cleanedData[key] = value; // Mantieni boolean
         }
       });
-      
+
       // Converti date da stringa a ISO string per Prisma
       if (cleanedData.birthDate && typeof cleanedData.birthDate === 'string') {
         try {
@@ -191,7 +174,7 @@ export class TrainersService {
           delete cleanedData.birthDate; // Rimuovi se errore
         }
       }
-      
+
       if (cleanedData.hiredDate && typeof cleanedData.hiredDate === 'string') {
         try {
           const dateStr = cleanedData.hiredDate.trim();
@@ -209,19 +192,29 @@ export class TrainersService {
           delete cleanedData.hiredDate;
         }
       }
-      
+
       const personData: any = {
         ...cleanedData,
         roleType: 'TRAINER',
         isActive: status === 'ACTIVE'
       };
-      
+
       // Assicurati che firstName e lastName siano presenti
       if (!personData.firstName || !personData.lastName) {
         throw new Error('Nome e cognome sono obbligatori per creare un formatore');
       }
-      
-      const resp = await apiPost<any>('/api/v1/persons', personData);
+
+      // P59: Pulisci campi vuoti per evitare errori di validazione backend
+      Object.keys(personData).forEach(key => {
+        if (personData[key] === '' || personData[key] === undefined) {
+          // Mantieni firstName, lastName e roleType anche se vuoti
+          if (!['firstName', 'lastName', 'roleType'].includes(key)) {
+            delete personData[key];
+          }
+        }
+      });
+
+      const resp = await apiPost<any>('/api/v1/persons', personData, options);
       const response: any = resp?.data ?? resp;
       return {
         ...response,
@@ -230,7 +223,6 @@ export class TrainersService {
         status: response.isActive ? 'ACTIVE' : 'INACTIVE'
       };
     } catch (error) {
-      console.error('Error creating trainer:', error);
       throw error;
     }
   }
@@ -238,14 +230,23 @@ export class TrainersService {
   /**
    * Aggiorna un formatore esistente
    */
-  static async updateTrainer(id: string, trainerData: UpdateTrainerDTO): Promise<Trainer> {
+  static async updateTrainer(id: string, trainerData: UpdateTrainerDTO, options?: ApiOptions): Promise<Trainer> {
     const { status, ...rest } = trainerData as any;
     const personData: any = {
       ...rest,
       isActive: status === 'ACTIVE'
     };
-    
-    const resp = await apiPut<any>(`/api/v1/persons/${id}`, personData);
+
+    // P59: Pulisci campi vuoti per evitare errori di validazione
+    // - email vuota "" fallisce isEmail() validation
+    // - phone vuota può causare problemi
+    Object.keys(personData).forEach(key => {
+      if (personData[key] === '' || personData[key] === undefined) {
+        delete personData[key];
+      }
+    });
+
+    const resp = await apiPut<any>(`/api/v1/persons/${id}`, personData, options);
     const response: any = resp?.data ?? resp;
     return {
       ...response,
@@ -258,15 +259,15 @@ export class TrainersService {
   /**
    * Elimina un formatore
    */
-  static async deleteTrainer(id: string): Promise<void> {
-    await apiDelete(`/api/v1/persons/${id}`);
+  static async deleteTrainer(id: string, options?: ApiOptions): Promise<void> {
+    await apiDelete(`/api/v1/persons/${id}`, options);
   }
 
   /**
    * Attiva/disattiva un formatore
    */
-  static async toggleTrainerStatus(id: string, isActive: boolean): Promise<Trainer> {
-    const response = await apiPut(`/api/v1/persons/${id}/status`, { isActive }) as PersonWithTrainerFields;
+  static async toggleTrainerStatus(id: string, isActive: boolean, options?: ApiOptions): Promise<Trainer> {
+    const response = await apiPut(`/api/v1/persons/${id}/status`, { isActive }, options) as PersonWithTrainerFields;
     return {
       ...response,
       specialties: response.specialties || [],
@@ -300,13 +301,13 @@ export class TrainersService {
    */
   static async exportTrainers(filters: TrainersFilters = {}): Promise<Blob> {
     const params = new URLSearchParams();
-    
+
     if (filters.isActive !== undefined) params.append('isActive', filters.isActive.toString());
     if (filters.companyId) params.append('companyId', filters.companyId.toString());
     if (filters.search) params.append('search', filters.search);
     if (filters.specialization) params.append('specialization', filters.specialization);
     if (filters.status) params.append('status', filters.status);
-    
+
     const response = await apiGet(`/api/v1/persons/export?view=trainer&${params.toString()}`, {
       responseType: 'blob'
     }) as Blob;
@@ -316,18 +317,23 @@ export class TrainersService {
   /**
    * Importa formatori da file CSV
    */
-  static async importTrainers(file: File): Promise<{
+  static async importTrainers(file: File, options?: ApiOptions): Promise<{
     imported: number;
     errors: Array<{ row: number; error: string }>;
   }> {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('roleType', 'TRAINER');
-    
+
+    // Merge headers: Content-Type + optional multi-tenant headers
+    const mergedHeaders = {
+      'Content-Type': 'multipart/form-data',
+      ...(options?.headers || {})
+    };
+
     const response = await apiPost('/api/v1/persons/import', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
+      ...options,
+      headers: mergedHeaders
     }) as { imported: number; errors: Array<{ row: number; error: string }> };
     return response;
   }

@@ -12,7 +12,7 @@ const SchedulesPage = React.lazy(() => import('./SchedulesPage'));
 export const SchedulesPageLazy: React.FC = () => {
   return (
     <ErrorBoundary>
-      <Suspense fallback={<LoadingFallback message="Loading Schedules..." />}>
+      <Suspense fallback={<LoadingFallback message="Caricamento programmazione..." />}>
         <SchedulesPage />
       </Suspense>
     </ErrorBoundary>

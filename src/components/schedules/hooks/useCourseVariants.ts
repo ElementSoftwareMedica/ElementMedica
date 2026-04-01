@@ -34,19 +34,6 @@ export function useCourseVariants({
   
     // DEBUG: Log dettagliato per capire cosa riceve l'hook
     if (import.meta?.env?.MODE === 'development') {
-      console.debug('[useCourseVariants] Hook triggered', {
-        selectedCourse: selectedCourse ? {
-          id: selectedCourse.id,
-          title: (selectedCourse as any)?.title,
-          name: (selectedCourse as any)?.name,
-          riskLevel: (selectedCourse as any)?.riskLevel,
-          courseType: (selectedCourse as any)?.courseType,
-          hasAllFields: !!(selectedCourse.id && ((selectedCourse as any)?.title || (selectedCourse as any)?.name))
-        } : null,
-        rawTitle,
-        normalizedTitle: title,
-        trainingsCount: trainings?.length || 0
-      });
     }
   
     if (!title) {
@@ -65,13 +52,6 @@ export function useCourseVariants({
     )) as Training[];
 
     if (import.meta?.env?.MODE === 'development') {
-      console.debug('[useCourseVariants] Local variants match', {
-        rawTitle,
-        normalizedTitle: title,
-        exactLocalCount: exactLocal.length,
-        localVariantsCount: localVariants.length,
-        localVariantTitles: localVariants.map(v => v.title || (v as any).name),
-      });
     }
   
     // Se trovo più di una variante localmente, uso come base ma procedo comunque con il fetch remoto per arricchire i dati
@@ -94,25 +74,11 @@ export function useCourseVariants({
       try {
         const authUrl = `/api/v1/courses/variants?search=${encodeURIComponent(rawTitle as string)}`;
         if (import.meta?.env?.MODE === 'development') {
-          console.debug('[useCourseVariants] Fetching variants from AUTH endpoint', {
-            endpoint: authUrl,
-            rawTitle: rawTitle as string,
-            encodedTitle: encodeURIComponent(rawTitle as string)
-          });
         }
         const authRes = await apiGet(authUrl);
         if (!cancelled) {
           const all = extractCoursesUtil(authRes) as Training[];
           if (import.meta?.env?.MODE === 'development') {
-            console.debug('[useCourseVariants] AUTH API response parsed', {
-              extractedCount: all.length,
-              sample: all[0] ? {
-                id: all[0].id,
-                title: all[0].title || (all[0] as any).name,
-                riskLevel: (all[0] as any).riskLevel,
-                courseType: (all[0] as any).courseType
-              } : null
-            });
           }
           const exactFirst = Array.isArray(all) ? all.filter(v => matchByExactNormalizedTitle((v.title || (v as any).name) as string, rawTitle, normalizeTextUtil)) : [];
           const variants = (exactFirst.length > 0
@@ -122,24 +88,16 @@ export function useCourseVariants({
           if (variants.length > 0) {
             setSelectedCourseVariants(variants);
             if (import.meta?.env?.MODE === 'development') {
-              console.debug('[useCourseVariants] ✅ SUCCESS: Variants found from AUTH API', {
-                count: variants.length,
-                titles: variants.map(v => v.title || (v as any).name),
-                riskLevels: variants.map(v => (v as any).riskLevel).filter(Boolean),
-                courseTypes: variants.map(v => (v as any).courseType).filter(Boolean)
-              });
             }
           } else if (import.meta?.env?.MODE === 'development') {
-            console.debug('[useCourseVariants] ⚠️ No variants found from AUTH API, will try PUBLIC fallback');
           }
           setLoading(false);
           setError(null);
           // Se arriviamo qui senza varianti, continuiamo con il fallback pubblico
           if (variants.length > 0) return;
         }
-      } catch (authErr: any) {
+      } catch (authErr: unknown) {
         if (import.meta?.env?.MODE === 'development') {
-          console.warn('[useCourseVariants] AUTH API failed, falling back to PUBLIC', { error: authErr?.message });
         }
         // Continua al fallback pubblico
       }
@@ -148,63 +106,33 @@ export function useCourseVariants({
       try {
         const pubUrl = `/api/public/courses?search=${encodeURIComponent(rawTitle as string)}&limit=200`;
         if (import.meta?.env?.MODE === 'development') {
-          console.debug('[useCourseVariants] Fetching variants from PUBLIC endpoint', { 
-            endpoint: pubUrl,
-            rawTitle: rawTitle as string,
-            encodedTitle: encodeURIComponent(rawTitle as string)
-          });
         }
         const pubRes = await apiGet(pubUrl);
         if (!cancelled) {
           const all = extractCoursesUtil(pubRes) as Training[];
           if (import.meta?.env?.MODE === 'development') {
-            console.debug('[useCourseVariants] PUBLIC API response parsed', {
-              extractedCount: all.length,
-              extractedTitles: all.map(v => v.title || (v as any).name),
-              sampleCourse: all.length > 0 ? {
-                id: all[0].id,
-                title: all[0].title || (all[0] as any).name,
-                riskLevel: (all[0] as any).riskLevel,
-                courseType: (all[0] as any).courseType
-              } : null
-            });
           }
           const exactFirst = Array.isArray(all) ? all.filter(v => matchByExactNormalizedTitle((v.title || (v as any).name) as string, rawTitle, normalizeTextUtil)) : [];
           const variants = (exactFirst.length > 0
             ? exactFirst
             : (Array.isArray(all) ? all.filter(v => sameCourseGroup((v.title || (v as any).name) as string, rawTitle, normalizeTextUtil)) : [])) as Training[];
           if (import.meta?.env?.MODE === 'development') {
-            console.debug('[useCourseVariants] Matching results (PUBLIC)', {
-              exactMatches: exactFirst.length,
-              exactTitles: exactFirst.map(v => v.title || (v as any).name),
-              groupMatches: variants.length,
-              groupTitles: variants.map(v => v.title || (v as any).name),
-              finalVariants: variants.length
-            });
           }
           if (variants.length > 0) {
             setSelectedCourseVariants(variants);
             if (import.meta?.env?.MODE === 'development') {
-              console.debug('[useCourseVariants] ✅ SUCCESS: Variants found from PUBLIC API', {
-                count: variants.length,
-                titles: variants.map(v => v.title || (v as any).name),
-                riskLevels: variants.map(v => (v as any).riskLevel).filter(Boolean),
-                courseTypes: variants.map(v => (v as any).courseType).filter(Boolean)
-              });
             }
           } else if (import.meta?.env?.MODE === 'development') {
-            console.debug('[useCourseVariants] ❌ No variants found from PUBLIC API');
           }
           setLoading(false);
           setError(null);
           return;
         }
-      } catch (pubErr: any) {
+      } catch (pubErr: unknown) {
         if (!cancelled) {
           setError(pubErr instanceof Error ? pubErr.message : 'Errore nel caricamento delle varianti corso');
           setLoading(false);
           if (import.meta?.env?.MODE === 'development') {
-            console.error('[useCourseVariants] ❌ ERROR: Public API failed', { error: pubErr?.message });
           }
         }
       }

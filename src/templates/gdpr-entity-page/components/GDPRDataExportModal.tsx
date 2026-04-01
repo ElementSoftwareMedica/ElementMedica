@@ -102,7 +102,6 @@ export const GDPRDataExportModal: React.FC<GDPRDataExportModalProps> = ({
 
       onClose();
     } catch (error) {
-      console.error('Errore durante l\'esportazione:', error);
     } finally {
       setIsSubmitting(false);
     }

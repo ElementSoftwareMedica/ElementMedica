@@ -62,11 +62,6 @@ class MetricsCollector {
     this.metricCounter++;
     if (LOGGING_CONFIG.enableDetailedLogging && 
         (this.metricCounter % LOGGING_CONFIG.logEveryNMetrics === 0 || metric.value > 1000)) {
-      console.log('📊 Metric recorded (batch):', {
-        count: this.metricCounter,
-        latest: metric,
-        avgLast10: this.getAverageLastN(10)
-      });
     }
   }
 
@@ -78,12 +73,6 @@ class MetricsCollector {
     // Log solo errori o operazioni lente
     if (LOGGING_CONFIG.enableDetailedLogging && 
         (metric.status >= 400 || metric.duration > 2000)) {
-      console.log('📊 API Metric (error/slow):', {
-        endpoint: metric.endpoint,
-        status: metric.status,
-        duration: metric.duration,
-        error: metric.error
-      });
     }
   }
 
@@ -96,11 +85,6 @@ class MetricsCollector {
     this.cacheCounter++;
     if (LOGGING_CONFIG.enableDetailedLogging && 
         (this.cacheCounter % LOGGING_CONFIG.logEveryNCacheOps === 0 || metric.operation === 'clear')) {
-      console.log('💾 Cache Metric (batch):', {
-        count: this.cacheCounter,
-        operation: metric.operation,
-        hitRate: this.getCacheStats().hitRate + '%'
-      });
     }
   }
 
@@ -211,7 +195,6 @@ class MetricsCollector {
     this.metricCounter = 0;
     this.cacheCounter = 0;
     if (LOGGING_CONFIG.enableDetailedLogging) {
-      console.log('🗑️ All metrics cleared');
     }
   }
 
@@ -236,14 +219,6 @@ class MetricsCollector {
     const apiStats = this.getApiStats();
     const cacheStats = this.getCacheStats();
     
-    console.log('📊 Metrics Summary:', {
-      totalMetrics: this.metrics.length,
-      apiRequests: apiStats.totalRequests,
-      avgResponseTime: apiStats.averageResponseTime + 'ms',
-      errorRate: apiStats.errorRate + '%',
-      cacheHitRate: cacheStats.hitRate + '%',
-      cacheOperations: cacheStats.totalOperations
-    });
   }
 }
 
@@ -347,7 +322,6 @@ export async function flushMetrics(): Promise<void> {
     // await apiPost('/api/metrics', JSON.parse(metrics));
     
     if (LOGGING_CONFIG.enableDetailedLogging) {
-      console.log('📊 Metrics would be flushed to backend:', JSON.parse(metrics).stats);
     }
     
     // Per ora, salva in localStorage per debug
@@ -355,7 +329,6 @@ export async function flushMetrics(): Promise<void> {
       localStorage.setItem('performance_metrics', metrics);
     }
   } catch (error) {
-    console.error('Error flushing metrics:', error);
   }
 }
 
@@ -396,11 +369,9 @@ if (LOGGING_CONFIG.enableDetailedLogging) {
     logSummary: logMetricsSummary,
     enableLogging: () => {
       localStorage.setItem('ENABLE_METRICS_LOGGING', 'true');
-      console.log('📊 Metrics logging enabled. Reload page to take effect.');
     },
     disableLogging: () => {
       localStorage.removeItem('ENABLE_METRICS_LOGGING');
-      console.log('📊 Metrics logging disabled. Reload page to take effect.');
     }
   };
 }

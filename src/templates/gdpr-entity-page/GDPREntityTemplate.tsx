@@ -2,27 +2,42 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useGDPRPermissions } from '../../hooks/useGDPRPermissions';
-import { useGDPREntityData } from '../../hooks/useGDPREntityData';
+import { useGDPREntityData } from './hooks/useGDPREntityData';
 import { useGDPREntityOperations } from '../../hooks/useGDPREntityOperations';
-import { DataTableColumn } from '../../components/shared/tables/DataTable';
-import { SearchBar, Badge } from '../../design-system';
+
+/** Definizione di una colonna per GDPREntityTemplate / ResizableTable */
+export interface DataTableColumn<T = unknown> {
+  key: string;
+  label: string;
+  header?: string;
+  width?: number;
+  minWidth?: number;
+  sortable?: boolean;
+  sortKey?: string;
+  renderHeader?: (col: DataTableColumn<T>) => React.ReactNode;
+  renderCell?: (row: T, rowIndex: number) => React.ReactNode;
+  filterable?: boolean;
+  filterType?: 'string' | 'number' | 'date' | 'boolean' | 'select';
+  filterOptions?: { value: string; label: string }[];
+}
+import { Badge } from '../../design-system';
 import {
+  AlertCircle,
   Download,
   Edit,
   Eye,
   FileText,
+  LayoutGrid,
+  List,
   Plus,
+  Search,
   Trash2,
   Upload,
   XCircle
 } from 'lucide-react';
-import { ViewModeToggle } from '../../design-system/molecules/ViewModeToggle';
 import { FilterPanel } from '../../design-system/organisms/FilterPanel';
 import { AddEntityDropdown, ColumnSelector, BatchEditButton, ActionButton } from '../../components/ui';
 import { exportToCsv } from '../../utils/csvExport';
-
-import ResizableTable from '../../components/shared/ResizableTable';
-import EntityListLayout from '../../components/layouts/EntityListLayout';
 import { useToast } from '../../hooks/useToast';
 
 /**
@@ -109,6 +124,42 @@ export interface GDPREntityTemplateProps<T extends Record<string, any> & { id: s
 
   // Sort di default
   defaultSort?: { field: string; direction: 'asc' | 'desc' };
+
+  /**
+   * P51: Trigger per forzare il refresh della lista
+   * Quando questo valore cambia, la lista viene ricaricata automaticamente
+   * Utile per refreshare dopo operazioni custom come import da modal esterni
+   */
+  refreshTrigger?: number | string;
+
+  /** Icona da mostrare nell'header della pagina */
+  icon?: React.ReactNode;
+
+  /** Sottotitolo opzionale per l'header (default: 'Gestisci {entityDisplayNamePlural}') */
+  pageSubtitle?: string;
+
+  /**
+   * Tema colore del brand:
+   * - 'blue' → ElementSicurezza (default)
+   * - 'teal' → ElementMedica / Clinica
+   * - 'violet' → Management
+   */
+  theme?: 'blue' | 'teal' | 'violet';
+
+  /**
+   * Azioni batch aggiuntive da mostrare nel BatchEditButton insieme a
+   * "Elimina selezionati" e "Esporta selezionati".
+   * Il callback riceve l'array degli ID selezionati (o tutti gli ID se nessuno
+   * è esplicitamente selezionato).
+   */
+  customBulkActions?: Array<{
+    key: string;
+    label: string;
+    icon?: React.ReactNode;
+    variant?: 'default' | 'danger' | 'warning' | 'success';
+    /** Invocato con gli ID correntemente selezionati */
+    onClick: (selectedIds: string[]) => void;
+  }>;
 }
 
 export function GDPREntityTemplate<T extends Record<string, any> & { id: string }>({
@@ -140,7 +191,12 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
   enableColumnSelector = true,
   enableAdvancedFilters = true,
   defaultViewMode = 'table',
-  defaultSort
+  defaultSort,
+  refreshTrigger,
+  icon,
+  pageSubtitle,
+  theme = 'blue',
+  customBulkActions = [],
 }: GDPREntityTemplateProps<T>): JSX.Element {
   const navigate = useNavigate();
   const { isLoading: authLoading, permissions: authPermissions } = useAuth();
@@ -175,6 +231,44 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
   });
 
   const toast = useToast();
+
+  // Theme-aware classes per il brand corrente
+  const themeClasses = {
+    blue: {
+      iconBg: 'bg-blue-50 dark:bg-blue-900/20',
+      iconColor: 'text-blue-600 dark:text-blue-400',
+      accent: 'bg-blue-600',
+      badge: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
+      emptyIcon: 'text-blue-200 dark:text-blue-800',
+      emptyAccent: 'text-blue-600 dark:text-blue-400',
+      filterActive: 'bg-blue-600 text-white',
+    },
+    teal: {
+      iconBg: 'bg-teal-50 dark:bg-teal-900/20',
+      iconColor: 'text-teal-600 dark:text-teal-400',
+      accent: 'bg-teal-600',
+      badge: 'bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300',
+      emptyIcon: 'text-teal-200 dark:text-teal-800',
+      emptyAccent: 'text-teal-600 dark:text-teal-400',
+      filterActive: 'bg-teal-600 text-white',
+    },
+    violet: {
+      iconBg: 'bg-violet-50 dark:bg-violet-900/20',
+      iconColor: 'text-violet-600 dark:text-violet-400',
+      accent: 'bg-violet-600',
+      badge: 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300',
+      emptyIcon: 'text-violet-200 dark:text-violet-800',
+      emptyAccent: 'text-violet-600 dark:text-violet-400',
+      filterActive: 'bg-violet-600 text-white',
+    },
+  };
+  const tc = themeClasses[theme];
+  useEffect(() => {
+    if (refreshTrigger !== undefined) {
+      refetch();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshTrigger]);
 
   // Stati per ricerca e filtri
   const [searchQuery, setSearchQuery] = useState('');
@@ -269,7 +363,7 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
   const filteredEntities = useMemo(() => {
     // Validazione di sicurezza per assicurarsi che entities sia un array
     if (!Array.isArray(entities)) {
-      console.error('GDPREntityTemplate: entities deve essere un array, ricevuto:', typeof entities, entities);
+      if (import.meta.env.DEV) console.error('GDPREntityTemplate: entities deve essere un array, ricevuto:', typeof entities);
       return [];
     }
 
@@ -436,7 +530,7 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
                 if (Array.isArray(filteredEntities)) {
                   handleSelectAll(filteredEntities);
                 } else {
-                  console.error('GDPREntityTemplate: filteredEntities non è un array:', filteredEntities);
+                  if (import.meta.env.DEV) console.error('GDPREntityTemplate: filteredEntities non è un array:', typeof filteredEntities);
                 }
               }}
               className="h-4 w-4 accent-blue-600"
@@ -470,9 +564,12 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
         {
           label: 'Importa da CSV',
           icon: <Upload className="h-4 w-4" />,
-          onClick: () => {
+          onClick: async () => {
             if (onImportEntities) {
               // Chiama la funzione onImportEntities fornita dal componente padre
+              // P51: Dopo import, il padre deve fare refetch manualmente se necessario
+              // Il template non ha modo di sapere quando l'import è completato
+              // perché il padre potrebbe aprire un modal
               onImportEntities([]);
             } else {
               // Fallback per import CSV automatico
@@ -496,14 +593,13 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
                         });
                         return obj;
                       });
-                      console.log('CSV data imported:', data);
                       toast.showToast({
                         message: `Importati ${data.length} record da CSV`,
                         type: 'success'
                       });
                       // Qui si potrebbe aggiungere la logica per salvare i dati
                     } catch (error) {
-                      console.error('Errore import CSV:', error);
+                      if (import.meta.env.DEV) console.error('Errore import CSV:', error);
                       toast.showToast({
                         message: 'Errore durante l\'importazione del CSV',
                         type: 'error'
@@ -586,6 +682,16 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
       });
     }
 
+    // Azioni custom passate dall'esterno (es. "Invia Credenziali")
+    for (const ca of customBulkActions) {
+      actions.push({
+        label: ca.label,
+        icon: ca.icon,
+        onClick: () => ca.onClick(selectedIds.length > 0 ? selectedIds : entities.map(e => e.id)),
+        variant: (ca.variant ?? 'default') as 'default' | 'danger' | 'warning' | 'success'
+      });
+    }
+
     // Azione per annullare selezione
     actions.push({
       label: 'Annulla selezione',
@@ -597,7 +703,7 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
     });
 
     return actions;
-  }, [permissions, handleDeleteSelected, enableImportExport, entities, selectedIds, onExportEntities, csvHeaders, entityNamePlural, clearSelection]);
+  }, [permissions, handleDeleteSelected, enableImportExport, entities, selectedIds, onExportEntities, csvHeaders, entityNamePlural, clearSelection, customBulkActions]);
 
   // Azioni memoizzate per le card della vista griglia
   const getCardActions = useCallback((entity: T) => [
@@ -664,7 +770,7 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
     return (
       <div
         key={entity.id}
-        className="bg-white rounded-lg shadow overflow-hidden relative flex flex-col h-full cursor-pointer hover:shadow-md transition-all duration-200"
+        className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-black/30 overflow-hidden relative flex flex-col h-full cursor-pointer hover:shadow-md dark:hover:shadow-black/40 transition-all duration-200 border border-transparent dark:border-gray-700"
         onClick={() => {
           if (!selectionMode) {
             navigate(`/${entityNamePlural}/${entity.id}`);
@@ -674,7 +780,7 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
         {/* Checkbox selezione */}
         {selectionMode && (
           <div
-            className={`absolute top-2 right-2 h-5 w-5 rounded border ${selectedIds.includes(entity.id) ? 'bg-blue-500 border-blue-600' : 'bg-white border-gray-300'
+            className={`absolute top-2 right-2 h-5 w-5 rounded border ${selectedIds.includes(entity.id) ? 'bg-blue-500 border-blue-600' : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600'
               } flex items-center justify-center z-10`}
             onClick={(e: React.MouseEvent) => {
               e.stopPropagation();
@@ -691,16 +797,16 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
 
         {/* Header */}
         <div className="flex items-center p-4">
-          <div className="flex-shrink-0 h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+          <div className="flex-shrink-0 h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center">
             {iconElement}
           </div>
 
           <div className="ml-3 flex-grow min-w-0">
-            <h3 className="text-base font-semibold text-gray-800 line-clamp-2 whitespace-normal">
+            <h3 className="text-base font-semibold text-gray-800 dark:text-gray-100 line-clamp-2 whitespace-normal">
               {title}
             </h3>
             {subtitle && (
-              <p className="text-sm text-gray-600 mt-1">{subtitle}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{subtitle}</p>
             )}
             {badgeData && (
               <div className="mt-1">
@@ -720,10 +826,10 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
             return (
               <div key={index} className="flex items-baseline text-sm">
                 <span className="flex items-center">
-                  {field.icon && <span className="mr-2 h-3.5 w-3.5 text-gray-400">{field.icon}</span>}
-                  <span className="text-gray-500">{field.label}:</span>
+                  {field.icon && <span className="mr-2 h-3.5 w-3.5 text-gray-400 dark:text-gray-500">{field.icon}</span>}
+                  <span className="text-gray-500 dark:text-gray-400">{field.label}:</span>
                 </span>
-                <span className="ml-2 text-gray-700">{value}</span>
+                <span className="ml-2 text-gray-700 dark:text-gray-300">{value}</span>
               </div>
             );
           })}
@@ -735,10 +841,10 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
             return (
               <div key={String(field.key)} className="flex items-baseline text-sm">
                 <span className="flex items-center">
-                  {field.icon && <span className="mr-2 h-3.5 w-3.5 text-gray-400">{field.icon}</span>}
-                  <span className="text-gray-500">{field.label}:</span>
+                  {field.icon && <span className="mr-2 h-3.5 w-3.5 text-gray-400 dark:text-gray-500">{field.icon}</span>}
+                  <span className="text-gray-500 dark:text-gray-400">{field.label}:</span>
                 </span>
-                <span className="ml-2 text-gray-700">
+                <span className="ml-2 text-gray-700 dark:text-gray-300">
                   {field.formatter ? field.formatter(value) : String(value)}
                 </span>
               </div>
@@ -746,14 +852,14 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
           })}
 
           {description && (
-            <div className="mt-2 text-sm text-gray-600 line-clamp-2">
+            <div className="mt-2 text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
               {description}
             </div>
           )}
         </div>
 
         {/* Footer azioni */}
-        <div className="px-4 py-3 bg-white border-t border-gray-200 flex justify-end items-center mt-auto" style={{ position: 'relative', maxWidth: '100%' }}>
+        <div className="px-4 py-3 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 flex justify-end items-center mt-auto" style={{ position: 'relative', maxWidth: '100%' }}>
           <ActionButton
             actions={getCardActions(entity)}
             asPill={true}
@@ -764,153 +870,299 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
   };
 
   return (
-    <EntityListLayout
-      title={entityDisplayNamePlural}
-      subtitle={`Gestisci ${entityDisplayNamePlural.toLowerCase()}`}
-      headerContent={
-        <div className="space-y-4 mb-4">
-          {/* Prima riga: Toggle switch e dropdown aggiungi */}
-          <div className="flex flex-wrap items-center justify-end gap-3">
-            <div className="flex items-center gap-3">
-              <ViewModeToggle
-                viewMode={viewMode}
-                onChange={setViewMode}
-                gridLabel="Griglia"
-                tableLabel="Tabella"
-              />
+    <div className="flex flex-col">
+      {/* ── Brand accent stripe ── */}
+      <div className={`h-0.5 w-full ${tc.accent} opacity-80`} />
 
+      <div className="p-5 lg:p-6 space-y-4">
+        {/* ── Header card ── */}
+        <div className="bg-white dark:bg-gray-800/90 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
+          <div className="px-5 py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            {/* Left: icon + title */}
+            <div className="flex items-center gap-3.5 min-w-0">
+              {icon && (
+                <div className={`p-2.5 rounded-xl ${tc.iconBg} flex-shrink-0`}>
+                  <span className={`block ${tc.iconColor}`}>{icon}</span>
+                </div>
+              )}
+              <div className="min-w-0">
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 leading-tight truncate">
+                    {entityDisplayNamePlural}
+                  </h1>
+                  {!loading && (
+                    <span className={`inline-flex items-center text-xs font-bold px-2.5 py-0.5 rounded-full tabular-nums flex-shrink-0 ${tc.badge}`}>
+                      {filteredEntities.length !== entities.length
+                        ? `${filteredEntities.length} / ${entities.length}`
+                        : entities.length}
+                    </span>
+                  )}
+                  {loading && (
+                    <div className="h-5 w-10 bg-gray-200 dark:bg-gray-700 rounded-full animate-pulse" />
+                  )}
+                </div>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                  {pageSubtitle || `Gestisci ${entityDisplayNamePlural.toLowerCase()}`}
+                </p>
+              </div>
+            </div>
+
+            {/* Right: view toggle + add button */}
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {/* Inline ViewModeToggle – ElementMedica style */}
+              <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 p-0.5">
+                <button
+                  onClick={() => setViewMode('table')}
+                  className={`p-2 rounded-md transition-all duration-150 ${viewMode === 'table' ? `bg-white dark:bg-gray-600 shadow ${tc.iconColor}` : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
+                  title="Visualizzazione tabella"
+                  aria-label="Tabella"
+                >
+                  <List className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`p-2 rounded-md transition-all duration-150 ${viewMode === 'grid' ? `bg-white dark:bg-gray-600 shadow ${tc.iconColor}` : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
+                  title="Visualizzazione griglia"
+                  aria-label="Griglia"
+                >
+                  <LayoutGrid className="h-4 w-4" />
+                </button>
+              </div>
               {(canCreateEntity() || addOptions.length > 1) && (
                 <AddEntityDropdown
                   label={`Aggiungi ${entityDisplayName}`}
                   options={addOptions}
                   icon={<Plus className="h-4 w-4" />}
                   variant="primary"
+                  colorTheme={theme}
                 />
               )}
-            </div>
-          </div>
-
-          {/* Seconda riga: Search bar a sinistra e pulsanti a destra */}
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex-1 max-w-md">
-              <SearchBar
-                value={searchQuery}
-                onChange={setSearchQuery}
-                placeholder={`Cerca ${entityDisplayNamePlural.toLowerCase()}...`}
-                className="h-10 bg-white"
-                showButton={false}
-                showClearButton={true}
-              />
-            </div>
-
-            <div className="flex items-center gap-2">
-              {enableAdvancedFilters && filterOptions.length > 0 && (
-                <FilterPanel
-                  filterOptions={filterOptions.map(option => ({ value: option.key, label: option.label, options: option.options }))}
-                  activeFilters={activeFilters}
-                  onFilterChange={setActiveFilters}
-                  sortOptions={sortOptions.map(option => ({ value: option.key, label: option.label }))}
-                  activeSort={activeSort}
-                  onSortChange={setActiveSort}
-                  className="h-10"
-                />
-              )}
-
-              {/* Pulsanti Colonne e Modifica su una sola riga */}
-              <div className="flex items-center gap-2">
-                {enableColumnSelector && (
-                  <ColumnSelector
-                    columns={tableColumns.map(col => ({
-                      key: col.key,
-                      label: col.label,
-                      required: col.key === 'actions' || col.key === 'select'
-                    }))}
-                    hiddenColumns={hiddenColumns}
-                    onChange={handleColumnVisibilityChange}
-                    onOrderChange={handleColumnOrderChange}
-                    columnOrder={columnOrder}
-                    buttonClassName="h-10 flex items-center gap-2"
-                  />
-                )}
-
-                {enableBatchOperations && canUpdateEntity() && (
-                  <BatchEditButton
-                    selectionMode={selectionMode}
-                    onToggleSelectionMode={() => setSelectionMode(!selectionMode)}
-                    selectedCount={selectedIds.length}
-                    className="h-10 flex items-center gap-2"
-                    variant={selectionMode ? "primary" : "outline"}
-                    actions={batchActions}
-                  />
-                )}
-              </div>
             </div>
           </div>
         </div>
-      }
-      searchBarContent={null}
-    >
-      <div className={loading ? 'opacity-50 pointer-events-none' : ''}>
-        {/* Messaggio errore */}
+
+        {/* ── Toolbar — search + filters + tools ── */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 min-w-[180px] max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={`Cerca ${entityDisplayNamePlural.toLowerCase()}...`}
+              className="w-full h-9 pl-9 pr-8 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-0 focus:ring-blue-500/30 dark:focus:ring-blue-400/30 focus:border-blue-500 dark:focus:border-blue-400 transition-colors"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded"
+                aria-label="Cancella ricerca"
+              >
+                <XCircle className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {enableAdvancedFilters && filterOptions.length > 0 && (
+            <FilterPanel
+              filterOptions={filterOptions.map(option => ({ value: option.key, label: option.label, options: option.options }))}
+              activeFilters={activeFilters}
+              onFilterChange={setActiveFilters}
+              sortOptions={sortOptions.map(option => ({ value: option.key, label: option.label }))}
+              activeSort={activeSort}
+              onSortChange={setActiveSort}
+              theme={theme}
+              className="h-9"
+            />
+          )}
+
+          {enableColumnSelector && (
+            <ColumnSelector
+              columns={tableColumns.map(col => ({
+                key: col.key,
+                label: col.label,
+                required: col.key === 'actions' || col.key === 'select'
+              }))}
+              hiddenColumns={hiddenColumns}
+              onChange={handleColumnVisibilityChange}
+              onOrderChange={handleColumnOrderChange}
+              columnOrder={columnOrder}
+              buttonClassName="h-9 flex items-center gap-2"
+            />
+          )}
+
+          {enableBatchOperations && canUpdateEntity() && (
+            <BatchEditButton
+              selectionMode={selectionMode}
+              onToggleSelectionMode={() => setSelectionMode(!selectionMode)}
+              selectedCount={selectedIds.length}
+              className="h-9 flex items-center gap-2"
+              variant={selectionMode ? 'primary' : 'outline'}
+              actions={batchActions}
+            />
+          )}
+
+          {Object.keys(activeFilters).filter(k => activeFilters[k]).length > 0 && (
+            <button
+              onClick={() => setActiveFilters({})}
+              className="flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm font-medium bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors border border-red-200 dark:border-red-800"
+            >
+              <XCircle className="h-3.5 w-3.5" />
+              Rimuovi filtri ({Object.keys(activeFilters).filter(k => activeFilters[k]).length})
+            </button>
+          )}
+        </div>
+
+        {/* ── Error alert ── */}
         {error && (
-          <div className="mb-4 p-4 border border-red-300 bg-red-50 rounded-md">
-            <p className="text-red-800 text-sm">{error}</p>
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0" />
+            <span className="text-red-700 dark:text-red-300 text-sm">{error}</span>
           </div>
         )}
 
-        {/* Loading */}
+        {/* ── Main content ── */}
         {loading ? (
-          <div className="flex justify-center items-center h-64">
-            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
-          </div>
-        ) : (
-          <>
-            {/* Vista tabella */}
-            {viewMode === 'table' ? (
-              <ResizableTable<T>
-                columns={tableColumns.map(col => ({
-                  key: col.key,
-                  label: col.label,
-                  width: col.width,
-                  minWidth: col.minWidth,
-                  sortable: col.sortable,
-                  renderHeader: col.renderHeader ? (_) => col.renderHeader!(col) : undefined,
-                  renderCell: col.renderCell ? (row, _, rowIndex) => col.renderCell!(row as T, rowIndex) : undefined
-                }))}
-                data={filteredEntities as T[]}
-                onSort={(key, direction) => {
-                  setActiveSort(direction ? { field: key, direction } : undefined);
-                }}
-                sortKey={activeSort?.field}
-                sortDirection={activeSort?.direction || null}
-                hiddenColumns={hiddenColumns}
-                columnOrder={columnOrder}
-                tableName={entityNamePlural}
-                onRowClick={(entity) => {
-                  if (!selectionMode) {
-                    if (onViewEntity) {
-                      onViewEntity(entity as T);
-                    } else {
-                      navigate(`/${entityNamePlural}/${entity.id}`);
-                    }
-                  }
-                }}
-                rowClassName={() => selectionMode ? '' : 'cursor-pointer hover:bg-gray-50'}
-                zebra={true}
-                tableProps={{
-                  className: "border rounded-md overflow-hidden shadow-sm"
-                }}
-              />
-            ) : (
-              /* Vista griglia */
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-                {filteredEntities.map(renderEntityCard)}
+          /* ── Skeleton loader ── */
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-700 flex gap-4">
+              {[32, 20, 20, 14, 14].map((w, i) => (
+                <div key={i} className="h-3.5 bg-gray-200 dark:bg-gray-700 rounded-full animate-pulse" style={{ width: `${w}%` }} />
+              ))}
+            </div>
+            {Array.from({ length: 7 }).map((_, i) => (
+              <div
+                key={i}
+                className="px-5 py-3.5 flex gap-4 border-b border-gray-50 dark:border-gray-700/40 last:border-0"
+                style={{ opacity: 1 - i * 0.12 }}
+              >
+                <div className="h-3.5 bg-gray-100 dark:bg-gray-700/60 rounded-full animate-pulse w-8 flex-shrink-0" />
+                <div className="h-3.5 bg-gray-100 dark:bg-gray-700/60 rounded-full animate-pulse" style={{ width: `${30 + (i % 3) * 7}%` }} />
+                <div className="h-3.5 bg-gray-100 dark:bg-gray-700/60 rounded-full animate-pulse" style={{ width: `${18 + (i % 4) * 5}%` }} />
+                <div className="h-4 bg-gray-100 dark:bg-gray-700/60 rounded-full animate-pulse w-20 ml-auto flex-shrink-0" />
               </div>
-            )}
-          </>
+            ))}
+          </div>
+        ) : viewMode === 'table' ? (
+          filteredEntities.length === 0 ? (
+            /* ── Empty state ── */
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col items-center justify-center py-20 px-6 text-center">
+              <div className={`p-5 rounded-2xl ${tc.iconBg} mb-5`}>
+                {icon
+                  ? <span className={`block w-10 h-10 ${tc.emptyIcon}`}>{icon}</span>
+                  : <FileText className={`w-10 h-10 ${tc.emptyIcon}`} />
+                }
+              </div>
+              <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1.5">
+                {searchQuery || Object.keys(activeFilters).some(k => activeFilters[k])
+                  ? 'Nessun risultato trovato'
+                  : `Nessun ${entityDisplayName.toLowerCase()} presente`}
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 max-w-sm">
+                {searchQuery || Object.keys(activeFilters).some(k => activeFilters[k])
+                  ? 'Prova a modificare i criteri di ricerca o a rimuovere i filtri attivi.'
+                  : `I ${entityDisplayNamePlural.toLowerCase()} appariranno qui non appena verranno aggiunti.`}
+              </p>
+              {(searchQuery || Object.keys(activeFilters).some(k => activeFilters[k])) && (
+                <button
+                  onClick={() => { setSearchQuery(''); setActiveFilters({}); }}
+                  className={`mt-5 text-sm font-semibold ${tc.emptyAccent} hover:underline`}
+                >
+                  Rimuovi tutti i filtri
+                </button>
+              )}
+            </div>
+          ) : (
+            /* ── Table (native HTML, VisiteListPage style) ── */
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
+                    <tr>
+                      {tableColumns.filter(col => !hiddenColumns.includes(col.key)).map(col => (
+                        <th
+                          key={col.key}
+                          className={`px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap${col.sortable ? ' cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200' : ''}`}
+                          onClick={() => {
+                            if (!col.sortable) return;
+                            const sk = (col as unknown as Record<string, unknown>).sortKey as string || col.key;
+                            if (activeSort?.field === sk) {
+                              setActiveSort(activeSort.direction === 'asc' ? { field: sk, direction: 'desc' } : undefined);
+                            } else {
+                              setActiveSort({ field: sk, direction: 'asc' });
+                            }
+                          }}
+                        >
+                          <span className="inline-flex items-center gap-1">
+                            {col.renderHeader ? col.renderHeader(col) : col.label}
+                            {col.sortable && activeSort?.field === ((col as unknown as Record<string, unknown>).sortKey as string || col.key) && (
+                              <span className="text-xs opacity-70">{activeSort.direction === 'asc' ? '\u2191' : '\u2193'}</span>
+                            )}
+                          </span>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-700/50">
+                    {filteredEntities.map((entity, rowIndex) => (
+                      <tr
+                        key={entity.id}
+                        className={!selectionMode
+                          ? 'hover:bg-gray-50/80 dark:hover:bg-gray-700/30 transition-colors cursor-pointer'
+                          : 'hover:bg-gray-50/40 dark:hover:bg-gray-700/10 transition-colors'
+                        }
+                        onClick={() => {
+                          if (!selectionMode) {
+                            if (onViewEntity) onViewEntity(entity as T);
+                            else navigate(`/${entityNamePlural}/${entity.id}`);
+                          }
+                        }}
+                      >
+                        {tableColumns.filter(col => !hiddenColumns.includes(col.key)).map(col => (
+                          <td key={col.key} className="px-4 py-3.5 text-sm text-gray-800 dark:text-gray-200">
+                            {col.renderCell
+                              ? col.renderCell(entity as T, rowIndex)
+                              : String(entity[col.key as keyof T] ?? '')}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )
+        ) : (
+          /* ── Grid view ── */
+          filteredEntities.length === 0 ? (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col items-center justify-center py-20 text-center px-6">
+              <div className={`p-5 rounded-2xl ${tc.iconBg} mb-5`}>
+                <FileText className={`w-10 h-10 ${tc.emptyIcon}`} />
+              </div>
+              <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1">
+                Nessun {entityDisplayName.toLowerCase()} trovato
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Prova a modificare i criteri di ricerca.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {filteredEntities.map(renderEntityCard)}
+            </div>
+          )
+        )}
+
+        {/* ── Footer count ── */}
+        {!loading && filteredEntities.length > 0 && (
+          <p className="text-xs text-gray-400 dark:text-gray-500 text-center pb-1">
+            {filteredEntities.length !== entities.length
+              ? `${filteredEntities.length} ${entityDisplayNamePlural.toLowerCase()} su ${entities.length} totali`
+              : `${entities.length} ${entityDisplayNamePlural.toLowerCase()} totali`}
+          </p>
         )}
       </div>
-    </EntityListLayout>
+    </div>
   );
 }
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { 
+import {
   ChevronLeft,
   ChevronRight,
   MoreHorizontal
@@ -85,29 +85,29 @@ export const Pagination: React.FC<PaginationProps> = ({
     // Altrimenti calcola quali numeri mostrare
     const leftSiblingIndex = Math.max(currentPage - siblingCount, 1);
     const rightSiblingIndex = Math.min(currentPage + siblingCount, totalPages);
-    
+
     const shouldShowLeftDots = leftSiblingIndex > 2;
     const shouldShowRightDots = rightSiblingIndex < totalPages - 1;
-    
+
     // Casi speciali
     if (!shouldShowLeftDots && shouldShowRightDots) {
       // Caso 1: niente dots a sinistra, dots a destra
       const leftRange = range(1, 5);
       return [...leftRange, 'dots', totalPages];
     }
-    
+
     if (shouldShowLeftDots && !shouldShowRightDots) {
       // Caso 2: dots a sinistra, niente dots a destra
       const rightRange = range(totalPages - 4, totalPages);
       return [1, 'dots', ...rightRange];
     }
-    
+
     if (shouldShowLeftDots && shouldShowRightDots) {
       // Caso 3: dots su entrambi i lati
       const middleRange = range(leftSiblingIndex, rightSiblingIndex);
       return [1, 'dots', ...middleRange, 'dots', totalPages];
     }
-    
+
     return range(1, totalPages);
   };
 
@@ -116,10 +116,10 @@ export const Pagination: React.FC<PaginationProps> = ({
   // Calcola le informazioni da mostrare
   const getInfoText = () => {
     if (!totalItems || !pageSize) return '';
-    
+
     const startItem = (currentPage - 1) * pageSize + 1;
     const endItem = Math.min(currentPage * pageSize, totalItems);
-    
+
     return `Mostrando ${startItem}-${endItem} di ${totalItems} elementi`;
   };
 
@@ -131,7 +131,7 @@ export const Pagination: React.FC<PaginationProps> = ({
           {getInfoText()}
         </div>
       )}
-      
+
       {/* Controlli paginazione */}
       <div className="flex items-center gap-2">
         {/* Pulsante Precedente */}
@@ -141,11 +141,11 @@ export const Pagination: React.FC<PaginationProps> = ({
           onClick={() => onPageChange(currentPage - 1)}
           disabled={currentPage <= 1}
           className="h-8 w-8 p-0"
-          aria-label="Previous page"
+          aria-label="Pagina precedente"
         >
           <ChevronLeft className="h-4 w-4" />
         </Button>
-        
+
         {/* Numeri di pagina */}
         <div className="flex items-center gap-1">
           {paginationItems.map((item, index) => {
@@ -156,10 +156,10 @@ export const Pagination: React.FC<PaginationProps> = ({
                 </div>
               );
             }
-            
+
             const pageNumber = item as number;
             const isActive = pageNumber === currentPage;
-            
+
             return (
               <Button
                 key={pageNumber}
@@ -173,7 +173,7 @@ export const Pagination: React.FC<PaginationProps> = ({
             );
           })}
         </div>
-        
+
         {/* Pulsante Successivo */}
         <Button
           variant="outline"
@@ -181,12 +181,12 @@ export const Pagination: React.FC<PaginationProps> = ({
           onClick={() => onPageChange(currentPage + 1)}
           disabled={currentPage >= totalPages}
           className="h-8 w-8 p-0"
-          aria-label="Next page"
+          aria-label="Pagina successiva"
         >
           <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
-      
+
       {/* Selettore dimensione pagina */}
       {showPageSizeSelector && pageSize && onPageSizeChange && (
         <div className="flex items-center gap-2">

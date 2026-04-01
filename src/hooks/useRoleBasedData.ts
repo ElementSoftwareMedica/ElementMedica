@@ -110,8 +110,8 @@ export function useRoleBasedData(): UseRoleBasedDataResult {
   const userId = user?.id || null;
   const userRole = (user?.roleType || user?.roles?.[0] || user?.role || null) as FilteredRoleType | null;
   const userCompanyId = user?.companyId || null;
-  // siteId potrebbe essere in un campo esteso
-  const userSiteId = ((user as any)?.siteId) || null;
+  // siteId è in PersonTenantProfile, denormalizzato nel profilo utente
+  const userSiteId = user?.siteId || null;
 
   // Determina i ruoli
   const isAdmin = useMemo((): boolean => {
@@ -156,7 +156,6 @@ export function useRoleBasedData(): UseRoleBasedDataResult {
     }
 
     if (!userId) {
-      console.warn('[useRoleBasedData] No userId available, returning empty array');
       return [];
     }
 

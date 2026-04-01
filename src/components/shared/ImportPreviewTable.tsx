@@ -149,22 +149,22 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
   };
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4">
+    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
       {/* Header with stats and company selector */}
-      <div className="rounded-t-lg bg-gray-50">
+      <div className="rounded-t-lg bg-gray-50 dark:bg-gray-900/50">
         <div className="py-4 px-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <span className="font-medium text-gray-700">
+              <span className="font-medium text-gray-700 dark:text-gray-300">
                 {preview.length} righe trovate
               </span>
               {duplicateCount > 0 && (
-                <span className="text-blue-700 bg-blue-100 px-2 py-0.5 text-xs rounded-full">
+                <span className="text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/50 px-2 py-0.5 text-xs rounded-full">
                   {duplicateCount} duplicati
                 </span>
               )}
             </div>
-            
+
             {availableCompanies && availableCompanies.length > 0 && (
               <CompanySelector
                 companies={availableCompanies}
@@ -176,10 +176,10 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
           </div>
         </div>
       </div>
-      
+
       {/* Table */}
       <div className="max-h-96 overflow-auto">
-        <table className="min-w-full divide-y divide-gray-200" style={{ tableLayout: 'fixed' }}>
+        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700" style={{ tableLayout: 'fixed' }}>
           <colgroup>
             <col style={{ width: '60px', minWidth: '60px', maxWidth: '80px' }} />
             {columns.map(col => (
@@ -187,7 +187,7 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
             ))}
             {!useSingleCheckboxColumn && <col style={{ width: '70px', minWidth: '70px' }} />}
           </colgroup>
-          
+
           <TableHeader
             columns={columns}
             colWidths={colWidths}
@@ -197,8 +197,8 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
             onSelectAllRows={handleSelectAllRows}
             useSingleCheckboxColumn={useSingleCheckboxColumn}
           />
-          
-          <tbody className="bg-white divide-y divide-gray-200">
+
+          <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
             {preview.map((item, idx) => (
               <TableRow
                 key={`import-row-${idx}`}
@@ -225,10 +225,10 @@ export default function ImportPreviewTable<T extends Record<string, any>>({
           </tbody>
         </table>
       </div>
-      
+
       {/* Error summary */}
       {Object.keys(rowErrors).length > 0 && (
-        <div className="mt-2 bg-red-50 border border-red-200 rounded p-3 text-sm text-red-700">
+        <div className="mt-2 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 rounded p-3 text-sm text-red-700 dark:text-red-300">
           <div className="font-medium mb-1">Errori rilevati:</div>
           <ul className="list-disc pl-5 space-y-1">
             {Object.entries(rowErrors).map(([rowIdx, errors]) => (

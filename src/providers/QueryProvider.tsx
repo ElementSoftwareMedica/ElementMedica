@@ -47,8 +47,7 @@ const queryClient = new QueryClient({
 
 // Error handler globale per le query
 queryClient.setMutationDefaults(['create', 'update', 'delete'], {
-  onError: (error: any) => {
-    console.error('Mutation error:', error);
+  onError: (error: unknown) => {
     // Errore sanitizzato - il componente che usa la mutation gestirà il proprio toast
     const _userMessage = sanitizeErrorMessage(error, 'Operazione fallita');
     // Toast rimosso per evitare dipendenza da react-hot-toast fuori dal contesto React

@@ -8,6 +8,7 @@ import prisma from '../config/prisma-optimization.js';
 import { body, query, validationResult } from 'express-validator';
 import { authenticate, optionalAuth } from '../middleware/auth.js';
 import { tenantMiddleware } from '../middleware/tenant.js';
+import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 import logger from '../utils/logger.js';
 import PersonRoleQueryService from '../services/person/PersonRoleQueryService.js';
 
@@ -28,7 +29,7 @@ function normalizeDetails(details) {
 async function resolvePersonId(req) {
   if (req.person?.id) return req.person.id;
 
-  const tenantId = req.tenant?.id || req.person?.tenantId;
+  const tenantId = req.tenant?.id || getEffectiveTenantId(req);
   if (!tenantId) return null;
 
   try {
@@ -83,7 +84,7 @@ router.post(
         });
       }
 
-      const tenantId = req.tenant?.id || req.person?.tenantId;
+      const tenantId = req.tenant?.id || getEffectiveTenantId(req);
       if (!tenantId) {
         return res.status(400).json({ success: false, error: 'Tenant non trovato o inattivo' });
       }
@@ -106,7 +107,7 @@ router.post(
       logger.error('Errore creazione ActivityLog', {
         component: 'activity-logs-routes',
         action: 'create',
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         tenantId: req.tenant?.id,
       });
@@ -193,7 +194,7 @@ router.get(
           take: limit,
           include: {
             person: {
-              select: { id: true, firstName: true, lastName: true, email: true }
+              select: { id: true, firstName: true, lastName: true }
             }
           }
         })
@@ -210,7 +211,7 @@ router.get(
       logger.error('Errore recupero ActivityLogs', {
         component: 'activity-logs-routes',
         action: 'list',
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         tenantId: req.tenant?.id,
       });

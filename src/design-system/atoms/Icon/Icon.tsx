@@ -226,7 +226,6 @@ export const Icon: React.FC<IconProps> = ({
   const pathData = iconPaths[name];
   
   if (!pathData) {
-    console.warn(`Icon "${name}" not found`);
     return null;
   }
 

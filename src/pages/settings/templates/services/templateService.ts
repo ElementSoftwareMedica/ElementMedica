@@ -5,6 +5,7 @@
 
 import axios from 'axios';
 import { API_BASE_URL } from '../../../../config/api';
+import { getToken } from '../../../../services/auth';
 import type {
   Template,
   TemplateListResponse,
@@ -16,7 +17,7 @@ import type {
 } from '../types/template.types';
 
 // Create axios instance with default config
-// Uses centralized API_BASE_URL which routes through proxy (port 4003) in development
+// P64: Uses centralized API_BASE_URL which routes to api:4001 via Vite proxy (dev) or Nginx (prod)
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -38,7 +39,7 @@ apiClient.interceptors.request.use((config) => {
     config.method = 'GET';
   }
 
-  const token = localStorage.getItem('token');
+  const token = getToken();
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
   }

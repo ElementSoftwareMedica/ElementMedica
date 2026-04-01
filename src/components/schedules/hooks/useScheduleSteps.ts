@@ -80,7 +80,7 @@ export function useScheduleSteps({
     const totalHours = Math.round((totalMinutes / 60) * 100) / 100;
 
     const hasDuration = Number.isFinite(durationNum) && durationNum > 0;
-    const hoursOk = !hasDuration || Math.abs(totalHours - durationNum) < 1e-6;
+    const hoursOk = !hasDuration || totalHours >= durationNum - 1e-6;
 
     // Validazione partecipanti
     const hasParticipants = selectedCompanies.length > 0 || selectedPersons.length > 0;
@@ -150,9 +150,8 @@ export function useScheduleSteps({
         const diff = durationNum - totalHours;
         if (diff > 0) {
           issues.push(`Mancano ${diff}h da programmare`);
-        } else {
-          issues.push(`Rimuovi ${Math.abs(diff)}h in eccesso`);
         }
+        // Se le ore sono superiori, nessun blocco — solo avviso visivo nel DateTimeManager
       }
     }
 

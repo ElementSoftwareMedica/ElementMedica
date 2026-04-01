@@ -91,7 +91,6 @@ export const ConsentManagementTab: React.FC<ConsentManagementTabProps> = ({ hook
         });
       }
     } catch (error) {
-      console.error('Error processing consent:', error);
     } finally {
       setProcessingConsent(null);
       setConfirmDialog({ open: false, type: null, action: 'grant' });
@@ -139,7 +138,7 @@ export const ConsentManagementTab: React.FC<ConsentManagementTabProps> = ({ hook
             size="small"
           />
 
-          <Tooltip title="Refresh consent data">
+          <Tooltip title="Aggiorna dati consenso">
             <IconButton onClick={refreshConsents} disabled={loading} size="small">
               <RefreshIcon />
             </IconButton>

@@ -19,6 +19,8 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { apiGet, apiPost } from '@/services/api';
+import { useTenantMode } from '@/contexts/TenantModeContext';
+import { useToast } from '@/hooks/useToast';
 import SearchableDropdown from './SearchableDropdown';
 import {
     Company,
@@ -68,6 +70,9 @@ const CreatePreventivoModal: React.FC<CreatePreventivoModalProps> = ({
     // Stato validazione codice sconto
     const [scontoValidation, setScontoValidation] = useState<ScontoValidation | null>(null);
     const [validatingSconto, setValidatingSconto] = useState(false);
+    const { getOperateHeaders } = useTenantMode();
+    const operateHeaders = getOperateHeaders();
+    const { showToast } = useToast();
 
     useEffect(() => {
         if (isOpen) {
@@ -105,8 +110,8 @@ const CreatePreventivoModal: React.FC<CreatePreventivoModalProps> = ({
                     return dateB.getTime() - dateA.getTime(); // Descending (newest first)
                 });
             setSchedules(validSchedules);
-        } catch (err) {
-            console.error('Error loading form data:', err);
+        } catch {
+            showToast({ message: 'Impossibile caricare i dati del form. Riprova.', type: 'warning' });
         } finally {
             setLoadingData(false);
         }
@@ -201,7 +206,7 @@ const CreatePreventivoModal: React.FC<CreatePreventivoModalProps> = ({
                 clienteId: clienteId,
                 clienteType: formData.aziendaId ? 'azienda' : 'persona',
                 ...(formData.corsoId && { corsoId: formData.corsoId })
-            });
+            }, { headers: operateHeaders });
 
             if (response.valid && response.calcolo) {
                 setScontoValidation({
@@ -219,7 +224,7 @@ const CreatePreventivoModal: React.FC<CreatePreventivoModalProps> = ({
                 });
             }
         } catch (err: unknown) {
-            const errorMessage = err instanceof Error ? err.message : 'Errore nella validazione del codice sconto';
+            const errorMessage = 'Errore nella validazione del codice sconto';
             setScontoValidation({
                 valid: false,
                 importoSconto: 0,
@@ -283,7 +288,7 @@ const CreatePreventivoModal: React.FC<CreatePreventivoModalProps> = ({
                 codiceSconto: ''
             });
         } catch (err) {
-            console.error('Error creating preventivo:', err);
+            showToast({ message: 'Errore nella creazione del preventivo. Riprova.', type: 'error' });
         } finally {
             setLoading(false);
         }
@@ -293,8 +298,8 @@ const CreatePreventivoModal: React.FC<CreatePreventivoModalProps> = ({
 
     return ReactDOM.createPortal(
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-orange-500 to-orange-600">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl dark:shadow-black/50 w-full max-w-3xl max-h-[90vh] overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-gradient-to-r from-orange-500 to-orange-600">
                     <h2 className="text-xl font-semibold text-white flex items-center gap-2">
                         <Plus className="h-5 w-5" />
                         Nuovo Preventivo
@@ -313,7 +318,7 @@ const CreatePreventivoModal: React.FC<CreatePreventivoModalProps> = ({
                         <div className="space-y-6">
                             {/* Tipo Servizio */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Tipo Servizio *</label>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tipo Servizio *</label>
                                 <div className="grid grid-cols-4 gap-2">
                                     {Object.entries(TIPO_SERVIZIO_CONFIG).map(([key, config]) => {
                                         const Icon = config.icon;
@@ -323,8 +328,8 @@ const CreatePreventivoModal: React.FC<CreatePreventivoModalProps> = ({
                                                 type="button"
                                                 onClick={() => setFormData({ ...formData, tipoServizio: key as CreatePreventivoData['tipoServizio'] })}
                                                 className={`p-3 rounded-lg border-2 transition-all flex flex-col items-center gap-1 ${formData.tipoServizio === key
-                                                        ? 'border-orange-500 bg-orange-50'
-                                                        : 'border-gray-200 hover:border-gray-300'
+                                                    ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/30'
+                                                    : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
                                                     }`}
                                             >
                                                 <Icon className={`h-5 w-5 ${config.color}`} />
@@ -337,7 +342,7 @@ const CreatePreventivoModal: React.FC<CreatePreventivoModalProps> = ({
 
                             {/* Cliente Type Toggle */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Cliente *</label>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Cliente *</label>
                                 <div className="flex gap-2 mb-3">
                                     <button
                                         type="button"
@@ -346,8 +351,8 @@ const CreatePreventivoModal: React.FC<CreatePreventivoModalProps> = ({
                                             setFormData({ ...formData, personaId: undefined });
                                         }}
                                         className={`flex-1 py-2 px-4 rounded-lg border-2 transition-all flex items-center justify-center gap-2 ${clienteType === 'azienda'
-                                                ? 'border-orange-500 bg-orange-50 text-orange-700'
-                                                : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                                            ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400'
+                                            : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500'
                                             }`}
                                     >
                                         <Building2 className="h-4 w-4" />
@@ -360,8 +365,8 @@ const CreatePreventivoModal: React.FC<CreatePreventivoModalProps> = ({
                                             setFormData({ ...formData, aziendaId: undefined });
                                         }}
                                         className={`flex-1 py-2 px-4 rounded-lg border-2 transition-all flex items-center justify-center gap-2 ${clienteType === 'persona'
-                                                ? 'border-orange-500 bg-orange-50 text-orange-700'
-                                                : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                                            ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400'
+                                            : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500'
                                             }`}
                                     >
                                         <User className="h-4 w-4" />
@@ -399,7 +404,7 @@ const CreatePreventivoModal: React.FC<CreatePreventivoModalProps> = ({
                             {/* Corso (if tipo = CORSO) */}
                             {formData.tipoServizio === 'CORSO' && (
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Corso Programmato</label>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Corso Programmato</label>
                                     <SearchableDropdown
                                         value={formData.corsoId || ''}
                                         onChange={(value) => setFormData({ ...formData, corsoId: value || undefined })}
@@ -415,21 +420,21 @@ const CreatePreventivoModal: React.FC<CreatePreventivoModalProps> = ({
 
                             {/* Titolo Servizio */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Titolo Servizio *</label>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Titolo Servizio *</label>
                                 <input
                                     type="text"
                                     value={formData.titoloServizio}
                                     onChange={(e) => setFormData({ ...formData, titoloServizio: e.target.value })}
                                     placeholder="Es. Corso Sicurezza sul Lavoro"
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-50"
                                     required
                                 />
                             </div>
 
                             {/* VOCI DEL PREVENTIVO */}
-                            <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                            <div className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 bg-gray-50 dark:bg-gray-700/50">
                                 <div className="flex items-center justify-between mb-4">
-                                    <label className="text-sm font-medium text-gray-700">
+                                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
                                         Voci del Preventivo
                                     </label>
                                     <button
@@ -444,7 +449,7 @@ const CreatePreventivoModal: React.FC<CreatePreventivoModalProps> = ({
 
                                 <div className="space-y-3">
                                     {/* Header */}
-                                    <div className="grid grid-cols-12 gap-2 text-xs font-medium text-gray-500 px-1">
+                                    <div className="grid grid-cols-12 gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 px-1">
                                         <div className="col-span-5">Descrizione</div>
                                         <div className="col-span-2 text-center">Qtà</div>
                                         <div className="col-span-2 text-right">Prezzo Unit.</div>
@@ -454,14 +459,14 @@ const CreatePreventivoModal: React.FC<CreatePreventivoModalProps> = ({
 
                                     {/* Voci */}
                                     {(formData.voci || []).map((voce) => (
-                                        <div key={voce.id} className="grid grid-cols-12 gap-2 items-center bg-white p-2 rounded-lg border border-gray-200">
+                                        <div key={voce.id} className="grid grid-cols-12 gap-2 items-center bg-white dark:bg-gray-700 p-2 rounded-lg border border-gray-200 dark:border-gray-600">
                                             <div className="col-span-5">
                                                 <input
                                                     type="text"
                                                     value={voce.descrizione}
                                                     onChange={(e) => updateVoce(voce.id, 'descrizione', e.target.value)}
                                                     placeholder="Es. Partecipante corso base"
-                                                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-orange-500 focus:border-orange-500"
+                                                    className="w-full px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded focus:ring-1 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-50"
                                                 />
                                             </div>
                                             <div className="col-span-2">
@@ -471,7 +476,7 @@ const CreatePreventivoModal: React.FC<CreatePreventivoModalProps> = ({
                                                     step="1"
                                                     value={voce.quantita}
                                                     onChange={(e) => updateVoce(voce.id, 'quantita', parseInt(e.target.value) || 1)}
-                                                    className="w-full px-3 py-1.5 text-sm text-center border border-gray-200 rounded focus:ring-1 focus:ring-orange-500 focus:border-orange-500"
+                                                    className="w-full px-3 py-1.5 text-sm text-center border border-gray-200 dark:border-gray-600 rounded focus:ring-1 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-50"
                                                 />
                                             </div>
                                             <div className="col-span-2">
@@ -483,11 +488,11 @@ const CreatePreventivoModal: React.FC<CreatePreventivoModalProps> = ({
                                                         step="0.01"
                                                         value={voce.prezzoUnitario}
                                                         onChange={(e) => updateVoce(voce.id, 'prezzoUnitario', parseFloat(e.target.value) || 0)}
-                                                        className="w-full pl-5 pr-2 py-1.5 text-sm text-right border border-gray-200 rounded focus:ring-1 focus:ring-orange-500 focus:border-orange-500"
+                                                        className="w-full pl-5 pr-2 py-1.5 text-sm text-right border border-gray-200 dark:border-gray-600 rounded focus:ring-1 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-50"
                                                     />
                                                 </div>
                                             </div>
-                                            <div className="col-span-2 text-right font-medium text-gray-900 text-sm">
+                                            <div className="col-span-2 text-right font-medium text-gray-900 dark:text-gray-50 text-sm">
                                                 € {voce.subtotale.toFixed(2)}
                                             </div>
                                             <div className="col-span-1 text-center">
@@ -508,7 +513,7 @@ const CreatePreventivoModal: React.FC<CreatePreventivoModalProps> = ({
 
                             {/* Codice Sconto */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                     <div className="flex items-center gap-2">
                                         <Tag className="h-4 w-4 text-green-600" />
                                         Codice Sconto (opzionale)
@@ -519,20 +524,20 @@ const CreatePreventivoModal: React.FC<CreatePreventivoModalProps> = ({
                                     value={formData.codiceSconto || ''}
                                     onChange={(e) => setFormData({ ...formData, codiceSconto: e.target.value.toUpperCase() })}
                                     placeholder="Es. SCONTO20"
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 uppercase"
+                                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 uppercase bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-50"
                                 />
-                                <p className="mt-1 text-xs text-gray-500">
+                                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                                     Il codice sconto verrà applicato dopo la creazione del preventivo
                                 </p>
                             </div>
 
                             {/* IVA */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Aliquota IVA</label>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Aliquota IVA</label>
                                 <select
                                     value={formData.aliquotaIva}
                                     onChange={(e) => setFormData({ ...formData, aliquotaIva: parseFloat(e.target.value) })}
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-50"
                                 >
                                     <option value="0">0% (Esente)</option>
                                     <option value="4">4%</option>
@@ -542,18 +547,18 @@ const CreatePreventivoModal: React.FC<CreatePreventivoModalProps> = ({
                             </div>
 
                             {/* Totali Preview */}
-                            <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
-                                <h4 className="font-medium text-gray-700 mb-3">Riepilogo</h4>
+                            <div className="bg-orange-50 dark:bg-orange-900/30 rounded-lg p-4 border border-orange-200 dark:border-orange-700">
+                                <h4 className="font-medium text-gray-700 dark:text-gray-300 mb-3">Riepilogo</h4>
                                 <div className="space-y-2 text-sm">
                                     <div className="flex justify-between">
-                                        <span className="text-gray-600">Totale voci ({(formData.voci || []).filter(v => v.subtotale > 0).length}):</span>
+                                        <span className="text-gray-600 dark:text-gray-400">Totale voci ({(formData.voci || []).filter(v => v.subtotale > 0).length}):</span>
                                         <span className="font-medium">€ {totaleVoci.toFixed(2)}</span>
                                     </div>
 
                                     {/* Sconto - mostra solo se validato o in validazione */}
                                     {formData.codiceSconto && (
                                         <div className="flex justify-between items-center">
-                                            <span className="text-gray-600 flex items-center gap-1">
+                                            <span className="text-gray-600 dark:text-gray-400 flex items-center gap-1">
                                                 Sconto
                                                 {validatingSconto && (
                                                     <span className="inline-block animate-spin rounded-full h-3 w-3 border-b-2 border-orange-500"></span>
@@ -575,25 +580,25 @@ const CreatePreventivoModal: React.FC<CreatePreventivoModalProps> = ({
 
                                     {/* Subtotale scontato (mostra solo se c'è uno sconto valido) */}
                                     {scontoValidation?.valid && importoScontoCalcolato > 0 && (
-                                        <div className="flex justify-between text-gray-600">
+                                        <div className="flex justify-between text-gray-600 dark:text-gray-400">
                                             <span>Imponibile scontato:</span>
                                             <span className="font-medium">€ {imponibileScontato.toFixed(2)}</span>
                                         </div>
                                     )}
 
                                     <div className="flex justify-between">
-                                        <span className="text-gray-600">IVA ({formData.aliquotaIva}%):</span>
+                                        <span className="text-gray-600 dark:text-gray-400">IVA ({formData.aliquotaIva}%):</span>
                                         <span className="font-medium">€ {importoIva.toFixed(2)}</span>
                                     </div>
-                                    <div className="flex justify-between pt-2 border-t border-orange-300">
-                                        <span className="text-gray-900 font-semibold">Totale:</span>
+                                    <div className="flex justify-between pt-2 border-t border-orange-300 dark:border-orange-600">
+                                        <span className="text-gray-900 dark:text-gray-50 font-semibold">Totale:</span>
                                         <span className="text-xl font-bold text-orange-600">€ {importoFinale.toFixed(2)}</span>
                                     </div>
 
                                     {/* Messaggio risparmio */}
                                     {scontoValidation?.valid && importoScontoCalcolato > 0 && (
-                                        <div className="mt-2 p-2 bg-green-50 rounded-lg border border-green-200 text-center">
-                                            <span className="text-green-700 text-xs font-medium">
+                                        <div className="mt-2 p-2 bg-green-50 dark:bg-green-900/30 rounded-lg border border-green-200 dark:border-green-700 text-center">
+                                            <span className="text-green-700 dark:text-green-400 text-xs font-medium">
                                                 🎉 Risparmi € {importoScontoCalcolato.toFixed(2)} con il codice sconto!
                                             </span>
                                         </div>
@@ -601,8 +606,8 @@ const CreatePreventivoModal: React.FC<CreatePreventivoModalProps> = ({
 
                                     {/* Errore codice sconto */}
                                     {scontoValidation && !scontoValidation.valid && scontoValidation.error && (
-                                        <div className="mt-2 p-2 bg-red-50 rounded-lg border border-red-200 text-center">
-                                            <span className="text-red-600 text-xs">
+                                        <div className="mt-2 p-2 bg-red-50 dark:bg-red-900/30 rounded-lg border border-red-200 dark:border-red-700 text-center">
+                                            <span className="text-red-600 dark:text-red-400 text-xs">
                                                 ⚠️ {scontoValidation.error}
                                             </span>
                                         </div>
@@ -612,20 +617,20 @@ const CreatePreventivoModal: React.FC<CreatePreventivoModalProps> = ({
 
                             {/* Note */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Note</label>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Note</label>
                                 <textarea
                                     value={formData.note}
                                     onChange={(e) => setFormData({ ...formData, note: e.target.value })}
                                     placeholder="Note aggiuntive..."
                                     rows={2}
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-50"
                                 />
                             </div>
                         </div>
                     )}
                 </form>
 
-                <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3 bg-gray-50">
+                <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3 bg-gray-50 dark:bg-gray-700/50">
                     <Button variant="outline" onClick={onClose} disabled={loading}>
                         Annulla
                     </Button>

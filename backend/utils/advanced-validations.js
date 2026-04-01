@@ -9,53 +9,53 @@ import { z } from 'zod';
 
 export const CourseStatusSchema = z.enum(['DRAFT', 'PUBLISHED', 'ACTIVE', 'COMPLETED', 'CANCELLED', 'SUSPENDED']);
 
-export const EnrollmentStatusSchema = z.enum(['PENDING', 'CONFIRMED', 'ACTIVE', 'COMPLETED', 'CANCELLED', 'SUSPENDED']);
+export const EnrollmentStatusSchema = z.enum(['PREVENTIVO', 'ACCETTATO', 'COMPLETATO', 'FATTURATO']);
 
 // === NUMERIC VALIDATIONS ===
 
 // Validazioni monetarie
 export const MoneySchema = z.number()
-  .min(0, 'Amount must be positive')
-  .max(99999999.99, 'Amount too large')
-  .multipleOf(0.01, 'Amount must have max 2 decimal places');
+  .min(0, 'L\'importo deve essere positivo')
+  .max(99999999.99, 'Importo troppo grande')
+  .multipleOf(0.01, 'L\'importo deve avere massimo 2 decimali');
 
 // Validazioni percentuali
 export const PercentageSchema = z.number()
-  .min(0, 'Percentage must be positive')
-  .max(100, 'Percentage cannot exceed 100')
-  .multipleOf(0.01, 'Percentage must have max 2 decimal places');
+  .min(0, 'La percentuale deve essere positiva')
+  .max(100, 'La percentuale non può superare 100')
+  .multipleOf(0.01, 'La percentuale deve avere massimo 2 decimali');
 
 // Validazioni ore
 export const HoursSchema = z.number()
-  .min(0, 'Hours must be positive')
-  .max(999999.99, 'Hours value too large')
-  .multipleOf(0.01, 'Hours must have max 2 decimal places');
+  .min(0, 'Le ore devono essere positive')
+  .max(999999.99, 'Valore ore troppo grande')
+  .multipleOf(0.01, 'Le ore devono avere massimo 2 decimali');
 
 // === MODEL VALIDATIONS ===
 
 // Person validation
 export const PersonValidationSchema = z.object({
-  email: z.string().email('Invalid email format'),
-  firstName: z.string().min(1, 'First name required').max(100, 'First name too long'),
-  lastName: z.string().min(1, 'Last name required').max(100, 'Last name too long'),
-  taxCode: z.string().regex(/^[A-Z]{6}[0-9]{2}[A-Z][0-9]{2}[A-Z][0-9]{3}[A-Z]$/, 'Invalid tax code').optional(),
+  email: z.string().email('Formato email non valido'),
+  firstName: z.string().min(1, 'Nome obbligatorio').max(100, 'Nome troppo lungo'),
+  lastName: z.string().min(1, 'Cognome obbligatorio').max(100, 'Cognome troppo lungo'),
+  taxCode: z.string().regex(/^[A-Z]{6}[0-9]{2}[A-Z][0-9]{2}[A-Z][0-9]{3}[A-Z]$/, 'Codice fiscale non valido').optional(),
   status: PersonStatusSchema.optional(),
   gender: GenderSchema.optional()
 });
 
 // Company validation
 export const CompanyValidationSchema = z.object({
-  ragioneSociale: z.string().min(1, 'Company name required').max(255, 'Company name too long'),
-  piva: z.string().regex(/^[0-9]{11}$/, 'Invalid VAT number').optional(),
-  codiceFiscale: z.string().regex(/^[0-9]{11}$/, 'Invalid fiscal code').optional(),
+  ragioneSociale: z.string().min(1, 'Nome azienda obbligatorio').max(255, 'Nome azienda troppo lungo'),
+  piva: z.string().regex(/^[0-9]{11}$/, 'Numero IVA non valido').optional(),
+  codiceFiscale: z.string().regex(/^[0-9]{11}$/, 'Codice fiscale aziendale non valido').optional(),
   status: CompanyStatusSchema.optional(),
   type: CompanyTypeSchema.optional()
 });
 
 // Course validation
 export const CourseValidationSchema = z.object({
-  title: z.string().min(1, 'Course title required').max(255, 'Title too long'),
-  description: z.string().max(2000, 'Description too long').optional(),
+  title: z.string().min(1, 'Titolo corso obbligatorio').max(255, 'Titolo troppo lungo'),
+  description: z.string().max(2000, 'Descrizione troppo lunga').optional(),
   status: CourseStatusSchema.optional(),
   level: CourseLevelSchema.optional(),
   type: CourseTypeSchema.optional(),
@@ -67,12 +67,11 @@ export const CourseValidationSchema = z.object({
 
 /**
  * Valida un oggetto con schema Zod
+ * @param {import('zod').ZodSchema} schema
+ * @param {unknown} data
+ * @returns {{ success: boolean; data?: unknown; errors?: string[] }}
  */
-export function validateWithSchema<T>(schema: z.ZodSchema<T>, data: unknown): {
-  success: boolean;
-  data?: T;
-  errors?: string[];
-} {
+export function validateWithSchema(schema, data) {
   try {
     const result = schema.parse(data);
     return { success: true, data: result };
@@ -85,25 +84,26 @@ export function validateWithSchema<T>(schema: z.ZodSchema<T>, data: unknown): {
     }
     return {
       success: false,
-      errors: ['Validation failed']
+      errors: ['Validazione non riuscita']
     };
   }
 }
 
 /**
  * Middleware per validazione automatica
+ * @param {import('zod').ZodSchema} schema
  */
-export function createValidationMiddleware<T>(schema: z.ZodSchema<T>) {
-  return (req: any, res: any, next: any) => {
+export function createValidationMiddleware(schema) {
+  return (req, res, next) => {
     const validation = validateWithSchema(schema, req.body);
-    
+
     if (!validation.success) {
       return res.status(400).json({
-        error: 'Validation failed',
+        error: 'Validazione non riuscita',
         details: validation.errors
       });
     }
-    
+
     req.validatedData = validation.data;
     next();
   };

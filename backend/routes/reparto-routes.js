@@ -1,15 +1,16 @@
 import express from 'express';
 import logger from '../utils/logger.js';
-import middleware from '../auth/middleware.js';
+import middleware from '../middleware/auth.js';
 import { checkAdvancedPermission, filterDataByPermissions } from '../middleware/advanced-permissions.js';
 import prisma from '../config/prisma-optimization.js';
+import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 
 const router = express.Router();
 const { authenticate: authenticateToken } = middleware;
 
 // Get all Reparti for a site
 router.get('/site/:siteId',
-  authenticateToken(),
+  authenticateToken,
   checkAdvancedPermission('companies', 'read', {
     getSiteId: (req) => req.params.siteId
   }),
@@ -18,17 +19,17 @@ router.get('/site/:siteId',
     try {
       const { siteId } = req.params;
       const person = req.person;
+      const tenantId = getEffectiveTenantId(req);
 
-      // Verifica che la sede esista
-      const site = await prisma.companySite.findUnique({
-        where: { id: siteId },
-        include: { company: true }
+      // Verifica che la sede esista e appartenga al tenant
+      const site = await prisma.companySite.findFirst({
+        where: { id: siteId, tenantId, deletedAt: null },
+        include: { companyTenantProfile: { include: { company: true } } }
       });
 
       if (!site) {
         return res.status(404).json({
-          error: 'Site not found',
-          message: `Site with ID ${siteId} does not exist`
+          error: 'Sede non trovata'
         });
       }
 
@@ -45,10 +46,15 @@ router.get('/site/:siteId',
             select: {
               id: true,
               siteName: true,
-              company: {
+              companyTenantProfile: {
                 select: {
                   id: true,
-                  name: true
+                  company: {
+                    select: {
+                      id: true,
+                      ragioneSociale: true
+                    }
+                  }
                 }
               }
             }
@@ -57,17 +63,21 @@ router.get('/site/:siteId',
             select: {
               id: true,
               firstName: true,
-              lastName: true,
-              email: true
+              lastName: true
             }
           },
-          dipendenti: {
+          personProfiles: {
             where: { deletedAt: null },
             select: {
               id: true,
-              firstName: true,
-              lastName: true,
-              email: true
+              email: true,
+              person: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true
+                }
+              }
             }
           }
         },
@@ -79,13 +89,13 @@ router.get('/site/:siteId',
       logger.error('Failed to fetch Reparti', {
         component: 'reparto-routes',
         action: 'getRepartieBySite',
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         siteId: req.params?.siteId
       });
       res.status(500).json({
-        error: 'Internal server error',
-        message: 'Failed to fetch departments'
+        error: 'Errore interno del server',
+        message: 'Errore nel recupero dei reparti'
       });
     }
   }
@@ -93,11 +103,11 @@ router.get('/site/:siteId',
 
 // Get Reparto by ID
 router.get('/:id',
-  authenticateToken(),
+  authenticateToken,
   checkAdvancedPermission('companies', 'read', {
     getSiteId: async (req) => {
-      const reparto = await prisma.reparto.findUnique({
-        where: { id: req.params.id, deletedAt: null },
+      const reparto = await prisma.reparto.findFirst({
+        where: { id: req.params.id, tenantId: getEffectiveTenantId(req), deletedAt: null },
         select: { siteId: true }
       });
       return reparto?.siteId;
@@ -109,33 +119,38 @@ router.get('/:id',
       const { id } = req.params;
       const person = req.person;
 
-      const reparto = await prisma.reparto.findUnique({
+      const reparto = await prisma.reparto.findFirst({
         where: {
           id,
+          tenantId: getEffectiveTenantId(req),
           deletedAt: null
         },
         include: {
           site: {
             include: {
-              company: true
+              companyTenantProfile: { include: { company: true } }
             }
           },
           responsabile: {
             select: {
               id: true,
               firstName: true,
-              lastName: true,
-              email: true
+              lastName: true
             }
           },
-          dipendenti: {
+          personProfiles: {
             where: { deletedAt: null },
             select: {
               id: true,
-              firstName: true,
-              lastName: true,
               email: true,
-              title: true
+              title: true,
+              person: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true
+                }
+              }
             }
           }
         }
@@ -143,8 +158,8 @@ router.get('/:id',
 
       if (!reparto) {
         return res.status(404).json({
-          error: 'Department not found',
-          message: `Department with ID ${id} does not exist`
+          error: 'Reparto non trovato',
+          message: 'Il reparto specificato non esiste'
         });
       }
 
@@ -156,13 +171,13 @@ router.get('/:id',
       logger.error('Failed to fetch Reparto', {
         component: 'reparto-routes',
         action: 'getReparto',
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         repartoId: req.params?.id
       });
       res.status(500).json({
-        error: 'Internal server error',
-        message: 'Failed to fetch department'
+        error: 'Errore interno del server',
+        message: 'Errore nel recupero del reparto'
       });
     }
   }
@@ -170,33 +185,33 @@ router.get('/:id',
 
 // Create new Reparto
 router.post('/',
-  authenticateToken(),
+  authenticateToken,
   checkAdvancedPermission('companies', 'create', {
     getSiteId: (req) => req.body.siteId
   }),
   async (req, res) => {
     try {
       const person = req.person;
+      const tenantId = getEffectiveTenantId(req);
       const { siteId, nome, descrizione, codice, responsabileId } = req.body;
 
       // Validate required fields
       if (!siteId || !nome) {
         return res.status(400).json({
-          error: 'Validation error',
-          message: 'siteId and nome are required'
+          error: 'Errore di validazione',
+          message: 'siteId e nome sono obbligatori'
         });
       }
 
-      // Verifica che la sede esista
-      const site = await prisma.companySite.findUnique({
-        where: { id: siteId },
-        include: { company: true }
+      // Verifica che la sede esista e appartenga al tenant
+      const site = await prisma.companySite.findFirst({
+        where: { id: siteId, tenantId, deletedAt: null },
+        include: { companyTenantProfile: { include: { company: true } } }
       });
 
       if (!site) {
         return res.status(404).json({
-          error: 'Site not found',
-          message: `Site with ID ${siteId} does not exist`
+          error: 'Sede non trovata'
         });
       }
 
@@ -211,16 +226,16 @@ router.post('/',
 
         if (!responsabile) {
           return res.status(404).json({
-            error: 'Responsible person not found',
-            message: `Person with ID ${responsabileId} does not exist`
+            error: 'Responsabile non trovato',
+            message: 'La persona specificata non esiste'
           });
         }
 
         // Verifica che il responsabile appartenga alla stessa company
         if (person.globalRole !== 'ADMIN' && responsabile.companyId !== site.companyId) {
           return res.status(403).json({
-            error: 'Access denied',
-            message: 'Responsible person must belong to the same company'
+            error: 'Accesso negato',
+            message: 'Il responsabile deve appartenere alla stessa azienda'
           });
         }
       }
@@ -236,8 +251,8 @@ router.post('/',
 
       if (existingReparto) {
         return res.status(409).json({
-          error: 'Conflict',
-          message: `A department with name "${nome}" already exists in this site`
+          error: 'Conflitto',
+          message: 'Un reparto con questo nome esiste già in questa sede'
         });
       }
 
@@ -255,10 +270,15 @@ router.post('/',
             select: {
               id: true,
               siteName: true,
-              company: {
+              companyTenantProfile: {
                 select: {
                   id: true,
-                  name: true
+                  company: {
+                    select: {
+                      id: true,
+                      ragioneSociale: true
+                    }
+                  }
                 }
               }
             }
@@ -267,8 +287,7 @@ router.post('/',
             select: {
               id: true,
               firstName: true,
-              lastName: true,
-              email: true
+              lastName: true
             }
           }
         }
@@ -279,13 +298,13 @@ router.post('/',
       logger.error('Failed to create Reparto', {
         component: 'reparto-routes',
         action: 'createReparto',
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         body: req.body
       });
       res.status(500).json({
-        error: 'Internal server error',
-        message: 'Failed to create department'
+        error: 'Errore interno del server',
+        message: 'Errore nella creazione del reparto'
       });
     }
   }
@@ -293,11 +312,11 @@ router.post('/',
 
 // Update Reparto
 router.put('/:id',
-  authenticateToken(),
+  authenticateToken,
   checkAdvancedPermission('companies', 'edit', {
     getSiteId: async (req) => {
-      const reparto = await prisma.reparto.findUnique({
-        where: { id: req.params.id, deletedAt: null },
+      const reparto = await prisma.reparto.findFirst({
+        where: { id: req.params.id, tenantId: getEffectiveTenantId(req), deletedAt: null },
         select: { siteId: true }
       });
       return reparto?.siteId;
@@ -310,19 +329,19 @@ router.put('/:id',
       const { nome, descrizione, codice, responsabileId } = req.body;
 
       // Verifica che il reparto esista
-      const existingReparto = await prisma.reparto.findUnique({
-        where: { id, deletedAt: null },
+      const existingReparto = await prisma.reparto.findFirst({
+        where: { id, tenantId: getEffectiveTenantId(req), deletedAt: null },
         include: {
           site: {
-            include: { company: true }
+            include: { companyTenantProfile: { include: { company: true } } }
           }
         }
       });
 
       if (!existingReparto) {
         return res.status(404).json({
-          error: 'Department not found',
-          message: `Department with ID ${id} does not exist`
+          error: 'Reparto non trovato',
+          message: 'Il reparto specificato non esiste'
         });
       }
 
@@ -337,16 +356,16 @@ router.put('/:id',
 
         if (!responsabile) {
           return res.status(404).json({
-            error: 'Responsible person not found',
-            message: `Person with ID ${responsabileId} does not exist`
+            error: 'Responsabile non trovato',
+            message: 'La persona specificata non esiste'
           });
         }
 
         // Verifica che il responsabile appartenga alla stessa company
         if (person.globalRole !== 'ADMIN' && responsabile.companyId !== existingReparto.site.companyId) {
           return res.status(403).json({
-            error: 'Access denied',
-            message: 'Responsible person must belong to the same company'
+            error: 'Accesso negato',
+            message: 'Il responsabile deve appartenere alla stessa azienda'
           });
         }
       }
@@ -364,8 +383,8 @@ router.put('/:id',
 
         if (duplicateReparto) {
           return res.status(409).json({
-            error: 'Conflict',
-            message: `A department with name "${nome}" already exists in this site`
+            error: 'Conflitto',
+            message: 'Un reparto con questo nome esiste già in questa sede'
           });
         }
       }
@@ -383,10 +402,15 @@ router.put('/:id',
             select: {
               id: true,
               siteName: true,
-              company: {
+              companyTenantProfile: {
                 select: {
                   id: true,
-                  name: true
+                  company: {
+                    select: {
+                      id: true,
+                      ragioneSociale: true
+                    }
+                  }
                 }
               }
             }
@@ -395,17 +419,21 @@ router.put('/:id',
             select: {
               id: true,
               firstName: true,
-              lastName: true,
-              email: true
+              lastName: true
             }
           },
-          dipendenti: {
+          personProfiles: {
             where: { deletedAt: null },
             select: {
               id: true,
-              firstName: true,
-              lastName: true,
-              email: true
+              email: true,
+              person: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true
+                }
+              }
             }
           }
         }
@@ -416,14 +444,14 @@ router.put('/:id',
       logger.error('Failed to update Reparto', {
         component: 'reparto-routes',
         action: 'updateReparto',
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         repartoId: req.params?.id,
         body: req.body
       });
       res.status(500).json({
-        error: 'Internal server error',
-        message: 'Failed to update department'
+        error: 'Errore interno del server',
+        message: 'Errore nell\'aggiornamento del reparto'
       });
     }
   }
@@ -431,11 +459,11 @@ router.put('/:id',
 
 // Delete Reparto (soft delete)
 router.delete('/:id',
-  authenticateToken(),
+  authenticateToken,
   checkAdvancedPermission('companies', 'delete', {
     getSiteId: async (req) => {
-      const reparto = await prisma.reparto.findUnique({
-        where: { id: req.params.id, deletedAt: null },
+      const reparto = await prisma.reparto.findFirst({
+        where: { id: req.params.id, tenantId: getEffectiveTenantId(req), deletedAt: null },
         select: { siteId: true }
       });
       return reparto?.siteId;
@@ -447,13 +475,13 @@ router.delete('/:id',
       const person = req.person;
 
       // Verifica che il reparto esista
-      const reparto = await prisma.reparto.findUnique({
-        where: { id, deletedAt: null },
+      const reparto = await prisma.reparto.findFirst({
+        where: { id, tenantId: getEffectiveTenantId(req), deletedAt: null },
         include: {
           site: {
-            include: { company: true }
+            include: { companyTenantProfile: { include: { company: true } } }
           },
-          dipendenti: {
+          personProfiles: {
             where: { deletedAt: null }
           }
         }
@@ -461,8 +489,8 @@ router.delete('/:id',
 
       if (!reparto) {
         return res.status(404).json({
-          error: 'Department not found',
-          message: `Department with ID ${id} does not exist`
+          error: 'Reparto non trovato',
+          message: 'Il reparto specificato non esiste'
         });
       }
 
@@ -470,10 +498,10 @@ router.delete('/:id',
       // che ora include la verifica dei permessi per sede
 
       // Verifica che non ci siano dipendenti assegnati al reparto
-      if (reparto.dipendenti.length > 0) {
+      if (reparto.personProfiles.length > 0) {
         return res.status(409).json({
-          error: 'Conflict',
-          message: 'Cannot delete department with assigned employees. Please reassign employees first.'
+          error: 'Conflitto',
+          message: 'Impossibile eliminare il reparto con dipendenti assegnati. Riassegnare prima i dipendenti.'
         });
       }
 
@@ -487,13 +515,13 @@ router.delete('/:id',
       logger.error('Failed to delete Reparto', {
         component: 'reparto-routes',
         action: 'deleteReparto',
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         repartoId: req.params?.id
       });
       res.status(500).json({
-        error: 'Internal server error',
-        message: 'Failed to delete department'
+        error: 'Errore interno del server',
+        message: 'Errore nell\'eliminazione del reparto'
       });
     }
   }
@@ -501,11 +529,11 @@ router.delete('/:id',
 
 // Assign employee to department
 router.post('/:id/assign-employee',
-  authenticateToken(),
+  authenticateToken,
   checkAdvancedPermission('companies', 'edit', {
     getSiteId: async (req) => {
-      const reparto = await prisma.reparto.findUnique({
-        where: { id: req.params.id, deletedAt: null },
+      const reparto = await prisma.reparto.findFirst({
+        where: { id: req.params.id, tenantId: getEffectiveTenantId(req), deletedAt: null },
         select: { siteId: true }
       });
       return reparto?.siteId;
@@ -519,59 +547,64 @@ router.post('/:id/assign-employee',
 
       if (!personId) {
         return res.status(400).json({
-          error: 'Validation error',
-          message: 'personId is required'
+          error: 'Errore di validazione',
+          message: 'personId obbligatorio'
         });
       }
 
       // Verifica che il reparto esista
-      const reparto = await prisma.reparto.findUnique({
-        where: { id, deletedAt: null },
+      const reparto = await prisma.reparto.findFirst({
+        where: { id, tenantId: getEffectiveTenantId(req), deletedAt: null },
         include: {
           site: {
-            include: { company: true }
+            include: { companyTenantProfile: { include: { company: true } } }
           }
         }
       });
 
       if (!reparto) {
         return res.status(404).json({
-          error: 'Department not found',
-          message: `Department with ID ${id} does not exist`
+          error: 'Reparto non trovato',
+          message: 'Il reparto specificato non esiste'
         });
       }
 
       // I permessi sono già stati verificati dal middleware checkAdvancedPermission
       // che ora include la verifica dei permessi per sede
 
-      // Verifica che la persona esista
+      // Verifica che la persona esista e abbia un profilo nel tenant
       const employee = await prisma.person.findUnique({
-        where: { id: personId, deletedAt: null }
+        where: { id: personId, deletedAt: null },
+        include: { tenantProfiles: { where: { tenantId: getEffectiveTenantId(req), deletedAt: null }, take: 1 } }
       });
 
       if (!employee) {
         return res.status(404).json({
-          error: 'Employee not found',
-          message: `Employee with ID ${personId} does not exist`
+          error: 'Dipendente non trovato',
+          message: 'Il dipendente specificato non esiste'
         });
       }
 
-      // Verifica che l'employee appartenga alla stessa company
-      if (person.globalRole !== 'ADMIN' && employee.companyId !== reparto.site.companyId) {
+      const employeeProfile = employee.tenantProfiles[0];
+
+      // P48: Verifica company tramite companyTenantProfileId nel profilo tenant
+      if (person.globalRole !== 'ADMIN' && employeeProfile?.companyTenantProfileId !== reparto.site.companyTenantProfileId) {
         return res.status(403).json({
-          error: 'Access denied',
-          message: 'Employee must belong to the same company'
+          error: 'Accesso negato',
+          message: 'Il dipendente deve appartenere alla stessa azienda'
         });
       }
 
-      // Assegna l'employee al reparto
-      await prisma.person.update({
-        where: { id: personId },
-        data: { repartoId: id }
-      });
+      // P48: repartoId è su PersonTenantProfile
+      if (employeeProfile) {
+        await prisma.personTenantProfile.update({
+          where: { id: employeeProfile.id },
+          data: { repartoId: id }
+        });
+      }
 
       res.json({
-        message: 'Employee assigned to department successfully',
+        message: 'Dipendente assegnato al reparto con successo',
         repartoId: id,
         personId
       });
@@ -579,14 +612,14 @@ router.post('/:id/assign-employee',
       logger.error('Failed to assign employee to department', {
         component: 'reparto-routes',
         action: 'assignEmployee',
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         repartoId: req.params?.id,
         body: req.body
       });
       res.status(500).json({
-        error: 'Internal server error',
-        message: 'Failed to assign employee to department'
+        error: 'Errore interno del server',
+        message: 'Errore nell\'assegnazione del dipendente al reparto'
       });
     }
   }
@@ -594,11 +627,11 @@ router.post('/:id/assign-employee',
 
 // Remove employee from department
 router.post('/:id/remove-employee',
-  authenticateToken(),
+  authenticateToken,
   checkAdvancedPermission('companies', 'edit', {
     getSiteId: async (req) => {
-      const reparto = await prisma.reparto.findUnique({
-        where: { id: req.params.id, deletedAt: null },
+      const reparto = await prisma.reparto.findFirst({
+        where: { id: req.params.id, tenantId: getEffectiveTenantId(req), deletedAt: null },
         select: { siteId: true }
       });
       return reparto?.siteId;
@@ -612,25 +645,25 @@ router.post('/:id/remove-employee',
 
       if (!personId) {
         return res.status(400).json({
-          error: 'Validation error',
-          message: 'personId is required'
+          error: 'Errore di validazione',
+          message: 'personId obbligatorio'
         });
       }
 
       // Verifica che il reparto esista
-      const reparto = await prisma.reparto.findUnique({
-        where: { id, deletedAt: null },
+      const reparto = await prisma.reparto.findFirst({
+        where: { id, tenantId: getEffectiveTenantId(req), deletedAt: null },
         include: {
           site: {
-            include: { company: true }
+            include: { companyTenantProfile: { include: { company: true } } }
           }
         }
       });
 
       if (!reparto) {
         return res.status(404).json({
-          error: 'Department not found',
-          message: `Department with ID ${id} does not exist`
+          error: 'Reparto non trovato',
+          message: 'Il reparto specificato non esiste'
         });
       }
 
@@ -639,31 +672,33 @@ router.post('/:id/remove-employee',
 
       // Verifica che la persona esista e sia assegnata al reparto
       const employee = await prisma.person.findUnique({
-        where: { id: personId, deletedAt: null }
+        where: { id: personId, deletedAt: null },
+        include: { tenantProfiles: { where: { tenantId: getEffectiveTenantId(req), deletedAt: null }, take: 1 } }
       });
 
       if (!employee) {
         return res.status(404).json({
-          error: 'Employee not found',
-          message: `Employee with ID ${personId} does not exist`
+          error: 'Dipendente non trovato',
+          message: 'Il dipendente specificato non esiste'
         });
       }
 
-      if (employee.repartoId !== id) {
+      const employeeProfile = employee.tenantProfiles[0];
+      if (!employeeProfile || employeeProfile.repartoId !== id) {
         return res.status(400).json({
-          error: 'Validation error',
-          message: 'Employee is not assigned to this department'
+          error: 'Errore di validazione',
+          message: 'Il dipendente non è assegnato a questo reparto'
         });
       }
 
-      // Rimuovi l'employee dal reparto
-      await prisma.person.update({
-        where: { id: personId },
+      // P48: repartoId è su PersonTenantProfile
+      await prisma.personTenantProfile.update({
+        where: { id: employeeProfile.id },
         data: { repartoId: null }
       });
 
       res.json({
-        message: 'Employee removed from department successfully',
+        message: 'Dipendente rimosso dal reparto con successo',
         repartoId: id,
         personId
       });
@@ -671,14 +706,14 @@ router.post('/:id/remove-employee',
       logger.error('Failed to remove employee from department', {
         component: 'reparto-routes',
         action: 'removeEmployee',
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         repartoId: req.params?.id,
         body: req.body
       });
       res.status(500).json({
-        error: 'Internal server error',
-        message: 'Failed to remove employee from department'
+        error: 'Errore interno del server',
+        message: 'Errore nell\'eliminazione del dipendente dal reparto'
       });
     }
   }

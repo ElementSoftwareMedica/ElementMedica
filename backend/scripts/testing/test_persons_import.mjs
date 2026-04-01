@@ -4,9 +4,14 @@ import http from 'http';
 
 async function main() {
   try {
-    const admin = await prisma.person.findFirst({ where: { email: 'admin@example.com' } });
+    // P48: Cerca per email nel PersonTenantProfile, non in Person
+    const profile = await prisma.personTenantProfile.findFirst({
+      where: { email: 'admin@example.com', deletedAt: null },
+      include: { person: true }
+    });
+    const admin = profile?.person;
     if (!admin) { console.log('ADMIN_NOT_FOUND'); return; }
-    const tenantId = admin.tenantId;
+    const tenantId = profile.tenantId;
     const { accessToken } = await JWTService.generateTokenPair(admin, { userAgent: 'safe-script', ip: '127.0.0.1' }, { rememberMe: false });
 
     const persons = [

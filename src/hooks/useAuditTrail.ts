@@ -4,7 +4,8 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { apiClient } from '../services';
+import { apiGet } from '../services/api';
+import { apiClient } from '../services'; // Keep for blob downloads
 import {
   AuditLogEntry,
   AuditTrailFilters,
@@ -55,12 +56,11 @@ export const useAuditTrail = (initialFilters?: AuditTrailFilters): UseAuditTrail
         params.append('dataType', currentFilters.dataType);
       }
 
-      const response = await apiClient.get(
+      const data = await apiGet<{ entries: AuditLogEntry[]; total: number; limit: number; offset: number } | AuditTrailResponse>(
         `/api/v1/gdpr/audit?${params.toString()}`
       );
 
       // Backend returns { entries, total, limit, offset } directly
-      const data = response.data as { entries: AuditLogEntry[]; total: number; limit: number; offset: number } | AuditTrailResponse;
       if ('success' in data && data.success && data.data) {
         const { auditTrail: logs, total: totalCount } = data.data;
         setAuditTrail(logs);
@@ -69,7 +69,7 @@ export const useAuditTrail = (initialFilters?: AuditTrailFilters): UseAuditTrail
         setAuditTrail(data.entries);
         setTotal(data.total);
       } else {
-        throw new Error('Failed to fetch audit trail');
+        throw new Error('Errore nel recupero del registro di audit');
       }
 
       // Update filters if new ones were provided
@@ -78,15 +78,13 @@ export const useAuditTrail = (initialFilters?: AuditTrailFilters): UseAuditTrail
       }
     } catch (err) {
       // Non mostrare errori se l'endpoint non esiste o restituisce errore
-      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch audit trail';
+      const errorMessage = 'Errore nel recupero del registro di audit';
       if (!errorMessage.includes('500') && !errorMessage.includes('404')) {
         setError(errorMessage);
-        console.error('Error fetching audit trail:', err);
       } else {
         // Errore 500/404 = endpoint non funzionante, set array vuoto
         setAuditTrail([]);
         setTotal(0);
-        console.warn('GDPR audit endpoint not available, using empty state');
       }
     } finally {
       setLoading(false);
@@ -209,7 +207,6 @@ export const useAuditTrail = (initialFilters?: AuditTrailFilters): UseAuditTrail
 
       // Toast handled by calling component
     } catch (err) {
-      console.error('Error exporting audit trail:', err);
       // Toast handled by calling component
     } finally {
       setLoading(false);
@@ -321,12 +318,12 @@ export const useAdminAuditTrail = (companyId?: string) => {
       if (currentFilters.endDate) params.append('endDate', currentFilters.endDate.toISOString());
       if (currentFilters.dataType) params.append('dataType', currentFilters.dataType);
 
-      const response = await apiClient.get<AuditTrailResponse>(
+      const data = await apiGet<AuditTrailResponse>(
         `/api/v1/gdpr/audit?${params.toString()}`
       );
 
-      if (response.data.success && response.data.data) {
-        const { auditTrail: logs, total: totalCount } = response.data.data;
+      if (data.success && data.data) {
+        const { auditTrail: logs, total: totalCount } = data.data;
         setAuditTrail(logs);
         setTotal(totalCount);
 
@@ -334,12 +331,11 @@ export const useAdminAuditTrail = (companyId?: string) => {
           setFilters(newFilters);
         }
       } else {
-        throw new Error(response.data.error || 'Failed to fetch admin audit trail');
+        throw new Error(data.error || 'Errore nel recupero del registro di audit admin');
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch admin audit trail';
+      const errorMessage = 'Errore nel recupero del registro di audit admin';
       setError(errorMessage);
-      console.error('Error fetching admin audit trail:', err);
       // Toast handled by calling component
     } finally {
       setLoading(false);

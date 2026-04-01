@@ -8,30 +8,30 @@ type CompanyImportData = Partial<Company> & Record<string, unknown>;
 // Validazione personalizzata per le aziende
 export const validateCompany = (company: CompanyImportData): string[] => {
   const errors: string[] = [];
-  
+
   if (!company.ragioneSociale) {
     errors.push('Ragione Sociale obbligatoria');
   } else if (company.ragioneSociale.length > 250) {
     errors.push('Ragione Sociale troppo lunga (max 250 caratteri)');
   }
-  
+
   // Verifica che ci sia almeno uno tra P.IVA e Codice Fiscale
   if (!company.piva && !company.codiceFiscale) {
     errors.push('P.IVA o Codice Fiscale obbligatori');
   }
-  
+
   // Verifica della P.IVA (se presente)
   if (company.piva) {
     if (company.piva.length < 8 || company.piva.length > 13) {
       errors.push('P.IVA non valida (deve essere tra 8 e 13 caratteri)');
     }
-    
+
     // Verifica che contenga solo numeri
     if (!/^\d+$/.test(company.piva)) {
       errors.push('P.IVA deve contenere solo numeri');
     }
   }
-  
+
   // Verifica del Codice Fiscale SOLO se non c'è una P.IVA valida
   if (!company.piva && company.codiceFiscale) {
     // Se il codice fiscale è per un'azienda (11 caratteri) o una persona (16 caratteri)
@@ -39,34 +39,34 @@ export const validateCompany = (company: CompanyImportData): string[] => {
       errors.push('Codice Fiscale non valido (deve essere 16 caratteri per persone fisiche o 11 per aziende)');
     }
   }
-  
+
   // Verifica campi che potrebbero causare errori 500
   if (company.sdi && company.sdi.length > 7) {
     errors.push('Codice SDI troppo lungo (max 7 caratteri)');
   }
-  
+
   if (company.pec && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(company.pec)) {
     errors.push('Formato PEC non valido');
   }
-  
+
   if (company.mail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(company.mail)) {
     errors.push('Formato Mail non valido');
   }
-  
+
   if (company.telefono && !/^[\d\s+\-().]+$/.test(company.telefono)) {
     errors.push('Formato Telefono non valido (sono consentiti solo numeri, spazi e caratteri +-(). )');
   }
-  
+
   // Validazione domini
   if (company.domain && !/^[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}$/.test(company.domain)) {
     errors.push('Formato Dominio non valido');
   }
-  
+
   // Validazione slug
   if (company.slug && !/^[a-z0-9-]+$/.test(company.slug)) {
     errors.push('Slug deve contenere solo lettere minuscole, numeri e trattini');
   }
-  
+
   // Validazione date
   const dateFields = ['ultimoSopralluogo', 'prossimoSopralluogo', 'ultimoSopralluogoRSPP', 'prossimoSopralluogoRSPP', 'ultimoSopralluogoMedico', 'prossimoSopralluogoMedico'];
   dateFields.forEach(field => {
@@ -75,12 +75,12 @@ export const validateCompany = (company: CompanyImportData): string[] => {
       errors.push(`Formato data non valido per ${field}`);
     }
   });
-  
+
   // Validazione boolean
   if (company.isActive && !['true', 'false', '1', '0', 'sì', 'no', 'si', 'yes', 'no'].includes(String(company.isActive).toLowerCase())) {
     errors.push('Campo Attivo deve essere true/false, 1/0, sì/no, yes/no');
   }
-  
+
   // Verifica lunghezza eccessiva per campi comuni - ALLINEATI AL TEMPLATE
   const maxLengthFields: [string, number][] = [
     ['sedeAzienda', 250],
@@ -104,14 +104,14 @@ export const validateCompany = (company: CompanyImportData): string[] => {
     ['pec', 100],
     ['sdi', 7]
   ];
-  
+
   maxLengthFields.forEach(([field, maxLength]) => {
     const value = company[field as keyof CompanyImportData];
     if (value && typeof value === 'string' && value.length > maxLength) {
       errors.push(`Il campo ${field} è troppo lungo (max ${maxLength} caratteri)`);
     }
   });
-  
+
   return errors;
 };
 
@@ -119,31 +119,36 @@ export const validateCompany = (company: CompanyImportData): string[] => {
 export const formatCompanyData = (company: CompanyImportData): CompanyImportData => {
   // Applica il Title Case ai campi specificati
   const formattedCompany = applyTitleCaseToFields(company, titleCaseFields);
-  
+
   // Conversioni specifiche per i campi booleani
-  if (formattedCompany.isActive) {
-    const activeValue = String(formattedCompany.isActive).toLowerCase();
-    formattedCompany.isActive = ['true', '1', 'sì', 'si', 'yes'].includes(activeValue);
+  // Gestisce anche stringa vuota '' → rimossa dal payload (evita errori Prisma BooleanField)
+  if (formattedCompany.isActive !== undefined) {
+    if (formattedCompany.isActive === '' || formattedCompany.isActive === null) {
+      delete formattedCompany.isActive;
+    } else {
+      const activeValue = String(formattedCompany.isActive).toLowerCase();
+      formattedCompany.isActive = ['true', '1', 'sì', 'si', 'yes'].includes(activeValue);
+    }
   }
-  
+
   // Normalizza i campi numerici
   if (formattedCompany.piva && typeof formattedCompany.piva === 'string') {
     formattedCompany.piva = formattedCompany.piva.replace(/\D/g, ''); // Rimuovi caratteri non numerici
   }
-  
+
   if (formattedCompany.codiceFiscale && typeof formattedCompany.codiceFiscale === 'string') {
     formattedCompany.codiceFiscale = formattedCompany.codiceFiscale.toUpperCase().replace(/\s/g, '');
   }
-  
+
   // Normalizza le email
   if (formattedCompany.mail && typeof formattedCompany.mail === 'string') {
     formattedCompany.mail = formattedCompany.mail.toLowerCase().trim();
   }
-  
+
   if (formattedCompany.pec && typeof formattedCompany.pec === 'string') {
     formattedCompany.pec = formattedCompany.pec.toLowerCase().trim();
   }
-  
+
   return formattedCompany;
 };
 
@@ -151,17 +156,17 @@ export const formatCompanyData = (company: CompanyImportData): CompanyImportData
 export const detectConflicts = (companies: CompanyImportData[], existingCompanies: CompanyImportData[] = []): CompanyImportData[] => {
   return companies.map((company) => {
     const conflictInfo = { ...company } as CompanyImportData & { _isExisting?: boolean; _existingId?: string; _isDuplicateSite?: boolean; _isNewSite?: boolean; _isNewCompanyWithSite?: boolean };
-    
+
     // Cerca aziende esistenti con stessa P.IVA o Codice Fiscale (supporta sia chiavi italiane che alias inglesi)
     const existingCompany = existingCompanies.find((existing: any) =>
       (company.piva && (existing.piva === company.piva || existing.vatNumber === company.piva)) ||
       (company.codiceFiscale && (existing.codiceFiscale === company.codiceFiscale || existing.taxCode === company.codiceFiscale))
     ) as any;
-    
+
     if (existingCompany) {
       conflictInfo._isExisting = true;
       conflictInfo._existingId = existingCompany.id as string;
-      
+
       // Verifica se è una nuova sede per un'azienda esistente (solo match su siteName)
       if ((company.siteName || company.siteIndirizzo)) {
         if (Array.isArray((existingCompany as any).sites)) {
@@ -172,7 +177,7 @@ export const detectConflicts = (companies: CompanyImportData[], existingCompanie
             normalize(site.name) === companySiteName ||
             normalize(site.siteName) === companySiteName
           )
-          
+
           if (companySiteName && existingSite) {
             conflictInfo._isDuplicateSite = true
           } else {
@@ -187,7 +192,7 @@ export const detectConflicts = (companies: CompanyImportData[], existingCompanie
     } else if (company.siteName || company.siteIndirizzo) {
       conflictInfo._isNewCompanyWithSite = true;
     }
-    
+
     return conflictInfo;
   });
 };
@@ -195,20 +200,37 @@ export const detectConflicts = (companies: CompanyImportData[], existingCompanie
 // Funzione per convertire i dati per l'API (allineata ai campi attesi dal backend)
 export const convertToApiFormat = (company: CompanyImportData): Record<string, unknown> => {
   const payload: Record<string, unknown> = {
-    // Campi Company
+    // Campi Company (globali)
     ragioneSociale: company.ragioneSociale,
     codiceAteco: company.codiceAteco,
     piva: company.piva,
     codiceFiscale: company.codiceFiscale,
     sdi: company.sdi,
+    formaGiuridica: company.formaGiuridica,
+    sedeLegaleIndirizzo: company.sedeLegaleIndirizzo,
+    sedeLegaleCitta: company.sedeLegaleCitta,
+    sedeLegaleCap: company.sedeLegaleCap,
+    sedeLegaleProvincia: company.sedeLegaleProvincia,
+    sedeLegaleNazione: company.sedeLegaleNazione,
+    settore: company.settore,
+    dimensione: company.dimensione,
+    pecFatturazione: company.pecFatturazione,
+
+    // Campi CompanyTenantProfile (per-tenant)
     pec: company.pec,
     iban: company.iban,
-    note: company.note,
-    slug: company.slug,
-    domain: company.domain,
-    settings: company.settings,
-    subscriptionPlan: company.subscriptionPlan,
     isActive: company.isActive,
+    note: company.note,
+    referenteRuolo: company.referenteRuolo,
+    dataInizioRapporto: company.dataInizioRapporto,
+    dataFineRapporto: company.dataFineRapporto,
+    tipoContratto: company.tipoContratto,
+    numeroContratto: company.numeroContratto,
+    scontoPercentuale: company.scontoPercentuale,
+    terminiPagamento: company.terminiPagamento,
+    modalitaPagamento: company.modalitaPagamento,
+    noteCommerciali: company.noteCommerciali,
+    noteOperative: company.noteOperative,
   };
 
   // Campi CompanySite se presenti

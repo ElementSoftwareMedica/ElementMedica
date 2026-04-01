@@ -28,15 +28,33 @@ describe('TrainerImportService E2E Tests', () => {
   });
 
   afterAll(async () => {
+    // P63: Person.tenantId RIMOSSO - cleanup tramite PersonTenantProfile
     await prisma.personRole.deleteMany({ where: { tenantId: TEST_TENANT_ID } });
-    await prisma.person.deleteMany({ where: { tenantId: TEST_TENANT_ID } });
-    await prisma.tenant.delete({ where: { id: TEST_TENANT_ID } }).catch(() => {});
+    const profiles = await prisma.personTenantProfile.findMany({
+      where: { tenantId: TEST_TENANT_ID },
+      select: { personId: true }
+    });
+    const personIds = profiles.map(p => p.personId);
+    await prisma.personTenantProfile.deleteMany({ where: { tenantId: TEST_TENANT_ID } });
+    if (personIds.length > 0) {
+      await prisma.person.deleteMany({ where: { id: { in: personIds } } });
+    }
+    await prisma.tenant.delete({ where: { id: TEST_TENANT_ID } }).catch(() => { });
     await prisma.$disconnect();
   });
 
   beforeEach(async () => {
+    // P63: Person.tenantId RIMOSSO - cleanup tramite PersonTenantProfile
     await prisma.personRole.deleteMany({ where: { tenantId: TEST_TENANT_ID } });
-    await prisma.person.deleteMany({ where: { tenantId: TEST_TENANT_ID } });
+    const profiles = await prisma.personTenantProfile.findMany({
+      where: { tenantId: TEST_TENANT_ID },
+      select: { personId: true }
+    });
+    const personIds = profiles.map(p => p.personId);
+    await prisma.personTenantProfile.deleteMany({ where: { tenantId: TEST_TENANT_ID } });
+    if (personIds.length > 0) {
+      await prisma.person.deleteMany({ where: { id: { in: personIds } } });
+    }
   });
 
   describe('validateTrainers', () => {
@@ -111,7 +129,7 @@ describe('TrainerImportService E2E Tests', () => {
       // Verifica Person + Role (NO user relation - username/password on Person)
       const person = await prisma.person.findFirst({
         where: { taxCode: 'GLLGLU88E20H501V' },
-        include: { personRoles: true }
+        include: { personRoles: true, tenantProfiles: { where: { tenantId: TEST_TENANT_ID } } }
       });
 
       expect(person).toBeDefined();
@@ -119,7 +137,7 @@ describe('TrainerImportService E2E Tests', () => {
 
       // Verifica username/password su Person (non separate User table)
       expect(person.username).toBe('giulia.gialli');
-      expect(person.email).toBe('giulia.gialli@trainer.com');
+      expect(person.tenantProfiles[0]?.email).toBe('giulia.gialli@trainer.com');
 
       // Verifica password hash
       const validPassword = await bcrypt.compare('Password123!', person.password);
@@ -127,16 +145,21 @@ describe('TrainerImportService E2E Tests', () => {
     });
 
     it('dovrebbe gestire omonimie con contatore (giorgio.verdi1, giorgio.verdi2)', async () => {
-      // Crea primo Giorgio Verdi
+      // P48: Crea primo Giorgio Verdi con profilo tenant
       await prisma.person.create({
         data: {
           firstName: 'Giorgio',
           lastName: 'Verdi',
           taxCode: 'VRDGRG70B15H501M', // Test 4a - Primo Giorgio
-          email: 'giorgio1@test.com',
           username: 'giorgio.verdi',
           password: 'hash123',
-          tenantId: TEST_TENANT_ID,
+          tenantProfiles: {
+            create: {
+              tenantId: TEST_TENANT_ID,
+              email: 'giorgio1@test.com',
+              isPrimary: true
+            }
+          },
           personRoles: { create: { roleType: 'TRAINER', tenantId: TEST_TENANT_ID } }
         }
       });

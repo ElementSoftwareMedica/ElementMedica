@@ -6,13 +6,13 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  RefreshCw, 
-  X, 
-  AlertCircle, 
-  CheckCircle, 
-  Clock, 
-  Loader, 
+import {
+  RefreshCw,
+  X,
+  AlertCircle,
+  CheckCircle,
+  Clock,
+  Loader,
   ChevronDown,
   ChevronRight,
   FileText,
@@ -46,10 +46,10 @@ const BatchMonitoringPage: React.FC = () => {
   const loadBatches = useCallback(async () => {
     try {
       setError(null);
-      
+
       // Get all documents grouped by batchId
       const response = await documentService.list({ limit: 1000 });
-      
+
       // Group documents by batchId
       const batchMap = new Map<string, GeneratedDocument[]>();
       response.data.forEach(doc => {
@@ -74,7 +74,6 @@ const BatchMonitoringPage: React.FC = () => {
             generatedAt: new Date(docs[0].generatedAt),
           });
         } catch (err) {
-          console.error(`Failed to get status for batch ${batchId}:`, err);
         }
       }
 
@@ -82,8 +81,8 @@ const BatchMonitoringPage: React.FC = () => {
       batchJobs.sort((a, b) => b.generatedAt.getTime() - a.generatedAt.getTime());
 
       setBatches(batchJobs);
-    } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Errore durante il caricamento dei batch');
+    } catch (err: unknown) {
+      setError('Errore durante il caricamento dei batch');
     } finally {
       setLoading(false);
     }
@@ -139,19 +138,19 @@ const BatchMonitoringPage: React.FC = () => {
    */
   const filteredBatches = batches.filter(batch => {
     if (statusFilter === 'all') return true;
-    
+
     if (statusFilter === 'active') {
       return batch.status.inProgress > 0;
     }
-    
+
     if (statusFilter === 'completed') {
       return batch.status.completed === batch.status.total && batch.status.failed === 0;
     }
-    
+
     if (statusFilter === 'failed') {
       return batch.status.failed > 0;
     }
-    
+
     return true;
   });
 
@@ -163,7 +162,7 @@ const BatchMonitoringPage: React.FC = () => {
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
           <Loader className="w-8 h-8 animate-spin mx-auto text-blue-600 mb-4" />
-          <p className="text-gray-600">Caricamento batch...</p>
+          <p className="text-gray-600 dark:text-gray-400">Caricamento batch...</p>
         </div>
       </div>
     );
@@ -174,7 +173,7 @@ const BatchMonitoringPage: React.FC = () => {
    */
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+      <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 rounded-lg p-4">
         <div className="flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
           <div className="flex-1">
@@ -196,20 +195,20 @@ const BatchMonitoringPage: React.FC = () => {
     <div className="p-6">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Monitoraggio Batch</h1>
-        <p className="text-gray-600">Monitora lo stato dei batch di generazione documenti</p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-50 mb-2">Monitoraggio Batch</h1>
+        <p className="text-gray-600 dark:text-gray-400">Monitora lo stato dei batch di generazione documenti</p>
       </div>
 
       {/* Controls */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm dark:shadow-black/30 border border-gray-200 dark:border-gray-700 p-4 mb-6">
         <div className="flex items-center justify-between gap-4">
           {/* Filters */}
           <div className="flex items-center gap-3">
-            <label className="text-sm font-medium text-gray-700">Stato:</label>
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Stato:</label>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as any)}
-              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-50"
             >
               <option value="all">Tutti</option>
               <option value="active">In Corso</option>
@@ -225,16 +224,16 @@ const BatchMonitoringPage: React.FC = () => {
                 type="checkbox"
                 checked={autoRefresh}
                 onChange={(e) => setAutoRefresh(e.target.checked)}
-                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 bg-white dark:bg-gray-700"
               />
-              <span className="text-gray-700">Auto-refresh</span>
+              <span className="text-gray-700 dark:text-gray-300">Auto-refresh</span>
             </label>
 
             {autoRefresh && (
               <select
                 value={refreshInterval}
                 onChange={(e) => setRefreshInterval(Number(e.target.value))}
-                className="px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
+                className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-50"
               >
                 <option value={3000}>3s</option>
                 <option value={5000}>5s</option>
@@ -257,11 +256,11 @@ const BatchMonitoringPage: React.FC = () => {
 
       {/* Batch list */}
       {filteredBatches.length === 0 ? (
-        <div className="bg-gray-50 rounded-lg border border-gray-200 p-8 text-center">
-          <FileText className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-          <p className="text-gray-600 font-medium mb-1">Nessun batch trovato</p>
-          <p className="text-gray-500 text-sm">
-            {statusFilter !== 'all' 
+        <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-700 p-8 text-center">
+          <FileText className="w-12 h-12 text-gray-400 dark:text-gray-500 mx-auto mb-3" />
+          <p className="text-gray-600 dark:text-gray-400 font-medium mb-1">Nessun batch trovato</p>
+          <p className="text-gray-500 dark:text-gray-400 text-sm">
+            {statusFilter !== 'all'
               ? 'Prova a cambiare i filtri o aggiorna la pagina'
               : 'I batch di generazione documenti appariranno qui'
             }
@@ -275,9 +274,9 @@ const BatchMonitoringPage: React.FC = () => {
             const hasErrors = batch.status.failed > 0;
 
             return (
-              <div 
+              <div
                 key={batch.batchId}
-                className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden"
+                className="bg-white dark:bg-gray-800 rounded-lg shadow-sm dark:shadow-black/30 border border-gray-200 dark:border-gray-700 overflow-hidden"
               >
                 {/* Batch header */}
                 <div className="p-4">
@@ -285,18 +284,18 @@ const BatchMonitoringPage: React.FC = () => {
                     {/* Status icon and info */}
                     <div className="flex items-start gap-3 flex-1">
                       {getStatusIcon(batch.status)}
-                      
+
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <h3 className="font-medium text-gray-900">
+                          <h3 className="font-medium text-gray-900 dark:text-gray-50">
                             Batch #{batch.batchId.slice(0, 8)}
                           </h3>
                           <span className={`text-sm font-medium ${getStatusColor(batch.status)}`}>
                             {isActive ? 'In corso' : hasErrors ? 'Completato con errori' : 'Completato'}
                           </span>
                         </div>
-                        
-                        <div className="flex items-center gap-4 text-sm text-gray-600">
+
+                        <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
                           <span className="flex items-center gap-1">
                             <Clock className="w-4 h-4" />
                             {new Date(batch.generatedAt).toLocaleString('it-IT')}
@@ -327,12 +326,12 @@ const BatchMonitoringPage: React.FC = () => {
                       {/* Expand button */}
                       <button
                         onClick={() => toggleBatchExpansion(batch.batchId)}
-                        className="p-1 hover:bg-gray-100 rounded transition-colors"
+                        className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
                       >
                         {isExpanded ? (
-                          <ChevronDown className="w-5 h-5 text-gray-600" />
+                          <ChevronDown className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                         ) : (
-                          <ChevronRight className="w-5 h-5 text-gray-600" />
+                          <ChevronRight className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                         )}
                       </button>
                     </div>
@@ -340,15 +339,14 @@ const BatchMonitoringPage: React.FC = () => {
 
                   {/* Progress bar */}
                   <div className="mt-3">
-                    <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
+                    <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400 mb-1">
                       <span>Progresso</span>
                       <span className="font-medium">{Math.round(batch.status.percentage)}%</span>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                      <div 
-                        className={`h-full transition-all duration-500 ${
-                          hasErrors ? 'bg-red-500' : isActive ? 'bg-blue-500' : 'bg-green-500'
-                        }`}
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+                      <div
+                        className={`h-full transition-all duration-500 ${hasErrors ? 'bg-red-500' : isActive ? 'bg-blue-500' : 'bg-green-500'
+                          }`}
                         style={{ width: `${batch.status.percentage}%` }}
                       />
                     </div>
@@ -357,24 +355,24 @@ const BatchMonitoringPage: React.FC = () => {
 
                 {/* Expanded details */}
                 {isExpanded && (
-                  <div className="border-t border-gray-200 p-4 bg-gray-50">
-                    <h4 className="text-sm font-medium text-gray-900 mb-3">
+                  <div className="border-t border-gray-200 dark:border-gray-700 p-4 bg-gray-50 dark:bg-gray-700/50">
+                    <h4 className="text-sm font-medium text-gray-900 dark:text-gray-50 mb-3">
                       Documenti ({batch.documents.length})
                     </h4>
-                    
+
                     <div className="space-y-2 max-h-96 overflow-y-auto">
                       {batch.documents.map(doc => (
-                        <div 
+                        <div
                           key={doc.id}
-                          className="flex items-center justify-between p-2 bg-white rounded border border-gray-200 text-sm"
+                          className="flex items-center justify-between p-2 bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-600 text-sm"
                         >
                           <div className="flex-1">
-                            <div className="font-medium text-gray-900">{doc.filename}</div>
-                            <div className="text-xs text-gray-500">
+                            <div className="font-medium text-gray-900 dark:text-gray-50">{doc.filename}</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">
                               {doc.entityType} • {doc.entityId}
                             </div>
                           </div>
-                          
+
                           <div className="flex items-center gap-2">
                             {doc.status === 'GENERATED' && (
                               <span className="flex items-center gap-1 text-green-600">

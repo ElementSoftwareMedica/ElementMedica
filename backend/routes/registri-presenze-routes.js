@@ -6,26 +6,33 @@
  */
 
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
-import middleware from '../auth/middleware.js';
+import prisma from '../config/prisma-optimization.js';
+import middleware from '../middleware/auth.js';
 import { body, validationResult } from 'express-validator';
 import logger from '../utils/logger.js';
 import { DocumentService } from '../services/documentService.js';
+import { getEffectiveTenantId } from '../utils/tenantHelper.js';
+import { signDocument, signDocumentsBulk } from '../services/documentSigningService.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fsSync from 'fs';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const router = express.Router();
-const prisma = new PrismaClient();
 const documentService = new DocumentService();
 
-const { authenticate: authenticateToken, authorize: requirePermission } = middleware;
+const { authenticate: authenticateToken, requirePermission } = middleware;
 
 /**
  * GET /api/v1/registri-presenze
  * Get all attendance registers
  */
-router.get('/', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
+router.get('/', authenticateToken, requirePermission('documents:read'), async (req, res) => {
   try {
     const { scheduleId, sessionId, formatoreId } = req.query;
-    const tenantId = req.person.tenantId;
+    const tenantId = getEffectiveTenantId(req);
 
     const where = {
       tenantId,
@@ -43,7 +50,7 @@ router.get('/', authenticateToken(), requirePermission('documents:read'), async 
           include: {
             course: true,
             companies: {
-              include: { company: true }
+              include: { companyTenantProfile: { include: { company: true } } }
             }
           }
         },
@@ -76,10 +83,10 @@ router.get('/', authenticateToken(), requirePermission('documents:read'), async 
     logger.error('Failed to fetch registri presenze', {
       component: 'registri-presenze-routes',
       action: 'list',
-      error: error.message,
+      error: 'Operazione non riuscita',
       personId: req.person?.id
     });
-    res.status(500).json({ error: 'Failed to fetch registri presenze' });
+    res.status(500).json({ error: 'Errore nel recupero dei registri presenze' });
   }
 });
 
@@ -89,7 +96,7 @@ router.get('/', authenticateToken(), requirePermission('documents:read'), async 
  * Accepts either sessionId (CourseSession UUID) OR scheduleId + sessionIndex + sessionDate
  */
 router.post('/generate',
-  authenticateToken(),
+  authenticateToken,
   requirePermission('documents:create'),
   [
     body('sessionId').optional().isString(),
@@ -109,11 +116,11 @@ router.post('/generate',
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
-        return res.status(400).json({ error: 'Validation error', details: errors.array() });
+        return res.status(400).json({ error: 'Errore di validazione', details: errors.array() });
       }
 
       const { sessionId, scheduleId, sessionIndex, sessionDate, sessionStart, sessionEnd, formatoreId, templateId, attendanceData } = req.body;
-      const tenantId = req.person.tenantId;
+      const tenantId = getEffectiveTenantId(req);
       const userId = req.person.id;
 
       let session = null;
@@ -128,7 +135,7 @@ router.post('/generate',
               include: {
                 course: true,
                 companies: {
-                  include: { company: true }
+                  include: { companyTenantProfile: { include: { company: true } } }
                 }
               }
             },
@@ -148,7 +155,7 @@ router.post('/generate',
         }
 
         if (!effectiveScheduleId) {
-          return res.status(400).json({ error: 'Either a valid sessionId or scheduleId is required' });
+          return res.status(400).json({ error: 'È richiesto un sessionId o scheduleId valido' });
         }
 
         schedule = await prisma.courseSchedule.findFirst({
@@ -156,7 +163,7 @@ router.post('/generate',
           include: {
             course: true,
             companies: {
-              include: { company: true }
+              include: { companyTenantProfile: { include: { company: true } } }
             },
             sessions: {
               where: { deletedAt: null },
@@ -170,7 +177,7 @@ router.post('/generate',
         });
 
         if (!schedule) {
-          return res.status(404).json({ error: 'Schedule not found' });
+          return res.status(404).json({ error: 'Programmazione non trovata' });
         }
 
         // Create a virtual session object from the schedule data
@@ -188,13 +195,13 @@ router.post('/generate',
         };
       }
 
-      // Verify formatore exists
+      // Verify formatore exists (P48: Person is global, tenantId is on PersonTenantProfile)
       const formatore = await prisma.person.findFirst({
-        where: { id: formatoreId, tenantId, deletedAt: null }
+        where: { id: formatoreId, deletedAt: null, tenantProfiles: { some: { tenantId, deletedAt: null } } }
       });
 
       if (!formatore) {
-        return res.status(404).json({ error: 'Formatore not found' });
+        return res.status(404).json({ error: 'Formatore non trovato' });
       }
 
       // Get template (default if not specified)
@@ -204,7 +211,7 @@ router.post('/generate',
           where: { id: templateId, tenantId, type: 'ATTENDANCE_REGISTER', deletedAt: null }
         });
         if (!template) {
-          return res.status(404).json({ error: 'Template not found' });
+          return res.status(404).json({ error: 'Template non trovato' });
         }
       } else {
         template = await prisma.templateLink.findFirst({
@@ -217,25 +224,33 @@ router.post('/generate',
           }
         });
         if (!template) {
-          return res.status(404).json({ error: 'No default template found. Please specify a template ID.' });
+          return res.status(404).json({ error: 'Nessun template predefinito trovato. Specificare un ID template.' });
         }
       }
 
       // Get or create attendance records
       let participants = [];
       if (attendanceData && attendanceData.length > 0) {
-        // Use provided attendance data - IMPORTANTE: include company per avere companyName
+        // Use provided attendance data - IMPORTANTE: include tenantProfiles per company
         participants = await Promise.all(
           attendanceData.map(async (data) => {
             const person = await prisma.person.findFirst({
-              where: { id: data.personId, tenantId, deletedAt: null },
+              where: { id: data.personId, deletedAt: null, tenantProfiles: { some: { tenantId, deletedAt: null } } },
               include: {
-                company: true // Includi company per ottenere ragioneSociale/name
+                tenantProfiles: {
+                  where: { tenantId, deletedAt: null },
+                  select: {
+                    companyTenantProfile: {
+                      select: { company: { select: { ragioneSociale: true } } }
+                    }
+                  },
+                  take: 1
+                }
               }
             });
             return person ? {
               ...person,
-              companyName: person.company?.ragioneSociale || person.company?.name || '',
+              companyName: person.tenantProfiles?.[0]?.companyTenantProfile?.company?.ragioneSociale || '',
               present: data.present || false,
               hours: data.hours || 0
             } : null;
@@ -254,7 +269,15 @@ router.post('/generate',
           include: {
             person: {
               include: {
-                company: true
+                tenantProfiles: {
+                  where: { tenantId, deletedAt: null },
+                  select: {
+                    companyTenantProfile: {
+                      select: { company: { select: { ragioneSociale: true } } }
+                    }
+                  },
+                  take: 1
+                }
               }
             }
           }
@@ -264,7 +287,7 @@ router.post('/generate',
           .filter(e => e.person)
           .map(enrollment => ({
             ...enrollment.person,
-            companyName: enrollment.person.company?.ragioneSociale || enrollment.person.company?.name || '',
+            companyName: enrollment.person.tenantProfiles?.[0]?.companyTenantProfile?.company?.ragioneSociale || '',
             present: false,
             hours: 0
           }));
@@ -321,7 +344,12 @@ router.post('/generate',
             url: document.fileUrl,
             dataGenerazione: new Date(),
             numeroProgressivo: existingRegistro.numeroProgressivo,
-            annoProgressivo: existingRegistro.annoProgressivo
+            annoProgressivo: existingRegistro.annoProgressivo,
+            // Reset firma quando il documento viene rigenerato
+            firmaFormatore: null,
+            firmaFormatoreAt: null,
+            firmaFormatoreId: null,
+            firmaFormatoreIp: null,
           }
         });
       } else {
@@ -391,11 +419,11 @@ router.post('/generate',
       logger.error('Failed to generate attendance register', {
         component: 'registri-presenze-routes',
         action: 'generate',
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         personId: req.person?.id
       });
-      res.status(500).json({ error: 'Failed to generate attendance register', message: error.message });
+      res.status(500).json({ error: 'Errore durante la generazione del registro presenze' });
     }
   }
 );
@@ -405,7 +433,7 @@ router.post('/generate',
  * Update attendance data
  */
 router.put('/:id/attendance',
-  authenticateToken(),
+  authenticateToken,
   requirePermission('documents:create'),
   [
     body('attendanceData').isArray({ min: 1 }).withMessage('Attendance data is required'),
@@ -417,19 +445,19 @@ router.put('/:id/attendance',
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
-        return res.status(400).json({ error: 'Validation error', details: errors.array() });
+        return res.status(400).json({ error: 'Errore di validazione', details: errors.array() });
       }
 
       const { id } = req.params;
       const { attendanceData } = req.body;
-      const tenantId = req.person.tenantId;
+      const tenantId = getEffectiveTenantId(req);
 
       const registro = await prisma.registroPresenze.findFirst({
         where: { id, tenantId, deletedAt: null }
       });
 
       if (!registro) {
-        return res.status(404).json({ error: 'Registro presenze not found' });
+        return res.status(404).json({ error: 'Registro presenze non trovato' });
       }
 
       // Update attendance records
@@ -464,15 +492,15 @@ router.put('/:id/attendance',
         personId: req.person?.id
       });
 
-      res.json({ message: 'Attendance data updated successfully' });
+      res.json({ message: 'Dati presenza aggiornati con successo' });
     } catch (error) {
       logger.error('Failed to update attendance data', {
         component: 'registri-presenze-routes',
         action: 'update-attendance',
-        error: error.message,
+        error: 'Operazione non riuscita',
         personId: req.person?.id
       });
-      res.status(500).json({ error: 'Failed to update attendance data' });
+      res.status(500).json({ error: 'Errore nell\'aggiornamento dei dati presenza' });
     }
   }
 );
@@ -481,17 +509,17 @@ router.put('/:id/attendance',
  * DELETE /api/v1/registri-presenze/:id
  * Delete register (soft delete)
  */
-router.delete('/:id', authenticateToken(), requirePermission('documents:delete'), async (req, res) => {
+router.delete('/:id', authenticateToken, requirePermission('documents:delete'), async (req, res) => {
   try {
     const { id } = req.params;
-    const tenantId = req.person.tenantId;
+    const tenantId = getEffectiveTenantId(req);
 
     const registro = await prisma.registroPresenze.findFirst({
       where: { id, tenantId }
     });
 
     if (!registro) {
-      return res.status(404).json({ error: 'Registro presenze not found' });
+      return res.status(404).json({ error: 'Registro presenze non trovato' });
     }
 
     await prisma.registroPresenze.update({
@@ -506,15 +534,15 @@ router.delete('/:id', authenticateToken(), requirePermission('documents:delete')
       personId: req.person?.id
     });
 
-    res.json({ message: 'Registro presenze deleted successfully' });
+    res.json({ message: 'Registro presenze eliminato con successo' });
   } catch (error) {
     logger.error('Failed to delete registro presenze', {
       component: 'registri-presenze-routes',
       action: 'delete',
-      error: error.message,
+      error: 'Operazione non riuscita',
       personId: req.person?.id
     });
-    res.status(500).json({ error: 'Failed to delete registro presenze' });
+    res.status(500).json({ error: 'Errore nell\'eliminazione del registro presenze' });
   }
 });
 
@@ -522,17 +550,17 @@ router.delete('/:id', authenticateToken(), requirePermission('documents:delete')
  * GET /api/v1/registri-presenze/:id/download
  * Download register PDF
  */
-router.get('/:id/download', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
+router.get('/:id/download', authenticateToken, requirePermission('documents:read'), async (req, res) => {
   try {
     const { id } = req.params;
-    const tenantId = req.person.tenantId;
+    const tenantId = getEffectiveTenantId(req);
 
     const registro = await prisma.registroPresenze.findFirst({
       where: { id, tenantId, deletedAt: null }
     });
 
     if (!registro) {
-      return res.status(404).json({ error: 'Registro presenze not found' });
+      return res.status(404).json({ error: 'Registro presenze non trovato' });
     }
 
     // Redirect to document download
@@ -541,10 +569,10 @@ router.get('/:id/download', authenticateToken(), requirePermission('documents:re
     logger.error('Failed to download registro presenze', {
       component: 'registri-presenze-routes',
       action: 'download',
-      error: error.message,
+      error: 'Operazione non riuscita',
       personId: req.person?.id
     });
-    res.status(500).json({ error: 'Failed to download registro presenze' });
+    res.status(500).json({ error: 'Errore nel download del registro presenze' });
   }
 });
 
@@ -553,13 +581,13 @@ router.get('/:id/download', authenticateToken(), requirePermission('documents:re
  * Download multiple registers as ZIP for a schedule
  */
 router.get('/schedule/:scheduleId/download-zip',
-  authenticateToken(),
+  authenticateToken,
   requirePermission('documents:read'),
   async (req, res) => {
     try {
       const { scheduleId } = req.params;
       const { ids } = req.query;
-      const tenantId = req.person.tenantId;
+      const tenantId = getEffectiveTenantId(req);
 
       // Build where clause
       const where = {
@@ -621,7 +649,7 @@ router.get('/schedule/:scheduleId/download-zip',
           } catch (fileError) {
             logger.warn('Failed to add file to ZIP', {
               registroId: registro.id,
-              error: fileError.message
+              error: 'Operazione non riuscita'
             });
           }
         }
@@ -640,10 +668,10 @@ router.get('/schedule/:scheduleId/download-zip',
       logger.error('Failed to create registers ZIP', {
         component: 'registri-presenze-routes',
         action: 'download-zip',
-        error: error.message,
+        error: 'Operazione non riuscita',
         personId: req.person?.id
       });
-      res.status(500).json({ error: 'Failed to create ZIP file' });
+      res.status(500).json({ error: 'Errore nella creazione del file ZIP' });
     }
   }
 );
@@ -655,10 +683,10 @@ router.get('/schedule/:scheduleId/download-zip',
  * GET /api/v1/registri-presenze/:id
  * Get single attendance register
  */
-router.get('/:id', authenticateToken(), requirePermission('documents:read'), async (req, res) => {
+router.get('/:id', authenticateToken, requirePermission('documents:read'), async (req, res) => {
   try {
     const { id } = req.params;
-    const tenantId = req.person.tenantId;
+    const tenantId = getEffectiveTenantId(req);
 
     const registro = await prisma.registroPresenze.findFirst({
       where: { id, tenantId, deletedAt: null },
@@ -667,7 +695,7 @@ router.get('/:id', authenticateToken(), requirePermission('documents:read'), asy
           include: {
             course: true,
             companies: {
-              include: { company: true }
+              include: { companyTenantProfile: { include: { company: true } } }
             },
             sessions: {
               include: {
@@ -699,7 +727,7 @@ router.get('/:id', authenticateToken(), requirePermission('documents:read'), asy
     });
 
     if (!registro) {
-      return res.status(404).json({ error: 'Registro presenze not found' });
+      return res.status(404).json({ error: 'Registro presenze non trovato' });
     }
 
     res.json(registro);
@@ -708,10 +736,151 @@ router.get('/:id', authenticateToken(), requirePermission('documents:read'), asy
       component: 'registri-presenze-routes',
       action: 'get',
       id: req.params.id,
-      error: error.message,
+      error: 'Operazione non riuscita',
       personId: req.person?.id
     });
-    res.status(500).json({ error: 'Failed to fetch registro presenze' });
+    res.status(500).json({ error: 'Errore nel recupero del registro presenze' });
+  }
+});
+
+/**
+ * GET /api/v1/registri-presenze/:id/preview
+ * Serve registro PDF inline for preview (used by SigningWorkflowModal)
+ */
+router.get('/:id/preview', authenticateToken, requirePermission('documents:read'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const tenantId = getEffectiveTenantId(req);
+
+    const registro = await prisma.registroPresenze.findFirst({
+      where: { id, tenantId, deletedAt: null }
+    });
+
+    if (!registro) {
+      return res.status(404).json({ error: 'Registro presenze non trovato' });
+    }
+
+    if (!registro.url) {
+      return res.status(404).json({ error: 'File registro non trovato' });
+    }
+
+    const backendRoot = path.join(__dirname, '..');
+
+    if (registro.url.startsWith('/uploads/')) {
+      const filePath = path.join(backendRoot, registro.url);
+      if (fsSync.existsSync(filePath)) {
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', 'inline');
+        return fsSync.createReadStream(filePath).pipe(res);
+      }
+
+      // Fallback: try just the filename in uploads/documents/
+      const justFileName = path.basename(registro.url);
+      const altPath = path.join(backendRoot, 'uploads', 'documents', justFileName);
+      if (fsSync.existsSync(altPath)) {
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', 'inline');
+        return fsSync.createReadStream(altPath).pipe(res);
+      }
+
+      return res.status(404).json({ error: 'File non trovato su disco' });
+    }
+
+    // External URL: proxy the file
+    const axios = await import('axios');
+    const fileResponse = await axios.default.get(registro.url, { responseType: 'stream' });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline');
+    fileResponse.data.pipe(res);
+  } catch (error) {
+    logger.error('Failed to preview registro', {
+      component: 'registri-presenze-routes',
+      action: 'preview',
+      registroId: req.params.id,
+      error: 'Operazione non riuscita'
+    });
+    res.status(500).json({ error: 'Errore nel caricamento dell\'anteprima' });
+  }
+});
+
+/**
+ * POST /api/v1/registri-presenze/:id/sign
+ * Apply signature to registro presenze
+ */
+router.post('/:id/sign', authenticateToken, requirePermission('documents:write'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const tenantId = getEffectiveTenantId(req);
+    const { signatureData, placement } = req.body;
+
+    if (!signatureData) {
+      return res.status(400).json({ error: 'Dati firma mancanti' });
+    }
+
+    const result = await signDocument({
+      documentId: id,
+      signatureBase64: signatureData,
+      signedById: req.person?.id,
+      tenantId,
+      placement
+    });
+
+    logger.info('Registro presenze signed', {
+      component: 'registri-presenze-routes',
+      action: 'sign',
+      registroId: id,
+      signerId: req.person?.id
+    });
+
+    res.json({ success: true, message: 'Firma applicata con successo', signedFileUrl: result.signedFileUrl });
+  } catch (error) {
+    logger.error('Failed to sign registro', {
+      component: 'registri-presenze-routes',
+      action: 'sign',
+      registroId: req.params.id,
+      error: 'Operazione non riuscita'
+    });
+    res.status(500).json({ error: 'Errore nell\'applicazione della firma' });
+  }
+});
+
+/**
+ * POST /api/v1/registri-presenze/bulk-sign
+ * Apply signature to multiple registri presenze
+ */
+router.post('/bulk-sign', authenticateToken, requirePermission('documents:write'), async (req, res) => {
+  try {
+    const tenantId = getEffectiveTenantId(req);
+    const { documentIds, signatureData, placement } = req.body;
+
+    if (!signatureData || !Array.isArray(documentIds) || documentIds.length === 0) {
+      return res.status(400).json({ error: 'Dati firma o ID documenti mancanti' });
+    }
+
+    const { succeeded, failed } = await signDocumentsBulk({
+      documentIds,
+      signatureBase64: signatureData,
+      signedById: req.person?.id,
+      tenantId,
+      placement
+    });
+
+    logger.info('Registri presenze bulk signed', {
+      component: 'registri-presenze-routes',
+      action: 'bulk-sign',
+      succeeded: succeeded.length,
+      failed: failed.length,
+      signerId: req.person?.id
+    });
+
+    res.json({ succeeded, failed });
+  } catch (error) {
+    logger.error('Failed to bulk sign registri', {
+      component: 'registri-presenze-routes',
+      action: 'bulk-sign',
+      error: 'Operazione non riuscita'
+    });
+    res.status(500).json({ error: 'Errore nella firma multipla' });
   }
 });
 

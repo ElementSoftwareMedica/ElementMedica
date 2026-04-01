@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
+import {
   ArrowUpDown,
   CheckSquare,
   Filter,
@@ -90,7 +90,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const sortDropdownRef = useRef<HTMLDivElement>(null);
-  
+
   // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -101,63 +101,61 @@ const PageHeader: React.FC<PageHeaderProps> = ({
         setSortDropdownOpen(false);
       }
     };
-    
+
     if (dropdownOpen || sortDropdownOpen) {
       document.addEventListener('mousedown', handleClickOutside);
     }
-    
+
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [dropdownOpen, sortDropdownOpen]);
-  
+
   return (
     <div className="space-y-4 mb-6">
       {/* Title row with actions */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">{title}</h1>
+          <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">{title}</h1>
           {description && (
-            <p className="text-gray-500">{description}</p>
+            <p className="text-gray-500 dark:text-gray-400">{description}</p>
           )}
         </div>
-        
+
         <div className="flex items-center gap-3">
           {/* Selection Mode Toggle (Modify) */}
           <button
             onClick={onToggleSelectionMode}
-            className={`px-4 h-10 rounded-full border flex items-center gap-2 transition ${
-              selectionMode ? 'bg-blue-100 text-blue-700 border-blue-400' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-            }`}
+            className={`px-4 h-10 rounded-full border flex items-center gap-2 transition ${selectionMode ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-400 dark:border-blue-700' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+              }`}
           >
             <CheckSquare className="h-4 w-4" />
             Modifica
           </button>
-          
+
           {/* View Mode Toggle */}
-          <div className="flex items-center bg-gray-100 rounded-full p-1 relative h-10 w-40">
+          <div className="flex items-center bg-gray-100 dark:bg-gray-700 rounded-full p-1 relative h-10 w-40">
             <button
-              className={`flex-1 h-8 z-10 relative transition-colors duration-300 flex items-center justify-center gap-1.5 ${viewMode === 'grid' ? 'text-blue-700' : 'text-gray-600'}`}
+              className={`flex-1 h-8 z-10 relative transition-colors duration-300 flex items-center justify-center gap-1.5 ${viewMode === 'grid' ? 'text-blue-700 dark:text-blue-300' : 'text-gray-600 dark:text-gray-400'}`}
               onClick={() => onViewModeChange('grid')}
             >
               <LayoutGrid className="h-4 w-4" />
               <span className="text-xs font-medium">Card</span>
             </button>
             <button
-              className={`flex-1 h-8 z-10 relative transition-colors duration-300 flex items-center justify-center gap-1.5 ${viewMode === 'table' ? 'text-blue-700' : 'text-gray-600'}`}
+              className={`flex-1 h-8 z-10 relative transition-colors duration-300 flex items-center justify-center gap-1.5 ${viewMode === 'table' ? 'text-blue-700 dark:text-blue-300' : 'text-gray-600 dark:text-gray-400'}`}
               onClick={() => onViewModeChange('table')}
             >
               <List className="h-4 w-4" />
               <span className="text-xs font-medium">Table</span>
             </button>
             <span
-              className={`absolute top-1 bottom-1 h-8 bg-white rounded-full shadow transition-transform duration-300 ${
-                viewMode === 'table' ? 'right-1 left-[50%]' : 'left-1 right-[50%]'
-              }`}
+              className={`absolute top-1 bottom-1 h-8 bg-white dark:bg-gray-600 rounded-full shadow dark:shadow-black/20 transition-transform duration-300 ${viewMode === 'table' ? 'right-1 left-[50%]' : 'left-1 right-[50%]'
+                }`}
               style={{ zIndex: 0 }}
             />
           </div>
-          
+
           {/* Primary Action Button/Dropdown */}
           {(onPrimaryAction || primaryActionDropdownOptions) && (
             <div className="relative" ref={dropdownRef}>
@@ -173,13 +171,13 @@ const PageHeader: React.FC<PageHeaderProps> = ({
                   </svg>
                 )}
               </button>
-              
+
               {dropdownOpen && primaryActionDropdownOptions && (
-                <div className="absolute right-0 mt-2 py-2 w-56 bg-white rounded-lg shadow-lg z-50 border border-gray-200">
+                <div className="absolute right-0 mt-2 py-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg dark:shadow-black/30 z-50 border border-gray-200 dark:border-gray-700">
                   {primaryActionDropdownOptions.map((option, idx) => (
                     <button
                       key={idx}
-                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
                       onClick={() => { setDropdownOpen(false); option.onClick(); }}
                     >
                       {option.icon}
@@ -192,7 +190,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({
           )}
         </div>
       </div>
-      
+
       {/* Search and filters row */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <div className="relative flex-grow">
@@ -201,24 +199,24 @@ const PageHeader: React.FC<PageHeaderProps> = ({
             value={searchValue}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Cerca..."
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-blue-500 dark:focus:border-blue-400"
           />
-          <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
           {searchValue && (
             <button
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
               onClick={() => onSearchChange('')}
             >
               ×
             </button>
           )}
         </div>
-        
+
         {onSort && (
           <div className="relative" ref={sortDropdownRef}>
-            <button 
-              onClick={sortOptions ? () => setSortDropdownOpen(!sortDropdownOpen) : onSort} 
-              className="px-3 py-1.5 rounded-full border border-gray-300 text-gray-700 hover:bg-gray-50 flex items-center gap-1.5"
+            <button
+              onClick={sortOptions ? () => setSortDropdownOpen(!sortDropdownOpen) : onSort}
+              className="px-3 py-1.5 rounded-full border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-1.5"
             >
               <ArrowUpDown className="h-3.5 w-3.5" />
               Sort By
@@ -228,16 +226,16 @@ const PageHeader: React.FC<PageHeaderProps> = ({
                 </svg>
               )}
             </button>
-            
+
             {sortDropdownOpen && sortOptions && (
-              <div className="absolute right-0 mt-2 py-2 w-40 bg-white rounded-lg shadow-lg z-50 border border-gray-200">
+              <div className="absolute right-0 mt-2 py-2 w-40 bg-white dark:bg-gray-800 rounded-lg shadow-lg dark:shadow-black/30 z-50 border border-gray-200 dark:border-gray-700">
                 {sortOptions.map((option, idx) => (
                   <button
                     key={idx}
-                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => { 
-                      setSortDropdownOpen(false); 
-                      option.onClick(); 
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    onClick={() => {
+                      setSortDropdownOpen(false);
+                      option.onClick();
                     }}
                   >
                     {option.label}
@@ -247,22 +245,22 @@ const PageHeader: React.FC<PageHeaderProps> = ({
             )}
           </div>
         )}
-        
-        <button 
-          className={`px-3 py-1.5 rounded-full ${filtersActive 
-            ? 'bg-blue-100 text-blue-700' 
-            : 'border border-gray-300 text-gray-700 hover:bg-gray-50'} flex items-center gap-1.5`}
+
+        <button
+          className={`px-3 py-1.5 rounded-full ${filtersActive
+            ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+            : 'border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'} flex items-center gap-1.5`}
         >
           <Filter className="h-3.5 w-3.5" />
           {filtersActive ? 'Filtri attivi' : 'Filters'}
         </button>
-        
+
         {filterComponents}
       </div>
-      
+
       {/* Selection mode toolbar - shown right below the search bar */}
       {selectionMode && selectionToolbar}
-      
+
       {children && <div className="mt-3 sm:mt-0">{children}</div>}
     </div>
   );

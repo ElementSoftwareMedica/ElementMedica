@@ -16,7 +16,7 @@ NC='\033[0m'
 
 # Configurazione
 SSH_KEY="$HOME/.ssh/id_ed25519"
-SERVER="root@128.140.15.15"
+SERVER="root@178.104.44.177"
 REMOTE_PATH="/var/www/elementmedica/dist"
 
 # Directory base
@@ -60,7 +60,11 @@ rsync -avz --delete \
     $SERVER:$REMOTE_PATH/
 
 echo ""
+echo -e "${BLUE}🔐 Correzione permessi file statici...${NC}"
+ssh -i $SSH_KEY $SERVER "find $REMOTE_PATH -type f \( -name '*.png' -o -name '*.jpg' -o -name '*.ico' -o -name '*.svg' -o -name '*.webp' \) ! -perm 644 -exec chmod 644 {} \;"
+
+echo ""
 echo -e "${GREEN}✅ Frontend deployed!${NC}"
 echo ""
-echo "🌐 Verifica: https://www.elementformazione.com"
+echo "🌐 Verifica: https://www.elementsicurezza.com"
 echo "🔄 Cache: Ctrl+Shift+R nel browser per forzare refresh"

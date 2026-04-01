@@ -136,7 +136,6 @@ export const useImportData = <T extends Record<string, any>>({
         }
       } catch (error) {
         // Ignore errors and continue with next entity
-        console.error(`Error processing entity at index ${i}:`, error);
       }
     }
     

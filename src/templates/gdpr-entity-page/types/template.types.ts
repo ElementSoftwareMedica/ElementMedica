@@ -18,19 +18,19 @@ import { GDPRConfig } from './gdpr.types';
 export interface GDPREntityPageConfig<T extends BaseEntity = BaseEntity> {
   /** Configurazione entità */
   entity: EntityTemplateConfig<T>;
-  
+
   /** Configurazione GDPR */
   gdpr: GDPRConfig;
-  
+
   /** Configurazione UI */
   ui: UITemplateConfig;
-  
+
   /** Configurazione API */
   api: APITemplateConfig;
-  
+
   /** Configurazione permessi */
   permissions: PermissionsTemplateConfig;
-  
+
   /** Configurazione avanzata */
   advanced?: AdvancedTemplateConfig;
 }
@@ -41,28 +41,28 @@ export interface GDPREntityPageConfig<T extends BaseEntity = BaseEntity> {
 export interface EntityTemplateConfig<T extends BaseEntity = BaseEntity> {
   /** Nome dell'entità (singolare) */
   name: string;
-  
+
   /** Nome dell'entità (plurale) */
   namePlural: string;
-  
+
   /** Descrizione dell'entità */
   description?: string;
-  
+
   /** Icona dell'entità */
   icon?: string;
-  
+
   /** Colonne della tabella */
   columns: EntityColumn<T>[];
-  
+
   /** Filtri disponibili */
   filters: EntityFilter<T>[];
-  
+
   /** Azioni disponibili */
   actions: EntityAction<T>[];
-  
+
   /** Configurazione validazione */
   validation?: EntityValidationTemplateConfig<T>;
-  
+
   /** Configurazione export/import */
   dataExchange?: EntityDataExchangeConfig;
 }
@@ -73,19 +73,19 @@ export interface EntityTemplateConfig<T extends BaseEntity = BaseEntity> {
 export interface UITemplateConfig {
   /** Configurazione header */
   header: HeaderTemplateConfig;
-  
+
   /** Configurazione toolbar */
   toolbar: ToolbarTemplateConfig;
-  
+
   /** Configurazione tabella */
   table: TableTemplateConfig;
-  
+
   /** Configurazione modali */
   modals: ModalsTemplateConfig;
-  
+
   /** Configurazione layout */
   layout: LayoutTemplateConfig;
-  
+
   /** Configurazione temi */
   theme?: ThemeTemplateConfig;
 }
@@ -96,19 +96,19 @@ export interface UITemplateConfig {
 export interface HeaderTemplateConfig {
   /** Titolo della pagina */
   title: string;
-  
+
   /** Sottotitolo della pagina */
   subtitle?: string;
-  
+
   /** Breadcrumb personalizzato */
   breadcrumb?: BreadcrumbItem[];
-  
+
   /** Mostra contatore entità */
   showEntityCount: boolean;
-  
+
   /** Mostra indicatori GDPR */
   showGDPRIndicators: boolean;
-  
+
   /** Azioni header personalizzate */
   customActions?: HeaderAction[];
 }
@@ -143,31 +143,31 @@ export interface HeaderAction {
 export interface ToolbarTemplateConfig {
   /** Mostra barra di ricerca */
   showSearch: boolean;
-  
+
   /** Placeholder ricerca personalizzato */
   searchPlaceholder?: string;
-  
+
   /** Mostra filtri */
   showFilters: boolean;
-  
+
   /** Mostra ordinamento */
   showSorting: boolean;
-  
+
   /** Mostra selezione multipla */
   showBulkSelection: boolean;
-  
+
   /** Mostra azioni bulk */
   showBulkActions: boolean;
-  
+
   /** Mostra paginazione */
   showPagination: boolean;
-  
+
   /** Mostra controlli densità */
   showDensityControls: boolean;
-  
+
   /** Mostra controlli colonne */
   showColumnControls: boolean;
-  
+
   /** Azioni toolbar personalizzate */
   customActions?: ToolbarAction[];
 }
@@ -194,37 +194,37 @@ export interface ToolbarAction {
 export interface TableTemplateConfig {
   /** Dimensione di default */
   defaultPageSize: number;
-  
+
   /** Opzioni dimensione pagina */
   pageSizeOptions: number[];
-  
+
   /** Abilita ordinamento */
   enableSorting: boolean;
-  
+
   /** Abilita ridimensionamento colonne */
   enableColumnResizing: boolean;
-  
+
   /** Abilita riordinamento colonne */
   enableColumnReordering: boolean;
-  
+
   /** Abilita raggruppamento */
   enableGrouping: boolean;
-  
+
   /** Abilita filtri colonna */
   enableColumnFilters: boolean;
-  
+
   /** Mostra numeri riga */
   showRowNumbers: boolean;
-  
+
   /** Mostra checkbox selezione */
   showSelectionCheckboxes: boolean;
-  
+
   /** Mostra menu azioni riga */
   showRowActions: boolean;
-  
+
   /** Densità di default */
   defaultDensity: 'compact' | 'standard' | 'comfortable';
-  
+
   /** Configurazione virtualizzazione */
   virtualization?: {
     enabled: boolean;
@@ -239,19 +239,19 @@ export interface TableTemplateConfig {
 export interface ModalsTemplateConfig {
   /** Configurazione modale creazione */
   create: ModalTemplateConfig;
-  
+
   /** Configurazione modale modifica */
   edit: ModalTemplateConfig;
-  
+
   /** Configurazione modale visualizzazione */
   view: ModalTemplateConfig;
-  
+
   /** Configurazione modale cancellazione */
   delete: ModalTemplateConfig;
-  
+
   /** Configurazione modale consenso GDPR */
   gdprConsent: ModalTemplateConfig;
-  
+
   /** Configurazione modale audit */
   gdprAudit: ModalTemplateConfig;
 }
@@ -262,22 +262,22 @@ export interface ModalsTemplateConfig {
 export interface ModalTemplateConfig {
   /** Dimensione modale */
   size: 'sm' | 'md' | 'lg' | 'xl' | 'full';
-  
+
   /** Chiusura con ESC */
   closeOnEscape: boolean;
-  
+
   /** Chiusura cliccando overlay */
   closeOnOverlayClick: boolean;
-  
+
   /** Mostra header */
   showHeader: boolean;
-  
+
   /** Mostra footer */
   showFooter: boolean;
-  
+
   /** Titolo personalizzato */
   customTitle?: string;
-  
+
   /** Azioni footer personalizzate */
   customFooterActions?: ModalAction[];
 }
@@ -300,19 +300,19 @@ export interface ModalAction {
 export interface LayoutTemplateConfig {
   /** Tipo layout */
   type: 'standard' | 'compact' | 'wide' | 'full';
-  
+
   /** Padding container */
   containerPadding: string;
-  
+
   /** Gap tra sezioni */
   sectionGap: string;
-  
+
   /** Mostra sidebar */
   showSidebar: boolean;
-  
+
   /** Configurazione sidebar */
   sidebar?: SidebarTemplateConfig;
-  
+
   /** Configurazione responsive */
   responsive: ResponsiveTemplateConfig;
 }
@@ -323,16 +323,16 @@ export interface LayoutTemplateConfig {
 export interface SidebarTemplateConfig {
   /** Posizione sidebar */
   position: 'left' | 'right';
-  
+
   /** Larghezza sidebar */
   width: string;
-  
+
   /** Collassabile */
   collapsible: boolean;
-  
+
   /** Collassata di default */
   defaultCollapsed: boolean;
-  
+
   /** Contenuto sidebar */
   content: ReactNode;
 }
@@ -343,13 +343,13 @@ export interface SidebarTemplateConfig {
 export interface ResponsiveTemplateConfig {
   /** Breakpoint mobile */
   mobileBreakpoint: string;
-  
+
   /** Breakpoint tablet */
   tabletBreakpoint: string;
-  
+
   /** Breakpoint desktop */
   desktopBreakpoint: string;
-  
+
   /** Comportamento mobile */
   mobileBehavior: {
     hideColumns?: string[];
@@ -365,13 +365,13 @@ export interface ResponsiveTemplateConfig {
 export interface ThemeTemplateConfig {
   /** Tema di default */
   defaultTheme: 'light' | 'dark' | 'auto';
-  
+
   /** Colori personalizzati */
   customColors?: Record<string, string>;
-  
+
   /** Font personalizzati */
   customFonts?: Record<string, string>;
-  
+
   /** Spacing personalizzato */
   customSpacing?: Record<string, string>;
 }
@@ -382,7 +382,7 @@ export interface ThemeTemplateConfig {
 export interface APITemplateConfig {
   /** Endpoint base */
   baseEndpoint: string;
-  
+
   /** Configurazione endpoints */
   endpoints: {
     list: string;
@@ -396,14 +396,14 @@ export interface APITemplateConfig {
     import?: string;
     search?: string;
   };
-  
+
   /** Configurazione cache */
   cache?: {
     enabled: boolean;
     ttl: number;
     invalidateOn: string[];
   };
-  
+
   /** Configurazione retry */
   retry?: {
     enabled: boolean;
@@ -427,14 +427,14 @@ export interface PermissionsTemplateConfig {
     bulkOperations: string[];
     gdprOperations: string[];
   };
-  
+
   /** Permessi opzionali */
   optional?: {
     advancedFilters?: string[];
     auditLog?: string[];
     systemSettings?: string[];
   };
-  
+
   /** Configurazione ruoli */
   roles?: {
     admin: string[];
@@ -450,13 +450,13 @@ export interface PermissionsTemplateConfig {
 export interface EntityValidationTemplateConfig<T extends BaseEntity = BaseEntity> {
   /** Regole validazione per campo */
   fieldRules: Record<keyof T, ValidationRule[]>;
-  
+
   /** Validazione personalizzata */
   customValidation?: (entity: Partial<T>) => ValidationResult;
-  
+
   /** Validazione asincrona */
   asyncValidation?: (entity: Partial<T>) => Promise<ValidationResult>;
-  
+
   /** Validazione GDPR */
   gdprValidation?: {
     checkConsent: boolean;
@@ -497,7 +497,7 @@ export interface EntityDataExchangeConfig {
     customFields?: string[];
     gdprCompliant: boolean;
   };
-  
+
   /** Configurazione import */
   import: {
     enabled: boolean;
@@ -520,7 +520,7 @@ export interface AdvancedTemplateConfig {
     debounceMs: number;
     cacheSize: number;
   };
-  
+
   /** Configurazione analytics */
   analytics?: {
     enabled: boolean;
@@ -528,14 +528,14 @@ export interface AdvancedTemplateConfig {
     trackPerformance: boolean;
     customEvents?: string[];
   };
-  
+
   /** Configurazione debug */
   debug?: {
     enabled: boolean;
     logLevel: 'error' | 'warn' | 'info' | 'debug';
     showDevTools: boolean;
   };
-  
+
   /** Configurazione sperimentale */
   experimental?: {
     features: string[];
@@ -585,23 +585,23 @@ export interface TemplateActions<T extends BaseEntity = BaseEntity> {
   updateEntity: (id: string, entity: Partial<T>) => Promise<T>;
   deleteEntity: (id: string) => Promise<void>;
   bulkDelete: (ids: string[]) => Promise<void>;
-  
+
   // Azioni UI
   setFilters: (filters: Record<string, unknown>) => void;
   setSorting: (field: keyof T, direction: 'asc' | 'desc') => void;
   setPage: (page: number) => void;
   setPageSize: (pageSize: number) => void;
   setSelectedEntities: (entities: T[]) => void;
-  
+
   // Azioni modali
   openModal: (modalId: string, data?: unknown) => void;
   closeModal: () => void;
-  
-  // Azioni GDPR
-  requestConsent: (consentTypes: string[]) => Promise<void>;
-  revokeConsent: (consentTypes: string[]) => Promise<void>;
-  exportData: (format: string) => Promise<void>;
-  requestDeletion: (reason: string) => Promise<void>;
+
+  // Azioni GDPR (opzionali - implementate dove necessario)
+  requestConsent?: (consentTypes: string[]) => Promise<void>;
+  revokeConsent?: (consentTypes: string[]) => Promise<void>;
+  exportData?: (format: string) => Promise<void>;
+  requestDeletion?: (reason: string) => Promise<void>;
 }
 
 /**

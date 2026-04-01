@@ -87,12 +87,14 @@ export interface MediaFolder {
 
 export interface MediaListResponse {
   success: boolean;
-  data: MediaFile[];  // Backend returns array directly, not nested
-  pagination?: {
-    page: number;
-    limit: number;
-    total: number;
-    pages: number;
+  data: {
+    media: MediaFile[];
+    pagination?: {
+      total: number;
+      page: number;
+      limit: number;
+      totalPages: number;
+    };
   };
 }
 
@@ -180,15 +182,14 @@ class CMSMediaService {
     if (params.page) queryParams.append('page', params.page.toString());
     if (params.limit) queryParams.append('limit', params.limit.toString());
 
-    const response = await api.get<ApiResponse<MediaFile[]>>(
+    const response = await api.get<MediaListResponse>(
       `${this.baseUrl}?${queryParams.toString()}`
     );
 
-    // Backend returns { success, data: MediaFile[], pagination }
-    // Transform to { media, pagination } for frontend compatibility
-    const pag = response.data.pagination;
+    const mediaList = response.data.data?.media || [];
+    const pag = response.data.data?.pagination;
     return {
-      media: response.data.data,
+      media: mediaList,
       pagination: pag ? {
         page: pag.page,
         limit: pag.limit,
@@ -297,7 +298,6 @@ class CMSMediaService {
       'image/png',
       'image/webp',
       'image/gif',
-      'image/svg+xml',
       'application/pdf',
     ];
 

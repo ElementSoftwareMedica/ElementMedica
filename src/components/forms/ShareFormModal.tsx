@@ -58,7 +58,6 @@ export const ShareFormModal: React.FC<ShareFormModalProps> = ({
 
   // Debug log
   useEffect(() => {
-    console.log('📋 ShareFormModal state:', { isOpen, hasTemplate: !!template, templateId: template?.id });
   }, [isOpen, template]);
 
   // Update settings when template changes
@@ -143,12 +142,9 @@ export const ShareFormModal: React.FC<ShareFormModalProps> = ({
         qrContainer.innerHTML = '';
         try {
           qrCode.append(qrContainer);
-          console.log('✅ QR Code rendered successfully');
         } catch (error) {
-          console.error('❌ Error rendering QR code:', error);
         }
       } else {
-        console.warn('⚠️ QR container not found, retrying...');
         // Retry dopo un breve delay
         setTimeout(renderQR, 100);
       }
@@ -164,7 +160,6 @@ export const ShareFormModal: React.FC<ShareFormModalProps> = ({
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
-      console.error('Failed to copy URL:', error);
     }
   };
 
@@ -191,7 +186,6 @@ export const ShareFormModal: React.FC<ShareFormModalProps> = ({
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
-      console.error('Failed to copy embed code:', error);
     }
   };
 
@@ -200,7 +194,6 @@ export const ShareFormModal: React.FC<ShareFormModalProps> = ({
     
     setSaving(true);
     try {
-      console.log('💾 Saving share settings:', settings);
       
       // Salva le impostazioni sul template
       await formTemplatesService.updateFormTemplate(template.id, {
@@ -210,10 +203,8 @@ export const ShareFormModal: React.FC<ShareFormModalProps> = ({
         // TODO: Aggiungere queste colonne al database e includerle qui
       });
       
-      console.log('✅ Share settings saved successfully');
       onClose();
     } catch (error) {
-      console.error('❌ Error saving share settings:', error);
       showToast({ message: 'Errore nel salvataggio delle impostazioni. Riprova.', type: 'error' });
     } finally {
       setSaving(false);
@@ -222,7 +213,6 @@ export const ShareFormModal: React.FC<ShareFormModalProps> = ({
 
   // Non renderizzare se template è undefined
   if (!template) {
-    console.warn('⚠️ ShareFormModal: template is undefined');
     return null;
   }
 

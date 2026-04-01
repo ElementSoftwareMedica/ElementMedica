@@ -44,6 +44,7 @@ import { prestazioniApi, strumentiApi } from '../../../services/clinicaApi';
 import type { Prestazione, Strumento, TipoPrestazione } from '../../../services/clinicaApi';
 import { useToast } from '../../../hooks/useToast';
 import { getAllSpecialties, addCustomSpecialty } from '../../../constants/specialties';
+import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
 import '../../../styles/clinica-theme.css';
 
 // =====================================================
@@ -66,7 +67,7 @@ interface TipologiaRichiesta {
 }
 
 // Extend Prestazione to include tipologieRichieste relation
-interface PrestazioneWithTipologie extends Prestazione {
+interface PrestazioneWithTipologie extends Omit<Prestazione, 'tipologieRichieste'> {
     tipologieRichieste?: {
         tipologia: TipologiaStrumento;
         obbligatorio: boolean;
@@ -81,6 +82,11 @@ interface FormData {
     brancheSpecialistiche: string[]; // Array di branche
     durataPrevista: number;
     prezzoBase: string;
+    prezzoPrimaVisita: string;
+    prezzoControllo: string;
+    durataPrimaVisita: string;
+    durataControllo: string;
+    scadenzaDefaultMesi: string;
     ivaAliquota: string;
     istruzioniPreparazione: string;
     richiedeStrumento: boolean;
@@ -160,6 +166,11 @@ const INITIAL_FORM_DATA: FormData = {
     brancheSpecialistiche: [],
     durataPrevista: 30,
     prezzoBase: '',
+    prezzoPrimaVisita: '',
+    prezzoControllo: '',
+    durataPrimaVisita: '',
+    durataControllo: '',
+    scadenzaDefaultMesi: '',
     ivaAliquota: '0',
     istruzioniPreparazione: '',
     richiedeStrumento: false,
@@ -177,6 +188,7 @@ const PrestazioneForm: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const queryClient = useQueryClient();
     const { showToast } = useToast();
+    const { confirmWarning } = useConfirmDialog();
     const isEditing = Boolean(id);
 
     // State
@@ -246,6 +258,11 @@ const PrestazioneForm: React.FC = () => {
                 brancheSpecialistiche: branche,
                 durataPrevista: prestazione.durataPrevista || 30,
                 prezzoBase: prestazione.prezzoBase ? String(prestazione.prezzoBase) : '',
+                prezzoPrimaVisita: prestazione.prezzoPrimaVisita ? String(prestazione.prezzoPrimaVisita) : '',
+                prezzoControllo: prestazione.prezzoControllo ? String(prestazione.prezzoControllo) : '',
+                durataPrimaVisita: prestazione.durataPrimaVisita ? String(prestazione.durataPrimaVisita) : '',
+                durataControllo: prestazione.durataControllo ? String(prestazione.durataControllo) : '',
+                scadenzaDefaultMesi: prestazione.scadenzaDefaultMesi ? String(prestazione.scadenzaDefaultMesi) : '',
                 ivaAliquota: prestazione.ivaAliquota ? String(prestazione.ivaAliquota) : '0',
                 istruzioniPreparazione: prestazione.istruzioniPreparazione || '',
                 richiedeStrumento: prestazione.richiedeStrumento ?? false,
@@ -259,7 +276,6 @@ const PrestazioneForm: React.FC = () => {
     // Mutations
     const createMutation = useMutation({
         mutationFn: (data: Partial<Prestazione>) => {
-            console.log('📋 [PRESTAZIONE CREATE] Submitting data:', JSON.stringify(data, null, 2));
             return prestazioniApi.create(data);
         },
         onSuccess: () => {
@@ -267,27 +283,29 @@ const PrestazioneForm: React.FC = () => {
             showToast({ type: 'success', message: 'Prestazione creata con successo' });
             navigate('/poliambulatorio/catalogo/prestazioni');
         },
-        onError: (error: Error & { response?: { data?: { error?: string; message?: string } } }) => {
-            console.error('📋 [PRESTAZIONE CREATE] Error:', error);
+        onError: (error: Error & { response?: { status?: number; data?: { error?: string; message?: string; details?: Array<{ field: string; message: string }> } } }) => {
 
-            // Extract error message from response if available
-            const responseError = error.response?.data?.error || error.response?.data?.message;
-            let errorMessage = responseError || error.message || 'Errore durante la creazione';
-
-            // Handle specific error cases
-            if (errorMessage.includes('già esistente') || errorMessage.includes('already exists')) {
-                errorMessage = 'Il codice prestazione è già in uso. Prova con un codice diverso.';
-            } else if (error.message?.includes('500') || error.message?.includes('Internal Server')) {
-                errorMessage = 'Errore del server. Riprova tra qualche secondo o contatta l\'assistenza.';
+            // Extract detailed validation errors if available
+            const validationDetails = error.response?.data?.details;
+            if (validationDetails && validationDetails.length > 0) {
+                showToast({ type: 'error', message: 'Errore di validazione. Verifica i dati inseriti.' });
+                return;
             }
 
-            showToast({ type: 'error', message: errorMessage });
+            // Handle specific error cases via status code
+            const status = error.response?.status;
+            if (status === 409) {
+                showToast({ type: 'error', message: 'Il codice prestazione è già in uso. Prova con un codice diverso.' });
+            } else if (status === 500) {
+                showToast({ type: 'error', message: 'Errore del server. Riprova tra qualche secondo o contatta l\'assistenza.' });
+            } else {
+                showToast({ type: 'error', message: 'Errore durante la creazione della prestazione' });
+            }
         }
     });
 
     const updateMutation = useMutation({
         mutationFn: (data: Partial<Prestazione>) => {
-            console.log('📋 [PRESTAZIONE UPDATE] Submitting data:', JSON.stringify(data, null, 2));
             return prestazioniApi.update(id!, data);
         },
         onSuccess: () => {
@@ -296,23 +314,19 @@ const PrestazioneForm: React.FC = () => {
             showToast({ type: 'success', message: 'Prestazione aggiornata con successo' });
             navigate('/poliambulatorio/catalogo/prestazioni');
         },
-        onError: (error: Error & { response?: { data?: { error?: string; message?: string } } }) => {
-            console.error('📋 [PRESTAZIONE UPDATE] Error:', error);
+        onError: (error: Error & { response?: { data?: { error?: string; message?: string }; status?: number } }) => {
 
-            // Extract error message from response if available
-            const responseError = error.response?.data?.error || error.response?.data?.message;
-            let errorMessage = responseError || error.message || 'Errore durante l\'aggiornamento';
-
-            // Handle specific error cases
-            if (errorMessage.includes('già esistente') || errorMessage.includes('already exists')) {
-                errorMessage = 'Il codice prestazione è già in uso. Prova con un codice diverso.';
-            } else if (errorMessage.includes('not found') || errorMessage.includes('non trovata')) {
-                errorMessage = 'La prestazione non è stata trovata. Potrebbe essere stata eliminata.';
-            } else if (error.message?.includes('500') || error.message?.includes('Internal Server')) {
-                errorMessage = 'Errore del server. Riprova tra qualche secondo o contatta l\'assistenza.';
+            // Handle specific error cases via status code
+            const status = error.response?.status;
+            if (status === 409) {
+                showToast({ type: 'error', message: 'Il codice prestazione è già in uso. Prova con un codice diverso.' });
+            } else if (status === 404) {
+                showToast({ type: 'error', message: 'La prestazione non è stata trovata. Potrebbe essere stata eliminata.' });
+            } else if (status === 500) {
+                showToast({ type: 'error', message: 'Errore del server. Riprova tra qualche secondo o contatta l\'assistenza.' });
+            } else {
+                showToast({ type: 'error', message: 'Errore durante l\'aggiornamento della prestazione' });
             }
-
-            showToast({ type: 'error', message: errorMessage });
         }
     });
 
@@ -375,14 +389,19 @@ const PrestazioneForm: React.FC = () => {
         }
     };
 
-    // Toggle branca specialistica
+    // Toggle branca specialistica — auto-set IVA 22% for medicina estetica
     const toggleBranca = (branca: string) => {
-        setFormData(prev => ({
-            ...prev,
-            brancheSpecialistiche: prev.brancheSpecialistiche.includes(branca)
-                ? prev.brancheSpecialistiche.filter(b => b !== branca)
-                : [...prev.brancheSpecialistiche, branca]
-        }));
+        setFormData(prev => {
+            const isEstetica = branca.toLowerCase().includes('estetica');
+            const isAdding = !prev.brancheSpecialistiche.includes(branca);
+            const nextBranche = isAdding
+                ? [...prev.brancheSpecialistiche, branca]
+                : prev.brancheSpecialistiche.filter(b => b !== branca);
+            const hasEstetica = nextBranche.some(b => b.toLowerCase().includes('estetica'));
+            // Auto-set IVA: 22% if any "estetica" branca selected, 0% if none remain
+            const newIva = (isEstetica || hasEstetica) ? (hasEstetica ? '22' : '0') : prev.ivaAliquota;
+            return { ...prev, brancheSpecialistiche: nextBranche, ivaAliquota: newIva };
+        });
         setIsDirty(true);
     };
 
@@ -443,6 +462,14 @@ const PrestazioneForm: React.FC = () => {
         }
 
         // Build submit data with extended tipologie support
+        const parsedPrezzoBase = parseFloat(formData.prezzoBase);
+        const parsedPrimaVisita = parseFloat(formData.prezzoPrimaVisita);
+        const parsedControllo = parseFloat(formData.prezzoControllo);
+        const parsedDurataPrimaVisita = parseInt(formData.durataPrimaVisita, 10);
+        const parsedDurataControllo = parseInt(formData.durataControllo, 10);
+        const parsedScadenza = parseInt(formData.scadenzaDefaultMesi, 10);
+        const parsedIvaAliquota = parseFloat(formData.ivaAliquota);
+
         const submitData: Partial<PrestazioneWithTipologie> = {
             codice: formData.codice.toUpperCase().trim(),
             nome: formData.nome.trim(),
@@ -450,8 +477,13 @@ const PrestazioneForm: React.FC = () => {
             tipo: formData.tipo,
             brancheSpecialistiche: formData.brancheSpecialistiche.length > 0 ? formData.brancheSpecialistiche : undefined,
             durataPrevista: formData.durataPrevista,
-            prezzoBase: parseFloat(formData.prezzoBase),
-            ivaAliquota: parseFloat(formData.ivaAliquota),
+            prezzoBase: isNaN(parsedPrezzoBase) ? 0 : parsedPrezzoBase,
+            prezzoPrimaVisita: !isNaN(parsedPrimaVisita) && parsedPrimaVisita > 0 ? parsedPrimaVisita : undefined,
+            prezzoControllo: !isNaN(parsedControllo) && parsedControllo > 0 ? parsedControllo : undefined,
+            durataPrimaVisita: !isNaN(parsedDurataPrimaVisita) && parsedDurataPrimaVisita > 0 ? parsedDurataPrimaVisita : undefined,
+            durataControllo: !isNaN(parsedDurataControllo) && parsedDurataControllo > 0 ? parsedDurataControllo : undefined,
+            scadenzaDefaultMesi: !isNaN(parsedScadenza) && parsedScadenza > 0 ? parsedScadenza : undefined,
+            ivaAliquota: isNaN(parsedIvaAliquota) ? 0 : parsedIvaAliquota,
             istruzioniPreparazione: formData.istruzioniPreparazione.trim() || undefined,
             richiedeStrumento: formData.richiedeStrumento,
             strumentiRichiesti: formData.strumentiRichiesti,
@@ -467,8 +499,8 @@ const PrestazioneForm: React.FC = () => {
         }
     };
 
-    const handleCancel = () => {
-        if (isDirty && !confirm('Hai modifiche non salvate. Sei sicuro di voler uscire?')) {
+    const handleCancel = async () => {
+        if (isDirty && !(await confirmWarning('Modifiche non salvate', 'Hai modifiche non salvate. Sei sicuro di voler uscire?'))) {
             return;
         }
         navigate('/poliambulatorio/catalogo/prestazioni');
@@ -781,8 +813,8 @@ const PrestazioneForm: React.FC = () => {
                             <DollarSign className="w-5 h-5 text-green-600" />
                         </div>
                         <div>
-                            <h2 className="text-lg font-medium text-gray-900">Prezzo</h2>
-                            <p className="text-sm text-gray-500">Configurazione del prezzo base</p>
+                            <h2 className="text-lg font-medium text-gray-900">Prezzi & Tariffe</h2>
+                            <p className="text-sm text-gray-500">Prezzo base, prima visita, controllo e scadenza</p>
                         </div>
                     </div>
 
@@ -854,6 +886,154 @@ const PrestazioneForm: React.FC = () => {
                                 </div>
                             </div>
                         )}
+
+                        {/* Separator */}
+                        <div className="md:col-span-2 border-t border-gray-200 pt-4">
+                            <p className="text-sm font-medium text-gray-700 mb-1">Prezzi differenziati</p>
+                            <p className="text-xs text-gray-500">Se la prima visita o il controllo hanno un prezzo diverso dal base, inseriscili qui. Lascia vuoto per usare il prezzo base.</p>
+                        </div>
+
+                        {/* Prezzo Prima Visita */}
+                        <div>
+                            <label className="label-clinica">
+                                Prezzo Prima Visita (€)
+                            </label>
+                            <input
+                                type="number"
+                                value={formData.prezzoPrimaVisita}
+                                onChange={(e) => handleChange('prezzoPrimaVisita', e.target.value)}
+                                step="0.01"
+                                min="0"
+                                placeholder="Usa prezzo base"
+                                className="input-clinica"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">Se diverso dal prezzo base per la prima visita</p>
+                        </div>
+
+                        {/* Prezzo Controllo */}
+                        <div>
+                            <label className="label-clinica">
+                                Prezzo Controllo (€)
+                            </label>
+                            <input
+                                type="number"
+                                value={formData.prezzoControllo}
+                                onChange={(e) => handleChange('prezzoControllo', e.target.value)}
+                                step="0.01"
+                                min="0"
+                                placeholder="Usa prezzo base"
+                                className="input-clinica"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">Se diverso dal prezzo base per le visite di controllo</p>
+                        </div>
+
+                        {/* Scadenza Default Mesi */}
+                        <div>
+                            <label className="label-clinica">
+                                Scadenza controllo (mesi)
+                            </label>
+                            <div className="flex items-center gap-3">
+                                <input
+                                    type="number"
+                                    value={formData.scadenzaDefaultMesi}
+                                    onChange={(e) => handleChange('scadenzaDefaultMesi', e.target.value)}
+                                    min="1"
+                                    max="120"
+                                    placeholder="Es. 12"
+                                    className="w-24 input-clinica"
+                                />
+                                <div className="flex gap-2">
+                                    {[3, 6, 12, 24].map((m) => (
+                                        <button
+                                            key={m}
+                                            type="button"
+                                            onClick={() => handleChange('scadenzaDefaultMesi', String(m))}
+                                            className={`px-3 py-1 rounded text-sm transition-colors ${formData.scadenzaDefaultMesi === String(m)
+                                                ? 'bg-teal-500 text-white'
+                                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                                }`}
+                                        >
+                                            {m} mesi
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-1">Dopo quanti mesi la visita scade e diventa necessario un controllo</p>
+                        </div>
+
+                        {/* Separator durate differenziate */}
+                        <div className="md:col-span-2 border-t border-gray-200 pt-4">
+                            <p className="text-sm font-medium text-gray-700 mb-1">Durate differenziate</p>
+                            <p className="text-xs text-gray-500">Se la prima visita o il controllo hanno una durata diversa da quella standard, inseriscila qui. Lascia vuoto per usare la durata standard.</p>
+                        </div>
+
+                        {/* Durata Prima Visita */}
+                        <div>
+                            <label className="label-clinica">
+                                Durata Prima Visita (min)
+                            </label>
+                            <div className="flex items-center gap-3">
+                                <input
+                                    type="number"
+                                    value={formData.durataPrimaVisita}
+                                    onChange={(e) => handleChange('durataPrimaVisita', e.target.value)}
+                                    min="5"
+                                    max="480"
+                                    placeholder="Usa durata standard"
+                                    className="w-28 input-clinica"
+                                />
+                                <div className="flex gap-2">
+                                    {[30, 45, 60, 90].map((m) => (
+                                        <button
+                                            key={m}
+                                            type="button"
+                                            onClick={() => handleChange('durataPrimaVisita', String(m))}
+                                            className={`px-3 py-1 rounded text-sm transition-colors ${formData.durataPrimaVisita === String(m)
+                                                ? 'bg-teal-500 text-white'
+                                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                                }`}
+                                        >
+                                            {m}m
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-1">Durata specifica per visite preventive / prima visita MDL</p>
+                        </div>
+
+                        {/* Durata Controllo */}
+                        <div>
+                            <label className="label-clinica">
+                                Durata Controllo (min)
+                            </label>
+                            <div className="flex items-center gap-3">
+                                <input
+                                    type="number"
+                                    value={formData.durataControllo}
+                                    onChange={(e) => handleChange('durataControllo', e.target.value)}
+                                    min="5"
+                                    max="480"
+                                    placeholder="Usa durata standard"
+                                    className="w-28 input-clinica"
+                                />
+                                <div className="flex gap-2">
+                                    {[15, 20, 30, 45].map((m) => (
+                                        <button
+                                            key={m}
+                                            type="button"
+                                            onClick={() => handleChange('durataControllo', String(m))}
+                                            className={`px-3 py-1 rounded text-sm transition-colors ${formData.durataControllo === String(m)
+                                                ? 'bg-teal-500 text-white'
+                                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                                }`}
+                                        >
+                                            {m}m
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-1">Durata specifica per visite periodiche / visite di controllo MDL</p>
+                        </div>
                     </div>
                 </div>
 

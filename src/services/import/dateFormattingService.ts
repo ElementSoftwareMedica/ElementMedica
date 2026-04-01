@@ -54,7 +54,6 @@ export class DateFormattingService {
       
       return cleanDateStr; // Se non riesce a parsare, restituisce l'originale
     } catch (error) {
-      console.warn(`Errore nella formattazione della data: ${dateString}`, error);
       return dateString;
     }
   }
@@ -116,7 +115,6 @@ export class DateFormattingService {
         return date.toISOString().split('T')[0];
       }
     } catch (error) {
-      console.warn(`Impossibile formattare la data per l'API: ${dateString}`, error);
     }
 
     return cleanDateStr; // Se non riesce a convertire, restituisce l'originale
@@ -181,7 +179,6 @@ export class DateFormattingService {
       const monthStr = month.toString().padStart(2, '0');
       return `${dayStr}/${monthStr}/${year}`;
     } catch (error) {
-      console.warn(`Errore nell'estrazione della data dal codice fiscale: ${taxCode}`, error);
       return null;
     }
   }

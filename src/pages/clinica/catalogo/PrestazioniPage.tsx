@@ -35,7 +35,8 @@ import {
     RefreshCw,
     Download,
     MoreHorizontal,
-    Activity
+    Activity,
+    Eye
 } from 'lucide-react';
 import {
     prestazioniApi,
@@ -44,14 +45,19 @@ import {
     PaginatedResponse
 } from '../../../services/clinicaApi';
 import { formatDate, formatDuration } from '../../../utils/dateUtils';
+import { formatCurrency } from '../../../lib/utils';
 import { useTenantFilter } from '../../../context/TenantFilterContext';
+import { useViewMode, type ViewMode } from '../../../hooks/useViewMode';
+import { useToast } from '../../../hooks/useToast';
+import { ActionMenu, createCrudActions } from '@/components/ui/ActionMenu';
+import ViewModeToggle from '../../../components/clinica/ViewModeToggle';
+import { CRUDButton } from '../../../components/shared/CRUDButton';
+import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
 import '../../../styles/clinica-theme.css';
 
 // =====================================================
 // TYPES
 // =====================================================
-
-type ViewMode = 'grid' | 'table';
 
 interface FilterState {
     search: string;
@@ -133,12 +139,14 @@ const StatusIndicator: React.FC<{ isActive: boolean }> = ({ isActive }) => (
 export const PrestazioniPage: React.FC = () => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
+    const { showToast } = useToast();
+    const { confirmDelete } = useConfirmDialog();
 
     // Tenant filter from global context
     const { getTenantFilterParams, isReady, tenantFilterKey } = useTenantFilter();
 
-    // State
-    const [viewMode, setViewMode] = useState<ViewMode>('table');
+    // State - View mode with localStorage persistence
+    const { viewMode, setViewMode } = useViewMode({ storageKey: 'prestazioni', defaultMode: 'list' });
     const [page, setPage] = useState(1);
     const [filters, setFilters] = useState<FilterState>({
         search: '',
@@ -160,7 +168,7 @@ export const PrestazioniPage: React.FC = () => {
             ...(tenantParams.tenantIds && { tenantIds: tenantParams.tenantIds.join(',') }),
             ...(tenantParams.allTenants && { allTenants: 'true' })
         };
-    }, [page, filters, getTenantFilterParams]);
+    }, [page, filters, getTenantFilterParams, tenantFilterKey]);
 
     // Queries
     const {
@@ -185,7 +193,11 @@ export const PrestazioniPage: React.FC = () => {
         mutationFn: (id: string) => prestazioniApi.delete(id),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['prestazioni'] });
+            showToast({ type: 'success', message: 'Prestazione eliminata con successo' });
         },
+        onError: () => {
+            showToast({ type: 'error', message: 'Errore durante l\'eliminazione' });
+        }
     });
 
     // Extract data
@@ -203,11 +215,20 @@ export const PrestazioniPage: React.FC = () => {
         setPage(1);
     }, []);
 
-    const handleDelete = useCallback((id: string) => {
-        if (window.confirm('Sei sicuro di voler eliminare questa prestazione?')) {
+    const handleDelete = useCallback(async (id: string) => {
+        if (await confirmDelete('questa prestazione')) {
             deleteMutation.mutate(id);
         }
-    }, [deleteMutation]);
+    }, [deleteMutation, confirmDelete]);
+
+    // Handlers for navigation
+    const handleView = useCallback((id: string) => {
+        navigate(`/poliambulatorio/catalogo/prestazioni/${id}`);
+    }, [navigate]);
+
+    const handleEdit = useCallback((id: string) => {
+        navigate(`/poliambulatorio/catalogo/prestazioni/${id}/modifica`);
+    }, [navigate]);
 
     const handleSelectAll = useCallback(() => {
         if (selectedIds.size === prestazioni.length) {
@@ -258,13 +279,14 @@ export const PrestazioniPage: React.FC = () => {
                     >
                         <Download className="w-5 h-5" />
                     </button>
-                    <Link
-                        to="/poliambulatorio/catalogo/prestazioni/nuovo"
+                    <CRUDButton
+                        operation="create"
+                        onClick={() => navigate('/poliambulatorio/catalogo/prestazioni/nuovo')}
                         className="clinica-button-primary flex items-center gap-2"
                     >
                         <Plus className="w-4 h-4" />
                         Nuova Prestazione
-                    </Link>
+                    </CRUDButton>
                 </div>
             </div>
 
@@ -352,8 +374,8 @@ export const PrestazioniPage: React.FC = () => {
                     {/* View Toggle */}
                     <div className="flex items-center border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden">
                         <button
-                            onClick={() => setViewMode('table')}
-                            className={`p-2 ${viewMode === 'table' ? 'bg-teal-500 text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                            onClick={() => setViewMode('list')}
+                            className={`p-2 ${viewMode === 'list' ? 'bg-teal-500 text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
                         >
                             <ListIcon className="w-5 h-5" />
                         </button>
@@ -448,7 +470,7 @@ export const PrestazioniPage: React.FC = () => {
                         </Link>
                     )}
                 </div>
-            ) : viewMode === 'table' ? (
+            ) : viewMode === 'list' ? (
                 /* Table View */
                 <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
                     <div className="overflow-x-auto">
@@ -475,6 +497,15 @@ export const PrestazioniPage: React.FC = () => {
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                         Durata
                                     </th>
+                                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                        Prezzo Base
+                                    </th>
+                                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                        Prima Visita
+                                    </th>
+                                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                        Controllo
+                                    </th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                         Stato
                                     </th>
@@ -487,9 +518,10 @@ export const PrestazioniPage: React.FC = () => {
                                 {prestazioni.map((prestazione) => (
                                     <tr
                                         key={prestazione.id}
-                                        className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                                        onClick={() => handleView(prestazione.id)}
+                                        className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer"
                                     >
-                                        <td className="px-4 py-3">
+                                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                                             <input
                                                 type="checkbox"
                                                 checked={selectedIds.has(prestazione.id)}
@@ -504,12 +536,9 @@ export const PrestazioniPage: React.FC = () => {
                                         </td>
                                         <td className="px-4 py-3">
                                             <div>
-                                                <Link
-                                                    to={`/poliambulatorio/catalogo/prestazioni/${prestazione.id}`}
-                                                    className="font-medium text-gray-900 dark:text-white hover:text-teal-600 dark:hover:text-teal-400"
-                                                >
+                                                <span className="font-medium text-gray-900 dark:text-white">
                                                     {prestazione.nome}
-                                                </Link>
+                                                </span>
                                                 {prestazione.descrizione && (
                                                     <p className="text-sm text-gray-500 dark:text-gray-400 truncate max-w-xs">
                                                         {prestazione.descrizione}
@@ -526,33 +555,42 @@ export const PrestazioniPage: React.FC = () => {
                                                 {formatDuration(prestazione.durataPrevista)}
                                             </span>
                                         </td>
+                                        <td className="px-4 py-3 text-right">
+                                            <span className="text-sm font-medium text-gray-900 dark:text-white">
+                                                {formatCurrency(prestazione.prezzoBase)}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3 text-right">
+                                            {prestazione.prezzoPrimaVisita ? (
+                                                <span className="text-sm font-medium text-teal-600 dark:text-teal-400">
+                                                    {formatCurrency(prestazione.prezzoPrimaVisita)}
+                                                </span>
+                                            ) : (
+                                                <span className="text-sm text-gray-400 dark:text-gray-500">—</span>
+                                            )}
+                                        </td>
+                                        <td className="px-4 py-3 text-right">
+                                            {prestazione.prezzoControllo ? (
+                                                <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                                                    {formatCurrency(prestazione.prezzoControllo)}
+                                                </span>
+                                            ) : (
+                                                <span className="text-sm text-gray-400 dark:text-gray-500">—</span>
+                                            )}
+                                        </td>
                                         <td className="px-4 py-3">
                                             <StatusIndicator isActive={prestazione.attivo} />
                                         </td>
-                                        <td className="px-4 py-3 text-right">
-                                            <div className="flex items-center justify-end gap-2">
-                                                <Link
-                                                    to={`/poliambulatorio/catalogo/prestazioni/${prestazione.id}`}
-                                                    className="p-2 text-gray-500 hover:text-teal-600 dark:text-gray-400 dark:hover:text-teal-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
-                                                    title="Dettagli"
-                                                >
-                                                    <ChevronRight className="w-4 h-4" />
-                                                </Link>
-                                                <Link
-                                                    to={`/poliambulatorio/catalogo/prestazioni/${prestazione.id}/modifica`}
-                                                    className="p-2 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
-                                                    title="Modifica"
-                                                >
-                                                    <Edit className="w-4 h-4" />
-                                                </Link>
-                                                <button
-                                                    onClick={() => handleDelete(prestazione.id)}
-                                                    className="p-2 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
-                                                    title="Elimina"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
-                                            </div>
+                                        <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                                            <ActionMenu
+                                                theme="teal"
+                                                size="sm"
+                                                actions={createCrudActions({
+                                                    onView: () => handleView(prestazione.id),
+                                                    onEdit: () => handleEdit(prestazione.id),
+                                                    onDelete: () => handleDelete(prestazione.id)
+                                                })}
+                                            />
                                         </td>
                                     </tr>
                                 ))}
@@ -566,7 +604,8 @@ export const PrestazioniPage: React.FC = () => {
                     {prestazioni.map((prestazione) => (
                         <div
                             key={prestazione.id}
-                            className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 hover:shadow-md transition-shadow"
+                            onClick={() => handleView(prestazione.id)}
+                            className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 hover:shadow-lg transition-shadow cursor-pointer"
                         >
                             <div className="flex items-start justify-between mb-3">
                                 <div>
@@ -594,6 +633,26 @@ export const PrestazioniPage: React.FC = () => {
                                 <StatusIndicator isActive={prestazione.attivo} />
                             </div>
 
+                            {/* Pricing */}
+                            <div className="flex items-center gap-3 text-sm mb-4 border-t border-gray-200 dark:border-gray-700 pt-3">
+                                <div className="flex-1">
+                                    <span className="text-xs text-gray-500 dark:text-gray-400">Base</span>
+                                    <p className="font-medium text-gray-900 dark:text-white">{formatCurrency(prestazione.prezzoBase)}</p>
+                                </div>
+                                {prestazione.prezzoPrimaVisita && (
+                                    <div className="flex-1">
+                                        <span className="text-xs text-teal-600 dark:text-teal-400">1a Visita</span>
+                                        <p className="font-medium text-teal-600 dark:text-teal-400">{formatCurrency(prestazione.prezzoPrimaVisita)}</p>
+                                    </div>
+                                )}
+                                {prestazione.prezzoControllo && (
+                                    <div className="flex-1">
+                                        <span className="text-xs text-blue-600 dark:text-blue-400">Controllo</span>
+                                        <p className="font-medium text-blue-600 dark:text-blue-400">{formatCurrency(prestazione.prezzoControllo)}</p>
+                                    </div>
+                                )}
+                            </div>
+
                             <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 mb-4 border-t border-gray-200 dark:border-gray-700 pt-4">
                                 {prestazione.richiedeStrumento && (
                                     <span className="flex items-center gap-1">
@@ -603,28 +662,16 @@ export const PrestazioniPage: React.FC = () => {
                                 )}
                             </div>
 
-                            <div className="flex items-center justify-between pt-3 border-t border-gray-200 dark:border-gray-700">
-                                <Link
-                                    to={`/poliambulatorio/catalogo/prestazioni/${prestazione.id}`}
-                                    className="text-sm font-medium text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 flex items-center gap-1"
-                                >
-                                    Dettagli
-                                    <ChevronRight className="w-4 h-4" />
-                                </Link>
-                                <div className="flex items-center gap-2">
-                                    <Link
-                                        to={`/poliambulatorio/catalogo/prestazioni/${prestazione.id}/modifica`}
-                                        className="p-2 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
-                                    >
-                                        <Edit className="w-4 h-4" />
-                                    </Link>
-                                    <button
-                                        onClick={() => handleDelete(prestazione.id)}
-                                        className="p-2 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </button>
-                                </div>
+                            <div className="flex items-center justify-end pt-3 border-t border-gray-200 dark:border-gray-700" onClick={(e) => e.stopPropagation()}>
+                                <ActionMenu
+                                    theme="teal"
+                                    size="sm"
+                                    actions={createCrudActions({
+                                        onView: () => handleView(prestazione.id),
+                                        onEdit: () => handleEdit(prestazione.id),
+                                        onDelete: () => handleDelete(prestazione.id)
+                                    })}
+                                />
                             </div>
                         </div>
                     ))}

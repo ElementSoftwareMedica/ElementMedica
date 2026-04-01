@@ -14,7 +14,7 @@ import logger from '../../utils/logger.js';
  */
 class PersonService {
   // ==================== CORE OPERATIONS ====================
-  
+
   /**
    * Ottiene persone per ruolo
    * @param {string|Array} roleType - Tipo/i di ruolo
@@ -53,8 +53,8 @@ class PersonService {
    * @param {Object} updateData - Dati da aggiornare
    * @returns {Promise<Object>} Persona aggiornata
    */
-  static async updatePerson(id, updateData) {
-    return await PersonCore.updatePerson(id, updateData);
+  static async updatePerson(id, updateData, tenantId = null) {
+    return await PersonCore.updatePerson(id, updateData, tenantId);
   }
 
   /**
@@ -62,17 +62,30 @@ class PersonService {
    * @param {string} id - ID della persona
    * @returns {Promise<Object>} Risultato dell'operazione
    */
-  static async deletePerson(id) {
-    return await PersonCore.deletePerson(id);
+  /**
+   * Elimina una persona con ownership check e GDPR logging
+   * @param {string} id - ID della persona
+   * @param {Object} options - Opzioni eliminazione
+   * @param {string} options.tenantId - Tenant ID per ownership check
+   * @param {string} options.deletedBy - Person ID che sta eliminando
+   * @param {string} options.deletionReason - Motivo eliminazione (GDPR)
+   * @returns {Promise<Object>} Risultato dell'operazione
+   */
+  static async deletePerson(id, options = {}) {
+    return await PersonCore.deletePerson(id, options);
   }
 
   /**
-   * Elimina più persone
+   * Elimina più persone con ownership check e GDPR logging
    * @param {Array} ids - Array di ID delle persone
+   * @param {Object} options - Opzioni eliminazione
+   * @param {string} options.tenantId - Tenant ID per ownership check
+   * @param {string} options.deletedBy - Person ID che sta eliminando
+   * @param {string} options.deletionReason - Motivo eliminazione (GDPR)
    * @returns {Promise<Object>} Risultato dell'operazione
    */
-  static async deleteMultiplePersons(ids) {
-    return await PersonCore.deleteMultiplePersons(ids);
+  static async deleteMultiplePersons(ids, options = {}) {
+    return await PersonCore.deleteMultiplePersons(ids, options);
   }
 
   /**
@@ -120,7 +133,7 @@ class PersonService {
    * @returns {Promise<boolean>} True se disponibile
    */
   static async checkEmailAvailability(email, excludeId = null) {
-    return await PersonCore.checkEmailAvailability(email, excludeId);
+    return await PersonCore.isEmailAvailable(email, excludeId);
   }
 
   // ==================== ROLE MANAGEMENT ====================
@@ -236,7 +249,7 @@ class PersonService {
     if (typeof overwriteIds === 'object' && !Array.isArray(overwriteIds)) {
       return await PersonImport.importFromJSON(personsData, overwriteIds);
     }
-    
+
     // Nuova firma: converti i parametri in options
     const options = {
       defaultCompanyId: companyId,
@@ -245,7 +258,7 @@ class PersonService {
       overwriteIds: overwriteIds || [],
       skipDuplicates: false  // Segnala i duplicati come errori invece di saltarli
     };
-    
+
     return await PersonImport.importFromJSON(personsData, options);
   }
 
@@ -263,7 +276,7 @@ class PersonService {
       skipDuplicates: false,  // Segnala i duplicati come errori invece di saltarli
       ...options
     };
-    
+
     return await PersonImport.importFromCSV(csvContent, normalizedOptions);
   }
 
@@ -321,7 +334,7 @@ class PersonService {
       const isAvailable = await PersonCore.checkUsernameAvailability(username);
       return !isAvailable; // Inverti il risultato
     };
-    
+
     return await PersonUtils.generateUniqueUsername(firstName, lastName, checkExistence);
   }
 
@@ -367,41 +380,6 @@ class PersonService {
    */
   static getAllRoles() {
     return PersonRoleMapping.getAllRoles();
-  }
-
-  // ==================== BACKWARD COMPATIBILITY ====================
-
-  /**
-   * @deprecated Usa getPersonsByRole('EMPLOYEE') invece
-   */
-  static async getEmployees(options = {}) {
-    logger.warn('getEmployees is deprecated, use getPersonsByRole("EMPLOYEE") instead');
-    return await PersonCore.getEmployees(options);
-  }
-
-  /**
-   * @deprecated Usa getPersonsByRole('TRAINER') invece
-   */
-  static async getTrainers(options = {}) {
-    logger.warn('getTrainers is deprecated, use getPersonsByRole("TRAINER") instead');
-    return await PersonCore.getTrainers(options);
-  }
-
-  /**
-   * @deprecated Usa getPersonsByRole(['ADMIN', 'SUPER_ADMIN']) invece
-   */
-  static async getSystemUsers(options = {}) {
-    logger.warn('getSystemUsers is deprecated, use getPersonsByRole(["ADMIN", "SUPER_ADMIN"]) instead');
-    return await PersonCore.getSystemUsers(options);
-  }
-
-  /**
-   * @deprecated Usa generateUniqueUsername invece
-   */
-  static async generateUniqueEmail(firstName, lastName, domain = 'example.com') {
-    logger.warn('generateUniqueEmail is deprecated and will be removed in future versions');
-    const username = await this.generateUniqueUsername(firstName, lastName);
-    return `${username}@${domain}`;
   }
 
   // ==================== HEALTH CHECK ====================

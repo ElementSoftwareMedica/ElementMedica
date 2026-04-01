@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
-import { Filter, SortDesc } from 'lucide-react';
-import { Button } from '../../atoms/Button';
+import React, { useState, useRef, useEffect } from 'react';
+import { Filter, SortDesc, X, Check, ChevronDown } from 'lucide-react';
 import { cn } from '../../utils';
 
 export interface FilterOption {
@@ -30,7 +29,33 @@ export interface FilterPanelProps {
   activeFilters?: Record<string, string>;
   /** Ordinamento attivo */
   activeSort?: { field: string, direction: 'asc' | 'desc' };
+  /** Tema colore: 'blue' (ElementSicurezza), 'teal' (ElementMedica), 'violet' (Management) */
+  theme?: 'blue' | 'teal' | 'violet';
 }
+
+const THEME = {
+  blue: {
+    activeBtn: 'bg-blue-600 text-white hover:bg-blue-700 border-blue-600',
+    outlineBtn: 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 border-gray-300 dark:border-gray-600',
+    activeRow: 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
+    applyBtn: 'bg-blue-600 text-white hover:bg-blue-700',
+    resetLink: 'text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300',
+  },
+  teal: {
+    activeBtn: 'bg-teal-600 text-white hover:bg-teal-700 border-teal-600',
+    outlineBtn: 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 border-gray-300 dark:border-gray-600',
+    activeRow: 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300',
+    applyBtn: 'bg-teal-600 text-white hover:bg-teal-700',
+    resetLink: 'text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300',
+  },
+  violet: {
+    activeBtn: 'bg-violet-600 text-white hover:bg-violet-700 border-violet-600',
+    outlineBtn: 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 border-gray-300 dark:border-gray-600',
+    activeRow: 'bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300',
+    applyBtn: 'bg-violet-600 text-white hover:bg-violet-700',
+    resetLink: 'text-violet-600 dark:text-violet-400 hover:text-violet-800 dark:hover:text-violet-300',
+  },
+};
 
 export const FilterPanel: React.FC<FilterPanelProps> = ({
   filterOptions = [],
@@ -40,119 +65,134 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
   className = '',
   activeFilters = {},
   activeSort,
+  theme = 'blue',
 }) => {
   const [showFilterPopup, setShowFilterPopup] = useState(false);
   const [showSortPopup, setShowSortPopup] = useState(false);
   const [tempFilters, setTempFilters] = useState<Record<string, string>>(activeFilters);
-  
-  // Conta i filtri attivi
+
+  const filterRef = useRef<HTMLDivElement>(null);
+  const sortRef = useRef<HTMLDivElement>(null);
+
+  // Chiudi popup quando si clicca fuori
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
+        setShowFilterPopup(false);
+      }
+      if (sortRef.current && !sortRef.current.contains(event.target as Node)) {
+        setShowSortPopup(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Sync tempFilters con activeFilters quando cambiano dall'esterno
+  useEffect(() => {
+    setTempFilters(activeFilters);
+  }, [activeFilters]);
+
+  const tc = THEME[theme];
   const activeFilterCount = Object.values(activeFilters).filter(Boolean).length;
-  
-  // Gestisce il cambio di un filtro
+
   const handleFilterChange = (field: string, value: string) => {
-    setTempFilters(prev => ({
-      ...prev,
-      [field]: value,
-    }));
+    setTempFilters(prev => ({ ...prev, [field]: value }));
   };
-  
-  // Applica i filtri
+
   const applyFilters = () => {
-    if (onFilterChange) {
-      onFilterChange(tempFilters);
-    }
+    if (onFilterChange) onFilterChange(tempFilters);
     setShowFilterPopup(false);
   };
-  
-  // Resetta i filtri
+
   const resetFilters = () => {
     const emptyFilters = filterOptions.reduce((acc, option) => {
       acc[option.value] = '';
       return acc;
     }, {} as Record<string, string>);
-    
     setTempFilters(emptyFilters);
-    if (onFilterChange) {
-      onFilterChange(emptyFilters);
-    }
+    if (onFilterChange) onFilterChange(emptyFilters);
   };
-  
-  // Gestisce il cambio di ordinamento
+
   const handleSortChange = (field: string) => {
     if (!onSortChange) return;
-    
-    let direction: 'asc' | 'desc' = 'asc';
-    
-    // Se il campo è già selezionato, inverti la direzione
-    if (activeSort && activeSort.field === field) {
-      direction = activeSort.direction === 'asc' ? 'desc' : 'asc';
-    }
-    
+    const direction: 'asc' | 'desc' =
+      activeSort?.field === field && activeSort.direction === 'asc' ? 'desc' : 'asc';
     onSortChange({ field, direction });
     setShowSortPopup(false);
   };
-  
-  // Determina se un filtro è attivo
-  const isFilterActive = (field: string, value: string) => {
-    return activeFilters[field] === value;
-  };
-  
-  // Determina se un ordinamento è attivo
-  const isSortActive = (field: string) => {
-    return activeSort?.field === field;
-  };
-  
-  // Per garantire che i filtri funzionino anche senza opzioni
+
   const hasFilterFunctionality = filterOptions.length > 0 && onFilterChange;
   const hasSortFunctionality = sortOptions.length > 0 && onSortChange;
-  
+
   return (
     <div className={cn('flex items-center gap-2', className)}>
-      {/* Pulsante di filtro - sempre mostrato */}
-      <div className="relative">
-        <Button
-          variant={activeFilterCount > 0 ? 'primary' : 'outline'}
-          leftIcon={<Filter className="h-4 w-4" />}
+
+      {/* ── Filtri button ── */}
+      <div className="relative" ref={filterRef}>
+        <button
+          type="button"
           onClick={() => {
-            setShowFilterPopup(!showFilterPopup);
+            setShowFilterPopup(v => !v);
             setShowSortPopup(false);
           }}
-          className="relative h-10"
+          className={cn(
+            'inline-flex items-center gap-2 h-9 px-3.5 text-sm font-medium rounded-xl border transition-all duration-150',
+            'focus:outline-none focus:ring-2 focus:ring-offset-1',
+            activeFilterCount > 0 ? tc.activeBtn : tc.outlineBtn
+          )}
         >
-          Filtri
+          <Filter className="h-4 w-4 flex-shrink-0" />
+          <span>Filtri</span>
           {activeFilterCount > 0 && (
-            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+            <span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[11px] font-bold text-white leading-none bg-red-500">
               {activeFilterCount}
             </span>
           )}
-        </Button>
-        
-        {/* Popup di filtro - mostrato solo se ci sono opzioni di filtro */}
+          <ChevronDown className={cn('h-3.5 w-3.5 ml-0.5 transition-transform duration-150', showFilterPopup && 'rotate-180')} />
+        </button>
+
+        {/* Filter popup */}
         {showFilterPopup && hasFilterFunctionality && (
-          <div className="absolute right-0 mt-2 w-72 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50">
-            <div className="p-4 space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-medium">Filtri</h3>
-                <button 
-                  onClick={resetFilters}
-                  className="text-xs text-blue-600 hover:text-blue-800"
+          <div className="absolute left-0 top-full mt-2 w-80 rounded-xl shadow-xl dark:shadow-black/40 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 z-[600]">
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Filtri di ricerca</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {activeFilterCount > 0 && (
+                  <button
+                    onClick={resetFilters}
+                    className={cn('flex items-center gap-1 text-xs font-medium transition-colors', tc.resetLink)}
+                  >
+                    <X className="h-3 w-3" />
+                    Reimposta
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowFilterPopup(false)}
+                  className="p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                 >
-                  Reimposta
+                  <X className="h-4 w-4" />
                 </button>
               </div>
-              
-              <div className="space-y-3">
-                {filterOptions.map((filter) => (
-                  <div key={filter.value} className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700">
-                      {filter.label}
-                    </label>
-                    
-                    {filter.options ? (
+            </div>
+
+            {/* Filter options */}
+            <div className="p-4 space-y-4">
+              {filterOptions.map((filter) => (
+                <div key={filter.value}>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
+                    {filter.label}
+                  </label>
+                  {filter.options ? (
+                    <div className="relative">
                       <select
                         value={tempFilters[filter.value] || ''}
                         onChange={(e) => handleFilterChange(filter.value, e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full pl-3 pr-8 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 appearance-none focus:outline-none focus:ring-2 focus:ring-offset-0 focus:ring-blue-500/30 focus:border-blue-500 dark:focus:border-blue-400 transition-colors"
                       >
                         <option value="">Tutti</option>
                         {filter.options.map((option) => (
@@ -161,85 +201,100 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
                           </option>
                         ))}
                       </select>
-                    ) : (
-                      <input
-                        type="text"
-                        value={tempFilters[filter.value] || ''}
-                        onChange={(e) => handleFilterChange(filter.value, e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder={`Cerca per ${filter.label.toLowerCase()}`}
-                      />
-                    )}
-                  </div>
-                ))}
-              </div>
-              
-              <div className="flex justify-end space-x-2 pt-4 border-t">
-                <Button
-                  variant="outline"
-                  onClick={() => setShowFilterPopup(false)}
-                  size="sm"
-                >
-                  Annulla
-                </Button>
-                <Button
-                  variant="primary"
-                  onClick={applyFilters}
-                  size="sm"
-                >
-                  Applica
-                </Button>
-              </div>
+                      <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                    </div>
+                  ) : (
+                    <input
+                      type="text"
+                      value={tempFilters[filter.value] || ''}
+                      onChange={(e) => handleFilterChange(filter.value, e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-0 focus:ring-blue-500/30 focus:border-blue-500 dark:focus:border-blue-400 transition-colors"
+                      placeholder={`Cerca per ${filter.label.toLowerCase()}...`}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-gray-100 dark:border-gray-700">
+              <button
+                onClick={() => setShowFilterPopup(false)}
+                className="h-8 px-3.5 text-sm font-medium rounded-xl border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                Annulla
+              </button>
+              <button
+                onClick={applyFilters}
+                className={cn('inline-flex items-center gap-1.5 h-8 px-3.5 text-sm font-medium rounded-xl transition-colors', tc.applyBtn)}
+              >
+                <Check className="h-3.5 w-3.5" />
+                Applica
+              </button>
             </div>
           </div>
         )}
       </div>
-      
-      {/* Pulsante di ordinamento - sempre mostrato */}
-      <div className="relative">
-        <Button
-          variant={activeSort ? 'primary' : 'outline'}
-          leftIcon={<SortDesc className="h-4 w-4" />}
-          onClick={() => {
-            setShowSortPopup(!showSortPopup);
-            setShowFilterPopup(false);
-          }}
-          className="h-10"
-        >
-          Ordina
-        </Button>
-        
-        {/* Popup di ordinamento - mostrato solo se ci sono opzioni di ordinamento */}
-        {showSortPopup && hasSortFunctionality && (
-          <div className="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50">
-            <div className="p-2">
-              <div className="space-y-1">
-                {sortOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => handleSortChange(option.value)}
-                    className={cn(
-                      'w-full text-left px-3 py-2 rounded-md text-sm transition-colors',
-                      isSortActive(option.value)
-                        ? 'bg-blue-50 text-blue-700'
-                        : 'hover:bg-gray-50'
-                    )}
-                  >
-                    <div className="flex items-center justify-between">
+
+      {/* ── Ordina button ── */}
+      {hasSortFunctionality && (
+        <div className="relative" ref={sortRef}>
+          <button
+            type="button"
+            onClick={() => {
+              setShowSortPopup(v => !v);
+              setShowFilterPopup(false);
+            }}
+            className={cn(
+              'inline-flex items-center gap-2 h-9 px-3.5 text-sm font-medium rounded-xl border transition-all duration-150',
+              'focus:outline-none focus:ring-2 focus:ring-offset-1',
+              activeSort ? tc.activeBtn : tc.outlineBtn
+            )}
+          >
+            <SortDesc className="h-4 w-4 flex-shrink-0" />
+            <span>Ordina</span>
+            {activeSort && (
+              <span className="text-[11px] opacity-80">
+                {activeSort.direction === 'asc' ? '↑' : '↓'}
+              </span>
+            )}
+            <ChevronDown className={cn('h-3.5 w-3.5 ml-0.5 transition-transform duration-150', showSortPopup && 'rotate-180')} />
+          </button>
+
+          {showSortPopup && (
+            <div className="absolute left-0 top-full mt-2 w-56 rounded-xl shadow-xl dark:shadow-black/40 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 z-[600]">
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+                <SortDesc className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Ordina per</span>
+              </div>
+              <div className="p-2">
+                {sortOptions.map((option) => {
+                  const isActive = activeSort?.field === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      onClick={() => handleSortChange(option.value)}
+                      className={cn(
+                        'w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors',
+                        isActive
+                          ? tc.activeRow
+                          : 'hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100'
+                      )}
+                    >
                       <span>{option.label}</span>
-                      {isSortActive(option.value) && (
-                        <span className="text-xs">
-                          {activeSort?.direction === 'asc' ? '↑' : '↓'}
+                      {isActive && (
+                        <span className="text-xs font-semibold">
+                          {activeSort?.direction === 'asc' ? '↑ Crescente' : '↓ Decrescente'}
                         </span>
                       )}
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  );
+                })}
               </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

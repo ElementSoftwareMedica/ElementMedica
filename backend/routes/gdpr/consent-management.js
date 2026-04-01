@@ -6,9 +6,11 @@
 import express from 'express';
 import { body, validationResult } from 'express-validator';
 import prisma from '../../config/prisma-optimization.js';
-import { authenticate } from '../../auth/middleware.js';
+import authMiddleware from '../../middleware/auth.js';
+const { authenticate } = authMiddleware;
 import { authenticateAdvanced } from '../../middleware/auth-advanced.js';
 import { requireRoles } from '../../middleware/rbac.js';
+import { getEffectiveTenantId } from '../../utils/tenantHelper.js';
 import { logger } from '../../utils/logger.js';
 
 const router = express.Router();
@@ -64,7 +66,7 @@ router.post('/grant',
             // Check if user can grant consent for other person
             if (personId !== req.person.id && !req.person.roles.includes('global_admin')) {
                 return res.status(403).json({
-                    error: 'Access denied to grant consent for other person',
+                    error: 'Accesso negato alla concessione del consenso per un\'altra persona',
                     code: 'GDPR_ACCESS_DENIED'
                 });
             }
@@ -116,13 +118,13 @@ router.post('/grant',
             logger.error('Failed to grant consents', {
                 component: 'gdpr-consent-management',
                 action: 'grantConsents',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 personId: req.person?.id,
                 body: req.body
             });
 
             res.status(500).json({
-                error: 'Failed to grant consents',
+                error: 'Errore nella concessione dei consensi',
                 code: 'GDPR_CONSENT_GRANT_FAILED'
             });
         }
@@ -155,7 +157,7 @@ router.post('/revoke',
             // Check if user can revoke consent for other person
             if (personId !== req.person.id && !req.person.roles.includes('global_admin')) {
                 return res.status(403).json({
-                    error: 'Access denied to revoke consent for other person',
+                    error: 'Accesso negato alla revoca del consenso per un\'altra persona',
                     code: 'GDPR_ACCESS_DENIED'
                 });
             }
@@ -195,13 +197,13 @@ router.post('/revoke',
             logger.error('Failed to revoke consents', {
                 component: 'gdpr-consent-management',
                 action: 'revokeConsents',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 personId: req.person?.id,
                 body: req.body
             });
 
             res.status(500).json({
-                error: 'Failed to revoke consents',
+                error: 'Errore nella revoca dei consensi',
                 code: 'GDPR_CONSENT_REVOKE_FAILED'
             });
         }
@@ -272,13 +274,13 @@ router.post('/',
             logger.error('Failed to record consent', {
                 component: 'gdpr-consent-management',
                 action: 'recordConsent',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 personId: req.person?.id,
                 body: req.body
             });
 
             res.status(500).json({
-                error: 'Failed to record consent',
+                error: 'Errore nella registrazione del consenso',
                 code: 'GDPR_CONSENT_RECORD_FAILED'
             });
         }
@@ -337,13 +339,13 @@ router.post('/withdraw',
             logger.error('Failed to withdraw consent', {
                 component: 'gdpr-consent-management',
                 action: 'withdrawConsent',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 personId: req.person?.id,
                 body: req.body
             });
 
             res.status(500).json({
-                error: 'Failed to withdraw consent',
+                error: 'Errore nel ritiro del consenso',
                 code: 'GDPR_CONSENT_WITHDRAW_FAILED'
             });
         }
@@ -405,13 +407,13 @@ router.get('/current-user',
             logger.error('Failed to get current user consent status', {
                 component: 'gdpr-consent-management',
                 action: 'getCurrentUserConsent',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 stack: error.stack,
                 personId: req.person?.id
             });
 
             res.status(500).json({
-                error: 'Failed to get consent status',
+                error: 'Errore nel recupero dello stato consenso',
                 code: 'GDPR_CONSENT_GET_FAILED'
             });
         }
@@ -427,7 +429,7 @@ router.get('/:personId',
     async (req, res) => {
         try {
             const { personId } = req.params;
-            const tenantId = req.person.tenantId;
+            const tenantId = getEffectiveTenantId(req);
 
             const consents = await prisma.consentRecord.findMany({
                 where: {
@@ -479,13 +481,13 @@ router.get('/:personId',
             logger.error('Failed to get person consent status', {
                 component: 'gdpr-consent-management',
                 action: 'getPersonConsent',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 personId: req.params?.personId,
                 adminPersonId: req.person?.id
             });
 
             res.status(500).json({
-                error: 'Failed to get consent status',
+                error: 'Errore nel recupero dello stato consenso',
                 code: 'GDPR_CONSENT_GET_FAILED'
             });
         }
@@ -547,13 +549,13 @@ router.get('/',
             logger.error('Failed to get consent status', {
                 component: 'gdpr-consent-management',
                 action: 'getConsent',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 stack: error.stack,
                 personId: req.person?.id
             });
 
             res.status(500).json({
-                error: 'Failed to get consent status',
+                error: 'Errore nel recupero dello stato consenso',
                 code: 'GDPR_CONSENT_GET_FAILED'
             });
         }

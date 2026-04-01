@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Session 65 - VisitaPage: MDLInfoCard, Sezioni Visita Horizontal Collapse
+
+#### MDLInfoCard (Issue #2 — New Component)
+- **File**: `src/pages/clinica/clinica/components/MDLInfoCard.tsx` (NEW — 466 lines)
+  - Card compatta per visite MDL: mansioni, protocollo sanitario, rischi lavorativi
+  - Label mapping completo per CodiceRischio (28 codici), LivelloRischio, CategoriaRischio
+  - Edit inline per livello rischio individuale senza cambiare mansione/protocollo
+  - Aggiunta/rimozione rischi direttamente dalla card
+  - Props: mansioni, protocolli, rischi (MansioneRischio[]), pazienteId, isReadonly, isMDL
+
+#### VisitSidebar (Issue #3 — "Sezioni Visita")
+- **File**: `src/pages/clinica/clinica/components/VisitSidebar.tsx`
+  - Rinominato "Sezioni" → "Sezioni Visita"
+  - Collapse orizzontale (barra icone compatta) invece del collapse verticale
+
+#### VisitaPage Integration
+- **File**: `src/pages/clinica/clinica/VisitaPage.tsx`
+  - MDLInfoCard integrata in tutte e 3 le modalità layout (tabs, sections, scroll)
+  - Renderizzata prima di VisitaScadenzaCard, visibile solo per visite MDL
+
 ### Session 64 - CMS Forms, Widget Fixes, Sidebar Counters Tenant Reactivity, Management Tenant Filters
 
 #### Sidebar Counters - Tenant Reactivity (Issue #3)

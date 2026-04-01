@@ -34,11 +34,26 @@ interface ConsensoType {
     dataUltimaModifica: string;
 }
 
+interface TutoreData {
+    nome: string;
+    cognome: string;
+    cf: string;
+}
+
+/**
+ * ConsensiData - Tipo per i dati dei consensi
+ * Include i consensi booleani e opzionalmente i dati del tutore per minorenni
+ */
+interface ConsensiData {
+    [key: string]: boolean | TutoreData | undefined;
+    tutore?: TutoreData;
+}
+
 interface ConsensoPrivacyModalProps {
     appuntamento: Appuntamento;
     isOpen: boolean;
     onClose: () => void;
-    onConfirm: (consensi: Record<string, boolean>) => void;
+    onConfirm: (consensi: ConsensiData) => void;
     isLoading?: boolean;
 }
 
@@ -70,6 +85,14 @@ const CONSENSI_RICHIESTI: ConsensoType[] = [
         obbligatorio: true,
         versione: '2.0',
         dataUltimaModifica: '2024-03-01'
+    },
+    {
+        id: 'consenso_minorenne',
+        nome: 'Consenso Genitore/Tutore (Minorenne)',
+        descrizione: 'Come genitore/tutore legale del minore, autorizzo il trattamento dei dati personali e sanitari e lo svolgimento della prestazione sanitaria.',
+        obbligatorio: false,  // Diventa obbligatorio se il paziente è minorenne
+        versione: '1.0',
+        dataUltimaModifica: '2024-06-01'
     },
     {
         id: 'privacy_comunicazioni',
@@ -105,11 +128,41 @@ export const ConsensoPrivacyModal: React.FC<ConsensoPrivacyModalProps> = ({
         CONSENSI_RICHIESTI.reduce((acc, c) => ({ ...acc, [c.id]: false }), {})
     );
     const [showInfo, setShowInfo] = useState<string | null>(null);
+    const [tutoreNome, setTutoreNome] = useState('');
+    const [tutoreCognome, setTutoreCognome] = useState('');
+    const [tutoreCF, setTutoreCF] = useState('');
+
+    // Calcola se il paziente è minorenne
+    const paziente = appuntamento.paziente;
+    const isMinorenne = React.useMemo(() => {
+        if (!paziente?.dataNascita && !paziente?.birthDate) return false;
+        const birthDate = new Date(paziente.dataNascita || paziente.birthDate || '');
+        const today = new Date();
+        const age = today.getFullYear() - birthDate.getFullYear();
+        const monthDiff = today.getMonth() - birthDate.getMonth();
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+            return age - 1 < 18;
+        }
+        return age < 18;
+    }, [paziente]);
+
+    // Consensi con obbligatorietà dinamica per minorenni
+    const consensiConObbligatori = React.useMemo(() => {
+        return CONSENSI_RICHIESTI.map(c => ({
+            ...c,
+            obbligatorio: c.id === 'consenso_minorenne' ? isMinorenne : c.obbligatorio,
+            // Nascondi il consenso minorenne se il paziente è maggiorenne
+            hidden: c.id === 'consenso_minorenne' && !isMinorenne
+        }));
+    }, [isMinorenne]);
 
     // Verifica se tutti i consensi obbligatori sono stati dati
-    const consensiObbligatoriOk = CONSENSI_RICHIESTI
-        .filter(c => c.obbligatorio)
+    const consensiObbligatoriOk = consensiConObbligatori
+        .filter(c => c.obbligatorio && !c.hidden)
         .every(c => consensi[c.id]);
+
+    // Per minorenni, verifica anche i dati del tutore
+    const tutoreDataOk = !isMinorenne || (tutoreNome.trim() && tutoreCognome.trim() && tutoreCF.trim().length === 16);
 
     // Handler toggle consenso
     const handleToggle = useCallback((id: string) => {
@@ -118,10 +171,14 @@ export const ConsensoPrivacyModal: React.FC<ConsensoPrivacyModalProps> = ({
 
     // Handler conferma
     const handleConfirm = useCallback(() => {
-        if (consensiObbligatoriOk) {
-            onConfirm(consensi);
+        if (consensiObbligatoriOk && tutoreDataOk) {
+            // Include tutore data if minorenne
+            const consensiData = isMinorenne
+                ? { ...consensi, tutore: { nome: tutoreNome, cognome: tutoreCognome, cf: tutoreCF } }
+                : consensi;
+            onConfirm(consensiData);
         }
-    }, [consensiObbligatoriOk, consensi, onConfirm]);
+    }, [consensiObbligatoriOk, tutoreDataOk, consensi, isMinorenne, tutoreNome, tutoreCognome, tutoreCF, onConfirm]);
 
     // Handler stampa
     const handlePrint = useCallback(() => {
@@ -129,8 +186,6 @@ export const ConsensoPrivacyModal: React.FC<ConsensoPrivacyModalProps> = ({
     }, []);
 
     if (!isOpen) return null;
-
-    const paziente = appuntamento.paziente;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -173,9 +228,16 @@ export const ConsensoPrivacyModal: React.FC<ConsensoPrivacyModalProps> = ({
                             <p className="font-semibold text-gray-900">
                                 {paziente ? `${paziente.cognome} ${paziente.nome}` : 'Paziente'}
                             </p>
-                            <p className="text-sm text-gray-500">
-                                {paziente?.codiceFiscale || 'CF non disponibile'}
-                            </p>
+                            <div className="flex items-center gap-2">
+                                <p className="text-sm text-gray-500">
+                                    {paziente?.codiceFiscale || paziente?.taxCode || 'CF non disponibile'}
+                                </p>
+                                {isMinorenne && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                                        Minorenne
+                                    </span>
+                                )}
+                            </div>
                         </div>
                         <div className="ml-auto text-right">
                             <p className="text-sm text-gray-500">Appuntamento</p>
@@ -189,6 +251,49 @@ export const ConsensoPrivacyModal: React.FC<ConsensoPrivacyModalProps> = ({
                     </div>
                 </div>
 
+                {/* Tutore Section (solo se minorenne) */}
+                {isMinorenne && (
+                    <div className="px-6 py-4 bg-amber-50 border-b border-amber-200">
+                        <h3 className="font-medium text-amber-800 mb-3 flex items-center gap-2">
+                            <User className="h-4 w-4" />
+                            Dati Genitore/Tutore Legale *
+                        </h3>
+                        <div className="grid grid-cols-3 gap-3">
+                            <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Cognome *</label>
+                                <input
+                                    type="text"
+                                    value={tutoreCognome}
+                                    onChange={(e) => setTutoreCognome(e.target.value)}
+                                    placeholder="Cognome tutore"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Nome *</label>
+                                <input
+                                    type="text"
+                                    value={tutoreNome}
+                                    onChange={(e) => setTutoreNome(e.target.value)}
+                                    placeholder="Nome tutore"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Codice Fiscale *</label>
+                                <input
+                                    type="text"
+                                    value={tutoreCF}
+                                    onChange={(e) => setTutoreCF(e.target.value.toUpperCase().slice(0, 16))}
+                                    placeholder="RSSMRA85M01H501Z"
+                                    maxLength={16}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono uppercase focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Consensi List */}
                 <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
                     <p className="text-sm text-gray-600 mb-4">
@@ -196,7 +301,7 @@ export const ConsensoPrivacyModal: React.FC<ConsensoPrivacyModalProps> = ({
                         I consensi contrassegnati con <span className="text-red-500">*</span> sono obbligatori
                     </p>
 
-                    {CONSENSI_RICHIESTI.map((consenso) => (
+                    {consensiConObbligatori.filter(c => !c.hidden).map((consenso) => (
                         <div
                             key={consenso.id}
                             className={`
@@ -290,10 +395,10 @@ export const ConsensoPrivacyModal: React.FC<ConsensoPrivacyModalProps> = ({
                             </button>
                             <button
                                 onClick={handleConfirm}
-                                disabled={!consensiObbligatoriOk || isLoading}
+                                disabled={!consensiObbligatoriOk || !tutoreDataOk || isLoading}
                                 className={`
                                     px-6 py-2 rounded-lg font-medium flex items-center gap-2
-                                    ${consensiObbligatoriOk
+                                    ${consensiObbligatoriOk && tutoreDataOk
                                         ? 'bg-teal-600 text-white hover:bg-teal-700'
                                         : 'bg-gray-300 text-gray-500 cursor-not-allowed'}
                                     disabled:opacity-50
@@ -313,6 +418,12 @@ export const ConsensoPrivacyModal: React.FC<ConsensoPrivacyModalProps> = ({
                         <p className="text-sm text-amber-600 mt-2 flex items-center gap-1">
                             <AlertCircle className="h-4 w-4" />
                             Tutti i consensi obbligatori devono essere accettati
+                        </p>
+                    )}
+                    {consensiObbligatoriOk && !tutoreDataOk && (
+                        <p className="text-sm text-amber-600 mt-2 flex items-center gap-1">
+                            <AlertCircle className="h-4 w-4" />
+                            Inserire i dati del genitore/tutore (nome, cognome e codice fiscale)
                         </p>
                     )}
                 </div>

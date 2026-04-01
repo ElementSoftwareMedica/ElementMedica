@@ -1,16 +1,20 @@
 /**
  * Brand Detection Middleware
- * Rileva il frontend brand dall'header X-Frontend-Id e mappa al tenant REALE nel database
  * 
- * IMPORTANTE: I tenant devono esistere nel database con slug corrispondente
- * - element-formazione → Tenant con slug "element-formazione"
- * - element-medica → Tenant con slug "element-medica"
+ * P57 REFACTOR: Brand determina SOLO il branch UI, NON il tenant.
+ * Il tenant è SEMPRE derivato dal JWT dell'utente autenticato (req.person.tenantId)
  * 
- * @updated Project 45 - Added branch-based access control
+ * Architettura:
+ * - X-Frontend-Id header → determina quale branch visualizzare (MEDICA/FORMAZIONE)
+ * - Tenant → SEMPRE da req.person.tenantId (JWT)
+ * - Permessi CRUD → basati su tenant, non su brand
+ * 
+ * Questo permette a un singolo tenant di avere più domini che mostrano branch diversi.
+ * 
+ * @updated Project 57 - Brand/Tenant Separation
  */
 
 import { logger } from '../utils/logger.js';
-import prisma from '../config/prisma-optimization.js';
 import {
   BRANCH_TYPES,
   getBranchFromRequest,
@@ -19,82 +23,60 @@ import {
   enrichBranchContext
 } from '../utils/branchHelper.js';
 
-// Cache per tenant (TTL 5 minuti)
-let tenantCache = new Map();
-let cacheTimestamp = 0;
-const CACHE_TTL = 5 * 60 * 1000; // 5 minuti
+// ============================================
+// CONFIGURAZIONE BRAND → BRANCH MAPPING
+// ============================================
 
-// Brand configurations - features + branch types
-const BRAND_FEATURES = {
-  'element-formazione': {
-    name: 'ElementFormazione',
-    allowedFeatures: ['medicinaLavoro', 'corsiFormazione', 'rspp'],
-    corsesCategories: ['all'],
-    // Project 45: Branch configuration
+/**
+ * Mappatura Brand → Branch Type
+ * 
+ * Il brand determina SOLO quale branch UI visualizzare.
+ * NON determina il tenant (quello viene dal JWT)
+ */
+const BRAND_BRANCH_MAPPING = {
+  'element-sicurezza': {
+    name: 'ElementSicurezza',
+    displayName: 'Element Sicurezza',
     primaryBranch: BRANCH_TYPES.FORMAZIONE,
-    enabledBranches: [BRANCH_TYPES.FORMAZIONE],
+    theme: 'formazione',
+    colors: {
+      primary: '#2563eb', // blue-600
+      secondary: '#1d4ed8', // blue-700
+    },
+    // Features visibili in questo branch UI
+    uiFeatures: ['corsiFormazione', 'rspp', 'medicinaLavoro'],
   },
   'element-medica': {
     name: 'ElementMedica',
-    allowedFeatures: ['medicinaLavoro', 'poliambulatorio', 'prenotazioniOnline'],
-    corsesCategories: [],
-    // Project 45: Branch configuration
+    displayName: 'Element Medica',
     primaryBranch: BRANCH_TYPES.MEDICA,
-    enabledBranches: [BRANCH_TYPES.MEDICA],
+    theme: 'medical',
+    colors: {
+      primary: '#0d9488', // teal-600
+      secondary: '#0f766e', // teal-700
+    },
+    // Features visibili in questo branch UI
+    uiFeatures: ['medicinaLavoro', 'poliambulatorio', 'prenotazioniOnline'],
   },
 };
 
-const ALLOWED_BRANDS = Object.keys(BRAND_FEATURES);
+const ALLOWED_BRANDS = Object.keys(BRAND_BRANCH_MAPPING);
+
+// ============================================
+// MIDDLEWARE PRINCIPALE
+// ============================================
 
 /**
- * Carica tenant dal database e aggiorna la cache
- */
-async function loadTenantsFromDB() {
-  const now = Date.now();
-
-  // Usa cache se valida
-  if (tenantCache.size > 0 && (now - cacheTimestamp) < CACHE_TTL) {
-    return tenantCache;
-  }
-
-  try {
-    const tenants = await prisma.tenant.findMany({
-      where: { isActive: true, deletedAt: null },
-      select: { id: true, slug: true, name: true }
-    });
-
-    tenantCache = new Map();
-    tenants.forEach(t => {
-      if (t.slug) {
-        tenantCache.set(t.slug, t);
-      }
-    });
-    cacheTimestamp = now;
-
-    logger.debug({
-      component: 'brandDetection',
-      action: 'cache_refresh',
-      tenantsLoaded: tenants.length
-    }, 'Tenant cache refreshed');
-
-    return tenantCache;
-  } catch (error) {
-    logger.error({
-      component: 'brandDetection',
-      action: 'cache_refresh_error',
-      error: error.message
-    }, 'Failed to load tenants from DB');
-    return tenantCache; // Ritorna cache esistente se fallisce
-  }
-}
-
-/**
- * Middleware per rilevare e validare il frontend brand
- * Mappa il frontendId al tenant REALE nel database
+ * Middleware per rilevare il brand e impostare il branch UI
+ * 
+ * IMPORTANTE P57: 
+ * - NON imposta più req.brandTenantId
+ * - Il tenant è SEMPRE quello dell'utente (req.person.tenantId)
+ * - Il brand serve SOLO per determinare il branch UI visualizzato
  */
 async function brandDetectionMiddleware(req, res, next) {
   // Estrai frontend ID dall'header
-  const frontendId = req.headers['x-frontend-id'] || req.query.frontendId || 'element-formazione';
+  const frontendId = req.headers['x-frontend-id'] || req.query.frontendId || 'element-sicurezza';
 
   // Validazione brand
   if (!ALLOWED_BRANDS.includes(frontendId)) {
@@ -106,104 +88,112 @@ async function brandDetectionMiddleware(req, res, next) {
 
     return res.status(400).json({
       success: false,
-      error: 'Invalid frontend identifier',
+      error: 'Identificatore frontend non valido',
       code: 'INVALID_FRONTEND_ID',
+      allowedBrands: ALLOWED_BRANDS,
     });
   }
 
-  // Carica tenant dal database
-  const tenants = await loadTenantsFromDB();
-  const dbTenant = tenants.get(frontendId);
+  // Recupera configurazione brand
+  const brandConfig = BRAND_BRANCH_MAPPING[frontendId];
 
-  if (!dbTenant) {
-    logger.warn({
-      frontendId,
-      availableTenants: Array.from(tenants.keys()),
-      path: req.path,
-    }, 'No matching tenant found in database for frontendId');
-
-    // Fallback: usa il primo tenant disponibile o crea errore
-    // In produzione potremmo voler essere più rigidi
-    return res.status(400).json({
-      success: false,
-      error: `Tenant "${frontendId}" not found in database`,
-      code: 'TENANT_NOT_FOUND',
-      hint: 'Ensure tenant with matching slug exists in database'
-    });
-  }
-
-  // Recupera configurazione features per brand
-  const brandFeatures = BRAND_FEATURES[frontendId];
-
-  // Crea brandConfig combinando DB + features
-  const brandConfig = {
-    tenantId: dbTenant.id, // ID REALE dal database
-    name: brandFeatures.name,
-    allowedFeatures: brandFeatures.allowedFeatures,
-    corsesCategories: brandFeatures.corsesCategories,
-    dbTenant: dbTenant, // Info aggiuntive dal DB
-    // Project 45: Branch info
-    primaryBranch: brandFeatures.primaryBranch,
-    enabledBranches: brandFeatures.enabledBranches,
+  // Imposta dati sulla request
+  req.frontendId = frontendId;
+  req.brandConfig = {
+    name: brandConfig.name,
+    displayName: brandConfig.displayName,
+    theme: brandConfig.theme,
+    colors: brandConfig.colors,
+    uiFeatures: brandConfig.uiFeatures,
+    primaryBranch: brandConfig.primaryBranch,
+    // P57: Questi campi sono mantenuti per compatibilità ma NON determinano il tenant
+    allowedFeatures: brandConfig.uiFeatures,
+    enabledBranches: [brandConfig.primaryBranch],
   };
 
-  // Aggiungi al request object
-  req.frontendId = frontendId;
-  req.brandConfig = brandConfig;
-  req.brandTenantId = dbTenant.id; // Tenant REALE dal database
+  // Branch UI da visualizzare
+  req.branchType = brandConfig.primaryBranch;
 
-  // Project 45: Add branch info to request
-  req.branchType = brandFeatures.primaryBranch;
-  req.accessibleBranches = brandFeatures.enabledBranches;
+  // Nota: accessibleBranches sarà validato con i branch abilitati del tenant
+  // dopo che auth.js imposta req.person
+  req.requestedBranch = brandConfig.primaryBranch;
+  req.accessibleBranches = [brandConfig.primaryBranch];
 
   // Log per debugging
   logger.debug({
     frontendId,
     brandName: brandConfig.name,
-    tenantId: dbTenant.id,
-    tenantName: dbTenant.name,
     branchType: req.branchType,
-    accessibleBranches: req.accessibleBranches,
     path: req.path,
-  }, 'Brand detected - mapped to real tenant with branch info');
+  }, 'Brand detected - branch UI determined');
 
   next();
 }
 
 /**
- * Middleware per filtrare contenuti per brand
- * Da usare DOPO brandDetectionMiddleware
+ * Middleware per validare che l'utente abbia accesso al branch richiesto
  * 
- * @updated Project 45 - Added branch-based filtering
+ * DA USARE DOPO auth.js (che imposta req.person)
+ * Verifica che il tenant dell'utente abbia il branch richiesto abilitato
+ */
+async function validateBranchAccessMiddleware(req, res, next) {
+  // Se non c'è utente autenticato, skip (route pubblica)
+  if (!req.person) {
+    return next();
+  }
+
+  // Se non c'è branch richiesto, skip
+  if (!req.requestedBranch) {
+    return next();
+  }
+
+  // TODO: Verificare che Tenant.enabledBranches contenga il branch richiesto
+  // Per ora, permettiamo tutti i branch se il tenant li ha abilitati
+  // Questo sarà implementato quando caricheremo il tenant completo
+
+  // Imposta i branch accessibili
+  // Per ora assumiamo MEDICA e FORMAZIONE (default)
+  req.accessibleBranches = [BRANCH_TYPES.MEDICA, BRANCH_TYPES.FORMAZIONE];
+
+  next();
+}
+
+// ============================================
+// MIDDLEWARE FILTRO CONTENUTI
+// ============================================
+
+/**
+ * Middleware per filtrare contenuti per branch
+ * Da usare DOPO brandDetectionMiddleware e auth.js
  */
 function brandContentFilterMiddleware(req, res, next) {
   if (!req.brandConfig) {
     return res.status(500).json({
       success: false,
-      error: 'Brand configuration not loaded',
+      error: 'Configurazione brand non caricata',
       code: 'BRAND_CONFIG_MISSING',
     });
   }
 
   // Aggiungi helper per filtrare query
   req.brandFilter = {
-    // Filtra per tenantId del brand
-    tenantId: req.brandConfig.tenantId,
+    // P57: tenantId viene SEMPRE da req.person.tenantId, NON da brand
+    tenantId: req.person?.tenantId,
 
-    // Project 45: Branch type for filtering
+    // Branch type per filtering
     branchType: req.branchType,
 
-    // Check se una feature è abilitata
-    hasFeature: (feature) => req.brandConfig.allowedFeatures.includes(feature),
+    // Check se una feature UI è disponibile in questo brand
+    hasFeature: (feature) => req.brandConfig.uiFeatures?.includes(feature) ||
+      req.brandConfig.allowedFeatures?.includes(feature),
 
-    // Project 45: Check se un branch è accessibile
+    // Check se un branch è accessibile
     hasBranch: (branch) => req.accessibleBranches?.includes(branch) || false,
 
-    // Filtra corsi per brand (Element Medica non ha corsi)
+    // Filtra corsi per brand (Element Medica non mostra corsi)
     filterCourses: (courses) => {
-      // Project 45: Use branch check instead of hardcoded brand
       if (!req.accessibleBranches?.includes(BRANCH_TYPES.FORMAZIONE)) {
-        return []; // Nessun corso per branch non-FORMAZIONE
+        return [];
       }
       return courses;
     },
@@ -211,37 +201,30 @@ function brandContentFilterMiddleware(req, res, next) {
     // Filtra servizi per brand
     filterServices: (services) => {
       return services.filter(service => {
-        // Medicina del lavoro: disponibile per entrambi
         if (service.type === 'medicina_lavoro') return true;
-
-        // Corsi: solo branch FORMAZIONE
         if (service.type === 'corsi') {
           return req.accessibleBranches?.includes(BRANCH_TYPES.FORMAZIONE);
         }
-
-        // RSPP: solo branch FORMAZIONE
         if (service.type === 'rspp') {
           return req.accessibleBranches?.includes(BRANCH_TYPES.FORMAZIONE);
         }
-
-        // Poliambulatorio: solo branch MEDICA
         if (service.type === 'poliambulatorio') {
           return req.accessibleBranches?.includes(BRANCH_TYPES.MEDICA);
         }
-
         return true;
       });
     },
 
-    // Project 45: Get branch filter for Prisma queries
+    // Get branch filter for Prisma queries
     getBranchFilter: () => {
       if (!req.branchType) return {};
       return { branchType: req.branchType };
     },
 
-    // Project 45: Get full where clause for multi-tenant + branch queries
+    // Get full where clause for tenant + branch queries
+    // P57: tenantId viene SEMPRE da req.person.tenantId, NON da brand
     getWhereClause: (additionalFilters = {}) => ({
-      tenantId: req.brandConfig.tenantId,
+      tenantId: req.person?.tenantId,
       branchType: req.branchType,
       deletedAt: null,
       ...additionalFilters,
@@ -251,47 +234,207 @@ function brandContentFilterMiddleware(req, res, next) {
   next();
 }
 
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
+
 /**
- * Helper: Get brand features config by ID
+ * Get brand config by ID
  */
 function getBrandConfig(frontendId) {
-  return BRAND_FEATURES[frontendId] || null;
+  return BRAND_BRANCH_MAPPING[frontendId] || null;
 }
 
 /**
- * Helper: Get all brand features
+ * Get all brand configurations
  */
 function getAllBrands() {
-  return BRAND_FEATURES;
+  return BRAND_BRANCH_MAPPING;
 }
 
 /**
- * Helper: Invalidate tenant cache (call after tenant CRUD operations)
+ * Get branch type from brand ID
  */
-function invalidateTenantCache() {
-  tenantCache.clear();
-  cacheTimestamp = 0;
-  logger.info({ component: 'brandDetection' }, 'Tenant cache invalidated');
+function getBranchFromBrand(frontendId) {
+  const config = BRAND_BRANCH_MAPPING[frontendId];
+  return config?.primaryBranch || BRANCH_TYPES.FORMAZIONE;
+}
+
+// ============================================
+// PUBLIC CONTENT MIDDLEWARE
+// ============================================
+
+import prisma from '../config/prisma-optimization.js';
+
+// Cache per tenant pubblici (TTL 5 minuti)
+let publicTenantCache = new Map();
+let publicCacheTimestamp = 0;
+const PUBLIC_CACHE_TTL = 5 * 60 * 1000;
+
+// Cache per la mappatura brand → tenant configurata in Management
+let brandTenantMappingCache = null;
+let brandTenantMappingTimestamp = 0;
+const PUBLIC_BRAND_MAPPING_KEY = 'publicBrandTenantMapping';
+
+/**
+ * Carica tenant per contenuti pubblici
+ */
+async function loadPublicTenants() {
+  const now = Date.now();
+  if (publicTenantCache.size > 0 && (now - publicCacheTimestamp) < PUBLIC_CACHE_TTL) {
+    return publicTenantCache;
+  }
+
+  try {
+    const tenants = await prisma.tenant.findMany({
+      where: { isActive: true, deletedAt: null },
+      select: { id: true, slug: true, name: true }
+    });
+
+    publicTenantCache = new Map();
+    tenants.forEach(t => {
+      if (t.slug) {
+        publicTenantCache.set(t.slug, t);
+      }
+    });
+    publicCacheTimestamp = now;
+    return publicTenantCache;
+  } catch (error) {
+    logger.error({ error: error.message }, 'Failed to load public tenants');
+    return publicTenantCache;
+  }
 }
 
 /**
- * Helper: Get tenant from cache (for testing)
+ * Carica la mappatura brand → tenant configurata dagli admin in Management.
+ * Cerca il valore publicBrandTenantMapping nel settings JSON di qualsiasi tenant attivo.
  */
-async function getTenantBySlug(slug) {
-  const tenants = await loadTenantsFromDB();
-  return tenants.get(slug) || null;
+async function loadBrandTenantMapping() {
+  const now = Date.now();
+  if (brandTenantMappingCache && (now - brandTenantMappingTimestamp) < PUBLIC_CACHE_TTL) {
+    return brandTenantMappingCache;
+  }
+
+  try {
+    const tenants = await prisma.tenant.findMany({
+      where: { isActive: true, deletedAt: null },
+      select: { settings: true }
+    });
+
+    let mapping = {};
+    for (const tenant of tenants) {
+      const s = tenant.settings || {};
+      if (s[PUBLIC_BRAND_MAPPING_KEY] && Object.keys(s[PUBLIC_BRAND_MAPPING_KEY]).length > 0) {
+        mapping = s[PUBLIC_BRAND_MAPPING_KEY];
+        break;
+      }
+    }
+
+    brandTenantMappingCache = mapping;
+    brandTenantMappingTimestamp = now;
+    return mapping;
+  } catch (error) {
+    logger.error({ error: error.message }, 'Failed to load brand tenant mapping');
+    return brandTenantMappingCache || {};
+  }
 }
+
+/**
+ * Middleware per route PUBBLICHE (CMS, corsi pubblici)
+ * 
+ * Questo middleware è DIVERSO da brandDetectionMiddleware:
+ * - brandDetectionMiddleware: per route autenticate, determina solo branch UI
+ * - publicContentMiddleware: per route pubbliche, fa lookup tenant da brand slug
+ * 
+ * IMPORTANTE: Questo NON impatta i permessi CRUD. È solo per filtrare contenuti pubblici.
+ * 
+ * Uso: Per route che non richiedono autenticazione ma devono mostrare
+ * contenuti filtrati per brand (es: /public/cms/pages/:slug)
+ */
+async function publicContentMiddleware(req, res, next) {
+  const frontendId = req.headers['x-frontend-id'] || req.query.frontendId || 'element-sicurezza';
+
+  if (!ALLOWED_BRANDS.includes(frontendId)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Identificatore frontend non valido',
+      code: 'INVALID_FRONTEND_ID',
+    });
+  }
+
+  let resolvedTenantId = null;
+
+  // 1. Prima: controlla la mappatura configurata in Management (brand → tenant UUID)
+  const brandMapping = await loadBrandTenantMapping();
+  if (brandMapping[frontendId]) {
+    resolvedTenantId = brandMapping[frontendId];
+    logger.debug({ frontendId, tenantId: resolvedTenantId }, 'Public content: tenant from Management config');
+  }
+
+  // 2. Fallback: lookup per slug del tenant (slug == frontendId)
+  if (!resolvedTenantId) {
+    const tenants = await loadPublicTenants();
+    const tenant = tenants.get(frontendId);
+    if (tenant) {
+      resolvedTenantId = tenant.id;
+      logger.debug({ frontendId, tenantId: resolvedTenantId }, 'Public content: tenant from slug fallback');
+    }
+  }
+
+  if (!resolvedTenantId) {
+    logger.warn({ frontendId }, 'No tenant found for public content brand');
+  }
+
+  req.publicTenantId = resolvedTenantId;
+
+  // Imposta anche branch config
+  const brandConfig = BRAND_BRANCH_MAPPING[frontendId];
+  req.frontendId = frontendId;
+  req.branchType = brandConfig.primaryBranch;
+  req.brandConfig = {
+    name: brandConfig.name,
+    displayName: brandConfig.displayName,
+    theme: brandConfig.theme,
+    primaryBranch: brandConfig.primaryBranch,
+  };
+
+  logger.debug({
+    frontendId,
+    publicTenantId: req.publicTenantId,
+    branchType: req.branchType,
+    path: req.path,
+  }, 'Public content middleware: tenant resolved from brand');
+
+  next();
+}
+
+/**
+ * Invalida cache contenuti pubblici (tenant slug e brand mapping)
+ */
+function invalidatePublicTenantCache() {
+  publicTenantCache.clear();
+  publicCacheTimestamp = 0;
+  brandTenantMappingCache = null;
+  brandTenantMappingTimestamp = 0;
+  logger.info({ component: 'brandDetection' }, 'Public tenant cache invalidated');
+}
+
+// ============================================
+// EXPORTS
+// ============================================
 
 export {
   brandDetectionMiddleware,
+  validateBranchAccessMiddleware,
   brandContentFilterMiddleware,
+  publicContentMiddleware,
   getBrandConfig,
   getAllBrands,
-  invalidateTenantCache,
-  getTenantBySlug,
-  BRAND_FEATURES,
+  getBranchFromBrand,
+  invalidatePublicTenantCache,
+  BRAND_BRANCH_MAPPING,
   ALLOWED_BRANDS,
-  // Project 45: Re-export branch utilities
+  // Re-export branch utilities
   BRANCH_TYPES,
   getBranchFromRequest,
   canAccessBranch,

@@ -63,7 +63,7 @@ const ProfileHeader: React.FC<ProfileHeaderProps> = ({ person }) => {
                         </div>
                         <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
                             <Building2 className="w-4 h-4" />
-                            {person.company?.ragioneSociale || person.company?.name || 'Nessuna azienda'}
+                            {person.company?.ragioneSociale || 'Nessuna azienda'}
                         </div>
                         <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
                             <Clock className="w-4 h-4" />

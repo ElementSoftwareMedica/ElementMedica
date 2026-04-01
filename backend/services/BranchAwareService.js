@@ -66,7 +66,8 @@ export class BranchAwareService {
      * @returns {Object} Prisma where clause
      */
     buildBaseFilter(req, additionalFilters = {}) {
-        const tenantId = req.effectiveTenantId || req.person?.tenantId || req.brandTenantId;
+        // P57: Tenant SEMPRE da effectiveTenantId o person.tenantId - mai da brand
+        const tenantId = req.effectiveTenantId || req.person?.tenantId;
         const branchType = req.branchType;
 
         const baseFilter = {
@@ -159,7 +160,8 @@ export class BranchAwareService {
      * @returns {Promise<Object>} Record creato
      */
     async create(req, data, options = {}) {
-        const tenantId = req.effectiveTenantId || req.person?.tenantId || req.brandTenantId;
+        // P57: Tenant SEMPRE da effectiveTenantId o person.tenantId - mai da brand
+        const tenantId = req.effectiveTenantId || req.person?.tenantId;
         const branchType = req.branchType || this.defaultBranch;
 
         // Prepara dati con tenant e branch
@@ -272,53 +274,6 @@ export class BranchAwareService {
             data: {
                 deletedAt: new Date(),
             },
-        });
-    }
-
-    /**
-     * Hard delete di un record (SOLO per admin, con audit trail)
-     * ⚠️ ATTENZIONE: Viola GDPR per dati PII - usare con estrema cautela
-     * 
-     * @param {Object} req - Express request object
-     * @param {string} id - ID del record
-     * @returns {Promise<Object|null>} Record eliminato o null
-     */
-    async hardDelete(req, id) {
-        const globalRole = req.person?.globalRole;
-
-        // Solo admin può fare hard delete
-        if (!['ADMIN', 'SUPER_ADMIN'].includes(globalRole)) {
-            logger.error({
-                component: 'BranchAwareService',
-                entity: this.entityName,
-                action: 'hardDelete',
-                id,
-                personId: req.person?.id,
-                globalRole,
-            }, 'Unauthorized hard delete attempt');
-
-            throw new Error('Unauthorized: hard delete requires admin privileges');
-        }
-
-        // Verifica che il record esista (include soft deleted)
-        const existing = await this.model.findUnique({
-            where: { id },
-        });
-
-        if (!existing) {
-            return null;
-        }
-
-        logger.warn({
-            component: 'BranchAwareService',
-            entity: this.entityName,
-            action: 'hardDelete',
-            id,
-            personId: req.person?.id,
-        }, `⚠️ HARD DELETING ${this.entityName} - This violates GDPR for PII data!`);
-
-        return this.model.delete({
-            where: { id },
         });
     }
 
@@ -452,7 +407,8 @@ export class BranchAwareService {
      * @returns {Promise<Object>} Record creato o aggiornato
      */
     async upsert(req, where, create, update, options = {}) {
-        const tenantId = req.effectiveTenantId || req.person?.tenantId || req.brandTenantId;
+        // P57: Tenant SEMPRE da effectiveTenantId o person.tenantId - mai da brand
+        const tenantId = req.effectiveTenantId || req.person?.tenantId;
         const branchType = req.branchType || this.defaultBranch;
 
         // Aggiungi tenant e branch ai dati di creazione

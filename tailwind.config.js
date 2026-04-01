@@ -1,10 +1,11 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: 'class',
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   safelist: [
     // CMS Content - Include all gradient and color classes used in database HTML
     {
-      pattern: /^(bg|text|border|from|via|to)-(teal|cyan|blue|gray|white|green|red|yellow|orange|purple|pink|indigo)-(50|100|200|300|400|500|600|700|800|900)/,
+      pattern: /^(bg|text|border|from|via|to)-(teal|cyan|blue|gray|white|green|red|yellow|orange|purple|pink|indigo)-(50|100|200|300|400|500|600|700|800|900|950)/,
     },
     {
       pattern: /^(bg|text|border)-gradient-(to|from)-(r|l|t|b|tr|tl|br|bl)/,
@@ -36,9 +37,15 @@ export default {
     'animate-pulse',
     'backdrop-filter',
     'blur-10px',
+    'font-heading',
+    'font-body',
   ],
   theme: {
     extend: {
+      fontFamily: {
+        heading: ['Space Grotesk', 'Inter', 'system-ui', 'sans-serif'],
+        body: ['Montserrat', 'Inter', 'system-ui', 'sans-serif'],
+      },
       colors: {
         primary: {
           50: 'var(--color-primary-50)',
@@ -64,6 +71,7 @@ export default {
           700: 'var(--color-secondary-700)',
           800: 'var(--color-secondary-800)',
           900: 'var(--color-secondary-900)',
+          950: 'var(--color-secondary-950)',
         },
         accent: {
           50: 'var(--color-accent-50)',
@@ -133,8 +141,8 @@ export default {
         },
       },
       backgroundImage: {
-        'gradient-medical': 'linear-gradient(135deg, #0d9488 0%, #10b981 100%)',
-        'gradient-medical-light': 'linear-gradient(135deg, #f0fdfa 0%, #d1fae5 100%)',
+        'gradient-medical': 'linear-gradient(135deg, var(--color-primary-700) 0%, var(--color-primary-600) 40%, var(--color-primary-500) 100%)',
+        'gradient-medical-light': 'linear-gradient(135deg, var(--color-primary-50) 0%, var(--color-primary-100) 100%)',
         'gradient-safety-high': 'linear-gradient(135deg, var(--color-safety-high-500) 0%, var(--color-safety-high-700) 100%)',
       },
       animation: {

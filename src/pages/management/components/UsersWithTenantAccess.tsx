@@ -12,6 +12,7 @@ import { Users, Shield, Search, Filter, Plus, Edit2, Trash2, Check, X, Eye, Load
 import { apiGet } from '../../../services/api';
 import { managementApi } from '../api';
 import type { TenantAccessLevel, Feature } from '../types';
+import type { PersonTenantProfile } from '../../../types/personMultiTenant';
 
 interface Person {
   id: string;
@@ -29,6 +30,9 @@ interface Person {
     isActive: boolean;
     isPrimary: boolean;
   }>;
+  // Progetto 48: Multi-tenant support
+  tenantProfiles?: PersonTenantProfile[];
+  currentProfile?: PersonTenantProfile;
 }
 
 interface UsersWithTenantAccessProps {
@@ -75,9 +79,8 @@ const UsersWithTenantAccess: React.FC<UsersWithTenantAccessProps> = ({ tenantId,
       );
 
       setPersons(response.data || []);
-    } catch (err: any) {
-      console.error('Error loading persons:', err);
-      setError(err.message || 'Errore nel caricamento degli utenti');
+    } catch (err: unknown) {
+      setError('Errore nel caricamento degli utenti');
     } finally {
       setLoading(false);
     }
@@ -236,8 +239,8 @@ const UsersWithTenantAccess: React.FC<UsersWithTenantAccessProps> = ({ tenantId,
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${person.status === 'ACTIVE' || person.isActive !== false
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-red-100 text-red-800'
+                      ? 'bg-green-100 text-green-800'
+                      : 'bg-red-100 text-red-800'
                       }`}>
                       {person.status === 'ACTIVE' || person.isActive !== false ? (
                         <><Check className="h-3 w-3 mr-1" /> Attivo</>

@@ -6,12 +6,12 @@
 import express from 'express';
 import { authenticate, optionalAuth } from '../middleware/auth.js';
 import { requirePermissions } from '../middleware/rbac.js';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/prisma-optimization.js';
 import logger from '../utils/logger.js';
+import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 import { UAParser } from 'ua-parser-js';
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 /**
  * POST /api/v1/cms/analytics/track
@@ -37,7 +37,7 @@ router.post('/track', optionalAuth, async (req, res) => {
     if (!page) {
       return res.status(404).json({
         success: false,
-        error: 'Page not found'
+        error: 'Pagina non trovata'
       });
     }
 
@@ -114,11 +114,11 @@ router.post('/track', optionalAuth, async (req, res) => {
   } catch (error) {
     logger.error('Failed to track page view', {
       component: 'cms-analytics',
-      error: error.message
+      error: 'Operazione non riuscita'
     });
     res.status(500).json({
       success: false,
-      error: 'Failed to track page view'
+      error: 'Errore nel tracciamento della visualizzazione pagina'
     });
   }
 });
@@ -132,8 +132,7 @@ router.get('/pages',
   requirePermissions(['cms:read']),
   async (req, res) => {
     try {
-      // Usa brandTenantId dall'header X-Frontend-Id se presente, altrimenti tenantId dell'utente
-      const tenantId = req.brandTenantId || req.person?.tenantId;
+      const tenantId = getEffectiveTenantId(req);
       const { startDate, endDate, limit = 20 } = req.query;
 
       // Date range filter
@@ -206,11 +205,11 @@ router.get('/pages',
     } catch (error) {
       logger.error('Failed to get page analytics', {
         component: 'cms-analytics',
-        error: error.message
+        error: 'Operazione non riuscita'
       });
       res.status(500).json({
         success: false,
-        error: 'Failed to get page analytics'
+        error: 'Errore nel recupero delle analitiche pagina'
       });
     }
   }
@@ -225,10 +224,12 @@ router.get('/pages/:pageId',
   requirePermissions(['cms:read']),
   async (req, res) => {
     try {
-      // Usa brandTenantId dall'header X-Frontend-Id se presente, altrimenti tenantId dell'utente
-      const tenantId = req.brandTenantId || req.person?.tenantId;
+      const tenantId = getEffectiveTenantId(req);
       const { pageId } = req.params;
       const { startDate, endDate, groupBy = 'day' } = req.query;
+      const normalizedGroupBy = ['day', 'week', 'month'].includes(String(groupBy))
+        ? String(groupBy)
+        : 'day';
 
       // Verifica che la pagina appartenga al tenant
       const page = await prisma.cMSPage.findFirst({
@@ -242,7 +243,7 @@ router.get('/pages/:pageId',
       if (!page) {
         return res.status(404).json({
           success: false,
-          error: 'Page not found'
+          error: 'Pagina non trovata'
         });
       }
 
@@ -322,17 +323,29 @@ router.get('/pages/:pageId',
       const viewsStartDate = startDate ? new Date(startDate) : thirtyDaysAgo;
       const viewsEndDate = endDate ? new Date(endDate) : new Date();
 
-      const viewsOverTime = await prisma.$queryRaw`
-        SELECT 
-          DATE(created_at) as date,
-          COUNT(*) as views
-        FROM cms_page_views
-        WHERE page_id = ${pageId}
-          AND created_at >= ${viewsStartDate}
-          AND created_at <= ${viewsEndDate}
-        GROUP BY DATE(created_at)
-        ORDER BY date ASC
-      `;
+      const timeBucketExpression =
+        normalizedGroupBy === 'week'
+          ? `DATE_TRUNC('week', "createdAt")::date`
+          : normalizedGroupBy === 'month'
+            ? `DATE_TRUNC('month', "createdAt")::date`
+            : `DATE("createdAt")`;
+
+      const viewsOverTime = await prisma.$queryRawUnsafe(
+        `
+        SELECT
+          ${timeBucketExpression} as date,
+          COUNT(*)::int as views
+        FROM "cms_page_views"
+        WHERE "pageId" = $1
+          AND "createdAt" >= $2
+          AND "createdAt" <= $3
+        GROUP BY 1
+        ORDER BY 1 ASC
+        `,
+        pageId,
+        viewsStartDate,
+        viewsEndDate
+      );
 
       res.json({
         success: true,
@@ -360,18 +373,23 @@ router.get('/pages/:pageId',
             referer: r.referer,
             count: r._count.id
           })),
-          viewsOverTime: viewsOverTime
+          viewsOverTime: Array.isArray(viewsOverTime)
+            ? viewsOverTime.map(v => ({
+              date: v.date,
+              views: Number(v.views || 0)
+            }))
+            : []
         }
       });
     } catch (error) {
       logger.error('Failed to get page analytics detail', {
         component: 'cms-analytics',
         pageId: req.params.pageId,
-        error: error.message
+        error: 'Operazione non riuscita'
       });
       res.status(500).json({
         success: false,
-        error: 'Failed to get page analytics'
+        error: 'Errore nel recupero delle analitiche pagina'
       });
     }
   }
@@ -386,8 +404,7 @@ router.get('/summary',
   requirePermissions(['cms:read']),
   async (req, res) => {
     try {
-      // Usa brandTenantId dall'header X-Frontend-Id se presente, altrimenti tenantId dell'utente
-      const tenantId = req.brandTenantId || req.person?.tenantId;
+      const tenantId = getEffectiveTenantId(req);
       const { period = '30d' } = req.query;
 
       // Calcola date range dal periodo
@@ -557,11 +574,11 @@ router.get('/summary',
     } catch (error) {
       logger.error('Failed to get analytics summary', {
         component: 'cms-analytics',
-        error: error.message
+        error: 'Operazione non riuscita'
       });
       res.status(500).json({
         success: false,
-        error: 'Failed to get analytics summary'
+        error: 'Errore nel recupero del riepilogo analitico'
       });
     }
   }

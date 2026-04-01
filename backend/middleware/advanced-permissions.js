@@ -2,11 +2,12 @@
  * Advanced Permissions Middleware
  * Middleware per controllo permessi granulari
  * 
- * @version 2.0.0 - E2E Optimized (uses RBACService, no bypass)
+ * @version 2.1.0 - Uses req.person.permissions first (P52 optimization)
  */
 
 import prisma from '../config/prisma-optimization.js';
 import { RBACService } from '../services/RBACService.js';
+import { matchPermission } from '../constants/permissions.js';
 import logger from '../utils/logger.js';
 
 /**
@@ -31,8 +32,32 @@ const checkAdvancedPermission = (resource, action, options = {}) => {
             // Costruisci il permesso in formato resource:action
             const requiredPermission = `${resource}:${action}`;
 
-            // Usa RBACService per verificare il permesso
-            const hasPermission = await RBACService.hasPermission(person.id, requiredPermission);
+            // P52: First check req.person.permissions (already loaded by auth middleware)
+            // P65: Handle both array format (auth/middleware.js) and object format (middleware/auth.js)
+            let hasPermission = false;
+            if (person.permissions) {
+                if (Array.isArray(person.permissions)) {
+                    for (const userPerm of person.permissions) {
+                        if (matchPermission(userPerm, requiredPermission)) {
+                            hasPermission = true;
+                            break;
+                        }
+                    }
+                } else if (typeof person.permissions === 'object') {
+                    // Object format: { 'clinica.visite:change_refertante': true, ... }
+                    for (const userPerm of Object.keys(person.permissions)) {
+                        if (person.permissions[userPerm] === true && matchPermission(userPerm, requiredPermission)) {
+                            hasPermission = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Fallback to RBACService if not found in req.person.permissions
+            if (!hasPermission) {
+                hasPermission = await RBACService.hasPermission(person.id, requiredPermission, null, person.tenantId || null);
+            }
 
             if (!hasPermission) {
                 logger.warn('Advanced permission denied', {
@@ -40,7 +65,8 @@ const checkAdvancedPermission = (resource, action, options = {}) => {
                     personId: person.id,
                     resource,
                     action,
-                    requiredPermission
+                    requiredPermission,
+                    userPermissionsCount: person.permissions?.length || 0
                 });
 
                 return res.status(403).json({
@@ -173,12 +199,14 @@ function filterObjectFields(obj, allowedFields) {
 
 /**
  * Middleware per verificare accesso alla propria compagnia
+ * P49: usa companyTenantProfileId invece di companyId
  */
 const requireOwnCompany = () => {
     return async (req, res, next) => {
         try {
             const person = req.person;
-            const targetCompanyId = req.params.companyId || req.params.id || req.body.companyId;
+            // P49: companyTenantProfileId invece di companyId
+            const targetCompanyTenantProfileId = req.params.companyTenantProfileId || req.params.id || req.body.companyTenantProfileId;
 
             if (!person) {
                 return res.status(401).json({
@@ -187,7 +215,7 @@ const requireOwnCompany = () => {
                 });
             }
 
-            // Allow global admins to access any company
+            // Allow global admins and tenant admins to access any company in their tenant
             const isGlobalAdmin = person.globalRole === 'SUPER_ADMIN' ||
                 person.globalRole === 'ADMIN';
 
@@ -195,8 +223,14 @@ const requireOwnCompany = () => {
                 return next();
             }
 
+            // TENANT_ADMIN can access all companies in their tenant
+            const roleTypes = person.personRoles?.map(pr => pr.roleType) || [];
+            if (roleTypes.includes('TENANT_ADMIN')) {
+                return next();
+            }
+
             // For regular users, check if they belong to the target company
-            if (person.companyId && person.companyId === targetCompanyId) {
+            if (person.companyTenantProfileId && person.companyTenantProfileId === targetCompanyTenantProfileId) {
                 return next();
             }
 
@@ -243,21 +277,20 @@ const requireSelfAccess = (getTargetPersonId) => {
 
             // COMPANY_ADMIN può accedere ai dati della propria compagnia
             if (person.globalRole === 'COMPANY_ADMIN') {
-                // Verifica che la persona target appartenga alla stessa compagnia
-                const targetPerson = await prisma.person.findUnique({
-                    where: { id: targetPersonId },
-                    select: { companyId: true, deletedAt: true }
+                // P49: Verifica che la persona target appartenga alla stessa compagnia
+                const targetPerson = await prisma.person.findFirst({ // F235: findFirst+deletedAt
+                    where: { id: targetPersonId, deletedAt: null },
+                    select: {
+                        tenantProfiles: {
+                            where: { isActive: true, deletedAt: null },
+                            select: { companyTenantProfileId: true },
+                            take: 1
+                        }
+                    }
                 });
 
-                // Verifica che la persona non sia stata eliminata
-                if (targetPerson?.deletedAt) {
-                    return res.status(404).json({
-                        error: 'Persona non trovata',
-                        code: 'PERSON_NOT_FOUND'
-                    });
-                }
-
-                if (targetPerson && targetPerson.companyId === person.companyId) {
+                const targetCompanyProfileId = targetPerson?.tenantProfiles?.[0]?.companyTenantProfileId;
+                if (targetPerson && targetCompanyProfileId === person.companyTenantProfileId) {
                     return next();
                 }
             }

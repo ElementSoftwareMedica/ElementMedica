@@ -92,53 +92,53 @@ export const JOI_SCHEMAS = {
  */
 export const ZOD_SCHEMAS = {
   // Schemi base
-  email: z.string().email('Invalid email format'),
+  email: z.string().email('Formato email non valido'),
   password: z.string()
-    .min(8, 'Password must be at least 8 characters')
+    .min(8, 'La password deve essere di almeno 8 caratteri')
     .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/,
-      'Password must contain uppercase, lowercase, number and special character'),
-  id: z.string().uuid('Invalid UUID format'),
-  objectId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid ObjectId format'),
+      'La password deve contenere maiuscole, minuscole, numeri e caratteri speciali'),
+  id: z.string().uuid('Formato UUID non valido'),
+  objectId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Formato ObjectId non valido'),
 
   // Schemi per autenticazione
   login: z.object({
-    identifier: z.string().min(1, 'Identifier is required'),
-    password: z.string().min(1, 'Password is required'),
+    identifier: z.string().min(1, 'Identificativo obbligatorio'),
+    password: z.string().min(1, 'Password obbligatoria'),
     rememberMe: z.boolean().optional()
   }),
 
   register: z.object({
-    email: z.string().email('Invalid email format'),
+    email: z.string().email('Formato email non valido'),
     password: z.string()
-      .min(8, 'Password must be at least 8 characters')
+      .min(8, 'La password deve essere di almeno 8 caratteri')
       .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/,
-        'Password must contain uppercase, lowercase, number and special character'),
-    firstName: z.string().min(2, 'First name must be at least 2 characters').max(50),
-    lastName: z.string().min(2, 'Last name must be at least 2 characters').max(50),
-    acceptTerms: z.boolean().refine(val => val === true, 'Terms must be accepted')
+        'La password deve contenere maiuscole, minuscole, numeri e caratteri speciali'),
+    firstName: z.string().min(2, 'Il nome deve essere di almeno 2 caratteri').max(50),
+    lastName: z.string().min(2, 'Il cognome deve essere di almeno 2 caratteri').max(50),
+    acceptTerms: z.boolean().refine(val => val === true, 'I termini devono essere accettati')
   }),
 
   // Schemi per utenti
   user: z.object({
-    email: z.string().email('Invalid email format'),
+    email: z.string().email('Formato email non valido'),
     firstName: z.string().min(2).max(50),
     lastName: z.string().min(2).max(50),
     role: z.enum(['admin', 'user', 'manager']).optional(),
     isActive: z.boolean().optional(),
-    phone: z.string().regex(/^\+?[1-9]\d{1,14}$/, 'Invalid phone format').optional(),
-    dateOfBirth: z.date().max(new Date(), 'Date of birth cannot be in the future').optional()
+    phone: z.string().regex(/^\+?[1-9]\d{1,14}$/, 'Formato telefono non valido').optional(),
+    dateOfBirth: z.date().max(new Date(), 'La data di nascita non può essere nel futuro').optional()
   }),
 
   updateUser: z.object({
     firstName: z.string().min(2).max(50).optional(),
     lastName: z.string().min(2).max(50).optional(),
-    phone: z.string().regex(/^\+?[1-9]\d{1,14}$/, 'Invalid phone format').optional(),
-    dateOfBirth: z.date().max(new Date(), 'Date of birth cannot be in the future').optional()
+    phone: z.string().regex(/^\+?[1-9]\d{1,14}$/, 'Formato telefono non valido').optional(),
+    dateOfBirth: z.date().max(new Date(), 'La data di nascita non può essere nel futuro').optional()
   }),
 
   // Schemi per corsi
   course: z.object({
-    title: z.string().min(3, 'Title must be at least 3 characters').max(200),
+    title: z.string().min(3, 'Il titolo deve essere di almeno 3 caratteri').max(200),
     description: z.string().max(2000).optional(),
     duration: z.number().int().min(1).max(1000),
     price: z.number().min(0).max(10000).optional(),
@@ -150,10 +150,10 @@ export const ZOD_SCHEMAS = {
   // Schemi per aziende
   company: z.object({
     name: z.string().min(2).max(200),
-    email: z.string().email('Invalid email format'),
-    phone: z.string().regex(/^\+?[1-9]\d{1,14}$/, 'Invalid phone format').optional(),
+    email: z.string().email('Formato email non valido'),
+    phone: z.string().regex(/^\+?[1-9]\d{1,14}$/, 'Formato telefono non valido').optional(),
     address: z.string().max(500).optional(),
-    website: z.string().url('Invalid URL format').optional(),
+    website: z.string().url('Formato URL non valido').optional(),
     vatNumber: z.string().min(8).max(20).optional(),
     industry: z.string().max(100).optional()
   }),
@@ -230,8 +230,8 @@ export const createJoiValidator = (schema, options = {}) => {
       });
 
       return res.status(400).json({
-        error: 'Validation failed',
-        message: 'The provided data is invalid',
+        error: 'Validazione fallita',
+        message: 'I dati forniti non sono validi',
         details: errors
       });
     }
@@ -267,8 +267,8 @@ export const createZodValidator = (schema, options = {}) => {
         });
 
         return res.status(400).json({
-          error: 'Validation failed',
-          message: 'The provided data is invalid',
+          error: 'Validazione fallita',
+          message: 'I dati forniti non sono validi',
           details: errors
         });
       }
@@ -281,8 +281,8 @@ export const createZodValidator = (schema, options = {}) => {
       });
 
       return res.status(500).json({
-        error: 'Internal validation error',
-        message: 'An unexpected error occurred during validation'
+        error: 'Errore interno di validazione',
+        message: 'Si è verificato un errore imprevisto durante la validazione'
       });
     }
   };
@@ -304,7 +304,7 @@ export const validateQuery = (schema, validator = 'joi') => {
           }));
 
           return res.status(400).json({
-            error: 'Query validation failed',
+            error: 'Validazione query fallita',
             details: errors
           });
         }
@@ -323,8 +323,8 @@ export const validateQuery = (schema, validator = 'joi') => {
       });
 
       return res.status(400).json({
-        error: 'Query validation failed',
-        message: error.message
+        error: 'Validazione query fallita',
+        message: 'I parametri di query forniti non sono validi'
       });
     }
   };
@@ -346,7 +346,7 @@ export const validateParams = (schema, validator = 'joi') => {
           }));
 
           return res.status(400).json({
-            error: 'Parameter validation failed',
+            error: 'Validazione parametri fallita',
             details: errors
           });
         }
@@ -365,8 +365,8 @@ export const validateParams = (schema, validator = 'joi') => {
       });
 
       return res.status(400).json({
-        error: 'Parameter validation failed',
-        message: error.message
+        error: 'Validazione parametri fallita',
+        message: 'I parametri forniti non sono validi'
       });
     }
   };

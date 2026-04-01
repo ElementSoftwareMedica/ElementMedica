@@ -16,7 +16,7 @@ export interface BatchEditButtonProps {
     label: string;
     icon?: React.ReactNode;
     onClick: () => void;
-    variant?: 'default' | 'danger' | 'primary' | 'secondary';
+    variant?: 'default' | 'danger' | 'primary' | 'secondary' | 'warning' | 'success';
   }>;
   /** Additional CSS classes */
   className?: string;
@@ -43,20 +43,20 @@ export const BatchEditButton: React.FC<BatchEditButtonProps> = ({
         label={`${selectedCount} selezionati`}
         icon={<Check className="h-4 w-4" />}
         actions={actions}
-        className={cn("bg-blue-50 text-blue-700 border-blue-300", className)}
+        className={cn("bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700", className)}
       />
     );
   }
 
   return (
-    <Button 
+    <Button
       variant={variant}
-      size="sm" 
+      size="sm"
       leftIcon={<Pencil className="h-4 w-4" />}
       onClick={onToggleSelectionMode}
       className={cn(
         "h-10 px-4 min-w-[100px] whitespace-nowrap",
-        selectionMode ? "bg-blue-50 text-blue-700 border-blue-300" : "",
+        selectionMode ? "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700" : "",
         className
       )}
     >

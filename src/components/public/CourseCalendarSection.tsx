@@ -5,13 +5,15 @@
  * Mostra i prossimi corsi in un formato visivamente accattivante con date, orari e dettagli.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import {
     Calendar, Clock, MapPin, Users, ChevronRight,
     BookOpen, Award, Monitor, Building2, Loader2,
-    CalendarDays, ArrowRight
+    CalendarDays, ArrowRight, X
 } from 'lucide-react';
 import { PublicButton } from './PublicButton';
+
+const CourseEnrollmentWidget = lazy(() => import('./CourseEnrollmentWidget'));
 
 interface CourseSchedule {
     id: string;
@@ -53,13 +55,13 @@ const modeLabels: Record<string, string> = {
 };
 
 const categoryColors: Record<string, { bg: string; text: string; border: string }> = {
-    'sicurezza-base': { bg: 'bg-blue-500/20', text: 'text-blue-300', border: 'border-blue-400/30' },
-    'sicurezza-specifica': { bg: 'bg-green-500/20', text: 'text-green-300', border: 'border-green-400/30' },
+    'sicurezza-base': { bg: 'bg-primary-500/20', text: 'text-primary-300', border: 'border-primary-400/30' },
+    'sicurezza-specifica': { bg: 'bg-health-500/20', text: 'text-health-300', border: 'border-health-400/30' },
     'antincendio': { bg: 'bg-orange-500/20', text: 'text-orange-300', border: 'border-orange-400/30' },
     'primo-soccorso': { bg: 'bg-red-500/20', text: 'text-red-300', border: 'border-red-400/30' },
-    'rspp': { bg: 'bg-purple-500/20', text: 'text-purple-300', border: 'border-purple-400/30' },
-    'rls': { bg: 'bg-teal-500/20', text: 'text-teal-300', border: 'border-teal-400/30' },
-    'default': { bg: 'bg-indigo-500/20', text: 'text-indigo-300', border: 'border-indigo-400/30' }
+    'rspp': { bg: 'bg-primary-500/20', text: 'text-primary-300', border: 'border-primary-400/30' },
+    'rls': { bg: 'bg-primary-500/20', text: 'text-primary-300', border: 'border-primary-400/30' },
+    'default': { bg: 'bg-primary-500/20', text: 'text-primary-300', border: 'border-primary-400/30' }
 };
 
 export const CourseCalendarSection: React.FC<CourseCalendarSectionProps> = ({
@@ -70,6 +72,7 @@ export const CourseCalendarSection: React.FC<CourseCalendarSectionProps> = ({
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [selectedMonth, setSelectedMonth] = useState<string>('all');
+    const [enrollSchedule, setEnrollSchedule] = useState<CourseSchedule | null>(null);
 
     useEffect(() => {
         fetchSchedules();
@@ -118,7 +121,6 @@ export const CourseCalendarSection: React.FC<CourseCalendarSectionProps> = ({
                 setSchedules([]);
             }
         } catch (err) {
-            console.error('Error fetching course schedules:', err);
             setSchedules([]);
         } finally {
             setLoading(false);
@@ -161,7 +163,7 @@ export const CourseCalendarSection: React.FC<CourseCalendarSectionProps> = ({
             endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
             startTime: '09:00',
             endTime: '18:00',
-            location: 'Milano',
+            location: 'Selvazzano Dentro (PD)',
             mode: 'aula',
             availableSeats: 8,
             totalSeats: 15,
@@ -237,7 +239,7 @@ export const CourseCalendarSection: React.FC<CourseCalendarSectionProps> = ({
             endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
             startTime: '09:00',
             endTime: '18:00',
-            location: 'Milano',
+            location: 'Selvazzano Dentro (PD)',
             mode: 'blended',
             availableSeats: 10,
             totalSeats: 20,
@@ -276,8 +278,8 @@ export const CourseCalendarSection: React.FC<CourseCalendarSectionProps> = ({
     if (loading) {
         return (
             <div className="flex items-center justify-center py-16">
-                <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
-                <span className="ml-3 text-blue-200">Caricamento calendario...</span>
+                <Loader2 className="w-8 h-8 text-primary-400 animate-spin" />
+                <span className="ml-3 text-white/60">Caricamento calendario...</span>
             </div>
         );
     }
@@ -287,7 +289,7 @@ export const CourseCalendarSection: React.FC<CourseCalendarSectionProps> = ({
             {/* Header con filtri mese */}
             <div className="flex flex-wrap items-center justify-between gap-4">
                 <div className="flex items-center gap-2">
-                    <CalendarDays className="w-6 h-6 text-cyan-400" />
+                    <CalendarDays className="w-6 h-6 text-primary-400" />
                     <span className="text-lg font-semibold text-white">
                         {displaySchedules.length} corsi in programmazione
                     </span>
@@ -300,8 +302,8 @@ export const CourseCalendarSection: React.FC<CourseCalendarSectionProps> = ({
                             key={month}
                             onClick={() => setSelectedMonth(month)}
                             className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${selectedMonth === month
-                                    ? 'bg-cyan-500 text-white'
-                                    : 'bg-white/10 text-blue-200 hover:bg-white/20'
+                                ? 'bg-primary-500 text-white'
+                                : 'bg-white/10 text-white/80 hover:bg-white/20 hover:text-white'
                                 }`}
                         >
                             {month === 'all' ? 'Tutti' : month.charAt(0).toUpperCase() + month.slice(1)}
@@ -325,15 +327,15 @@ export const CourseCalendarSection: React.FC<CourseCalendarSectionProps> = ({
                         >
                             {/* Date Header */}
                             <div className="flex items-stretch">
-                                <div className="bg-gradient-to-br from-cyan-500 to-blue-600 p-4 flex flex-col items-center justify-center min-w-[80px]">
+                                <div className="p-4 flex flex-col items-center justify-center min-w-[80px]" style={{ backgroundImage: 'linear-gradient(to bottom right, var(--color-primary-500), var(--color-primary-700))' }}>
                                     <span className="text-3xl font-bold text-white">{dateInfo.day}</span>
-                                    <span className="text-sm font-medium text-cyan-100">{dateInfo.month}</span>
+                                    <span className="text-sm font-medium text-primary-100">{dateInfo.month}</span>
                                 </div>
                                 <div className="flex-1 p-4">
                                     <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${colors.bg} ${colors.text} border ${colors.border} mb-2`}>
                                         {schedule.course.category.replace(/-/g, ' ')}
                                     </div>
-                                    <h3 className="font-semibold text-white text-lg leading-tight group-hover:text-cyan-300 transition-colors">
+                                    <h3 className="font-semibold text-white text-lg leading-tight group-hover:text-primary-300 transition-colors">
                                         {schedule.course.title}
                                     </h3>
                                 </div>
@@ -342,20 +344,20 @@ export const CourseCalendarSection: React.FC<CourseCalendarSectionProps> = ({
                             {/* Course Details */}
                             <div className="p-4 pt-0 space-y-3">
                                 <div className="grid grid-cols-2 gap-3 text-sm">
-                                    <div className="flex items-center text-blue-200">
-                                        <Clock className="w-4 h-4 mr-2 text-cyan-400" />
+                                    <div className="flex items-center text-white/60">
+                                        <Clock className="w-4 h-4 mr-2 text-primary-400" />
                                         {schedule.startTime} - {schedule.endTime}
                                     </div>
-                                    <div className="flex items-center text-blue-200">
-                                        <BookOpen className="w-4 h-4 mr-2 text-cyan-400" />
+                                    <div className="flex items-center text-white/60">
+                                        <BookOpen className="w-4 h-4 mr-2 text-primary-400" />
                                         {schedule.course.duration}h totali
                                     </div>
-                                    <div className="flex items-center text-blue-200">
-                                        <ModeIcon className="w-4 h-4 mr-2 text-cyan-400" />
+                                    <div className="flex items-center text-white/60">
+                                        <ModeIcon className="w-4 h-4 mr-2 text-primary-400" />
                                         {modeLabels[schedule.mode]}
                                     </div>
-                                    <div className="flex items-center text-blue-200">
-                                        <MapPin className="w-4 h-4 mr-2 text-cyan-400" />
+                                    <div className="flex items-center text-white/60">
+                                        <MapPin className="w-4 h-4 mr-2 text-primary-400" />
                                         {schedule.location}
                                     </div>
                                 </div>
@@ -363,15 +365,15 @@ export const CourseCalendarSection: React.FC<CourseCalendarSectionProps> = ({
                                 {/* Seats Progress */}
                                 <div className="space-y-1">
                                     <div className="flex justify-between text-xs">
-                                        <span className="text-blue-300">
+                                        <span className="text-white/70">
                                             <Users className="w-3 h-3 inline mr-1" />
                                             {schedule.availableSeats} posti disponibili
                                         </span>
-                                        <span className="text-blue-300">{schedule.totalSeats} totali</span>
+                                        <span className="text-white/70">{schedule.totalSeats} totali</span>
                                     </div>
                                     <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
                                         <div
-                                            className={`h-full rounded-full transition-all ${schedule.availableSeats <= 3 ? 'bg-orange-500' : 'bg-cyan-500'
+                                            className={`h-full rounded-full transition-all ${schedule.availableSeats <= 3 ? 'bg-orange-500' : 'bg-primary-500'
                                                 }`}
                                             style={{ width: `${seatsPercentage}%` }}
                                         />
@@ -382,9 +384,12 @@ export const CourseCalendarSection: React.FC<CourseCalendarSectionProps> = ({
                                 <div className="flex items-center justify-between pt-3 border-t border-white/10">
                                     <div>
                                         <span className="text-2xl font-bold text-white">€{schedule.price}</span>
-                                        <span className="text-blue-300 text-sm ml-1">+ IVA</span>
+                                        <span className="text-white/70 text-sm ml-1">+ IVA</span>
                                     </div>
-                                    <button className="flex items-center gap-2 px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-white rounded-lg font-medium transition-colors">
+                                    <button
+                                        onClick={() => setEnrollSchedule(schedule)}
+                                        className="flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-400 text-white rounded-lg font-medium transition-colors"
+                                    >
                                         Prenota
                                         <ChevronRight className="w-4 h-4" />
                                     </button>
@@ -396,7 +401,7 @@ export const CourseCalendarSection: React.FC<CourseCalendarSectionProps> = ({
                                         {schedule.course.certifications.map((cert, idx) => (
                                             <span
                                                 key={idx}
-                                                className="inline-flex items-center text-xs text-green-300 bg-green-500/10 px-2 py-0.5 rounded"
+                                                className="inline-flex items-center text-xs text-health-300 bg-health-500/10 px-2 py-0.5 rounded"
                                             >
                                                 <Award className="w-3 h-3 mr-1" />
                                                 {cert}
@@ -421,10 +426,39 @@ export const CourseCalendarSection: React.FC<CourseCalendarSectionProps> = ({
                     Richiedi Calendario Completo
                     <ArrowRight className="w-5 h-5 ml-2" />
                 </PublicButton>
-                <p className="text-blue-300 text-sm mt-3">
+                <p className="text-white/70 text-sm mt-3">
                     Contattaci per ricevere il calendario aggiornato e prenotare il tuo posto
                 </p>
             </div>
+
+            {/* Enrollment Modal */}
+            {enrollSchedule && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                    <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto">
+                        <button
+                            onClick={() => setEnrollSchedule(null)}
+                            className="absolute top-3 right-3 z-10 w-8 h-8 bg-gray-100 hover:bg-gray-200 rounded-full flex items-center justify-center text-gray-600 transition-colors"
+                            aria-label="Chiudi"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                        <Suspense fallback={
+                            <div className="bg-white rounded-2xl p-12 text-center">
+                                <Loader2 className="w-8 h-8 animate-spin text-primary-500 mx-auto" />
+                            </div>
+                        }>
+                            <CourseEnrollmentWidget
+                                scheduleId={enrollSchedule.id}
+                                courseTitle={enrollSchedule.course.title}
+                                courseDate={formatDate(enrollSchedule.startDate).full}
+                                onSuccess={() => {
+                                    setTimeout(() => setEnrollSchedule(null), 3000);
+                                }}
+                            />
+                        </Suspense>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

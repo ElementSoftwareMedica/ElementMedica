@@ -19,7 +19,7 @@ export const IntroductionSection: React.FC<{ content: any }> = ({ content }) => 
   if (!content.introduction) return null;
 
   return (
-    <section className="py-20 bg-gradient-to-br from-white via-slate-50/50 to-blue-50/30">
+    <section className="py-20 bg-gradient-to-br from-white via-slate-50/50 to-primary-50/30">
       <div className="container mx-auto px-4">
         <div className="max-w-4xl mx-auto text-center mb-12">
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-6">
@@ -57,9 +57,9 @@ export const ServicesItemsSection: React.FC<{ content: any }> = ({ content }) =>
   if (!content.services?.items) return null;
 
   const colors: Record<string, { bg: string; border: string; iconBg: string }> = {
-    teal: { bg: 'from-teal-50 to-white', border: 'border-teal-500', iconBg: 'bg-teal-600' },
-    blue: { bg: 'from-blue-50 to-white', border: 'border-blue-500', iconBg: 'bg-blue-600' },
-    purple: { bg: 'from-purple-50 to-white', border: 'border-purple-500', iconBg: 'bg-purple-600' },
+    teal: { bg: 'from-primary-50 to-white', border: 'border-primary-500', iconBg: 'bg-primary-600' },
+    blue: { bg: 'from-primary-50 to-white', border: 'border-primary-500', iconBg: 'bg-primary-600' },
+    purple: { bg: 'from-secondary-50 to-white', border: 'border-secondary-500', iconBg: 'bg-secondary-600' },
     orange: { bg: 'from-orange-50 to-white', border: 'border-orange-500', iconBg: 'bg-orange-600' }
   };
 
@@ -125,7 +125,7 @@ export const ServicesArraySection: React.FC<{ content: any }> = ({ content }) =>
     <section className="py-20 bg-gradient-to-br from-gray-50 via-white to-gray-50">
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
-          <span className="inline-block px-4 py-2 bg-blue-100 text-blue-700 rounded-full text-sm font-semibold mb-4">I Nostri Servizi</span>
+          <span className="inline-block px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-4">I Nostri Servizi</span>
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
             {content.services.sectionTitle || 'Soluzioni Complete per la Sicurezza'}
           </h2>
@@ -194,7 +194,7 @@ export const ServiceIncludesSection: React.FC<{ content: any }> = ({ content }) 
   if (!content.serviceIncludes) return null;
 
   return (
-    <section className="py-20 bg-gradient-to-br from-white via-teal-50/30 to-cyan-50/40">
+    <section className="py-20 bg-gradient-to-br from-white via-primary-50/30 to-accent-50/40">
       <div className="container mx-auto px-4">
         <div className="text-center mb-12">
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">

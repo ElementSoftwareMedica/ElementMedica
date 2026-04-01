@@ -40,15 +40,19 @@ import {
   Layers,
   Scissors,
   Pencil,
-  GraduationCap
+  GraduationCap,
+  Copy,
+  Stethoscope
 } from 'lucide-react';
 import { Button } from '@/design-system/atoms/Button';
 import { ViewModeToggle } from '@/design-system/molecules/ViewModeToggle';
 import { ConfirmModal } from '@/design-system/molecules/Modal';
 import { ActionButton } from '@/components/ui';
+import { CRUDPrimaryButton } from '@/components/shared/CRUDButton';
 import { usePreventivi, Preventivo } from '@/hooks/finance/usePreventivi';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/hooks/useToast';
+import { useTenantFilter } from '@/context/TenantFilterContext';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 
@@ -67,7 +71,8 @@ import {
   MergedDetailsModal,
   ApplyScontoModal,
   QuicklookModal,
-  EditPreventivoModal
+  EditPreventivoModal,
+  GenerateMDLModal
 } from './components';
 
 // ============================================================================
@@ -78,6 +83,7 @@ const PreventiviPage: React.FC = () => {
   // CRITICAL: Wait for auth to complete before fetching data
   const { isLoading: authLoading, isAuthenticated } = useAuth();
   const { showToast } = useToast();
+  const { tenantFilterKey, isReady: tenantReady } = useTenantFilter();
 
   const {
     preventivi,
@@ -93,7 +99,8 @@ const PreventiviPage: React.FC = () => {
     generatePdf,
     changeStato,
     mergePreventivi,
-    unmergePreventivo
+    unmergePreventivo,
+    duplicatePreventivo
   } = usePreventivi();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -107,6 +114,7 @@ const PreventiviPage: React.FC = () => {
   const [showMergedDetailsModal, setShowMergedDetailsModal] = useState(false);
   const [showQuicklookModal, setShowQuicklookModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showGenerateMDLModal, setShowGenerateMDLModal] = useState(false);
   const [selectedForSconto, setSelectedForSconto] = useState<Preventivo | null>(null);
   const [selectedMergedPreventivo, setSelectedMergedPreventivo] = useState<Preventivo | null>(null);
   const [selectedPreventivo, setSelectedPreventivo] = useState<Preventivo | null>(null);
@@ -120,12 +128,12 @@ const PreventiviPage: React.FC = () => {
   const [confirmUnmerge, setConfirmUnmerge] = useState<Preventivo | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
 
-  // CRITICAL FIX: Only fetch preventivi AFTER auth is complete
+  // CRITICAL FIX: Only fetch preventivi AFTER auth is complete AND tenant is ready
   useEffect(() => {
-    if (!authLoading && isAuthenticated) {
+    if (!authLoading && isAuthenticated && tenantReady) {
       fetchPreventivi();
     }
-  }, [authLoading, isAuthenticated, fetchPreventivi]);
+  }, [authLoading, isAuthenticated, fetchPreventivi, tenantFilterKey, tenantReady]);
 
   // Helper per filtrare per periodo
   const filterByPeriod = (date: string | undefined, period: string): boolean => {
@@ -240,9 +248,11 @@ const PreventiviPage: React.FC = () => {
       try {
         await applySconto(newPreventivo.id, codiceSconto);
         showToast({ message: `Preventivo creato e sconto "${codiceSconto}" applicato`, type: 'success' });
-      } catch (scontoErr: any) {
+      } catch (scontoErr: unknown) {
         showToast({ message: `Preventivo creato, ma errore applicazione sconto: ${scontoErr?.message || 'codice non valido'}`, type: 'warning' });
       }
+    } else {
+      showToast({ message: 'Preventivo creato con successo', type: 'success' });
     }
   };
 
@@ -266,7 +276,7 @@ const PreventiviPage: React.FC = () => {
         try {
           await applySconto(id, codiceSconto);
           showToast({ message: `Preventivo aggiornato e sconto "${codiceSconto}" applicato`, type: 'success' });
-        } catch (scontoErr: any) {
+        } catch (scontoErr: unknown) {
           const statusCode = scontoErr?.response?.status;
           const errorMsg = scontoErr?.response?.data?.error || scontoErr?.message || 'codice non valido';
 
@@ -285,7 +295,7 @@ const PreventiviPage: React.FC = () => {
       } else {
         showToast({ message: 'Preventivo aggiornato con successo', type: 'success' });
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       showToast({ message: err?.message || 'Errore durante l\'aggiornamento', type: 'error' });
       throw err;
     }
@@ -301,7 +311,7 @@ const PreventiviPage: React.FC = () => {
     try {
       await deletePreventivo(confirmDeleteId);
       showToast({ message: 'Preventivo eliminato con successo', type: 'success' });
-    } catch (err: any) {
+    } catch (err: unknown) {
       showToast({ message: err?.message || 'Errore durante l\'eliminazione', type: 'error' });
     } finally {
       setConfirmLoading(false);
@@ -319,7 +329,7 @@ const PreventiviPage: React.FC = () => {
       await bulkDelete(selectedIds);
       setSelectedIds([]);
       showToast({ message: `${selectedIds.length} preventivi eliminati con successo`, type: 'success' });
-    } catch (err: any) {
+    } catch (err: unknown) {
       showToast({ message: err?.message || 'Errore durante l\'eliminazione', type: 'error' });
     } finally {
       setConfirmLoading(false);
@@ -356,8 +366,8 @@ const PreventiviPage: React.FC = () => {
         duration: 5000
       });
       await fetchPreventivi();
-    } catch (err: any) {
-      showToast({ message: err.message || 'Impossibile unire i preventivi', type: 'error' });
+    } catch (err: unknown) {
+      showToast({ message: 'Impossibile unire i preventivi', type: 'error' });
     }
   };
 
@@ -368,6 +378,20 @@ const PreventiviPage: React.FC = () => {
       return;
     }
     setConfirmUnmerge(preventivo);
+  };
+
+  const handleDuplicatePreventivo = async (preventivo: Preventivo) => {
+    try {
+      const duplicato = await duplicatePreventivo(preventivo.id);
+      showToast({
+        message: `Preventivo duplicato con successo! Nuovo numero: ${duplicato.numero}`,
+        type: 'success',
+        duration: 4000
+      });
+      await fetchPreventivi();
+    } catch (err: unknown) {
+      showToast({ message: 'Impossibile duplicare il preventivo', type: 'error' });
+    }
   };
 
   const handleConfirmUnmerge = async () => {
@@ -382,8 +406,8 @@ const PreventiviPage: React.FC = () => {
       });
       await fetchPreventivi();
       setSelectedIds([]);
-    } catch (err: any) {
-      showToast({ message: err.message || 'Impossibile separare i preventivi', type: 'error' });
+    } catch (err: unknown) {
+      showToast({ message: 'Impossibile separare i preventivi', type: 'error' });
     } finally {
       setConfirmLoading(false);
       setConfirmUnmerge(null);
@@ -395,7 +419,7 @@ const PreventiviPage: React.FC = () => {
       await changeStato(id, nuovoStato);
       setShowStatusDropdown(null);
       showToast({ message: `Stato aggiornato a ${nuovoStato}`, type: 'success' });
-    } catch (err: any) {
+    } catch (err: unknown) {
       showToast({ message: err?.message || 'Errore nel cambio stato del preventivo', type: 'error' });
     }
   };
@@ -432,101 +456,108 @@ const PreventiviPage: React.FC = () => {
               tableLabel="Tabella"
             />
             <Button
-              variant="primary"
+              variant="outline"
+              onClick={() => setShowGenerateMDLModal(true)}
+              className="border-teal-300 text-teal-700 hover:bg-teal-50"
+            >
+              <Stethoscope className="h-4 w-4 mr-2" />
+              Genera MDL
+            </Button>
+            <CRUDPrimaryButton
+              operation="create"
               onClick={() => setShowCreateModal(true)}
-              className="flex items-center gap-2"
             >
               <Plus className="h-4 w-4" />
               Nuovo Preventivo
-            </Button>
+            </CRUDPrimaryButton>
           </div>
         </div>
       </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-4">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">Totale</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Totale</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-gray-50">{stats.total}</p>
             </div>
             <FileText className="h-8 w-8 text-gray-400" />
           </div>
         </div>
 
         <div
-          className={`rounded-xl shadow-sm border p-4 cursor-pointer hover:shadow-md transition-shadow ${filterStato === 'BOZZA' ? 'bg-gray-100 border-gray-400' : 'bg-gray-50 border-gray-200'}`}
+          className={`rounded-xl shadow-sm border p-4 cursor-pointer hover:shadow-md transition-shadow ${filterStato === 'BOZZA' ? 'bg-gray-100 dark:bg-gray-700 border-gray-400 dark:border-gray-500' : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700'}`}
           onClick={() => setFilterStato(filterStato === 'BOZZA' ? 'all' : 'BOZZA')}
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">Bozze</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.bozze}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Bozze</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-gray-50">{stats.bozze}</p>
             </div>
             <Clock className="h-8 w-8 text-gray-500" />
           </div>
         </div>
 
         <div
-          className={`rounded-xl shadow-sm border p-4 cursor-pointer hover:shadow-md transition-shadow ${filterStato === 'INVIATO' ? 'bg-blue-100 border-blue-400' : 'bg-blue-50 border-blue-200'}`}
+          className={`rounded-xl shadow-sm border p-4 cursor-pointer hover:shadow-md transition-shadow ${filterStato === 'INVIATO' ? 'bg-blue-100 dark:bg-blue-900/50 border-blue-400 dark:border-blue-500' : 'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800'}`}
           onClick={() => setFilterStato(filterStato === 'INVIATO' ? 'all' : 'INVIATO')}
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-blue-600 mb-1">Inviati</p>
-              <p className="text-2xl font-bold text-blue-900">{stats.inviati}</p>
+              <p className="text-sm text-blue-600 dark:text-blue-400 mb-1">Inviati</p>
+              <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">{stats.inviati}</p>
             </div>
             <Send className="h-8 w-8 text-blue-500" />
           </div>
         </div>
 
         <div
-          className={`rounded-xl shadow-sm border p-4 cursor-pointer hover:shadow-md transition-shadow ${filterStato === 'ACCETTATO' ? 'bg-green-100 border-green-400' : 'bg-green-50 border-green-200'}`}
+          className={`rounded-xl shadow-sm border p-4 cursor-pointer hover:shadow-md transition-shadow ${filterStato === 'ACCETTATO' ? 'bg-green-100 dark:bg-green-900/50 border-green-400 dark:border-green-500' : 'bg-green-50 dark:bg-green-900/30 border-green-200 dark:border-green-800'}`}
           onClick={() => setFilterStato(filterStato === 'ACCETTATO' ? 'all' : 'ACCETTATO')}
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-green-600 mb-1">Accettati</p>
-              <p className="text-2xl font-bold text-green-900">{stats.accettati}</p>
+              <p className="text-sm text-green-600 dark:text-green-400 mb-1">Accettati</p>
+              <p className="text-2xl font-bold text-green-900 dark:text-green-100">{stats.accettati}</p>
             </div>
             <ThumbsUp className="h-8 w-8 text-green-500" />
           </div>
         </div>
 
         <div
-          className={`rounded-xl shadow-sm border p-4 cursor-pointer hover:shadow-md transition-shadow ${filterStato === 'RIFIUTATO' ? 'bg-red-100 border-red-400' : 'bg-red-50 border-red-200'}`}
+          className={`rounded-xl shadow-sm border p-4 cursor-pointer hover:shadow-md transition-shadow ${filterStato === 'RIFIUTATO' ? 'bg-red-100 dark:bg-red-900/50 border-red-400 dark:border-red-500' : 'bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-800'}`}
           onClick={() => setFilterStato(filterStato === 'RIFIUTATO' ? 'all' : 'RIFIUTATO')}
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-red-600 mb-1">Rifiutati</p>
-              <p className="text-2xl font-bold text-red-900">{stats.rifiutati}</p>
+              <p className="text-sm text-red-600 dark:text-red-400 mb-1">Rifiutati</p>
+              <p className="text-2xl font-bold text-red-900 dark:text-red-100">{stats.rifiutati}</p>
             </div>
             <XCircle className="h-8 w-8 text-red-500" />
           </div>
         </div>
 
         <div
-          className={`rounded-xl shadow-sm border p-4 cursor-pointer hover:shadow-md transition-shadow ${filterStato === 'FATTURATO' ? 'bg-purple-100 border-purple-400' : 'bg-purple-50 border-purple-200'}`}
+          className={`rounded-xl shadow-sm border p-4 cursor-pointer hover:shadow-md transition-shadow ${filterStato === 'FATTURATO' ? 'bg-purple-100 dark:bg-purple-900/50 border-purple-400 dark:border-purple-500' : 'bg-purple-50 dark:bg-purple-900/30 border-purple-200 dark:border-purple-800'}`}
           onClick={() => setFilterStato(filterStato === 'FATTURATO' ? 'all' : 'FATTURATO')}
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-purple-600 mb-1">Fatturati</p>
-              <p className="text-2xl font-bold text-purple-900">{stats.fatturati}</p>
+              <p className="text-sm text-purple-600 dark:text-purple-400 mb-1">Fatturati</p>
+              <p className="text-2xl font-bold text-purple-900 dark:text-purple-100">{stats.fatturati}</p>
             </div>
             <Receipt className="h-8 w-8 text-purple-500" />
           </div>
         </div>
 
         {/* Filtro Periodo */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-          <p className="text-xs text-gray-500 mb-2">Periodo</p>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4">
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Periodo</p>
           <select
             value={filterPeriodo}
             onChange={(e) => setFilterPeriodo(e.target.value)}
-            className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1 focus:ring-1 focus:ring-orange-500"
+            className="w-full text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1 focus:ring-1 focus:ring-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-50"
           >
             <option value="all">Tutti</option>
             <option value="thisMonth">Questo mese</option>
@@ -556,7 +587,7 @@ const PreventiviPage: React.FC = () => {
           className={`rounded-xl shadow-sm p-4 cursor-pointer transition-all ${filterTipo === 'COMPENSO_FORMATORE'
             ? 'bg-amber-600 text-white'
             : 'bg-gradient-to-br from-amber-500 to-amber-600 text-white'
-          }`}
+            }`}
           onClick={() => setFilterTipo(filterTipo === 'COMPENSO_FORMATORE' ? 'all' : 'COMPENSO_FORMATORE')}
         >
           <div className="flex items-center justify-between">
@@ -596,7 +627,7 @@ const PreventiviPage: React.FC = () => {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 mb-6">
         <div className="flex flex-col md:flex-row gap-4">
           <div className="flex-1">
             <div className="relative">
@@ -606,7 +637,7 @@ const PreventiviPage: React.FC = () => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Cerca per numero, cliente, tipo..."
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-50"
               />
             </div>
           </div>
@@ -614,7 +645,7 @@ const PreventiviPage: React.FC = () => {
           <select
             value={filterTipo}
             onChange={(e) => setFilterTipo(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-50"
           >
             <option value="all">Tutti i tipi</option>
             {Object.entries(TIPO_SERVIZIO_CONFIG).map(([key, config]) => (
@@ -688,7 +719,7 @@ const PreventiviPage: React.FC = () => {
       </div>
 
       {/* Results count */}
-      <div className="mb-4 text-sm text-gray-600">
+      <div className="mb-4 text-sm text-gray-600 dark:text-gray-400">
         {filteredPreventivi.length === preventivi.length
           ? `${preventivi.length} preventivi totali`
           : `${filteredPreventivi.length} di ${preventivi.length} preventivi`}
@@ -696,31 +727,31 @@ const PreventiviPage: React.FC = () => {
 
       {/* Preventivi Grid */}
       {error ? (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+        <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 rounded-lg p-6 text-center">
           <AlertCircle className="h-8 w-8 text-red-500 mx-auto mb-2" />
-          <p className="text-red-700">{error}</p>
+          <p className="text-red-700 dark:text-red-400">{error}</p>
           <Button variant="outline" onClick={() => fetchPreventivi()} className="mt-4">Riprova</Button>
         </div>
       ) : filteredPreventivi.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
-          <FileText className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Nessun preventivo trovato</h3>
-          <p className="text-gray-600 mb-4">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-12 text-center">
+          <FileText className="h-16 w-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-50 mb-2">Nessun preventivo trovato</h3>
+          <p className="text-gray-600 dark:text-gray-400 mb-4">
             {searchQuery || filterStato !== 'all' || filterTipo !== 'all'
               ? 'Prova a modificare i filtri di ricerca'
               : 'Crea il tuo primo preventivo'}
           </p>
-          <Button variant="primary" onClick={() => setShowCreateModal(true)} className="flex items-center gap-2 mx-auto">
+          <CRUDPrimaryButton operation="create" onClick={() => setShowCreateModal(true)} className="flex items-center gap-2 mx-auto">
             <Plus className="h-4 w-4" />
             Nuovo Preventivo
-          </Button>
+          </CRUDPrimaryButton>
         </div>
       ) : viewMode === 'table' ? (
         /* ===== TABLE VIEW ===== */
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-visible">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-visible">
           <div className="overflow-x-auto overflow-y-visible">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
+              <thead className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
                 <tr>
                   <th className="px-4 py-3 text-left">
                     <input
@@ -736,16 +767,16 @@ const PreventiviPage: React.FC = () => {
                       className="h-4 w-4 text-orange-600 rounded border-gray-300"
                     />
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Azioni</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Stato</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Numero</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Tipo</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Cliente</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Data</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Importo</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Azioni</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Stato</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Numero</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Tipo</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Cliente</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Data</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Importo</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                 {filteredPreventivi.map((preventivo) => {
                   const statusConfig = STATUS_CONFIG[preventivo.stato] || STATUS_CONFIG.BOZZA;
                   const StatusIcon = statusConfig.icon;
@@ -758,6 +789,7 @@ const PreventiviPage: React.FC = () => {
                   const actions = [
                     { label: 'Anteprima', icon: <Eye className="h-4 w-4" />, onClick: () => handleQuicklook(preventivo), variant: 'default' as const },
                     { label: 'Modifica', icon: <Pencil className="h-4 w-4" />, onClick: () => handleEdit(preventivo), variant: 'default' as const },
+                    { label: 'Duplica', icon: <Copy className="h-4 w-4" />, onClick: () => handleDuplicatePreventivo(preventivo), variant: 'default' as const },
                     { label: 'Applica sconto', icon: <Tag className="h-4 w-4" />, onClick: () => { setSelectedForSconto(preventivo); setShowScontoModal(true); }, variant: 'default' as const },
                     { label: 'Scarica PDF', icon: <Download className="h-4 w-4" />, onClick: () => handleDownloadPdf(preventivo.id), variant: 'default' as const },
                     ...(isMerged ? [{ label: 'Separa preventivi', icon: <Scissors className="h-4 w-4" />, onClick: () => handleUnmergePreventivo(preventivo), variant: 'default' as const }] : []),
@@ -767,7 +799,7 @@ const PreventiviPage: React.FC = () => {
                   return (
                     <tr
                       key={preventivo.id}
-                      className={`hover:bg-gray-50 transition-colors cursor-pointer ${isSelected ? 'bg-orange-50' : ''}`}
+                      className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer ${isSelected ? 'bg-orange-50 dark:bg-orange-900/30' : ''}`}
                       onClick={() => handleQuicklook(preventivo)}
                     >
                       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
@@ -804,10 +836,10 @@ const PreventiviPage: React.FC = () => {
                             <>
                               <div className="fixed inset-0 z-[9999]" onClick={() => { setShowStatusDropdown(null); setStatusDropdownPosition(null); }} />
                               <div
-                                className="fixed w-48 bg-white rounded-lg shadow-2xl border border-gray-200 py-1 z-[10000]"
+                                className="fixed w-48 bg-white dark:bg-gray-800 rounded-lg shadow-2xl dark:shadow-black/50 border border-gray-200 dark:border-gray-700 py-1 z-[10000]"
                                 style={{ top: statusDropdownPosition.top, left: statusDropdownPosition.left }}
                               >
-                                <p className="px-3 py-1.5 text-xs text-gray-500 font-medium border-b bg-gray-50 rounded-t-lg">Cambia stato:</p>
+                                <p className="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 font-medium border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 rounded-t-lg">Cambia stato:</p>
                                 {(STATO_TRANSITIONS[preventivo.stato] || []).length > 0 ? (
                                   (STATO_TRANSITIONS[preventivo.stato] || [])
                                     .filter(key => STATUS_CONFIG[key])
@@ -822,7 +854,7 @@ const PreventiviPage: React.FC = () => {
                                             setShowStatusDropdown(null);
                                             setStatusDropdownPosition(null);
                                           }}
-                                          className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+                                          className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-700 dark:text-gray-300"
                                         >
                                           <Icon className="h-4 w-4" />
                                           {config.label}
@@ -841,7 +873,7 @@ const PreventiviPage: React.FC = () => {
 
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono font-semibold text-gray-900">{preventivo.numero}</span>
+                          <span className="font-mono font-semibold text-gray-900 dark:text-gray-50">{preventivo.numero}</span>
                           {isMerged && (
                             <button
                               onClick={() => { setSelectedMergedPreventivo(preventivo); setShowMergedDetailsModal(true); }}
@@ -858,7 +890,7 @@ const PreventiviPage: React.FC = () => {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <TipoIcon className={`h-4 w-4 ${tipoConfig.color}`} />
-                          <span className="text-gray-700">{tipoConfig.label}</span>
+                          <span className="text-gray-700 dark:text-gray-300">{tipoConfig.label}</span>
                         </div>
                       </td>
 
@@ -866,24 +898,24 @@ const PreventiviPage: React.FC = () => {
                         {preventivo.azienda ? (
                           <div className="flex items-center gap-2">
                             <Building2 className="h-4 w-4 text-gray-400" />
-                            <span className="text-gray-900 truncate max-w-[200px]">{preventivo.azienda.ragioneSociale}</span>
+                            <span className="text-gray-900 dark:text-gray-50 truncate max-w-[200px]">{preventivo.azienda.ragioneSociale}</span>
                           </div>
                         ) : preventivo.persona ? (
                           <div className="flex items-center gap-2">
                             <User className="h-4 w-4 text-gray-400" />
-                            <span className="text-gray-900">{preventivo.persona.firstName} {preventivo.persona.lastName}</span>
+                            <span className="text-gray-900 dark:text-gray-50">{preventivo.persona.firstName} {preventivo.persona.lastName}</span>
                           </div>
                         ) : (
                           <span className="text-gray-400">-</span>
                         )}
                       </td>
 
-                      <td className="px-4 py-3 text-gray-600">
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
                         {preventivo.dataEmissione && format(new Date(preventivo.dataEmissione), 'dd/MM/yyyy', { locale: it })}
                       </td>
 
                       <td className="px-4 py-3 text-right">
-                        <span className="font-semibold text-gray-900">
+                        <span className="font-semibold text-gray-900 dark:text-gray-50">
                           € {Number(preventivo.importoFinale || 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })}
                         </span>
                         {preventivo.sconti && preventivo.sconti.length > 0 && (
@@ -912,10 +944,10 @@ const PreventiviPage: React.FC = () => {
             return (
               <div
                 key={preventivo.id}
-                className={`bg-white rounded-xl shadow-sm border hover:shadow-md transition-all ${isSelected ? 'border-orange-500 ring-2 ring-orange-200' : 'border-gray-200'}`}
+                className={`bg-white dark:bg-gray-800 rounded-xl shadow-sm border hover:shadow-md transition-all ${isSelected ? 'border-orange-500 ring-2 ring-orange-200 dark:ring-orange-700' : 'border-gray-200 dark:border-gray-700'}`}
               >
                 {/* Card Header */}
-                <div className="p-4 border-b border-gray-100">
+                <div className="p-4 border-b border-gray-100 dark:border-gray-700">
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-3">
                       <input
@@ -924,7 +956,7 @@ const PreventiviPage: React.FC = () => {
                         onChange={() => toggleSelect(preventivo.id)}
                         className="h-4 w-4 text-orange-600 rounded border-gray-300"
                       />
-                      <div className={`p-2 rounded-lg ${tipoConfig.color} bg-gray-50`}>
+                      <div className={`p-2 rounded-lg ${tipoConfig.color} bg-gray-50 dark:bg-gray-700`}>
                         <TipoIcon className="h-5 w-5" />
                       </div>
                     </div>
@@ -936,7 +968,7 @@ const PreventiviPage: React.FC = () => {
 
                   <div className="flex items-center gap-2 mb-1">
                     <FileText className="h-4 w-4 text-gray-400" />
-                    <span className="font-mono font-semibold text-gray-900">{preventivo.numero}</span>
+                    <span className="font-mono font-semibold text-gray-900 dark:text-gray-50">{preventivo.numero}</span>
                     {isMerged && (
                       <button
                         onClick={() => { setSelectedMergedPreventivo(preventivo); setShowMergedDetailsModal(true); }}
@@ -948,7 +980,7 @@ const PreventiviPage: React.FC = () => {
                       </button>
                     )}
                   </div>
-                  <p className="text-sm text-gray-600">{tipoConfig.label}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">{tipoConfig.label}</p>
                 </div>
 
                 {/* Card Body */}
@@ -957,12 +989,12 @@ const PreventiviPage: React.FC = () => {
                     {preventivo.azienda ? (
                       <>
                         <Building2 className="h-4 w-4 text-gray-400" />
-                        <span className="text-sm font-medium text-gray-900">{preventivo.azienda.ragioneSociale}</span>
+                        <span className="text-sm font-medium text-gray-900 dark:text-gray-50">{preventivo.azienda.ragioneSociale}</span>
                       </>
                     ) : preventivo.persona ? (
                       <>
                         <User className="h-4 w-4 text-gray-400" />
-                        <span className="text-sm text-gray-900">{preventivo.persona.firstName} {preventivo.persona.lastName}</span>
+                        <span className="text-sm text-gray-900 dark:text-gray-50">{preventivo.persona.firstName} {preventivo.persona.lastName}</span>
                       </>
                     ) : (
                       <span className="text-sm text-gray-400">Cliente non specificato</span>
@@ -972,7 +1004,7 @@ const PreventiviPage: React.FC = () => {
                   {preventivo.schedule?.course && (
                     <div className="flex items-center gap-2">
                       <GraduationCap className="h-4 w-4 text-blue-500" />
-                      <span className="text-sm text-gray-600">
+                      <span className="text-sm text-gray-600 dark:text-gray-400">
                         {preventivo.schedule.course.title}
                         {preventivo.schedule.startDate && (
                           <span className="text-gray-400 ml-1">
@@ -985,15 +1017,15 @@ const PreventiviPage: React.FC = () => {
 
                   <div className="flex items-center gap-2">
                     <Calendar className="h-4 w-4 text-gray-400" />
-                    <span className="text-sm text-gray-600">
+                    <span className="text-sm text-gray-600 dark:text-gray-400">
                       {preventivo.dataEmissione && format(new Date(preventivo.dataEmissione), 'dd MMM yyyy', { locale: it })}
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                  <div className="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-gray-700">
                     <div className="flex items-center gap-2">
                       <Euro className="h-4 w-4 text-gray-400" />
-                      <span className="text-lg font-bold text-gray-900">
+                      <span className="text-lg font-bold text-gray-900 dark:text-gray-50">
                         {Number(preventivo.importoFinale || 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })}
                       </span>
                     </div>
@@ -1008,19 +1040,19 @@ const PreventiviPage: React.FC = () => {
                 </div>
 
                 {/* Card Actions */}
-                <div className="px-4 py-3 bg-gray-50 border-t border-gray-100 flex justify-between items-center">
+                <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700/50 border-t border-gray-100 dark:border-gray-700 flex justify-between items-center">
                   <div className="relative">
                     <button
                       onClick={() => setShowStatusDropdown(showStatusDropdown === preventivo.id ? null : preventivo.id)}
-                      className="px-3 py-1.5 text-xs font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-1"
+                      className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-50 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors flex items-center gap-1"
                       title="Cambia stato"
                     >
                       <MoreHorizontal className="h-4 w-4" />
                       Stato
                     </button>
                     {showStatusDropdown === preventivo.id && (
-                      <div className="absolute left-0 bottom-full mb-1 w-44 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
-                        <p className="px-3 py-1 text-xs text-gray-500 border-b">Cambia stato in:</p>
+                      <div className="absolute left-0 bottom-full mb-1 w-44 bg-white dark:bg-gray-800 rounded-lg shadow-lg dark:shadow-black/30 border border-gray-200 dark:border-gray-700 py-1 z-50">
+                        <p className="px-3 py-1 text-xs text-gray-500 dark:text-gray-400 border-b dark:border-gray-700">Cambia stato in:</p>
                         {Object.entries(STATUS_CONFIG)
                           .filter(([key]) => key !== preventivo.stato)
                           .map(([key, config]) => {
@@ -1029,7 +1061,7 @@ const PreventiviPage: React.FC = () => {
                               <button
                                 key={key}
                                 onClick={() => handleChangeStato(preventivo.id, key)}
-                                className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+                                className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-700 dark:text-gray-300"
                               >
                                 <Icon className="h-4 w-4" />
                                 {config.label}
@@ -1043,21 +1075,21 @@ const PreventiviPage: React.FC = () => {
                   <div className="flex gap-2">
                     <button
                       onClick={() => { setSelectedForSconto(preventivo); setShowScontoModal(true); }}
-                      className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                      className="p-2 text-gray-600 dark:text-gray-400 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30 rounded-lg transition-colors"
                       title="Applica sconto"
                     >
                       <Tag className="h-4 w-4" />
                     </button>
                     <button
                       onClick={() => handleDownloadPdf(preventivo.id)}
-                      className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                      className="p-2 text-gray-600 dark:text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
                       title="Scarica PDF"
                     >
                       <Download className="h-4 w-4" />
                     </button>
                     <button
                       onClick={() => handleDelete(preventivo.id)}
-                      className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      className="p-2 text-gray-600 dark:text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
                       title="Elimina"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -1153,6 +1185,15 @@ const PreventiviPage: React.FC = () => {
         confirmLabel="Separa"
         cancelLabel="Annulla"
         loading={confirmLoading}
+      />
+
+      {/* Wizard MDL */}
+      <GenerateMDLModal
+        isOpen={showGenerateMDLModal}
+        onClose={() => setShowGenerateMDLModal(false)}
+        onSuccess={() => {
+          fetchPreventivi();
+        }}
       />
     </div>
   );

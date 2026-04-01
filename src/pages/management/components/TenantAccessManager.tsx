@@ -7,10 +7,14 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Shield, Check, X, Star, StarOff, Plus, Trash2, Edit2, Search, Filter, Eye, ExternalLink } from 'lucide-react';
+import { Building2, Shield, Check, X, Star, StarOff, Plus, Trash2, Edit2, Search, Filter, Eye, ExternalLink, Settings } from 'lucide-react';
 import { managementApi } from '../api';
-import type { Tenant, Feature, TenantAccessLevel } from '../types';
+import type { Tenant, Feature, TenantAccessLevel, TenantSettings } from '../types';
 import { useAuth } from '../../../context/AuthContext';
+import { useToast } from '../../../hooks/useToast';
+import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
+import useTenantAccess from '../../../hooks/useTenantAccess';
+import TenantEditModal from './TenantEditModal';
 
 interface TenantAccessManagerProps {
     personId?: string; // Se null, mostra i tenant dell'utente corrente
@@ -27,6 +31,7 @@ const ACCESS_LEVELS: { value: TenantAccessLevel; label: string; description: str
 const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({ personId, onTenantSelect }) => {
     const { user } = useAuth();
     const navigate = useNavigate();
+    const { confirm: confirmDialog } = useConfirmDialog();
     const [tenants, setTenants] = useState<Tenant[]>([]);
     const [features, setFeatures] = useState<Feature[]>([]);
     const [loading, setLoading] = useState(true);
@@ -39,6 +44,10 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({ personId, onT
     // Modal state
     const [showAddModal, setShowAddModal] = useState(false);
     const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
+    const [tenantToEdit, setTenantToEdit] = useState<Tenant | null>(null);
+    const [isSavingTenant, setIsSavingTenant] = useState(false);
+    const { showToast } = useToast();
+    const { refresh: refreshTenantAccess } = useTenantAccess();
 
     const isViewingOwnTenants = !personId || personId === user?.id;
 
@@ -61,10 +70,9 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({ personId, onT
                     ? await managementApi.getPersonTenants(personId)
                     : await managementApi.getMyTenants();
                 tenantsData = tenantsRes.data || [];
-            } catch (tenantErr: any) {
-                console.error('Error loading tenants:', tenantErr);
+            } catch (tenantErr: unknown) {
                 // Se non autenticato, non mostrare errore ma lista vuota
-                if (tenantErr.response?.status === 401) {
+                if ((tenantErr as { response?: { status?: number } }).response?.status === 401) {
                     setError('Sessione scaduta. Effettua nuovamente il login.');
                     return;
                 }
@@ -73,22 +81,20 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({ personId, onT
             try {
                 const featuresRes = await managementApi.getFeatures();
                 featuresData = featuresRes.data || [];
-            } catch (featErr: any) {
-                console.error('Error loading features:', featErr);
+            } catch (featErr: unknown) {
                 // Features sono opzionali, ignora errore
             }
 
             setTenants(tenantsData);
             setFeatures(featuresData);
-        } catch (err: any) {
-            const message = err.message || 'Errore nel caricamento dei dati';
+        } catch (err: unknown) {
+            const message = 'Errore nel caricamento dei dati';
             // Evita errori criptici
             if (message.includes('toUpperCase')) {
                 setError('Errore di comunicazione con il server. Ricarica la pagina.');
             } else {
                 setError(message);
             }
-            console.error('Error loading tenant access data:', err);
         } finally {
             setLoading(false);
         }
@@ -100,21 +106,42 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({ personId, onT
         try {
             await managementApi.setPrimaryTenant(personId, tenantId);
             await loadData();
-        } catch (err: any) {
-            setError(err.message || 'Errore nell\'impostare il tenant primario');
+        } catch (err: unknown) {
+            setError('Errore nell\'impostare il tenant primario');
         }
     };
 
     const handleRevoke = async (tenantId: string) => {
         if (!personId) return;
 
-        if (!confirm('Sei sicuro di voler revocare l\'accesso a questo tenant?')) return;
+        if (!(await confirmDialog({ title: 'Revoca accesso', message: 'Sei sicuro di voler revocare l\'accesso a questo tenant?', variant: 'danger', confirmLabel: 'Revoca' }))) return;
 
         try {
             await managementApi.revokeTenantAccess(personId, tenantId);
             await loadData();
-        } catch (err: any) {
-            setError(err.message || 'Errore nella revoca dell\'accesso');
+        } catch (err: unknown) {
+            setError('Errore nella revoca dell\'accesso');
+        }
+    };
+
+    // Handler per salvare modifiche tenant
+    const handleSaveTenant = async (tenantId: string, data: { name: string; settings: TenantSettings }) => {
+        setIsSavingTenant(true);
+        try {
+            await managementApi.updateTenant(tenantId, data);
+            await refreshTenantAccess();
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('tenant-access:changed'));
+            }
+            showToast({ message: 'Tenant aggiornato con successo', type: 'success' });
+            setTenantToEdit(null);
+            setSelectedTenantDetails(null); // Chiudi anche modal dettagli se aperto
+            await loadData(); // Ricarica dati per vedere le modifiche
+        } catch (err: unknown) {
+            showToast({ message: 'Errore nell\'aggiornamento del tenant', type: 'error' });
+            throw err; // Rethrow so the modal knows the save failed
+        } finally {
+            setIsSavingTenant(false);
         }
     };
 
@@ -135,7 +162,7 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({ personId, onT
         return (
             <div className="flex items-center justify-center py-12">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                <span className="ml-3 text-gray-600">Caricamento tenant...</span>
+                <span className="ml-3 text-gray-600 dark:text-gray-400">Caricamento tenant...</span>
             </div>
         );
     }
@@ -143,15 +170,15 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({ personId, onT
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-gray-200">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-gray-200 dark:border-gray-700">
                 <div>
-                    <h2 className="text-xl font-bold text-gray-900 flex items-center">
-                        <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center mr-3">
+                    <h2 className="text-xl font-bold text-gray-900 dark:text-gray-50 flex items-center">
+                        <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center mr-3">
                             <Building2 className="h-5 w-5 text-blue-600" />
                         </div>
                         {isViewingOwnTenants ? 'I Miei Tenant' : 'Tenant Accessibili'}
                     </h2>
-                    <p className="text-sm text-gray-500 mt-1 ml-13">
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 ml-13">
                         {tenants.length} tenant{tenants.length !== 1 ? '' : ''} disponibil{tenants.length !== 1 ? 'i' : 'e'}
                         {tenants.filter(t => t.isActive).length !== tenants.length && (
                             <span className="ml-2 text-amber-600">
@@ -175,7 +202,7 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({ personId, onT
 
             {/* Error */}
             {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg">
                     {error}
                 </div>
             )}
@@ -189,7 +216,7 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({ personId, onT
                         placeholder="Cerca tenant..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-50"
                     />
                 </div>
 
@@ -198,7 +225,7 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({ personId, onT
                     <select
                         value={filterFeature}
                         onChange={(e) => setFilterFeature(e.target.value)}
-                        className="pl-10 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none bg-white"
+                        className="pl-10 pr-8 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-50"
                     >
                         <option value="">Tutte le features</option>
                         {features.map(feature => (
@@ -210,10 +237,10 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({ personId, onT
 
             {/* Tenant Grid */}
             {filteredTenants.length === 0 ? (
-                <div className="text-center py-12 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                <div className="text-center py-12 bg-gray-50 dark:bg-gray-700/50 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-600">
                     <Building2 className="mx-auto h-12 w-12 text-gray-400" />
-                    <h3 className="mt-3 text-sm font-semibold text-gray-900">Nessun tenant trovato</h3>
-                    <p className="mt-1 text-sm text-gray-500">
+                    <h3 className="mt-3 text-sm font-semibold text-gray-900 dark:text-gray-50">Nessun tenant trovato</h3>
+                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                         {searchTerm || filterFeature
                             ? 'Prova a modificare i filtri di ricerca'
                             : 'Non hai accesso a nessun tenant'}
@@ -237,9 +264,9 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({ personId, onT
                         return (
                             <div
                                 key={tenant.id}
-                                className={`relative bg-white rounded-xl border-2 transition-all duration-200 hover:shadow-lg cursor-pointer group overflow-hidden ${tenant.isPrimary
-                                        ? 'border-yellow-400 ring-2 ring-yellow-100 shadow-md'
-                                        : 'border-gray-200 hover:border-blue-300'
+                                className={`relative bg-white dark:bg-gray-800 rounded-xl border-2 transition-all duration-200 hover:shadow-lg cursor-pointer group overflow-hidden ${tenant.isPrimary
+                                    ? 'border-yellow-400 ring-2 ring-yellow-100 dark:ring-yellow-900/30 shadow-md'
+                                    : 'border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-600'
                                     }`}
                                 onClick={handleTenantClick}
                             >
@@ -267,8 +294,8 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({ personId, onT
                                     {/* Tenant Info */}
                                     <div className="flex items-start justify-between mb-4 mt-2">
                                         <div className="flex-1 min-w-0">
-                                            <h3 className="font-semibold text-gray-900 truncate text-base">{tenant.name}</h3>
-                                            <p className="text-sm text-gray-500 truncate mt-0.5">{tenant.slug}</p>
+                                            <h3 className="font-semibold text-gray-900 dark:text-gray-50 truncate text-base">{tenant.name}</h3>
+                                            <p className="text-sm text-gray-500 dark:text-gray-400 truncate mt-0.5">{tenant.slug}</p>
                                         </div>
                                         <span className={`ml-2 px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap ${accessInfo.color}`}>
                                             {accessInfo.label}
@@ -278,10 +305,10 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({ personId, onT
                                     {/* Features */}
                                     {tenant.enabledFeatures && tenant.enabledFeatures.length > 0 && (
                                         <div className="mb-4">
-                                            <p className="text-xs text-gray-500 mb-2 font-medium uppercase tracking-wide">Features</p>
+                                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2 font-medium uppercase tracking-wide">Features</p>
                                             <div className="flex flex-wrap gap-1.5">
                                                 {tenant.enabledFeatures.slice(0, 4).map(feature => (
-                                                    <span key={feature} className="bg-gray-100 text-gray-700 px-2 py-1 rounded-md text-xs font-medium capitalize">
+                                                    <span key={feature} className="bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1 rounded-md text-xs font-medium capitalize">
                                                         {feature}
                                                     </span>
                                                 ))}
@@ -295,20 +322,20 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({ personId, onT
                                     )}
 
                                     {/* Status Row */}
-                                    <div className="flex items-center justify-between text-xs pt-3 border-t border-gray-100">
-                                        <span className={`flex items-center font-medium ${tenant.isActive ? 'text-emerald-600' : 'text-red-600'}`}>
+                                    <div className="flex items-center justify-between text-xs pt-3 border-t border-gray-100 dark:border-gray-700">
+                                        <span className={`flex items-center font-medium ${tenant.isActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                                             {tenant.isActive ? <Check className="h-3.5 w-3.5 mr-1" /> : <X className="h-3.5 w-3.5 mr-1" />}
                                             {tenant.isActive ? 'Attivo' : 'Inattivo'}
                                         </span>
-                                        <span className="text-gray-400 bg-gray-50 px-2 py-0.5 rounded capitalize">{tenant.billingPlan}</span>
+                                        <span className="text-gray-400 bg-gray-50 dark:bg-gray-700 px-2 py-0.5 rounded capitalize">{tenant.billingPlan}</span>
                                     </div>
 
                                     {/* Actions (only for admin managing other users) */}
                                     {!isViewingOwnTenants && !tenant.isAdminAccess && (
-                                        <div className="flex items-center gap-2 mt-4 pt-3 border-t border-gray-100">
+                                        <div className="flex items-center gap-2 mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); setEditingTenant(tenant); }}
-                                                className="flex-1 flex items-center justify-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors font-medium"
+                                                className="flex-1 flex items-center justify-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors font-medium"
                                             >
                                                 <Edit2 className="h-3.5 w-3.5 mr-1.5" />
                                                 Modifica
@@ -341,23 +368,23 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({ personId, onT
             {/* Tenant Details Modal */}
             {selectedTenantDetails && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedTenantDetails(null)}>
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl dark:shadow-black/50 w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                         {/* Modal Header */}
-                        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
                             <div className="flex items-center">
-                                <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center mr-3">
+                                <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center mr-3">
                                     <Building2 className="h-5 w-5 text-blue-600" />
                                 </div>
                                 <div>
-                                    <h3 className="text-lg font-semibold text-gray-900">{selectedTenantDetails.name}</h3>
-                                    <p className="text-sm text-gray-500">{selectedTenantDetails.slug}</p>
+                                    <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-50">{selectedTenantDetails.name}</h3>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400">{selectedTenantDetails.slug}</p>
                                 </div>
                             </div>
                             <button
                                 onClick={() => setSelectedTenantDetails(null)}
-                                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                             >
-                                <X className="h-5 w-5 text-gray-500" />
+                                <X className="h-5 w-5 text-gray-500 dark:text-gray-400" />
                             </button>
                         </div>
 
@@ -365,17 +392,17 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({ personId, onT
                         <div className="px-6 py-4 space-y-6">
                             {/* Access Level */}
                             <div>
-                                <h4 className="text-sm font-medium text-gray-700 mb-2">Livello di Accesso</h4>
+                                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Livello di Accesso</h4>
                                 <div className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium ${getAccessLevelInfo(selectedTenantDetails.accessLevel).color}`}>
                                     <Shield className="h-4 w-4 mr-1.5" />
                                     {getAccessLevelInfo(selectedTenantDetails.accessLevel).label}
                                 </div>
-                                <p className="text-sm text-gray-500 mt-1">{getAccessLevelInfo(selectedTenantDetails.accessLevel).description}</p>
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{getAccessLevelInfo(selectedTenantDetails.accessLevel).description}</p>
                             </div>
 
                             {/* Status */}
                             <div>
-                                <h4 className="text-sm font-medium text-gray-700 mb-2">Stato</h4>
+                                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Stato</h4>
                                 <div className="flex items-center gap-4">
                                     <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium ${selectedTenantDetails.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                                         {selectedTenantDetails.isActive ? <Check className="h-4 w-4 mr-1.5" /> : <X className="h-4 w-4 mr-1.5" />}
@@ -392,8 +419,8 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({ personId, onT
 
                             {/* Billing Plan */}
                             <div>
-                                <h4 className="text-sm font-medium text-gray-700 mb-2">Piano</h4>
-                                <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-gray-100 text-gray-800 capitalize">
+                                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Piano</h4>
+                                <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 capitalize">
                                     {selectedTenantDetails.billingPlan || 'Standard'}
                                 </span>
                             </div>
@@ -401,10 +428,10 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({ personId, onT
                             {/* Features */}
                             {selectedTenantDetails.enabledFeatures && selectedTenantDetails.enabledFeatures.length > 0 && (
                                 <div>
-                                    <h4 className="text-sm font-medium text-gray-700 mb-2">Funzionalità Abilitate</h4>
+                                    <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Funzionalità Abilitate</h4>
                                     <div className="flex flex-wrap gap-2">
                                         {selectedTenantDetails.enabledFeatures.map(feature => (
-                                            <span key={feature} className="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-sm font-medium capitalize">
+                                            <span key={feature} className="bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-3 py-1.5 rounded-lg text-sm font-medium capitalize">
                                                 {feature}
                                             </span>
                                         ))}
@@ -414,22 +441,31 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({ personId, onT
 
                             {/* Tenant ID */}
                             <div>
-                                <h4 className="text-sm font-medium text-gray-700 mb-2">ID Tenant</h4>
-                                <code className="text-xs bg-gray-100 px-3 py-1.5 rounded-lg font-mono text-gray-600 block overflow-x-auto">
+                                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">ID Tenant</h4>
+                                <code className="text-xs bg-gray-100 dark:bg-gray-700 px-3 py-1.5 rounded-lg font-mono text-gray-600 dark:text-gray-300 block overflow-x-auto">
                                     {selectedTenantDetails.id}
                                 </code>
                             </div>
                         </div>
 
                         {/* Modal Footer */}
-                        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between rounded-b-2xl">
+                        <div className="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between rounded-b-2xl">
                             <button
                                 onClick={() => setSelectedTenantDetails(null)}
-                                className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
+                                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
                             >
                                 Chiudi
                             </button>
                             <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => {
+                                        setTenantToEdit(selectedTenantDetails);
+                                    }}
+                                    className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                                >
+                                    <Settings className="h-4 w-4 mr-1.5" />
+                                    Modifica Configurazione
+                                </button>
                                 <button
                                     onClick={() => {
                                         navigate(`/management/tenant-access?tenantId=${selectedTenantDetails.id}`);
@@ -444,6 +480,18 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({ personId, onT
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* Tenant Edit Modal - Per modificare configurazione tenant */}
+            {tenantToEdit && (
+                <TenantEditModal
+                    tenant={tenantToEdit}
+                    isOpen={!!tenantToEdit}
+                    onClose={() => setTenantToEdit(null)}
+                    onSave={handleSaveTenant}
+                    isSaving={isSavingTenant}
+                    canEditFeatures={user?.roleType === 'SUPER_ADMIN' || user?.roleType === 'ADMIN'}
+                />
             )}
 
             {/* Add/Edit Modal would go here */}

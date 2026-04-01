@@ -32,7 +32,10 @@ import {
     Euro,
     Activity,
     RefreshCw,
-    Eye
+    Eye,
+    Wrench,
+    Package,
+    Receipt
 } from 'lucide-react';
 import {
     prestazioniApi,
@@ -44,10 +47,13 @@ import {
     Convenzione,
     Medico,
     MedicoAbilitato,
-    TipoCompensoMedico
+    TipoCompensoMedico,
+    TipologiaStrumento
 } from '../../../services/clinicaApi';
 import { useTenantFilter } from '../../../context/TenantFilterContext';
 import { useToast } from '../../../hooks/useToast';
+import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
+import { tariffariAziendaliApi, VoceTariffarioWithContext, CATEGORIA_VISITA_LABELS } from '../../../services/tariffarioAziendaleApi';
 import '../../../styles/clinica-theme.css';
 
 // =====================================================
@@ -64,7 +70,7 @@ interface PrezzoMedicoFormData {
     compensoMassimo: string;
 }
 
-type TabType = 'info' | 'prezzi' | 'convenzioni';
+type TabType = 'info' | 'prezzi' | 'convenzioni' | 'tariffarioAziendale';
 
 // =====================================================
 // CONSTANTS
@@ -229,21 +235,108 @@ const InfoTab: React.FC<{ prestazione: Prestazione }> = ({ prestazione }) => {
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                 <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center gap-2">
                     <DollarSign className="w-5 h-5 text-green-600" />
-                    Prezzo Base
+                    Prezzi
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     <div>
                         <label className="text-sm font-medium text-gray-500">Prezzo base</label>
                         <p className="mt-1 text-2xl font-semibold text-gray-900">
                             {formatCurrency(prestazione.prezzoBase)}
                         </p>
                     </div>
+                    {/* P65: Prezzo Prima Visita */}
+                    <div>
+                        <label className="text-sm font-medium text-gray-500">Prima Visita</label>
+                        {prestazione.prezzoPrimaVisita ? (
+                            <p className="mt-1 text-2xl font-semibold text-teal-700">
+                                {formatCurrency(prestazione.prezzoPrimaVisita)}
+                            </p>
+                        ) : (
+                            <p className="mt-1 text-sm text-gray-400 italic">= Prezzo base</p>
+                        )}
+                    </div>
+                    {/* P65: Prezzo Controllo */}
+                    <div>
+                        <label className="text-sm font-medium text-gray-500">Controllo</label>
+                        {prestazione.prezzoControllo ? (
+                            <p className="mt-1 text-2xl font-semibold text-blue-700">
+                                {formatCurrency(prestazione.prezzoControllo)}
+                            </p>
+                        ) : (
+                            <p className="mt-1 text-sm text-gray-400 italic">= Prezzo base</p>
+                        )}
+                    </div>
                     <div>
                         <label className="text-sm font-medium text-gray-500">Aliquota IVA</label>
                         <p className="mt-1 text-gray-900">{prestazione.ivaAliquota}%</p>
                     </div>
                 </div>
+                {/* P65: Scadenza default per controllo */}
+                {prestazione.scadenzaDefaultMesi && (
+                    <div className="mt-4 pt-4 border-t border-gray-100">
+                        <label className="text-sm font-medium text-gray-500">Scadenza Controllo</label>
+                        <p className="mt-1 text-gray-900">
+                            Ogni <span className="font-semibold">{prestazione.scadenzaDefaultMesi}</span> mesi
+                        </p>
+                    </div>
+                )}
             </div>
+
+            {/* Strumenti e Tipologie Richieste Card */}
+            {(prestazione.tipologieRichieste && prestazione.tipologieRichieste.length > 0) ||
+                (prestazione.strumentiRichiesti && prestazione.strumentiRichiesti.length > 0) ? (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center gap-2">
+                        <Wrench className="w-5 h-5 text-indigo-600" />
+                        Strumenti Richiesti
+                    </h3>
+                    <div className="space-y-4">
+                        {/* Tipologie strumenti richieste */}
+                        {prestazione.tipologieRichieste && prestazione.tipologieRichieste.length > 0 && (
+                            <div>
+                                <label className="text-sm font-medium text-gray-500 block mb-2">Tipologie Strumenti</label>
+                                <div className="flex flex-wrap gap-2">
+                                    {prestazione.tipologieRichieste.map((tip) => (
+                                        <span
+                                            key={tip.id}
+                                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium ${tip.isObbligatorio
+                                                ? 'bg-indigo-100 text-indigo-800 ring-1 ring-indigo-200'
+                                                : 'bg-gray-100 text-gray-700'
+                                                }`}
+                                        >
+                                            <Package className="w-3.5 h-3.5" />
+                                            {tip.tipologia.replace(/_/g, ' ')}
+                                            {tip.quantitaMinima > 1 && (
+                                                <span className="text-xs opacity-75">×{tip.quantitaMinima}</span>
+                                            )}
+                                            {tip.isObbligatorio && (
+                                                <span className="text-xs bg-indigo-200 px-1.5 py-0.5 rounded">Obbligatorio</span>
+                                            )}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        {/* Strumenti specifici richiesti (array di stringhe) */}
+                        {prestazione.strumentiRichiesti && prestazione.strumentiRichiesti.length > 0 && (
+                            <div>
+                                <label className="text-sm font-medium text-gray-500 block mb-2">Strumenti Specifici</label>
+                                <div className="flex flex-wrap gap-2">
+                                    {prestazione.strumentiRichiesti.map((strumento, idx) => (
+                                        <span
+                                            key={idx}
+                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-700"
+                                        >
+                                            <Wrench className="w-3.5 h-3.5" />
+                                            {strumento}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            ) : null}
 
             {/* Instructions Card */}
             {prestazione.istruzioniPreparazione && (
@@ -265,8 +358,10 @@ const InfoTab: React.FC<{ prestazione: Prestazione }> = ({ prestazione }) => {
 
 // Calcola il compenso default basato sul tipo di prestazione
 const getDefaultCompenso = (tipo: string): number => {
-    // 70% per visite specialistiche o medicina del lavoro, 50% per altre
-    if (tipo === 'VISITA_SPECIALISTICA' || tipo === 'VISITA_MEDICINA_LAVORO') {
+    // 70% per visite specialistiche, medicina del lavoro e certificazioni
+    // 50% per altre tipologie
+    const tipi70Percent = ['VISITA_SPECIALISTICA', 'VISITA_MEDICINA_LAVORO', 'CERTIFICAZIONE'];
+    if (tipi70Percent.includes(tipo)) {
         return 70;
     }
     return 50;
@@ -292,6 +387,7 @@ const PrezziTab: React.FC<{ prestazione: Prestazione }> = ({ prestazione }) => {
     const { getTenantFilterParams, tenantFilterKey } = useTenantFilter();
     const queryClient = useQueryClient();
     const { showToast } = useToast();
+    const { confirmDelete } = useConfirmDialog();
 
     const [isAddingNew, setIsAddingNew] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -410,7 +506,7 @@ const PrezziTab: React.FC<{ prestazione: Prestazione }> = ({ prestazione }) => {
             resetForm();
         },
         onError: (error: Error) => {
-            showToast({ type: 'error', message: error.message });
+            showToast({ type: 'error', message: 'Errore del server' });
         }
     });
 
@@ -425,7 +521,7 @@ const PrezziTab: React.FC<{ prestazione: Prestazione }> = ({ prestazione }) => {
             resetForm();
         },
         onError: (error: Error) => {
-            showToast({ type: 'error', message: error.message });
+            showToast({ type: 'error', message: 'Errore del server' });
         }
     });
 
@@ -491,8 +587,8 @@ const PrezziTab: React.FC<{ prestazione: Prestazione }> = ({ prestazione }) => {
         setIsAddingNew(false);
     };
 
-    const handleDelete = (id: string) => {
-        if (confirm('Sei sicuro di voler eliminare questo prezzo?')) {
+    const handleDelete = async (id: string) => {
+        if (await confirmDelete('questo prezzo')) {
             deleteListinoMutation.mutate(id);
         }
     };
@@ -926,7 +1022,7 @@ const ConvenzioniTab: React.FC<{ prestazione: Prestazione }> = ({ prestazione })
                         Gestisci le convenzioni dalla sezione Catalogo &gt; Convenzioni
                     </p>
                     <Link
-                        to="/poliambulatorio/convenzioni"
+                        to="/poliambulatorio/catalogo/convenzioni"
                         className="inline-flex items-center gap-2 mt-4 text-teal-600 hover:text-teal-700"
                     >
                         <Eye className="w-4 h-4" />
@@ -994,6 +1090,195 @@ const ConvenzioniTab: React.FC<{ prestazione: Prestazione }> = ({ prestazione })
 };
 
 // =====================================================
+// P65: TARIFFARIO AZIENDALE TAB
+// =====================================================
+
+const TariffarioAziendaleTab: React.FC<{ prestazione: Prestazione }> = ({ prestazione }) => {
+    const { data: vociResponse, isLoading } = useQuery({
+        queryKey: ['voci-tariffario-prestazione', prestazione.id],
+        queryFn: async () => {
+            const response = await tariffariAziendaliApi.getVociByPrestazione(prestazione.id);
+            return response.data;
+        }
+    });
+
+    const voci = vociResponse || [];
+
+    // Flatten: per ogni voce, creare una riga per ogni azienda associata
+    const righe = useMemo(() => {
+        const rows: Array<{
+            voce: VoceTariffarioWithContext;
+            azienda: string;
+            companyId: string;
+            tariffarioNome: string;
+            tariffarioCodice: string;
+            convenzione?: string;
+        }> = [];
+
+        voci.forEach((voce: VoceTariffarioWithContext) => {
+            const tar = voce.tariffarioAziendale;
+            if (tar.companyAssociations.length === 0) {
+                // Tariffario senza aziende associate (template base)
+                rows.push({
+                    voce,
+                    azienda: '— Nessuna azienda —',
+                    companyId: '',
+                    tariffarioNome: tar.nome,
+                    tariffarioCodice: tar.codice,
+                    convenzione: tar.convenzione?.nome
+                });
+            } else {
+                tar.companyAssociations.forEach(assoc => {
+                    rows.push({
+                        voce,
+                        azienda: assoc.companyTenantProfile?.company?.ragioneSociale || 'N/D',
+                        companyId: assoc.companyTenantProfile?.company?.id || '',
+                        tariffarioNome: tar.nome,
+                        tariffarioCodice: tar.codice,
+                        convenzione: tar.convenzione?.nome
+                    });
+                });
+            }
+        });
+
+        return rows;
+    }, [voci]);
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-teal-600" />
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-6">
+            <div>
+                <h3 className="text-lg font-medium text-gray-900">Tariffari Aziendali</h3>
+                <p className="text-sm text-gray-500">
+                    Aziende che includono questa prestazione nei loro tariffari di Medicina del Lavoro
+                </p>
+            </div>
+
+            {righe.length === 0 ? (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+                    <Building2 className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">
+                        Nessun tariffario aziendale
+                    </h3>
+                    <p className="text-gray-500">
+                        Questa prestazione non è inclusa in nessun tariffario aziendale.
+                        <br />
+                        Gestisci i tariffari dalla sezione Medicina del Lavoro &gt; Tariffari
+                    </p>
+                    <Link
+                        to="/poliambulatorio/medicina-lavoro/tariffari"
+                        className="inline-flex items-center gap-2 mt-4 text-teal-600 hover:text-teal-700"
+                    >
+                        <Eye className="w-4 h-4" />
+                        Vai ai Tariffari Aziendali
+                    </Link>
+                </div>
+            ) : (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <table className="w-full">
+                        <thead>
+                            <tr className="bg-gray-50 border-b border-gray-200">
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                    Azienda
+                                </th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                    Tariffario
+                                </th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                    Tipo Visita MDL
+                                </th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                    Convenzione
+                                </th>
+                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                                    Prezzo
+                                </th>
+                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                                    IVA
+                                </th>
+                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                                    Fasce
+                                </th>
+                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                                    Stato
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {righe.map((riga, index) => (
+                                <tr key={`${riga.voce.id}-${riga.companyId || index}`} className="hover:bg-gray-50">
+                                    <td className="px-6 py-4">
+                                        <span className="font-medium text-gray-900">{riga.azienda}</span>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <div className="flex flex-col">
+                                            <span className="text-sm text-gray-900">{riga.tariffarioNome}</span>
+                                            <span className="text-xs text-gray-500 font-mono">{riga.tariffarioCodice}</span>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        {riga.voce.categoriaVisita ? (
+                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-teal-100 text-teal-800">
+                                                {CATEGORIA_VISITA_LABELS[riga.voce.categoriaVisita] ?? riga.voce.categoriaVisita}
+                                            </span>
+                                        ) : (
+                                            <span className="text-gray-400 text-xs italic">Tutte</span>
+                                        )}
+                                    </td>
+                                    <td className="px-6 py-4 text-sm text-gray-600">
+                                        {riga.convenzione || '—'}
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
+                                        <span className="text-sm font-semibold text-gray-900">
+                                            {formatCurrency(riga.voce.prezzoBase)}
+                                        </span>
+                                        {riga.voce.usaFasceDipendenti && riga.voce.fasceDipendenti?.length > 0 && (
+                                            <span className="block text-xs text-amber-600">
+                                                Da {formatCurrency(Math.min(...riga.voce.fasceDipendenti.map(f => Number(f.prezzo || 0))))}
+                                            </span>
+                                        )}
+                                    </td>
+                                    <td className="px-6 py-4 text-right text-sm text-gray-600">
+                                        {riga.voce.ivaAliquota}%
+                                    </td>
+                                    <td className="px-6 py-4 text-center">
+                                        {riga.voce.usaFasceDipendenti ? (
+                                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                                                {riga.voce.fasceDipendenti?.length || 0} fasce
+                                            </span>
+                                        ) : (
+                                            <span className="text-gray-400 text-xs">Fisso</span>
+                                        )}
+                                    </td>
+                                    <td className="px-6 py-4 text-center">
+                                        {riga.voce.attivo && riga.voce.tariffarioAziendale.attivo ? (
+                                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                ● Attivo
+                                            </span>
+                                        ) : (
+                                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                                ○ Non attivo
+                                            </span>
+                                        )}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </div>
+    );
+};
+
+// =====================================================
 // MAIN COMPONENT
 // =====================================================
 
@@ -1003,6 +1288,7 @@ const PrestazioneDetailPage: React.FC = () => {
     const queryClient = useQueryClient();
     const { showToast } = useToast();
     const { tenantFilterKey } = useTenantFilter();
+    const { confirmDelete: confirmDeletePrestazione } = useConfirmDialog();
 
     const [activeTab, setActiveTab] = useState<TabType>('info');
 
@@ -1030,12 +1316,12 @@ const PrestazioneDetailPage: React.FC = () => {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['prestazioni'] });
             showToast({ type: 'success', message: 'Prestazione eliminata' });
-            navigate('/poliambulatorio/prestazioni');
+            navigate('/poliambulatorio/catalogo/prestazioni');
         }
     });
 
-    const handleDelete = () => {
-        if (confirm('Sei sicuro di voler eliminare questa prestazione? L\'azione non può essere annullata.')) {
+    const handleDelete = async () => {
+        if (await confirmDeletePrestazione('questa prestazione')) {
             deleteMutation.mutate();
         }
     };
@@ -1054,7 +1340,7 @@ const PrestazioneDetailPage: React.FC = () => {
                 <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
                 <h2 className="text-xl font-semibold text-gray-900 mb-2">Prestazione non trovata</h2>
                 <p className="text-gray-500 mb-4">La prestazione richiesta non esiste o è stata eliminata.</p>
-                <Link to="/poliambulatorio/prestazioni" className="clinica-button-secondary">
+                <Link to="/poliambulatorio/catalogo/prestazioni" className="clinica-button-secondary">
                     <ArrowLeft className="w-4 h-4 mr-2" />
                     Torna al catalogo
                 </Link>
@@ -1066,7 +1352,7 @@ const PrestazioneDetailPage: React.FC = () => {
         <div className="p-6 max-w-7xl mx-auto clinica-theme" data-brand="element-medica">
             {/* Breadcrumb */}
             <Link
-                to="/poliambulatorio/prestazioni"
+                to="/poliambulatorio/catalogo/prestazioni"
                 className="inline-flex items-center gap-2 text-gray-500 hover:text-teal-600 mb-6 text-sm transition-colors"
             >
                 <ArrowLeft className="w-4 h-4" />
@@ -1114,6 +1400,18 @@ const PrestazioneDetailPage: React.FC = () => {
                                     <span className="text-teal-200 text-xs">Prezzo Base</span>
                                     <p className="text-2xl font-bold">{formatCurrency(prestazione.prezzoBase)}</p>
                                 </div>
+                                {prestazione.prezzoPrimaVisita && (
+                                    <div>
+                                        <span className="text-teal-200 text-xs">Prima Visita</span>
+                                        <p className="text-lg font-semibold">{formatCurrency(prestazione.prezzoPrimaVisita)}</p>
+                                    </div>
+                                )}
+                                {prestazione.prezzoControllo && (
+                                    <div>
+                                        <span className="text-teal-200 text-xs">Controllo</span>
+                                        <p className="text-lg font-semibold">{formatCurrency(prestazione.prezzoControllo)}</p>
+                                    </div>
+                                )}
                                 <div>
                                     <span className="text-teal-200 text-xs">IVA</span>
                                     <p className="text-lg font-semibold">{prestazione.ivaAliquota}%</p>
@@ -1123,7 +1421,7 @@ const PrestazioneDetailPage: React.FC = () => {
                     </div>
                     <div className="flex items-center gap-2">
                         <Link
-                            to={`/poliambulatorio/prestazioni/${id}/modifica`}
+                            to={`/poliambulatorio/catalogo/prestazioni/${id}/modifica`}
                             className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors backdrop-blur-sm"
                         >
                             <Edit className="w-4 h-4" />
@@ -1199,6 +1497,13 @@ const PrestazioneDetailPage: React.FC = () => {
                             count={convenzioniCount}
                             color="amber"
                         />
+                        <TabButton
+                            active={activeTab === 'tariffarioAziendale'}
+                            onClick={() => setActiveTab('tariffarioAziendale')}
+                            icon={<Receipt className="w-4 h-4" />}
+                            label="Tariffario Aziendale"
+                            color="violet"
+                        />
                     </nav>
                 </div>
 
@@ -1207,6 +1512,7 @@ const PrestazioneDetailPage: React.FC = () => {
                     {activeTab === 'info' && <InfoTab prestazione={prestazione} />}
                     {activeTab === 'prezzi' && <PrezziTab prestazione={prestazione} />}
                     {activeTab === 'convenzioni' && <ConvenzioniTab prestazione={prestazione} />}
+                    {activeTab === 'tariffarioAziendale' && <TariffarioAziendaleTab prestazione={prestazione} />}
                 </div>
             </div>
         </div>

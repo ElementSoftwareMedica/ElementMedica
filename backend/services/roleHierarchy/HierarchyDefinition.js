@@ -1,6 +1,20 @@
 /**
  * Definizioni statiche della gerarchia dei ruoli
  * Contiene la struttura gerarchica completa con livelli, relazioni e permessi
+ * 
+ * P69 - Gerarchia corretta:
+ * 0: SUPER_ADMIN (accesso globale)
+ * 1: ADMIN (admin sistema)
+ * 2: TENANT_ADMIN (admin del proprio tenant)
+ * 3: COMPANY_ADMIN (admin della propria azienda)
+ * 4: TRAINING_ADMIN, CLINIC_ADMIN
+ * 5: HR_MANAGER, MANAGER, DEPARTMENT_HEAD
+ * 6: Coordinatori e Supervisori
+ * 7: Senior staff
+ * 8: Staff operativo
+ * 9: Dipendenti base
+ * 10: Viewer
+ * 11: Guest
  */
 
 /**
@@ -12,16 +26,16 @@ export const ROLE_HIERARCHY = {
     level: 0,
     parent: null,
     name: 'Super Amministratore',
-    description: 'Accesso completo a tutto il sistema',
-    canAssignTo: ['ADMIN', 'COMPANY_ADMIN', 'TENANT_ADMIN', 'TRAINER', 'EMPLOYEE'],
+    description: 'Accesso completo a tutto il sistema e tutti i tenant',
+    canAssignTo: ['ADMIN', 'TENANT_ADMIN'],
     permissions: ['ALL_PERMISSIONS']
   },
   'ADMIN': {
     level: 1,
     parent: 'SUPER_ADMIN',
     name: 'Amministratore',
-    description: 'Gestione completa del tenant',
-    canAssignTo: ['COMPANY_ADMIN', 'TENANT_ADMIN', 'HR_MANAGER', 'MANAGER', 'TRAINER', 'EMPLOYEE'],
+    description: 'Gestione completa del sistema per i tenant assegnati',
+    canAssignTo: ['TENANT_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER', 'MANAGER', 'TRAINER', 'EMPLOYEE'],
     permissions: [
       'ROLE_MANAGEMENT', 'USER_MANAGEMENT', 'TENANT_MANAGEMENT',
       'CREATE_ROLES', 'EDIT_ROLES', 'DELETE_ROLES', 'VIEW_ROLES', 'EDIT_HIERARCHY',
@@ -36,9 +50,29 @@ export const ROLE_HIERARCHY = {
       'ADMIN_PANEL', 'SYSTEM_SETTINGS', 'VIEW_REPORTS', 'CREATE_REPORTS'
     ]
   },
-  'COMPANY_ADMIN': {
+  'TENANT_ADMIN': {
     level: 2,
     parent: 'ADMIN',
+    name: 'Amministratore Tenant',
+    description: 'Gestione completa del proprio tenant',
+    canAssignTo: ['COMPANY_ADMIN', 'TRAINING_ADMIN', 'CLINIC_ADMIN', 'HR_MANAGER', 'MANAGER', 'TRAINER', 'EMPLOYEE'],
+    permissions: [
+      'TENANT_MANAGEMENT',
+      'CREATE_ROLES', 'EDIT_ROLES', 'DELETE_ROLES', 'VIEW_ROLES', 'EDIT_HIERARCHY',
+      'MANAGE_USERS', 'ASSIGN_ROLES', 'REVOKE_ROLES', 'VIEW_ADMINISTRATION',
+      'VIEW_HIERARCHY', 'CREATE_HIERARCHY', 'DELETE_HIERARCHY', 'MANAGE_HIERARCHY',
+      'VIEW_COMPANIES', 'CREATE_COMPANIES', 'EDIT_COMPANIES', 'DELETE_COMPANIES',
+      'VIEW_EMPLOYEES', 'CREATE_EMPLOYEES', 'EDIT_EMPLOYEES', 'DELETE_EMPLOYEES',
+      'VIEW_TRAINERS', 'CREATE_TRAINERS', 'EDIT_TRAINERS', 'DELETE_TRAINERS',
+      'VIEW_USERS', 'CREATE_USERS', 'EDIT_USERS', 'DELETE_USERS',
+      'VIEW_COURSES', 'CREATE_COURSES', 'EDIT_COURSES', 'DELETE_COURSES',
+      'VIEW_DOCUMENTS', 'CREATE_DOCUMENTS', 'EDIT_DOCUMENTS', 'DELETE_DOCUMENTS',
+      'VIEW_REPORTS', 'CREATE_REPORTS'
+    ]
+  },
+  'COMPANY_ADMIN': {
+    level: 3,
+    parent: 'TENANT_ADMIN',
     name: 'Amministratore Azienda',
     description: 'Gestione della propria azienda e dipendenti',
     canAssignTo: ['TRAINING_ADMIN', 'CLINIC_ADMIN', 'HR_MANAGER', 'MANAGER', 'TRAINER', 'EMPLOYEE'],
@@ -46,33 +80,16 @@ export const ROLE_HIERARCHY = {
       'CREATE_ROLES', 'EDIT_ROLES', 'VIEW_ROLES',
       'MANAGE_USERS', 'ASSIGN_ROLES', 'VIEW_HIERARCHY',
       'VIEW_COMPANIES', 'EDIT_COMPANIES',
-      'VIEW_EMPLOYEES', 'CREATE_EMPLOYEES', 'EDIT_EMPLOYEES',
+      'VIEW_EMPLOYEES', 'CREATE_EMPLOYEES', 'EDIT_EMPLOYEES', 'DELETE_EMPLOYEES',
       'VIEW_TRAINERS', 'CREATE_TRAINERS', 'EDIT_TRAINERS',
       'VIEW_USERS', 'CREATE_USERS', 'EDIT_USERS',
       'VIEW_COURSES', 'CREATE_COURSES', 'EDIT_COURSES',
-      'VIEW_DOCUMENTS', 'CREATE_DOCUMENTS', 'EDIT_DOCUMENTS'
-    ]
-  },
-  'TENANT_ADMIN': {
-    level: 2,
-    parent: 'ADMIN',
-    name: 'Amministratore Tenant',
-    description: 'Gestione del tenant',
-    canAssignTo: ['COMPANY_ADMIN', 'HR_MANAGER', 'MANAGER', 'TRAINER', 'EMPLOYEE'],
-    permissions: [
-      'TENANT_MANAGEMENT',
-      'CREATE_ROLES', 'EDIT_ROLES', 'DELETE_ROLES', 'VIEW_ROLES', 'EDIT_HIERARCHY',
-      'MANAGE_USERS', 'ASSIGN_ROLES', 'REVOKE_ROLES', 'VIEW_ADMINISTRATION',
-      'VIEW_HIERARCHY', 'CREATE_HIERARCHY', 'DELETE_HIERARCHY', 'MANAGE_HIERARCHY',
-      'VIEW_COMPANIES', 'CREATE_COMPANIES', 'EDIT_COMPANIES',
-      'VIEW_EMPLOYEES', 'CREATE_EMPLOYEES', 'EDIT_EMPLOYEES',
-      'VIEW_TRAINERS', 'CREATE_TRAINERS', 'EDIT_TRAINERS',
-      'VIEW_USERS', 'CREATE_USERS', 'EDIT_USERS',
-      'VIEW_COURSES', 'CREATE_COURSES', 'EDIT_COURSES'
+      'VIEW_DOCUMENTS', 'CREATE_DOCUMENTS', 'EDIT_DOCUMENTS',
+      'VIEW_REPORTS'
     ]
   },
   'TRAINING_ADMIN': {
-    level: 3,
+    level: 4,
     parent: 'COMPANY_ADMIN',
     name: 'Amministratore Formazione & Lavoro',
     description: 'Gestione completa formazione e lavoro',
@@ -86,22 +103,46 @@ export const ROLE_HIERARCHY = {
     ]
   },
   'CLINIC_ADMIN': {
-    level: 3,
+    level: 4,
     parent: 'COMPANY_ADMIN',
     name: 'Amministratore Poliambulatorio',
     description: 'Gestione completa poliambulatorio',
-    canAssignTo: ['MANAGER', 'DEPARTMENT_HEAD', 'SUPERVISOR'],
+    canAssignTo: ['MANAGER', 'DEPARTMENT_HEAD', 'SUPERVISOR', 'MEDICO'],
     permissions: [
       'VIEW_EMPLOYEES', 'CREATE_EMPLOYEES', 'EDIT_EMPLOYEES', 'DELETE_EMPLOYEES',
       'VIEW_PATIENTS', 'CREATE_PATIENTS', 'EDIT_PATIENTS',
       'VIEW_APPOINTMENTS', 'CREATE_APPOINTMENTS', 'EDIT_APPOINTMENTS',
       'VIEW_MEDICAL_RECORDS', 'CREATE_MEDICAL_RECORDS', 'EDIT_MEDICAL_RECORDS',
       'VIEW_DOCUMENTS', 'CREATE_DOCUMENTS', 'EDIT_DOCUMENTS', 'DELETE_DOCUMENTS',
-      'VIEW_REPORTS', 'CREATE_REPORTS', 'EDIT_REPORTS'
+      'VIEW_REPORTS', 'CREATE_REPORTS', 'EDIT_REPORTS',
+      'VIEW_NOTIFICATIONS'
+    ]
+  },
+  'MEDICO': {
+    level: 5,
+    parent: 'CLINIC_ADMIN',
+    name: 'Medico',
+    description: 'Medico del poliambulatorio - gestione visite e pazienti',
+    canAssignTo: [],
+    permissions: [
+      // Dashboard e navigazione base
+      'VIEW_DASHBOARD',
+      'VIEW_NOTIFICATIONS',
+      // Clinica - lettura e gestione visite
+      'VIEW_PATIENTS', 'EDIT_PATIENTS',
+      'VIEW_APPOINTMENTS', 'EDIT_APPOINTMENTS',
+      'VIEW_MEDICAL_RECORDS', 'CREATE_MEDICAL_RECORDS', 'EDIT_MEDICAL_RECORDS',
+      // Visite e referti
+      'VIEW_VISITS', 'CREATE_VISITS', 'EDIT_VISITS',
+      'VIEW_REPORTS', 'CREATE_REPORTS',
+      // Documenti
+      'VIEW_DOCUMENTS', 'CREATE_DOCUMENTS',
+      // Calendario e disponibilità
+      'VIEW_CALENDAR', 'VIEW_AVAILABILITY'
     ]
   },
   'HR_MANAGER': {
-    level: 4,
+    level: 5,
     parent: 'TRAINING_ADMIN',
     name: 'Manager HR',
     description: 'Gestione risorse umane',
@@ -113,7 +154,7 @@ export const ROLE_HIERARCHY = {
     ]
   },
   'MANAGER': {
-    level: 4,
+    level: 5,
     parent: 'TRAINING_ADMIN',
     name: 'Manager',
     description: 'Gestione operativa e coordinamento',
@@ -127,7 +168,7 @@ export const ROLE_HIERARCHY = {
     ]
   },
   'DEPARTMENT_HEAD': {
-    level: 4,
+    level: 5,
     parent: 'MANAGER',
     name: 'Responsabile Dipartimento',
     description: 'Gestione dipartimento specifico',
@@ -140,7 +181,7 @@ export const ROLE_HIERARCHY = {
     ]
   },
   'TRAINER_COORDINATOR': {
-    level: 5,
+    level: 6,
     parent: 'HR_MANAGER',
     name: 'Coordinatore Formatori',
     description: 'Coordinamento attività formative',
@@ -152,7 +193,7 @@ export const ROLE_HIERARCHY = {
     ]
   },
   'COMPANY_MANAGER': {
-    level: 5,
+    level: 6,
     parent: 'HR_MANAGER',
     name: 'Responsabile Aziendale',
     description: 'Responsabilità aziendali specifiche',
@@ -165,7 +206,7 @@ export const ROLE_HIERARCHY = {
     ]
   },
   'SENIOR_TRAINER': {
-    level: 6,
+    level: 7,
     parent: 'TRAINER_COORDINATOR',
     name: 'Formatore Senior',
     description: 'Formazione avanzata e mentoring',
@@ -176,7 +217,7 @@ export const ROLE_HIERARCHY = {
     ]
   },
   'TRAINER': {
-    level: 7,
+    level: 8,
     parent: 'SENIOR_TRAINER',
     name: 'Formatore',
     description: 'Gestione corsi e formazione',
@@ -187,7 +228,7 @@ export const ROLE_HIERARCHY = {
     ]
   },
   'EXTERNAL_TRAINER': {
-    level: 7,
+    level: 8,
     parent: 'SENIOR_TRAINER',
     name: 'Formatore Esterno',
     description: 'Formazione specialistica esterna',
@@ -197,7 +238,7 @@ export const ROLE_HIERARCHY = {
     ]
   },
   'SUPERVISOR': {
-    level: 5,
+    level: 6,
     parent: 'DEPARTMENT_HEAD',
     name: 'Supervisore',
     description: 'Supervisione operativa',
@@ -208,7 +249,7 @@ export const ROLE_HIERARCHY = {
     ]
   },
   'COORDINATOR': {
-    level: 6,
+    level: 7,
     parent: 'SUPERVISOR',
     name: 'Coordinatore',
     description: 'Coordinamento attività',
@@ -219,7 +260,7 @@ export const ROLE_HIERARCHY = {
     ]
   },
   'OPERATOR': {
-    level: 7,
+    level: 8,
     parent: 'COORDINATOR',
     name: 'Operatore',
     description: 'Operazioni base',
@@ -229,7 +270,7 @@ export const ROLE_HIERARCHY = {
     ]
   },
   'EMPLOYEE': {
-    level: 8,
+    level: 9,
     parent: 'OPERATOR',
     name: 'Dipendente',
     description: 'Accesso base alle funzionalità',
@@ -239,7 +280,7 @@ export const ROLE_HIERARCHY = {
     ]
   },
   'VIEWER': {
-    level: 9,
+    level: 10,
     parent: 'EMPLOYEE',
     name: 'Visualizzatore',
     description: 'Solo visualizzazione',
@@ -249,7 +290,7 @@ export const ROLE_HIERARCHY = {
     ]
   },
   'GUEST': {
-    level: 10,
+    level: 11,
     parent: 'VIEWER',
     name: 'Ospite',
     description: 'Accesso limitato',
@@ -259,7 +300,7 @@ export const ROLE_HIERARCHY = {
     ]
   },
   'CONSULTANT': {
-    level: 7,
+    level: 8,
     parent: 'COORDINATOR',
     name: 'Consulente',
     description: 'Consulenza specialistica',
@@ -269,7 +310,7 @@ export const ROLE_HIERARCHY = {
     ]
   },
   'AUDITOR': {
-    level: 5,
+    level: 6,
     parent: 'MANAGER',
     name: 'Auditor',
     description: 'Controllo e audit',
@@ -306,7 +347,7 @@ export function getDefaultParentRole(roleType) {
 export function getAssignableRoles(roleType) {
   const roleInfo = ROLE_HIERARCHY[roleType];
   if (!roleInfo) return [];
-  
+
   return roleInfo.canAssignTo.map(targetRole => ({
     type: targetRole,
     ...ROLE_HIERARCHY[targetRole]
@@ -359,5 +400,5 @@ export function getRolesByLevel(level) {
     .map(([roleType, roleData]) => ({ type: roleType, ...roleData }));
 }
 
-// Timestamp per forzare il ricaricamento del modulo: 2025-02-01T06:30:00.000Z
-export const MODULE_TIMESTAMP = '2025-02-01T06:30:00.000Z';
+// P69: Timestamp per forzare il ricaricamento del modulo
+export const MODULE_TIMESTAMP = '2026-02-05T12:00:00.000Z';

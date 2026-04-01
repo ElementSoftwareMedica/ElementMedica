@@ -29,6 +29,11 @@ export interface RegistroPresenze {
   markers?: Record<string, any>;
   generatedBy?: string;
   fileSize?: number;
+  // Firma formatore (P65)
+  firmaFormatore?: string | null;
+  firmaFormatoreAt?: string | null;
+  firmaFormatoreId?: string | null;
+  signedAt?: string | null;
   scheduledCourse?: {
     id: string;
     course: {
@@ -224,7 +229,6 @@ class RegistriPresenzeService {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Error downloading ZIP:', error);
       throw error;
     }
   }

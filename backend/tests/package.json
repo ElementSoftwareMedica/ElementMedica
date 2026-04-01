@@ -1,13 +1,12 @@
 {
-  "name": "proxy-server-tests",
+  "name": "backend-tests",
   "version": "1.0.0",
-  "description": "Test end-to-end per il proxy server ottimizzato",
+  "description": "Test end-to-end per API e Documents servers",
   "type": "module",
   "scripts": {
     "test": "mocha --timeout 10000 --recursive *.test.js",
     "test:watch": "mocha --timeout 10000 --recursive *.test.js --watch",
     "test:coverage": "nyc mocha --timeout 10000 --recursive *.test.js",
-    "test:proxy": "mocha --timeout 10000 proxy-server.test.js",
     "lint": "eslint *.js",
     "lint:fix": "eslint *.js --fix"
   },
@@ -22,12 +21,10 @@
     "@eslint/js": "^9.0.0"
   },
   "keywords": [
-    "proxy",
-    "server",
     "test",
     "e2e",
     "supertest"
   ],
-  "author": "Proxy Server Team",
+  "author": "ElementMedica",
   "license": "MIT"
 }

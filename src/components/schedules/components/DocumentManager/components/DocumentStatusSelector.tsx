@@ -28,19 +28,19 @@ export const DocumentStatusSelector: React.FC<DocumentStatusSelectorProps> = ({
       <div className="relative mt-1">
         <button
           type="button"
-          className="w-full p-2.5 border rounded-lg flex justify-between items-center bg-white hover:bg-gray-50 transition-colors"
+          className="w-full p-2.5 border dark:border-gray-600 rounded-lg flex justify-between items-center bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
           onClick={() => onShowMenuChange(!showMenu)}
         >
-          <span className="font-medium">{status}</span>
+          <span className="font-medium dark:text-gray-200">{status}</span>
           <span className="text-gray-400">▼</span>
         </button>
 
         {showMenu && (
-          <div className="absolute left-0 right-0 mt-1 border rounded-lg bg-white shadow-xl z-10">
+          <div className="absolute left-0 right-0 mt-1 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 shadow-xl z-10">
             {statusOptions.map(s => (
               <div
                 key={s}
-                className="p-2.5 hover:bg-blue-50 cursor-pointer first:rounded-t-lg last:rounded-b-lg transition-colors"
+                className="p-2.5 hover:bg-blue-50 dark:hover:bg-blue-900/30 cursor-pointer first:rounded-t-lg last:rounded-b-lg transition-colors dark:text-gray-200"
                 onClick={() => {
                   onStatusChange(s);
                   onShowMenuChange(false);

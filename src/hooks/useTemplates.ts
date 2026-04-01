@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiGet, apiDelete, apiPost, apiPut } from '../services/api';
-import { Template } from '../types/template';
+import { Template } from '../types/templates';
+import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 
 interface UseTemplatesReturn {
   templates: Template[];
@@ -19,16 +20,16 @@ export const useTemplates = (): UseTemplatesReturn => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const { confirmDelete } = useConfirmDialog();
 
   const fetchTemplates = async () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await apiGet<Template[]>('/template-links');
+      const data = await apiGet<Template[]>('/api/v1/templates');
       setTemplates(data || []);
     } catch (err) {
       setError('Errore nel recupero dei template');
-      console.error('Error fetching templates:', err);
     } finally {
       setLoading(false);
     }
@@ -38,38 +39,37 @@ export const useTemplates = (): UseTemplatesReturn => {
     try {
       setLoading(true);
       setError(null);
-      await apiPut(`/template-links/${id}`, { isDefault: true, type });
+      await apiPut(`/api/v1/templates/${id}`, { isDefault: true, type });
       setSuccess('Template impostato come predefinito');
-      
+
       // Resetta il messaggio di successo dopo 3 secondi
       setTimeout(() => setSuccess(null), 3000);
-      
+
       // Aggiorna la lista dei template
       await fetchTemplates();
     } catch (err) {
       setError('Errore nell\'impostare il template come predefinito');
-      console.error('Error setting template as default:', err);
     } finally {
       setLoading(false);
     }
   };
 
   const removeTemplate = async (id: string) => {
-    if (window.confirm('Sei sicuro di voler eliminare questo template?')) {
+    const confirmed = await confirmDelete('template');
+    if (confirmed) {
       try {
         setLoading(true);
         setError(null);
-        await apiDelete(`/template-links/${id}`);
+        await apiDelete(`/api/v1/templates/${id}`);
         setSuccess('Template eliminato con successo');
-        
+
         // Resetta il messaggio di successo dopo 3 secondi
         setTimeout(() => setSuccess(null), 3000);
-        
+
         // Aggiorna la lista dei template
         await fetchTemplates();
       } catch (err) {
         setError('Errore nell\'eliminazione del template');
-        console.error('Error deleting template:', err);
       } finally {
         setLoading(false);
       }
@@ -80,17 +80,16 @@ export const useTemplates = (): UseTemplatesReturn => {
     try {
       setLoading(true);
       setError(null);
-      await apiPost('/template-links', templateData);
+      await apiPost('/api/v1/templates', templateData);
       setSuccess('Nuovo template creato con successo');
-      
+
       // Resetta il messaggio di successo dopo 3 secondi
       setTimeout(() => setSuccess(null), 3000);
-      
+
       // Aggiorna la lista dei template
       await fetchTemplates();
     } catch (err) {
       setError('Errore nel salvataggio del template');
-      console.error('Errore nel salvataggio del template:', err);
     } finally {
       setLoading(false);
     }
@@ -100,17 +99,16 @@ export const useTemplates = (): UseTemplatesReturn => {
     try {
       setLoading(true);
       setError(null);
-      await apiPut(`/template-links/${id}`, templateData);
+      await apiPut(`/api/v1/templates/${id}`, templateData);
       setSuccess('Template aggiornato con successo');
-      
+
       // Resetta il messaggio di successo dopo 3 secondi
       setTimeout(() => setSuccess(null), 3000);
-      
+
       // Aggiorna la lista dei template
       await fetchTemplates();
     } catch (err) {
       setError('Errore nell\'aggiornamento del template');
-      console.error('Errore nell\'aggiornamento del template:', err);
     } finally {
       setLoading(false);
     }

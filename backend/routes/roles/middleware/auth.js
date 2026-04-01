@@ -5,13 +5,13 @@
  * e controllo dei permessi nel sistema di gestione dei ruoli.
  */
 
-import { PrismaClient } from '@prisma/client';
+import prisma from '../../../config/prisma-optimization.js';
 import { authenticate, authMiddleware as baseAuthMiddleware, optionalAuth, requireRoles } from '../../../middleware/auth.js';
 import { tenantMiddleware } from '../../../middleware/tenant.js';
 import enhancedRoleService from '../../../services/enhancedRoleService.js';
 import roleHierarchyService from '../../../services/roleHierarchyService.js';
+import logger from '../../../utils/logger.js';
 
-const prisma = new PrismaClient();
 
 /**
  * Middleware di autenticazione base
@@ -49,13 +49,13 @@ export async function requireRoleManagement(req, res, next) {
     if (!userId) {
       return res.status(401).json({
         success: false,
-        error: 'Authentication required'
+        error: 'Autenticazione richiesta'
       });
     }
 
     // CORREZIONE: Se l'utente ha globalRole SUPER_ADMIN o ADMIN, consenti l'accesso immediatamente
     if (globalRole === 'SUPER_ADMIN' || globalRole === 'ADMIN') {
-      console.log('[DEBUG] Role management access granted via globalRole:', globalRole);
+      logger.debug({ globalRole, userId }, 'Role management access granted via globalRole');
       return next();
     }
 
@@ -69,16 +69,16 @@ export async function requireRoleManagement(req, res, next) {
     if (!hasPermission) {
       return res.status(403).json({
         success: false,
-        error: 'Insufficient permissions for role management'
+        error: 'Permessi insufficienti per la gestione dei ruoli'
       });
     }
 
     next();
   } catch (error) {
-    console.error('[AUTH_MIDDLEWARE] Error checking role management permission:', error);
+    logger.error({ error: 'Operazione non riuscita', userId: req.person?.id }, 'Errore verifica permessi gestione ruoli');
     res.status(500).json({
       success: false,
-      error: 'Failed to verify permissions'
+      error: 'Errore nella verifica dei permessi'
     });
   }
 }
@@ -98,7 +98,7 @@ export async function requireUserAccess(req, res, next) {
     if (!currentUserId) {
       return res.status(401).json({
         success: false,
-        error: 'Authentication required'
+        error: 'Autenticazione richiesta'
       });
     }
 
@@ -117,16 +117,16 @@ export async function requireUserAccess(req, res, next) {
     if (!hasPermission) {
       return res.status(403).json({
         success: false,
-        error: 'Access denied'
+        error: 'Accesso negato'
       });
     }
 
     next();
   } catch (error) {
-    console.error('[AUTH_MIDDLEWARE] Error checking user access:', error);
+    logger.error({ error: 'Operazione non riuscita', userId: req.person?.id }, 'Errore verifica permessi accesso utente');
     res.status(500).json({
       success: false,
-      error: 'Failed to verify access permissions'
+      error: 'Errore nella verifica dei permessi di accesso'
     });
   }
 }
@@ -144,19 +144,18 @@ export async function requireHierarchyManagement(req, res, next) {
     const tenantId = req.person?.tenantId || req.tenant?.id;
     const globalRole = req.person?.globalRole;
 
-    console.log('[DEBUG] requireHierarchyManagement - userId:', userId, 'tenantId:', tenantId, 'globalRole:', globalRole);
-    console.log('[DEBUG] req.person.tenantId:', req.person?.tenantId, 'req.tenant.id:', req.tenant?.id);
+    logger.debug({ userId, tenantId, globalRole }, 'requireHierarchyManagement check');
 
     if (!userId) {
       return res.status(401).json({
         success: false,
-        error: 'Authentication required'
+        error: 'Autenticazione richiesta'
       });
     }
 
     // CORREZIONE: Se l'utente ha globalRole SUPER_ADMIN o ADMIN, consenti l'accesso immediatamente
     if (globalRole === 'SUPER_ADMIN' || globalRole === 'ADMIN') {
-      console.log('[DEBUG] Access granted via globalRole:', globalRole);
+      logger.debug({ globalRole, userId }, 'Hierarchy management access granted via globalRole');
       req.userRoles = [globalRole];
       req.userHighestRole = globalRole;
       req.userLevel = globalRole === 'SUPER_ADMIN' ? 0 : 1;
@@ -172,24 +171,24 @@ export async function requireHierarchyManagement(req, res, next) {
       }
     });
 
-    console.log('[DEBUG] userRoles found:', userRoles.length, userRoles.map(r => r.roleType));
+    logger.debug({ userRolesCount: userRoles.length }, 'userRoles found');
 
     const userRoleTypes = userRoles.map(role => role.roleType);
     const highestRole = roleHierarchyService.getHighestRole(userRoleTypes);
 
-    console.log('[DEBUG] highestRole:', highestRole);
+    logger.debug({ highestRole }, 'highestRole resolved');
 
     // Verifica se l'utente ha un ruolo sufficientemente alto per gestire la gerarchia
     const userLevel = roleHierarchyService.getRoleLevel(highestRole);
 
-    console.log('[DEBUG] userLevel:', userLevel, 'check:', userLevel <= 1);
+    logger.debug({ userLevel, check: userLevel <= 1 }, 'userLevel check');
 
     // CORREZIONE: Solo SUPER_ADMIN (livello 0) e ADMIN (livello 1) possono gestire la gerarchia
     // Livelli più bassi (0, 1) hanno più permessi, livelli più alti (2, 3, 4...) hanno meno permessi
     if (userLevel > 1) {
       return res.status(403).json({
         success: false,
-        error: 'Insufficient permissions for hierarchy management'
+        error: 'Permessi insufficienti per la gestione della gerarchia'
       });
     }
 
@@ -200,10 +199,10 @@ export async function requireHierarchyManagement(req, res, next) {
 
     next();
   } catch (error) {
-    console.error('[AUTH_MIDDLEWARE] Error checking hierarchy management permission:', error);
+    logger.error({ error: 'Operazione non riuscita', userId: req.person?.id }, 'Errore verifica permessi gerarchia');
     res.status(500).json({
       success: false,
-      error: 'Failed to verify hierarchy permissions'
+      error: 'Errore nella verifica dei permessi della gerarchia'
     });
   }
 }
@@ -224,13 +223,13 @@ export async function requireRoleAssignmentPermission(req, res, next) {
     if (!userId || !targetRoleType) {
       return res.status(400).json({
         success: false,
-        error: 'User ID and role type are required'
+        error: 'ID utente e tipo ruolo obbligatori'
       });
     }
 
     // CORREZIONE: Se l'utente ha globalRole SUPER_ADMIN o ADMIN, può assegnare qualsiasi ruolo
     if (globalRole === 'SUPER_ADMIN' || globalRole === 'ADMIN') {
-      console.log('[DEBUG] Role assignment access granted via globalRole:', globalRole);
+      logger.debug({ globalRole, userId }, 'Role assignment access granted via globalRole');
       req.userRoles = [globalRole];
       req.userHighestRole = globalRole;
       return next();
@@ -254,7 +253,7 @@ export async function requireRoleAssignmentPermission(req, res, next) {
     if (!canAssign) {
       return res.status(403).json({
         success: false,
-        error: `You don't have permission to assign role ${targetRoleType}. Your highest role: ${currentUserHighestRole}`
+        error: 'Permessi insufficienti per assegnare questo ruolo'
       });
     }
 
@@ -264,10 +263,10 @@ export async function requireRoleAssignmentPermission(req, res, next) {
 
     next();
   } catch (error) {
-    console.error('[AUTH_MIDDLEWARE] Error checking role assignment permission:', error);
+    logger.error({ error: 'Operazione non riuscita', userId: req.person?.id }, 'Errore verifica permessi assegnazione ruolo');
     res.status(500).json({
       success: false,
-      error: 'Failed to verify role assignment permissions'
+      error: 'Errore nella verifica dei permessi di assegnazione ruolo'
     });
   }
 }
@@ -286,7 +285,7 @@ export async function requireAnalyticsAccess(req, res, next) {
     if (!userId) {
       return res.status(401).json({
         success: false,
-        error: 'Authentication required'
+        error: 'Autenticazione richiesta'
       });
     }
 
@@ -299,16 +298,16 @@ export async function requireAnalyticsAccess(req, res, next) {
     if (!hasPermission) {
       return res.status(403).json({
         success: false,
-        error: 'Access denied to analytics'
+        error: 'Accesso negato alle statistiche'
       });
     }
 
     next();
   } catch (error) {
-    console.error('[AUTH_MIDDLEWARE] Error checking analytics access:', error);
+    logger.error({ error: 'Operazione non riuscita', userId: req.person?.id }, 'Errore verifica permessi statistiche');
     res.status(500).json({
       success: false,
-      error: 'Failed to verify analytics permissions'
+      error: 'Errore nella verifica dei permessi analitici'
     });
   }
 }
@@ -331,7 +330,6 @@ export function authAndTenant(req, res, next) {
       }).then(tenant => {
         if (tenant && tenant.isActive && !tenant.deletedAt) {
           req.tenant = tenant;
-          req.tenantId = tenant.id;
           next();
         } else {
           // Fallback al tenantAuth normale
@@ -362,7 +360,7 @@ export async function requireCustomRoleManagement(req, res, next) {
     if (!userId) {
       return res.status(401).json({
         success: false,
-        error: 'Authentication required'
+        error: 'Autenticazione richiesta'
       });
     }
 
@@ -383,13 +381,13 @@ export async function requireCustomRoleManagement(req, res, next) {
 
     return res.status(403).json({
       success: false,
-      error: 'Insufficient permissions for custom role management'
+      error: 'Permessi insufficienti per la gestione dei ruoli personalizzati'
     });
   } catch (error) {
-    console.error('[AUTH_MIDDLEWARE] Error checking custom role management permission:', error);
+    logger.error({ error: 'Operazione non riuscita', userId: req.person?.id }, 'Errore verifica permessi ruoli personalizzati');
     res.status(500).json({
       success: false,
-      error: 'Failed to verify custom role permissions'
+      error: 'Errore nella verifica dei permessi del ruolo personalizzato'
     });
   }
 }

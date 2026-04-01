@@ -143,6 +143,24 @@ _{{clinicName}}_`
         whatsapp: `{{message}}
 
 _{{clinicName}}_`
+    },
+
+    // P71: Idoneità password delivery (sent via WhatsApp/SMS separately from ZIP email)
+    IDONEITA_PASSWORD: {
+        sms: `{{clinicName}}: password doc idoneità {{recipientName}}: {{password}} ({{date}}). Conservare in luogo sicuro.`,
+        whatsapp: `🔐 *Password Documento Idoneità*
+
+Gentile {{recipientName}},
+
+la password per aprire l'archivio allegato alla email è:
+
+*{{password}}*
+
+📅 {{date}}
+🏥 {{clinicName}}
+
+_Conservi questa password in luogo sicuro e non condividerla._
+_Ai sensi del D.Lgs 81/08 Art. 41 c.7._`
     }
 };
 
@@ -299,27 +317,28 @@ export class SMSService {
     /**
      * Send notification via preferred channel
      * Checks patient preferences and opt-out status
+     * P48/P63: usa PersonTenantProfile.phone e PersonTenantProfile.preferences
      */
     static async sendNotification({ patientId, template, data, tenantId, forceChannel = null }) {
         try {
-            // Get patient with preferences
-            const patient = await prisma.person.findFirst({
+            // P48: leggi phone e preferences da PersonTenantProfile
+            const profile = await prisma.personTenantProfile.findFirst({
                 where: {
-                    id: patientId,
+                    personId: patientId,
                     tenantId,
                     deletedAt: null
                 },
                 select: {
-                    cellulare: true,
-                    preferenzeContatto: true
+                    phone: true,
+                    preferences: true
                 }
             });
 
-            if (!patient || !patient.cellulare) {
+            if (!profile || !profile.phone) {
                 throw new Error('Patient has no phone number');
             }
 
-            const prefs = patient.preferenzeContatto || {};
+            const prefs = (profile.preferences && typeof profile.preferences === 'object') ? profile.preferences : {};
 
             // Check opt-out
             if (prefs.smsOptOut && prefs.whatsappOptOut && !forceChannel) {
@@ -347,14 +366,14 @@ export class SMSService {
             // Send via selected channel
             if (channel === 'whatsapp') {
                 return await this.sendWhatsApp({
-                    to: patient.cellulare,
+                    to: profile.phone,
                     template,
                     data,
                     tenantId
                 });
             } else {
                 return await this.sendSMS({
-                    to: patient.cellulare,
+                    to: profile.phone,
                     template,
                     data,
                     tenantId
@@ -378,7 +397,7 @@ export class SMSService {
      */
     static async sendAppointmentConfirmation(appointment, patient, clinic, tenantId) {
         const data = {
-            patientName: `${patient.nome} ${patient.cognome}`,
+            patientName: `${patient.firstName} ${patient.lastName}`,
             clinicName: clinic.name || clinic.ragioneSociale,
             clinicAddress: clinic.address || clinic.indirizzo,
             clinicPhone: clinic.phone || clinic.telefono,
@@ -392,7 +411,7 @@ export class SMSService {
                 minute: '2-digit'
             }),
             serviceName: appointment.prestazione?.nome || 'Visita',
-            doctorName: appointment.medico ? `Dr. ${appointment.medico.cognome}` : ''
+            doctorName: appointment.medico ? `${appointment.medico.gender === 'FEMALE' ? 'Dott.ssa' : 'Dott.'} ${appointment.medico.lastName}` : ''
         };
 
         return this.sendNotification({
@@ -415,7 +434,7 @@ export class SMSService {
         };
 
         const data = {
-            patientName: `${patient.nome} ${patient.cognome}`,
+            patientName: `${patient.firstName} ${patient.lastName}`,
             clinicName: clinic.name || clinic.ragioneSociale,
             clinicAddress: clinic.address || clinic.indirizzo,
             clinicPhone: clinic.phone || clinic.telefono,
@@ -429,7 +448,7 @@ export class SMSService {
                 minute: '2-digit'
             }),
             serviceName: appointment.prestazione?.nome || 'Visita',
-            doctorName: appointment.medico ? `Dr. ${appointment.medico.cognome}` : '',
+            doctorName: appointment.medico ? `${appointment.medico.gender === 'FEMALE' ? 'Dott.ssa' : 'Dott.'} ${appointment.medico.lastName}` : '',
             reminderText: reminderTexts[reminderType] || reminderType
         };
 
@@ -443,25 +462,28 @@ export class SMSService {
 
     /**
      * Update patient opt-out preferences
+     * P48/P63: usa PersonTenantProfile.preferences (non Person.preferenzeContatto che non esiste)
      */
     static async updateOptOut(patientId, tenantId, { smsOptOut, whatsappOptOut }) {
         try {
-            const patient = await prisma.person.findFirst({
+            // P48: leggi preferences da PersonTenantProfile
+            const profile = await prisma.personTenantProfile.findFirst({
                 where: {
-                    id: patientId,
+                    personId: patientId,
                     tenantId,
                     deletedAt: null
                 },
                 select: {
-                    preferenzeContatto: true
+                    id: true,
+                    preferences: true
                 }
             });
 
-            if (!patient) {
+            if (!profile) {
                 throw new Error('Patient not found');
             }
 
-            const currentPrefs = patient.preferenzeContatto || {};
+            const currentPrefs = (profile.preferences && typeof profile.preferences === 'object') ? profile.preferences : {};
             const newPrefs = {
                 ...currentPrefs,
                 ...(smsOptOut !== undefined && { smsOptOut }),
@@ -469,10 +491,11 @@ export class SMSService {
                 optOutUpdatedAt: new Date().toISOString()
             };
 
-            await prisma.person.update({
-                where: { id: patientId },
+            // P48: aggiorna preferences su PersonTenantProfile
+            await prisma.personTenantProfile.update({
+                where: { id: profile.id },
                 data: {
-                    preferenzeContatto: newPrefs
+                    preferences: newPrefs
                 }
             });
 
@@ -516,13 +539,13 @@ export class SMSService {
 
         const sampleData = {
             patientName: 'Mario Rossi',
-            clinicName: 'Studio Medico',
-            clinicAddress: 'Via Roma 123',
-            clinicPhone: '02 1234567',
+            clinicName: 'Element srl',
+            clinicAddress: 'Via Bracciano 34, Selvazzano Dentro',
+            clinicPhone: '+39 351 318 1574',
             appointmentDate: 'Lunedì 15 Gennaio',
             appointmentTime: '10:30',
             serviceName: 'Visita Specialistica',
-            doctorName: 'Dr. Bianchi',
+            doctorName: 'Dott. Bianchi',
             reminderText: 'domani',
             visitDate: '10/01/2025',
             invoiceNumber: '2025/001',

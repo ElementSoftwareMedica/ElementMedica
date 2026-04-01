@@ -135,6 +135,11 @@ export class AmbulatorioService {
 
     /**
      * Get all ambulatori for tenant
+     * @param {string} tenantId - Primary tenant ID (fallback)
+     * @param {Object} options - Query options
+     * @param {string} options.tenantIds - Comma-separated list of tenant IDs (multi-tenant support)
+     * @param {boolean} options.allTenants - If true and accessibleTenantIds provided, show all
+     * @param {string[]} options.accessibleTenantIds - Array of tenant IDs the user can access
      */
     static async getAll(tenantId, options = {}) {
         try {
@@ -143,19 +148,49 @@ export class AmbulatorioService {
                 limit = 20,
                 search = '',
                 poliambulatorioId = null,
+                sedeId = null,
                 specializzazione = null,
                 filterByActive = true,
                 orderBy = 'nome',
-                orderDir = 'asc'
+                orderDir = 'asc',
+                tenantIds = null,
+                allTenants = false,
+                accessibleTenantIds = []
             } = options;
 
             const skip = (page - 1) * limit;
 
+            // Determine tenant filter based on user's access (multi-tenant support)
+            let tenantFilter = {};
+
+            if (tenantIds) {
+                // Filter by specific tenant IDs (must be in user's accessible tenants)
+                const requestedIds = Array.isArray(tenantIds)
+                    ? tenantIds
+                    : (typeof tenantIds === 'string' ? tenantIds.split(',').map(id => id.trim()) : []);
+                const allowedIds = accessibleTenantIds.length > 0
+                    ? requestedIds.filter(id => accessibleTenantIds.includes(id))
+                    : requestedIds;
+
+                if (allowedIds.length > 0) {
+                    tenantFilter = allowedIds.length === 1
+                        ? { tenantId: allowedIds[0] }
+                        : { tenantId: { in: allowedIds } };
+                } else {
+                    tenantFilter = tenantId ? { tenantId } : {};
+                }
+            } else if (allTenants && accessibleTenantIds.length > 0) {
+                tenantFilter = { tenantId: { in: accessibleTenantIds } };
+            } else if (tenantId) {
+                tenantFilter = { tenantId };
+            }
+
             const where = {
-                tenantId,
                 deletedAt: null,
+                ...tenantFilter,
                 ...(filterByActive && { stato: 'ATTIVO' }),
                 ...(poliambulatorioId && { poliambulatorioId }),
+                ...(sedeId && { sedeId }),
                 ...(specializzazione && { specializzazione }),
                 ...(search && {
                     OR: [
@@ -414,7 +449,7 @@ export class AmbulatorioService {
     static async removePrestazione(ambulatorioId, prestazioneId, tenantId) {
         try {
             const assignment = await prisma.ambulatorioPrestazione.findFirst({
-                where: { ambulatorioId, prestazioneId }
+                where: { ambulatorioId, prestazioneId, deletedAt: null }
             });
 
             if (!assignment) {

@@ -87,7 +87,7 @@ async function createRemainingMedicaPages() {
         `,
         status: 'published',
         isPublished: true,
-        seoTitle: 'Chi Siamo - Element Medica Poliambulatorio Milano',
+        seoTitle: 'Chi Siamo - Element Medica Poliambulatorio Padova',
         seoDescription: 'Scopri Element Medica: poliambulatorio specializzato in medicina del lavoro con team qualificato, tecnologie avanzate e servizi completi.',
         tenantId: tenantMedica.id
       }
@@ -210,8 +210,8 @@ async function createRemainingMedicaPages() {
         `,
         status: 'published',
         isPublished: true,
-        seoTitle: 'Visite Specialistiche Milano - Element Medica',
-        seoDescription: 'Cardiologia, pneumologia, oculistica, ortopedia, neurologia, dermatologia. Prenota la tua visita specialistica a Milano.',
+        seoTitle: 'Visite Specialistiche Padova - Element Medica',
+        seoDescription: 'Cardiologia, pneumologia, oculistica, ortopedia, neurologia, dermatologia. Prenota la tua visita specialistica a Padova.',
         tenantId: tenantMedica.id
       }
     });
@@ -309,8 +309,8 @@ async function createRemainingMedicaPages() {
         `,
         status: 'published',
         isPublished: true,
-        seoTitle: 'Diagnostica Strumentale Milano - Element Medica',
-        seoDescription: 'ECG, spirometria, audiometria, esami di laboratorio. Diagnostica strumentale con tecnologie avanzate a Milano.',
+        seoTitle: 'Diagnostica Strumentale Padova - Element Medica',
+        seoDescription: 'ECG, spirometria, audiometria, esami di laboratorio. Diagnostica strumentale con tecnologie avanzate a Padova.',
         tenantId: tenantMedica.id
       }
     });
@@ -346,8 +346,8 @@ async function createRemainingMedicaPages() {
               <div class="bg-white p-8 rounded-lg shadow-lg">
                 <h3 class="text-2xl font-bold text-cyan-900 mb-4">📞 Telefono</h3>
                 <p class="text-gray-700 mb-4">Chiamaci per prenotare immediatamente</p>
-                <a href="tel:+390123999888" class="text-2xl font-bold text-cyan-600 hover:text-cyan-700">
-                  +39 0123 999 888
+                <a href="tel:+393513181574" class="text-2xl font-bold text-cyan-600 hover:text-cyan-700">
+                  +39 351 318 1574
                 </a>
                 <p class="text-sm text-gray-600 mt-4">Lun-Ven: 8:00-18:00 | Sab: 8:00-13:00</p>
               </div>
@@ -355,8 +355,8 @@ async function createRemainingMedicaPages() {
               <div class="bg-white p-8 rounded-lg shadow-lg">
                 <h3 class="text-2xl font-bold text-cyan-900 mb-4">✉️ Email</h3>
                 <p class="text-gray-700 mb-4">Scrivici per richiedere una prenotazione</p>
-                <a href="mailto:info@elementmedica.it" class="text-2xl font-bold text-cyan-600 hover:text-cyan-700 break-all">
-                  info@elementmedica.it
+                <a href="mailto:info@elementmedica.com" class="text-2xl font-bold text-cyan-600 hover:text-cyan-700 break-all">
+                  info@elementmedica.com
                 </a>
                 <p class="text-sm text-gray-600 mt-4">Risposta entro 24 ore lavorative</p>
               </div>
@@ -365,14 +365,14 @@ async function createRemainingMedicaPages() {
             <div class="bg-cyan-900 text-white p-8 rounded-lg mt-12">
               <h3 class="text-2xl font-bold mb-4">🏥 Vieni di Persona</h3>
               <p class="mb-4">Puoi anche venire direttamente presso il nostro poliambulatorio per prenotare.</p>
-              <p class="text-cyan-200">Via della Salute 10, 20100 Milano (MI)</p>
+              <p class="text-cyan-200">Via Bracciano 34, 35030 Selvazzano Dentro (PD)</p>
             </div>
           </div>
         `,
         status: 'published',
         isPublished: true,
-        seoTitle: 'Prenota Visita Online - Element Medica Milano',
-        seoDescription: 'Prenota la tua visita specialistica o esame diagnostico a Milano. Contattaci per fissare un appuntamento.',
+        seoTitle: 'Prenota Visita Online - Element Medica Padova',
+        seoDescription: 'Prenota la tua visita specialistica o esame diagnostico a Padova. Contattaci per fissare un appuntamento.',
         tenantId: tenantMedica.id
       }
     });

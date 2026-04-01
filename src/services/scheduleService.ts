@@ -46,7 +46,7 @@ const scheduleService = {
       throw error;
     }
   },
-  
+
   /**
    * Get schedule by ID
    */
@@ -59,7 +59,7 @@ const scheduleService = {
       throw error;
     }
   },
-  
+
   /**
    * Create a new schedule
    */
@@ -72,7 +72,7 @@ const scheduleService = {
       throw error;
     }
   },
-  
+
   /**
    * Update an existing schedule
    */
@@ -85,7 +85,7 @@ const scheduleService = {
       throw error;
     }
   },
-  
+
   /**
    * Delete a schedule
    */
@@ -98,7 +98,7 @@ const scheduleService = {
       throw error;
     }
   },
-  
+
   /**
    * Get employees by company IDs
    */
@@ -106,22 +106,20 @@ const scheduleService = {
     try {
       // Get all employees and filter client-side
       // This is more reliable than using a potentially missing endpoint
-      console.log(`Getting all employees and filtering for companies: ${companyIds.join(', ')}`);
       const data = await apiGet<Employee[]>('/api/v1/employees');
-      
+
       if (!data || !Array.isArray(data)) {
         console.warn('Invalid response from employees endpoint:', data);
         return [];
       }
-      
+
       // Filter employees by company ID
       const filteredEmployees = data.filter(emp => {
         // Convert IDs to string for comparison
         const employeeCompanyId = String(emp.companyId || emp.company_id || (emp.company && emp.company.id) || '');
         return companyIds.some(id => String(id) === employeeCompanyId);
       });
-      
-      console.log(`Found ${filteredEmployees.length} employees for the selected companies`);
+
       return filteredEmployees;
     } catch (error) {
       console.error('Error fetching employees:', error);

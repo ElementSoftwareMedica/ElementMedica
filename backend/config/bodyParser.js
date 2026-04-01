@@ -62,7 +62,7 @@ const environmentConfig = {
  */
 export const createBodyParsers = (options = {}, environment = process.env.NODE_ENV || 'development') => {
   const envConfig = environmentConfig[environment] || environmentConfig.development;
-  
+
   // Merge configurations: default -> environment -> custom options
   const config = {
     json: { ...defaultConfig.json, ...envConfig.json, ...options.json },
@@ -70,7 +70,7 @@ export const createBodyParsers = (options = {}, environment = process.env.NODE_E
     text: { ...defaultConfig.text, ...envConfig.text, ...options.text },
     raw: { ...defaultConfig.raw, ...envConfig.raw, ...options.raw }
   };
-  
+
   return {
     json: bodyParser.json(config.json),
     urlencoded: bodyParser.urlencoded(config.urlencoded),
@@ -86,7 +86,7 @@ export const createBodyParsers = (options = {}, environment = process.env.NODE_E
  */
 export const createStandardParsers = (customOptions = {}) => {
   const parsers = createBodyParsers(customOptions);
-  
+
   return [
     parsers.json,
     parsers.urlencoded
@@ -104,9 +104,9 @@ export const createUploadParsers = (customOptions = {}) => {
     urlencoded: { limit: '100mb' },
     ...customOptions
   };
-  
+
   const parsers = createBodyParsers(uploadConfig);
-  
+
   return [
     parsers.json,
     parsers.urlencoded,
@@ -125,9 +125,9 @@ export const createMinimalParsers = (customOptions = {}) => {
     urlencoded: { limit: '1mb' },
     ...customOptions
   };
-  
+
   const parsers = createBodyParsers(minimalConfig);
-  
+
   return [
     parsers.json,
     parsers.urlencoded
@@ -144,25 +144,25 @@ export const createMinimalParsers = (customOptions = {}) => {
 export const bodyParserErrorHandler = (err, req, res, next) => {
   if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
     return res.status(400).json({
-      error: 'Invalid JSON syntax',
-      message: 'Request body contains invalid JSON'
+      error: 'Sintassi JSON non valida',
+      message: 'Il corpo della richiesta contiene JSON non valido'
     });
   }
-  
+
   if (err.type === 'entity.too.large') {
     return res.status(413).json({
-      error: 'Payload too large',
-      message: 'Request body exceeds size limit'
+      error: 'Payload troppo grande',
+      message: 'Il corpo della richiesta supera il limite di dimensione'
     });
   }
-  
+
   if (err.type === 'entity.parse.failed') {
     return res.status(400).json({
-      error: 'Parse error',
-      message: 'Failed to parse request body'
+      error: 'Errore di parsing',
+      message: 'Impossibile analizzare il corpo della richiesta'
     });
   }
-  
+
   next(err);
 };
 
@@ -173,16 +173,16 @@ export const bodyParserErrorHandler = (err, req, res, next) => {
  */
 export const validateBodyParserConfig = (config) => {
   const validTypes = ['json', 'urlencoded', 'text', 'raw'];
-  
+
   return Object.keys(config).every(type => {
     if (!validTypes.includes(type)) return false;
-    
+
     const typeConfig = config[type];
     if (typeof typeConfig !== 'object') return false;
-    
+
     // Validate limit format
     if (typeConfig.limit && typeof typeConfig.limit !== 'string') return false;
-    
+
     return true;
   });
 };

@@ -16,7 +16,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '../../../design-system/atoms/Button';
 import {
     Plus,
@@ -46,8 +46,14 @@ import {
 
 const FormTemplateCreate: React.FC = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const { showToast } = useToast();
     const [loading, setLoading] = useState(false);
+
+    // Detect context: CMS management or Test section
+    const contextBasePath = location.pathname.includes('/management/cms')
+        ? '/management/cms/forms'
+        : '/test';
     const [draggedField, setDraggedField] = useState<string | null>(null);
     const [dragOverField, setDragOverField] = useState<string | null>(null);
     const [dropPosition, setDropPosition] = useState<'before' | 'after' | null>(null);
@@ -64,7 +70,7 @@ const FormTemplateCreate: React.FC = () => {
             setLoadingCourses(true);
             getCourses()
                 .then(courses => setAvailableCourses(courses))
-                .catch(err => console.error('Errore caricamento corsi:', err))
+                .catch(() => showToast({ message: 'Impossibile caricare i corsi disponibili', type: 'error' }))
                 .finally(() => setLoadingCourses(false));
         }
     }, [formData.testAssignment?.enabled, availableCourses.length]);
@@ -397,7 +403,6 @@ const FormTemplateCreate: React.FC = () => {
                         await createCourseTestAssignment(assignment as any);
                     }
                 } catch (testError) {
-                    console.error('Error creating test assignment:', testError);
                     showToast({
                         message: 'Template creato, ma errore nell\'associazione test. Puoi configurarla manualmente.',
                         type: 'warning'
@@ -406,11 +411,9 @@ const FormTemplateCreate: React.FC = () => {
             }
 
             showToast({ message: 'Template creato con successo!', type: 'success' });
-            navigate('/forms');
-        } catch (error: any) {
-            console.error('Errore creazione:', error);
-            const errorMsg = error.response?.data?.message || 'Errore nella creazione';
-            showToast({ message: errorMsg, type: 'error' });
+            navigate(contextBasePath);
+        } catch (error: unknown) {
+            showToast({ message: 'Errore nella creazione del template', type: 'error' });
         } finally {
             setLoading(false);
         }
@@ -429,7 +432,7 @@ const FormTemplateCreate: React.FC = () => {
                         <div className="flex items-center space-x-4">
                             <Button
                                 variant="ghost"
-                                onClick={() => navigate('/forms')}
+                                onClick={() => navigate(contextBasePath)}
                                 className="flex items-center"
                             >
                                 <ArrowLeft className="w-4 h-4 mr-2" />

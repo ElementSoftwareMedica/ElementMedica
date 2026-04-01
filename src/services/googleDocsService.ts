@@ -61,7 +61,6 @@ const googleDocsService = {
       const response = await apiGet<GoogleDocsTemplateResponse>(`/api/google-docs/templates/${type}`);
       return response?.template || null;
     } catch (error: unknown) {
-      console.error('Error getting default Google Docs template:', getErrorMessage(error));
       return null;
     }
   },
@@ -76,7 +75,6 @@ const googleDocsService = {
       const response = await apiPost<GenerateDocumentResult>(`/api/google-docs/generate`, params);
       return response;
     } catch (error: unknown) {
-      console.error('Error generating document from Google Docs template:', getErrorMessage(error));
       return {
         success: false,
         message: 'Error generating document',
@@ -99,7 +97,6 @@ const googleDocsService = {
       );
       return response;
     } catch (error: unknown) {
-      console.error('Error generating attestato from Google Docs template:', getErrorMessage(error));
 
       // Extract more detailed error information if available
       const errorMessage = getErrorMessage(error);

@@ -3,8 +3,7 @@
  * @project 43 - Tenant Roles Management System
  */
 
-// Main page
-export { default as Management } from './Management';
+// Main page - Uses ManagementRouter for all routes
 export { ManagementLazy } from './Management.lazy';
 
 // Components

@@ -5,8 +5,8 @@
  */
 
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
-import middleware from '../../auth/middleware.js';
+import prisma from '../../config/prisma-optimization.js';
+import middleware from '../../middleware/auth.js';
 import { body, validationResult } from 'express-validator';
 import logger from '../../utils/logger.js';
 import { DocumentService } from '../../services/documentService.js';
@@ -23,10 +23,9 @@ import qrCodeService from '../../services/qrCodeService.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const prisma = new PrismaClient();
 const documentService = new DocumentService();
 
-const { authenticate: authenticateToken, authorize: requirePermission } = middleware;
+const { authenticate: authenticateToken, requirePermission } = middleware;
 
 // ============================================================================
 // HELPER FUNCTIONS

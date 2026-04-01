@@ -25,6 +25,7 @@ import { documentService } from '../../services/documentService';
 import type { GeneratedDocument, DocumentStatus, TemplateType } from '../../types/templates';
 import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
 import { useToast } from '../../hooks/useToast';
+import { useTenantFilter } from '../../context/TenantFilterContext';
 
 // Data row type for ResizableTable
 interface DataRow extends Record<string, unknown> {
@@ -44,6 +45,7 @@ const DocumentListPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { confirmDelete, confirm } = useConfirmDialog();
   const { showToast } = useToast();
+  const { getTenantFilterParams, tenantFilterKey, isReady } = useTenantFilter();
 
   // State
   const [documents, setDocuments] = useState<GeneratedDocument[]>([]);
@@ -80,6 +82,7 @@ const DocumentListPage: React.FC = () => {
       setLoading(true);
       setError(null);
 
+      const tenantParams = getTenantFilterParams();
       const params: any = {
         page,
         limit,
@@ -87,6 +90,8 @@ const DocumentListPage: React.FC = () => {
 
       if (statusFilter !== 'all') params.status = statusFilter;
       if (typeFilter !== 'all') params.type = typeFilter;
+      if (tenantParams.tenantIds) params.tenantIds = tenantParams.tenantIds.join(',');
+      if (tenantParams.allTenants) params.allTenants = true;
 
       const response = await documentService.list(params);
 
@@ -105,19 +110,21 @@ const DocumentListPage: React.FC = () => {
       setDocuments(filteredData);
       setTotal(response.pagination.total);
       setTotalPages(response.pagination.totalPages);
-    } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Errore durante il caricamento dei documenti');
+    } catch (err: unknown) {
+      setError('Errore durante il caricamento dei documenti');
     } finally {
       setLoading(false);
     }
-  }, [page, limit, statusFilter, typeFilter, searchQuery]);
+  }, [page, limit, statusFilter, typeFilter, searchQuery, getTenantFilterParams, tenantFilterKey]);
 
   /**
    * Load documents on mount and when filters change
    */
   useEffect(() => {
-    loadDocuments();
-  }, [loadDocuments]);
+    if (isReady) {
+      loadDocuments();
+    }
+  }, [loadDocuments, isReady]);
 
   /**
    * Update URL params when filters change
@@ -136,8 +143,8 @@ const DocumentListPage: React.FC = () => {
   const handleDownload = async (id: string) => {
     try {
       await documentService.download(id);
-    } catch (err: any) {
-      showToast({ type: 'error', title: 'Errore', message: `Errore durante il download: ${err.message}` });
+    } catch (err: unknown) {
+      showToast({ type: 'error', title: 'Errore', message: 'Errore durante il download' });
     }
   };
 
@@ -163,8 +170,8 @@ const DocumentListPage: React.FC = () => {
       setResendDialogOpen(false);
       setResendDocumentId(null);
       setResendEmail('');
-    } catch (err: any) {
-      showToast({ message: `Errore durante l'invio: ${err.response?.data?.error || err.message}`, type: 'error' });
+    } catch (err: unknown) {
+      showToast({ message: "Errore durante l'invio dell'email", type: 'error' });
     } finally {
       setResending(false);
     }
@@ -181,8 +188,8 @@ const DocumentListPage: React.FC = () => {
       await documentService.delete(id);
       showToast({ message: 'Documento eliminato con successo', type: 'success' });
       loadDocuments();
-    } catch (err: any) {
-      showToast({ message: `Errore durante l'eliminazione: ${err.response?.data?.error || err.message}`, type: 'error' });
+    } catch (err: unknown) {
+      showToast({ message: "Errore durante l'eliminazione", type: 'error' });
     }
   };
 
@@ -207,8 +214,8 @@ const DocumentListPage: React.FC = () => {
       showToast({ message: `${selectedIds.size} documenti eliminati con successo`, type: 'success' });
       setSelectedIds(new Set());
       loadDocuments();
-    } catch (err: any) {
-      showToast({ message: `Errore durante l'eliminazione: ${err.message}`, type: 'error' });
+    } catch (err: unknown) {
+      showToast({ message: "Errore durante l'eliminazione", type: 'error' });
     }
   };
 
@@ -402,12 +409,12 @@ const DocumentListPage: React.FC = () => {
     <div className="p-6">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Documenti Generati</h1>
-        <p className="text-gray-600">Gestisci tutti i documenti generati dal sistema</p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-50 mb-2">Documenti Generati</h1>
+        <p className="text-gray-600 dark:text-gray-400">Gestisci tutti i documenti generati dal sistema</p>
       </div>
 
       {/* Filters and search */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm dark:shadow-black/30 border border-gray-200 dark:border-gray-700 p-4 mb-6">
         <div className="flex items-center gap-4 flex-wrap">
           {/* Search */}
           <div className="flex-1 min-w-[250px]">
@@ -418,7 +425,7 @@ const DocumentListPage: React.FC = () => {
                 placeholder="Cerca per nome file, template, entità..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-50"
               />
             </div>
           </div>
@@ -429,7 +436,7 @@ const DocumentListPage: React.FC = () => {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as any)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-50"
             >
               <option value="all">Tutti gli stati</option>
               <option value="DRAFT">Bozza</option>
@@ -443,7 +450,7 @@ const DocumentListPage: React.FC = () => {
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value as any)}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-50"
           >
             <option value="all">Tutti i tipi</option>
             <option value="LETTER_OF_ENGAGEMENT">Lettera Incarico</option>
@@ -468,9 +475,9 @@ const DocumentListPage: React.FC = () => {
 
       {/* Bulk actions */}
       {selectedIds.size > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+        <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg p-4 mb-6">
           <div className="flex items-center justify-between">
-            <span className="text-blue-900 font-medium">
+            <span className="text-blue-900 dark:text-blue-100 font-medium">
               {selectedIds.size} {selectedIds.size === 1 ? 'documento selezionato' : 'documenti selezionati'}
             </span>
             <div className="flex items-center gap-2">
@@ -488,7 +495,7 @@ const DocumentListPage: React.FC = () => {
 
       {/* Error message */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+        <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 rounded-lg p-4 mb-6">
           <div className="flex items-start gap-3">
             <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
             <div className="flex-1">
@@ -506,7 +513,7 @@ const DocumentListPage: React.FC = () => {
       )}
 
       {/* Table */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm dark:shadow-black/30 border border-gray-200 dark:border-gray-700 overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center h-96">
             <RefreshCw className="w-8 h-8 animate-spin text-blue-600" />
@@ -521,22 +528,22 @@ const DocumentListPage: React.FC = () => {
 
         {/* Pagination */}
         {!loading && totalPages > 1 && (
-          <div className="border-t border-gray-200 px-4 py-3 flex items-center justify-between">
-            <div className="text-sm text-gray-600">
+          <div className="border-t border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center justify-between">
+            <div className="text-sm text-gray-600 dark:text-gray-400">
               Pagina {page} di {totalPages} • {total} documenti totali
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setPage(Math.max(1, page - 1))}
                 disabled={page === 1}
-                className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 dark:text-gray-300"
               >
                 Precedente
               </button>
               <button
                 onClick={() => setPage(Math.min(totalPages, page + 1))}
                 disabled={page === totalPages}
-                className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 dark:text-gray-300"
               >
                 Successiva
               </button>
@@ -548,14 +555,14 @@ const DocumentListPage: React.FC = () => {
       {/* Resend Email Dialog */}
       {resendDialogOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl dark:shadow-black/50 max-w-md w-full mx-4">
             <div className="p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-50 mb-4">
                 Invia Documento via Email
               </h3>
 
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Indirizzo Email
                 </label>
                 <input
@@ -563,7 +570,7 @@ const DocumentListPage: React.FC = () => {
                   value={resendEmail}
                   onChange={(e) => setResendEmail(e.target.value)}
                   placeholder="email@esempio.it"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-50"
                 />
               </div>
 
@@ -574,7 +581,7 @@ const DocumentListPage: React.FC = () => {
                     setResendDocumentId(null);
                     setResendEmail('');
                   }}
-                  className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg font-medium transition-colors"
+                  className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg font-medium transition-colors"
                 >
                   Annulla
                 </button>

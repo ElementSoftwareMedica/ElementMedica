@@ -127,8 +127,6 @@ export const getLogs = async (filters?: ActivityLogFilters, limit?: number, offs
   if (filters?.search) params.search = filters.search;
 
   try {
-    console.log('Attempting to fetch logs from backend endpoint:', API_ENDPOINTS.ACTIVITY_LOGS, params);
-
     // Usa apiGet per gestire baseURL/headers automaticamente
     const resp = await apiGet<unknown>(API_ENDPOINTS.ACTIVITY_LOGS, params);
 
@@ -200,7 +198,8 @@ export const trackCtaEvent = async (payload: CtaEventPayload) => {
     } as Record<string, unknown>;
 
     // Preferisci sendBeacon per non bloccare la navigazione
-    let endpoint = `/api${API_ENDPOINTS.ACTIVITY_LOGS}`; // '/api/activity-logs'
+    // P64: API_ENDPOINTS.ACTIVITY_LOGS è ora '/v1/activity-logs', quindi endpoint = '/api/v1/activity-logs'
+    let endpoint = `/api${API_ENDPOINTS.ACTIVITY_LOGS}`;
 
     // Aggiungi tenantId come query string (sendBeacon non supporta headers custom)
     try {

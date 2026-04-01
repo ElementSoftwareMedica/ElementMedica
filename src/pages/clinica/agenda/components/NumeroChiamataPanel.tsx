@@ -216,7 +216,7 @@ export const NumeroChiamataPanel: React.FC<NumeroChiamataPanelProps> = ({
                     </button>
                     <p className="text-center text-sm text-gray-500 mt-2">
                         {prossimoNumero.paziente
-                            ? `${prossimoNumero.paziente.cognome} ${prossimoNumero.paziente.nome}`
+                            ? `${prossimoNumero.paziente.lastName || ''} ${prossimoNumero.paziente.firstName || ''}`.trim()
                             : 'Paziente'}
                     </p>
                 </div>
@@ -258,7 +258,7 @@ export const NumeroChiamataPanel: React.FC<NumeroChiamataPanelProps> = ({
                             <div className="flex-1 min-w-0">
                                 <p className="font-medium text-gray-900 truncate">
                                     {app.paziente
-                                        ? `${app.paziente.cognome} ${app.paziente.nome}`
+                                        ? `${app.paziente.lastName || ''} ${app.paziente.firstName || ''}`.trim()
                                         : 'Paziente'}
                                 </p>
                                 <p className="text-xs text-gray-500">

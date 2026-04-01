@@ -100,7 +100,7 @@ export async function generateQRCodeSVG(data, options = {}) {
  * @returns {Promise<string>} - Data URL del QR code
  */
 export async function generateVerificationQRCode(attestatoNumber, baseUrl = null, options = {}) {
-    const publicUrl = baseUrl || process.env.PUBLIC_URL || 'https://app.elementmedica.it';
+    const publicUrl = baseUrl || process.env.PUBLIC_URL || 'https://app.element-srl.it';
     const verifyUrl = `${publicUrl}/verify/${encodeURIComponent(attestatoNumber)}`;
 
     logger.info('Generating verification QR code', { attestatoNumber, verifyUrl });

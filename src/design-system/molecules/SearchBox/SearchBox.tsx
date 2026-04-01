@@ -5,7 +5,7 @@
 
 import React, { forwardRef, useState } from 'react';
 import { cn } from '../../utils';
-import { MagnifyingGlassIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { Search, X } from 'lucide-react';
 
 export interface SearchBoxProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> {
   /** Search box size */
@@ -90,7 +90,7 @@ export const SearchBox = forwardRef<HTMLInputElement, SearchBoxProps>(
         setInternalValue('');
       }
       onClear?.();
-      
+
       // Create synthetic event for onChange
       const syntheticEvent = {
         target: { value: '' },
@@ -102,7 +102,7 @@ export const SearchBox = forwardRef<HTMLInputElement, SearchBoxProps>(
     return (
       <div className={cn('relative', styles.container, containerClassName)}>
         {/* Search Icon */}
-        <MagnifyingGlassIcon
+        <Search
           className={cn(
             'absolute top-1/2 transform -translate-y-1/2 text-gray-400',
             styles.icon,
@@ -176,7 +176,7 @@ export const SearchBox = forwardRef<HTMLInputElement, SearchBoxProps>(
               )}
               aria-label="Cancella ricerca"
             >
-              <XMarkIcon className={styles.icon} />
+              <X className={styles.icon} />
             </button>
           )
         )}

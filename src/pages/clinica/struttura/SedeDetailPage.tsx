@@ -25,9 +25,13 @@ import {
     Calendar,
     User,
     Star,
-    Stethoscope
+    Stethoscope,
+    Clock,
+    CalendarX,
+    DoorOpen
 } from 'lucide-react';
 import { clinicaApi } from '../../../services/clinicaApi';
+import { formatMedicoName } from '../../../utils/textFormatters';
 
 // Import Element Medica theme
 import '../../../styles/clinica-theme.css';
@@ -63,7 +67,7 @@ const SedeDetailPage: React.FC = () => {
                         Errore nel caricamento
                     </h3>
                     <p className="text-red-600 text-sm mb-4">
-                        {error instanceof Error ? error.message : 'Sede non trovata'}
+                        {'Sede non trovata'}
                     </p>
                     <button
                         onClick={() => navigate('/poliambulatorio/sedi')}
@@ -234,7 +238,7 @@ const SedeDetailPage: React.FC = () => {
                             </div>
                             <div>
                                 <p className="font-medium text-gray-900">
-                                    Dott. {sede.direttoreSanitario.firstName} {sede.direttoreSanitario.lastName}
+                                    {formatMedicoName(sede.direttoreSanitario)}
                                 </p>
                                 {sede.direttoreSanitario.email && (
                                     <p className="text-sm text-gray-500">{sede.direttoreSanitario.email}</p>
@@ -283,24 +287,158 @@ const SedeDetailPage: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Related Ambulatori Card */}
-                <div className="lg:col-span-3 bg-white rounded-xl border border-gray-200 p-6">
-                    <h2 className="text-lg font-semibold text-gray-900 mb-6 flex items-center gap-2">
-                        <Stethoscope className="h-5 w-5 text-teal-600" />
-                        Ambulatori
+                {/* Orari Settimanali Card */}
+                <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-6 h-[400px] flex flex-col">
+                    <h2 className="text-lg font-semibold text-gray-900 mb-6 flex items-center gap-2 flex-shrink-0">
+                        <Clock className="h-5 w-5 text-teal-600" />
+                        Orari di Apertura
                     </h2>
 
-                    <Link
-                        to={`/poliambulatorio/ambulatori?sede=${id}`}
-                        className="block p-4 rounded-lg border border-gray-200 hover:border-teal-300 hover:shadow-sm transition-all group text-center"
-                    >
-                        <Stethoscope className="h-8 w-8 text-gray-300 mx-auto mb-2 group-hover:text-teal-500 transition-colors" />
-                        <p className="text-gray-600 group-hover:text-teal-700 transition-colors">
-                            {sede._count?.ambulatori !== undefined
-                                ? `${sede._count.ambulatori} ambulatori in questa sede`
-                                : 'Visualizza ambulatori della sede'}
-                        </p>
-                    </Link>
+                    {sede.orariSettimanali && sede.orariSettimanali.length > 0 ? (
+                        <div className="space-y-3">
+                            {(() => {
+                                const DAYS = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato'];
+                                const groupedByDay = sede.orariSettimanali.reduce((acc: Record<number, typeof sede.orariSettimanali>, orario) => {
+                                    if (!acc[orario.giornoSettimana]) acc[orario.giornoSettimana] = [];
+                                    acc[orario.giornoSettimana]!.push(orario);
+                                    return acc;
+                                }, {} as Record<number, typeof sede.orariSettimanali>);
+
+                                // Sort days starting from Monday (1) to Sunday (0)
+                                const sortedDays = [1, 2, 3, 4, 5, 6, 0].filter(d => groupedByDay[d]);
+
+                                return sortedDays.map(dayNum => {
+                                    const orari = groupedByDay[dayNum];
+                                    const allClosed = orari?.every(o => o.isChiuso);
+                                    return (
+                                        <div key={dayNum} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                                            <span className="font-medium text-gray-700 w-28">{DAYS[dayNum]}</span>
+                                            <div className="flex-1 flex flex-wrap gap-2 justify-end">
+                                                {allClosed ? (
+                                                    <span className="text-red-500 text-sm font-medium">Chiuso</span>
+                                                ) : (
+                                                    orari?.filter(o => !o.isChiuso).map((o, idx) => (
+                                                        <span key={idx} className="bg-teal-50 text-teal-700 text-sm px-2 py-1 rounded">
+                                                            {o.oraInizio} - {o.oraFine}
+                                                        </span>
+                                                    ))
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                });
+                            })()}
+                        </div>
+                    ) : (
+                        <p className="text-gray-500 text-center py-4">Nessun orario configurato</p>
+                    )}
+                </div>
+
+                {/* Chiusure Speciali Card */}
+                <div className="bg-white rounded-xl border border-gray-200 p-6 h-[400px] flex flex-col">
+                    <h2 className="text-lg font-semibold text-gray-900 mb-6 flex items-center gap-2 flex-shrink-0">
+                        <CalendarX className="h-5 w-5 text-teal-600" />
+                        Chiusure Speciali
+                    </h2>
+
+                    {sede.chiusureSpeciali && sede.chiusureSpeciali.filter(c => c.attivo).length > 0 ? (
+                        <div className="space-y-3 overflow-y-auto flex-1">
+                            {sede.chiusureSpeciali.filter(c => c.attivo).map(chiusura => (
+                                <div key={chiusura.id} className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+                                    <div className="flex items-start justify-between">
+                                        <div>
+                                            <p className="font-medium text-amber-800">{chiusura.nome}</p>
+                                            <p className="text-sm text-amber-600">
+                                                {new Date(chiusura.dataInizio).toLocaleDateString('it-IT')}
+                                                {chiusura.dataFine !== chiusura.dataInizio && (
+                                                    <> - {new Date(chiusura.dataFine).toLocaleDateString('it-IT')}</>
+                                                )}
+                                            </p>
+                                            {chiusura.descrizione && (
+                                                <p className="text-xs text-amber-500 mt-1">{chiusura.descrizione}</p>
+                                            )}
+                                        </div>
+                                        <div className="flex gap-1">
+                                            {chiusura.isParziale && (
+                                                <span className="text-xs bg-amber-200 text-amber-700 px-2 py-0.5 rounded">Parziale</span>
+                                            )}
+                                            {chiusura.ricorrente && (
+                                                <span className="text-xs bg-purple-200 text-purple-700 px-2 py-0.5 rounded">Ricorrente</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-gray-500 text-center py-4">Nessuna chiusura programmata</p>
+                    )}
+                </div>
+
+                {/* Ambulatori Card */}
+                <div className="lg:col-span-3 bg-white rounded-xl border border-gray-200 p-6">
+                    <div className="flex items-center justify-between mb-6">
+                        <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                            <DoorOpen className="h-5 w-5 text-teal-600" />
+                            Ambulatori ({sede.ambulatori?.length || 0})
+                        </h2>
+                        <Link
+                            to={`/poliambulatorio/ambulatori?sede=${id}`}
+                            className="text-sm text-teal-600 hover:text-teal-700 font-medium"
+                        >
+                            Vedi tutti →
+                        </Link>
+                    </div>
+
+                    {sede.ambulatori && sede.ambulatori.length > 0 ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {sede.ambulatori.map(amb => (
+                                <Link
+                                    key={amb.id}
+                                    to={`/poliambulatorio/ambulatori/${amb.id}`}
+                                    className="p-4 rounded-lg border border-gray-200 hover:border-teal-300 hover:shadow-sm transition-all group"
+                                >
+                                    <div className="flex items-start gap-3">
+                                        <div
+                                            className="w-3 h-3 rounded-full mt-1.5 flex-shrink-0"
+                                            style={{ backgroundColor: amb.colore || '#14B8A6' }}
+                                        />
+                                        <div className="flex-1 min-w-0">
+                                            <p className="font-medium text-gray-900 truncate group-hover:text-teal-700">
+                                                {amb.nome}
+                                            </p>
+                                            <p className="text-sm text-gray-500">{amb.codice}</p>
+                                            {amb.specializzazione && (
+                                                <p className="text-xs text-gray-400 mt-1">{amb.specializzazione}</p>
+                                            )}
+                                            <div className="flex items-center gap-2 mt-2">
+                                                <span className={`text-xs px-2 py-0.5 rounded-full ${amb.stato === 'ATTIVO' ? 'bg-emerald-100 text-emerald-700' :
+                                                    amb.stato === 'MANUTENZIONE' ? 'bg-amber-100 text-amber-700' :
+                                                        'bg-gray-100 text-gray-600'
+                                                    }`}>
+                                                    {amb.stato}
+                                                </span>
+                                                {amb.piano && (
+                                                    <span className="text-xs text-gray-400">Piano {amb.piano}</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </Link>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="text-center py-8">
+                            <Stethoscope className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                            <p className="text-gray-500">Nessun ambulatorio associato a questa sede</p>
+                            <Link
+                                to={`/poliambulatorio/ambulatori/nuovo?sede=${id}`}
+                                className="mt-3 inline-block text-sm text-teal-600 hover:text-teal-700 font-medium"
+                            >
+                                + Aggiungi ambulatorio
+                            </Link>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

@@ -30,8 +30,8 @@ import logger from '../utils/logger.js';
  */
 const generateICS = (appointment, options = {}) => {
     const {
-        clinicName = 'ElementMedica',
-        clinicEmail = 'info@elementmedica.it',
+        clinicName = 'Element srl',
+        clinicEmail = process.env.SMTP_FROM || 'info@element-srl.it',
         timezone = 'Europe/Rome'
     } = options;
 
@@ -65,7 +65,7 @@ const generateICS = (appointment, options = {}) => {
 
     const description = escapeICS([
         `Prestazione: ${appointment.prestazione?.nome || 'Visita'}`,
-        appointment.medico ? `Medico: Dr. ${appointment.medico.cognome}` : '',
+        appointment.medico ? `Medico: ${appointment.medico.gender === 'FEMALE' ? 'Dott.ssa' : 'Dott.'} ${appointment.medico.lastName}` : '',
         appointment.note ? `Note: ${appointment.note}` : '',
         '',
         `Prenotazione confermata presso ${clinicName}`,
@@ -84,7 +84,7 @@ const generateICS = (appointment, options = {}) => {
     const icsContent = [
         'BEGIN:VCALENDAR',
         'VERSION:2.0',
-        `PRODID:-//${clinicName}//ElementMedica Calendar//IT`,
+        `PRODID:-//${clinicName}//Element srl Calendar//IT`,
         'CALSCALE:GREGORIAN',
         'METHOD:PUBLISH',
         `X-WR-CALNAME:${escapeICS(clinicName)} - Appuntamenti`,
@@ -144,7 +144,7 @@ const generateICS = (appointment, options = {}) => {
  */
 const generateICSFeed = (appointments, options = {}) => {
     const {
-        clinicName = 'ElementMedica',
+        clinicName = 'Element srl',
         timezone = 'Europe/Rome'
     } = options;
 
@@ -162,7 +162,7 @@ const generateICSFeed = (appointments, options = {}) => {
     const header = [
         'BEGIN:VCALENDAR',
         'VERSION:2.0',
-        `PRODID:-//${clinicName}//ElementMedica Calendar//IT`,
+        `PRODID:-//${clinicName}//Element srl Calendar//IT`,
         'CALSCALE:GREGORIAN',
         'METHOD:PUBLISH',
         `X-WR-CALNAME:${escapeICS(clinicName)} - Appuntamenti`,
@@ -231,19 +231,19 @@ export class CalendarService {
                 },
                 include: {
                     prestazione: { select: { nome: true } },
-                    medico: { select: { nome: true, cognome: true } },
+                    medico: { select: { firstName: true, lastName: true, gender: true } },
                     ambulatorio: { select: { nome: true, indirizzo: true } },
-                    paziente: { select: { nome: true, cognome: true } },
+                    paziente: { select: { firstName: true, lastName: true } },
                     tenant: { select: { name: true, settings: true } }
                 }
             });
 
             if (!appointment) {
-                throw new Error('Appointment not found');
+                throw new Error('Appuntamento non trovato');
             }
 
-            const clinicName = appointment.tenant?.name || 'ElementMedica';
-            const clinicEmail = appointment.tenant?.settings?.email || 'info@elementmedica.it';
+            const clinicName = appointment.tenant?.name || 'Element srl';
+            const clinicEmail = appointment.tenant?.settings?.email || process.env.SMTP_FROM || 'info@element-srl.it';
 
             const icsContent = generateICS(appointment, { clinicName, clinicEmail });
 
@@ -264,7 +264,7 @@ export class CalendarService {
                     id: appointment.id,
                     date: appointment.dataOra,
                     prestazione: appointment.prestazione?.nome,
-                    patient: `${appointment.paziente?.nome} ${appointment.paziente?.cognome}`
+                    patient: `${appointment.paziente?.firstName} ${appointment.paziente?.lastName}`
                 }
             };
         } catch (error) {
@@ -307,20 +307,20 @@ export class CalendarService {
                 where,
                 include: {
                     prestazione: { select: { nome: true } },
-                    paziente: { select: { nome: true, cognome: true } },
+                    paziente: { select: { firstName: true, lastName: true } },
                     ambulatorio: { select: { nome: true } }
                 },
                 orderBy: { dataOra: 'asc' },
                 take: 500 // Limit for performance
             });
 
-            const tenant = await prisma.tenant.findUnique({
-                where: { id: tenantId },
+            const tenant = await prisma.tenant.findFirst({
+                where: { id: tenantId, deletedAt: null },
                 select: { name: true }
             });
 
             const icsContent = generateICSFeed(appointments, {
-                clinicName: tenant?.name || 'ElementMedica'
+                clinicName: tenant?.name || 'Element srl'
             });
 
             logger.info('Doctor calendar feed generated', {
@@ -374,20 +374,20 @@ export class CalendarService {
                 where,
                 include: {
                     prestazione: { select: { nome: true } },
-                    medico: { select: { nome: true, cognome: true } },
+                    medico: { select: { firstName: true, lastName: true, gender: true } },
                     ambulatorio: { select: { nome: true, indirizzo: true } }
                 },
                 orderBy: { dataOra: 'asc' },
                 take: 100
             });
 
-            const tenant = await prisma.tenant.findUnique({
-                where: { id: tenantId },
+            const tenant = await prisma.tenant.findFirst({
+                where: { id: tenantId, deletedAt: null },
                 select: { name: true }
             });
 
             const icsContent = generateICSFeed(appointments, {
-                clinicName: tenant?.name || 'ElementMedica'
+                clinicName: tenant?.name || 'Element srl'
             });
 
             return {
@@ -418,17 +418,22 @@ export class CalendarService {
      */
     static async getGoogleCalendarClient(userId, tenantId) {
         try {
-            // Get user's Google tokens
-            const person = await prisma.person.findFirst({
-                where: { id: userId, tenantId, deletedAt: null },
-                select: { googleTokens: true }
+            // P48/P63: query GoogleTokens direttamente (non via Person.tenantId che non esiste)
+            const tokenRecord = await prisma.googleTokens.findFirst({
+                where: { userId, tenantId }
             });
 
-            if (!person?.googleTokens) {
-                throw new Error('Google account not connected');
+            if (!tokenRecord) {
+                throw new Error('Account Google non collegato');
             }
 
-            const tokens = person.googleTokens;
+            const tokens = {
+                access_token: tokenRecord.accessToken,
+                refresh_token: tokenRecord.refreshToken,
+                expiry_date: Number(tokenRecord.expiryDate),
+                token_type: tokenRecord.tokenType,
+                scope: tokenRecord.scope?.join(' ')
+            };
 
             const oauth2Client = new google.auth.OAuth2(
                 process.env.GOOGLE_CLIENT_ID,
@@ -442,9 +447,15 @@ export class CalendarService {
             if (tokens.expiry_date && tokens.expiry_date < Date.now()) {
                 const { credentials } = await oauth2Client.refreshAccessToken();
 
-                await prisma.person.update({
-                    where: { id: userId },
-                    data: { googleTokens: credentials }
+                // P48: aggiorna GoogleTokens direttamente (non person)
+                await prisma.googleTokens.update({
+                    where: { id: tokenRecord.id, deletedAt: null },
+                    data: {
+                        accessToken: credentials.access_token,
+                        refreshToken: credentials.refresh_token || tokenRecord.refreshToken,
+                        expiryDate: BigInt(credentials.expiry_date || 0),
+                        tokenType: credentials.token_type || tokenRecord.tokenType
+                    }
                 });
 
                 oauth2Client.setCredentials(credentials);
@@ -474,14 +485,14 @@ export class CalendarService {
                 where: { id: appointmentId, tenantId, deletedAt: null },
                 include: {
                     prestazione: { select: { nome: true } },
-                    medico: { select: { nome: true, cognome: true } },
+                    medico: { select: { firstName: true, lastName: true, gender: true } },
                     ambulatorio: { select: { nome: true, indirizzo: true } },
                     tenant: { select: { name: true, settings: true } }
                 }
             });
 
             if (!appointment) {
-                throw new Error('Appointment not found');
+                throw new Error('Appuntamento non trovato');
             }
 
             const startDateTime = new Date(appointment.dataOra);
@@ -491,10 +502,10 @@ export class CalendarService {
                 summary: appointment.prestazione?.nome || 'Appuntamento Medico',
                 description: [
                     `Prestazione: ${appointment.prestazione?.nome || 'Visita'}`,
-                    appointment.medico ? `Medico: Dr. ${appointment.medico.cognome}` : '',
+                    appointment.medico ? `Medico: ${appointment.medico.gender === 'FEMALE' ? 'Dott.ssa' : 'Dott.'} ${appointment.medico.lastName}` : '',
                     appointment.note || '',
                     '',
-                    `Prenotazione presso ${appointment.tenant?.name || 'ElementMedica'}`
+                    `Prenotazione presso ${appointment.tenant?.name || 'Element srl'}`
                 ].filter(Boolean).join('\n'),
                 location: appointment.ambulatorio?.indirizzo || appointment.tenant?.settings?.indirizzo || '',
                 start: {
@@ -607,7 +618,7 @@ export class CalendarService {
                 return { success: true, deleted: true };
             }
 
-            return { success: true, deleted: false, reason: 'Event not found' };
+            return { success: true, deleted: false, reason: 'Evento non trovato' };
         } catch (error) {
             logger.error('Failed to remove from Google Calendar', {
                 component: 'CalendarService',

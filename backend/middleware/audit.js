@@ -13,9 +13,9 @@ import logger from '../utils/logger.js';
 export function auditLog(action, options = {}) {
     return async (req, res, next) => {
         try {
-            // Get tenant ID from request
-            const tenantId = req.tenant?.id || req.person?.tenantId || req.headers['x-tenant-id'];
-            
+            // Get tenant ID from request — req.person.tenantId is authoritative for authenticated routes
+            const tenantId = req.person?.tenantId || req.tenant?.id;
+
             if (!tenantId) {
                 logger.warn('Audit log skipped - no tenant ID', {
                     component: 'audit-middleware',
@@ -25,10 +25,12 @@ export function auditLog(action, options = {}) {
                 return next();
             }
 
+            // P49: companyId in GdprAuditLog still uses old field name for compatibility
+            // but source value comes from req.person.companyTenantProfileId
             const auditData = {
                 action,
                 personId: req.person?.id || null,
-                companyId: req.person?.companyId || null,
+                companyId: req.person?.companyTenantProfileId || null,
                 tenantId,
                 ipAddress: req.ip,
                 userAgent: req.get('User-Agent'),

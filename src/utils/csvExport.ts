@@ -114,7 +114,6 @@ export function exportToCsv<T extends Record<string, unknown>>(
   delimiter: string = ';'
 ): void {
   if (!data || data.length === 0) {
-    console.warn('Nessun dato da esportare');
     return;
   }
 
@@ -196,7 +195,6 @@ export function exportToCsv<T extends Record<string, unknown>>(
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   } catch (error) {
-    console.error('Errore nell\'esportazione CSV:', error);
   }
 }
 
@@ -234,6 +232,5 @@ export function downloadCsvTemplate(
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   } catch (error) {
-    console.error('Errore nel download del template CSV:', error);
   }
 }

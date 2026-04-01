@@ -6,41 +6,40 @@
  */
 
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../../config/prisma-optimization.js';
 import { logger } from '../../utils/logger.js';
 
 // Import del servizio (STATICO per evitare timeout)
 import roleHierarchyService from '../../services/roleHierarchyService.js';
 
 // Import dei middleware
-import { 
-  requireHierarchyManagement, 
-  requireRoleAssignmentPermission 
+import {
+  requireHierarchyManagement,
+  requireRoleAssignmentPermission
 } from './middleware/auth.js';
 import { logRoleOperation, auditRoleChanges } from './middleware/logging.js';
-import { 
-  validateRoleAssignmentData, 
-  validateRouteId, 
-  validatePagination 
+import {
+  validateRoleAssignmentData,
+  validateRouteId,
+  validatePagination
 } from './middleware/validation.js';
 
 // Import delle utilità
-import { 
-  createSuccessResponse, 
+import {
+  createSuccessResponse,
   createErrorResponse,
   createPaginationResponse,
-  calculateOffset 
+  calculateOffset
 } from './utils/helpers.js';
 import { filterRoleData, filterUserData } from './utils/filters.js';
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 /**
  * GET /api/roles/hierarchy
  * Ottiene la gerarchia completa dei ruoli
  */
-router.get('/', 
+router.get('/',
   requireHierarchyManagement,
   logRoleOperation('GET_ROLE_HIERARCHY'),
   async (req, res) => {
@@ -55,19 +54,16 @@ router.get('/',
         hierarchySize: hierarchy?.length || 0
       });
 
-      res.json(createSuccessResponse(hierarchy, 'Role hierarchy retrieved successfully'));
+      res.json(createSuccessResponse(hierarchy, 'Gerarchia dei ruoli recuperata con successo'));
     } catch (error) {
       logger.error('Error retrieving role hierarchy', {
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         tenantId: req.tenant?.id || req.person?.tenantId,
         userId: req.person?.id
       });
 
-      res.status(500).json(createErrorResponse(
-        'Failed to retrieve role hierarchy',
-        error.message
-      ));
+      res.status(500).json(createErrorResponse('Errore nel recupero della gerarchia dei ruoli'));
     }
   }
 );
@@ -94,8 +90,8 @@ router.get('/user/:userId',
 
       if (!user) {
         return res.status(404).json(createErrorResponse(
-          'User not found',
-          'The specified user does not exist or does not belong to your tenant'
+          'Utente non trovato',
+          'L\'utente specificato non esiste o non appartiene al tuo tenant'
         ));
       }
 
@@ -127,20 +123,17 @@ router.get('/user/:userId',
         hierarchy,
         assignableRoles,
         assignablePermissions
-      }, 'User role hierarchy retrieved successfully'));
+      }, 'Gerarchia ruoli utente recuperata con successo'));
     } catch (error) {
       logger.error('Error retrieving user role hierarchy', {
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         userId: req.params.userId,
         requesterId: req.person?.id,
         tenantId: req.tenant?.id || req.person?.tenantId
       });
 
-      res.status(500).json(createErrorResponse(
-        'Failed to retrieve user role hierarchy',
-        error.message
-      ));
+      res.status(500).json(createErrorResponse('Errore nel recupero della gerarchia ruoli utente'));
     }
   }
 );
@@ -175,16 +168,13 @@ router.get('/current-user',
       }, 'Current user role hierarchy retrieved successfully'));
     } catch (error) {
       logger.error('Error retrieving current user role hierarchy', {
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         userId: req.person?.id,
         tenantId: req.tenant?.id || req.person?.tenantId
       });
 
-      res.status(500).json(createErrorResponse(
-        'Failed to retrieve current user role hierarchy',
-        error.message
-      ));
+      res.status(500).json(createErrorResponse('Errore nel recupero della gerarchia ruoli corrente'));
     }
   }
 );
@@ -234,20 +224,17 @@ router.post('/assign',
         tenantId: req.tenant?.id || req.person?.tenantId
       });
 
-      res.json(createSuccessResponse(result, 'Role assigned successfully'));
+      res.json(createSuccessResponse(result, 'Ruolo assegnato con successo'));
     } catch (error) {
       logger.error('Error assigning role with hierarchy control', {
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         assignerId: req.person?.id,
         requestData: req.body,
         tenantId: req.tenant?.id || req.person?.tenantId
       });
 
-      res.status(500).json(createErrorResponse(
-        'Failed to assign role',
-        error.message
-      ));
+      res.status(500).json(createErrorResponse('Errore nell\'assegnazione del ruolo'));
     }
   }
 );
@@ -266,7 +253,7 @@ router.post('/assign-permissions',
 
       if (!personId || !Array.isArray(permissions)) {
         return res.status(400).json(createErrorResponse(
-          'Invalid input',
+          'Dati non validi',
           'personId and permissions array are required'
         ));
       }
@@ -301,20 +288,17 @@ router.post('/assign-permissions',
         tenantId: req.tenant?.id || req.person?.tenantId
       });
 
-      res.json(createSuccessResponse(result, 'Permissions assigned successfully'));
+      res.json(createSuccessResponse(result, 'Permessi assegnati con successo'));
     } catch (error) {
       logger.error('Error assigning permissions with hierarchy control', {
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         assignerId: req.person?.id,
         requestData: req.body,
         tenantId: req.tenant?.id || req.person?.tenantId
       });
 
-      res.status(500).json(createErrorResponse(
-        'Failed to assign permissions',
-        error.message
-      ));
+      res.status(500).json(createErrorResponse('Errore nell\'assegnazione dei permessi'));
     }
   }
 );
@@ -342,7 +326,7 @@ router.get('/assignable/:roleType',
         req.tenant?.id || req.person?.tenantId
       );
 
-      logger.info('Assignable roles and permissions retrieved', {
+      logger.info('Ruoli e permessi assegnabili recuperati', {
         requesterId: req.person?.id,
         roleType,
         assignableRolesCount: assignableRoles?.length || 0,
@@ -357,17 +341,14 @@ router.get('/assignable/:roleType',
       }, 'Assignable roles and permissions retrieved successfully'));
     } catch (error) {
       logger.error('Error retrieving assignable roles and permissions', {
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         roleType: req.params.roleType,
         requesterId: req.person?.id,
         tenantId: req.tenant?.id || req.person?.tenantId
       });
 
-      res.status(500).json(createErrorResponse(
-        'Failed to retrieve assignable roles and permissions',
-        error.message
-      ));
+      res.status(500).json(createErrorResponse('Errore nel recupero dei ruoli e permessi assegnabili'));
     }
   }
 );
@@ -420,19 +401,16 @@ router.get('/visible',
       res.json(createSuccessResponse({
         userLevel,
         ...paginationResponse
-      }, 'Visible roles retrieved successfully'));
+      }, 'Ruoli visibili recuperati con successo'));
     } catch (error) {
       logger.error('Error retrieving visible roles', {
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         userId: req.person?.id,
         tenantId: req.tenant?.id || req.person?.tenantId
       });
 
-      res.status(500).json(createErrorResponse(
-        'Failed to retrieve visible roles',
-        error.message
-      ));
+      res.status(500).json(createErrorResponse('Errore nel recupero dei ruoli visibili'));
     }
   }
 );
@@ -451,7 +429,7 @@ router.put('/move',
 
       if (!roleId) {
         return res.status(400).json(createErrorResponse(
-          'Invalid input',
+          'Dati non validi',
           'roleId is required'
         ));
       }
@@ -492,17 +470,14 @@ router.put('/move',
       res.json(createSuccessResponse(result, 'Role moved successfully in hierarchy'));
     } catch (error) {
       logger.error('Error moving role in hierarchy', {
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack,
         moverId: req.person?.id,
         requestData: req.body,
         tenantId: req.tenant?.id || req.person?.tenantId
       });
 
-      res.status(500).json(createErrorResponse(
-        'Failed to move role in hierarchy',
-        error.message
-      ));
+      res.status(500).json(createErrorResponse('Errore nello spostamento del ruolo nella gerarchia'));
     }
   }
 );

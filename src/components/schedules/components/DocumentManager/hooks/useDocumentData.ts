@@ -62,7 +62,6 @@ export const useDocumentData = (
       setAttestatiList(attestati);
       setPreventiviList(preventivi);
     } catch (error) {
-      console.error('Errore caricamento documenti:', error);
       // Don't clear lists on error - keep showing cached data
     } finally {
       setIsLoading(false);
@@ -85,7 +84,6 @@ export const useDocumentData = (
       const preventivi = (await Promise.all(preventiviPromises)).filter(p => p !== null);
       setPreventiviList(preventivi);
     } catch (error) {
-      console.error('Errore caricamento preventivi pending:', error);
     } finally {
       setIsLoading(false);
     }

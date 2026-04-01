@@ -36,6 +36,21 @@ export class ConvenzioneService {
                 throw new Error(`Convenzione con codice "${data.codice}" già esistente`);
             }
 
+            // Validate cross-tenant: codice sconto must belong to same tenant
+            // P52 Session #11: condizioni.codiceSconto ora memorizza il testo del codice, non l'ID
+            if (data.condizioni?.codiceSconto) {
+                const codiceSconto = await prisma.codiceSconto.findFirst({
+                    where: {
+                        codice: data.condizioni.codiceSconto,
+                        tenantId,
+                        deletedAt: null
+                    }
+                });
+                if (!codiceSconto) {
+                    throw new Error('Il codice sconto selezionato non appartiene a questo tenant');
+                }
+            }
+
             const convenzione = await prisma.convenzione.create({
                 data: {
                     tenantId,
@@ -132,13 +147,18 @@ export class ConvenzioneService {
                     aziende: {
                         where: { deletedAt: null },
                         include: {
-                            azienda: {
+                            companyTenantProfile: {
                                 select: {
                                     id: true,
-                                    ragioneSociale: true,
-                                    piva: true,
-                                    mail: true,
-                                    telefono: true
+                                    emailGenerale: true,
+                                    telefonoGenerale: true,
+                                    company: {
+                                        select: {
+                                            id: true,
+                                            ragioneSociale: true,
+                                            piva: true
+                                        }
+                                    }
                                 }
                             },
                             riconoscimenti: {
@@ -212,9 +232,12 @@ export class ConvenzioneService {
 
     /**
      * Get all convenzioni with pagination and filters
-     * @param {string} tenantId - Tenant ID
+     * @param {string} tenantId - Primary tenant ID (fallback)
      * @param {Object} options - Query options
      * @param {string} branchType - Branch type (optional for backward compatibility)
+     * @param {string} options.tenantIds - Comma-separated list of tenant IDs (multi-tenant support)
+     * @param {boolean} options.allTenants - If true and accessibleTenantIds provided, show all
+     * @param {string[]} options.accessibleTenantIds - Array of tenant IDs the user can access
      * @returns {Promise<Object>} Paginated convenzioni
      */
     static async getAll(tenantId, options = {}, branchType = null) {
@@ -227,16 +250,43 @@ export class ConvenzioneService {
                 search,
                 validaOggi = false,
                 sortBy = 'nome',
-                sortOrder = 'asc'
+                sortOrder = 'asc',
+                tenantIds = null,
+                allTenants = false,
+                accessibleTenantIds = []
             } = options;
 
             const skip = (page - 1) * pageSize;
             const today = new Date();
 
+            // Determine tenant filter based on user's access (multi-tenant support)
+            let tenantFilter = {};
+
+            if (tenantIds) {
+                const requestedIds = Array.isArray(tenantIds)
+                    ? tenantIds
+                    : (typeof tenantIds === 'string' ? tenantIds.split(',').map(id => id.trim()) : []);
+                const allowedIds = accessibleTenantIds.length > 0
+                    ? requestedIds.filter(id => accessibleTenantIds.includes(id))
+                    : requestedIds;
+
+                if (allowedIds.length > 0) {
+                    tenantFilter = allowedIds.length === 1
+                        ? { tenantId: allowedIds[0] }
+                        : { tenantId: { in: allowedIds } };
+                } else {
+                    tenantFilter = tenantId ? { tenantId } : {};
+                }
+            } else if (allTenants && accessibleTenantIds.length > 0) {
+                tenantFilter = { tenantId: { in: accessibleTenantIds } };
+            } else if (tenantId) {
+                tenantFilter = { tenantId };
+            }
+
             // Build where clause
             const where = {
-                tenantId,
                 deletedAt: null,
+                ...tenantFilter,
                 // Project 45: Add branchType filter if provided
                 ...(branchType && { branchType }),
             };
@@ -354,7 +404,10 @@ export class ConvenzioneService {
             const allowedFields = [
                 'codice', 'nome', 'tipo', 'descrizione', 'contatto',
                 'telefono', 'email', 'indirizzo', 'percentualeSconto',
-                'massimaleAnnuo', 'documentoPath', 'note', 'attiva'
+                'massimaleAnnuo', 'documentoPath', 'note', 'attiva',
+                // Additional fields for convenzione management
+                'enteTerzo', 'partitaIva', 'codiceFiscale', 'referente',
+                'condizioni' // JSON field for codiceSconto, bundleIds, prestazioniIds
             ];
 
             allowedFields.forEach(field => {

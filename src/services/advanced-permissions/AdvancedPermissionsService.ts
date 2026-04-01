@@ -11,7 +11,7 @@ import { getRoleTypeFromDisplayName } from '../roleHierarchyService';
  * Refactorizzato per essere più modulare e manutenibile
  */
 export class AdvancedPermissionsService {
-  private baseUrl = '/api/advanced-permissions';
+  private baseUrl = '/api/v1/advanced-permissions';
 
   /**
    * Ottiene le definizioni delle entità del sistema
@@ -19,13 +19,9 @@ export class AdvancedPermissionsService {
    */
   async getEntityDefinitions(): Promise<EntityDefinition[]> {
     try {
-      console.log('[AdvancedPermissions] Caricamento entità dal backend...');
       const response = await apiGet<{ success: boolean; entities: EntityDefinition[] }>(`${this.baseUrl}/entities`);
 
       if (response.success && response.entities) {
-        console.log('[AdvancedPermissions] Entità caricate dal backend:', response.entities.length);
-        console.log('[AdvancedPermissions] Entità dal backend:', response.entities.map(e => e.name));
-
         // Verifica se le entità critiche sono presenti
         const missingEntities = CRITICAL_ENTITIES.filter(entity =>
           !response.entities.some(e => e.name === entity)
@@ -33,7 +29,6 @@ export class AdvancedPermissionsService {
 
         if (missingEntities.length > 0) {
           console.warn('[AdvancedPermissions] Entità mancanti dal backend:', missingEntities);
-          console.log('[AdvancedPermissions] Uso fallback statico per avere tutte le entità');
           return this.getStaticEntityDefinitionsWithVirtual();
         }
 
@@ -45,12 +40,7 @@ export class AdvancedPermissionsService {
       }
     } catch (error) {
       console.error('[AdvancedPermissions] Errore nel caricamento entità dal backend:', error);
-      console.log('[AdvancedPermissions] Uso definizioni statiche come fallback');
-
-      const staticEntities = this.getStaticEntityDefinitionsWithVirtual();
-      console.log('[AdvancedPermissions] Entità statiche caricate:', staticEntities.length);
-      console.log('[AdvancedPermissions] Entità statiche:', staticEntities.map(e => e.name));
-      return staticEntities;
+      return this.getStaticEntityDefinitionsWithVirtual();
     }
   }
 
@@ -61,8 +51,6 @@ export class AdvancedPermissionsService {
     try {
       // Converte il nome visualizzato in roleType se necessario
       const roleType = getRoleTypeFromDisplayName(roleIdentifier);
-
-      console.log(`🔍 [AdvancedPermissions] Getting permissions for role: ${roleIdentifier} -> ${roleType}`);
 
       // Usa l'endpoint corretto per ottenere i permessi del ruolo
       const response = await apiGet<{
@@ -93,8 +81,6 @@ export class AdvancedPermissionsService {
     try {
       // Converte il nome visualizzato in roleType se necessario
       const roleType = getRoleTypeFromDisplayName(roleIdentifier);
-
-      console.log(`🔄 [AdvancedPermissions] Updating permissions for role: ${roleIdentifier} -> ${roleType}`);
 
       // Converte i permessi dal formato frontend al formato backend
       const backendPermissions = convertToBackendFormat(permissions);
@@ -169,7 +155,7 @@ export class AdvancedPermissionsService {
     const hasTrainers = allEntities.some(e => e.name === 'trainers');
 
     if (!hasEmployees || !hasTrainers) {
-      console.log('[AdvancedPermissions] Aggiunta entità virtuali mancanti');
+      // some virtual entities will be added
     }
 
     return allEntities;
@@ -190,13 +176,9 @@ export class AdvancedPermissionsService {
     virtualEntities.forEach(virtualEntity => {
       const exists = allEntities.some(e => e.name === virtualEntity.name);
       if (!exists) {
-        console.log(`[AdvancedPermissions] Aggiunta entità virtuale: ${virtualEntity.name}`);
         allEntities.push(virtualEntity);
       }
     });
-
-    console.log('[AdvancedPermissions] Entità totali (con virtuali):', allEntities.length);
-    console.log('[AdvancedPermissions] Entità finali:', allEntities.map((e: EntityDefinition) => e.name));
 
     return allEntities;
   }
@@ -306,7 +288,6 @@ export class AdvancedPermissionsService {
    */
   async getRelationDefinitions(): Promise<RelationDefinition[]> {
     try {
-      console.log('[AdvancedPermissions] Caricamento relation definitions...');
       const response = await apiGet<{
         success: boolean;
         data: {
@@ -316,7 +297,6 @@ export class AdvancedPermissionsService {
       }>('/api/v1/roles/relation-definitions');
 
       if (response.success && response.data?.definitions) {
-        console.log(`[AdvancedPermissions] ${response.data.count} relation definitions caricate`);
         return response.data.definitions;
       }
 

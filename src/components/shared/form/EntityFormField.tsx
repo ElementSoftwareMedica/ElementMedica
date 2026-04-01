@@ -105,7 +105,6 @@ const EntityFormField: React.FC<EntityFormFieldProps> = ({
 
   // Handle direct input change
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    console.log(`Field ${name} changed:`, e.target.value);
     onChange(e);
   };
 

@@ -137,8 +137,7 @@ export class ListinoPrezzoService {
                         select: {
                             id: true,
                             firstName: true,
-                            lastName: true,
-                            specialties: true
+                            lastName: true
                         }
                     },
                     convenzione: {
@@ -212,7 +211,6 @@ export class ListinoPrezzoService {
                             id: true,
                             firstName: true,
                             lastName: true,
-                            specialties: true,
                             taxCode: true
                         }
                     },
@@ -265,7 +263,10 @@ export class ListinoPrezzoService {
                 page = 1,
                 limit = 20,
                 orderBy = 'createdAt',
-                orderDir = 'desc'
+                orderDir = 'desc',
+                tenantIds = null,
+                allTenants = false,
+                accessibleTenantIds = []
             } = options;
 
             const {
@@ -281,9 +282,33 @@ export class ListinoPrezzoService {
             const skip = (page - 1) * limit;
             const today = new Date();
 
+            // Determine tenant filter based on user's access (multi-tenant support)
+            let tenantFilter = {};
+
+            if (tenantIds) {
+                const requestedIds = Array.isArray(tenantIds)
+                    ? tenantIds
+                    : (typeof tenantIds === 'string' ? tenantIds.split(',').map(id => id.trim()) : []);
+                const allowedIds = accessibleTenantIds.length > 0
+                    ? requestedIds.filter(id => accessibleTenantIds.includes(id))
+                    : requestedIds;
+
+                if (allowedIds.length > 0) {
+                    tenantFilter = allowedIds.length === 1
+                        ? { tenantId: allowedIds[0] }
+                        : { tenantId: { in: allowedIds } };
+                } else {
+                    tenantFilter = tenantId ? { tenantId } : {};
+                }
+            } else if (allTenants && accessibleTenantIds.length > 0) {
+                tenantFilter = { tenantId: { in: accessibleTenantIds } };
+            } else if (tenantId) {
+                tenantFilter = { tenantId };
+            }
+
             const where = {
-                tenantId,
                 deletedAt: null,
+                ...tenantFilter,
                 ...(branchType && { branchType })
             };
 
@@ -407,8 +432,7 @@ export class ListinoPrezzoService {
                         select: {
                             id: true,
                             firstName: true,
-                            lastName: true,
-                            specialties: true
+                            lastName: true
                         }
                     },
                     convenzione: {
@@ -563,26 +587,21 @@ export class ListinoPrezzoService {
     }
 
     /**
-     * Get all prices for a medico
+     * Get all prices configured for a medico (management view — all listini regardless of date).
+     * Returns prestazione, bundle, and documentoTemplate (questionario) entries.
+     * P72_19: Includes bundle and documentoTemplate relations.
+     *
      * @param {string} medicoId - Medico ID
      * @param {string} tenantId - Tenant ID
-     * @returns {Promise<Array>} Listini for medico
+     * @returns {Promise<Array>} Listini with all relation data
      */
     static async getByMedico(medicoId, tenantId) {
         try {
-            const today = new Date();
-
             const listini = await prisma.listinoPrezzo.findMany({
                 where: {
                     medicoId,
                     tenantId,
-                    deletedAt: null,
-                    attivo: true,
-                    validoDa: { lte: today },
-                    OR: [
-                        { validoA: null },
-                        { validoA: { gte: today } }
-                    ]
+                    deletedAt: null
                 },
                 include: {
                     prestazione: {
@@ -592,17 +611,45 @@ export class ListinoPrezzoService {
                             nome: true,
                             tipo: true,
                             brancheSpecialistiche: true,
-                            prezzoBase: true
+                            prezzoBase: true,
+                            durataPrevista: true
+                        }
+                    },
+                    bundle: {
+                        select: {
+                            id: true,
+                            codice: true,
+                            nome: true,
+                            attivo: true
+                        }
+                    },
+                    // P72_19: documentoTemplate (questionario)
+                    documentoTemplate: {
+                        select: {
+                            id: true,
+                            codice: true,
+                            nome: true,
+                            tipo: true
                         }
                     },
                     convenzione: {
                         select: { id: true, codice: true, nome: true }
+                    },
+                    poliambulatorio: {
+                        select: { id: true, nome: true, codice: true }
                     }
                 },
                 orderBy: [
-                    { prestazione: { nome: 'asc' } },
-                    { priorita: 'desc' }
+                    { createdAt: 'desc' }
                 ]
+            });
+
+            logger.info('Retrieved listini by medico', {
+                component: 'listino-prezzo-service',
+                action: 'getByMedico',
+                medicoId,
+                count: listini.length,
+                tenantId
             });
 
             return listini;
@@ -613,6 +660,183 @@ export class ListinoPrezzoService {
                 error: error.message,
                 medicoId,
                 tenantId
+            });
+            throw error;
+        }
+    }
+
+    /**
+     * Get all listini for a specific documentoTemplate (questionario compensation view).
+     * P72_19: Support for questionario-based listino entries.
+     *
+     * @param {string} documentoTemplateId - DocumentoTemplate ID
+     * @param {string} tenantId - Tenant ID
+     * @returns {Promise<Array>} Listini with documentoTemplate data
+     */
+    static async getByDocumentoTemplate(documentoTemplateId, tenantId) {
+        try {
+            const listini = await prisma.listinoPrezzo.findMany({
+                where: {
+                    documentoTemplateId,
+                    tenantId,
+                    deletedAt: null
+                },
+                include: {
+                    documentoTemplate: {
+                        select: {
+                            id: true,
+                            codice: true,
+                            nome: true,
+                            tipo: true
+                        }
+                    },
+                    medico: {
+                        select: { id: true, firstName: true, lastName: true }
+                    },
+                    convenzione: {
+                        select: { id: true, codice: true, nome: true }
+                    }
+                },
+                orderBy: [
+                    { priorita: 'desc' }
+                ]
+            });
+
+            logger.info('Retrieved listini by documentoTemplate', {
+                component: 'listino-prezzo-service',
+                action: 'getByDocumentoTemplate',
+                documentoTemplateId,
+                count: listini.length,
+                tenantId
+            });
+
+            return listini;
+        } catch (error) {
+            logger.error('Failed to get listini by documentoTemplate', {
+                component: 'listino-prezzo-service',
+                action: 'getByDocumentoTemplate',
+                error: error.message,
+                documentoTemplateId,
+                tenantId
+            });
+            throw error;
+        }
+    }
+
+    /**
+     * Create a listino prezzo for a documentoTemplate (questionario).
+     * P72_19: Support for questionario-based listino entries.
+     *
+     * @param {Object} data - Create data including documentoTemplateId
+     * @returns {Promise<Object>} Created listino
+     */
+    static async createForDocumentoTemplate(data) {
+        try {
+            const { tenantId, createdBy } = data;
+
+            // Verify documentoTemplate exists and belongs to tenant
+            const template = await prisma.documentoTemplate.findFirst({
+                where: {
+                    id: data.documentoTemplateId,
+                    tenantId,
+                    deletedAt: null
+                }
+            });
+
+            if (!template) {
+                throw new Error('DocumentoTemplate not found');
+            }
+
+            // If medicoId provided, verify it exists
+            if (data.medicoId) {
+                const medico = await prisma.person.findFirst({
+                    where: {
+                        id: data.medicoId,
+                        deletedAt: null,
+                        personRoles: {
+                            some: {
+                                roleType: 'MEDICO',
+                                tenantId,
+                                isActive: true,
+                                deletedAt: null
+                            }
+                        }
+                    }
+                });
+                if (!medico) {
+                    throw new Error('Medico not found or not enabled for this tenant');
+                }
+            }
+
+            // Check for duplicate (same template/medico/convenzione)
+            const duplicate = await prisma.listinoPrezzo.findFirst({
+                where: {
+                    tenantId,
+                    documentoTemplateId: data.documentoTemplateId,
+                    medicoId: data.medicoId || null,
+                    convenzioneId: data.convenzioneId || null,
+                    deletedAt: null
+                }
+            });
+
+            if (duplicate) {
+                throw new Error('Esiste già un listino per questa configurazione medico/questionario');
+            }
+
+            const createData = {
+                documentoTemplateId: data.documentoTemplateId,
+                prezzo: data.prezzo ?? 0,
+                tenantId,
+                createdBy,
+                ...(data.medicoId && { medicoId: data.medicoId }),
+                ...(data.convenzioneId && { convenzioneId: data.convenzioneId }),
+                ...(data.poliambulatorioId && { poliambulatorioId: data.poliambulatorioId }),
+                ...(data.codice && { codice: data.codice }),
+                ...(data.nome && { nome: data.nome }),
+                ...(data.descrizione && { descrizione: data.descrizione }),
+                ...(data.durataMedico !== undefined && { durataMedico: data.durataMedico }),
+                ...(data.ivaAliquota !== undefined && { ivaAliquota: data.ivaAliquota }),
+                ...(data.scontoPercentuale !== undefined && { scontoPercentuale: data.scontoPercentuale }),
+                ...(data.compensoMedicoTipo && { compensoMedicoTipo: data.compensoMedicoTipo }),
+                ...(data.compensoMedicoValore !== undefined && { compensoMedicoValore: data.compensoMedicoValore }),
+                ...(data.compensoMedicoMinimo !== undefined && { compensoMedicoMinimo: data.compensoMedicoMinimo }),
+                ...(data.compensoMedicoMassimo !== undefined && { compensoMedicoMassimo: data.compensoMedicoMassimo }),
+                ...(data.attivo !== undefined && { attivo: data.attivo }),
+                ...(data.validoDa && { validoDa: new Date(data.validoDa) }),
+                ...(data.validoA && { validoA: new Date(data.validoA) }),
+                ...(data.priorita !== undefined && { priorita: data.priorita })
+            };
+
+            const listino = await prisma.listinoPrezzo.create({
+                data: createData,
+                include: {
+                    documentoTemplate: {
+                        select: { id: true, codice: true, nome: true, tipo: true }
+                    },
+                    medico: {
+                        select: { id: true, firstName: true, lastName: true }
+                    },
+                    convenzione: {
+                        select: { id: true, codice: true, nome: true }
+                    }
+                }
+            });
+
+            logger.info('Listino prezzo for documentoTemplate created', {
+                component: 'listino-prezzo-service',
+                action: 'createForDocumentoTemplate',
+                listinoId: listino.id,
+                documentoTemplateId: data.documentoTemplateId,
+                medicoId: data.medicoId,
+                tenantId
+            });
+
+            return listino;
+        } catch (error) {
+            logger.error('Failed to create listino prezzo for documentoTemplate', {
+                component: 'listino-prezzo-service',
+                action: 'createForDocumentoTemplate',
+                error: error.message
             });
             throw error;
         }
@@ -946,8 +1170,7 @@ export class ListinoPrezzoService {
                         select: {
                             id: true,
                             firstName: true,
-                            lastName: true,
-                            specialties: true
+                            lastName: true
                         }
                     },
                     convenzione: {
@@ -1102,8 +1325,7 @@ export class ListinoPrezzoService {
                         select: {
                             id: true,
                             firstName: true,
-                            lastName: true,
-                            specialties: true
+                            lastName: true
                         }
                     },
                     convenzione: {

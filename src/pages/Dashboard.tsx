@@ -20,19 +20,17 @@ import { useNavigate } from 'react-router-dom';
 import { apiGet, apiPost } from '../services/api';
 import { getTrainers } from '../services/trainers';
 import { getCompanies } from '../services/companies';
-import { getPersons } from '../services/persons';
-import { getToken } from '../services/auth';
-import { Company, Employee, Course } from '../types';
+import { Company, Course } from '../types';
 import { checkConsent as checkGdprConsent, logGdprAction, ConsentRequiredError } from '../utils/gdpr';
-import { recordApiCall, startTimer } from '../utils/metrics';
+import { startTimer } from '../utils/metrics';
 import { useAuth } from '../context/AuthContext';
 import { useTenant } from '../context/TenantContext';
+import { useTenantFilter } from '../context/TenantFilterContext';
 import { useToast } from '../hooks/useToast';
 import { dbStatusToItalian } from '../utils/scheduleStatusColors';
 import { useExpiringCoursesCount } from '../hooks/useExpiringCoursesCount';
 import { useRoleBasedData, FilterableSchedule } from '../hooks/useRoleBasedData';
 import preventiviService, { Preventivo } from '../services/preventiviService';
-
 // Interfaccia estesa per la dashboard che include campi aggiuntivi
 interface DashboardCompany extends Partial<Company> {
   id: string;
@@ -117,9 +115,16 @@ function toScheduleResource(schedule: DashboardSchedule): ScheduleResource {
       end: sess.end,
       trainer: sess.trainer ? { id: sess.trainer.id, firstName: sess.trainer.firstName, lastName: sess.trainer.lastName } : undefined
     })),
-    companies: schedule.companies?.map(c => ({
-      company: { id: c.company.id, ragioneSociale: c.company.ragioneSociale, name: c.company.name }
-    }))
+    // P49: Handle both old (company) and new (companyTenantProfile) patterns
+    companies: schedule.companies?.map(c => {
+      const profile = (c as any).companyTenantProfile;
+      const companyData = profile?.company || (c as any).company;
+      return {
+        // Expose CompanyTenantProfile.id for matching with getCompanies() results
+        id: profile?.id ?? (c as any).companyTenantProfileId,
+        company: { id: companyData?.id || (c as any).companyId, ragioneSociale: companyData?.ragioneSociale }
+      };
+    })
   };
 }
 
@@ -134,6 +139,7 @@ const Dashboard: React.FC = () => {
   const [calendarEvents, setCalendarEvents] = useState<ScheduleEvent[]>([]);
   const [schedulesData, setSchedulesData] = useState<DashboardSchedule[]>([]); // per rimappare quando cambia vista
   const [calendarView, setCalendarView] = useState('month');
+  const [calendarDate, setCalendarDate] = useState<Date>(new Date());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [gdprConsent, setGdprConsent] = useState<boolean>(false);
@@ -143,6 +149,9 @@ const Dashboard: React.FC = () => {
 
   const navigate = useNavigate();
   const { user, isAuthenticated, hasPermission, isLoading: authLoading } = useAuth();
+
+  // P57: TenantFilter hook for multi-tenant dashboard filtering
+  const { getTenantFilterParams, tenantFilterKey, isReady: tenantFilterReady } = useTenantFilter();
 
   // Hook per filtraggio dati basato sul ruolo
   const {
@@ -162,7 +171,6 @@ const Dashboard: React.FC = () => {
     const tenantContext = useTenant();
     tenant = tenantContext.tenant;
   } catch (error) {
-    console.warn('TenantContext not yet initialized, using fallback values');
   }
 
   const mountedRef = useRef(true);
@@ -171,13 +179,20 @@ const Dashboard: React.FC = () => {
   // Hook per contatore corsi in scadenza (sincronizzato con sidebar)
   const { count: expiringCoursesCount, loading: expiringCoursesLoading } = useExpiringCoursesCount();
 
-  // Cleanup on unmount
+  // P58: Reset fetchingRef AND mountedRef when tenant changes to allow new fetch
   useEffect(() => {
+    fetchingRef.current = false;
+    mountedRef.current = true; // P58: Reset mountedRef to fix tenant change issue
+  }, [tenantFilterKey]);
+
+  // Cleanup on unmount - only set false, not interfere with tenant changes
+  useEffect(() => {
+    // Set mountedRef true on mount
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };
   }, []);
-
   // GDPR Consent Check
   const checkDashboardConsent = useCallback(async () => {
     try {
@@ -205,26 +220,34 @@ const Dashboard: React.FC = () => {
 
       return true;
     } catch (error) {
-      console.warn('GDPR consent check failed, using fallback data:', error);
       setGdprConsent(false);
       setDataSource('fallback');
       return false;
     }
   }, [tenant?.id, user?.id]);
 
-  // Simplified counters fetch using only the working endpoint
+  // Simplified counters fetch using only the working endpoint with tenant filter support
   const fetchCounters = useCallback(async (): Promise<{ companies: number; employees: number }> => {
     try {
-      console.log('🔄 [COUNTERS] Fetching counters from /api/counters...');
-      const data = await apiGet<{ companies: number; employees: number }>('/api/counters');
+      // P57: Build tenantIds query param for multi-tenant filtering
+      const tenantParams = getTenantFilterParams();
+      const queryParams = new URLSearchParams();
+      if (tenantParams.tenantIds) {
+        queryParams.set('tenantIds', tenantParams.tenantIds.join(','));
+      }
+      if (tenantParams.allTenants) {
+        queryParams.set('allTenants', 'true');
+      }
+      const queryString = queryParams.toString();
+      const countersUrl = queryString ? `/api/v1/counters?${queryString}` : '/api/v1/counters';
+
+      const data = await apiGet<{ companies: number; employees: number }>(countersUrl);
       const result = {
         companies: data.companies || 0,
         employees: data.employees || 0
       };
-      console.log('✅ [COUNTERS] Fetched successfully:', result);
       return result;
     } catch (error) {
-      console.error('❌ [COUNTERS] Failed to fetch from API:', error);
 
       // Final fallback to dummy data
       const dummyDataTyped = dummyData as unknown as DummyData;
@@ -232,30 +255,22 @@ const Dashboard: React.FC = () => {
         companies: (dummyDataTyped.companies || []).length,
         employees: (dummyDataTyped.employees || []).length
       };
-      console.log('📦 [COUNTERS] Using dummy data fallback:', fallback);
       return fallback;
     }
-  }, []);
+  }, [getTenantFilterParams, tenantFilterKey]); // P57: tenantFilterKey triggers re-fetch on tenant change
 
   // Optimized data fetching with GDPR compliance
   const fetchData = useCallback(async () => {
-    console.log('[Dashboard] 🔧 fetchData() called', {
-      fetchingRef: fetchingRef.current,
-      mountedRef: mountedRef.current,
-      timestamp: new Date().toISOString()
-    });
+    // P57: Wait for tenant filter to be ready
+    if (!tenantFilterReady) {
+      return;
+    }
 
-    // ✅ FIX CRITICO: Rimuovi check mountedRef che causa false-positive con React Strict Mode
     if (fetchingRef.current) {
-      console.warn('[Dashboard] ⚠️ fetchData() early return: already fetching', {
-        fetchingRef: fetchingRef.current,
-        timestamp: new Date().toISOString()
-      });
       return;
     }
 
     fetchingRef.current = true;
-    console.log('[Dashboard] 🔄 Setting isLoading = true');
     setIsLoading(true);
     setError(null);
 
@@ -265,33 +280,14 @@ const Dashboard: React.FC = () => {
 
     try {
       // Check GDPR consent first
-      console.log('[Dashboard] 🔐 Checking GDPR consent...');
       const hasConsent = await checkDashboardConsent();
-      console.log('[Dashboard] 🔐 GDPR consent result:', hasConsent);
 
       if (!hasConsent) {
-        // Use fallback data without API calls
-        console.log('[Dashboard] ⚠️ No GDPR consent, loading fallback data');
         await loadFallbackData();
-        console.log('[Dashboard] ✅ Fallback loaded, returning from fetchData');
         return;
       }
 
-      console.log('[Dashboard] ✅ GDPR consent granted, proceeding with API calls');
-
-      // Check permissions - permetti accesso se ha almeno un permesso di visualizzazione
-      // EMPLOYEE ha: VIEW_COURSES, VIEW_SCHEDULES, VIEW_PERSONS, VIEW_DOCUMENTS, etc.
-      // Debug: log each permission check individually
-      console.log('[Dashboard] 🔍 Permission checks:', {
-        'dashboard:read': hasPermission?.('dashboard', 'read'),
-        'dashboard:view': hasPermission?.('dashboard', 'view'),
-        'companies:read': hasPermission?.('companies', 'read'),
-        'administration:view': hasPermission?.('administration', 'view'),
-        'schedules:read': hasPermission?.('schedules', 'read'),
-        'courses:read': hasPermission?.('courses', 'read'),
-        'persons:read': hasPermission?.('persons', 'read'),
-      });
-
+      // Check permissions
       const hasDashboardAccess = hasPermission && (
         hasPermission('dashboard', 'read') ||
         hasPermission('dashboard', 'view') ||
@@ -302,87 +298,61 @@ const Dashboard: React.FC = () => {
         hasPermission('persons', 'read')       // EMPLOYEE può vedere persone
       );
 
-      console.log('[Dashboard] 🔑 Dashboard access check:', hasDashboardAccess);
-
       if (!hasDashboardAccess) {
-        console.error('[Dashboard] ❌ Insufficient permissions for dashboard');
         throw new Error('Permessi insufficienti per accedere al dashboard');
       }
 
-      console.log('🚀 Fetching dashboard data with GDPR compliance...');
-
       // Fetch counters using enhanced strategy
       try {
-        console.log('🔄 [COUNTERS] Starting fetch...');
         const countersData = await fetchCounters();
-        console.log('📊 [COUNTERS] Received data:', countersData);
         setCounters(countersData);
-        console.log('✅ [COUNTERS] State updated with:', countersData);
       } catch (error) {
-        console.error('❌ [COUNTERS] Fetch failed:', error);
         // Fallback to dummy data counters
         const dummyDataTyped = dummyData as unknown as DummyData;
         const fallback = {
           companies: (dummyDataTyped.companies || []).length,
           employees: (dummyDataTyped.employees || []).length
         };
-        console.log('📦 [COUNTERS] Using fallback:', fallback);
         setCounters(fallback);
       }
 
-      // Fetch data using optimized API calls (added companies and persons)
-      // FIX: Usa getCourses() service importato staticamente per garantire trasformazione
-      console.log('[Dashboard] 🔍 STARTING data fetch...');
+      // Fetch data using optimized API calls
       const [coursesData, trainersData, schedulesData, companiesData] = await Promise.allSettled([
         (async () => {
-          console.log('[Dashboard] 🚀 Calling getCourses()...');
           try {
             const { getCourses } = await import('../services/courses');
-            console.log('[Dashboard] ✅ Import successful, executing getCourses()');
             const result = await getCourses();
-            console.log('[Dashboard] ✅ getCourses() returned:', result?.length, 'courses', result?.[0]);
             return result;
           } catch (err) {
-            console.error('[Dashboard] ❌ getCourses() FAILED:', err);
             return [];
           }
         })(),
         (async () => {
-          console.log('[Dashboard] 🚀 Calling getTrainers()...');
           const result = await getTrainers();
-          console.log('[Dashboard] ✅ getTrainers() returned:', result?.length, 'trainers');
-
-          // 🔍 DEBUG: Verifica certificazioni ricevute
-          if (result && result.length > 0) {
-            console.log('[Dashboard] 🔍 Sample trainer:', {
-              id: result[0].id,
-              name: `${result[0].firstName} ${result[0].lastName}`,
-              certifications: result[0].certifications,
-              hasCertsField: 'certifications' in result[0]
-            });
-          }
 
           return result;
         })().catch(err => {
-          console.warn('Failed to fetch trainers:', err);
           return [];
         }),
         (async () => {
-          console.log('[Dashboard] 🚀 Calling apiGet(/schedules)...');
-          const result = await apiGet('/api/v1/schedules') as DashboardSchedule[] | undefined;
-          console.log('[Dashboard] ✅ apiGet(/schedules) returned:', result?.length, 'schedules');
+          // Fetch schedules for ±2 months around today to populate the calendar
+          const rangeStart = new Date();
+          rangeStart.setMonth(rangeStart.getMonth() - 2);
+          rangeStart.setDate(1);
+          const rangeEnd = new Date();
+          rangeEnd.setMonth(rangeEnd.getMonth() + 3);
+          rangeEnd.setDate(0);
+          const dateFrom = rangeStart.toISOString().split('T')[0];
+          const dateTo = rangeEnd.toISOString().split('T')[0];
+          const result = await apiGet(`/api/v1/schedules?dateFrom=${dateFrom}&dateTo=${dateTo}`) as DashboardSchedule[] | undefined;
           return result;
         })().catch(err => {
-          console.warn('Failed to fetch schedules:', err);
           return [];
         }),
         (async () => {
-          console.log('[Dashboard] 🚀 Calling getCompanies()...');
           const result = await getCompanies();
-          console.log('[Dashboard] ✅ getCompanies() returned:', result?.length, 'companies');
           return result;
         })().catch(err => {
-          console.warn('Failed to fetch companies:', err);
           return [];
         })
         // ✅ OTTIMIZZAZIONE CRITICA: Non caricare persons all'apertura Dashboard
@@ -390,51 +360,31 @@ const Dashboard: React.FC = () => {
         // Questo mantiene il caricamento Dashboard veloce (<2s invece di 10s+)
       ]);
 
-      console.log('[Dashboard] ✅ ALL Promise.allSettled COMPLETED');
-
       // Process results with safety checks
-      console.log('[Dashboard] 🔍 Promise.allSettled status:', {
-        courses: coursesData.status,
-        trainers: trainersData.status,
-        schedules: schedulesData.status,
-        companies: companiesData.status
-      });
-
-      console.log('[Dashboard] 📦 Step 1: Extracting courses...');
       let courses: any[] = [];
       try {
         courses = coursesData.status === 'fulfilled' ? (Array.isArray(coursesData.value) ? coursesData.value : []) : [];
-        console.log('[Dashboard] ✅ Step 1 complete: Extracted', courses.length, 'courses');
       } catch (err) {
-        console.error('[Dashboard] ❌ Error extracting courses:', err);
         courses = [];
       }
 
-      console.log('[Dashboard] 📦 Step 2: Extracting trainers, schedules, companies, persons...');
       const trainers = trainersData.status === 'fulfilled' ? (Array.isArray(trainersData.value) ? trainersData.value : []) : [];
-      console.log('[Dashboard] ✅ Trainers extracted:', trainers.length);
 
       const schedules = schedulesData.status === 'fulfilled' ? (Array.isArray(schedulesData.value) ? schedulesData.value : []) : [];
-      console.log('[Dashboard] ✅ Schedules extracted:', schedules.length);
 
       const rawCompanies = companiesData.status === 'fulfilled' ? (Array.isArray(companiesData.value) ? companiesData.value : []) : [];
-      console.log('[Dashboard] ✅ Raw companies extracted:', rawCompanies.length);
 
       // ✅ Persons NON caricati - verranno caricati lazy dalla modale
       const rawPersons: any[] = [];
-      console.log('[Dashboard] ℹ️ Persons: lazy loading (will be loaded by modal)');
 
-      console.log('[Dashboard] 📦 Step 3: Transforming companies...');
       // Map companies to DashboardCompany ensuring ragioneSociale compatibility
       const companies: DashboardCompany[] = rawCompanies.map((c: any) => ({
         id: String(c.id),
-        name: c.name || c.ragioneSociale || '',
-        ragioneSociale: c.ragioneSociale || c.name || '',
+        name: c.ragioneSociale || '',
+        ragioneSociale: c.ragioneSociale || '',
         sector: c.sector || c.industry || '',
       }));
-      console.log('[Dashboard] ✅ Companies transformed:', companies.length);
 
-      console.log('[Dashboard] 📦 Step 4: Transforming persons to employees...');
       // Map persons to DashboardEmployee shape
       const employees: DashboardEmployee[] = rawPersons.map((p: any) => ({
         id: String(p.id),
@@ -443,21 +393,6 @@ const Dashboard: React.FC = () => {
         email: p.email ?? '',
         companyId: (p.companyId ?? p.company_id ?? p.company?.id) ? String(p.companyId ?? p.company_id ?? p.company?.id) : undefined,
       }));
-      console.log('[Dashboard] ✅ Employees transformed:', employees.length);
-
-      // DEBUG: Log dettagliato dei risultati
-      console.log('🔍 [DEBUG] API Results Details:');
-      console.log('📊 Courses:', { status: coursesData.status, length: courses.length, sample: courses[0] });
-      console.log('👨‍🏫 Trainers:', { status: trainersData.status, length: trainers.length, sample: trainers[0] });
-      console.log('🏢 Companies:', { status: companiesData.status, length: companies.length, sample: companies[0] });
-      console.log('👥 Persons/Employees:', { lazy: true, length: employees.length });
-      console.log('📅 Schedules:', { status: schedulesData.status, length: schedules.length, sample: schedules[0] });
-
-      // DEBUG: Log errori se presenti
-      if (coursesData.status === 'rejected') console.error('❌ Courses error:', coursesData.reason);
-      if (trainersData.status === 'rejected') console.error('❌ Trainers error:', trainersData.reason);
-      if (schedulesData.status === 'rejected') console.error('❌ Schedules error:', schedulesData.reason);
-      if (companiesData.status === 'rejected') console.error('❌ Companies error:', companiesData.reason);
 
       // Transform trainers data for compatibility - ✅ MANTIENI certifications e specialties
       const transformedTrainers = trainers.map((trainer: any) => ({
@@ -482,23 +417,9 @@ const Dashboard: React.FC = () => {
 
       // DEBUG CRITICO: Log RAW courses PRIMA di salvare nello state
       if (process.env.NODE_ENV === 'development' && courses.length > 0) {
-        const sample = courses[0];
-        console.debug('[Dashboard] RAW courses from getCourses():', {
-          totalCourses: courses.length,
-          sampleCourse: sample,
-          sampleKeys: Object.keys(sample),
-          hasRiskLevel_camel: !!sample.riskLevel,
-          hasRiskLevel_snake: !!(sample as any).risk_level,
-          hasCourseType_camel: !!sample.courseType,
-          hasCourseType_snake: !!(sample as any).course_type,
-          riskLevelValue: sample.riskLevel,
-          risk_levelValue: (sample as any).risk_level,
-          courseTypeValue: sample.courseType,
-          course_typeValue: (sample as any).course_type
-        });
+        // dev-only raw courses debug removed
       }
 
-      console.log('[Dashboard] 💾 Updating state with fetched data...');
       setCoursesList(courses);
       setTrainersList(transformedTrainers);
       setCompaniesList(companiesWithCounts);
@@ -506,17 +427,7 @@ const Dashboard: React.FC = () => {
       setSchedulesData(schedules);
       setDataSource('api');
 
-      // Counters are now handled exclusively by fetchCounters() using /api/counters
-      console.log('✅ Counters managed by /api/counters endpoint:', counters);
-
-      console.log('✅ Dashboard data loaded successfully:', {
-        courses: courses.length,
-        trainers: transformedTrainers.length,
-        companies: companiesWithCounts.length,
-        employees: employees.length,
-        schedules: schedules.length,
-        mountedRef: mountedRef.current
-      });
+      // Counters are now handled exclusively by fetchCounters() using /api/v1/counters
 
       // Log successful data fetch
       await logGdprAction({
@@ -537,9 +448,8 @@ const Dashboard: React.FC = () => {
       });
 
     } catch (error) {
-      console.error('❌ Error loading dashboard data:', error);
 
-      const errorMessage = error instanceof Error ? error.message : 'Errore di connessione al server';
+      const errorMessage = 'Errore di connessione al server';
 
       // ✅ FIX: Log error in modo non-bloccante
       try {
@@ -554,7 +464,6 @@ const Dashboard: React.FC = () => {
           }
         });
       } catch (logError) {
-        console.warn('[Dashboard] GDPR error log failed (non-blocking):', logError);
       }
 
       // ✅ FIX: Rimuovi guard mountedRef anche qui
@@ -562,32 +471,13 @@ const Dashboard: React.FC = () => {
       // Load fallback data on error
       await loadFallbackData();
     } finally {
-      console.log('[Dashboard] 🏁 Finally block executing', {
-        fetchingRef: fetchingRef.current,
-        mountedRef: mountedRef.current,
-        timestamp: new Date().toISOString()
-      });
       fetchingRef.current = false;
-
-      // ✅ FIX CRITICO: Rimuovi guard mountedRef per setIsLoading
-      // React Strict Mode causa mountedRef=false durante remount, ma isLoading DEVE essere aggiornato
-      console.log('[Dashboard] 🔄 Setting isLoading = false (unconditionally)');
       setIsLoading(false);
-
-      // Mantieni guard per altri setState per sicurezza
-      if (mountedRef.current) {
-        console.log('[Dashboard] ✅ Component mounted, state updates safe');
-      } else {
-        console.warn('[Dashboard] ⚠️ Component unmounted during fetch (React Strict Mode remount)');
-      }
-      console.log('[Dashboard] ✅ fetchData() COMPLETED');
     }
-  }, [tenant?.id, hasPermission, checkDashboardConsent]);
+  }, [tenant?.id, hasPermission, checkDashboardConsent, tenantFilterReady, tenantFilterKey, fetchCounters]);
 
   // Load fallback data (dummy data)
   const loadFallbackData = useCallback(async () => {
-    console.log('📦 Loading fallback data...');
-
     try {
       const dummyDataTyped = dummyData as unknown as DummyData;
 
@@ -630,54 +520,37 @@ const Dashboard: React.FC = () => {
           }
         });
       } catch (logError) {
-        console.warn('[Dashboard] GDPR log failed (non-blocking):', logError);
       }
 
     } catch (error) {
-      console.error('Failed to load fallback data:', error);
     } finally {
       // ✅ FIX: Setta isLoading = false anche per fallback data
-      console.log('[Dashboard] ✅ Fallback data loaded, setting isLoading = false');
       setIsLoading(false);
     }
   }, [tenant?.id, gdprConsent]);
 
   // Initial data load - FIXED: Attendi che AuthContext finisca il caricamento
   useEffect(() => {
-    console.log('[Dashboard] 🎬 Mount useEffect triggered', {
-      mountedRef: mountedRef.current,
-      tenantId: tenant?.id || 'not available',
-      authLoading,
-      isAuthenticated,
-      timestamp: new Date().toISOString()
-    });
-
-    // ✅ FIX: Aspetta che AuthContext finisca il caricamento prima di verificare i permessi
     if (authLoading) {
-      console.log('[Dashboard] ⏳ Auth still loading, waiting...');
       return;
     }
 
-    // Load data even without tenant for testing - tenant is only used for GDPR logging
+    // P57: Aspetta che TenantFilter sia pronto
+    if (!tenantFilterReady) {
+      return;
+    }
+
+    // Load data even without tenant for testing
     if (mountedRef.current) {
-      console.log('[Dashboard] 🚀 Calling fetchData() from mount useEffect');
       fetchData();
     } else {
-      console.warn('[Dashboard] ⚠️ mountedRef is false, skipping fetchData()');
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading]); // ✅ Dipende da authLoading per aspettare le permissions
+  }, [authLoading, tenantFilterReady, tenantFilterKey, fetchData]); // P57: Include fetchData for proper counter refresh
 
-  // Monitor counters changes for debugging
-  useEffect(() => {
-    console.log('📊 [COUNTERS] State changed:', counters);
-  }, [counters]);
-
-  // Update counters from loaded data if they're still at 0 and we have data
+  // Update counters when data is loaded
   useEffect(() => {
     if (counters.companies === 0 && counters.employees === 0 &&
       (companiesList.length > 0 || employeesList.length > 0)) {
-      console.log('🔄 [COUNTERS] Updating from loaded data...');
       setCounters({
         companies: companiesList.length,
         employees: employeesList.length
@@ -685,10 +558,10 @@ const Dashboard: React.FC = () => {
     }
   }, [companiesList.length, employeesList.length, counters]);
 
-  // Log when tenant becomes available
+  // Log when tenant becomes available (removed)
   useEffect(() => {
     if (tenant) {
-      console.log('✅ Dashboard: Tenant loaded:', tenant.id);
+      // tenant loaded
     }
   }, [tenant]);
 
@@ -704,7 +577,6 @@ const Dashboard: React.FC = () => {
         const data = await preventiviService.list();
         setPreventivi(data);
       } catch (err) {
-        console.warn('Failed to load preventivi for dashboard:', err);
       }
     };
 
@@ -739,7 +611,7 @@ const Dashboard: React.FC = () => {
               return `<span style='color:#2563eb;font-weight:700'>Sessione ${i + 1}: ${dateStr}, ${orario}${trainer}</span>`;
             }).join('<br>');
             // Aziende senza duplicati
-            const aziende = [...new Set((s.companies || []).map((c) => c.company?.ragioneSociale || c.company?.name))].join(', ');
+            const aziende = [...new Set((s.companies || []).map((c) => c.company?.ragioneSociale))].filter(Boolean).join(', ');
             // Orari del giorno
             const orari = sessions.map((sess: any, idx: number) => `Sessione ${idx + 1}: ${sess.start || '--:--'} - ${sess.end || '--:--'}${sess.trainer ? ' (' + sess.trainer.firstName + ' ' + sess.trainer.lastName + ')' : ''}`).join('\n');
             const sortedSessions = [...sessions].sort((a, b) => a.start.localeCompare(b.start));
@@ -767,13 +639,14 @@ const Dashboard: React.FC = () => {
           });
         } else {
           // fallback: usa startDate/endDate della schedule
-          const aziende = [...new Set((s.companies || []).map((c: any) => c.company?.ragioneSociale || c.company?.name))].join(', ');
+          const aziende = [...new Set((s.companies || []).map((c: any) => c.company?.ragioneSociale))].filter(Boolean).join(', ');
           grouped.push({
             id: s.id,
             scheduleId: s.id,
             title: s.course?.title || 'Corso',
             start: new Date(s.startDate),
-            end: new Date(s.endDate),
+            end: new Date(s.startDate), // single-day event: avoid spanning the full startDate-endDate range
+            allDay: true,
             resource: toScheduleResource(s),
             status: dbStatusToItalian(s.status || 'scheduled'),
             tooltip: `Corso: ${s.course?.title}\nAziende: ${aziende}\nLuogo: ${s.location || '-'}\nData: ${s.startDate ? new Date(s.startDate).toLocaleDateString('it-IT') : '-'}\nOrario: --:--\nStato: ${dbStatusToItalian(s.status || 'scheduled')}`,
@@ -805,7 +678,7 @@ const Dashboard: React.FC = () => {
               const isCurrent = allSameDay || ss === sess;
               return `<span style='color:${isCurrent ? '#2563eb' : '#1e293b'};font-weight:${isCurrent ? 700 : 400}'>Sessione ${i + 1}: ${dateStr}, ${orario}${trainer}</span>`;
             }).join('<br>');
-            const aziende = [...new Set((s.companies || []).map((c: any) => c.company?.ragioneSociale || c.company?.name))].join(', ');
+            const aziende = [...new Set((s.companies || []).map((c: any) => c.company?.ragioneSociale))].filter(Boolean).join(', ');
             return {
               id: s.id + '-' + (sess.id || idx),
               scheduleId: s.id,
@@ -820,13 +693,14 @@ const Dashboard: React.FC = () => {
             };
           });
         } else {
-          const aziende = [...new Set((s.companies || []).map((c: any) => c.company?.ragioneSociale || c.company?.name))].join(', ');
+          const aziende = [...new Set((s.companies || []).map((c: any) => c.company?.ragioneSociale))].filter(Boolean).join(', ');
           return [{
             id: s.id,
             scheduleId: s.id,
             title: s.course?.title || 'Corso',
             start: new Date(s.startDate),
-            end: new Date(s.endDate),
+            end: new Date(s.startDate), // single-day event: avoid spanning the full startDate-endDate range
+            allDay: true,
             resource: toScheduleResource(s),
             status: dbStatusToItalian(s.status || 'scheduled'),
             tooltip: `Corso: ${s.course?.title}\nAziende: ${aziende}\nLuogo: ${s.location || '-'}\nData: ${s.startDate ? new Date(s.startDate).toLocaleDateString('it-IT') : '-'}\nOrario: --:--\nStato: ${dbStatusToItalian(s.status || 'scheduled')}`,
@@ -842,20 +716,9 @@ const Dashboard: React.FC = () => {
     // - EMPLOYEE: vede solo corsi a cui è iscritto
     // Note: filterSchedules è type-safe con FilterableSchedule, DashboardSchedule è compatibile
     const filteredSchedules = filterSchedules(
-      schedulesData as unknown as FilterableSchedule[], 
+      schedulesData as unknown as FilterableSchedule[],
       { includeCoTrainer: true }
     ) as unknown as DashboardSchedule[];
-
-    console.log('[Dashboard] 🔐 Role-based filtering applied:', {
-      originalCount: schedulesData.length,
-      filteredCount: filteredSchedules.length,
-      isAdmin,
-      isTrainingAdmin,
-      isTrainer,
-      isEmployee,
-      hasFullAccess,
-      currentUserId
-    });
 
     // Scegli mapping in base alla vista (default: month)
     let events;
@@ -866,6 +729,26 @@ const Dashboard: React.FC = () => {
     }
     setCalendarEvents(events);
   }, [calendarView, schedulesData, filterSchedules, isAdmin, isTrainingAdmin, isTrainer, isEmployee, hasFullAccess, currentUserId]);
+
+  // Re-fetch schedules when user navigates calendar to a different month
+  useEffect(() => {
+    if (!isAuthenticated || authLoading || dataSource === 'fallback') return;
+    const fetchSchedulesForMonth = async () => {
+      try {
+        const d = calendarDate;
+        const rangeStart = new Date(d.getFullYear(), d.getMonth() - 1, 1);
+        const rangeEnd = new Date(d.getFullYear(), d.getMonth() + 2, 0);
+        const dateFrom = rangeStart.toISOString().split('T')[0];
+        const dateTo = rangeEnd.toISOString().split('T')[0];
+        const result = await apiGet(`/api/v1/schedules?dateFrom=${dateFrom}&dateTo=${dateTo}`) as DashboardSchedule[] | undefined;
+        if (Array.isArray(result)) {
+          setSchedulesData(result);
+        }
+      } catch (err) {
+      }
+    };
+    fetchSchedulesForMonth();
+  }, [calendarDate, isAuthenticated, authLoading]);
 
   const handleCreateSchedule = async (data: any) => {
     try {
@@ -910,13 +793,12 @@ const Dashboard: React.FC = () => {
       await fetchData();
 
     } catch (error) {
-      console.error('Error creating schedule:', error);
 
       await logGdprAction({
         action: 'SCHEDULE_CREATE_ERROR',
         timestamp: new Date().toISOString(),
         tenantId: tenant?.id,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: 'Unknown error',
         metadata: {
           errorType: error instanceof Error ? error.constructor.name : 'UnknownError'
         }
@@ -924,9 +806,7 @@ const Dashboard: React.FC = () => {
 
       const errorMessage = error instanceof ConsentRequiredError
         ? 'Consenso GDPR richiesto per creare pianificazioni'
-        : error instanceof Error
-          ? error.message
-          : 'Errore nella creazione della pianificazione';
+        : 'Errore nella creazione della pianificazione';
 
       setError(errorMessage);
     }
@@ -997,16 +877,16 @@ const Dashboard: React.FC = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
+        <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Dashboard</h1>
         {/* 🔐 ROLE-BASED WELCOME MESSAGE */}
-        <p className="text-gray-500">
+        <p className="text-gray-500 dark:text-gray-400">
           {isTrainer && 'Benvenuto! Ecco i corsi che stai tenendo come formatore.'}
           {isEmployee && 'Benvenuto! Ecco i corsi a cui sei iscritto.'}
-          {(isAdmin || isTrainingAdmin) && 'Welcome to your occupational medicine management dashboard.'}
+          {(isAdmin || isTrainingAdmin) && 'Benvenuto nel tuo pannello di gestione della medicina del lavoro.'}
           {!isTrainer && !isEmployee && !isAdmin && !isTrainingAdmin && 'Benvenuto nella tua dashboard personale.'}
         </p>
         {error && (
-          <div className="mt-2 p-3 bg-red-50 border border-red-200 text-red-700 rounded-md">
+          <div className="mt-2 p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 rounded-md">
             <p className="flex items-center gap-2">
               <AlertTriangle size={16} />
               <span>Si è verificato un errore: {error}</span>
@@ -1109,12 +989,6 @@ const Dashboard: React.FC = () => {
           // ✅ FIX CRITICO: Blocca apertura se dati non pronti
           if (isLoading || coursesList.length === 0) {
             if (process.env.NODE_ENV === 'development') {
-              console.warn('[Dashboard] Cannot open modal: data still loading', {
-                isLoading,
-                coursesAvailable: coursesList.length,
-                companiesAvailable: companiesList.length,
-                employeesAvailable: employeesList.length
-              });
             }
             // Mostra messaggio user-friendly
             const message = isLoading
@@ -1125,12 +999,6 @@ const Dashboard: React.FC = () => {
           }
 
           if (process.env.NODE_ENV === 'development') {
-            console.debug('[Dashboard] Opening modal with data:', {
-              coursesAvailable: coursesList.length,
-              companiesAvailable: companiesList.length,
-              employeesAvailable: employeesList.length,
-              sampleCourse: coursesList[0]
-            });
           }
 
           const start = slotInfo.start;
@@ -1141,17 +1009,18 @@ const Dashboard: React.FC = () => {
         }}
         view={calendarView}
         onView={setCalendarView}
+        onNavigate={(date: Date) => setCalendarDate(date)}
       />
 
       {/* Prossime Sessioni e Corsi in Scadenza */}
       <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
         {/* Prossime Sessioni */}
-        <div className="bg-white rounded-2xl shadow p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow dark:shadow-gray-900/20 p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-800">Prossime Sessioni</h2>
+            <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Prossime Sessioni</h2>
             <button
               onClick={() => navigate('/schedules')}
-              className="text-sm font-medium text-blue-600 hover:text-blue-800 flex items-center gap-1"
+              className="text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1"
             >
               Vedi tutte <ArrowRight className="h-4 w-4" />
             </button>
@@ -1161,16 +1030,16 @@ const Dashboard: React.FC = () => {
               {upcomingSessions.map((session, index) => (
                 <li
                   key={session.id || index}
-                  className="border-b border-gray-100 pb-3 last:border-0 last:pb-0 hover:bg-gray-50 p-2 rounded-lg cursor-pointer transition-colors"
+                  className="border-b border-gray-100 dark:border-gray-700 pb-3 last:border-0 last:pb-0 hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded-lg cursor-pointer transition-colors"
                   onClick={() => session.scheduleId && navigate(`/schedules/${session.scheduleId}`)}
                 >
                   <div className="flex items-start gap-3">
-                    <span className="flex items-center justify-center bg-blue-100 rounded-full w-10 h-10 flex-shrink-0">
-                      <Clock className="h-5 w-5 text-blue-600" />
+                    <span className="flex items-center justify-center bg-blue-100 dark:bg-blue-900/30 rounded-full w-10 h-10 flex-shrink-0">
+                      <Clock className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                     </span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate">{session.title}</p>
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">{session.title}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                         {new Date(session.start).toLocaleDateString('it-IT', {
                           weekday: 'short',
                           day: 'numeric',
@@ -1180,26 +1049,26 @@ const Dashboard: React.FC = () => {
                         })}
                       </p>
                       {session.resource?.location && (
-                        <p className="text-xs text-gray-400 mt-0.5">{session.resource.location}</p>
+                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{session.resource.location}</p>
                       )}
                     </div>
-                    <span className={`px-2 py-1 text-xs rounded-full ${session.status === 'CONFIRMED' ? 'bg-green-100 text-green-700' :
-                      session.status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-gray-100 text-gray-600'
+                    <span className={`px-2 py-1 text-xs rounded-full ${session.status === 'ACCETTATO' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400' :
+                      session.status === 'PREVENTIVO' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400' :
+                        'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
                       }`}>
-                      {dbStatusToItalian(session.status || 'PENDING')}
+                      {dbStatusToItalian(session.status || 'PREVENTIVO')}
                     </span>
                   </div>
                 </li>
               ))}
             </ul>
           ) : (
-            <div className="text-center py-8 text-gray-500">
-              <Calendar className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+              <Calendar className="h-12 w-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" />
               <p className="text-sm">Nessuna sessione programmata</p>
               <button
                 onClick={() => setShowForm(true)}
-                className="mt-3 text-sm text-blue-600 hover:text-blue-800"
+                className="mt-3 text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
               >
                 Pianifica un corso
               </button>
@@ -1208,47 +1077,47 @@ const Dashboard: React.FC = () => {
         </div>
 
         {/* Corsi in Scadenza Alert */}
-        <div className="bg-white rounded-2xl shadow p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow dark:shadow-gray-900/20 p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-800">Corsi in Scadenza</h2>
+            <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Corsi in Scadenza</h2>
             <button
               onClick={() => navigate('/schedules#expiring-courses')}
-              className="text-sm font-medium text-blue-600 hover:text-blue-800 flex items-center gap-1"
+              className="text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1"
             >
               Gestisci <ArrowRight className="h-4 w-4" />
             </button>
           </div>
           {expiringCoursesCount > 0 ? (
             <div className="space-y-4">
-              <div className="flex items-center gap-4 p-4 bg-red-50 rounded-lg border border-red-100">
-                <span className="flex items-center justify-center bg-red-100 rounded-full w-12 h-12 flex-shrink-0">
-                  <AlertTriangle className="h-6 w-6 text-red-600" />
+              <div className="flex items-center gap-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-100 dark:border-red-800">
+                <span className="flex items-center justify-center bg-red-100 dark:bg-red-900/30 rounded-full w-12 h-12 flex-shrink-0">
+                  <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400" />
                 </span>
                 <div className="flex-1">
-                  <p className="text-lg font-semibold text-red-800">{expiringCoursesCount}</p>
-                  <p className="text-sm text-red-600">
+                  <p className="text-lg font-semibold text-red-800 dark:text-red-200">{expiringCoursesCount}</p>
+                  <p className="text-sm text-red-600 dark:text-red-400">
                     {expiringCoursesCount === 1 ? 'corso richiede' : 'corsi richiedono'} attenzione
                   </p>
                 </div>
                 <button
                   onClick={() => navigate('/schedules#expiring-courses')}
-                  className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors"
+                  className="px-4 py-2 bg-red-600 dark:bg-red-700 text-white text-sm font-medium rounded-lg hover:bg-red-700 dark:hover:bg-red-600 transition-colors"
                 >
                   Riprogramma
                 </button>
               </div>
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
                 Alcuni dipendenti hanno certificazioni scadute o in scadenza.
                 Clicca "Gestisci" per vedere i dettagli e riprogrammare i corsi necessari.
               </p>
             </div>
           ) : (
             <div className="text-center py-8">
-              <div className="flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mx-auto mb-4">
-                <GraduationCap className="h-8 w-8 text-green-600" />
+              <div className="flex items-center justify-center w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full mx-auto mb-4">
+                <GraduationCap className="h-8 w-8 text-green-600 dark:text-green-400" />
               </div>
-              <p className="text-sm font-medium text-gray-800">Tutto in regola!</p>
-              <p className="text-sm text-gray-500 mt-1">Nessun corso in scadenza che richiede azione</p>
+              <p className="text-sm font-medium text-gray-800 dark:text-gray-100">Tutto in regola!</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Nessun corso in scadenza che richiede azione</p>
             </div>
           )}
         </div>
@@ -1258,43 +1127,43 @@ const Dashboard: React.FC = () => {
       {hasFullAccess && (
         <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
           {/* Margine Netto YTD */}
-          <div className="bg-white rounded-2xl shadow p-6">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow dark:shadow-gray-900/20 p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-800">Margine Netto {financialData.year}</h2>
+              <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Margine Netto {financialData.year}</h2>
               <button
-                onClick={() => navigate('/quotes-and-invoices')}
-                className="text-sm font-medium text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                onClick={() => navigate('/preventivi')}
+                className="text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1"
               >
                 Dettagli <ArrowRight className="h-4 w-4" />
               </button>
             </div>
             <div className="space-y-4">
               <div className={`flex items-center gap-4 p-4 rounded-lg border ${financialData.margineNetto >= 0
-                ? 'bg-green-50 border-green-200'
-                : 'bg-red-50 border-red-200'
+                ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
                 }`}>
-                <span className={`flex items-center justify-center rounded-full w-14 h-14 flex-shrink-0 ${financialData.margineNetto >= 0 ? 'bg-green-100' : 'bg-red-100'
+                <span className={`flex items-center justify-center rounded-full w-14 h-14 flex-shrink-0 ${financialData.margineNetto >= 0 ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'
                   }`}>
-                  <Euro className={`h-7 w-7 ${financialData.margineNetto >= 0 ? 'text-green-600' : 'text-red-600'}`} />
+                  <Euro className={`h-7 w-7 ${financialData.margineNetto >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`} />
                 </span>
                 <div className="flex-1">
-                  <p className={`text-2xl font-bold ${financialData.margineNetto >= 0 ? 'text-green-700' : 'text-red-700'
+                  <p className={`text-2xl font-bold ${financialData.margineNetto >= 0 ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'
                     }`}>
                     € {financialData.margineNetto.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </p>
-                  <p className="text-sm text-gray-500">Da inizio anno ad oggi</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Da inizio anno ad oggi</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4 text-center">
-                <div className="p-3 bg-blue-50 rounded-lg">
-                  <p className="text-xs text-gray-500 mb-1">Entrate (Preventivi)</p>
-                  <p className="text-lg font-semibold text-blue-700">
+                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Entrate (Preventivi)</p>
+                  <p className="text-lg font-semibold text-blue-700 dark:text-blue-300">
                     € {financialData.entrate.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </p>
                 </div>
-                <div className="p-3 bg-orange-50 rounded-lg">
-                  <p className="text-xs text-gray-500 mb-1">Uscite (Formatori)</p>
-                  <p className="text-lg font-semibold text-orange-700">
+                <div className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Uscite (Formatori)</p>
+                  <p className="text-lg font-semibold text-orange-700 dark:text-orange-300">
                     € {financialData.uscite.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </p>
                 </div>
@@ -1303,10 +1172,10 @@ const Dashboard: React.FC = () => {
           </div>
 
           {/* Grafico Fatturato Mensile */}
-          <div className="bg-white rounded-2xl shadow p-6">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow dark:shadow-gray-900/20 p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-800">Fatturato Mensile {financialData.year}</h2>
-              <div className="flex items-center gap-1 text-sm text-gray-500">
+              <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Fatturato Mensile {financialData.year}</h2>
+              <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
                 <TrendingUp className="h-4 w-4" />
                 <span>Trend</span>
               </div>
@@ -1351,11 +1220,11 @@ const Dashboard: React.FC = () => {
                 </ResponsiveContainer>
               </div>
             ) : (
-              <div className="h-64 flex items-center justify-center text-gray-500">
+              <div className="h-64 flex items-center justify-center text-gray-500 dark:text-gray-400">
                 <div className="text-center">
-                  <TrendingUp className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                  <TrendingUp className="h-12 w-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" />
                   <p className="text-sm">Nessun dato disponibile</p>
-                  <p className="text-xs text-gray-400 mt-1">I dati appariranno quando ci saranno preventivi</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">I dati appariranno quando ci saranno preventivi</p>
                 </div>
               </div>
             )}
@@ -1364,13 +1233,6 @@ const Dashboard: React.FC = () => {
       )}
 
       {showForm && (() => {
-        console.debug('[Dashboard] Rendering ScheduleEventModal with:', {
-          coursesList: coursesList.length,
-          trainersList: trainersList.length,
-          companiesList: companiesList.length,
-          employeesList: employeesList.length,
-          sampleEmployee: employeesList[0]
-        });
         return (
           <ScheduleEventModal
             key={selectedSlot ? `${selectedSlot.start.toISOString()}_${selectedSlot.end.toISOString()}` : 'new-schedule-dashboard'}

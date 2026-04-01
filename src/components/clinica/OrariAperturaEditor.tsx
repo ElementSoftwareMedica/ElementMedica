@@ -8,6 +8,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
+import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 import {
     Clock,
     Plus,
@@ -116,6 +117,7 @@ const OrariAperturaEditor: React.FC<OrariAperturaEditorProps> = ({
     readonly = false,
     maxFascePerGiorno = 4
 }) => {
+    const { confirmWarning } = useConfirmDialog();
     const [expandedDays, setExpandedDays] = useState<number[]>([1, 2, 3, 4, 5]); // Lun-Ven espansi
     const [copiedDay, setCopiedDay] = useState<OrarioGiornaliero | null>(null);
     const [showPresets, setShowPresets] = useState(false);
@@ -238,8 +240,12 @@ const OrariAperturaEditor: React.FC<OrariAperturaEditorProps> = ({
     };
 
     // Reset orari
-    const resetOrari = () => {
-        if (confirm('Sei sicuro di voler resettare tutti gli orari?')) {
+    const resetOrari = async () => {
+        const confirmed = await confirmWarning(
+            'Reset orari',
+            'Sei sicuro di voler resettare tutti gli orari?'
+        );
+        if (confirmed) {
             onChange(GIORNI_SETTIMANA.map(g => ({
                 giornoSettimana: g.value,
                 isChiuso: g.value === 0 || g.value === 6,
@@ -393,10 +399,10 @@ const OrariAperturaEditor: React.FC<OrariAperturaEditorProps> = ({
                         <div
                             key={giorno.value}
                             className={`border rounded-xl transition-all ${orarioGiorno.isChiuso
-                                    ? 'bg-gray-50 border-gray-200'
-                                    : hasErrors
-                                        ? 'bg-red-50 border-red-200'
-                                        : 'bg-white border-gray-200 hover:border-teal-300'
+                                ? 'bg-gray-50 border-gray-200'
+                                : hasErrors
+                                    ? 'bg-red-50 border-red-200'
+                                    : 'bg-white border-gray-200 hover:border-teal-300'
                                 }`}
                         >
                             {/* Header giorno */}
@@ -413,8 +419,8 @@ const OrariAperturaEditor: React.FC<OrariAperturaEditorProps> = ({
                                         }}
                                         disabled={readonly}
                                         className={`w-10 h-6 rounded-full transition-colors relative ${!orarioGiorno.isChiuso
-                                                ? 'bg-teal-500'
-                                                : 'bg-gray-300'
+                                            ? 'bg-teal-500'
+                                            : 'bg-gray-300'
                                             } ${readonly ? 'opacity-50 cursor-not-allowed' : ''}`}
                                     >
                                         <span

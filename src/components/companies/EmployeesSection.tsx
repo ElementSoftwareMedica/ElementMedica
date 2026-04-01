@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { Users } from 'lucide-react';
 import { useToast } from '../../hooks/useToast';
 import { getEmployees as getEmployeesService } from '../../services/employees';
@@ -33,8 +34,7 @@ const EmployeesSection: React.FC<EmployeesSectionProps> = ({ companyId }) => {
       const list = await getEmployeesService({ companyId: companyId });
       setEmployees(list as unknown as Person[]);
     } catch (error) {
-      console.error('Error fetching employees:', error);
-      showToastRef.current?.({ message: 'Errore nel caricamento delle persone', type: 'error' });
+      showToastRef.current?.({ message: 'Errore nel caricamento dei dipendenti', type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -72,10 +72,10 @@ const EmployeesSection: React.FC<EmployeesSectionProps> = ({ companyId }) => {
       <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
         <h2 className="text-lg font-semibold text-gray-800 flex items-center">
           <Users className="h-5 w-5 mr-2" />
-          Persone
+          Dipendenti
         </h2>
         <span className="text-sm text-gray-500">
-          {employees.length} persone
+          {employees.length} dipendenti
         </span>
       </div>
 
@@ -83,14 +83,17 @@ const EmployeesSection: React.FC<EmployeesSectionProps> = ({ companyId }) => {
         {employees.length === 0 ? (
           <div className="text-center py-8">
             <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Nessuna persona trovata</h3>
-            <p className="text-gray-500">Non ci sono persone associate a questa azienda.</p>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Nessun dipendente trovato</h3>
+            <p className="text-gray-500">Non ci sono dipendenti associati a questa azienda.</p>
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
             {employees.map((employee) => (
-              <div key={employee.id} className="flex flex-col items-center space-y-3 group">
-                {/* Avatar con foto o iniziali */}
+              <Link
+                key={employee.id}
+                to={`/employees/${employee.id}`}
+                className="flex flex-col items-center space-y-3 group"
+              >  {/* Avatar con foto o iniziali */}
                 <div className="relative">
                   {employee.photo_url ? (
                     <img
@@ -119,7 +122,7 @@ const EmployeesSection: React.FC<EmployeesSectionProps> = ({ companyId }) => {
                     {employee.title || 'Persona'}
                   </p>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         )}

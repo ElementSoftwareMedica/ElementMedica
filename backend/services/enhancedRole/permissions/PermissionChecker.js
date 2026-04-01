@@ -1,9 +1,8 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '../../../config/prisma-optimization.js';
 import { logger } from '../../../utils/logger.js';
 import { ROLE_TYPES, ROLE_SCOPES, getDefaultPermissions } from '../utils/RoleTypes.js';
 import { getUserRoles } from '../core/RoleCore.js';
 
-const prisma = new PrismaClient();
 
 /**
  * Gestione avanzata dei permessi e verifiche di accesso
@@ -22,6 +21,7 @@ export async function hasPermission(personId, permission, context = {}) {
       where: {
         personId,
         isActive: true,
+        deletedAt: null, // F220: exclude soft-deleted roles
         OR: [
           { validUntil: null },
           { validUntil: { gt: new Date() } }
@@ -29,7 +29,7 @@ export async function hasPermission(personId, permission, context = {}) {
       },
       select: {
         roleType: true,
-        companyId: true,
+        companyTenantProfileId: true,
         tenantId: true
       }
     });
@@ -50,8 +50,8 @@ export async function hasPermission(personId, permission, context = {}) {
 
       if (defaultPermissions.includes(permission)) {
         // Verifica il contesto se necessario
-        if (role.companyId && companyId) {
-          if (role.companyId === companyId) {
+        if (role.companyTenantProfileId && companyId) {
+          if (role.companyTenantProfileId === companyId) {
             return true;
           }
         } else if (role.tenantId && tenantId) {
@@ -77,9 +77,11 @@ export async function hasPermission(personId, permission, context = {}) {
           where: {
             permission: permission,
             isGranted: true,
+            deletedAt: null, // F253: exclude soft-deleted role permissions
             personRole: {
               personId,
               isActive: true,
+              deletedAt: null, // F253: exclude soft-deleted roles
               OR: [
                 { validUntil: null },
                 { validUntil: { gt: new Date() } }
@@ -122,6 +124,7 @@ export async function getUserPermissions(personId, tenantId = null) {
         personId,
         tenantId,
         isActive: true,
+        deletedAt: null, // F220: exclude soft-deleted roles
         OR: [
           { validUntil: null },
           { validUntil: { gt: new Date() } }
@@ -196,6 +199,7 @@ export async function getAdvancedPermissions(personId, resource, action, tenantI
         personId,
         tenantId,
         isActive: true,
+        deletedAt: null, // F220: exclude soft-deleted roles
         OR: [
           { validUntil: null },
           { validUntil: { gt: new Date() } }
@@ -287,19 +291,33 @@ export async function evaluateConditions(conditions, personId, resourceId, tenan
     }
 
     if (conditions.companyId === 'same') {
-      // Ottieni entrambe le informazioni con una singola query ottimizzata
+      // Ottieni entrambe le informazioni con una singola query ottimizzata (P49: via tenantProfiles)
       const [userPerson, resourcePerson] = await Promise.all([
-        prisma.person.findUnique({
-          where: { id: personId },
-          select: { companyId: true }
+        prisma.person.findFirst({ // F220: findFirst+deletedAt
+          where: { id: personId, deletedAt: null },
+          include: {
+            tenantProfiles: {
+              where: { deletedAt: null, isActive: true },
+              select: { companyTenantProfileId: true },
+              take: 1
+            }
+          }
         }),
-        prisma.person.findUnique({
-          where: { id: resourceId },
-          select: { companyId: true }
+        prisma.person.findFirst({ // F220: findFirst+deletedAt
+          where: { id: resourceId, deletedAt: null },
+          include: {
+            tenantProfiles: {
+              where: { deletedAt: null, isActive: true },
+              select: { companyTenantProfileId: true },
+              take: 1
+            }
+          }
         })
       ]);
 
-      return userPerson?.companyId === resourcePerson?.companyId;
+      const userCompanyId = userPerson?.tenantProfiles?.[0]?.companyTenantProfileId;
+      const resourceCompanyId = resourcePerson?.tenantProfiles?.[0]?.companyTenantProfileId;
+      return userCompanyId && resourceCompanyId && userCompanyId === resourceCompanyId;
     }
 
     return true;
@@ -314,22 +332,24 @@ export async function evaluateConditions(conditions, personId, resourceId, tenan
  */
 export async function filterDataByPermissions(personId, resource, action, data, tenantId) {
   try {
-    // BYPASS TEMPORANEO: Verifica se l'utente è admin
-    const person = await prisma.person.findUnique({
-      where: { id: personId },
+    // P48: globalRole e email sono deprecati su Person
+    // Verifica se l'utente è admin tramite personRoles
+    const person = await prisma.person.findFirst({ // F220: findFirst+deletedAt
+      where: { id: personId, deletedAt: null },
       select: {
-        globalRole: true,
-        email: true,
         personRoles: {
-          where: { isActive: true },
+          where: { isActive: true, deletedAt: null }, // F220: exclude soft-deleted roles
           select: { roleType: true }
         }
       }
     });
 
+    // P48: Determina il ruolo principale da personRoles
+    const roles = person?.personRoles?.map(r => r.roleType) || [];
+    const isAdmin = roles.includes('ADMIN') || roles.includes('SUPER_ADMIN');
+
     // Se è admin o super admin, restituisci tutti i dati
-    if (person?.globalRole === 'ADMIN' || person?.globalRole === 'SUPER_ADMIN' ||
-      person?.personRoles?.some(role => role.roleType === 'ADMIN' || role.roleType === 'SUPER_ADMIN')) {
+    if (isAdmin) {
       return data;
     }
 

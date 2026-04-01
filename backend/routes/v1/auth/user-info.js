@@ -4,7 +4,8 @@
  */
 
 import express from 'express';
-import { authenticate } from '../../../auth/middleware.js';
+import authMiddleware from '../../../middleware/auth.js';
+const { authenticate } = authMiddleware;
 import prisma from '../../../config/prisma-optimization.js';
 import { logger } from '../../../utils/logger.js';
 import { RBACService } from '../../../middleware/rbac.js';
@@ -19,70 +20,77 @@ const router = express.Router();
  *     description: Get current authenticated person information
  *     tags: [Authentication]
  */
-router.get('/me', authenticate(), async (req, res) => {
+router.get('/me', authenticate, async (req, res) => {
   try {
+    // P48: req.person è già arricchito dal middleware auth con dati flattened
     const person = await prisma.person.findUnique({
       where: { id: req.person.id },
       include: {
-        company: true,
-        tenant: true,
         personRoles: {
+          where: { isActive: true, deletedAt: null },
           include: {
             permissions: {
-              where: {
-                isGranted: true
-              }
+              where: { isGranted: true }
+            },
+            companyTenantProfile: {
+              include: { company: true }
             }
           }
+        },
+        tenantProfiles: {
+          where: { deletedAt: null, isActive: true }
         }
       }
     });
 
     if (!person) {
       return res.status(404).json({
-        error: 'Person not found',
-        message: 'Person account not found'
+        error: 'Persona non trovata',
+        message: 'Account persona non trovato'
       });
     }
 
-    // Get comprehensive permissions using RBACService (includes admin bypass)
-    const permissions = await RBACService.getPersonPermissions(person.id);
+    // P48: Estrai dati dal profilo tenant del req.person (già risolto dal middleware)
+    const primaryProfile = person.tenantProfiles?.find(p => p.isPrimary) || person.tenantProfiles?.[0] || {};
+    const profileEmail = primaryProfile.email || null;
+    const profileStatus = primaryProfile.status || 'ACTIVE';
+
+    // Get permissions scoped to the effective tenant
+    const permissions = await RBACService.getPersonPermissions(person.id, req.person.tenantId);
+
+    // Ottieni companyTenantProfile dalla prima role attiva
+    const activeRole = person.personRoles?.[0];
+    const companyProfile = activeRole?.companyTenantProfile;
 
     res.json({
       id: person.id,
-      email: person.email,
+      email: profileEmail,
       firstName: person.firstName,
       lastName: person.lastName,
-      role: person.role,
-      globalRole: person.globalRole,
-      tenantId: person.tenantId,
-      companyId: person.companyId,
-      isActive: person.status === 'ACTIVE',
+      globalRole: req.person.globalRole,
+      tenantId: req.person.tenantId,
+      companyTenantProfileId: primaryProfile.companyTenantProfileId || null,
+      isActive: profileStatus === 'ACTIVE',
       createdAt: person.createdAt,
       updatedAt: person.updatedAt,
       lastLogin: person.lastLogin,
-      company: person.company ? {
-        id: person.company.id,
-        name: person.company.name
-      } : null,
-      tenant: person.tenant ? {
-        id: person.tenant.id,
-        name: person.tenant.name,
-        slug: person.tenant.slug
+      company: companyProfile?.company ? {
+        id: companyProfile.company.id,
+        ragioneSociale: companyProfile.company.ragioneSociale || companyProfile.company.name
       } : null,
       roles: person.personRoles.map(pr => pr.roleType),
       permissions: permissions
     });
   } catch (error) {
     logger.error('Get person error', {
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       personId: req.person?.personId
     });
 
     res.status(500).json({
-      error: 'Internal server error',
-      message: 'An error occurred while retrieving person information'
+      error: 'Errore interno del server',
+      message: 'Si è verificato un errore nel recupero delle informazioni utente'
     });
   }
 });
@@ -95,7 +103,7 @@ router.get('/me', authenticate(), async (req, res) => {
  *     description: Verifies if the provided JWT token is valid and returns person information with permissions
  *     tags: [Authentication]
  */
-router.get('/verify', authenticate(), async (req, res) => {
+router.get('/verify', authenticate, async (req, res) => {
   try {
     logger.info('🔍 [VERIFY] Token verification started', {
       personId: req.person?.id,
@@ -106,17 +114,20 @@ router.get('/verify', authenticate(), async (req, res) => {
     const person = await prisma.person.findUnique({
       where: { id: req.person.id },
       include: {
-        company: true,
-        tenant: true,
         personRoles: {
+          where: { isActive: true, deletedAt: null },
           include: {
             customRole: true,
             permissions: {
-              where: {
-                isGranted: true
-              }
+              where: { isGranted: true }
+            },
+            companyTenantProfile: {
+              include: { company: true }
             }
           }
+        },
+        tenantProfiles: {
+          where: { deletedAt: null, isActive: true }
         }
       }
     });
@@ -124,16 +135,31 @@ router.get('/verify', authenticate(), async (req, res) => {
     if (!person) {
       return res.status(401).json({
         valid: false,
-        error: 'Person not found',
-        message: 'Person account not found'
+        error: 'Persona non trovata',
+        message: 'Account persona non trovato'
       });
     }
+
+    // Filter personRoles by effective tenant for correct per-tenant permission scoping
+    const effectiveTenantId = req.person.tenantId;
+    const tenantPersonRoles = effectiveTenantId
+      ? person.personRoles.filter(pr => pr.tenantId === effectiveTenantId)
+      : person.personRoles;
 
     // Build permissions map
     const permissionMap = {};
 
-    // Get role-based permissions
-    person.personRoles.forEach(personRole => {
+    // Merge permissions from auth middleware (already tenant-scoped via RBACService)
+    if (req.person?.permissions) {
+      if (Array.isArray(req.person.permissions)) {
+        req.person.permissions.forEach(p => { permissionMap[p] = true; });
+      } else if (typeof req.person.permissions === 'object') {
+        Object.assign(permissionMap, req.person.permissions);
+      }
+    }
+
+    // Also add role-specific DB permissions for the current tenant only
+    tenantPersonRoles.forEach(personRole => {
       if (personRole.permissions) {
         personRole.permissions.forEach(rolePermission => {
           if (rolePermission.permission) {
@@ -143,27 +169,24 @@ router.get('/verify', authenticate(), async (req, res) => {
       }
     });
 
-    // Build roles array including customRole/roleType and fallback to globalRole
+    // Build roles array from tenant-scoped roles only
+    // Preserve SUPER_ADMIN globally (system-level admin always has full access)
     const roles = Array.from(new Set([
-      ...person.personRoles
+      ...tenantPersonRoles
         .map(pr => pr.customRole?.name || pr.roleType)
         .filter(Boolean),
-      ...(person.globalRole ? [person.globalRole] : []),
-      ...(Array.isArray(req.person?.roles) ? req.person.roles.filter(Boolean) : [])
+      ...(req.person.globalRole === 'SUPER_ADMIN' ? ['SUPER_ADMIN'] : [])
     ]));
 
-    // Determine primary role with fallback to globalRole
+    // Determine primary role
     const personRole = roles.length > 0
       ? roles[0]
-      : (person.globalRole || (Array.isArray(req.person?.roles) && req.person.roles.length > 0 ? req.person.roles[0] : null));
+      : (req.person.globalRole || null);
 
-    // Add default permissions based on role
+    // Add default permissions based on tenant-scoped role
     const isAdmin =
-      personRole === 'ADMIN' ||
-      personRole === 'SUPER_ADMIN' ||
-      roles.includes('ADMIN') ||
-      roles.includes('SUPER_ADMIN') ||
-      (Array.isArray(req.person?.roles) && (req.person.roles.includes('ADMIN') || req.person.roles.includes('SUPER_ADMIN')));
+      tenantPersonRoles.some(pr => pr.roleType === 'ADMIN' || pr.roleType === 'SUPER_ADMIN') ||
+      req.person.globalRole === 'SUPER_ADMIN';
     if (isAdmin) {
       // Admin permissions
       permissionMap['dashboard:view'] = true;
@@ -440,7 +463,6 @@ router.get('/verify', authenticate(), async (req, res) => {
 
     logger.info('🔍 [VERIFY] Token verification successful', {
       personId: person.id,
-      email: person.email,
       role: personRole,
       roles: roles,
       permissionsFromMiddleware: req.person?.permissions?.length || 0,
@@ -450,32 +472,32 @@ router.get('/verify', authenticate(), async (req, res) => {
     // Use permissions from middleware (already loaded and mapped)
     const finalPermissions = req.person?.permissions || [];
 
+    // P48: Estrai dati dal profilo tenant
+    const verifyProfile = person.tenantProfiles?.find(p => p.isPrimary) || person.tenantProfiles?.[0] || {};
+    const verifyActiveRole = person.personRoles?.[0];
+    const verifyCompanyProfile = verifyActiveRole?.companyTenantProfile;
+
     // Token is valid, return complete user info with permissions
     res.json({
       valid: true,
       user: {
         id: person.id,
         personId: person.id,
-        email: person.email,
+        email: verifyProfile.email || null,
         username: person.username,
         firstName: person.firstName,
         lastName: person.lastName,
-        companyId: person.companyId,
-        tenantId: person.tenantId,
-        globalRole: person.globalRole,
+        companyTenantProfileId: verifyProfile.companyTenantProfileId || null,
+        tenantId: req.person.tenantId,
+        globalRole: req.person.globalRole,
         role: personRole,
         roles: roles,
         permissions: finalPermissions,
-        company: person.company ? {
-          id: person.company.id,
-          name: person.company.name
+        company: verifyCompanyProfile?.company ? {
+          id: verifyCompanyProfile.company.id,
+          ragioneSociale: verifyCompanyProfile.company.ragioneSociale || verifyCompanyProfile.company.name
         } : null,
-        tenant: person.tenant ? {
-          id: person.tenant.id,
-          name: person.tenant.name,
-          slug: person.tenant.slug
-        } : null,
-        isActive: person.status === 'ACTIVE',
+        isActive: (verifyProfile.status || 'ACTIVE') === 'ACTIVE',
         lastLogin: person.lastLogin
       },
       permissions: permissionMap,
@@ -483,15 +505,15 @@ router.get('/verify', authenticate(), async (req, res) => {
     });
   } catch (error) {
     logger.error('Token verification failed', {
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack,
       personId: req.person?.id
     });
 
     res.status(401).json({
       valid: false,
-      error: 'Token verification failed',
-      message: 'An error occurred during token verification'
+      error: 'Verifica token fallita',
+      message: 'Si è verificato un errore durante la verifica del token'
     });
   }
 });

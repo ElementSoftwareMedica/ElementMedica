@@ -1,11 +1,6 @@
 /**
- * DocumentManager Re-export
- * 
- * This file now re-exports the refactored DocumentManager module.
- * Original 761-line implementation moved to DocumentManager.backup.tsx
- * 
- * Refactored implementation: DocumentManager/index.tsx (270L)
- * Reduction: 761L → 270L (-64%)
+ * DocumentManager - re-export module entry point.
+ * Implementation: DocumentManager/index.tsx
  */
 
 export { DocumentManager, DocumentManager as default } from './DocumentManager/index';

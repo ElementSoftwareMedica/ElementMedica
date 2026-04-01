@@ -35,7 +35,7 @@ export const DOCUMENT_TYPES: { value: TipoDocumentoPersonale; label: string; has
     { value: 'ALTRO', label: 'Altro' }
 ];
 
-export const DEFAULT_PASSWORD = 'Password1!';
+export const DEFAULT_PASSWORD = 'Password123!';
 
 export interface MedicoFormData {
     // Dati anagrafici
@@ -45,6 +45,9 @@ export interface MedicoFormData {
     phone: string;
     taxCode: string;
     birthDate: string;
+    gender: 'MALE' | 'FEMALE' | 'OTHER' | 'NOT_SPECIFIED' | '';
+    birthPlace: string;
+    birthProvince: string;
     pec: string;
     // Residenza
     residenceAddress: string;
@@ -167,6 +170,9 @@ export const getInitialFormData = (): MedicoFormData => ({
     phone: '',
     taxCode: '',
     birthDate: '',
+    gender: '',
+    birthPlace: '',
+    birthProvince: '',
     pec: '',
     residenceAddress: '',
     residenceCity: '',

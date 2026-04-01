@@ -7,6 +7,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Upload, AlertCircle, CheckCircle, GraduationCap, Download, Copy, Mail } from 'lucide-react';
 import { useToast } from '../../../hooks/useToast';
+import { apiPost } from '../../../services/api';
 import ImportConflictResolutionPanel, { ConflictItem, ConflictResolution } from '../common/ImportConflictResolutionPanel';
 
 interface TrainerData {
@@ -15,6 +16,19 @@ interface TrainerData {
   taxCode: string;
   email: string; // Required for trainers
   phone?: string;
+  birthDate?: string;
+  birthPlace?: string;
+  birthProvince?: string;
+  gender?: string;
+  vatNumber?: string;
+  hourlyRate?: string;
+  registerCode?: string;
+  iban?: string;
+  residenceAddress?: string;
+  city?: string;
+  province?: string;
+  postalCode?: string;
+  notes?: string;
   _rowIndex?: number;
   _hasConflict?: boolean;
   _conflictWith?: any;
@@ -33,13 +47,16 @@ interface TrainerImportModalProps {
   onClose: () => void;
   onImportComplete?: () => void;
   tenantId: string;
+  /** Multi-tenant operation headers (X-Operate-Tenant-Id) */
+  operateHeaders?: Record<string, string>;
 }
 
 const TrainerImportModal: React.FC<TrainerImportModalProps> = ({
   isOpen,
   onClose,
   onImportComplete,
-  tenantId
+  tenantId,
+  operateHeaders = {}
 }) => {
   const [file, setFile] = useState<File | null>(null);
   const [trainers, setTrainers] = useState<TrainerData[]>([]);
@@ -97,13 +114,26 @@ const TrainerImportModal: React.FC<TrainerImportModalProps> = ({
 
     // Parse header
     const header = lines[0].split(';').map(h => h.trim());
-    
+
     // Map header indices
     const firstNameIdx = header.findIndex(h => /^(firstName|nome)$/i.test(h));
     const lastNameIdx = header.findIndex(h => /^(lastName|cognome)$/i.test(h));
     const taxCodeIdx = header.findIndex(h => /^(taxCode|codiceFiscale|cf)$/i.test(h));
     const emailIdx = header.findIndex(h => /^(email|mail)$/i.test(h));
     const phoneIdx = header.findIndex(h => /^(phone|telefono|tel)$/i.test(h));
+    const birthDateIdx = header.findIndex(h => /^(birthDate|dataNascita|data_nascita)$/i.test(h));
+    const birthPlaceIdx = header.findIndex(h => /^(birthPlace|luogoNascita|luogo_nascita)$/i.test(h));
+    const birthProvinceIdx = header.findIndex(h => /^(birthProvince|provinciaNascita|prov_nascita)$/i.test(h));
+    const genderIdx = header.findIndex(h => /^(gender|sesso|genere)$/i.test(h));
+    const vatNumberIdx = header.findIndex(h => /^(vatNumber|partitaIva|piva)$/i.test(h));
+    const hourlyRateIdx = header.findIndex(h => /^(hourlyRate|tariffa|tariffaOraria)$/i.test(h));
+    const registerCodeIdx = header.findIndex(h => /^(registerCode|albo|codiceAlbo)$/i.test(h));
+    const ibanIdx = header.findIndex(h => /^(iban)$/i.test(h));
+    const residenceAddressIdx = header.findIndex(h => /^(residenceAddress|indirizzo|address)$/i.test(h));
+    const cityIdx = header.findIndex(h => /^(city|citta|città)$/i.test(h));
+    const provinceIdx = header.findIndex(h => /^(province|provincia)$/i.test(h));
+    const postalCodeIdx = header.findIndex(h => /^(postalCode|cap)$/i.test(h));
+    const notesIdx = header.findIndex(h => /^(notes|note)$/i.test(h));
 
     if (firstNameIdx === -1 || lastNameIdx === -1 || taxCodeIdx === -1 || emailIdx === -1) {
       throw new Error('Il CSV deve contenere le colonne: firstName, lastName, taxCode, email (obbligatoria per formatori)');
@@ -113,13 +143,26 @@ const TrainerImportModal: React.FC<TrainerImportModalProps> = ({
     const data: TrainerData[] = [];
     for (let i = 1; i < lines.length; i++) {
       const values = lines[i].split(';').map(v => v.trim());
-      
+
       const trainer: TrainerData = {
         firstName: values[firstNameIdx] || '',
         lastName: values[lastNameIdx] || '',
         taxCode: normalizeTaxCode(values[taxCodeIdx]),
         email: values[emailIdx] || '',
-        phone: phoneIdx !== -1 ? values[phoneIdx] : undefined,
+        phone: phoneIdx !== -1 ? values[phoneIdx] || undefined : undefined,
+        birthDate: birthDateIdx !== -1 ? values[birthDateIdx] || undefined : undefined,
+        birthPlace: birthPlaceIdx !== -1 ? values[birthPlaceIdx] || undefined : undefined,
+        birthProvince: birthProvinceIdx !== -1 ? values[birthProvinceIdx] || undefined : undefined,
+        gender: genderIdx !== -1 ? values[genderIdx] || undefined : undefined,
+        vatNumber: vatNumberIdx !== -1 ? values[vatNumberIdx] || undefined : undefined,
+        hourlyRate: hourlyRateIdx !== -1 ? values[hourlyRateIdx] || undefined : undefined,
+        registerCode: registerCodeIdx !== -1 ? values[registerCodeIdx] || undefined : undefined,
+        iban: ibanIdx !== -1 ? values[ibanIdx] || undefined : undefined,
+        residenceAddress: residenceAddressIdx !== -1 ? values[residenceAddressIdx] || undefined : undefined,
+        city: cityIdx !== -1 ? values[cityIdx] || undefined : undefined,
+        province: provinceIdx !== -1 ? values[provinceIdx] || undefined : undefined,
+        postalCode: postalCodeIdx !== -1 ? values[postalCodeIdx] || undefined : undefined,
+        notes: notesIdx !== -1 ? values[notesIdx] || undefined : undefined,
         _rowIndex: i - 1
       };
 
@@ -171,7 +214,7 @@ const TrainerImportModal: React.FC<TrainerImportModalProps> = ({
       await detectConflicts(parsedTrainers);
 
       setTrainers(parsedTrainers);
-      
+
       // Select all valid rows by default
       const validRows = new Set<number>();
       parsedTrainers.forEach((_, idx) => {
@@ -186,9 +229,8 @@ const TrainerImportModal: React.FC<TrainerImportModalProps> = ({
         type: 'success'
       });
     } catch (error) {
-      console.error('Errore parsing CSV:', error);
       showToast({
-        message: error instanceof Error ? error.message : 'Errore parsing CSV',
+        message: 'Errore parsing CSV',
         type: 'error'
       });
     } finally {
@@ -199,20 +241,10 @@ const TrainerImportModal: React.FC<TrainerImportModalProps> = ({
   // Detect conflicts with backend
   const detectConflicts = async (trainersData: TrainerData[]) => {
     try {
-      const response = await fetch('/api/v1/import/trainers/validate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          trainers: trainersData.map(({ _rowIndex, _hasConflict, _conflictWith, ...rest }) => rest),
-          tenantId
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Errore validazione backend');
-      }
-
-      const result = await response.json();
+      const result = await apiPost<{ conflicts?: any[] }>('/api/v1/import/trainers/validate', {
+        trainers: trainersData.map(({ _rowIndex, _hasConflict, _conflictWith, ...rest }) => rest),
+        tenantId
+      }, { headers: operateHeaders });
 
       // Process conflicts
       const conflictsMap = new Map<number, ConflictItem>();
@@ -236,7 +268,6 @@ const TrainerImportModal: React.FC<TrainerImportModalProps> = ({
 
       setConflicts(conflictsMap);
     } catch (error) {
-      console.error('Errore rilevamento conflitti:', error);
     }
   };
 
@@ -275,23 +306,13 @@ const TrainerImportModal: React.FC<TrainerImportModalProps> = ({
         .map(([_, res]) => res.itemId!);
 
       // Call import API
-      const response = await fetch('/api/v1/import/trainers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          trainers: selectedTrainers.map(({ _rowIndex, _hasConflict, _conflictWith, ...rest }) => rest),
-          tenantId,
-          overwriteIds,
-          createAccounts
-        })
-      });
+      const result = await apiPost<{ success?: boolean; imported?: number; created?: number; updated?: number; skipped?: number; errors?: any[]; credentials?: any[] }>('/api/v1/import/trainers', {
+        trainers: selectedTrainers.map(({ _rowIndex, _hasConflict, _conflictWith, ...rest }) => rest),
+        tenantId,
+        overwriteIds,
+        createAccounts
+      }, { headers: operateHeaders });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Errore importazione');
-      }
-
-      const result = await response.json();
       setImportResult(result);
 
       // Save credentials if accounts were created
@@ -308,9 +329,8 @@ const TrainerImportModal: React.FC<TrainerImportModalProps> = ({
         onImportComplete();
       }
     } catch (error) {
-      console.error('Errore importazione:', error);
       showToast({
-        message: error instanceof Error ? error.message : 'Errore importazione',
+        message: 'Errore importazione',
         type: 'error'
       });
     } finally {
@@ -324,7 +344,7 @@ const TrainerImportModal: React.FC<TrainerImportModalProps> = ({
 
     const csvContent = [
       'Nome;Cognome;Email;Username;Password',
-      ...credentials.map(c => 
+      ...credentials.map(c =>
         `${c.firstName};${c.lastName};${c.email};${c.username};${c.password}`
       )
     ].join('\n');
@@ -340,7 +360,7 @@ const TrainerImportModal: React.FC<TrainerImportModalProps> = ({
   const copyCredentials = async () => {
     if (credentials.length === 0) return;
 
-    const text = credentials.map(c => 
+    const text = credentials.map(c =>
       `${c.firstName} ${c.lastName}\nEmail: ${c.email}\nUsername: ${c.username}\nPassword: ${c.password}`
     ).join('\n\n');
 
@@ -356,17 +376,17 @@ const TrainerImportModal: React.FC<TrainerImportModalProps> = ({
   const validTrainersCount = trainers.filter((_, idx) => !validationErrors.has(idx)).length;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-70 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl dark:shadow-black/30 max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center gap-3">
-            <GraduationCap className="w-6 h-6 text-purple-600" />
-            <h2 className="text-2xl font-bold text-gray-900">Importazione Formatori</h2>
+            <GraduationCap className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-50">Importazione Formatori</h2>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors"
           >
             <X className="w-6 h-6" />
           </button>
@@ -377,30 +397,30 @@ const TrainerImportModal: React.FC<TrainerImportModalProps> = ({
           {credentials.length > 0 ? (
             // Show credentials after import
             <div className="space-y-4">
-              <div className="bg-green-50 border border-green-200 rounded-lg p-6">
+              <div className="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700 rounded-lg p-6">
                 <div className="flex items-center gap-3 mb-4">
-                  <CheckCircle className="w-8 h-8 text-green-600" />
-                  <h3 className="text-xl font-bold text-green-900">
+                  <CheckCircle className="w-8 h-8 text-green-600 dark:text-green-400" />
+                  <h3 className="text-xl font-bold text-green-900 dark:text-green-100">
                     Importazione Completata - Account Creati
                   </h3>
                 </div>
 
                 <div className="grid grid-cols-3 gap-4 mb-6">
-                  <div className="bg-white rounded-lg p-4 border border-green-100">
-                    <div className="text-sm text-gray-600 mb-1">Creati</div>
-                    <div className="text-3xl font-bold text-green-600">
+                  <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-green-100 dark:border-green-700">
+                    <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Creati</div>
+                    <div className="text-3xl font-bold text-green-600 dark:text-green-400">
                       {importResult?.created || 0}
                     </div>
                   </div>
-                  <div className="bg-white rounded-lg p-4 border border-blue-100">
-                    <div className="text-sm text-gray-600 mb-1">Aggiornati</div>
-                    <div className="text-3xl font-bold text-blue-600">
+                  <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-blue-100 dark:border-blue-700">
+                    <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Aggiornati</div>
+                    <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
                       {importResult?.updated || 0}
                     </div>
                   </div>
-                  <div className="bg-white rounded-lg p-4 border border-purple-100">
-                    <div className="text-sm text-gray-600 mb-1">Account Creati</div>
-                    <div className="text-3xl font-bold text-purple-600">
+                  <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-purple-100 dark:border-purple-700">
+                    <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Account Creati</div>
+                    <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">
                       {credentials.length}
                     </div>
                   </div>
@@ -408,13 +428,13 @@ const TrainerImportModal: React.FC<TrainerImportModalProps> = ({
               </div>
 
               {/* Credentials Table */}
-              <div className="bg-white border border-gray-200 rounded-lg">
-                <div className="p-4 border-b bg-gray-50 flex items-center justify-between">
-                  <h4 className="font-semibold text-gray-900">Credenziali Account Formatori</h4>
+              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
+                <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 flex items-center justify-between">
+                  <h4 className="font-semibold text-gray-900 dark:text-gray-100">Credenziali Account Formatori</h4>
                   <div className="flex gap-2">
                     <button
                       onClick={copyCredentials}
-                      className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-100 flex items-center gap-2"
+                      className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 flex items-center gap-2"
                     >
                       <Copy className="w-4 h-4" />
                       Copia
@@ -430,36 +450,36 @@ const TrainerImportModal: React.FC<TrainerImportModalProps> = ({
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
+                  <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead className="bg-gray-50 dark:bg-gray-900/50">
                       <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                           Nome
                         </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                           Cognome
                         </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                           Email
                         </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                           Username
                         </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                           Password
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                       {credentials.map((cred, idx) => (
                         <tr key={idx}>
-                          <td className="px-4 py-3 text-sm text-gray-900">{cred.firstName}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900">{cred.lastName}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900">{cred.email}</td>
-                          <td className="px-4 py-3 text-sm font-mono text-blue-600">
+                          <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{cred.firstName}</td>
+                          <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{cred.lastName}</td>
+                          <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{cred.email}</td>
+                          <td className="px-4 py-3 text-sm font-mono text-blue-600 dark:text-blue-400">
                             {cred.username}
                           </td>
-                          <td className="px-4 py-3 text-sm font-mono text-purple-600">
+                          <td className="px-4 py-3 text-sm font-mono text-purple-600 dark:text-purple-400">
                             {cred.password}
                           </td>
                         </tr>
@@ -469,12 +489,12 @@ const TrainerImportModal: React.FC<TrainerImportModalProps> = ({
                 </div>
               </div>
 
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <div className="bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700 rounded-lg p-4">
                 <div className="flex gap-2">
-                  <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-                  <div className="text-sm text-yellow-800">
+                  <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+                  <div className="text-sm text-yellow-800 dark:text-yellow-200">
                     <p className="font-medium mb-1">Importante:</p>
-                    <p>
+                    <p className="dark:text-yellow-300">
                       Le credenziali sono visualizzate una sola volta. Assicurati di scaricare il CSV
                       o copiare le credenziali prima di chiudere questa finestra.
                     </p>
@@ -502,21 +522,21 @@ const TrainerImportModal: React.FC<TrainerImportModalProps> = ({
               </div>
 
               <div className="grid grid-cols-3 gap-4 mb-6">
-                <div className="bg-white rounded-lg p-4 border border-green-100">
-                  <div className="text-sm text-gray-600 mb-1">Creati</div>
-                  <div className="text-3xl font-bold text-green-600">
+                <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-green-100 dark:border-green-700">
+                  <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Creati</div>
+                  <div className="text-3xl font-bold text-green-600 dark:text-green-400">
                     {importResult.created || 0}
                   </div>
                 </div>
-                <div className="bg-white rounded-lg p-4 border border-blue-100">
-                  <div className="text-sm text-gray-600 mb-1">Aggiornati</div>
-                  <div className="text-3xl font-bold text-blue-600">
+                <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-blue-100 dark:border-blue-700">
+                  <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Aggiornati</div>
+                  <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
                     {importResult.updated || 0}
                   </div>
                 </div>
-                <div className="bg-white rounded-lg p-4 border border-gray-100">
-                  <div className="text-sm text-gray-600 mb-1">Saltati</div>
-                  <div className="text-3xl font-bold text-gray-600">
+                <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-100 dark:border-gray-700">
+                  <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Saltati</div>
+                  <div className="text-3xl font-bold text-gray-600 dark:text-gray-400">
                     {importResult.skipped || 0}
                   </div>
                 </div>
@@ -535,12 +555,12 @@ const TrainerImportModal: React.FC<TrainerImportModalProps> = ({
             <>
               {/* File Upload */}
               {!file && (
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-                  <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">
+                <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-8 text-center hover:border-gray-400 dark:hover:border-gray-500">
+                  <Upload className="w-12 h-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
                     Carica file CSV formatori
                   </h3>
-                  <p className="text-sm text-gray-500 mb-4">
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
                     Il file deve contenere le colonne: firstName, lastName, taxCode, <strong>email (obbligatoria)</strong>
                   </p>
                   <label className="inline-block px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 cursor-pointer">
@@ -559,17 +579,17 @@ const TrainerImportModal: React.FC<TrainerImportModalProps> = ({
               {file && trainers.length > 0 && (
                 <div className="space-y-4">
                   {/* Stats */}
-                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                  <div className="bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-700 rounded-lg p-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium text-purple-900">
+                        <p className="text-sm font-medium text-purple-900 dark:text-purple-100">
                           {trainers.length} formatori totali
                         </p>
-                        <p className="text-sm text-purple-700">
+                        <p className="text-sm text-purple-700 dark:text-purple-300">
                           {validTrainersCount} validi, {validationErrors.size} con errori, {conflicts.size} conflitti
                         </p>
                       </div>
-                      <label className="px-4 py-2 bg-white border border-purple-300 text-purple-700 rounded-lg hover:bg-purple-50 cursor-pointer text-sm">
+                      <label className="px-4 py-2 bg-white dark:bg-gray-700 border border-purple-300 dark:border-purple-600 text-purple-700 dark:text-purple-300 rounded-lg hover:bg-purple-50 dark:hover:bg-gray-600 cursor-pointer text-sm">
                         Cambia File
                         <input
                           type="file"
@@ -582,19 +602,19 @@ const TrainerImportModal: React.FC<TrainerImportModalProps> = ({
                   </div>
 
                   {/* Account Creation Toggle */}
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg p-4">
                     <label className="flex items-center gap-3 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={createAccounts}
                         onChange={(e) => setCreateAccounts(e.target.checked)}
-                        className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        className="w-5 h-5 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 dark:bg-gray-700"
                       />
                       <div>
-                        <div className="font-medium text-blue-900">
+                        <div className="font-medium text-blue-900 dark:text-blue-100">
                           Crea automaticamente account di accesso
                         </div>
-                        <div className="text-sm text-blue-700">
+                        <div className="text-sm text-blue-700 dark:text-blue-300">
                           Genera username (nome.cognome) e password per ciascun formatore
                         </div>
                       </div>
@@ -625,10 +645,10 @@ const TrainerImportModal: React.FC<TrainerImportModalProps> = ({
                   />
 
                   {/* Data Table */}
-                  <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
                     <div className="overflow-x-auto">
-                      <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
+                      <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                        <thead className="bg-gray-50 dark:bg-gray-900/50">
                           <tr>
                             <th className="px-4 py-3 text-left">
                               <input
@@ -647,30 +667,30 @@ const TrainerImportModal: React.FC<TrainerImportModalProps> = ({
                                     setSelectedRows(new Set());
                                   }
                                 }}
-                                className="rounded border-gray-300"
+                                className="rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700"
                               />
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                               #
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                               Nome
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                               Cognome
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                               Codice Fiscale
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                               Email
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                               Stato
                             </th>
                           </tr>
                         </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
+                        <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                           {trainers.map((trainer, idx) => {
                             const errors = validationErrors.get(idx);
                             const hasError = !!errors;
@@ -680,9 +700,8 @@ const TrainerImportModal: React.FC<TrainerImportModalProps> = ({
                             return (
                               <tr
                                 key={idx}
-                                className={`${
-                                  hasError ? 'bg-red-50' : hasConflict ? 'bg-yellow-50' : ''
-                                }`}
+                                className={`${hasError ? 'bg-red-50 dark:bg-red-900/30' : hasConflict ? 'bg-yellow-50 dark:bg-yellow-900/30' : ''
+                                  }`}
                               >
                                 <td className="px-4 py-3">
                                   <input
@@ -690,21 +709,21 @@ const TrainerImportModal: React.FC<TrainerImportModalProps> = ({
                                     checked={isSelected}
                                     disabled={hasError}
                                     onChange={() => toggleRowSelection(idx)}
-                                    className="rounded border-gray-300"
+                                    className="rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700"
                                   />
                                 </td>
-                                <td className="px-4 py-3 text-sm text-gray-500">{idx + 1}</td>
-                                <td className="px-4 py-3 text-sm text-gray-900">{trainer.firstName}</td>
-                                <td className="px-4 py-3 text-sm text-gray-900">{trainer.lastName}</td>
-                                <td className="px-4 py-3 text-sm font-mono text-gray-900">
+                                <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{idx + 1}</td>
+                                <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{trainer.firstName}</td>
+                                <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{trainer.lastName}</td>
+                                <td className="px-4 py-3 text-sm font-mono text-gray-900 dark:text-gray-100">
                                   {trainer.taxCode}
                                 </td>
-                                <td className="px-4 py-3 text-sm text-gray-900">
+                                <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
                                   {trainer.email || '-'}
                                 </td>
                                 <td className="px-4 py-3 text-sm">
                                   {hasError ? (
-                                    <div className="flex items-center gap-1 text-red-600">
+                                    <div className="flex items-center gap-1 text-red-600 dark:text-red-400">
                                       <AlertCircle className="w-4 h-4" />
                                       <span className="text-xs">
                                         {errors.join(', ')}
@@ -716,7 +735,7 @@ const TrainerImportModal: React.FC<TrainerImportModalProps> = ({
                                       <span className="text-xs">Conflitto</span>
                                     </div>
                                   ) : (
-                                    <div className="flex items-center gap-1 text-green-600">
+                                    <div className="flex items-center gap-1 text-green-600 dark:text-green-400">
                                       <CheckCircle className="w-4 h-4" />
                                       <span className="text-xs">Valido</span>
                                     </div>
@@ -737,12 +756,12 @@ const TrainerImportModal: React.FC<TrainerImportModalProps> = ({
 
         {/* Footer */}
         {!importResult && !credentials.length && file && trainers.length > 0 && (
-          <div className="border-t p-6 bg-gray-50">
+          <div className="border-t border-gray-200 dark:border-gray-700 p-6 bg-gray-50 dark:bg-gray-900/50">
             <div className="flex items-center justify-between">
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-gray-600 dark:text-gray-400">
                 <span className="font-medium">{selectedRows.size}</span> formatori selezionati
                 {createAccounts && selectedRows.size > 0 && (
-                  <span className="ml-2 text-purple-600">
+                  <span className="ml-2 text-purple-600 dark:text-purple-400">
                     (verranno creati {selectedRows.size} account)
                   </span>
                 )}
@@ -750,7 +769,7 @@ const TrainerImportModal: React.FC<TrainerImportModalProps> = ({
               <div className="flex gap-3">
                 <button
                   onClick={onClose}
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100"
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
                 >
                   Annulla
                 </button>

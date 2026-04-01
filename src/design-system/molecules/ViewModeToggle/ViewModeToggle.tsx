@@ -30,17 +30,17 @@ export const ViewModeToggle: React.FC<ViewModeToggleProps> = ({
     <div className={cn('inline-flex', className)}>
       <div
         className={cn(
-          'relative flex items-center h-10 bg-gray-100 rounded-full p-1',
-          'shadow-inner transition-all duration-200 ease-in-out'
+          'relative flex items-center h-10 bg-gray-100 dark:bg-gray-700 rounded-full p-1',
+          'shadow-inner dark:shadow-black/20 transition-all duration-200 ease-in-out'
         )}
       >
         {/* Background animato slider */}
         <div
           className={cn(
-            'absolute h-8 bg-white rounded-full shadow-sm transition-transform duration-200 ease-in-out',
+            'absolute h-8 bg-white dark:bg-gray-600 rounded-full shadow-sm dark:shadow-black/20 transition-transform duration-200 ease-in-out',
             'transform',
-            viewMode === 'table' 
-              ? 'translate-x-0' 
+            viewMode === 'table'
+              ? 'translate-x-0'
               : 'translate-x-[calc(100%)]',
             'w-[calc(50%-2px)]'
           )}
@@ -54,8 +54,8 @@ export const ViewModeToggle: React.FC<ViewModeToggleProps> = ({
             'text-sm font-medium transition-colors duration-200',
             'min-w-[80px] gap-2',
             viewMode === 'table'
-              ? 'text-gray-900'
-              : 'text-gray-500 hover:text-gray-700'
+              ? 'text-gray-900 dark:text-gray-100'
+              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
           )}
           aria-pressed={viewMode === 'table'}
         >
@@ -71,8 +71,8 @@ export const ViewModeToggle: React.FC<ViewModeToggleProps> = ({
             'text-sm font-medium transition-colors duration-200',
             'min-w-[80px] gap-2',
             viewMode === 'grid'
-              ? 'text-gray-900'
-              : 'text-gray-500 hover:text-gray-700'
+              ? 'text-gray-900 dark:text-gray-100'
+              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
           )}
           aria-pressed={viewMode === 'grid'}
         >

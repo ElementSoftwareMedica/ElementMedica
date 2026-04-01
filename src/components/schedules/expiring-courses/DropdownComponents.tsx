@@ -38,12 +38,12 @@ export const DownloadDropdown: React.FC<{ onExportCSV: () => void }> = ({ onExpo
             </Button>
 
             {open && (
-                <div className="absolute right-0 mt-1 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                <div className="absolute right-0 mt-1 w-56 bg-white dark:bg-gray-900 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
                     <button
                         onClick={() => { onExportCSV(); setOpen(false); }}
-                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2 text-gray-900 dark:text-gray-100"
                     >
-                        <FileSpreadsheet className="h-4 w-4 text-green-600" />
+                        <FileSpreadsheet className="h-4 w-4 text-green-600 dark:text-green-400" />
                         Esporta dati CSV
                     </button>
                 </div>
@@ -97,7 +97,7 @@ export const ImportDropdown: React.FC<{
                 variant="outline"
                 size="sm"
                 onClick={() => setOpen(!open)}
-                className="flex items-center gap-1 text-orange-600 border-orange-300 hover:bg-orange-50"
+                className="flex items-center gap-1 text-orange-600 dark:text-orange-400 border-orange-300 dark:border-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/30"
             >
                 <Plus className="h-4 w-4" />
                 Aggiungi Scadenza
@@ -105,36 +105,36 @@ export const ImportDropdown: React.FC<{
             </Button>
 
             {open && (
-                <div className="absolute right-0 mt-1 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                <div className="absolute right-0 mt-1 w-64 bg-white dark:bg-gray-900 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
                     <button
                         onClick={() => { onAddExternal(); setOpen(false); }}
-                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2 text-gray-900 dark:text-gray-100"
                     >
-                        <Plus className="h-4 w-4 text-purple-600" />
+                        <Plus className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                         <div>
                             <div className="font-medium">Aggiungi singolo corso</div>
-                            <div className="text-xs text-gray-500">Inserimento manuale</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">Inserimento manuale</div>
                         </div>
                     </button>
-                    <div className="border-t border-gray-100 my-1" />
+                    <div className="border-t border-gray-100 dark:border-gray-700 my-1" />
                     <button
                         onClick={() => { onImportCSV(); setOpen(false); }}
-                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2 text-gray-900 dark:text-gray-100"
                     >
-                        <Upload className="h-4 w-4 text-orange-600" />
+                        <Upload className="h-4 w-4 text-orange-600 dark:text-orange-400" />
                         <div>
                             <div className="font-medium">Importa da CSV</div>
-                            <div className="text-xs text-gray-500">Carica file con corsi esterni</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">Carica file con corsi esterni</div>
                         </div>
                     </button>
                     <button
                         onClick={downloadTemplate}
-                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2 text-gray-900 dark:text-gray-100"
                     >
-                        <FileDown className="h-4 w-4 text-blue-600" />
+                        <FileDown className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                         <div>
                             <div className="font-medium">Scarica template CSV</div>
-                            <div className="text-xs text-gray-500">Formato: dd/mm/yyyy</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">Formato: dd/mm/yyyy</div>
                         </div>
                     </button>
                 </div>

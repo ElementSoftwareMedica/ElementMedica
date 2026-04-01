@@ -1,6 +1,6 @@
 import request from 'supertest';
 import express from 'express';
-import bcryptjs from 'bcryptjs';
+import bcrypt from 'bcrypt';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -42,25 +42,32 @@ async function createTestCompany(data = {}) {
   const timestamp = Date.now();
   const randomSuffix = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
   const uniqueId = `${timestamp}${randomSuffix}`.slice(-11); // Keep last 11 digits for piva
-  
+
   const companyData = {
     ragioneSociale: `Test Company ${timestamp}`,
-    mail: `test${timestamp}@company.com`,
-    telefono: '1234567890',
-    sedeAzienda: 'Test Address',
-    citta: 'Test City',
-    provincia: 'Test Province',
-    cap: '12345',
     piva: uniqueId,
     codiceFiscale: `TST${uniqueId.slice(-8)}`,
-    isActive: true,
-    tenantId: defaultTenant.id,
     ...data
   };
 
-  return await prisma.company.create({
+  const company = await prisma.company.create({
     data: companyData
   });
+
+  // P48: Create CompanyTenantProfile
+  await prisma.companyTenantProfile.create({
+    data: {
+      companyId: company.id,
+      tenantId: defaultTenant.id,
+      emailGenerale: `test${timestamp}@company.com`,
+      telefonoGenerale: '1234567890',
+      status: 'ACTIVE',
+      isActive: true,
+      isPrimary: true
+    }
+  });
+
+  return company;
 }
 
 describe('Document Management Tests', () => {
@@ -69,7 +76,7 @@ describe('Document Management Tests', () => {
   let testEmployee;
   let authToken;
   let defaultTenant;
-  
+
   beforeAll(async () => {
     // Get or create default tenant
     defaultTenant = await prisma.tenant.findUnique({
@@ -92,26 +99,35 @@ describe('Document Management Tests', () => {
     }
 
     // Setup test data
-    const hashedPassword = await bcryptjs.hash('Admin123!', 12);
-    
+    const hashedPassword = await bcrypt.hash('Admin123!', 12);
+
     // Create test company using helper function
     testCompany = await createTestCompany();
-    
-    // Create test person (admin)
+
+    // Create test person (admin) - P48 compliant
+    const companyTenantProfile = await prisma.companyTenantProfile.findFirst({
+      where: { companyId: testCompany.id, tenantId: defaultTenant.id }
+    });
+
     testUser = await prisma.person.create({
       data: {
         username: `admin_${Date.now()}`,
-        email: `admin_${Date.now()}@example.com`,
         password: hashedPassword,
         firstName: 'Admin',
         lastName: 'User',
-        status: 'ACTIVE',
-        companyId: testCompany.id,
-        tenantId: defaultTenant.id,
+        tenantProfiles: {
+          create: {
+            tenantId: defaultTenant.id,
+            email: `admin_${Date.now()}@example.com`,
+            status: 'ACTIVE',
+            companyTenantProfileId: companyTenantProfile?.id,
+            isPrimary: true
+          }
+        },
         personRoles: {
           create: {
             roleType: 'ADMIN',
-            companyId: testCompany.id,
+            companyTenantProfileId: companyTenantProfile?.id,
             tenantId: defaultTenant.id,
             permissions: {
               create: [
@@ -123,54 +139,65 @@ describe('Document Management Tests', () => {
         }
       }
     });
-    
+
     // Create test employee
     try {
       const employeeTimestamp = Date.now();
       const employeeRandomSuffix = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-      
+
       testEmployee = await prisma.person.create({
-      data: {
-        firstName: 'Test',
-        lastName: 'Employee',
-        email: `employee${employeeTimestamp}@test.com`,
-        phone: '1234567890',
-        taxCode: `TSTMPL${employeeTimestamp.toString().slice(-8)}`,
-        birthDate: new Date('1990-01-01'),
-        residenceAddress: 'Test Address',
-        residenceCity: 'Test City',
-        province: 'TP',
-        postalCode: '12345',
-        status: 'ACTIVE',
-        companyId: testCompany.id,
-        tenantId: defaultTenant.id,
-        personRoles: {
-          create: {
-            roleType: 'EMPLOYEE',
-            companyId: testCompany.id,
-            tenantId: defaultTenant.id,
-            permissions: {
-              create: [
-                { permission: 'VIEW_EMPLOYEES' },
-                { permission: 'VIEW_COURSES' }
-              ]
+        data: {
+          firstName: 'Test',
+          lastName: 'Employee',
+          taxCode: `TSTMPL${employeeTimestamp.toString().slice(-8)}`,
+          birthDate: new Date('1990-01-01'),
+          tenantProfiles: {
+            create: {
+              tenantId: defaultTenant.id,
+              email: `employee${employeeTimestamp}@test.com`,
+              phone: '1234567890',
+              residenceAddress: 'Test Address',
+              residenceCity: 'Test City',
+              province: 'TP',
+              postalCode: '12345',
+              status: 'ACTIVE',
+              companyTenantProfileId: companyTenantProfile?.id,
+              isPrimary: true
+            }
+          },
+          personRoles: {
+            create: {
+              roleType: 'EMPLOYEE',
+              companyTenantProfileId: companyTenantProfile?.id,
+              tenantId: defaultTenant.id,
+              permissions: {
+                create: [
+                  { permission: 'VIEW_EMPLOYEES' },
+                  { permission: 'VIEW_COURSES' }
+                ]
+              }
             }
           }
         }
-      }
-    });
+      });
     } catch (error) {
       console.error('Error creating testEmployee:', error);
       throw error;
     }
   });
-  
+
   afterAll(async () => {
     // Clean up test data in correct order
     try {
-      if (testCompany && testCompany.id) {
-        await prisma.person.deleteMany({ where: { companyId: testCompany.id } });
-        await prisma.company.delete({ where: { id: testCompany.id } });
+      if (testEmployee?.id) {
+        await prisma.person.delete({ where: { id: testEmployee.id } }).catch(() => { });
+      }
+      if (testUser?.id) {
+        await prisma.person.delete({ where: { id: testUser.id } }).catch(() => { });
+      }
+      if (testCompany?.id) {
+        await prisma.companyTenantProfile.deleteMany({ where: { companyId: testCompany.id } });
+        await prisma.company.delete({ where: { id: testCompany.id } }).catch(() => { });
       }
     } catch (error) {
       console.log('Cleanup error:', error.message);
@@ -183,7 +210,7 @@ describe('Document Management Tests', () => {
     it('should validate document template structure', () => {
       // Test that document templates have required placeholders
       const templatePath = path.join(__dirname, '../templates');
-      
+
       if (fs.existsSync(templatePath)) {
         const templates = fs.readdirSync(templatePath).filter(file => file.endsWith('.docx'));
         expect(templates.length).toBeGreaterThan(0);
@@ -193,9 +220,9 @@ describe('Document Management Tests', () => {
     it('should validate employee data for document generation', async () => {
       expect(testEmployee).toBeDefined();
       expect(testEmployee.id).toBeDefined();
-      
+
       const employee = await prisma.person.findUnique({
-        where: { 
+        where: {
           id: testEmployee.id
         },
         include: {
@@ -291,26 +318,34 @@ describe('Document Management Tests', () => {
       // Test that company deletion cascades properly
       const tempTimestamp = Date.now();
       const tempCompany = await createTestCompany();
+      const tempCompanyProfile = await prisma.companyTenantProfile.findFirst({
+        where: { companyId: tempCompany.id, tenantId: defaultTenant.id }
+      });
 
       const tempEmployee = await prisma.person.create({
         data: {
           firstName: 'Temp',
           lastName: 'Employee',
-          email: `temp${tempTimestamp}@employee.com`,
-          phone: '1234567890',
           taxCode: `TMPEMPL${tempTimestamp.toString().slice(-7)}`,
           birthDate: new Date('1990-01-01'),
-          residenceAddress: 'Temp Address',
-          residenceCity: 'Temp City',
-          province: 'TP',
-          postalCode: '12345',
-          status: 'ACTIVE',
-          companyId: tempCompany.id,
-          tenantId: defaultTenant.id,
+          tenantProfiles: {
+            create: {
+              tenantId: defaultTenant.id,
+              email: `temp${tempTimestamp}@employee.com`,
+              phone: '1234567890',
+              residenceAddress: 'Temp Address',
+              residenceCity: 'Temp City',
+              province: 'TP',
+              postalCode: '12345',
+              status: 'ACTIVE',
+              companyTenantProfileId: tempCompanyProfile?.id,
+              isPrimary: true
+            }
+          },
           personRoles: {
             create: {
               roleType: 'EMPLOYEE',
-              companyId: tempCompany.id,
+              companyTenantProfileId: tempCompanyProfile?.id,
               tenantId: defaultTenant.id,
               permissions: {
                 create: [
@@ -322,8 +357,9 @@ describe('Document Management Tests', () => {
         }
       });
 
-      // Delete company should cascade to persons
+      // Delete person then company
       await prisma.person.delete({ where: { id: tempEmployee.id } });
+      await prisma.companyTenantProfile.deleteMany({ where: { companyId: tempCompany.id } });
       await prisma.company.delete({ where: { id: tempCompany.id } });
 
       // Verify deletion

@@ -7,7 +7,7 @@
 
 import { useState, useEffect } from 'react';
 import { rolesService } from '../../../../services/roles';
-import { advancedPermissionsService } from '../../../../services/advancedPermissions';
+import { advancedPermissionsService } from '../../../../services/advanced-permissions';
 import type { PermissionGroup, EntityGroup, EntityDefinition, Permission } from '../types';
 
 interface UsePermissionLoaderReturn {
@@ -38,32 +38,29 @@ export const usePermissionLoader = (isOpen: boolean): UsePermissionLoaderReturn 
     try {
       setLoadingPermissions(true);
       setError(null);
-      
+
       // Load both permissions and entities
       const [permissions, entitiesData] = await Promise.all([
         rolesService.getPermissions(),
         advancedPermissionsService.getEntityDefinitions()
       ]);
-      
-      console.log('🔍 [usePermissionLoader] Entities loaded:', entitiesData.length);
-      console.log('🔍 [usePermissionLoader] Entity list:', entitiesData.map(e => e.name));
-      
+
+
       // Verify critical entities are present
       const criticalEntities = ['form_templates', 'form_submissions', 'public_cms'];
-      const foundCriticalEntities = criticalEntities.filter(entity => 
+      const foundCriticalEntities = criticalEntities.filter(entity =>
         entitiesData.some(e => e.name === entity)
       );
-      console.log('🔍 [usePermissionLoader] Critical entities found:', foundCriticalEntities);
-      
+
       // Group permissions by category
       const groupedPermissions: Record<string, PermissionGroup> = {};
       permissions.forEach(permission => {
         const category = permission.category || 'general';
         if (!groupedPermissions[category]) {
-          const categoryLabel = category && typeof category === 'string' 
+          const categoryLabel = category && typeof category === 'string'
             ? category.charAt(0).toUpperCase() + category.slice(1)
             : 'General';
-          
+
           groupedPermissions[category] = {
             label: categoryLabel,
             description: `Permessi per ${category}`,
@@ -76,12 +73,12 @@ export const usePermissionLoader = (isOpen: boolean): UsePermissionLoaderReturn 
           description: permission.description || ''
         });
       });
-      
+
       // Create entity groups with CRUD permissions
       const entityGroupsData: EntityGroup[] = entitiesData.map(entity => {
         // Normalize entity name as backend does
         const normalizedEntityName = entity.name.trim().toUpperCase();
-        
+
         const crudPermissions: Permission[] = [
           {
             key: `CREATE_${normalizedEntityName}`,
@@ -104,21 +101,18 @@ export const usePermissionLoader = (isOpen: boolean): UsePermissionLoaderReturn 
             description: `Permesso per eliminare i record di ${entity.displayName}`
           }
         ];
-        
+
         return {
           entity,
           permissions: crudPermissions
         };
       });
-      
-      console.log('🔍 [usePermissionLoader] Entity groups created:', entityGroupsData.length);
-      console.log('🔍 [usePermissionLoader] Entities in groups:', entityGroupsData.map(g => g.entity.name));
-      
+
+
       setAvailablePermissions(groupedPermissions);
       setEntities(entitiesData);
       setEntityGroups(entityGroupsData);
     } catch (error) {
-      console.error('[usePermissionLoader] Error loading permissions:', error);
       setError('Errore nel caricamento dei permessi');
     } finally {
       setLoadingPermissions(false);

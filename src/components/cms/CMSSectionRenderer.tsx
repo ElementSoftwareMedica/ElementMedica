@@ -6,6 +6,7 @@
  */
 
 import React from 'react';
+import { sanitizeHtml } from '../../utils/sanitize';
 import {
   CMSSection,
   CMSTextSection,
@@ -20,10 +21,10 @@ import {
 import { ServiceCard } from '../public/ServiceCard';
 import { PublicButton } from '../public/PublicButton';
 import { ContactForm } from '../public/ContactForm';
-import { 
-  CheckCircle, 
-  Star, 
-  Shield, 
+import {
+  CheckCircle,
+  Star,
+  Shield,
   Award,
   Heart,
   Users,
@@ -43,7 +44,7 @@ interface CMSSectionRendererProps {
 const TextSectionRenderer: React.FC<{ section: CMSTextSection }> = ({ section }) => {
   const bgColor = section.backgroundColor || 'bg-white';
   const alignment = section.alignment || 'left';
-  
+
   return (
     <section className={`py-16 ${bgColor}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -57,9 +58,9 @@ const TextSectionRenderer: React.FC<{ section: CMSTextSection }> = ({ section })
             {section.subtitle}
           </p>
         )}
-        <div 
+        <div
           className={`prose prose-lg max-w-none text-${alignment}`}
-          dangerouslySetInnerHTML={{ __html: section.content }}
+          dangerouslySetInnerHTML={{ __html: sanitizeHtml(section.content) }}
         />
       </div>
     </section>
@@ -152,9 +153,9 @@ const CardsSectionRenderer: React.FC<{ section: CMSCardsSection }> = ({ section 
           {section.cards.map((card) => (
             <div key={card.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               {card.image && (
-                <img 
-                  src={card.image} 
-                  alt={card.title} 
+                <img
+                  src={card.image}
+                  alt={card.title}
                   className="w-full h-48 object-cover rounded-lg mb-4"
                 />
               )}
@@ -254,8 +255,8 @@ const TestimonialsSectionRenderer: React.FC<{ section: CMSTestimonialsSection }>
             <div key={testimonial.id} className="bg-white rounded-lg shadow-sm p-6">
               <div className="flex items-center mb-4">
                 {testimonial.image && (
-                  <img 
-                    src={testimonial.image} 
+                  <img
+                    src={testimonial.image}
                     alt={testimonial.name}
                     className="w-12 h-12 rounded-full mr-4"
                   />
@@ -294,7 +295,7 @@ const CtaSectionRenderer: React.FC<{ section: CMSCtaSection }> = ({ section }) =
   const hasBackground = section.backgroundImage;
 
   return (
-    <section 
+    <section
       className={`py-16 ${bgColor} ${hasBackground ? 'bg-cover bg-center' : ''}`}
       style={hasBackground ? { backgroundImage: `url(${section.backgroundImage})` } : undefined}
     >
@@ -308,7 +309,7 @@ const CtaSectionRenderer: React.FC<{ section: CMSCtaSection }> = ({ section }) =
           </p>
         )}
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <PublicButton 
+          <PublicButton
             href={section.primaryButton.href}
             variant="primary"
             size="lg"
@@ -316,7 +317,7 @@ const CtaSectionRenderer: React.FC<{ section: CMSCtaSection }> = ({ section }) =
             {section.primaryButton.text}
           </PublicButton>
           {section.secondaryButton && (
-            <PublicButton 
+            <PublicButton
               href={section.secondaryButton.href}
               variant="outline"
               size="lg"
@@ -513,9 +514,9 @@ const CMSSectionRenderer: React.FC<CMSSectionRendererProps> = ({ section }) => {
   if (isContactInfoSection(section)) {
     return <ContactInfoSectionRenderer section={section} />;
   }
-  
+
   // Sezione custom non riconosciuta
-  console.warn('Unknown or custom section type:', (section as any).type);
+  if (import.meta.env.DEV) console.warn('Unknown or custom section type:', (section as any).type);
   return null;
 };
 

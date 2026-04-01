@@ -25,7 +25,7 @@
  */
 
 import express from 'express';
-import middleware from '../../auth/middleware.js';
+import middleware from '../../middleware/auth.js';
 import { checkAdvancedPermission } from '../../middleware/advanced-permissions.js';
 import prisma from '../../config/prisma-optimization.js';
 import logger from '../../utils/logger.js';
@@ -52,7 +52,7 @@ const router = express.Router();
  * @access Authenticated + VIEW_POLIAMBULATORIO
  */
 router.get('/',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('poliambulatorio', 'read'),
     auditClinico('list_sedi'),
     async (req, res) => {
@@ -67,14 +67,13 @@ router.get('/',
         } catch (error) {
             logger.error('Failed to list sedi', {
                 component: 'sedi-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero delle sedi',
-                message: error.message
             });
         }
     }
@@ -86,7 +85,7 @@ router.get('/',
  * @access Authenticated + VIEW_POLIAMBULATORIO
  */
 router.get('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('poliambulatorio', 'read'),
     auditClinico('get_sede'),
     async (req, res) => {
@@ -110,7 +109,7 @@ router.get('/:id',
         } catch (error) {
             logger.error('Failed to get sede', {
                 component: 'sedi-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 sedeId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -118,7 +117,6 @@ router.get('/:id',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero della sede',
-                message: error.message
             });
         }
     }
@@ -130,7 +128,7 @@ router.get('/:id',
  * @access Authenticated + CREATE_POLIAMBULATORIO
  */
 router.post('/',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('poliambulatorio', 'create'),
     auditClinico('create_sede'),
     async (req, res) => {
@@ -151,14 +149,13 @@ router.post('/',
         } catch (error) {
             logger.error('Failed to create sede', {
                 component: 'sedi-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nella creazione della sede',
-                message: error.message
             });
         }
     }
@@ -170,7 +167,7 @@ router.post('/',
  * @access Authenticated + UPDATE_POLIAMBULATORIO
  */
 router.put('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('poliambulatorio', 'update'),
     auditClinico('update_sede'),
     async (req, res) => {
@@ -188,7 +185,7 @@ router.put('/:id',
         } catch (error) {
             logger.error('Failed to update sede', {
                 component: 'sedi-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 sedeId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -203,7 +200,6 @@ router.put('/:id',
             res.status(500).json({
                 success: false,
                 error: 'Errore nell\'aggiornamento della sede',
-                message: error.message
             });
         }
     }
@@ -215,7 +211,7 @@ router.put('/:id',
  * @access Authenticated + DELETE_POLIAMBULATORIO
  */
 router.delete('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('poliambulatorio', 'delete'),
     auditClinico('delete_sede'),
     async (req, res) => {
@@ -232,7 +228,7 @@ router.delete('/:id',
         } catch (error) {
             logger.error('Failed to delete sede', {
                 component: 'sedi-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 sedeId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -247,7 +243,6 @@ router.delete('/:id',
             res.status(500).json({
                 success: false,
                 error: 'Errore nell\'eliminazione della sede',
-                message: error.message
             });
         }
     }
@@ -259,7 +254,7 @@ router.delete('/:id',
  * @access Authenticated + UPDATE_POLIAMBULATORIO
  */
 router.put('/:id/principale',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('poliambulatorio', 'update'),
     auditClinico('set_sede_principale'),
     async (req, res) => {
@@ -277,7 +272,7 @@ router.put('/:id/principale',
         } catch (error) {
             logger.error('Failed to set sede principale', {
                 component: 'sedi-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 sedeId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -285,7 +280,6 @@ router.put('/:id/principale',
             res.status(500).json({
                 success: false,
                 error: 'Errore nell\'impostazione della sede principale',
-                message: error.message
             });
         }
     }
@@ -297,7 +291,7 @@ router.put('/:id/principale',
  * @access Authenticated + VIEW_POLIAMBULATORIO
  */
 router.get('/:id/stats',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('poliambulatorio', 'read'),
     auditClinico('get_sede_stats'),
     async (req, res) => {
@@ -314,7 +308,7 @@ router.get('/:id/stats',
         } catch (error) {
             logger.error('Failed to get sede stats', {
                 component: 'sedi-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 sedeId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -322,7 +316,6 @@ router.get('/:id/stats',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero delle statistiche',
-                message: error.message
             });
         }
     }
@@ -334,7 +327,7 @@ router.get('/:id/stats',
  * @access Authenticated + MANAGE_POLIAMBULATORIO
  */
 router.post('/:sedeId/direttore',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('poliambulatorio', 'write'),
     auditClinico('assign_direttore_sede'),
     async (req, res) => {
@@ -353,7 +346,7 @@ router.post('/:sedeId/direttore',
         } catch (error) {
             logger.error('Failed to assign direttore sanitario to sede', {
                 component: 'sedi-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 sedeId: req.params.sedeId,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -375,7 +368,6 @@ router.post('/:sedeId/direttore',
             res.status(500).json({
                 success: false,
                 error: 'Errore nell\'assegnazione del direttore sanitario',
-                message: error.message
             });
         }
     }

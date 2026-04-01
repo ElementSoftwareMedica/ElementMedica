@@ -15,6 +15,7 @@
 
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 import {
     Building2,
     Plus,
@@ -50,6 +51,7 @@ import type {
     Prestazione
 } from '../../services/clinicaApi';
 import { useToast } from '../../hooks/useToast';
+import { DatePickerElegante } from '../ui/DatePickerElegante';
 
 // =====================================================
 // TYPES
@@ -134,7 +136,7 @@ const RiconoscimentoForm: React.FC<RiconoscimentoFormProps> = ({
             onSuccess();
         },
         onError: (error: Error) => {
-            showToast({ type: 'error', message: error.message || 'Errore nella creazione' });
+            showToast({ type: 'error', message: 'Errore nella creazione' });
         }
     });
 
@@ -146,7 +148,7 @@ const RiconoscimentoForm: React.FC<RiconoscimentoFormProps> = ({
             onSuccess();
         },
         onError: (error: Error) => {
-            showToast({ type: 'error', message: error.message || 'Errore nell\'aggiornamento' });
+            showToast({ type: 'error', message: 'Errore nell\'aggiornamento' });
         }
     });
 
@@ -189,8 +191,8 @@ const RiconoscimentoForm: React.FC<RiconoscimentoFormProps> = ({
                     type="button"
                     onClick={() => setTargetType('bundle')}
                     className={`p-3 rounded-lg border text-left transition-colors ${targetType === 'bundle'
-                            ? 'border-purple-500 bg-purple-50'
-                            : 'border-gray-200 hover:border-gray-300'
+                        ? 'border-purple-500 bg-purple-50'
+                        : 'border-gray-200 hover:border-gray-300'
                         }`}
                 >
                     <Package className={`w-5 h-5 mb-1 ${targetType === 'bundle' ? 'text-purple-600' : 'text-gray-400'}`} />
@@ -202,8 +204,8 @@ const RiconoscimentoForm: React.FC<RiconoscimentoFormProps> = ({
                     type="button"
                     onClick={() => setTargetType('prestazione')}
                     className={`p-3 rounded-lg border text-left transition-colors ${targetType === 'prestazione'
-                            ? 'border-teal-500 bg-teal-50'
-                            : 'border-gray-200 hover:border-gray-300'
+                        ? 'border-teal-500 bg-teal-50'
+                        : 'border-gray-200 hover:border-gray-300'
                         }`}
                 >
                     <Activity className={`w-5 h-5 mb-1 ${targetType === 'prestazione' ? 'text-teal-600' : 'text-gray-400'}`} />
@@ -323,11 +325,10 @@ const RiconoscimentoForm: React.FC<RiconoscimentoFormProps> = ({
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                         Data Fine (opzionale)
                     </label>
-                    <input
-                        type="date"
+                    <DatePickerElegante
                         value={formData.dataFine}
-                        onChange={(e) => setFormData(prev => ({ ...prev, dataFine: e.target.value }))}
-                        className="input-clinica w-full"
+                        onChange={(date) => setFormData(prev => ({ ...prev, dataFine: date ? date.toISOString().split('T')[0] : '' }))}
+                        theme="teal"
                     />
                 </div>
                 <div>
@@ -384,6 +385,7 @@ interface AziendaCardProps {
 
 const AziendaCard: React.FC<AziendaCardProps> = ({ associazione, convenzioneId, onUpdate }) => {
     const { showToast } = useToast();
+    const { confirmDelete } = useConfirmDialog();
     const queryClient = useQueryClient();
     const [isExpanded, setIsExpanded] = useState(false);
     const [showRiconoscimentoForm, setShowRiconoscimentoForm] = useState(false);
@@ -398,7 +400,7 @@ const AziendaCard: React.FC<AziendaCardProps> = ({ associazione, convenzioneId, 
             onUpdate();
         },
         onError: (error: Error) => {
-            showToast({ type: 'error', message: error.message || 'Errore nella rimozione' });
+            showToast({ type: 'error', message: 'Errore nella rimozione' });
         }
     });
 
@@ -410,18 +412,20 @@ const AziendaCard: React.FC<AziendaCardProps> = ({ associazione, convenzioneId, 
             showToast({ type: 'success', message: 'Riconoscimento eliminato' });
         },
         onError: (error: Error) => {
-            showToast({ type: 'error', message: error.message || 'Errore nell\'eliminazione' });
+            showToast({ type: 'error', message: 'Errore nell\'eliminazione' });
         }
     });
 
-    const handleRemove = () => {
-        if (window.confirm('Sei sicuro di voler rimuovere questa azienda dalla convenzione?')) {
+    const handleRemove = async () => {
+        const confirmed = await confirmDelete('azienda dalla convenzione');
+        if (confirmed) {
             removeMutation.mutate();
         }
     };
 
-    const handleDeleteRiconoscimento = (id: string) => {
-        if (window.confirm('Sei sicuro di voler eliminare questo riconoscimento?')) {
+    const handleDeleteRiconoscimento = async (id: string) => {
+        const confirmed = await confirmDelete('riconoscimento');
+        if (confirmed) {
             deleteRiconoscimentoMutation.mutate(id);
         }
     };
@@ -685,7 +689,7 @@ const AziendeRiconoscimentiSection: React.FC<Props> = ({ convenzioneId, isEditin
             });
         },
         onError: (error: Error) => {
-            showToast({ type: 'error', message: error.message || 'Errore nell\'associazione' });
+            showToast({ type: 'error', message: 'Errore nell\'associazione' });
         }
     });
 

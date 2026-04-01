@@ -8,8 +8,8 @@
  * @date 30 Dicembre 2024
  */
 
-// Componente principale
-export { default as GDPREntityPageTemplate } from './components/GDPREntityPageTemplate';
+// Componente principale (nuova implementazione con ResizableTable)
+export { GDPREntityTemplate, type DataTableColumn } from './GDPREntityTemplate';
 
 // Componenti GDPR
 export { default as GDPREntityHeader } from './components/GDPREntityHeader';

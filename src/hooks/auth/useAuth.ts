@@ -7,7 +7,7 @@ import { AuthContext } from '../../context/AuthContext';
  */
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  
+
   if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
@@ -18,17 +18,20 @@ export const useAuth = () => {
     user: context.user,
     isAuthenticated: !!context.user,
     isLoading: context.isLoading,
-    
+
     // Azioni
     login: context.login,
     logout: context.logout,
-    
+
     // Utility
     hasPermission: context.hasPermission,
     permissions: context.permissions,
-    
+    refreshUser: context.refreshUser,
+
     // Computed values
-    userRole: context.user?.role,
+    userRole: context.user?.role, // Display name ('Admin')
+    userRoleType: context.user?.roleType, // Backend role type ('ADMIN')
+    userRoles: context.user?.roles, // Array of backend roles (['ADMIN', ...])
     userName: context.user ? `${context.user.firstName} ${context.user.lastName}` : null,
     userEmail: context.user?.email,
   }), [
@@ -37,7 +40,8 @@ export const useAuth = () => {
     context.login,
     context.logout,
     context.hasPermission,
-    context.permissions
+    context.permissions,
+    context.refreshUser
   ]);
 };
 

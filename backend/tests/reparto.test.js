@@ -37,12 +37,7 @@ const mockLogger = {
 
 // Mock middleware functions
 const mockAuthMiddleware = (req, res, next) => {
-  req.user = {
-    id: '1',
-    globalRole: 'ADMIN',
-    companyId: '1',
-    tenantId: '1'
-  };
+  // P57: req.user obsoleto - usare SOLO req.person
   req.person = {
     id: '1',
     nome: 'Test',
@@ -67,7 +62,7 @@ jest.unstable_mockModule('../utils/logger.js', () => ({
   default: mockLogger
 }));
 
-jest.unstable_mockModule('../auth/middleware.js', () => ({
+jest.unstable_mockModule('../middleware/auth.js', () => ({
   default: {
     authenticate: () => mockAuthMiddleware
   }
@@ -96,10 +91,10 @@ describe('Reparto API Tests', () => {
 
   describe('GET /api/reparto/:id', () => {
     test('should get reparto by id', async () => {
-      const mockReparto = { 
-        id: '1', 
-        nome: 'Reparto 1', 
-        descrizione: 'Desc 1', 
+      const mockReparto = {
+        id: '1',
+        nome: 'Reparto 1',
+        descrizione: 'Desc 1',
         siteId: '1',
         site: {
           id: '1',
@@ -110,13 +105,13 @@ describe('Reparto API Tests', () => {
         responsabile: null,
         dipendenti: []
       };
-      
+
       mockPrisma.reparto.findUnique.mockResolvedValue(mockReparto);
-      
+
       const response = await request(app)
         .get('/api/reparto/1')
         .expect(200);
-      
+
       expect(response.body).toEqual(mockReparto);
       expect(mockPrisma.reparto.findUnique).toHaveBeenCalledWith({
         where: { id: '1', deletedAt: null },
@@ -150,24 +145,24 @@ describe('Reparto API Tests', () => {
 
     test('should return 404 for non-existent reparto', async () => {
       mockPrisma.reparto.findUnique.mockResolvedValue(null);
-      
+
       const response = await request(app)
         .get('/api/reparto/999')
         .expect(404);
-      
+
       expect(response.body.error).toBe('Department not found');
     });
   });
 
   describe('POST /api/reparto', () => {
     test('should create new reparto', async () => {
-      const newReparto = { 
-        siteId: '1', 
-        nome: 'Nuovo Reparto', 
-        descrizione: 'Nuova Desc' 
+      const newReparto = {
+        siteId: '1',
+        nome: 'Nuovo Reparto',
+        descrizione: 'Nuova Desc'
       };
-      const createdReparto = { 
-        id: '1', 
+      const createdReparto = {
+        id: '1',
         ...newReparto,
         tenantId: '1',
         site: {
@@ -177,21 +172,21 @@ describe('Reparto API Tests', () => {
         },
         responsabile: null
       };
-      
-      mockPrisma.companySite.findUnique.mockResolvedValue({ 
-        id: '1', 
+
+      mockPrisma.companySite.findUnique.mockResolvedValue({
+        id: '1',
         siteName: 'Test Site',
         companyId: '1',
         company: { id: '1', name: 'Test Company' }
       });
       mockPrisma.reparto.findFirst.mockResolvedValue(null); // No existing reparto
       mockPrisma.reparto.create.mockResolvedValue(createdReparto);
-      
+
       const response = await request(app)
         .post('/api/reparto')
         .send(newReparto)
         .expect(201);
-      
+
       expect(response.body).toEqual(createdReparto);
       expect(mockPrisma.reparto.create).toHaveBeenCalledWith({
         data: {
@@ -225,26 +220,26 @@ describe('Reparto API Tests', () => {
 
     test('should validate required fields', async () => {
       const invalidReparto = { descrizione: 'Desc senza nome' };
-      
+
       const response = await request(app)
         .post('/api/reparto')
         .send(invalidReparto)
         .expect(400);
-      
+
       expect(response.body.error).toBe('Validation error');
       expect(response.body.message).toBe('siteId and nome are required');
     });
 
     test('should validate siteId exists', async () => {
       const newReparto = { siteId: '999', nome: 'Nuovo Reparto', descrizione: 'Desc' };
-      
+
       mockPrisma.companySite.findUnique.mockResolvedValue(null);
-      
+
       const response = await request(app)
         .post('/api/reparto')
         .send(newReparto)
         .expect(404);
-      
+
       expect(response.body.error).toBe('Site not found');
     });
   });
@@ -252,9 +247,9 @@ describe('Reparto API Tests', () => {
   describe('PUT /api/reparto/:id', () => {
     test('should update reparto', async () => {
       const updateData = { nome: 'Reparto Aggiornato', descrizione: 'Desc Aggiornata' };
-      const existingReparto = { 
-        id: '1', 
-        nome: 'Old Name', 
+      const existingReparto = {
+        id: '1',
+        nome: 'Old Name',
         siteId: '1',
         site: {
           id: '1',
@@ -262,8 +257,8 @@ describe('Reparto API Tests', () => {
           company: { id: '1', name: 'Test Company' }
         }
       };
-      const updatedReparto = { 
-        ...existingReparto, 
+      const updatedReparto = {
+        ...existingReparto,
         ...updateData,
         site: {
           id: '1',
@@ -273,19 +268,19 @@ describe('Reparto API Tests', () => {
         responsabile: null,
         dipendenti: []
       };
-      
+
       // Mock per la verifica dell'esistenza del reparto
       mockPrisma.reparto.findUnique.mockResolvedValue(existingReparto);
       // Mock per la verifica di duplicati (nessun duplicato)
       mockPrisma.reparto.findFirst.mockResolvedValue(null);
       // Mock per l'update
       mockPrisma.reparto.update.mockResolvedValue(updatedReparto);
-      
+
       const response = await request(app)
         .put('/api/reparto/1')
         .send(updateData)
         .expect(200);
-      
+
       expect(response.body).toEqual(updatedReparto);
       expect(mockPrisma.reparto.update).toHaveBeenCalledWith({
         where: { id: '1' },
@@ -329,20 +324,20 @@ describe('Reparto API Tests', () => {
 
     test('should return 404 for non-existent reparto', async () => {
       mockPrisma.reparto.findUnique.mockResolvedValue(null);
-      
+
       const response = await request(app)
         .put('/api/reparto/999')
         .send({ nome: 'Test' })
         .expect(404);
-      
+
       expect(response.body.error).toBe('Department not found');
     });
   });
 
   describe('DELETE /api/reparto/:id', () => {
     test('should delete reparto', async () => {
-      const existingReparto = { 
-        id: '1', 
+      const existingReparto = {
+        id: '1',
         nome: 'Test Reparto',
         site: {
           id: '1',
@@ -351,16 +346,16 @@ describe('Reparto API Tests', () => {
         },
         dipendenti: [] // Nessun dipendente assegnato
       };
-      
+
       // Mock per la verifica dell'esistenza del reparto
       mockPrisma.reparto.findUnique.mockResolvedValue(existingReparto);
       // Mock per il soft delete
       mockPrisma.reparto.update.mockResolvedValue({ ...existingReparto, deletedAt: new Date() });
-      
+
       await request(app)
         .delete('/api/reparto/1')
         .expect(204);
-      
+
       expect(mockPrisma.reparto.update).toHaveBeenCalledWith({
         where: { id: '1' },
         data: { deletedAt: expect.any(Date) }
@@ -368,8 +363,8 @@ describe('Reparto API Tests', () => {
     });
 
     test('should not delete reparto with assigned employees', async () => {
-      const existingReparto = { 
-        id: '1', 
+      const existingReparto = {
+        id: '1',
         nome: 'Test Reparto',
         site: {
           id: '1',
@@ -378,13 +373,13 @@ describe('Reparto API Tests', () => {
         },
         dipendenti: [{ id: '1', firstName: 'John', lastName: 'Doe' }] // Ha dipendenti assegnati
       };
-      
+
       mockPrisma.reparto.findUnique.mockResolvedValue(existingReparto);
-      
+
       const response = await request(app)
         .delete('/api/reparto/1')
         .expect(409);
-      
+
       expect(response.body).toEqual({
         error: 'Conflict',
         message: 'Cannot delete department with assigned employees. Please reassign employees first.'
@@ -393,19 +388,19 @@ describe('Reparto API Tests', () => {
 
     test('should return 404 for non-existent reparto', async () => {
       mockPrisma.reparto.findUnique.mockResolvedValue(null);
-      
+
       const response = await request(app)
         .delete('/api/reparto/999')
         .expect(404);
-      
+
       expect(response.body.error).toBe('Department not found');
     });
   });
 
   describe('POST /api/reparto/:id/assign-employee', () => {
     test('should assign employee to reparto', async () => {
-      const mockReparto = { 
-        id: '1', 
+      const mockReparto = {
+        id: '1',
         nome: 'Test Reparto',
         site: {
           id: '1',
@@ -413,23 +408,23 @@ describe('Reparto API Tests', () => {
           company: { id: '1', name: 'Test Company' }
         }
       };
-      const mockEmployee = { 
-        id: '1', 
-        firstName: 'Test', 
+      const mockEmployee = {
+        id: '1',
+        firstName: 'Test',
         lastName: 'Employee',
         repartoId: null,
         companyId: '1'
       };
-      
+
       mockPrisma.reparto.findUnique.mockResolvedValue(mockReparto);
       mockPrisma.person.findUnique.mockResolvedValue(mockEmployee);
       mockPrisma.person.update.mockResolvedValue({ ...mockEmployee, repartoId: '1' });
-      
+
       const response = await request(app)
         .post('/api/reparto/1/assign-employee')
         .send({ personId: '1' })
         .expect(200);
-      
+
       expect(response.body.message).toBe('Employee assigned to department successfully');
       expect(mockPrisma.person.update).toHaveBeenCalledWith({
         where: { id: '1' },
@@ -439,17 +434,17 @@ describe('Reparto API Tests', () => {
 
     test('should return 404 for non-existent reparto', async () => {
       mockPrisma.reparto.findUnique.mockResolvedValue(null);
-      
+
       const response = await request(app)
         .post('/api/reparto/999/assign-employee')
         .send({ personId: '1' })
         .expect(404);
-      
+
       expect(response.body.error).toBe('Department not found');
     });
 
     test('should return 404 for non-existent employee', async () => {
-      const mockReparto = { 
+      const mockReparto = {
         id: '1',
         site: {
           id: '1',
@@ -457,15 +452,15 @@ describe('Reparto API Tests', () => {
           company: { id: 1, name: 'Test Company' }
         }
       };
-      
+
       mockPrisma.reparto.findUnique.mockResolvedValue(mockReparto);
       mockPrisma.person.findUnique.mockResolvedValue(null);
-      
+
       const response = await request(app)
         .post('/api/reparto/1/assign-employee')
         .send({ personId: '999' })
         .expect(404);
-      
+
       expect(response.body.error).toBe('Employee not found');
     });
 
@@ -474,7 +469,7 @@ describe('Reparto API Tests', () => {
         .post('/api/reparto/1/assign-employee')
         .send({})
         .expect(400);
-      
+
       expect(response.body.error).toBe('Validation error');
       expect(response.body.message).toBe('personId is required');
     });
@@ -482,8 +477,8 @@ describe('Reparto API Tests', () => {
 
   describe('POST /api/reparto/:id/remove-employee', () => {
     test('should remove employee from reparto', async () => {
-      const mockReparto = { 
-        id: '1', 
+      const mockReparto = {
+        id: '1',
         nome: 'Test Reparto',
         site: {
           id: '1',
@@ -491,23 +486,23 @@ describe('Reparto API Tests', () => {
           company: { id: 1, name: 'Test Company' }
         }
       };
-      const mockEmployee = { 
-        id: '1', 
-        firstName: 'Test', 
+      const mockEmployee = {
+        id: '1',
+        firstName: 'Test',
         lastName: 'Employee',
         repartoId: '1',
         companyId: 1
       };
-      
+
       mockPrisma.reparto.findUnique.mockResolvedValue(mockReparto);
       mockPrisma.person.findUnique.mockResolvedValue(mockEmployee);
       mockPrisma.person.update.mockResolvedValue({ ...mockEmployee, repartoId: null });
-      
+
       const response = await request(app)
         .post('/api/reparto/1/remove-employee')
         .send({ personId: '1' })
         .expect(200);
-      
+
       expect(response.body.message).toBe('Employee removed from department successfully');
       expect(mockPrisma.person.update).toHaveBeenCalledWith({
         where: { id: '1' },
@@ -517,17 +512,17 @@ describe('Reparto API Tests', () => {
 
     test('should return 400 for non-existent reparto', async () => {
       mockPrisma.reparto.findUnique.mockResolvedValue(null);
-      
+
       const response = await request(app)
         .post('/api/reparto/999/remove-employee')
         .send({ personId: '1' })
         .expect(404);
-      
+
       expect(response.body.error).toBe('Department not found');
     });
 
     test('should return 400 for non-existent employee', async () => {
-      const mockReparto = { 
+      const mockReparto = {
         id: '1',
         site: {
           id: '1',
@@ -535,20 +530,20 @@ describe('Reparto API Tests', () => {
           company: { id: 1, name: 'Test Company' }
         }
       };
-      
+
       mockPrisma.reparto.findUnique.mockResolvedValue(mockReparto);
       mockPrisma.person.findUnique.mockResolvedValue(null);
-      
+
       const response = await request(app)
         .post('/api/reparto/1/remove-employee')
         .send({ personId: '999' })
         .expect(404);
-      
+
       expect(response.body.error).toBe('Employee not found');
     });
 
     test('should validate employee is assigned to department', async () => {
-      const mockReparto = { 
+      const mockReparto = {
         id: '1',
         site: {
           id: '1',
@@ -556,22 +551,22 @@ describe('Reparto API Tests', () => {
           company: { id: 1, name: 'Test Company' }
         }
       };
-      const mockEmployee = { 
-        id: '1', 
-        firstName: 'Test', 
+      const mockEmployee = {
+        id: '1',
+        firstName: 'Test',
         lastName: 'Employee',
         repartoId: '2', // Different department
         companyId: 1
       };
-      
+
       mockPrisma.reparto.findUnique.mockResolvedValue(mockReparto);
       mockPrisma.person.findUnique.mockResolvedValue(mockEmployee);
-      
+
       const response = await request(app)
         .post('/api/reparto/1/remove-employee')
         .send({ personId: '1' })
         .expect(400);
-      
+
       expect(response.body.error).toBe('Validation error');
       expect(response.body.message).toBe('Employee is not assigned to this department');
     });
@@ -581,7 +576,7 @@ describe('Reparto API Tests', () => {
         .post('/api/reparto/1/remove-employee')
         .send({})
         .expect(400);
-      
+
       expect(response.body.error).toBe('Validation error');
       expect(response.body.message).toBe('personId is required');
     });

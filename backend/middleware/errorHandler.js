@@ -17,20 +17,33 @@ const globalErrorHandler = (error, req, res, next) => {
   // Determine error type and response
   let statusCode = 500;
   let errorCode = 'INTERNAL_ERROR';
-  let message = 'Internal server error';
+  let message = 'Errore interno del server';
   let details = null;
 
+  // Handle JSON parsing errors (malformed JSON)
+  if (error instanceof SyntaxError && error.status === 400 && 'body' in error) {
+    statusCode = 400;
+    errorCode = 'INVALID_JSON';
+    message = 'Invalid JSON in request body';
+    details = 'The request body contains malformed JSON';
+  }
+  // Handle AppError with explicit statusCode
+  else if (error.statusCode && error.statusCode !== 500) {
+    statusCode = error.statusCode;
+    errorCode = error.code || 'APP_ERROR';
+    message = error.message;
+  }
   // Handle different error types
-  if (error.name === 'ValidationError') {
+  else if (error.name === 'ValidationError') {
     statusCode = 400;
     errorCode = 'VALIDATION_ERROR';
     message = 'Validation failed';
-    details = error.details || error.message;
+    details = error.details || 'Dati non validi';
   } else if (error.name === 'UnauthorizedError' || error.message?.includes('unauthorized')) {
     statusCode = 401;
     errorCode = 'UNAUTHORIZED';
     message = 'Authentication required';
-    
+
     // Log security event
     logAudit('UNAUTHORIZED_ACCESS_ATTEMPT', req.person?.id || null, req.url, {
       ip: req.ip,
@@ -41,7 +54,7 @@ const globalErrorHandler = (error, req, res, next) => {
     statusCode = 403;
     errorCode = 'FORBIDDEN';
     message = 'Access denied';
-    
+
     // Log security event
     logAudit('FORBIDDEN_ACCESS_ATTEMPT', req.person?.id || null, req.url, {
       ip: req.ip,
@@ -56,7 +69,7 @@ const globalErrorHandler = (error, req, res, next) => {
     statusCode = 409;
     errorCode = 'CONFLICT';
     message = 'Resource conflict';
-    details = error.message;
+    details = 'Conflitto con una risorsa esistente';
   } else if (error.code === 'P2002') {
     // Prisma unique constraint violation
     statusCode = 409;
@@ -73,11 +86,16 @@ const globalErrorHandler = (error, req, res, next) => {
     statusCode = 400;
     errorCode = 'FOREIGN_KEY_CONSTRAINT';
     message = 'Foreign key constraint violation';
+  } else if (error.code === 'P2023' || error.code === 'P2020') {
+    // Prisma invalid data format (e.g. non-UUID string passed as UUID field)
+    statusCode = 400;
+    errorCode = 'INVALID_ID_FORMAT';
+    message = 'Invalid resource identifier format';
   }
 
   // Don't expose internal errors in production
   const isDevelopment = process.env.NODE_ENV === 'development';
-  
+
   const errorResponse = {
     error: message,
     code: errorCode,
@@ -90,7 +108,7 @@ const globalErrorHandler = (error, req, res, next) => {
     if (details) {
       errorResponse.details = details;
     }
-    
+
     // Add stack trace in development
     if (isDevelopment && error.stack) {
       errorResponse.stack = error.stack;
@@ -106,7 +124,7 @@ const notFoundHandler = (req, res, next) => {
   error.status = 404;
   error.path = req.path;
   error.method = req.method;
-  
+
   // Log per debugging
   logger.warn('404 - Endpoint not found', {
     method: req.method,
@@ -115,12 +133,10 @@ const notFoundHandler = (req, res, next) => {
     userAgent: req.get('User-Agent'),
     ip: req.ip
   });
-  
+
   res.status(404).json({
-    error: 'Endpoint not found',
-    path: req.path,
-    method: req.method,
-    timestamp: new Date().toISOString()
+    error: 'Endpoint non trovato',
+    code: 'NOT_FOUND'
   });
 };
 

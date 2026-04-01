@@ -32,7 +32,7 @@ interface PreventiviModalProps {
   scheduleId?: string | number | null;
   editingPreventivo?: any | null;
   attendance?: Record<number, (string | number)[]>;
-  persons?: Array<{ id: string | number; aziendaId?: string | number;[key: string]: any }>;
+  persons?: Array<{ id: string | number; companyId?: string | number;[key: string]: any }>;
   onPreventiviCreated: (ids: string[]) => void;
 }
 
@@ -163,10 +163,9 @@ export const PreventiviModal = ({
         onPreventiviCreated([editingPreventivo.id]);
         // Chiudi automaticamente il modal dopo l'aggiornamento
         onClose();
-      } catch (error: any) {
-        console.error('Errore aggiornamento preventivo:', error);
+      } catch (error: unknown) {
         showToast({
-          message: error.response?.data?.message || error.message || 'Aggiornamento fallito',
+          message: 'Errore durante l\'aggiornamento del preventivo',
           type: 'error'
         });
       }
@@ -198,8 +197,12 @@ export const PreventiviModal = ({
             note
           );
 
+          // P49: Use companyTenantProfileId for backend API
+          // The backend expects companyTenantProfileId, not company.id
+          const companyTenantProfileId = (company as any).companyTenantProfileId || company.id;
+
           const preventivoData = {
-            aziendaId: String(companyId),
+            aziendaId: String(companyTenantProfileId),
             corsoId: String(scheduleId),
             tipoServizio,
             quantita: config.numPartecipanti,
@@ -211,12 +214,6 @@ export const PreventiviModal = ({
             note: noteBreakdown,
           };
 
-          console.log('[PreventiviModal] 🔍 Creating preventivo with data:', {
-            aziendaId: preventivoData.aziendaId,
-            quantita: preventivoData.quantita,
-            numPartecipanti: config.numPartecipanti,
-            prezzoTotale: preventivoData.prezzoTotale
-          });
 
           const preventivo = await createPreventivo(preventivoData);
 
@@ -230,7 +227,6 @@ export const PreventiviModal = ({
             successCount++;
           }
         } catch (error) {
-          console.error(`Errore creazione preventivo per azienda ${companyId}:`, error);
           errorCount++;
         }
       }
@@ -246,10 +242,9 @@ export const PreventiviModal = ({
       } else {
         showToast({ message: 'Nessun preventivo generato con successo', type: 'error' });
       }
-    } catch (error: any) {
-      console.error('Errore generazione preventivi:', error);
+    } catch (error: unknown) {
       showToast({
-        message: error.response?.data?.message || error.message || 'Generazione fallita',
+        message: 'Errore durante la generazione dei preventivi',
         type: 'error'
       });
     }
@@ -268,14 +263,14 @@ export const PreventiviModal = ({
 
       {/* Modal content con z-index superiore */}
       <div className="fixed inset-0 flex items-center justify-center z-[1100] p-4 pointer-events-none">
-        <div className="bg-white rounded-xl shadow-2xl w-full max-w-7xl max-h-[90vh] overflow-hidden flex flex-col pointer-events-auto">
+        <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-7xl max-h-[90vh] overflow-hidden flex flex-col pointer-events-auto">
           {/* Header */}
-          <div className="flex items-center justify-between p-6 bg-white border-b border-gray-200 relative">
+          <div className="flex items-center justify-between p-6 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 relative">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                 {editingPreventivo ? 'Modifica Preventivo' : 'Genera Preventivi'}
               </h2>
-              <p className="text-sm text-gray-600 mt-1">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                 {editingPreventivo
                   ? 'Modifica i dettagli del preventivo'
                   : `${enabledCount} ${enabledCount === 1 ? 'azienda selezionata' : 'aziende selezionate'}`}
@@ -283,18 +278,18 @@ export const PreventiviModal = ({
             </div>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-white/50 rounded-lg transition-colors"
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
               title="Chiudi"
             >
-              <X className="w-6 h-6 text-gray-600" />
+              <X className="w-6 h-6 text-gray-600 dark:text-gray-400" />
             </button>
           </div>
 
           {/* Content */}
           <div className="flex-1 overflow-hidden">
-            <div className="grid grid-cols-12 gap-0 h-full divide-x divide-gray-200">
+            <div className="grid grid-cols-12 gap-0 h-full divide-x divide-gray-200 dark:divide-gray-700">
               {/* Sidebar - Company List */}
-              <div className="col-span-4 bg-gray-50">
+              <div className="col-span-4 bg-gray-50 dark:bg-gray-900">
                 <CompanyList
                   selectedCompanies={selectedCompanies}
                   companiesConfig={companiesConfig}
@@ -337,7 +332,7 @@ export const PreventiviModal = ({
                     )}
                   </div>
                 ) : (
-                  <div className="flex items-center justify-center h-full text-gray-500">
+                  <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
                     <p>Seleziona un'azienda dalla lista per configurare il preventivo</p>
                   </div>
                 )}
@@ -346,10 +341,10 @@ export const PreventiviModal = ({
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-between gap-4 p-6 border-t border-gray-200 bg-gray-50">
+          <div className="flex items-center justify-between gap-4 p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
             <button
               onClick={onClose}
-              className="px-6 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-full hover:bg-gray-50 transition-colors font-medium"
+              className="px-6 py-2.5 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-full hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors font-medium"
             >
               Annulla
             </button>

@@ -357,6 +357,20 @@ export class OffertaBundleService {
             const { accessibleTenantIds = [] } = options;
             const { prestazioni, ...bundleData } = data;
 
+            // F285: Allowlist — prevent mass assignment (protegge tenantId, id, createdAt, deletedAt, ecc.)
+            const ALLOWED_BUNDLE_FIELDS = [
+                'codice', 'nome', 'descrizione', 'prezzoBundle', 'scontoPercentuale',
+                'ivaAliquota', 'durataBundle', 'compensoMedicoTipo', 'compensoMedicoValore',
+                'compensoMedicoMinimo', 'compensoMedicoMassimo', 'attivo', 'validoDa', 'validoA',
+                'soloNuoviPazienti', 'maxUtilizzi', 'etaMinima', 'etaMassima',
+                'genereApplicabile', 'convenzioniIds', 'codiciScontoIds', 'branchType'
+            ];
+            for (const key of Object.keys(bundleData)) {
+                if (!ALLOWED_BUNDLE_FIELDS.includes(key)) {
+                    delete bundleData[key];
+                }
+            }
+
             // Ensure codiciScontoIds is an array, not null (Prisma String[] requires array)
             if (bundleData.codiciScontoIds === null) {
                 bundleData.codiciScontoIds = [];

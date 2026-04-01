@@ -7,7 +7,8 @@
 import express from 'express';
 import { body } from 'express-validator';
 import personController from '../controllers/personController.js';
-import middleware from '../auth/middleware.js';
+import middleware from '../middleware/auth.js';
+import { auditLog } from '../middleware/audit.js';
 import { employeesMiddleware, trainersMiddleware } from '../middleware/virtualEntityMiddleware.js';
 import { getPersonsInVirtualEntity } from '../services/virtualEntityPermissions.js';
 import logger from '../utils/logger.js';
@@ -16,13 +17,13 @@ const employeesRouter = express.Router();
 const trainersRouter = express.Router();
 const virtualEntitiesRouter = express.Router();
 
-const { authenticate: authenticateToken, auditLog } = middleware;
+const { authenticate: authenticateToken } = middleware;
 
 // ===== ROUTE PER DIPENDENTI (ENTITÀ VIRTUALE) =====
 
 // GET /api/employees - Lista tutti i dipendenti
 employeesRouter.get('/',
-  authenticateToken(),
+  authenticateToken,
   ...employeesMiddleware.list(),
   auditLog('VIEW_EMPLOYEES'),
   async (req, res) => {
@@ -50,7 +51,7 @@ employeesRouter.get('/',
 
 // GET /api/employees/export - Esporta dipendenti (DEVE essere prima di /:id)
 employeesRouter.get('/export',
-  authenticateToken(),
+  authenticateToken,
   ...employeesMiddleware.view(),
   auditLog('EXPORT_EMPLOYEES'),
   async (req, res) => {
@@ -69,7 +70,7 @@ employeesRouter.get('/export',
 
 // GET /api/employees/:id - Ottieni dipendente specifico
 employeesRouter.get('/:id',
-  authenticateToken(),
+  authenticateToken,
   ...employeesMiddleware.view(),
   auditLog('VIEW_EMPLOYEE'),
   personController.getPersonById
@@ -77,7 +78,7 @@ employeesRouter.get('/:id',
 
 // POST /api/employees - Crea nuovo dipendente
 employeesRouter.post('/',
-  authenticateToken(),
+  authenticateToken,
   ...employeesMiddleware.create(),
   body('firstName').notEmpty().withMessage('Nome richiesto'),
   body('lastName').notEmpty().withMessage('Cognome richiesto'),
@@ -105,7 +106,7 @@ employeesRouter.post('/',
 
 // PUT /api/employees/:id - Aggiorna dipendente
 employeesRouter.put('/:id',
-  authenticateToken(),
+  authenticateToken,
   ...employeesMiddleware.edit(),
   body('firstName').optional().notEmpty().withMessage('Nome non può essere vuoto'),
   body('lastName').optional().notEmpty().withMessage('Cognome non può essere vuoto'),
@@ -131,7 +132,7 @@ employeesRouter.put('/:id',
 
 // DELETE /api/employees/:id - Elimina dipendente
 employeesRouter.delete('/:id',
-  authenticateToken(),
+  authenticateToken,
   ...employeesMiddleware.delete(),
   auditLog('DELETE_EMPLOYEE'),
   async (req, res) => {
@@ -155,7 +156,7 @@ employeesRouter.delete('/:id',
 
 // GET /api/trainers - Lista tutti i formatori
 trainersRouter.get('/',
-  authenticateToken(),
+  authenticateToken,
   ...trainersMiddleware.list(),
   auditLog('VIEW_TRAINERS'),
   async (req, res) => {
@@ -183,7 +184,7 @@ trainersRouter.get('/',
 
 // GET /api/trainers/export - Esporta formatori (DEVE essere prima di /:id)
 trainersRouter.get('/export',
-  authenticateToken(),
+  authenticateToken,
   ...trainersMiddleware.view(),
   auditLog('EXPORT_TRAINERS'),
   async (req, res) => {
@@ -202,7 +203,7 @@ trainersRouter.get('/export',
 
 // GET /api/trainers/:id - Ottieni formatore specifico
 trainersRouter.get('/:id',
-  authenticateToken(),
+  authenticateToken,
   ...trainersMiddleware.view(),
   auditLog('VIEW_TRAINER'),
   personController.getPersonById
@@ -210,7 +211,7 @@ trainersRouter.get('/:id',
 
 // POST /api/trainers - Crea nuovo formatore
 trainersRouter.post('/',
-  authenticateToken(),
+  authenticateToken,
   ...trainersMiddleware.create(),
   body('firstName').notEmpty().withMessage('Nome richiesto'),
   body('lastName').notEmpty().withMessage('Cognome richiesto'),
@@ -238,7 +239,7 @@ trainersRouter.post('/',
 
 // PUT /api/trainers/:id - Aggiorna formatore
 trainersRouter.put('/:id',
-  authenticateToken(),
+  authenticateToken,
   ...trainersMiddleware.edit(),
   body('firstName').optional().notEmpty().withMessage('Nome non può essere vuoto'),
   body('lastName').optional().notEmpty().withMessage('Cognome non può essere vuoto'),
@@ -264,7 +265,7 @@ trainersRouter.put('/:id',
 
 // DELETE /api/trainers/:id - Elimina formatore
 trainersRouter.delete('/:id',
-  authenticateToken(),
+  authenticateToken,
   ...trainersMiddleware.delete(),
   auditLog('DELETE_TRAINER'),
   async (req, res) => {
@@ -288,7 +289,7 @@ trainersRouter.delete('/:id',
 
 // GET /api/virtual-entities/employees - Lista dipendenti (entità virtuale)
 virtualEntitiesRouter.get('/employees',
-  authenticateToken(),
+  authenticateToken,
   ...employeesMiddleware.list(),
   auditLog('VIEW_VIRTUAL_EMPLOYEES'),
   async (req, res) => {
@@ -316,7 +317,7 @@ virtualEntitiesRouter.get('/employees',
 
 // GET /api/virtual-entities/trainers - Lista formatori (entità virtuale)
 virtualEntitiesRouter.get('/trainers',
-  authenticateToken(),
+  authenticateToken,
   ...trainersMiddleware.list(),
   auditLog('VIEW_VIRTUAL_TRAINERS'),
   async (req, res) => {
@@ -344,7 +345,7 @@ virtualEntitiesRouter.get('/trainers',
 
 // GET /api/virtual-entities/export-trainers - Esporta formatori (entità virtuale)
 virtualEntitiesRouter.get('/export-trainers',
-  authenticateToken(),
+  authenticateToken,
   ...trainersMiddleware.view(),
   auditLog('EXPORT_VIRTUAL_TRAINERS'),
   async (req, res) => {
@@ -363,7 +364,7 @@ virtualEntitiesRouter.get('/export-trainers',
 
 // GET /api/virtual-entities/permissions - Ottieni permessi entità virtuali per l'utente corrente
 virtualEntitiesRouter.get('/permissions',
-  authenticateToken(),
+  authenticateToken,
   async (req, res) => {
     try {
       const userId = req.person?.id;
@@ -435,7 +436,7 @@ virtualEntitiesRouter.get('/permissions',
 
 // POST /api/virtual-entities/permissions/assign - Assegna permessi entità virtuali a un ruolo
 virtualEntitiesRouter.post('/permissions/assign',
-  authenticateToken(),
+  authenticateToken,
   body('roleId').notEmpty().withMessage('ID ruolo richiesto'),
   body('virtualEntityName').isIn(['EMPLOYEES', 'TRAINERS']).withMessage('Nome entità virtuale non valido'),
   body('permissions').isArray().withMessage('Lista permessi richiesta'),
@@ -471,7 +472,7 @@ virtualEntitiesRouter.post('/permissions/assign',
 
 // DELETE /api/virtual-entities/permissions/revoke - Rimuove permessi entità virtuali da un ruolo
 virtualEntitiesRouter.delete('/permissions/revoke',
-  authenticateToken(),
+  authenticateToken,
   body('roleId').notEmpty().withMessage('ID ruolo richiesto'),
   body('virtualEntityName').isIn(['EMPLOYEES', 'TRAINERS']).withMessage('Nome entità virtuale non valido'),
   body('permissions').isArray().withMessage('Lista permessi richiesta'),
@@ -499,7 +500,7 @@ virtualEntitiesRouter.delete('/permissions/revoke',
 
 // GET /api/virtual-entities/permissions/role/:roleId - Ottieni permessi entità virtuali di un ruolo
 virtualEntitiesRouter.get('/permissions/role/:roleId',
-  authenticateToken(),
+  authenticateToken,
   async (req, res) => {
     try {
       const { roleId } = req.params;
@@ -524,7 +525,7 @@ virtualEntitiesRouter.get('/permissions/role/:roleId',
 
 // POST /api/virtual-entities/permissions/check - Verifica permesso specifico su entità virtuale
 virtualEntitiesRouter.post('/permissions/check',
-  authenticateToken(),
+  authenticateToken,
   body('virtualEntityName').isIn(['EMPLOYEES', 'TRAINERS']).withMessage('Nome entità virtuale non valido'),
   body('action').isIn(['VIEW', 'CREATE', 'EDIT', 'DELETE']).withMessage('Azione non valida'),
   async (req, res) => {

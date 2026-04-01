@@ -269,7 +269,42 @@ export const normalizeResourceName = (pathSegment) => {
     'preventivi': 'Preventivo',
     'preventivo': 'Preventivo',
     'visite-specialistiche': 'VisitaSpecialistica',
-    'specialistic-visits': 'VisitaSpecialistica'
+    'specialistic-visits': 'VisitaSpecialistica',
+    // Italian route names (ElementMedica / ElementSicurezza)
+    'attestati': 'Certificate',
+    'attestato': 'Certificate',
+    'registri-presenze': 'AttendanceRegister',
+    'lettere-incarico': 'LetteraIncarico',
+    // NOTE: 'clinica' NOT mapped — let sub-routes (visite, referti, etc.) match instead
+    'visite': 'Visit',
+    'visita': 'Visit',
+    'giudizi': 'MedicalJudgement',
+    'giudizio': 'MedicalJudgement',
+    'prescrizioni': 'Prescription',
+    'referto': 'Report',
+    'referti': 'Report',
+    'impostazioni': 'Settings',
+    'dvr': 'DVR',
+    'sopralluogo': 'Sopralluogo',
+    'reparto': 'Reparto',
+    // NOTE: 'hr' NOT mapped — let sub-routes match instead
+    'scadenze': 'Deadline',
+    'movimenti-contabili': 'MovimentoContabile',
+    'tariffari-aziendali': 'TariffarioAziendale',
+    // NOTE: 'billing' NOT mapped — let sub-routes match instead
+    'gdpr': 'GDPRRequest',
+    'signatures': 'Signature',
+    'consent-fse': 'ConsentFSE',
+    'cda': 'CDA',
+    'form-templates': 'FormTemplate',
+    'forms': 'Form',
+    'submissions': 'Submission',
+    // NOTE: 'cms' NOT mapped — let sub-routes match instead
+    'codici-sconto': 'CodiceSconto',
+    'cross-tenant-approvals': 'CrossTenantApproval',
+    'person-profiles': 'PersonTenantProfile',
+    'course-tests': 'CourseTest',
+    'backup': 'Backup'
   };
 
   return resourceMap[pathSegment?.toLowerCase()] || null;

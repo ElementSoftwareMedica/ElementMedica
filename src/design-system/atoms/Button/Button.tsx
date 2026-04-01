@@ -30,7 +30,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   children?: React.ReactNode;
 }
 
-// Variant styles
+// Variant styles with dark mode support
 const variantStyles: Record<ButtonVariant, string> = {
   primary: `
     bg-primary-600 text-white border-primary-600
@@ -38,6 +38,7 @@ const variantStyles: Record<ButtonVariant, string> = {
     focus:ring-2 focus:ring-primary-500 focus:ring-offset-2
     active:bg-primary-800
     disabled:bg-primary-300 disabled:border-primary-300
+    dark:focus:ring-offset-gray-900
   `,
   secondary: `
     bg-gray-100 text-gray-900 border-gray-300
@@ -45,6 +46,11 @@ const variantStyles: Record<ButtonVariant, string> = {
     focus:ring-2 focus:ring-gray-500 focus:ring-offset-2
     active:bg-gray-300
     disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-200
+    dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600
+    dark:hover:bg-gray-600 dark:hover:border-gray-500
+    dark:active:bg-gray-500
+    dark:disabled:bg-gray-800 dark:disabled:text-gray-500
+    dark:focus:ring-offset-gray-900
   `,
   outline: `
     bg-transparent text-gray-700 border-gray-300
@@ -52,6 +58,11 @@ const variantStyles: Record<ButtonVariant, string> = {
     focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
     active:bg-gray-100
     disabled:text-gray-400 disabled:border-gray-200
+    dark:text-gray-200 dark:border-gray-600
+    dark:hover:bg-gray-800 dark:hover:border-gray-500
+    dark:active:bg-gray-700
+    dark:disabled:text-gray-500 dark:disabled:border-gray-700
+    dark:focus:ring-blue-400 dark:focus:ring-offset-gray-900
   `,
   ghost: `
     bg-transparent text-gray-700 border-transparent
@@ -59,6 +70,11 @@ const variantStyles: Record<ButtonVariant, string> = {
     focus:ring-2 focus:ring-gray-500 focus:ring-offset-2
     active:bg-gray-200
     disabled:text-gray-400
+    dark:text-gray-200
+    dark:hover:bg-gray-800
+    dark:active:bg-gray-700
+    dark:disabled:text-gray-500
+    dark:focus:ring-offset-gray-900
   `,
   destructive: `
     bg-red-600 text-white border-red-600
@@ -66,6 +82,9 @@ const variantStyles: Record<ButtonVariant, string> = {
     focus:ring-2 focus:ring-red-500 focus:ring-offset-2
     active:bg-red-800
     disabled:bg-red-300 disabled:border-red-300
+    dark:bg-red-700 dark:border-red-700
+    dark:hover:bg-red-600 dark:hover:border-red-600
+    dark:focus:ring-red-400 dark:focus:ring-offset-gray-900
   `,
 };
 
@@ -80,7 +99,7 @@ const sizeStyles: Record<ButtonSize, string> = {
 const baseStyles = `
   inline-flex items-center justify-center
   border border-solid
-  rounded-full
+  rounded-xl
   font-medium
   transition-all duration-200
   focus:outline-none
@@ -143,11 +162,11 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
             />
           </svg>
         )}
-        
+
         {!loading && leftIcon && (
           <span className="mr-2 flex-shrink-0">{leftIcon}</span>
         )}
-        
+
         {children && (
           leftIcon || rightIcon ? (
             <span className="flex-1 min-w-0">{children}</span>
@@ -155,7 +174,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
             <>{children}</>
           )
         )}
-        
+
         {!loading && rightIcon && (
           <span className="ml-2 flex-shrink-0">{rightIcon}</span>
         )}

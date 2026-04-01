@@ -55,7 +55,6 @@ export const GDPRDashboard: React.FC = () => {
         privacyHook.refreshSettings()
       ]);
     } catch (error) {
-      console.error('Error refreshing GDPR data:', error);
     } finally {
       setRefreshing(false);
     }
@@ -86,15 +85,15 @@ export const GDPRDashboard: React.FC = () => {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50/30">
       <div className="container mx-auto py-8 px-4 sm:px-6 space-y-8 max-w-7xl">
         {/* Header */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm dark:shadow-black/30 border border-gray-100 dark:border-gray-700 p-6">
           <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-6">
             <div className="flex items-center gap-4">
               <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/25">
                 <Shield className="h-7 w-7 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">GDPR Dashboard</h1>
-                <p className="text-gray-500 mt-1 text-sm sm:text-base">
+                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-50">GDPR Dashboard</h1>
+                <p className="text-gray-500 dark:text-gray-400 mt-1 text-sm sm:text-base">
                   Gestisci privacy, consensi e impostazioni GDPR
                 </p>
               </div>
@@ -113,8 +112,8 @@ export const GDPRDashboard: React.FC = () => {
               </Button>
 
               <div className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium text-sm ${overallScore >= 90 ? 'bg-emerald-100 text-emerald-700' :
-                  overallScore >= 70 ? 'bg-amber-100 text-amber-700' :
-                    'bg-red-100 text-red-700'
+                overallScore >= 70 ? 'bg-amber-100 text-amber-700' :
+                  'bg-red-100 text-red-700'
                 }`}>
                 <BarChart3 className="h-4 w-4" />
                 <span>Compliance: {overallScore}%</span>
@@ -178,27 +177,27 @@ export const GDPRDashboard: React.FC = () => {
         )}
 
         {/* Main Content Tabs */}
-        <Card className="rounded-2xl shadow-sm border-gray-100 overflow-hidden">
+        <Card className="rounded-2xl shadow-sm dark:shadow-black/30 border-gray-100 dark:border-gray-700 overflow-hidden">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <div className="border-b border-gray-100 bg-gray-50/50 p-2">
+            <div className="border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 p-2">
               <TabsList className="w-full grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1 bg-transparent h-auto p-0">
-                <TabsTrigger value="consent" className="gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-xl py-2.5 text-sm">
+                <TabsTrigger value="consent" className="gap-2 data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 data-[state=active]:shadow-sm rounded-xl py-2.5 text-sm">
                   <Shield className="h-4 w-4" />
                   <span className="hidden sm:inline">Consensi</span>
                 </TabsTrigger>
-                <TabsTrigger value="settings" className="gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-xl py-2.5 text-sm">
+                <TabsTrigger value="settings" className="gap-2 data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 data-[state=active]:shadow-sm rounded-xl py-2.5 text-sm">
                   <Settings className="h-4 w-4" />
                   <span className="hidden sm:inline">Privacy</span>
                 </TabsTrigger>
-                <TabsTrigger value="export" className="gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-xl py-2.5 text-sm">
+                <TabsTrigger value="export" className="gap-2 data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 data-[state=active]:shadow-sm rounded-xl py-2.5 text-sm">
                   <Download className="h-4 w-4" />
                   <span className="hidden sm:inline">Export</span>
                 </TabsTrigger>
-                <TabsTrigger value="deletion" className="gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-xl py-2.5 text-sm">
+                <TabsTrigger value="deletion" className="gap-2 data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 data-[state=active]:shadow-sm rounded-xl py-2.5 text-sm">
                   <Trash2 className="h-4 w-4" />
                   <span className="hidden sm:inline">Cancellazione</span>
                 </TabsTrigger>
-                <TabsTrigger value="audit" className="gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-xl py-2.5 text-sm">
+                <TabsTrigger value="audit" className="gap-2 data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 data-[state=active]:shadow-sm rounded-xl py-2.5 text-sm">
                   <History className="h-4 w-4" />
                   <span className="hidden sm:inline">Audit</span>
                 </TabsTrigger>
@@ -228,14 +227,14 @@ export const GDPRDashboard: React.FC = () => {
         </Card>
 
         {/* Footer Info */}
-        <Card className="p-5 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-100 rounded-2xl">
+        <Card className="p-5 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 border-blue-100 dark:border-blue-800 rounded-2xl">
           <div className="flex items-start gap-4">
-            <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
-              <Info className="h-5 w-5 text-blue-600" />
+            <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/50 rounded-xl flex items-center justify-center flex-shrink-0">
+              <Info className="h-5 w-5 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
-              <h4 className="font-semibold text-gray-900 mb-1">I tuoi diritti GDPR</h4>
-              <p className="text-sm text-gray-600">
+              <h4 className="font-semibold text-gray-900 dark:text-gray-50 mb-1">I tuoi diritti GDPR</h4>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
                 Questa dashboard ti permette di gestire i tuoi diritti sulla privacy secondo il GDPR.
                 Per domande sul trattamento dei dati, contatta il nostro Data Protection Officer.
               </p>

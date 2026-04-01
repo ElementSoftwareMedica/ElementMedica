@@ -9,8 +9,8 @@
  * - Azioni rapide e cambio stato
  */
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   Download, ArrowLeft, RefreshCw, Eye, Table, Grid3x3, Mail, User, Calendar,
   MoreVertical, ChevronDown, Check, Archive, X, BarChart3,
@@ -22,6 +22,7 @@ import { Card } from '../../design-system/molecules/Card';
 import { formTemplatesService, getFormSubmissions, updateSubmissionStatus } from '../../services/formTemplates';
 import type { FormSubmission, FormTemplate } from '../../types/forms';
 import { useToast } from '../../hooks/useToast';
+import { useTenantFilter } from '../../context/TenantFilterContext';
 import * as XLSX from 'xlsx';
 
 type ViewMode = 'table' | 'cards' | 'analytics';
@@ -105,8 +106,8 @@ const DetailPanel: React.FC<{
                   key={option.value}
                   onClick={() => onStatusChange(submission.id, option.value as FormSubmission['status'])}
                   className={`inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg border-2 transition-all ${isActive
-                      ? `${config.bgColor} ${config.color} border-current`
-                      : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                    ? `${config.bgColor} ${config.color} border-current`
+                    : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
                     }`}
                 >
                   {config.icon}
@@ -180,7 +181,14 @@ const DetailPanel: React.FC<{
 export const FormSubmissionsView: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { showToast } = useToast();
+
+  // Detect context: CMS management or Test section
+  const contextBasePath = location.pathname.includes('/management/cms')
+    ? '/management/cms/forms'
+    : '/test';
+  const { getTenantFilterParams, tenantFilterKey, isReady } = useTenantFilter();
   const [loading, setLoading] = useState(true);
   const [template, setTemplate] = useState<FormTemplate | null>(null);
   const [submissions, setSubmissions] = useState<FormSubmission[]>([]);
@@ -250,17 +258,22 @@ export const FormSubmissionsView: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (id) loadData();
-  }, [id]);
+    if (id && isReady) loadData();
+  }, [id, isReady, tenantFilterKey]);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!id) return;
     try {
       setLoading(true);
+      const tenantParams = getTenantFilterParams();
       const templateData = await formTemplatesService.getFormTemplate(id);
       setTemplate(templateData);
 
-      const response = await getFormSubmissions({ formTemplateId: id });
+      const response = await getFormSubmissions({
+        formTemplateId: id,
+        ...(tenantParams.tenantIds && { tenantIds: tenantParams.tenantIds.join(',') }),
+        ...(tenantParams.allTenants && { allTenants: 'true' })
+      });
       const fetchedSubmissions = response.submissions || [];
       setSubmissions(fetchedSubmissions);
 
@@ -310,12 +323,11 @@ export const FormSubmissionsView: React.FC = () => {
 
       setFields(dynamicFields);
     } catch (error) {
-      console.error('Error loading data:', error);
       showToast({ message: 'Errore nel caricamento dei dati', type: 'error' });
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, getTenantFilterParams, tenantFilterKey, showToast]);
 
   const handleStatusChange = async (submissionId: string, newStatus: FormSubmission['status']) => {
     try {
@@ -328,7 +340,6 @@ export const FormSubmissionsView: React.FC = () => {
       setOpenActionMenu(null);
       showToast({ message: 'Stato aggiornato con successo', type: 'success' });
     } catch (error) {
-      console.error('Error updating status:', error);
       showToast({ message: 'Errore nell\'aggiornamento dello stato', type: 'error' });
     }
   };
@@ -395,7 +406,7 @@ export const FormSubmissionsView: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-4">
-              <Button variant="ghost" onClick={() => navigate('/forms')} className="flex items-center">
+              <Button variant="ghost" onClick={() => navigate(contextBasePath)} className="flex items-center">
                 <ArrowLeft className="w-4 h-4 mr-2" />
                 Indietro
               </Button>
@@ -809,8 +820,8 @@ export const FormSubmissionsView: React.FC = () => {
                   }
                 }}
                 className={`flex items-center gap-2 w-full px-4 py-2 text-sm hover:bg-gray-50 ${submissions.find(s => s.id === openActionMenu)?.status === option.value
-                    ? 'font-semibold text-blue-600 bg-blue-50'
-                    : 'text-gray-700'
+                  ? 'font-semibold text-blue-600 bg-blue-50'
+                  : 'text-gray-700'
                   }`}
               >
                 {STATUS_CONFIG[option.value]?.icon}

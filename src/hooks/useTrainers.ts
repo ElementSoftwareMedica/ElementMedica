@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  getTrainers, 
-  createTrainer, 
-  updateTrainer, 
+import {
+  getTrainers,
+  createTrainer,
+  updateTrainer,
   Trainer,
   CreateTrainerDTO,
   UpdateTrainerDTO
@@ -11,12 +11,6 @@ import { useQuery } from '@tanstack/react-query';
 
 // Re-export DTOs for convenience
 export type { CreateTrainerDTO, UpdateTrainerDTO };
-
-// Legacy aliases - deprecated, use DTOs directly
-/** @deprecated Use CreateTrainerDTO instead */
-export type TrainerInsert = CreateTrainerDTO;
-/** @deprecated Use UpdateTrainerDTO instead */
-export type TrainerUpdate = UpdateTrainerDTO;
 
 export function useTrainers() {
   const [trainers, setTrainers] = useState<Trainer[]>([]);
@@ -32,17 +26,17 @@ export function useTrainers() {
       setLoading(true);
       setError(null);
       const data = await getTrainers();
-      
+
       const processedData = data.map(trainer => ({
         ...trainer,
         specialties: trainer.specialties || [],
         certifications: trainer.certifications || [],
         status: trainer.status || 'Active'
       }));
-      
+
       setTrainers(processedData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load trainers');
+      setError('Errore nel caricamento dei formatori');
     } finally {
       setLoading(false);
     }
@@ -55,7 +49,7 @@ export function useTrainers() {
       setTrainers(prev => [...prev, newTrainer]);
       return newTrainer;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create trainer');
+      setError('Errore nella creazione del formatore');
       throw err;
     }
   }
@@ -67,7 +61,7 @@ export function useTrainers() {
       setTrainers(prev => prev.map(t => t.id === id ? updatedTrainer : t));
       return updatedTrainer;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update trainer');
+      setError('Errore nell\'aggiornamento del formatore');
       throw err;
     }
   }

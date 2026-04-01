@@ -37,6 +37,7 @@ import cmsPagesService, { CMSPage, CMSPageListFilters } from '../../services/cms
 import CMSPageEditor from './CMSPageEditor';
 import { getAllBrands, type BrandConfig } from '../../config/brands.config';
 import { ActionButton } from '../../components/ui/ActionButton';
+import { CRUDPrimaryButton } from '../../components/shared/CRUDButton';
 import type { DropdownAction } from '../../design-system/molecules/Dropdown';
 
 interface CMSManagerProps {
@@ -97,7 +98,6 @@ const CMSManager: React.FC<CMSManagerProps> = ({ className = '' }) => {
       setIsCreating(false);
       setIsEditorOpen(true);
     } catch (error) {
-      console.error('Error fetching full page:', error);
       showToast({ type: 'error', message: 'Errore nel caricamento della pagina' });
     }
   };
@@ -115,7 +115,6 @@ const CMSManager: React.FC<CMSManagerProps> = ({ className = '' }) => {
     try {
       await deleteMutation.mutateAsync(page.id);
     } catch (error) {
-      console.error('Delete error:', error);
     }
   };
 
@@ -127,7 +126,6 @@ const CMSManager: React.FC<CMSManagerProps> = ({ className = '' }) => {
         await publishMutation.mutateAsync(page.id);
       }
     } catch (error) {
-      console.error('Toggle publish error:', error);
     }
   };
 
@@ -135,7 +133,6 @@ const CMSManager: React.FC<CMSManagerProps> = ({ className = '' }) => {
     try {
       await duplicateMutation.mutateAsync(page.id);
     } catch (error) {
-      console.error('Duplicate error:', error);
     }
   };
 
@@ -223,6 +220,7 @@ const CMSManager: React.FC<CMSManagerProps> = ({ className = '' }) => {
       <CMSPageEditor
         page={selectedPage}
         isCreating={isCreating}
+        targetTenantId={selectedTenantId}
         onClose={handleCloseEditor}
         onSave={() => {
           handleCloseEditor();
@@ -246,13 +244,10 @@ const CMSManager: React.FC<CMSManagerProps> = ({ className = '' }) => {
               {pagination?.total || 0} pagine totali
             </p>
           </div>
-          <button
-            onClick={handleCreate}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
+          <CRUDPrimaryButton operation="create" onClick={handleCreate}>
             <Plus className="w-5 h-5" />
             Nuova Pagina
-          </button>
+          </CRUDPrimaryButton>
         </div>
 
         {/* Brand Selector */}
@@ -371,7 +366,7 @@ const CMSManager: React.FC<CMSManagerProps> = ({ className = '' }) => {
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4 mb-6">
           <p className="font-semibold">Errore nel caricamento delle pagine</p>
-          <p className="text-sm mt-1">{error.message}</p>
+          <p className="text-sm mt-1">Si è verificato un errore. Riprova più tardi o contatta l'assistenza.</p>
         </div>
       )}
 
@@ -500,13 +495,10 @@ const CMSManager: React.FC<CMSManagerProps> = ({ className = '' }) => {
               : 'Inizia creando la tua prima pagina CMS'}
           </p>
           {!filters.search && !filters.status && (
-            <button
-              onClick={handleCreate}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
+            <CRUDPrimaryButton operation="create" onClick={handleCreate}>
               <Plus className="w-5 h-5" />
               Crea Prima Pagina
-            </button>
+            </CRUDPrimaryButton>
           )}
         </div>
       )}

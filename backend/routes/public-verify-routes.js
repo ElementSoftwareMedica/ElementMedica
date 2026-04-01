@@ -5,11 +5,10 @@
  */
 
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/prisma-optimization.js';
 import logger from '../utils/logger.js';
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 /**
  * GET /api/public/verify-attestato/:attestatoNumber
@@ -165,7 +164,7 @@ router.get('/verify-attestato/:attestatoNumber', async (req, res) => {
         });
 
     } catch (error) {
-        logger.error({ error: error.message, stack: error.stack }, 'Errore durante verifica attestato');
+        logger.error({ error: 'Operazione non riuscita', stack: error.stack }, 'Errore durante verifica attestato');
         return res.status(500).json({
             success: false,
             error: 'Errore durante la verifica dell\'attestato'

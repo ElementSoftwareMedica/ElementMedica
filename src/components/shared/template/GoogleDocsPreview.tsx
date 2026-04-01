@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from '../../../design-system/atoms/Button';
-import { 
+import {
   Eye,
   FileDown,
   FileText,
@@ -40,42 +40,41 @@ const GoogleDocsPreview: React.FC<GoogleDocsPreviewProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [generatedFile, setGeneratedFile] = useState<{ url: string; name: string } | null>(null);
   const [showPreview, setShowPreview] = useState(false);
-  
+
   // Generate document from template
   const handleGenerate = async () => {
     if (!documentUrl && !templateId) {
       setError('Nessun template selezionato');
       return;
     }
-    
+
     setLoading(true);
     setError(null);
-    
+
     try {
       const response = await googleApiClient.generateDocument(documentType, placeholderData);
-      
+
       if (response.success && response.fileUrl) {
         setGeneratedFile({
           url: response.fileUrl,
           name: response.fileName || 'documento.pdf'
         });
-        
+
         if (onGenerationSuccess) {
           onGenerationSuccess(response.fileUrl, response.fileName || 'documento.pdf');
         }
-        
+
         setShowPreview(true);
       } else {
-        setError(response.message || 'Errore durante la generazione del documento');
+        setError('Errore durante la generazione del documento');
       }
-    } catch (err: any) {
-      console.error('Error generating document:', err);
-      setError(err.message || 'Impossibile generare il documento');
+    } catch (err: unknown) {
+      setError('Impossibile generare il documento');
     } finally {
       setLoading(false);
     }
   };
-  
+
   // Print the generated document
   const handlePrint = () => {
     if (generatedFile?.url) {
@@ -87,7 +86,7 @@ const GoogleDocsPreview: React.FC<GoogleDocsPreviewProps> = ({
       }
     }
   };
-  
+
   // Download the generated document
   const handleDownload = () => {
     if (generatedFile?.url) {
@@ -99,15 +98,15 @@ const GoogleDocsPreview: React.FC<GoogleDocsPreviewProps> = ({
       document.body.removeChild(link);
     }
   };
-  
+
   // Convert Google Docs/Slides URL to embed URL
   const getEmbedUrl = (url: string): string => {
     if (!url) return '';
-    
+
     // Extract document ID from URL
     const docsMatch = url.match(/\/document\/d\/([a-zA-Z0-9-_]+)/);
     const slidesMatch = url.match(/\/presentation\/d\/([a-zA-Z0-9-_]+)/);
-    
+
     if (docsMatch) {
       // Google Docs embed format
       return `https://docs.google.com/document/d/${docsMatch[1]}/preview`;
@@ -115,10 +114,10 @@ const GoogleDocsPreview: React.FC<GoogleDocsPreviewProps> = ({
       // Google Slides embed format
       return `https://docs.google.com/presentation/d/${slidesMatch[1]}/embed?start=false&loop=false&delayms=3000`;
     }
-    
+
     return url;
   };
-  
+
   return (
     <div className={`google-docs-preview ${className}`}>
       <div className="border rounded-xl overflow-hidden">
@@ -145,7 +144,7 @@ const GoogleDocsPreview: React.FC<GoogleDocsPreviewProps> = ({
                 </>
               )}
             </Button>
-            
+
             {generatedFile && (
               <>
                 <Button
@@ -168,13 +167,13 @@ const GoogleDocsPreview: React.FC<GoogleDocsPreviewProps> = ({
             )}
           </div>
         </div>
-        
+
         {error && (
           <div className="bg-red-50 text-red-700 p-3 border-b text-sm">
             {error}
           </div>
         )}
-        
+
         <div className="p-4 bg-white">
           {!generatedFile && documentUrl ? (
             // Show template preview before generation
@@ -204,14 +203,14 @@ const GoogleDocsPreview: React.FC<GoogleDocsPreviewProps> = ({
             </div>
           )}
         </div>
-        
+
         <div className="bg-gray-50 p-3 border-t flex justify-between items-center">
           <div className="text-sm text-gray-600">
             {documentType === 'attestato' && 'Anteprima Attestato'}
             {documentType === 'lettera_incarico' && 'Anteprima Lettera di Incarico'}
             {documentType !== 'attestato' && documentType !== 'lettera_incarico' && `Anteprima ${documentType}`}
           </div>
-          
+
           {generatedFile && (
             <Button
               variant="ghost"

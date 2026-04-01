@@ -2,6 +2,33 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Smooth scrolling for hash navigation */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Hide spin buttons on ALL number inputs to prevent accidental value changes during scroll */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* Legacy class kept for backwards compatibility */
+.hide-spin-buttons::-webkit-outer-spin-button,
+.hide-spin-buttons::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.hide-spin-buttons {
+  -moz-appearance: textfield;
+}
+
 @layer components {
   .btn-primary {
     @apply px-4 py-2 bg-primary-600 text-white rounded-md shadow-sm text-sm font-medium hover:bg-primary-700 transition-colors;
@@ -23,6 +50,7 @@
     from {
       opacity: 0;
     }
+
     to {
       opacity: 1;
     }
@@ -37,6 +65,7 @@
       opacity: 0;
       transform: translateY(-100%);
     }
+
     to {
       opacity: 1;
       transform: translateY(0);
@@ -48,8 +77,15 @@
   }
 
   @keyframes scaleIn {
-    from { opacity: 0; transform: scale(0.95); }
-    to { opacity: 1; transform: scale(1); }
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
   }
 }
 
@@ -216,211 +252,211 @@ body {
   --tw-gradient-stops: var(--tw-gradient-from), rgb(255 255 255), var(--tw-gradient-to);
 }
 
-/* Teal colors for medical theme */
+/* Sage green colors for medical theme — new scale: #A1C8C1 at teal-500 */
 .cms-html-content .bg-teal-50 {
-  background-color: #f0fdfa;
+  background-color: #F5F9F9;
 }
 
 .cms-html-content .bg-teal-100 {
-  background-color: #ccfbf1;
+  background-color: #ECF4F3;
 }
 
 .cms-html-content .bg-teal-200 {
-  background-color: #99f6e4;
+  background-color: #D9E9E6;
 }
 
 .cms-html-content .bg-teal-300 {
-  background-color: #5eead4;
+  background-color: #C6DEDA;
 }
 
 .cms-html-content .bg-teal-400 {
-  background-color: #2dd4bf;
+  background-color: #B3D3CD;
 }
 
 .cms-html-content .bg-teal-500 {
-  background-color: #14b8a6;
+  background-color: #A1C8C1;
 }
 
 .cms-html-content .bg-teal-600 {
-  background-color: #0d9488;
+  background-color: #7FB3AB;
 }
 
 .cms-html-content .bg-teal-700 {
-  background-color: #0f766e;
+  background-color: #5F9B92;
 }
 
 .cms-html-content .bg-teal-800 {
-  background-color: #115e59;
+  background-color: #437D74;
 }
 
 .cms-html-content .bg-teal-900 {
-  background-color: #134e4a;
+  background-color: #2D5E56;
 }
 
 .cms-html-content .text-teal-50 {
-  color: #f0fdfa;
+  color: #F5F9F9;
 }
 
 .cms-html-content .text-teal-100 {
-  color: #ccfbf1;
+  color: #ECF4F3;
 }
 
 .cms-html-content .text-teal-200 {
-  color: #99f6e4;
+  color: #D9E9E6;
 }
 
 .cms-html-content .text-teal-300 {
-  color: #5eead4;
+  color: #C6DEDA;
 }
 
 .cms-html-content .text-teal-400 {
-  color: #2dd4bf;
+  color: #B3D3CD;
 }
 
 .cms-html-content .text-teal-500 {
-  color: #14b8a6;
+  color: #A1C8C1;
 }
 
 .cms-html-content .text-teal-600 {
-  color: #0d9488;
+  color: #7FB3AB;
 }
 
 .cms-html-content .text-teal-700 {
-  color: #0f766e;
+  color: #5F9B92;
 }
 
 .cms-html-content .text-teal-800 {
-  color: #115e59;
+  color: #437D74;
 }
 
 .cms-html-content .border-teal-50 {
-  border-color: #f0fdfa;
+  border-color: #F5F9F9;
 }
 
 .cms-html-content .border-teal-100 {
-  border-color: #ccfbf1;
+  border-color: #ECF4F3;
 }
 
 .cms-html-content .border-teal-200 {
-  border-color: #99f6e4;
+  border-color: #D9E9E6;
 }
 
 .cms-html-content .border-teal-400 {
-  border-color: #2dd4bf;
+  border-color: #B3D3CD;
 }
 
 .cms-html-content .border-teal-500 {
-  border-color: #14b8a6;
+  border-color: #A1C8C1;
 }
 
 .cms-html-content .border-teal-600 {
-  border-color: #0d9488;
+  border-color: #7FB3AB;
 }
 
 .cms-html-content .border-teal-700 {
-  border-color: #0f766e;
+  border-color: #5F9B92;
 }
 
-/* Blue colors for gradients */
+/* Dark navy colors for gradients */
 .cms-html-content .bg-blue-600 {
-  background-color: #2563eb;
+  background-color: #3B4A59;
 }
 
 .cms-html-content .bg-blue-700 {
-  background-color: #1d4ed8;
+  background-color: #313F4E;
 }
 
 .cms-html-content .bg-blue-800 {
-  background-color: #1e40af;
+  background-color: #233747;
 }
 
 .cms-html-content .text-blue-600 {
-  color: #2563eb;
+  color: #3B4A59;
 }
 
-/* Gradient utilities for teal/blue theme */
+/* Gradient utilities for verde salvia/dark navy theme */
 .cms-html-content .from-teal-50\/30 {
-  --tw-gradient-from: rgb(240 253 250 / 0.3);
-  --tw-gradient-to: rgb(240 253 250 / 0);
+  --tw-gradient-from: rgb(245 249 249 / 0.3);
+  --tw-gradient-to: rgb(245 249 249 / 0);
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
 }
 
 .cms-html-content .to-blue-50\/30 {
-  --tw-gradient-to: rgb(239 246 255 / 0.3);
+  --tw-gradient-to: rgb(240 242 244 / 0.3);
 }
 
 .cms-html-content .from-teal-400 {
-  --tw-gradient-from: #2dd4bf;
-  --tw-gradient-to: rgb(45 212 191 / 0);
+  --tw-gradient-from: #B3D3CD;
+  --tw-gradient-to: rgb(179 211 205 / 0);
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
 }
 
 .cms-html-content .from-teal-500 {
-  --tw-gradient-from: #14b8a6;
-  --tw-gradient-to: rgb(20 184 166 / 0);
+  --tw-gradient-from: #A1C8C1;
+  --tw-gradient-to: rgb(160 200 193 / 0);
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
 }
 
 .cms-html-content .from-teal-600 {
-  --tw-gradient-from: #0d9488;
-  --tw-gradient-to: rgb(13 148 136 / 0);
+  --tw-gradient-from: #7FB3AB;
+  --tw-gradient-to: rgb(127 179 171 / 0);
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
 }
 
 .cms-html-content .from-teal-700 {
-  --tw-gradient-from: #0f766e;
-  --tw-gradient-to: rgb(15 118 110 / 0);
+  --tw-gradient-from: #5F9B92;
+  --tw-gradient-to: rgb(95 155 146 / 0);
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
 }
 
 .cms-html-content .to-teal-700 {
-  --tw-gradient-to: #0f766e;
+  --tw-gradient-to: #5F9B92;
 }
 
 .cms-html-content .to-blue-600 {
-  --tw-gradient-to: #2563eb;
+  --tw-gradient-to: #3B4A59;
 }
 
 .cms-html-content .to-blue-700 {
-  --tw-gradient-to: #1d4ed8;
+  --tw-gradient-to: #313F4E;
 }
 
 .cms-html-content .to-blue-800 {
-  --tw-gradient-to: #1e40af;
+  --tw-gradient-to: #233747;
 }
 
 .cms-html-content .via-teal-700 {
-  --tw-gradient-to: rgb(15 118 110 / 0);
-  --tw-gradient-stops: var(--tw-gradient-from), #0f766e, var(--tw-gradient-to);
+  --tw-gradient-to: rgb(95 155 146 / 0);
+  --tw-gradient-stops: var(--tw-gradient-from), #5F9B92, var(--tw-gradient-to);
 }
 
 /* Hover states */
 .cms-html-content .hover\:bg-teal-50:hover {
-  background-color: #f0fdfa;
+  background-color: #F5F9F9;
 }
 
 .cms-html-content .hover\:bg-teal-700:hover {
-  background-color: #0f766e;
+  background-color: #5F9B92;
 }
 
 .cms-html-content .hover\:bg-teal-800:hover {
-  background-color: #115e59;
+  background-color: #437D74;
 }
 
 .cms-html-content .hover\:border-teal-400:hover {
-  border-color: #2dd4bf;
+  border-color: #80B5AC;
 }
 
 .cms-html-content .hover\:border-teal-700:hover {
-  border-color: #0f766e;
+  border-color: #3D6963;
 }
 
 .cms-html-content .hover\:from-teal-700:hover {
-  --tw-gradient-from: #0f766e;
+  --tw-gradient-from: #3D6963;
 }
 
 .cms-html-content .hover\:to-teal-800:hover {
-  --tw-gradient-to: #115e59;
+  --tw-gradient-to: #2E4F4B;
 }
 
 /* Aggiunta di border-radius personalizzato */
@@ -431,15 +467,15 @@ body {
 /* Important text color overrides for CTA buttons on dark backgrounds */
 /* Using attribute selectors because escaped class names don't work reliably */
 .cms-html-content [class*="!text-teal-600"] {
-  color: #0d9488 !important;
+  color: #4E8480 !important;
 }
 
 .cms-html-content [class*="!text-teal-700"] {
-  color: #0f766e !important;
+  color: #3D6963 !important;
 }
 
 .cms-html-content [class*="!text-teal-800"] {
-  color: #115e59 !important;
+  color: #2E4F4B !important;
 }
 
 .cms-html-content [class*="!text-teal-900"] {
@@ -504,7 +540,7 @@ body {
    =================================== */
 
 /* Ensure all cards have equal height and proper flex layout */
-.cms-html-content .grid > div[class*="flex-col"] {
+.cms-html-content .grid>div[class*="flex-col"] {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -561,9 +597,12 @@ body {
 
 /* Pulse animation for CTA buttons */
 @keyframes pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7);
   }
+
   50% {
     box-shadow: 0 0 0 8px rgba(255, 255, 255, 0);
   }
@@ -574,9 +613,11 @@ body {
   0% {
     background-position: 0% 50%;
   }
+
   50% {
     background-position: 100% 50%;
   }
+
   100% {
     background-position: 0% 50%;
   }
@@ -612,9 +653,12 @@ body {
 
 /* Subtle pulse animation for CTA buttons */
 @keyframes subtle-pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 1;
   }
+
   50% {
     opacity: 0.95;
   }

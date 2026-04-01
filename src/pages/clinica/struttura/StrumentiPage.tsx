@@ -27,8 +27,10 @@ import {
 import { strumentiApi, ambulatoriApi } from '../../../services/clinicaApi';
 import type { Strumento, Ambulatorio } from '../../../services/clinicaApi';
 import { useToast } from '../../../hooks/useToast';
+import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
 import { useTenantFilter } from '../../../context/TenantFilterContext';
-import ActionMenu, { createCrudActions } from '../../../components/clinica/ActionMenu';
+import { ActionMenu, createCrudActions } from '@/components/ui/ActionMenu';
+import { CRUDButton } from '../../../components/shared/CRUDButton';
 
 // Import Element Medica theme
 import '../../../styles/clinica-theme.css';
@@ -40,6 +42,7 @@ const StrumentiPage: React.FC = () => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const { showToast } = useToast();
+    const { confirmDelete } = useConfirmDialog();
 
     // Tenant filter from global context
     const { getTenantFilterParams, isReady, tenantFilterKey } = useTenantFilter();
@@ -124,11 +127,11 @@ const StrumentiPage: React.FC = () => {
         navigate(`/poliambulatorio/strumenti/${id}`);
     }, [navigate]);
 
-    const handleDelete = useCallback((id: string) => {
-        if (confirm('Sei sicuro di voler eliminare questo strumento?')) {
+    const handleDelete = useCallback(async (id: string) => {
+        if (await confirmDelete('questo strumento')) {
             deleteMutation.mutate(id);
         }
-    }, [deleteMutation]);
+    }, [deleteMutation, confirmDelete]);
 
     const handleManutenzione = useCallback((id: string) => {
         navigate(`/poliambulatorio/strumenti/${id}/manutenzione`);
@@ -228,10 +231,10 @@ const StrumentiPage: React.FC = () => {
                             Scadenze
                         </button>
                     </div>
-                    <button onClick={handleCreate} className="btn-clinica-primary inline-flex items-center gap-2">
+                    <CRUDButton operation="create" onClick={handleCreate} className="btn-clinica-primary inline-flex items-center gap-2">
                         <Plus className="h-4 w-4" />
                         Nuovo Strumento
-                    </button>
+                    </CRUDButton>
                 </div>
             </div>
 
@@ -371,9 +374,9 @@ const StrumentiPage: React.FC = () => {
                         <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
                             <Wrench className="h-12 w-12 mx-auto text-gray-300 mb-3" />
                             <p className="text-gray-500">Nessuno strumento trovato</p>
-                            <button onClick={handleCreate} className="btn-clinica-primary mt-4">
+                            <CRUDButton operation="create" onClick={handleCreate} className="btn-clinica-primary mt-4">
                                 Aggiungi il primo strumento
-                            </button>
+                            </CRUDButton>
                         </div>
                     ) : viewMode === 'grid' ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -443,29 +446,14 @@ const StrumentiPage: React.FC = () => {
                                             >
                                                 + Manutenzione
                                             </button>
-                                            <div className="flex items-center gap-1">
-                                                <button
-                                                    onClick={() => handleView(strumento.id)}
-                                                    className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-teal-600"
-                                                    title="Visualizza"
-                                                >
-                                                    <Eye className="h-4 w-4" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleEdit(strumento.id)}
-                                                    className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-teal-600"
-                                                    title="Modifica"
-                                                >
-                                                    <Edit className="h-4 w-4" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(strumento.id)}
-                                                    className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-red-600"
-                                                    title="Elimina"
-                                                >
-                                                    <Trash2 className="h-4 w-4" />
-                                                </button>
-                                            </div>
+                                            <ActionMenu
+                                                actions={createCrudActions(
+                                                    () => handleView(strumento.id),
+                                                    () => handleEdit(strumento.id),
+                                                    () => handleDelete(strumento.id)
+                                                )}
+                                                size="sm"
+                                            />
                                         </div>
                                     </div>
                                 );

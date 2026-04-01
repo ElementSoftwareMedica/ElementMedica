@@ -37,11 +37,23 @@ const sizeStyles: Record<SelectSize, string> = {
   lg: 'h-12 px-4 text-lg'
 };
 
-// Variant styles
+// Variant styles with dark mode support
 const variantStyles: Record<SelectVariant, string> = {
-  default: 'border-gray-300 bg-white focus:border-primary-500 focus:ring-primary-500',
-    outlined: 'border-2 border-gray-300 bg-white focus:border-primary-500 focus:ring-primary-500',
-    filled: 'border-gray-200 bg-gray-50 focus:border-primary-500 focus:ring-primary-500 focus:bg-white'
+  default: `
+    border-gray-300 bg-white focus:border-primary-500 focus:ring-primary-500
+    dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100
+    dark:focus:border-primary-400 dark:focus:ring-primary-400
+  `,
+  outlined: `
+    border-2 border-gray-300 bg-white focus:border-primary-500 focus:ring-primary-500
+    dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100
+    dark:focus:border-primary-400
+  `,
+  filled: `
+    border-gray-200 bg-gray-50 focus:border-primary-500 focus:ring-primary-500 focus:bg-white
+    dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100
+    dark:focus:bg-gray-900 dark:focus:border-primary-400
+  `
 };
 
 /**
@@ -69,8 +81,9 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>((
         'disabled:cursor-not-allowed disabled:opacity-50',
         'appearance-none bg-no-repeat bg-right',
         'bg-[url("data:image/svg+xml,%3csvg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 20 20\'%3e%3cpath stroke=\'%236b7280\' stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'1.5\' d=\'m6 8 4 4 4-4\'/%3e%3c/svg%3e")] pr-8',
+        'dark:focus:ring-offset-gray-900',
         sizeStyles[size],
-        error ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : variantStyles[variant],
+        error ? 'border-red-300 focus:border-red-500 focus:ring-red-500 dark:border-red-400 dark:focus:border-red-400' : variantStyles[variant],
         className
       )}
       {...props}

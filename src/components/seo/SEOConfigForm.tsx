@@ -5,6 +5,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { apiGet, apiPost } from '@/services/api';
 import { Alert, AlertDescription } from '../ui/alert';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -63,21 +64,15 @@ const SEOConfigForm: React.FC<SEOConfigFormProps> = ({
   const fetchConfig = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/v1/seo/config/${entityType}/${entityId}`, {
-        credentials: 'include'
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.data) {
-          setConfig({
-            ...data.data,
-            keywords: data.data.keywords || []
-          });
-        }
+      const data = await apiGet<{ success: boolean; data: typeof config }>(`/api/v1/seo/config/${entityType}/${entityId}`);
+      if (data.success && data.data) {
+        setConfig({
+          ...data.data,
+          keywords: data.data.keywords || []
+        });
       }
     } catch (err) {
-      console.error('Error fetching SEO config:', err);
+      // Config not found or not yet created — use defaults
     } finally {
       setLoading(false);
     }
@@ -89,23 +84,14 @@ const SEOConfigForm: React.FC<SEOConfigFormProps> = ({
     setSuccess(false);
 
     try {
-      const response = await fetch('/api/v1/seo/config', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          entityType,
-          entityId,
-          ...config
-        })
+      const data = await apiPost<{ success: boolean; error?: string }>('/api/v1/seo/config', {
+        entityType,
+        entityId,
+        ...config
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to save SEO config');
+      if (!data.success) {
+        throw new Error('Errore nel salvataggio della configurazione SEO');
       }
 
       setSuccess(true);
@@ -114,7 +100,7 @@ const SEOConfigForm: React.FC<SEOConfigFormProps> = ({
       // Hide success message after 3 seconds
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      setError('Unknown error');
     } finally {
       setSaving(false);
     }
@@ -140,11 +126,11 @@ const SEOConfigForm: React.FC<SEOConfigFormProps> = ({
   // Validate fields
   useEffect(() => {
     const newValidation: any = {};
-    
+
     if (config.title.length > 60) {
       newValidation.title = 'Title should be max 60 characters for optimal SEO';
     }
-    
+
     if (config.description.length > 160) {
       newValidation.description = 'Description should be max 160 characters for optimal SEO';
     }

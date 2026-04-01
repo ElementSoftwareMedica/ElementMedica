@@ -44,9 +44,7 @@ export function useScheduleTemplates() {
       });
       
       setTemplates(sorted);
-      console.log('[Templates] 📂 Caricati', sorted.length, 'template');
     } catch (error) {
-      console.error('[Templates] ❌ Errore caricamento:', error);
       setTemplates([]);
     }
   }, []);
@@ -55,9 +53,7 @@ export function useScheduleTemplates() {
     try {
       localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(newTemplates));
       setTemplates(newTemplates);
-      console.log('[Templates] 💾 Salvati', newTemplates.length, 'template');
     } catch (error) {
-      console.error('[Templates] ❌ Errore salvataggio:', error);
     }
   }, []);
 
@@ -69,7 +65,6 @@ export function useScheduleTemplates() {
     selectedCompanyIds?: (string | number)[]
   ): boolean => {
     if (!name.trim()) {
-      console.error('[Templates] ❌ Nome template vuoto');
       return false;
     }
 
@@ -98,10 +93,8 @@ export function useScheduleTemplates() {
       }
 
       saveTemplates(updatedTemplates);
-      console.log('[Templates] ✅ Template salvato:', name);
       return true;
     } catch (error) {
-      console.error('[Templates] ❌ Errore salvataggio template:', error);
       return false;
     }
   }, [templates, saveTemplates]);
@@ -110,7 +103,6 @@ export function useScheduleTemplates() {
   const loadTemplate = useCallback((templateId: string): ScheduleTemplate | null => {
     const template = templates.find(t => t.id === templateId);
     if (!template) {
-      console.error('[Templates] ❌ Template non trovato:', templateId);
       return null;
     }
 
@@ -123,10 +115,8 @@ export function useScheduleTemplates() {
       );
       saveTemplates(updatedTemplates);
 
-      console.log('[Templates] 📂 Template caricato:', template.name);
       return template;
     } catch (error) {
-      console.error('[Templates] ❌ Errore caricamento template:', error);
       return null;
     }
   }, [templates, saveTemplates]);
@@ -136,10 +126,8 @@ export function useScheduleTemplates() {
     try {
       const updatedTemplates = templates.filter(t => t.id !== templateId);
       saveTemplates(updatedTemplates);
-      console.log('[Templates] 🗑️ Template eliminato:', templateId);
       return true;
     } catch (error) {
-      console.error('[Templates] ❌ Errore eliminazione template:', error);
       return false;
     }
   }, [templates, saveTemplates]);
@@ -156,10 +144,8 @@ export function useScheduleTemplates() {
           : t
       );
       saveTemplates(updatedTemplates);
-      console.log('[Templates] ✏️ Template aggiornato:', templateId);
       return true;
     } catch (error) {
-      console.error('[Templates] ❌ Errore aggiornamento template:', error);
       return false;
     }
   }, [templates, saveTemplates]);
@@ -177,7 +163,6 @@ export function useScheduleTemplates() {
     try {
       return JSON.stringify(template, null, 2);
     } catch (error) {
-      console.error('[Templates] ❌ Errore export:', error);
       return null;
     }
   }, [templates]);
@@ -189,7 +174,6 @@ export function useScheduleTemplates() {
       
       // Validazione base
       if (!template.name || !template.formData) {
-        console.error('[Templates] ❌ Template non valido');
         return false;
       }
 
@@ -204,10 +188,8 @@ export function useScheduleTemplates() {
       const updatedTemplates = [...templates, newTemplate].slice(0, MAX_TEMPLATES);
       saveTemplates(updatedTemplates);
       
-      console.log('[Templates] ✅ Template importato:', newTemplate.name);
       return true;
     } catch (error) {
-      console.error('[Templates] ❌ Errore import:', error);
       return false;
     }
   }, [templates, saveTemplates]);

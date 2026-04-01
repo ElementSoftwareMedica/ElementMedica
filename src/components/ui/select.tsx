@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { cn } from '../../design-system/utils';
 import { ChevronDown } from 'lucide-react';
 
@@ -30,6 +30,13 @@ export interface SelectProps {
 export const Select: React.FC<SelectProps> = ({ value, onValueChange, children }) => {
   const [open, setOpen] = useState(false);
   const [displayValue, setDisplayValue] = useState<string | undefined>(undefined);
+
+  // S67: Reset displayValue when value is cleared
+  useEffect(() => {
+    if (!value) {
+      setDisplayValue(undefined);
+    }
+  }, [value]);
 
   const handleValueChange = (newValue: string, newDisplayValue?: string) => {
     onValueChange?.(newValue);
@@ -90,12 +97,45 @@ export interface SelectContentProps {
 }
 
 export const SelectContent: React.FC<SelectContentProps> = ({ children }) => {
-  const { open } = useSelect();
+  const { open, setOpen } = useSelect();
+  const contentRef = useRef<HTMLDivElement>(null);
 
-  if (!open) return null;
+  // Chiudi il dropdown quando si clicca fuori
+  useEffect(() => {
+    if (!open) return;
 
+    const handleClickOutside = (event: MouseEvent) => {
+      // Verifica se il click è avvenuto all'interno del content o del trigger
+      const target = event.target as Node;
+      const isInsideContent = contentRef.current?.contains(target);
+      const isInsideTrigger = contentRef.current?.parentElement?.querySelector('[role="combobox"]')?.contains(target);
+
+      if (!isInsideContent && !isInsideTrigger) {
+        setOpen(false);
+      }
+    };
+
+    // Usa setTimeout per evitare che il click che apre il dropdown lo chiuda subito
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside);
+    }, 0);
+
+    return () => {
+      clearTimeout(timeoutId);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [open, setOpen]);
+
+  // S67: Always render children (hidden when closed) so SelectItem useEffect
+  // can sync displayValue when value is set programmatically (e.g., pre-compila)
   return (
-    <div className="absolute top-full z-50 w-full rounded-md border border-gray-200 bg-white py-1 shadow-lg">
+    <div
+      ref={contentRef}
+      className={cn(
+        'absolute top-full z-50 w-full rounded-md border border-gray-200 bg-white py-1 shadow-lg',
+        !open && 'hidden'
+      )}
+    >
       {children}
     </div>
   );

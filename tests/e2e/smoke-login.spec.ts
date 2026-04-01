@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 // Minimal smoke test: verifies that a user can log in via the real frontend and reaches the private area (dashboard)
 // Preconditions:
-// - Backend proxy is running on :4003 and Vite dev server on :5173
+// - P64: Backend API server running on :4001 and Vite dev server on :5173
 // - Seed has created admin@example.com with password Admin123!
 
 test('Smoke: login redirects to dashboard', async ({ page }, testInfo) => {

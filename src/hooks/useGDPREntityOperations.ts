@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { apiDelete } from '../services/api';
 import { useToast } from './ui/useToast';
+import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 import { sanitizeErrorMessage } from '../utils/errorUtils';
 
 interface UseGDPREntityOperationsProps {
@@ -35,7 +36,8 @@ export function useGDPREntityOperations({
   refetch
 }: UseGDPREntityOperationsProps): UseGDPREntityOperationsReturn {
   const toast = useToast();
-  
+  const { confirmDelete, confirm: confirmDialog } = useConfirmDialog();
+
   // Stati per selezione e operazioni batch
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectAll, setSelectAll] = useState(false);
@@ -50,10 +52,9 @@ export function useGDPREntityOperations({
   const handleSelectAll = (entities: Array<{ id: string }>) => {
     // Validazione di sicurezza per assicurarsi che entities sia un array
     if (!Array.isArray(entities)) {
-      console.error('handleSelectAll: entities deve essere un array, ricevuto:', typeof entities, entities);
       return;
     }
-    
+
     if (selectAll) {
       setSelectedIds([]);
       setSelectAll(false);
@@ -81,7 +82,8 @@ export function useGDPREntityOperations({
   };
 
   const handleDeleteEntity = async (id: string) => {
-    if (!window.confirm(`Sei sicuro di voler eliminare questo ${entityDisplayName.toLowerCase()}?`)) {
+    const confirmed = await confirmDelete(entityDisplayName.toLowerCase());
+    if (!confirmed) {
       return;
     }
 
@@ -91,14 +93,13 @@ export function useGDPREntityOperations({
       } else {
         await apiDelete(`/api/v1/${entityNamePlural}/${id}`);
       }
-      
+
       toast.success(`${entityDisplayName} eliminato con successo`);
       await refetch();
-      
+
       // Rimuovi l'elemento dalla selezione se era selezionato
       setSelectedIds(prev => prev.filter(selectedId => selectedId !== id));
     } catch (error: unknown) {
-      console.error(`Errore eliminazione ${entityDisplayName.toLowerCase()}:`, error);
       const errorMessage = error instanceof Error ? error.message : `Errore durante l'eliminazione del ${entityDisplayName.toLowerCase()}`;
       toast.error(sanitizeErrorMessage(errorMessage));
     }
@@ -107,11 +108,16 @@ export function useGDPREntityOperations({
   const handleBatchDelete = async () => {
     if (selectedIds.length === 0) return;
 
-    const confirmMessage = selectedIds.length === 1 
+    const confirmMessage = selectedIds.length === 1
       ? `Sei sicuro di voler eliminare questo ${entityDisplayName.toLowerCase()}?`
       : `Sei sicuro di voler eliminare ${selectedIds.length} ${entityDisplayNamePlural.toLowerCase()}?`;
 
-    if (!window.confirm(confirmMessage)) {
+    const batchConfirmed = await confirmDialog({
+      title: 'Conferma eliminazione',
+      message: confirmMessage,
+      variant: 'danger'
+    });
+    if (!batchConfirmed) {
       return;
     }
 
@@ -135,7 +141,6 @@ export function useGDPREntityOperations({
       await refetch();
       clearSelection();
     } catch (error: unknown) {
-      console.error(`Errore eliminazione batch ${entityDisplayNamePlural.toLowerCase()}:`, error);
       const errorMessage = error instanceof Error ? error.message : `Errore durante l'eliminazione dei ${entityDisplayNamePlural.toLowerCase()}`;
       toast.error(sanitizeErrorMessage(errorMessage));
     }

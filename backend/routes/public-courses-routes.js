@@ -9,8 +9,12 @@ import { body, param, query, validationResult } from 'express-validator';
 import logger from '../utils/logger.js';
 import publicCoursesController from '../controllers/publicCoursesController.js';
 import prisma from '../config/prisma-optimization.js';
+import { publicContentMiddleware } from '../middleware/brandDetection.js';
 
 const router = express.Router();
+
+// Applica publicContentMiddleware a tutte le route per risolvere tenantId da brand
+router.use(publicContentMiddleware);
 
 // GET /api/public/courses - Retrieve all public courses with optional filters
 router.get('/courses', [
@@ -76,7 +80,7 @@ router.get('/schedules', [
     if (!errors.isEmpty()) {
       return res.status(400).json({
         success: false,
-        error: 'Validation error',
+        error: 'Errore di validazione',
         details: errors.array()
       });
     }
@@ -96,7 +100,7 @@ router.get('/schedules', [
       isPublic: true,
       source: 'INTERNAL', // Solo corsi interni (non esterni/importati)
       deletedAt: null,
-      status: { notIn: ['CANCELLED', 'SUSPENDED'] }, // Valori validi EnrollmentStatus
+      status: { in: ['PREVENTIVO', 'ACCETTATO', 'COMPLETATO', 'FATTURATO'] },
       startDate: {
         gte: fromDate,
         lte: toDate
@@ -116,9 +120,9 @@ router.get('/schedules', [
       };
     }
 
-    // Brand detection per multi-tenant
-    if (req.brandTenantId) {
-      where.tenantId = req.brandTenantId;
+    // Multi-tenant: filtra per tenant del brand
+    if (req.publicTenantId) {
+      where.tenantId = req.publicTenantId;
     }
 
     const [schedules, total] = await Promise.all([
@@ -214,12 +218,12 @@ router.get('/schedules', [
   } catch (error) {
     logger.error('Failed to get public schedules', {
       component: 'public-courses-routes',
-      error: error.message,
+      error: 'Operazione non riuscita',
       stack: error.stack
     });
     res.status(500).json({
       success: false,
-      error: 'Internal server error'
+      error: 'Errore interno del server'
     });
   }
 });
@@ -237,7 +241,7 @@ router.get('/schedules/:id', [
     if (!errors.isEmpty()) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid schedule ID'
+        error: 'ID calendario non valido'
       });
     }
 
@@ -248,8 +252,8 @@ router.get('/schedules/:id', [
       deletedAt: null
     };
 
-    if (req.brandTenantId) {
-      where.tenantId = req.brandTenantId;
+    if (req.publicTenantId) {
+      where.tenantId = req.publicTenantId;
     }
 
     const schedule = await prisma.courseSchedule.findFirst({
@@ -291,7 +295,7 @@ router.get('/schedules/:id', [
     if (!schedule) {
       return res.status(404).json({
         success: false,
-        error: 'Schedule not found'
+        error: 'Calendario non trovato'
       });
     }
 
@@ -345,12 +349,12 @@ router.get('/schedules/:id', [
   } catch (error) {
     logger.error('Failed to get public schedule detail', {
       component: 'public-courses-routes',
-      error: error.message,
+      error: 'Operazione non riuscita',
       scheduleId: req.params.id
     });
     res.status(500).json({
       success: false,
-      error: 'Internal server error'
+      error: 'Errore interno del server'
     });
   }
 });

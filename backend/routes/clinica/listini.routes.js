@@ -23,10 +23,11 @@
  */
 
 import express from 'express';
-import middleware from '../../auth/middleware.js';
+import middleware from '../../middleware/auth.js';
 import { checkAdvancedPermission } from '../../middleware/advanced-permissions.js';
 import logger from '../../utils/logger.js';
 import { auditClinico, getEffectiveTenantId } from './utils/clinica-utils.js';
+import prisma from '../../config/prisma-optimization.js';
 import { CLINICAL_ENUMS } from '../../config/validation-clinical.js';
 
 const { authenticate: authenticateToken } = middleware;
@@ -49,7 +50,7 @@ const router = express.Router();
  * @access Authenticated + VIEW_LISTINI
  */
 router.get('/',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('listini', 'read'),
     clinicalValidators.listinoPrezzo.query,
     auditClinico('list_listini'),
@@ -77,14 +78,13 @@ router.get('/',
         } catch (error) {
             logger.error('Failed to list listini', {
                 component: 'listini-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero dei listini',
-                message: error.message
             });
         }
     }
@@ -100,7 +100,7 @@ router.get('/',
  * @access Authenticated
  */
 router.get('/tipi',
-    authenticateToken(),
+    authenticateToken,
     async (req, res) => {
         try {
             const tipi = await ListinoPrezzoService.getTipi();
@@ -112,13 +112,12 @@ router.get('/tipi',
         } catch (error) {
             logger.error('Failed to get listini tipi', {
                 component: 'listini-routes',
-                error: error.message
+                error: 'Operazione non riuscita'
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero dei tipi listino',
-                message: error.message
             });
         }
     }
@@ -130,7 +129,7 @@ router.get('/tipi',
  * @access Authenticated + VIEW_LISTINI
  */
 router.post('/calculate',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('listini', 'read'),
     auditClinico('calculate_price'),
     async (req, res) => {
@@ -159,7 +158,7 @@ router.post('/calculate',
         } catch (error) {
             logger.error('Failed to calculate price', {
                 component: 'listini-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
@@ -180,7 +179,6 @@ router.post('/calculate',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel calcolo del prezzo',
-                message: error.message
             });
         }
     }
@@ -192,7 +190,7 @@ router.post('/calculate',
  * @access Authenticated + VIEW_LISTINI
  */
 router.get('/prestazione/:prestazioneId',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('listini', 'read'),
     auditClinico('list_listini_by_prestazione'),
     async (req, res) => {
@@ -210,7 +208,7 @@ router.get('/prestazione/:prestazioneId',
         } catch (error) {
             logger.error('Failed to list listini by prestazione', {
                 component: 'listini-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 prestazioneId: req.params.prestazioneId,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -218,7 +216,6 @@ router.get('/prestazione/:prestazioneId',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero dei listini',
-                message: error.message
             });
         }
     }
@@ -230,7 +227,7 @@ router.get('/prestazione/:prestazioneId',
  * @access Authenticated + VIEW_LISTINI
  */
 router.get('/bundle/:bundleId',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('listini', 'read'),
     auditClinico('list_listini_by_bundle'),
     async (req, res) => {
@@ -248,7 +245,7 @@ router.get('/bundle/:bundleId',
         } catch (error) {
             logger.error('Failed to list listini by bundle', {
                 component: 'listini-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 bundleId: req.params.bundleId,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -256,7 +253,6 @@ router.get('/bundle/:bundleId',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero dei listini bundle',
-                message: error.message
             });
         }
     }
@@ -268,7 +264,7 @@ router.get('/bundle/:bundleId',
  * @access Authenticated + CREATE_LISTINI
  */
 router.post('/bundle',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('listini', 'create'),
     auditClinico('create_listino_bundle'),
     async (req, res) => {
@@ -290,7 +286,7 @@ router.post('/bundle',
         } catch (error) {
             logger.error('Failed to create listino for bundle', {
                 component: 'listini-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 bundleId: req.body.bundleId,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -298,14 +294,13 @@ router.post('/bundle',
             if (error.message.includes('Esiste già un listino') || error.message.includes('not found')) {
                 return res.status(400).json({
                     success: false,
-                    error: error.message
+                    error: 'Errore interno del server'
                 });
             }
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nella creazione del listino bundle',
-                message: error.message
             });
         }
     }
@@ -317,7 +312,7 @@ router.post('/bundle',
  * @access Authenticated + VIEW_LISTINI
  */
 router.get('/tipo/:tipo',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('listini', 'read'),
     auditClinico('list_listini_by_tipo'),
     async (req, res) => {
@@ -344,7 +339,7 @@ router.get('/tipo/:tipo',
         } catch (error) {
             logger.error('Failed to list listini by tipo', {
                 component: 'listini-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tipo: req.params.tipo,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -352,8 +347,55 @@ router.get('/tipo/:tipo',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero dei listini',
-                message: error.message
             });
+        }
+    }
+);
+
+// ============================================
+// LISTINI PER MEDICO
+// ============================================
+
+/**
+ * @route GET /api/v1/clinica/listini/medico/:medicoId
+ * @desc Lista prezzi associati a un medico specifico
+ * @access Authenticated + VIEW_LISTINI
+ */
+router.get('/medico/:medicoId',
+    authenticateToken,
+    checkAdvancedPermission('listini', 'read'),
+    auditClinico('view_listini_medico'),
+    async (req, res) => {
+        try {
+            const { medicoId } = req.params;
+            if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(medicoId)) {
+                return res.status(400).json({ success: false, error: 'ID medico non valido' });
+            }
+            const tenantId = getEffectiveTenantId(req);
+
+            const listini = await prisma.listinoPrezzo.findMany({
+                where: {
+                    medicoId,
+                    tenantId,
+                    deletedAt: null
+                },
+                include: {
+                    prestazione: {
+                        select: { id: true, nome: true, codice: true, tipo: true }
+                    }
+                },
+                orderBy: { createdAt: 'desc' }
+            });
+
+            res.json({ success: true, data: listini });
+        } catch (error) {
+            logger.error('Failed to get listini by medico', {
+                component: 'listini-routes',
+                error: 'Operazione non riuscita',
+                medicoId: req.params.medicoId,
+                tenantId: getEffectiveTenantId(req)
+            });
+            res.status(500).json({ success: false, error: 'Errore nel recupero dei listini del medico' });
         }
     }
 );
@@ -368,7 +410,7 @@ router.get('/tipo/:tipo',
  * @access Authenticated + VIEW_LISTINI
  */
 router.get('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('listini', 'read'),
     clinicalValidators.listinoPrezzo.id,
     auditClinico('view_listino'),
@@ -386,7 +428,7 @@ router.get('/:id',
         } catch (error) {
             logger.error('Failed to get listino', {
                 component: 'listini-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 listinoId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -401,7 +443,6 @@ router.get('/:id',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero del listino',
-                message: error.message
             });
         }
     }
@@ -413,7 +454,7 @@ router.get('/:id',
  * @access Authenticated + CREATE_LISTINI
  */
 router.post('/',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('listini', 'create'),
     clinicalValidators.listinoPrezzo.create,
     auditClinico('create_listino'),
@@ -436,7 +477,7 @@ router.post('/',
         } catch (error) {
             logger.error('Failed to create listino', {
                 component: 'listini-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
@@ -444,7 +485,6 @@ router.post('/',
                 return res.status(409).json({
                     success: false,
                     error: 'Listino già esistente',
-                    message: error.message
                 });
             }
 
@@ -459,7 +499,6 @@ router.post('/',
             res.status(500).json({
                 success: false,
                 error: 'Errore nella creazione del listino',
-                message: error.message
             });
         }
     }
@@ -471,7 +510,7 @@ router.post('/',
  * @access Authenticated + UPDATE_LISTINI
  */
 router.put('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('listini', 'update'),
     clinicalValidators.listinoPrezzo.id,
     clinicalValidators.listinoPrezzo.update,
@@ -495,7 +534,7 @@ router.put('/:id',
         } catch (error) {
             logger.error('Failed to update listino', {
                 component: 'listini-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 listinoId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -510,7 +549,6 @@ router.put('/:id',
             res.status(500).json({
                 success: false,
                 error: 'Errore nell\'aggiornamento del listino',
-                message: error.message
             });
         }
     }
@@ -522,7 +560,7 @@ router.put('/:id',
  * @access Authenticated + DELETE_LISTINI
  */
 router.delete('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('listini', 'delete'),
     clinicalValidators.listinoPrezzo.id,
     auditClinico('delete_listino'),
@@ -540,7 +578,7 @@ router.delete('/:id',
         } catch (error) {
             logger.error('Failed to delete listino', {
                 component: 'listini-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 listinoId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -555,7 +593,6 @@ router.delete('/:id',
             res.status(500).json({
                 success: false,
                 error: 'Errore nell\'eliminazione del listino',
-                message: error.message
             });
         }
     }

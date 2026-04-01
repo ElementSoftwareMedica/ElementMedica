@@ -1,3 +1,3 @@
 import { lazy } from 'react';
 
-export const FormTemplateCreateLazy = lazy(() => import('./FormTemplateCreate'));
+export const FormTemplateCreateLazy = lazy(() => import('./form-template-create'));

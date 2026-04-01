@@ -8,6 +8,7 @@ import React from 'react';
 import { FileText, Upload, Clock, ExternalLink, Trash2 } from 'lucide-react';
 import type { PersonDocument } from '../../../../services/clinicaApi';
 import { getDocumentTypeLabel } from './types';
+import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 
 interface DocumentsListProps {
     documents: PersonDocument[];
@@ -32,6 +33,8 @@ const DocumentsList: React.FC<DocumentsListProps> = ({
     onAddDocument,
     onDeleteDocument
 }) => {
+    const { confirmDelete } = useConfirmDialog();
+
     return (
         <div className="bg-white rounded-xl border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
@@ -119,8 +122,8 @@ const DocumentsList: React.FC<DocumentsListProps> = ({
                                 </a>
                                 <button
                                     type="button"
-                                    onClick={() => {
-                                        if (confirm('Sei sicuro di voler eliminare questo documento?')) {
+                                    onClick={async () => {
+                                        if (await confirmDelete('questo documento')) {
                                             onDeleteDocument(doc.id);
                                         }
                                     }}

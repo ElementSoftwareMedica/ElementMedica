@@ -23,7 +23,7 @@ export function logGdprRequest(req, res, next) {
         userAgent: req.get('User-Agent'),
         ip: req.ip,
         userId: req.person?.id,
-        companyId: req.person?.companyId,
+        companyTenantProfileId: req.person?.companyTenantProfileId,
         timestamp: new Date().toISOString()
     });
 
@@ -40,7 +40,7 @@ export function logGdprRequest(req, res, next) {
             statusCode: res.statusCode,
             duration: `${duration}ms`,
             userId: req.person?.id,
-            companyId: req.person?.companyId,
+            companyTenantProfileId: req.person?.companyTenantProfileId,
             timestamp: new Date().toISOString()
         });
 

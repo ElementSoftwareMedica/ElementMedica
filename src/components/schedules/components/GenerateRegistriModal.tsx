@@ -147,7 +147,6 @@ export const GenerateRegistriModal: React.FC<GenerateRegistriModalProps> = ({
                 setSelectedTemplateId(result.data[0].id);
             }
         } catch (err) {
-            console.error('Failed to load templates:', err);
             setError('Impossibile caricare i template disponibili');
         } finally {
             setLoadingTemplates(false);
@@ -177,8 +176,8 @@ export const GenerateRegistriModal: React.FC<GenerateRegistriModalProps> = ({
 
         // Sort by company name first, then by lastName
         return filtered.sort((a, b) => {
-            const companyA = (a.company?.ragioneSociale || a.company?.name || '').toLowerCase();
-            const companyB = (b.company?.ragioneSociale || b.company?.name || '').toLowerCase();
+            const companyA = (a.company?.ragioneSociale || '').toLowerCase();
+            const companyB = (b.company?.ragioneSociale || '').toLowerCase();
 
             // First sort by company
             if (companyA < companyB) return -1;
@@ -282,9 +281,8 @@ export const GenerateRegistriModal: React.FC<GenerateRegistriModalProps> = ({
             invalidateCache('/api/v1/registri-presenze');
             onSuccess();
             onClose();
-        } catch (err: any) {
-            console.error('Errore generazione registro:', err);
-            setError(err.response?.data?.message || err.message || 'Errore durante la generazione');
+        } catch {
+            setError('Errore durante la generazione del registro. Controlla sessione, template e partecipanti selezionati.');
         } finally {
             setLoading(false);
         }
@@ -304,23 +302,23 @@ export const GenerateRegistriModal: React.FC<GenerateRegistriModalProps> = ({
             />
 
             {/* Modal */}
-            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
                 {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-purple-50 to-indigo-50">
+                <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700 bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/30 dark:to-indigo-900/30">
                     <div className="flex items-center gap-3">
-                        <div className="p-2 bg-purple-100 rounded-lg">
-                            <FileText className="w-5 h-5 text-purple-600" />
+                        <div className="p-2 bg-purple-100 dark:bg-purple-900/50 rounded-lg">
+                            <FileText className="w-5 h-5 text-purple-600 dark:text-purple-400" />
                         </div>
                         <div>
-                            <h2 className="text-lg font-semibold text-gray-900">Genera Registro Presenze</h2>
-                            <p className="text-sm text-gray-500">Seleziona la sessione e i partecipanti</p>
+                            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Genera Registro Presenze</h2>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Seleziona la sessione e i partecipanti</p>
                         </div>
                     </div>
                     <button
                         onClick={onClose}
-                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                        className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                     >
-                        <X className="w-5 h-5 text-gray-500" />
+                        <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
                     </button>
                 </div>
 
@@ -328,7 +326,7 @@ export const GenerateRegistriModal: React.FC<GenerateRegistriModalProps> = ({
                 <div className="flex-1 overflow-y-auto p-6 space-y-6">
                     {/* Session Selector */}
                     <div className="space-y-2">
-                        <label className="block text-sm font-medium text-gray-700">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                             <Calendar className="w-4 h-4 inline mr-1" />
                             Seleziona Sessione
                         </label>
@@ -348,14 +346,14 @@ export const GenerateRegistriModal: React.FC<GenerateRegistriModalProps> = ({
                                         });
                                     }}
                                     className={`p-3 rounded-lg border text-left transition-all ${selectedSessionIndices.has(index)
-                                        ? 'border-purple-500 bg-purple-50 ring-2 ring-purple-200'
-                                        : 'border-gray-200 hover:border-purple-300 hover:bg-gray-50'
+                                        ? 'border-purple-500 dark:border-purple-500 bg-purple-50 dark:bg-purple-900/30 ring-2 ring-purple-200 dark:ring-purple-800'
+                                        : 'border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-600 hover:bg-gray-50 dark:hover:bg-gray-800'
                                         }`}
                                 >
-                                    <div className="font-medium text-sm">Sessione {index + 1}</div>
-                                    <div className="text-xs text-gray-500">{formatDate(date.date)}</div>
+                                    <div className="font-medium text-sm dark:text-gray-200">Sessione {index + 1}</div>
+                                    <div className="text-xs text-gray-500 dark:text-gray-400">{formatDate(date.date)}</div>
                                     {(getStartTime(date) || getEndTime(date)) && (
-                                        <div className="text-xs text-gray-400">
+                                        <div className="text-xs text-gray-400 dark:text-gray-500">
                                             {getStartTime(date) || '--:--'} - {getEndTime(date) || '--:--'}
                                         </div>
                                     )}
@@ -366,14 +364,14 @@ export const GenerateRegistriModal: React.FC<GenerateRegistriModalProps> = ({
 
                     {/* Template Selector */}
                     <div className="space-y-2">
-                        <label className="block text-sm font-medium text-gray-700">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                             <FileText className="w-4 h-4 inline mr-1" />
                             Template
                         </label>
                         <select
                             value={selectedTemplateId}
                             onChange={(e) => setSelectedTemplateId(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 dark:bg-gray-800 dark:text-gray-200"
                             disabled={loadingTemplates}
                         >
                             <option value="">{loadingTemplates ? 'Caricamento...' : 'Seleziona template'}</option>
@@ -387,26 +385,26 @@ export const GenerateRegistriModal: React.FC<GenerateRegistriModalProps> = ({
 
                     {/* Session Info */}
                     {currentDate && (
-                        <div className="bg-gray-50 rounded-lg p-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 grid grid-cols-2 md:grid-cols-4 gap-4">
                             <div>
-                                <div className="text-xs text-gray-500">Data</div>
-                                <div className="font-medium">{formatDate(currentDate.date)}</div>
+                                <div className="text-xs text-gray-500 dark:text-gray-400">Data</div>
+                                <div className="font-medium dark:text-gray-200">{formatDate(currentDate.date)}</div>
                             </div>
                             <div>
-                                <div className="text-xs text-gray-500">Orario</div>
-                                <div className="font-medium">
+                                <div className="text-xs text-gray-500 dark:text-gray-400">Orario</div>
+                                <div className="font-medium dark:text-gray-200">
                                     {(getStartTime(currentDate) || getEndTime(currentDate))
                                         ? `${getStartTime(currentDate) || '--:--'} - ${getEndTime(currentDate) || '--:--'}`
                                         : '-'}
                                 </div>
                             </div>
                             <div>
-                                <div className="text-xs text-gray-500">Durata</div>
-                                <div className="font-medium">{currentDate.duration || 8} ore</div>
+                                <div className="text-xs text-gray-500 dark:text-gray-400">Durata</div>
+                                <div className="font-medium dark:text-gray-200">{currentDate.duration || 8} ore</div>
                             </div>
                             <div>
-                                <div className="text-xs text-gray-500">Formatore</div>
-                                <div className="font-medium">
+                                <div className="text-xs text-gray-500 dark:text-gray-400">Formatore</div>
+                                <div className="font-medium dark:text-gray-200">
                                     {sessionTrainer
                                         ? `${sessionTrainer.firstName} ${sessionTrainer.lastName}`
                                         : '-'}
@@ -418,7 +416,7 @@ export const GenerateRegistriModal: React.FC<GenerateRegistriModalProps> = ({
                     {/* Companies involved */}
                     {sessionCompanies.length > 0 && (
                         <div className="space-y-2">
-                            <label className="block text-sm font-medium text-gray-700">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                                 <Building2 className="w-4 h-4 inline mr-1" />
                                 Aziende Partecipanti ({sessionCompanies.length})
                             </label>
@@ -426,9 +424,9 @@ export const GenerateRegistriModal: React.FC<GenerateRegistriModalProps> = ({
                                 {sessionCompanies.map(company => (
                                     <span
                                         key={company.id}
-                                        className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm"
+                                        className="px-3 py-1 bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-400 rounded-full text-sm"
                                     >
-                                        {company.ragioneSociale || company.name}
+                                        {company.ragioneSociale}
                                     </span>
                                 ))}
                             </div>
@@ -438,35 +436,35 @@ export const GenerateRegistriModal: React.FC<GenerateRegistriModalProps> = ({
                     {/* Participants */}
                     <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                            <label className="block text-sm font-medium text-gray-700">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                                 <Users className="w-4 h-4 inline mr-1" />
                                 Partecipanti ({selectedParticipants.size}/{sessionParticipants.length})
                             </label>
                             <button
                                 onClick={handleSelectAll}
-                                className="text-sm text-purple-600 hover:text-purple-800"
+                                className="text-sm text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300"
                             >
                                 {selectedParticipants.size === sessionParticipants.length ? 'Deseleziona tutti' : 'Seleziona tutti'}
                             </button>
                         </div>
 
                         {/* Preview table */}
-                        <div className="border rounded-lg overflow-hidden">
+                        <div className="border dark:border-gray-700 rounded-lg overflow-hidden">
                             <table className="w-full text-sm">
-                                <thead className="bg-gray-100">
+                                <thead className="bg-gray-100 dark:bg-gray-800">
                                     <tr>
                                         <th className="w-10 p-2"></th>
-                                        <th className="p-2 text-left">Cognome</th>
-                                        <th className="p-2 text-left">Nome</th>
-                                        <th className="p-2 text-left">Azienda</th>
-                                        <th className="p-2 text-center">Firma Ingresso</th>
-                                        <th className="p-2 text-center">Firma Uscita</th>
+                                        <th className="p-2 text-left dark:text-gray-300">Cognome</th>
+                                        <th className="p-2 text-left dark:text-gray-300">Nome</th>
+                                        <th className="p-2 text-left dark:text-gray-300">Azienda</th>
+                                        <th className="p-2 text-center dark:text-gray-300">Firma Ingresso</th>
+                                        <th className="p-2 text-center dark:text-gray-300">Firma Uscita</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {sessionParticipants.length === 0 ? (
                                         <tr>
-                                            <td colSpan={6} className="p-4 text-center text-gray-500">
+                                            <td colSpan={6} className="p-4 text-center text-gray-500 dark:text-gray-400">
                                                 Nessun partecipante per questa sessione
                                             </td>
                                         </tr>
@@ -479,7 +477,7 @@ export const GenerateRegistriModal: React.FC<GenerateRegistriModalProps> = ({
                                             return (
                                                 <tr
                                                     key={personId}
-                                                    className={`border-t ${isSelected ? 'bg-purple-50' : 'hover:bg-gray-50'}`}
+                                                    className={`border-t dark:border-gray-700 ${isSelected ? 'bg-purple-50 dark:bg-purple-900/30' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}`}
                                                 >
                                                     <td className="p-2 text-center">
                                                         <input
@@ -489,15 +487,15 @@ export const GenerateRegistriModal: React.FC<GenerateRegistriModalProps> = ({
                                                             className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
                                                         />
                                                     </td>
-                                                    <td className="p-2 font-medium">{person.lastName}</td>
-                                                    <td className="p-2">{person.firstName}</td>
-                                                    <td className="p-2 text-gray-600">
-                                                        {company?.ragioneSociale || company?.name || '-'}
+                                                    <td className="p-2 font-medium dark:text-gray-200">{person.lastName}</td>
+                                                    <td className="p-2 dark:text-gray-300">{person.firstName}</td>
+                                                    <td className="p-2 text-gray-600 dark:text-gray-400">
+                                                        {company?.ragioneSociale || '-'}
                                                     </td>
-                                                    <td className="p-2 text-center text-gray-400 border-l">
+                                                    <td className="p-2 text-center text-gray-400 dark:text-gray-500 border-l dark:border-gray-700">
                                                         <span className="text-xs">_______________</span>
                                                     </td>
-                                                    <td className="p-2 text-center text-gray-400 border-l">
+                                                    <td className="p-2 text-center text-gray-400 dark:text-gray-500 border-l dark:border-gray-700">
                                                         <span className="text-xs">_______________</span>
                                                     </td>
                                                 </tr>
@@ -511,17 +509,17 @@ export const GenerateRegistriModal: React.FC<GenerateRegistriModalProps> = ({
 
                     {/* Error */}
                     {error && (
-                        <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">
+                        <div className="p-3 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-lg text-sm">
                             ❌ {error}
                         </div>
                     )}
                 </div>
 
                 {/* Footer */}
-                <div className="flex items-center justify-between px-6 py-4 border-t bg-gray-50">
+                <div className="flex items-center justify-between px-6 py-4 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
                     <button
                         onClick={onClose}
-                        className="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
+                        className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
                     >
                         Annulla
                     </button>

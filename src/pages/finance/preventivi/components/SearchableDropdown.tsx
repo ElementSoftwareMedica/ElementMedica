@@ -66,11 +66,11 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
         <div className={`relative ${className}`} ref={dropdownRef}>
             <button
                 type="button"
-                className={`w-full px-4 py-2 text-left bg-white border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 flex items-center justify-between ${required && !value ? 'border-gray-300' : 'border-gray-300'
+                className={`w-full px-4 py-2 text-left bg-white dark:bg-gray-800 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 flex items-center justify-between ${required && !value ? 'border-gray-300 dark:border-gray-600' : 'border-gray-300 dark:border-gray-600'
                     }`}
                 onClick={() => setIsOpen(!isOpen)}
             >
-                <span className={selectedOption ? 'text-gray-900' : 'text-gray-500'}>
+                <span className={selectedOption ? 'text-gray-900 dark:text-gray-50' : 'text-gray-500 dark:text-gray-400'}>
                     {selectedOption ? selectedOption.label : placeholder}
                 </span>
                 <svg
@@ -87,14 +87,14 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
             </button>
 
             {isOpen && (
-                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg">
-                    <div className="p-2 border-b border-gray-200">
+                <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg dark:shadow-black/30">
+                    <div className="p-2 border-b border-gray-200 dark:border-gray-700">
                         <div className="relative">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                             <input
                                 ref={searchInputRef}
                                 type="text"
-                                className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
+                                className="w-full pl-9 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-50"
                                 placeholder={searchPlaceholder}
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -106,7 +106,7 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
                         {/* Option to clear selection */}
                         <button
                             type="button"
-                            className={`w-full px-4 py-2 text-left text-gray-500 hover:bg-gray-50 focus:outline-none focus:bg-gray-50 text-sm ${!value ? 'bg-orange-50 text-orange-600' : ''
+                            className={`w-full px-4 py-2 text-left text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:bg-gray-50 dark:focus:bg-gray-700 text-sm ${!value ? 'bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400' : ''
                                 }`}
                             onClick={() => {
                                 onChange('');
@@ -120,7 +120,7 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
                             <button
                                 key={option.value}
                                 type="button"
-                                className={`w-full px-4 py-2 text-left hover:bg-gray-50 focus:outline-none focus:bg-gray-50 text-sm ${option.value === value ? 'bg-orange-50 text-orange-600 font-medium' : 'text-gray-900'
+                                className={`w-full px-4 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:bg-gray-50 dark:focus:bg-gray-700 text-sm ${option.value === value ? 'bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 font-medium' : 'text-gray-900 dark:text-gray-50'
                                     }`}
                                 onClick={() => {
                                     onChange(option.value);
@@ -132,7 +132,7 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
                             </button>
                         ))}
                         {filteredOptions.length === 0 && (
-                            <div className="px-4 py-3 text-gray-500 text-sm text-center">
+                            <div className="px-4 py-3 text-gray-500 dark:text-gray-400 text-sm text-center">
                                 Nessun risultato trovato
                             </div>
                         )}

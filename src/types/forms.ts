@@ -204,7 +204,8 @@ export interface FieldValidation {
   acceptedFileTypes?: string; // e.g., "image/*,application/pdf"
 
   // Custom validation
-  customValidation?: string; // JavaScript function as string
+  /** Pattern regex per validazione custom — NON codice JS (sicurezza R26) */
+  customValidation?: string; // Regex pattern string (es: "^[A-Za-z0-9]+$")
 }
 
 /**
@@ -347,7 +348,7 @@ export function isValidConditionalLogic(logic: ConditionalLogic): boolean {
   ].filter(Boolean);
 
   if (activeConditions.length !== 1) {
-    throw new Error('ConditionalLogic must have exactly ONE active condition type');
+    throw new Error('ConditionalLogic deve avere esattamente UN tipo di condizione attivo');
   }
 
   return true;
@@ -415,11 +416,11 @@ export const UNARY_OPERATORS: ConditionOperator[] = [
  */
 export function validateOperatorValue(operator: ConditionOperator, value: any): boolean {
   if (VALUE_REQUIRED_OPERATORS.includes(operator) && value === undefined) {
-    throw new Error(`Operator '${operator}' requires a value`);
+    throw new Error(`L'operatore '${operator}' richiede un valore`);
   }
 
   if (UNARY_OPERATORS.includes(operator) && value !== undefined) {
-    console.warn(`Operator '${operator}' does not require a value, ignoring value: ${value}`);
+    if (import.meta.env.DEV) console.warn(`L'operatore '${operator}' non richiede un valore, valore ignorato: ${value}`);
   }
 
   return true;

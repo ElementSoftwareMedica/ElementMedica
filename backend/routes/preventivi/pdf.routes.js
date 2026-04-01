@@ -94,7 +94,7 @@ router.get('/:id/pdf',
         component: 'preventivi-routes',
         action: 'pdf',
         preventivoId: req.params.id,
-        error: error.message,
+        error: 'Operazione non riuscita',
         stack: error.stack
       });
 
@@ -110,7 +110,6 @@ router.get('/:id/pdf',
       res.status(500).json({
         success: false,
         error: 'Errore generazione PDF',
-        message: error.message
       });
     }
   }

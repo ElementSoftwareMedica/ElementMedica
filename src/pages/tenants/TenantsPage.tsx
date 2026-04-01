@@ -51,8 +51,8 @@ const TenantsPage: React.FC = () => {
       // Garantiamo sempre un array
       setTenants(Array.isArray(data) ? data : []);
       setError(null);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError('Errore del server');
       setTenants([]);
     } finally {
       setIsLoading(false);
@@ -83,8 +83,8 @@ const TenantsPage: React.FC = () => {
     try {
       await deleteTenant(tenantId);
       await fetchTenants();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError('Errore del server');
     }
   };
 
@@ -98,8 +98,8 @@ const TenantsPage: React.FC = () => {
 
       setIsModalOpen(false);
       await fetchTenants();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError('Errore del server');
     }
   };
 

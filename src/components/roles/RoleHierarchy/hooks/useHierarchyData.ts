@@ -38,12 +38,11 @@ export const useHierarchyData = () => {
       setHierarchy(hierarchyData);
       setCurrentUserHierarchy(userHierarchyData);
     } catch (err: unknown) {
-      console.error('Error loading hierarchy data:', err);
-      
+
       // Gestione errori specifici
       if (err && typeof err === 'object' && 'response' in err) {
         const response = (err as { response: { status: number } }).response;
-        
+
         if (response.status === 401) {
           setError('Accesso non autorizzato. Effettua il login per continuare.');
         } else if (response.status === 403) {
@@ -54,7 +53,7 @@ export const useHierarchyData = () => {
           setError('Si è verificato un errore durante il caricamento della gerarchia.');
         }
       } else {
-        setError((err as Error).message || 'Errore sconosciuto durante il caricamento.');
+        setError('Si è verificato un errore imprevisto. Riprova più tardi.');
       }
     } finally {
       setLoading(false);

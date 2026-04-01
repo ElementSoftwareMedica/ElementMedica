@@ -65,14 +65,13 @@ jobs:
           mkdir -p backend
           # Default Redis disabilitato se non specificato
           export REDIS_ENABLED="${REDIS_ENABLED:-false}"
+          # P64: Proxy server eliminato - Nginx gestisce routing
           cat > backend/.env.production <<EOF
           NODE_ENV=production
           API_HOST=0.0.0.0
           API_PORT=4001
           DOCUMENTS_HOST=0.0.0.0
           DOCUMENTS_PORT=4002
-          PROXY_HOST=0.0.0.0
-          PROXY_PORT=4003
           FRONTEND_URL=${FRONTEND_URL}
           CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}
           JWT_SECRET=${JWT_SECRET}
@@ -104,7 +103,7 @@ jobs:
       - name: Post-deploy health checks (HTTP)
         shell: bash
         env:
-          PUBLIC_DOMAIN: ${{ secrets.PUBLIC_DOMAIN || 'www.elementformazione.com' }}
+          PUBLIC_DOMAIN: ${{ secrets.PUBLIC_DOMAIN || 'www.elementsicurezza.com' }}
         run: |
           set -euo pipefail
           echo "Checking http://$PUBLIC_DOMAIN/health ..."
@@ -116,7 +115,7 @@ jobs:
       - name: Post-deploy health checks (HTTPS, ignore cert)
         shell: bash
         env:
-          PUBLIC_DOMAIN: ${{ secrets.PUBLIC_DOMAIN || 'www.elementformazione.com' }}
+          PUBLIC_DOMAIN: ${{ secrets.PUBLIC_DOMAIN || 'www.elementsicurezza.com' }}
         run: |
           set -euo pipefail
           echo "Checking https://$PUBLIC_DOMAIN/health ..."

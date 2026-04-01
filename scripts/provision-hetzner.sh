@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Provisioning script for Hetzner Ubuntu server
 # Usage: ./scripts/provision-hetzner.sh <HOST> [SSH_USER]
-# Example: ./scripts/provision-hetzner.sh 128.140.15.15 root
+# Example: ./scripts/provision-hetzner.sh 178.104.44.177 root
 
 HOST=${1:-}
 SSH_USER=${2:-root}

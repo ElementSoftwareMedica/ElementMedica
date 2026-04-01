@@ -8,7 +8,7 @@
  */
 
 import React, { useState, useMemo, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
     Package,
@@ -25,10 +25,17 @@ import {
     Tag,
     TrendingDown,
     Activity,
+    Grid3X3,
+    List as ListIcon,
 } from 'lucide-react';
 
 import { useTenantFilter } from '../../../context/TenantFilterContext';
+import { useViewMode, type ViewMode } from '../../../hooks/useViewMode';
+import { useToast } from '../../../hooks/useToast';
 import { bundleApi, OffertaBundle } from '../../../services/clinicaApi';
+import { ActionMenu, createCrudActions } from '@/components/ui/ActionMenu';
+import { CRUDButton } from '../../../components/shared/CRUDButton';
+import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
 
 // Types
 interface FilterState {
@@ -86,7 +93,13 @@ const calcolaRisparmio = (bundle: OffertaBundle): { valore: number; percentuale:
  */
 const OfferteBundlePage: React.FC = () => {
     const queryClient = useQueryClient();
+    const navigate = useNavigate();
     const { getTenantFilterParams, tenantFilterKey, isReady } = useTenantFilter();
+    const { showToast } = useToast();
+    const { confirmDelete } = useConfirmDialog();
+
+    // View mode with localStorage persistence
+    const { viewMode, setViewMode } = useViewMode({ storageKey: 'bundles', defaultMode: 'grid' });
 
     // State
     const [page, setPage] = useState(1);
@@ -107,7 +120,7 @@ const OfferteBundlePage: React.FC = () => {
             ...(tenantParams.tenantIds && { tenantIds: tenantParams.tenantIds.join(',') }),
             ...(tenantParams.allTenants && { allTenants: 'true' })
         };
-    }, [page, filters, getTenantFilterParams]);
+    }, [page, filters, getTenantFilterParams, tenantFilterKey]);
 
     // Queries
     const {
@@ -126,7 +139,11 @@ const OfferteBundlePage: React.FC = () => {
         mutationFn: (id: string) => bundleApi.delete(id),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['bundles'] });
+            showToast({ type: 'success', message: 'Bundle eliminato con successo' });
         },
+        onError: () => {
+            showToast({ type: 'error', message: 'Errore durante l\'eliminazione' });
+        }
     });
 
     const toggleMutation = useMutation({
@@ -134,7 +151,11 @@ const OfferteBundlePage: React.FC = () => {
             bundleApi.toggle(id, !attivo),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['bundles'] });
+            showToast({ type: 'success', message: 'Stato aggiornato con successo' });
         },
+        onError: () => {
+            showToast({ type: 'error', message: 'Errore durante l\'aggiornamento' });
+        }
     });
 
     // Extract data
@@ -152,11 +173,19 @@ const OfferteBundlePage: React.FC = () => {
         setPage(1);
     }, []);
 
-    const handleDelete = useCallback((id: string, nome: string) => {
-        if (window.confirm(`Sei sicuro di voler eliminare il bundle "${nome}"?`)) {
+    const handleDelete = useCallback(async (id: string, nome: string) => {
+        if (await confirmDelete(nome)) {
             deleteMutation.mutate(id);
         }
-    }, [deleteMutation]);
+    }, [deleteMutation, confirmDelete]);
+
+    const handleView = useCallback((id: string) => {
+        navigate(`/poliambulatorio/catalogo/bundles/${id}`);
+    }, [navigate]);
+
+    const handleEdit = useCallback((id: string) => {
+        navigate(`/poliambulatorio/catalogo/bundles/${id}/modifica`);
+    }, [navigate]);
 
     const handleToggle = useCallback((id: string, attivo: boolean) => {
         toggleMutation.mutate({ id, attivo });
@@ -186,13 +215,14 @@ const OfferteBundlePage: React.FC = () => {
                     >
                         <RefreshCw className="w-5 h-5" />
                     </button>
-                    <Link
-                        to="/poliambulatorio/catalogo/bundles/nuovo"
+                    <CRUDButton
+                        operation="create"
+                        onClick={() => navigate('/poliambulatorio/catalogo/bundles/nuovo')}
                         className="clinica-button-primary flex items-center gap-2"
                     >
                         <Plus className="w-4 h-4" />
                         Nuovo Bundle
-                    </Link>
+                    </CRUDButton>
                 </div>
             </div>
 
@@ -221,6 +251,22 @@ const OfferteBundlePage: React.FC = () => {
                         <option value="active">Solo attivi</option>
                         <option value="inactive">Solo disattivi</option>
                     </select>
+
+                    {/* View Toggle */}
+                    <div className="flex items-center border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden">
+                        <button
+                            onClick={() => setViewMode('list')}
+                            className={`p-2 ${viewMode === 'list' ? 'bg-teal-500 text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                        >
+                            <ListIcon className="w-5 h-5" />
+                        </button>
+                        <button
+                            onClick={() => setViewMode('grid')}
+                            className={`p-2 ${viewMode === 'grid' ? 'bg-teal-500 text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                        >
+                            <Grid3X3 className="w-5 h-5" />
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -260,6 +306,119 @@ const OfferteBundlePage: React.FC = () => {
                         </Link>
                     )}
                 </div>
+            ) : viewMode === 'list' ? (
+                /* Table/List View */
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                    <table className="w-full">
+                        <thead className="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
+                            <tr>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                                    Bundle
+                                </th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                                    Prestazioni
+                                </th>
+                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                                    Prezzo Singoli
+                                </th>
+                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                                    Prezzo Bundle
+                                </th>
+                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                                    Risparmio
+                                </th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                                    Stato
+                                </th>
+                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                                    Azioni
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                            {bundles.map((bundle) => {
+                                const risparmio = calcolaRisparmio(bundle);
+                                return (
+                                    <tr
+                                        key={bundle.id}
+                                        onClick={() => handleView(bundle.id)}
+                                        className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors"
+                                    >
+                                        <td className="px-4 py-3">
+                                            <div className="flex items-center gap-3">
+                                                <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
+                                                    <Package className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                                                </div>
+                                                <div>
+                                                    <p className="font-medium text-gray-900 dark:text-white">
+                                                        {bundle.nome}
+                                                    </p>
+                                                    {bundle.codice && (
+                                                        <p className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+                                                            {bundle.codice}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <span className="flex items-center gap-1 text-sm text-gray-700 dark:text-gray-300">
+                                                <Activity className="w-4 h-4 text-gray-400" />
+                                                {bundle.prestazioni?.length || 0}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3 text-right">
+                                            <span className="text-sm text-gray-500 dark:text-gray-400 line-through">
+                                                {formatCurrency(bundle.prezzoSingoli)}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3 text-right">
+                                            <span className="text-sm font-semibold text-teal-700 dark:text-teal-400">
+                                                {formatCurrency(bundle.prezzoBundle)}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3 text-center">
+                                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                                                <TrendingDown className="w-3 h-3" />
+                                                {risparmio.percentuale.toFixed(0)}%
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <StatusIndicator isActive={bundle.attivo} />
+                                        </td>
+                                        <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                                            <div className="flex items-center justify-end gap-2">
+                                                <button
+                                                    onClick={() => handleToggle(bundle.id, bundle.attivo)}
+                                                    className={`p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 ${bundle.attivo
+                                                        ? 'text-green-600 dark:text-green-400'
+                                                        : 'text-gray-400 dark:text-gray-500'
+                                                        }`}
+                                                    title={bundle.attivo ? 'Disattiva' : 'Attiva'}
+                                                >
+                                                    {bundle.attivo ? (
+                                                        <ToggleRight className="w-4 h-4" />
+                                                    ) : (
+                                                        <ToggleLeft className="w-4 h-4" />
+                                                    )}
+                                                </button>
+                                                <ActionMenu
+                                                    theme="teal"
+                                                    size="sm"
+                                                    actions={createCrudActions({
+                                                        onView: () => handleView(bundle.id),
+                                                        onEdit: () => handleEdit(bundle.id),
+                                                        onDelete: () => handleDelete(bundle.id, bundle.nome)
+                                                    })}
+                                                />
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
             ) : (
                 /* Grid View */
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -270,20 +429,18 @@ const OfferteBundlePage: React.FC = () => {
                         return (
                             <div
                                 key={bundle.id}
-                                className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-md transition-shadow"
+                                onClick={() => handleView(bundle.id)}
+                                className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
                             >
                                 {/* Main Card Content */}
                                 <div className="p-5">
                                     <div className="flex items-start justify-between mb-4">
-                                        <Link
-                                            to={`/poliambulatorio/catalogo/bundles/${bundle.id}`}
-                                            className="flex items-center gap-3 hover:opacity-80 transition-opacity"
-                                        >
+                                        <div className="flex items-center gap-3">
                                             <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
                                                 <Package className="w-5 h-5 text-purple-600 dark:text-purple-400" />
                                             </div>
                                             <div>
-                                                <h3 className="font-medium text-gray-900 dark:text-white hover:text-teal-600 dark:hover:text-teal-400 transition-colors">
+                                                <h3 className="font-medium text-gray-900 dark:text-white">
                                                     {bundle.nome}
                                                 </h3>
                                                 {bundle.codice && (
@@ -292,7 +449,7 @@ const OfferteBundlePage: React.FC = () => {
                                                     </span>
                                                 )}
                                             </div>
-                                        </Link>
+                                        </div>
                                         <StatusIndicator isActive={bundle.attivo} />
                                     </div>
 
@@ -372,7 +529,7 @@ const OfferteBundlePage: React.FC = () => {
                                 </div>
 
                                 {/* Actions Footer */}
-                                <div className="flex items-center justify-between px-5 py-3 bg-gray-50 dark:bg-gray-700/50 border-t border-gray-200 dark:border-gray-700">
+                                <div className="flex items-center justify-between px-5 py-3 bg-gray-50 dark:bg-gray-700/50 border-t border-gray-200 dark:border-gray-700" onClick={(e) => e.stopPropagation()}>
                                     <button
                                         onClick={() => toggleExpand(bundle.id)}
                                         className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 hover:text-teal-600 dark:hover:text-teal-400"
@@ -395,20 +552,15 @@ const OfferteBundlePage: React.FC = () => {
                                                 <ToggleLeft className="w-5 h-5" />
                                             )}
                                         </button>
-                                        <Link
-                                            to={`/poliambulatorio/catalogo/bundles/${bundle.id}/modifica`}
-                                            className="p-2 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600"
-                                            title="Modifica"
-                                        >
-                                            <Edit className="w-4 h-4" />
-                                        </Link>
-                                        <button
-                                            onClick={() => handleDelete(bundle.id, bundle.nome)}
-                                            className="p-2 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600"
-                                            title="Elimina"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
+                                        <ActionMenu
+                                            theme="teal"
+                                            size="sm"
+                                            actions={createCrudActions({
+                                                onView: () => handleView(bundle.id),
+                                                onEdit: () => handleEdit(bundle.id),
+                                                onDelete: () => handleDelete(bundle.id, bundle.nome)
+                                            })}
+                                        />
                                     </div>
                                 </div>
                             </div>

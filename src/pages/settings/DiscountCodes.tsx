@@ -1,8 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useToast } from '../../hooks/useToast';
 import { useNavigate } from 'react-router-dom';
 import { apiGet, apiPost, apiPut, apiDelete } from '../../services/api';
 import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
 import { ActionButton } from '../../components/ui';
+import { CRUDButton } from '../../components/shared/CRUDButton';
+import { useTenantFilter } from '../../context/TenantFilterContext';
+import { useTenantMode } from '../../contexts/TenantModeContext';
+import { DatePickerElegante } from '../../components/ui/DatePickerElegante';
 import {
   Tag,
   Plus,
@@ -95,9 +100,12 @@ const GENERE_OPTIONS: { value: 'MALE' | 'FEMALE' | null, label: string, icon: st
 const DiscountCodesPage: React.FC = () => {
   const navigate = useNavigate();
   const { confirmDelete } = useConfirmDialog();
+  const { getTenantFilterParams, tenantFilterKey, isReady } = useTenantFilter();
+  const { getOperateHeaders } = useTenantMode();
+  const operateHeaders = getOperateHeaders();
   const [codes, setCodes] = useState<CodiceSconto[]>([]);
   const [loading, setLoading] = useState(false);
-  const [notification, setNotification] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+  const { showToast } = useToast();
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -139,27 +147,34 @@ const DiscountCodesPage: React.FC = () => {
   // Advanced targeting section visibility
   const [showAdvancedTargeting, setShowAdvancedTargeting] = useState(false);
 
-  useEffect(() => {
-    fetchCodes();
-  }, []);
-
-  const fetchCodes = async () => {
+  const fetchCodes = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiGet<any>('/api/v1/codici-sconto');
+      // Build query params with multi-tenant support
+      const params: Record<string, string> = {};
+      const tenantParams = getTenantFilterParams();
+      if (tenantParams.tenantIds) {
+        params.tenantIds = tenantParams.tenantIds.join(',');
+      }
+      if (tenantParams.allTenants) {
+        params.allTenants = 'true';
+      }
+      const response = await apiGet<any>('/api/v1/codici-sconto', params);
       setCodes(response?.data || []);
     } catch (err) {
-      showNotification('error', 'Errore nel recupero dei codici sconto');
-      console.error('Error fetching discount codes:', err);
+      showToast({ message: 'Errore nel recupero dei codici sconto', type: 'error' });
     } finally {
       setLoading(false);
     }
-  };
+  }, [getTenantFilterParams, tenantFilterKey]);
 
-  const showNotification = (type: 'success' | 'error', message: string) => {
-    setNotification({ type, message });
-    setTimeout(() => setNotification(null), 5000);
-  };
+  useEffect(() => {
+    if (isReady) {
+      fetchCodes();
+    }
+  }, [fetchCodes, isReady]);
+
+
 
   const resetForm = () => {
     setFormData({
@@ -193,7 +208,7 @@ const DiscountCodesPage: React.FC = () => {
 
   const handleCreate = async () => {
     if (!formData.codice.trim() || !formData.nome.trim() || !formData.valore) {
-      showNotification('error', 'Compila tutti i campi obbligatori');
+      showToast({ message: 'Compila tutti i campi obbligatori', type: 'error' });
       return;
     }
 
@@ -215,15 +230,14 @@ const DiscountCodesPage: React.FC = () => {
         prestazioniIds: formData.prestazioniIds
       };
 
-      await apiPost('/api/v1/codici-sconto', payload);
-      showNotification('success', 'Codice sconto creato con successo');
+      await apiPost('/api/v1/codici-sconto', payload, { headers: operateHeaders });
+      showToast({ message: 'Codice sconto creato con successo', type: 'success' });
       setShowCreateModal(false);
       resetForm();
       fetchCodes();
-    } catch (err: any) {
+    } catch (err: unknown) {
       const errorMsg = err?.response?.data?.message || 'Errore nella creazione del codice sconto';
-      showNotification('error', errorMsg);
-      console.error('Error creating discount code:', err);
+      showToast({ message: errorMsg, type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -231,7 +245,7 @@ const DiscountCodesPage: React.FC = () => {
 
   const handleUpdate = async () => {
     if (!editingCode || !formData.codice.trim() || !formData.nome.trim() || !formData.valore) {
-      showNotification('error', 'Compila tutti i campi obbligatori');
+      showToast({ message: 'Compila tutti i campi obbligatori', type: 'error' });
       return;
     }
 
@@ -267,15 +281,14 @@ const DiscountCodesPage: React.FC = () => {
         prestazioniIds: formData.prestazioniIds
       };
 
-      await apiPut(`/api/v1/codici-sconto/${editingCode.id}`, payload);
-      showNotification('success', 'Codice sconto aggiornato con successo');
+      await apiPut(`/api/v1/codici-sconto/${editingCode.id}`, payload, { headers: operateHeaders });
+      showToast({ message: 'Codice sconto aggiornato con successo', type: 'success' });
       setShowCreateModal(false);
       resetForm();
       fetchCodes();
-    } catch (err: any) {
+    } catch (err: unknown) {
       const errorMsg = err?.response?.data?.message || 'Errore nell\'aggiornamento del codice sconto';
-      showNotification('error', errorMsg);
-      console.error('Error updating discount code:', err);
+      showToast({ message: errorMsg, type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -317,12 +330,11 @@ const DiscountCodesPage: React.FC = () => {
     try {
       await apiPut(`/api/v1/codici-sconto/${code.id}`, {
         attivo: !code.attivo
-      });
-      showNotification('success', `Codice ${!code.attivo ? 'attivato' : 'disattivato'} con successo`);
+      }, { headers: operateHeaders });
+      showToast({ message: `Codice ${!code.attivo ? 'attivato' : 'disattivato'} con successo`, type: 'success' });
       fetchCodes();
     } catch (err) {
-      showNotification('error', 'Errore nel cambio stato del codice');
-      console.error('Error toggling code status:', err);
+      showToast({ message: 'Errore nel cambio stato del codice', type: 'error' });
     }
   };
 
@@ -331,12 +343,11 @@ const DiscountCodesPage: React.FC = () => {
     if (!shouldDelete) return;
 
     try {
-      await apiDelete(`/api/v1/codici-sconto/${code.id}`);
-      showNotification('success', 'Codice sconto eliminato con successo');
+      await apiDelete(`/api/v1/codici-sconto/${code.id}`, { headers: operateHeaders });
+      showToast({ message: 'Codice sconto eliminato con successo', type: 'success' });
       fetchCodes();
     } catch (err) {
-      showNotification('error', 'Errore nell\'eliminazione del codice sconto');
-      console.error('Error deleting discount code:', err);
+      showToast({ message: 'Errore nell\'eliminazione del codice sconto', type: 'error' });
     }
   };
 
@@ -401,11 +412,12 @@ const DiscountCodesPage: React.FC = () => {
       const dataFine = new Date(c.dataFine);
       return c.attivo && now >= dataInizio && now <= dataFine;
     }).length,
-    expired: codes.filter(c => new Date() > new Date(c.dataFine)).length,
+    expired: codes.filter(c => c.dataFine && new Date() > new Date(c.dataFine)).length,
     totalUsage: codes.reduce((sum, c) => sum + c.utilizzoCorrente, 0)
   };
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return 'Nessuna scadenza';
     return new Date(dateString).toLocaleDateString('it-IT', {
       day: '2-digit',
       month: '2-digit',
@@ -416,12 +428,11 @@ const DiscountCodesPage: React.FC = () => {
   const getStatusInfo = (code: CodiceSconto) => {
     const now = new Date();
     const dataInizio = new Date(code.dataInizio);
-    const dataFine = new Date(code.dataFine);
 
     if (!code.attivo) {
       return { label: 'Disattivato', color: 'gray', icon: ToggleLeft };
     }
-    if (now > dataFine) {
+    if (code.dataFine && now > new Date(code.dataFine)) {
       return { label: 'Scaduto', color: 'red', icon: AlertCircle };
     }
     if (now < dataInizio) {
@@ -443,24 +454,17 @@ const DiscountCodesPage: React.FC = () => {
             Gestisci i codici sconto applicabili ai preventivi
           </p>
         </div>
-        <button
+        <CRUDButton
+          operation="create"
           onClick={() => navigate('/management/codici-sconto/nuovo')}
           className="inline-flex items-center px-6 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors shadow-sm"
         >
           <Plus className="w-5 h-5 mr-2" />
           Crea Codice Sconto
-        </button>
+        </CRUDButton>
       </div>
 
-      {/* Notification */}
-      {notification && (
-        <div className={`p-4 rounded-lg ${notification.type === 'success'
-          ? 'bg-green-50 border border-green-200 text-green-800'
-          : 'bg-red-50 border border-red-200 text-red-800'
-          }`}>
-          <p className="text-sm font-medium">{notification.message}</p>
-        </div>
-      )}
+
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -860,11 +864,10 @@ const DiscountCodesPage: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Data Inizio *
                     </label>
-                    <input
-                      type="date"
+                    <DatePickerElegante
                       value={formData.dataInizio}
-                      onChange={(e) => setFormData({ ...formData, dataInizio: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      onChange={(date) => setFormData({ ...formData, dataInizio: date ? date.toISOString().split('T')[0] : '' })}
+                      theme="blue"
                     />
                   </div>
 
@@ -872,11 +875,10 @@ const DiscountCodesPage: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Data Fine *
                     </label>
-                    <input
-                      type="date"
+                    <DatePickerElegante
                       value={formData.dataFine}
-                      onChange={(e) => setFormData({ ...formData, dataFine: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      onChange={(date) => setFormData({ ...formData, dataFine: date ? date.toISOString().split('T')[0] : '' })}
+                      theme="blue"
                     />
                   </div>
                 </div>
@@ -1101,8 +1103,8 @@ const DiscountCodesPage: React.FC = () => {
                             type="button"
                             onClick={() => setFormData({ ...formData, genereApplicabile: option.value })}
                             className={`flex-1 px-4 py-2 rounded-lg border-2 transition-all flex flex-col items-center ${formData.genereApplicabile === option.value
-                                ? 'border-purple-500 bg-purple-50 text-purple-700'
-                                : 'border-gray-200 hover:border-purple-200 text-gray-600'
+                              ? 'border-purple-500 bg-purple-50 text-purple-700'
+                              : 'border-gray-200 hover:border-purple-200 text-gray-600'
                               }`}
                           >
                             <span className="text-xl mb-1">{option.icon}</span>

@@ -1,13 +1,63 @@
 <!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Occupational Medicine Management System</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<html lang="it">
+
+<head>
+  <meta charset="UTF-8" />
+  <!-- Favicons — multi-format for maximum compatibility -->
+  <link rel="shortcut icon" href="/favicon.ico" />
+  <link rel="icon" type="image/svg+xml" href="/assets/logos/element-favicon.svg" />
+  <link rel="icon" type="image/x-icon" sizes="16x16 32x32 48x48 64x64" href="/assets/logos/%BRAND_FAVICON_ICO%" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/logos/%BRAND_APPLE_TOUCH%" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#ffffff" />
+  <!-- Font preload for performance -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <meta name="description" content="%BRAND_DESCRIPTION%" />
+  <meta name="author" content="Element srl" />
+  <link rel="canonical" href="%BRAND_CANONICAL%" />
+  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="it_IT" />
+  <meta property="og:site_name" content="%BRAND_SITE_NAME%" />
+  <meta property="og:title" content="%BRAND_OG_TITLE%" />
+  <meta property="og:description" content="%BRAND_OG_DESCRIPTION%" />
+  <meta property="og:url" content="%BRAND_CANONICAL%" />
+  <meta property="og:image" content="%BRAND_OG_IMAGE%" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:type" content="image/png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="%BRAND_OG_TITLE%" />
+  <meta name="twitter:description" content="%BRAND_OG_DESCRIPTION%" />
+  <meta name="twitter:image" content="%BRAND_OG_IMAGE%" />
+  <title>%BRAND_TITLE%</title>
+  <!-- Prevent flash of wrong theme -->
+  <script>
+    (function () {
+      const STORAGE_KEY = 'element-theme-mode';
+      const stored = localStorage.getItem(STORAGE_KEY);
+      const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+      let theme = 'light';
+      if (stored === 'dark') {
+        theme = 'dark';
+      } else if (stored === 'auto' || !stored) {
+        theme = systemDark ? 'dark' : 'light';
+      }
+
+      document.documentElement.classList.add(theme);
+      document.documentElement.style.colorScheme = theme;
+
+      // Update theme-color meta
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute('content', theme === 'dark' ? '#111827' : '#ffffff');
+    })();
+  </script>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+
 </html>

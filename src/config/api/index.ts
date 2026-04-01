@@ -18,6 +18,7 @@ export const API_BASE_URL = (() => {
 })();
 
 // Prefissi specifici dei server (relativi, gestiti da proxy)
+// P64: Tutti gli endpoint usano ora /v1/ direttamente - nessuna riscrittura proxy necessaria
 export const API_ENDPOINTS = {
   // Server API principale (gestito da proxy)
   API_SERVER: '/api',
@@ -25,31 +26,31 @@ export const API_ENDPOINTS = {
   // Server documenti (gestito da proxy)
   DOCUMENTS_SERVER: '/docs',
 
-  // Endpoint specifici
-  COMPANIES: '/companies',
-  EMPLOYEES: '/employees',
-  COURSES: '/courses',
-  TRAINERS: '/trainers',
-  SCHEDULES: '/api/v1/schedules',
-  ATTESTATI: '/attestati',
-  TEMPLATES: '/templates',
-  TEMPLATE_LINKS: '/template-links',
-  USER_PREFERENCES: '/user-preferences',
-  ACTIVITY_LOGS: '/activity-logs',
+  // Endpoint specifici - P64: standardizzati a /v1/
+  COMPANIES: '/v1/companies',
+  EMPLOYEES: '/v1/employees',
+  COURSES: '/v1/courses',
+  TRAINERS: '/v1/trainers',
+  SCHEDULES: '/v1/schedules',
+  ATTESTATI: '/v1/attestati',
+  TEMPLATES: '/v1/templates',
+  TEMPLATE_LINKS: '/v1/templates',
+  USER_PREFERENCES: '/v1/user-preferences',
+  ACTIVITY_LOGS: '/v1/activity-logs',
 
-  // Endpoint che accettano ID
-  COMPANY_BY_ID: (id: string) => `/companies/${id}`,
-  EMPLOYEE_BY_ID: (id: string) => `/employees/${id}`,
-  COURSE_BY_ID: (id: string) => `/courses/${id}`,
-  TRAINER_BY_ID: (id: string) => `/trainers/${id}`,
-  SCHEDULE_BY_ID: (id: string) => `/api/v1/schedules/${id}`,
-  ATTESTATO_BY_ID: (id: string) => `/attestati/${id}`,
+  // Endpoint che accettano ID - P64: standardizzati a /v1/
+  COMPANY_BY_ID: (id: string) => `/v1/companies/${id}`,
+  EMPLOYEE_BY_ID: (id: string) => `/v1/employees/${id}`,
+  COURSE_BY_ID: (id: string) => `/v1/courses/${id}`,
+  TRAINER_BY_ID: (id: string) => `/v1/trainers/${id}`,
+  SCHEDULE_BY_ID: (id: string) => `/v1/schedules/${id}`,
+  ATTESTATO_BY_ID: (id: string) => `/v1/attestati/${id}`,
 
-  // Google API
+  // Google API - P64: standardizzati a /v1/
   GOOGLE_DOCS: {
-    TEMPLATES: '/api/google-docs/templates',
-    GENERATE: '/api/google-docs/generate',
-    ATTESTATI: '/api/google-docs/attestati',
+    TEMPLATES: '/v1/google-docs/templates',
+    GENERATE: '/v1/google-docs/generate',
+    ATTESTATI: '/v1/google-docs/attestati',
   }
 };
 

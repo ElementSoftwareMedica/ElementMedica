@@ -113,8 +113,7 @@ export function useScontoValidation(): UseScontoValidationReturn {
           type: 'error'
         };
       }
-    } catch (error: any) {
-      console.error('Errore validazione codice:', error);
+    } catch (error: unknown) {
       return {
         success: false,
         sconto: null,

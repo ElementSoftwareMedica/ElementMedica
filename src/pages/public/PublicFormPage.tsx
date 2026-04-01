@@ -7,6 +7,7 @@ import { CheckCircle, AlertCircle, ArrowLeft, Lock, ChevronRight, ChevronLeft } 
 import { useAuth } from '../../context/AuthContext';
 import type { FormSection } from '../../types/forms';
 import { isSectionVisible } from '../../utils/conditionalLogic';
+import SEOHead from '../../components/seo/SEOHead';
 
 const PublicFormPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -61,7 +62,6 @@ const PublicFormPage: React.FC = () => {
       });
       setFormData(initialData);
     } catch (err) {
-      console.error('Errore nel caricamento del form:', err);
       setError('Errore nel caricamento del form. Riprova più tardi.');
     } finally {
       setLoading(false);
@@ -294,9 +294,8 @@ const PublicFormPage: React.FC = () => {
       await formTemplatesService.submitPublicForm(formTemplate.id, formData, visitedSectionIds);
 
       setSubmitted(true);
-    } catch (err: any) {
-      console.error('Errore nell\'invio del form:', err);
-      setError(err.message || 'Errore nell\'invio del form. Riprova più tardi.');
+    } catch (err: unknown) {
+      setError('Errore nell\'invio del form. Riprova più tardi.');
     } finally {
       setSubmitting(false);
     }
@@ -420,7 +419,7 @@ const PublicFormPage: React.FC = () => {
       <PublicLayout>
         <div className="min-h-screen flex items-center justify-center bg-gray-50">
           <div className="max-w-md w-full bg-white p-8 rounded-lg shadow-lg text-center">
-            <Lock className="w-12 h-12 text-blue-500 mx-auto mb-4" />
+            <Lock className="w-12 h-12 text-primary-500 mx-auto mb-4" />
             <h2 className="text-2xl font-bold text-gray-900 mb-2">{formTemplate.name}</h2>
             <p className="text-gray-600 mb-6">
               Questo form richiede l'autenticazione.
@@ -488,6 +487,12 @@ const PublicFormPage: React.FC = () => {
 
   return (
     <PublicLayout>
+      <SEOHead
+        title={formTemplate?.name || 'Compila Modulo'}
+        description={formTemplate?.description || 'Modulo online'}
+        noindex={true}
+        nofollow={true}
+      />
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-12">
         <div className="container mx-auto px-4">
           <div className="max-w-3xl mx-auto">
@@ -517,8 +522,8 @@ const PublicFormPage: React.FC = () => {
                 </div>
                 <div className="relative w-full bg-gray-200 rounded-full h-3 overflow-hidden">
                   <div
-                    className="absolute top-0 left-0 h-full bg-gradient-to-r from-primary-500 to-primary-600 rounded-full transition-all duration-500 ease-out shadow-sm"
-                    style={{ width: `${((currentIndexInVisited + 1) / visitedSections.length) * 100}%` }}
+                    className="absolute top-0 left-0 h-full rounded-full transition-all duration-500 ease-out shadow-sm"
+                    style={{ width: `${((currentIndexInVisited + 1) / visitedSections.length) * 100}%`, backgroundImage: 'linear-gradient(to right, var(--color-primary-500), var(--color-primary-600))' }}
                   />
                 </div>
                 {/* Section dots */}
@@ -527,10 +532,10 @@ const PublicFormPage: React.FC = () => {
                     <div key={section.id} className="flex flex-col items-center flex-1">
                       <div
                         className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold transition-all duration-300 ${idx < currentIndexInVisited
-                            ? 'bg-green-500 text-white'
-                            : idx === currentIndexInVisited
-                              ? 'bg-primary-600 text-white ring-4 ring-primary-200'
-                              : 'bg-gray-300 text-gray-600'
+                          ? 'bg-green-500 text-white'
+                          : idx === currentIndexInVisited
+                            ? 'bg-primary-600 text-white ring-4 ring-primary-200'
+                            : 'bg-gray-300 text-gray-600'
                           }`}
                       >
                         {idx < currentIndexInVisited ? '✓' : idx + 1}
@@ -559,7 +564,7 @@ const PublicFormPage: React.FC = () => {
               <form onSubmit={handleSubmit} className="p-8" noValidate>
                 {!currentSection ? (
                   <div className="text-center py-12">
-                    <AlertCircle className="w-16 h-16 mx-auto text-amber-500 mb-4" />
+                    <AlertCircle className="w-16 h-16 mx-auto text-accent-500 mb-4" />
                     <h3 className="text-xl font-semibold text-gray-900 mb-2">
                       Nessun campo disponibile
                     </h3>

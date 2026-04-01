@@ -64,7 +64,6 @@ const MediaPickerModal: React.FC<MediaPickerModalProps> = ({
                 options: { folderId: undefined }  // Will go to root folder
             });
         } catch (err) {
-            console.error('Upload failed:', err);
         }
     };
 
@@ -165,7 +164,6 @@ const MediaPickerModal: React.FC<MediaPickerModalProps> = ({
                                             alt={media.alt || media.originalName || media.filename}
                                             className="w-full h-full object-cover"
                                             onError={() => {
-                                                console.error('Image load error:', media.url);
                                                 setFailedImages(prev => new Set(prev).add(media.id));
                                             }}
                                         />

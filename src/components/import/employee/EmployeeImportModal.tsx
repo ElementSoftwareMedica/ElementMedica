@@ -7,9 +7,9 @@
 import React, { useState, useEffect } from 'react';
 import { X, Upload, AlertCircle, CheckCircle, Users, Download } from 'lucide-react';
 import { useToast } from '../../../hooks/useToast';
+import { apiPost } from '../../../services/api';
 import ImportConflictResolutionPanel, { ConflictItem, ConflictResolution } from '../common/ImportConflictResolutionPanel';
 import BulkCompanyAssignmentPanel from '../common/BulkCompanyAssignmentPanel';
-import * as authService from '../../../services/auth';
 
 interface EmployeeData {
   firstName: string;
@@ -24,6 +24,10 @@ interface EmployeeData {
   email?: string;
   phone?: string;
   birthDate?: string;
+  birthPlace?: string;
+  birthProvince?: string;
+  gender?: string;
+  vatNumber?: string;
   address?: string;
   city?: string;
   province?: string;
@@ -33,37 +37,46 @@ interface EmployeeData {
   notes?: string;
   status?: string;
   createdAt?: string;
+  mansioneCodice?: string;
+  repartoNome?: string;
   [key: string]: any;
   _rowIndex?: number;
   _hasConflict?: boolean;
   _conflictWith?: any;
 }
 
-interface Company {
+// P49: Usa tipi compatibili con Company globale
+interface CompanyForImport {
   id: string;
+  companyTenantProfileId?: string;
+  companyId?: string;
   ragioneSociale: string;
   businessName?: string; // Legacy/alias
   piva?: string;
   vatNumber?: string;
+  sedeLegaleCitta?: string;
   citta?: string;
   city?: string;
-  sites?: CompanySite[];
+  sites?: CompanySiteForImport[];
 }
 
-interface CompanySite {
+interface CompanySiteForImport {
   id: string;
-  companyId: string;
+  companyTenantProfileId: string;
+  tenantId: string;
   siteName: string;
-  citta: string;
-  indirizzo: string;
+  citta?: string;
+  indirizzo?: string;
 }
 
 interface EmployeeImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   onImportComplete?: () => void;
-  companies: Company[];
+  companies: CompanyForImport[];
   tenantId: string;
+  /** Multi-tenant operation headers (X-Operate-Tenant-Id) */
+  operateHeaders?: Record<string, string>;
 }
 
 const EmployeeImportModal: React.FC<EmployeeImportModalProps> = ({
@@ -71,7 +84,8 @@ const EmployeeImportModal: React.FC<EmployeeImportModalProps> = ({
   onClose,
   onImportComplete,
   companies,
-  tenantId
+  tenantId,
+  operateHeaders = {}
 }) => {
   const [file, setFile] = useState<File | null>(null);
   const [employees, setEmployees] = useState<EmployeeData[]>([]);
@@ -88,74 +102,70 @@ const EmployeeImportModal: React.FC<EmployeeImportModalProps> = ({
 
   // Debug: log companies con sedi
   useEffect(() => {
-    console.log('🏭 EmployeeImportModal - Companies received:', companies.length);
-    console.log('🏭 Companies with sites:', companies.filter(c => c.sites && c.sites.length > 0).length);
     companies.forEach(c => {
-      console.log(`  - ${c.ragioneSociale || c.businessName}: ${c.sites?.length || 0} sedi`, c.sites?.map(s => s.siteName));
     });
   }, [companies]);
 
   // Helper per estrarre data di nascita da codice fiscale
   const extractBirthDateFromTaxCode = (taxCode: string): string | null => {
     if (!taxCode || taxCode.length !== 16) return null;
-    
+
     try {
       const yearChars = taxCode.substring(6, 8);
       const monthChar = taxCode.charAt(8).toUpperCase();
       const dayChars = taxCode.substring(9, 11);
-      
+
       // Mesi: A=01, B=02, C=03, D=04, E=05, H=06, L=07, M=08, P=09, R=10, S=11, T=12
       const monthMap: { [key: string]: string } = {
         'A': '01', 'B': '02', 'C': '03', 'D': '04', 'E': '05', 'H': '06',
         'L': '07', 'M': '08', 'P': '09', 'R': '10', 'S': '11', 'T': '12'
       };
-      
+
       const month = monthMap[monthChar];
       if (!month) return null;
-      
+
       // Il giorno per le donne è incrementato di 40
       let day = parseInt(dayChars, 10);
       if (day > 40) day -= 40;
-      
+
       // Anno: assumiamo secolo in base all'età ragionevole (< 2000 o >= 2000)
       let year = parseInt(yearChars, 10);
       const currentYear = new Date().getFullYear() % 100;
       year = year <= currentYear + 10 ? 2000 + year : 1900 + year;
-      
+
       const dayStr = day.toString().padStart(2, '0');
       // Formato italiano: dd/mm/yyyy
       return `${dayStr}/${month}/${year}`;
     } catch (error) {
-      console.error('Errore estrazione data da CF:', error);
       return null;
     }
   };
 
   // Helper per ottenere il nome dell'azienda (ragioneSociale o businessName)
-  const getCompanyName = (company: Company): string => {
+  const getCompanyName = (company: CompanyForImport): string => {
     return company.ragioneSociale || company.businessName || 'N/A';
   };
 
   // Helper per ottenere P.IVA
-  const getCompanyVat = (company: Company): string | undefined => {
+  const getCompanyVat = (company: CompanyForImport): string | undefined => {
     return company.piva || company.vatNumber;
   };
 
   // Helper per ottenere città
-  const getCompanyCity = (company: Company): string | undefined => {
-    return company.citta || company.city;
+  const getCompanyCity = (company: CompanyForImport): string | undefined => {
+    return company.sedeLegaleCitta || company.citta || company.city;
   };
 
   // Funzione per assegnare azienda e sede ai dipendenti selezionati
   const handleBulkAssign = () => {
     if (!selectedCompanyId) return;
-    
+
     const company = companies.find(c => c.id === selectedCompanyId);
     if (!company) return;
-    
+
     const companyName = getCompanyName(company);
     const site = selectedSiteId ? company.sites?.find(s => s.id === selectedSiteId) : null;
-    
+
     setEmployees(prev => prev.map((emp, idx) => {
       if (selectedRows.has(idx)) {
         return {
@@ -168,12 +178,12 @@ const EmployeeImportModal: React.FC<EmployeeImportModalProps> = ({
       }
       return emp;
     }));
-    
+
     showToast({
       message: `Assegnati ${selectedRows.size} dipendenti a ${companyName}${site ? ` - ${site.siteName}` : ''}`,
       type: 'success'
     });
-    
+
     // Reset selezione
     setSelectedRows(new Set());
     setSelectedCompanyId(null);
@@ -216,19 +226,21 @@ const EmployeeImportModal: React.FC<EmployeeImportModalProps> = ({
 
   // Parse CSV file
   const parseCSV = (csvText: string): EmployeeData[] => {
-    const lines = csvText.split('\n').filter(line => line.trim());
+    // Rimuovi BOM (Byte Order Mark) se presente
+    const cleanText = csvText.replace(/^\uFEFF/, '');
+    const lines = cleanText.split('\n').filter(line => line.trim());
     if (lines.length < 2) {
       throw new Error('Il file CSV deve contenere almeno un header e una riga di dati');
     }
 
-    // Parse header
-    const header = lines[0].split(';').map(h => h.trim());
-    
+    // Parse header - rimuovi virgolette e spazi
+    const header = lines[0].split(';').map(h => h.trim().replace(/^["']|["']$/g, ''));
+
     // Map header indices for required fields
     const firstNameIdx = header.findIndex(h => /^(firstName|nome)$/i.test(h));
     const lastNameIdx = header.findIndex(h => /^(lastName|cognome)$/i.test(h));
     const taxCodeIdx = header.findIndex(h => /^(taxCode|codiceFiscale|codice fiscale|cf)$/i.test(h));
-    
+
     // Map header indices for optional fields
     const emailIdx = header.findIndex(h => /^(email|mail)$/i.test(h));
     const phoneIdx = header.findIndex(h => /^(phone|telefono|tel)$/i.test(h));
@@ -246,6 +258,12 @@ const EmployeeImportModal: React.FC<EmployeeImportModalProps> = ({
     const createdAtIdx = header.findIndex(h => /^(createdAt|data creazione|dataCreazione)$/i.test(h));
     const professionalProfileIdx = header.findIndex(h => /^(professionalProfile|profilo professionale)$/i.test(h));
     const hiringDateIdx = header.findIndex(h => /^(hiringDate|data assunzione|dataAssunzione)$/i.test(h));
+    const birthPlaceIdx = header.findIndex(h => /^(birthPlace|luogoNascita|luogo_nascita|comuneNascita)$/i.test(h));
+    const birthProvinceIdx = header.findIndex(h => /^(birthProvince|provinciaNascita|prov_nascita)$/i.test(h));
+    const genderIdx = header.findIndex(h => /^(gender|sesso|genere)$/i.test(h));
+    const vatNumberIdx = header.findIndex(h => /^(vatNumber|partitaIva|piva)$/i.test(h));
+    const mansioneCodiceIdx = header.findIndex(h => /^(mansioneCodice|mansione|codMansione|jobCode|codice_mansione)$/i.test(h));
+    const repartoNomeIdx = header.findIndex(h => /^(repartoNome|reparto|nome reparto|department)$/i.test(h));
 
     if (firstNameIdx === -1 || lastNameIdx === -1 || taxCodeIdx === -1) {
       throw new Error('Il CSV deve contenere almeno le colonne: firstName, lastName, taxCode');
@@ -255,13 +273,13 @@ const EmployeeImportModal: React.FC<EmployeeImportModalProps> = ({
     const data: EmployeeData[] = [];
     for (let i = 1; i < lines.length; i++) {
       const values = lines[i].split(';').map(v => v.trim());
-      
+
       const taxCode = normalizeTaxCode(values[taxCodeIdx]);
       const csvBirthDate = birthDateIdx !== -1 ? values[birthDateIdx] : undefined;
-      
+
       // Estrai data di nascita dal CF se non presente nel CSV
       const extractedBirthDate = !csvBirthDate && taxCode ? extractBirthDateFromTaxCode(taxCode) : null;
-      
+
       const employee: EmployeeData = {
         firstName: values[firstNameIdx] || '',
         lastName: values[lastNameIdx] || '',
@@ -276,6 +294,12 @@ const EmployeeImportModal: React.FC<EmployeeImportModalProps> = ({
         role: roleIdx !== -1 ? values[roleIdx] : 'Employee', // Default Employee
         professionalProfile: professionalProfileIdx !== -1 ? values[professionalProfileIdx] : undefined,
         hiringDate: hiringDateIdx !== -1 ? values[hiringDateIdx] : undefined,
+        birthPlace: birthPlaceIdx !== -1 ? values[birthPlaceIdx] || undefined : undefined,
+        birthProvince: birthProvinceIdx !== -1 ? values[birthProvinceIdx] || undefined : undefined,
+        gender: genderIdx !== -1 ? values[genderIdx] || undefined : undefined,
+        vatNumber: vatNumberIdx !== -1 ? values[vatNumberIdx] || undefined : undefined,
+        mansioneCodice: mansioneCodiceIdx !== -1 ? values[mansioneCodiceIdx] || undefined : undefined,
+        repartoNome: repartoNomeIdx !== -1 ? values[repartoNomeIdx] || undefined : undefined,
         company: companyIdx !== -1 ? values[companyIdx] : undefined,
         siteName: siteNameIdx !== -1 ? values[siteNameIdx] : undefined,
         username: usernameIdx !== -1 ? values[usernameIdx] : undefined,
@@ -356,23 +380,23 @@ const EmployeeImportModal: React.FC<EmployeeImportModalProps> = ({
             const companyName = getCompanyName(c);
             const companyVat = getCompanyVat(c);
             return companyName?.toLowerCase() === emp.company?.toLowerCase() ||
-                   companyVat === emp.company;
+              companyVat === emp.company;
           });
-          
+
           if (!matchedCompany) {
             // WARNING: Azienda non trovata - può essere assegnata manualmente
             rowWarnings.push(`Azienda "${emp.company}" non trovata. Assegnare manualmente dal pannello sotto.`);
           } else {
             emp.companyId = matchedCompany.id;
-            
+
             // LOGICA SEDE:
             // 1. Se sede specificata nel CSV, validala
             if (emp.siteName) {
               if (matchedCompany.sites && matchedCompany.sites.length > 0) {
-                const siteExists = matchedCompany.sites.find(s => 
+                const siteExists = matchedCompany.sites.find(s =>
                   s.siteName?.toLowerCase() === emp.siteName?.toLowerCase()
                 );
-                
+
                 if (!siteExists) {
                   rowErrors.push(`Sede "${emp.siteName}" non trovata per l'azienda "${emp.company}"`);
                 } else {
@@ -389,7 +413,6 @@ const EmployeeImportModal: React.FC<EmployeeImportModalProps> = ({
                   // Assegnazione automatica se c'è solo 1 sede
                   emp.companySiteId = matchedCompany.sites[0].id;
                   emp.siteName = matchedCompany.sites[0].siteName;
-                  console.log(`✅ Sede unica "${emp.siteName}" assegnata automaticamente a ${emp.firstName} ${emp.lastName}`);
                 } else {
                   // Richiedi specifica se ci sono più sedi
                   rowErrors.push(`L'azienda "${emp.company}" ha ${matchedCompany.sites.length} sedi. Specificare la sede nel CSV.`);
@@ -422,12 +445,11 @@ const EmployeeImportModal: React.FC<EmployeeImportModalProps> = ({
       try {
         await detectConflicts(parsedEmployees);
       } catch (conflictError) {
-        console.warn('Rilevamento conflitti saltato:', conflictError);
         // Non bloccare il processo se il rilevamento conflitti fallisce
       }
 
       setEmployees(parsedEmployees);
-      
+
       // Select all valid rows by default
       const validRows = new Set<number>();
       parsedEmployees.forEach((_, idx) => {
@@ -442,9 +464,8 @@ const EmployeeImportModal: React.FC<EmployeeImportModalProps> = ({
         type: 'success'
       });
     } catch (error) {
-      console.error('Errore parsing CSV:', error);
       showToast({
-        message: error instanceof Error ? error.message : 'Errore parsing CSV',
+        message: 'Errore parsing CSV',
         type: 'error'
       });
     } finally {
@@ -463,80 +484,32 @@ const EmployeeImportModal: React.FC<EmployeeImportModalProps> = ({
   // Detect conflicts with backend
   const detectConflicts = async (employeesData: EmployeeData[]) => {
     try {
-      // Usa authService invece di accedere direttamente a localStorage
-      const token = authService.getToken();
-      
-      if (!token) {
-        console.warn('Token non trovato, skip rilevamento conflitti');
-        return;
-      }
-      console.log('🔍 [IMPORT] Chiamata validate API con', employeesData.length, 'dipendenti');
-      
-      // Usa proxy Vite per evitare problemi CORS
-      const response = await fetch('/api/v1/import/employees/validate', {
-        method: 'POST',
-        credentials: 'include', // Importante per CORS con cookie
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          employees: employeesData.map(({ _rowIndex, _hasConflict, _conflictWith, ...rest }) => rest),
-          tenantId
-        })
-      });
+      const result = await apiPost<{ conflicts?: any[] }>('/api/v1/import/employees/validate', {
+        employees: employeesData.map(({ _rowIndex, _hasConflict, _conflictWith, ...rest }) => rest),
+        tenantId
+      }, { headers: operateHeaders });
 
-      if (!response.ok) {
-        if (response.status === 401) {
-          console.warn('Token non valido o scaduto, skip rilevamento conflitti');
-          return;
-        }
-        throw new Error('Errore validazione backend');
-      }
-
-      const result = await response.json();
-
-      console.log('🔍 [IMPORT] Backend validation result:', {
-        total: result.total,
-        valid: result.valid,
-        errors: result.errors?.length || 0,
-        duplicates: result.duplicates?.length || 0,
-        conflicts: result.conflicts?.length || 0,
-        sampleConflict: result.conflicts?.[0],
-        allConflicts: result.conflicts
-      });
 
       // Process conflicts
       const conflictsMap = new Map<number, ConflictItem>();
       if (result.conflicts) {
-        console.log('🔍 [IMPORT] Processing conflicts:', result.conflicts.length);
-        console.log('🔍 [IMPORT] Sample conflict structure:', result.conflicts[0]);
-        
+
         result.conflicts.forEach((conflict: any) => {
           // Prova multipli campi per trovare il taxCode
-          const conflictTaxCode = conflict.taxCode || 
-                                 conflict.conflictValue || 
-                                 conflict.newItem?.taxCode ||
-                                 conflict.existingPerson?.taxCode;
-          
+          const conflictTaxCode = conflict.taxCode ||
+            conflict.conflictValue ||
+            conflict.newItem?.taxCode ||
+            conflict.existingPerson?.taxCode;
+
           if (!conflictTaxCode) {
-            console.warn('🔍 [IMPORT] Conflict without taxCode:', conflict);
             return;
           }
-          
+
           // Normalizza taxCode per confronto (uppercase, no spaces)
           const normalizedConflictTaxCode = normalizeTaxCode(conflictTaxCode);
           const index = employeesData.findIndex(e => normalizeTaxCode(e.taxCode) === normalizedConflictTaxCode);
-          
-          console.log(`🔍 [IMPORT] Conflict for taxCode ${conflictTaxCode}, found at index: ${index}`, {
-            conflictTaxCode: normalizedConflictTaxCode,
-            sampleCSVTaxCode: employeesData[0] ? normalizeTaxCode(employeesData[0].taxCode) : 'N/A',
-            existingPerson: conflict.existingPerson ? {
-              id: conflict.existingPerson.id,
-              name: `${conflict.existingPerson.firstName} ${conflict.existingPerson.lastName}`
-            } : 'N/A'
-          });
-          
+
+
           if (index !== -1) {
             conflictsMap.set(index, {
               index,
@@ -549,16 +522,13 @@ const EmployeeImportModal: React.FC<EmployeeImportModalProps> = ({
             employeesData[index]._hasConflict = true;
             employeesData[index]._conflictWith = conflict.existingPerson;
           } else {
-            console.warn(`🔍 [IMPORT] Could not match taxCode ${conflictTaxCode} in CSV data`);
           }
         });
-        
-        console.log('🔍 [IMPORT] Conflicts map size:', conflictsMap.size);
+
       }
 
       setConflicts(conflictsMap);
     } catch (error) {
-      console.error('Errore rilevamento conflitti:', error);
     }
   };
 
@@ -597,59 +567,32 @@ const EmployeeImportModal: React.FC<EmployeeImportModalProps> = ({
         .map(idx => conflicts.get(idx)?.existingItem?.id)
         .filter((id): id is string => !!id);
 
-      console.log('🔍 [IMPORT] Preparing import:', {
-        selectedRowsCount: selectedRows.size,
-        selectedEmployeesCount: selectedEmployees.length,
-        conflictsCount: conflicts.size,
-        overwriteIdsCount: overwriteIds.length,
+
+      // Call import API tramite central API client
+      const result = await apiPost<{ created: number; updated: number; skipped: number; errors?: Array<{ taxCode: string; name: string; error: string }>; warnings?: Array<{ taxCode: string; name: string; warning: string }> }>('/api/v1/import/employees', {
+        employees: selectedEmployees.map(({ _rowIndex, _hasConflict, _conflictWith, ...rest }) => rest),
+        tenantId,
+        // P48/P49: selectedCompanyId è già il companyTenantProfileId (dalla flatten API)
+        defaultCompanyTenantProfileId: selectedCompanyId,
         overwriteIds
-      });
+      }, { headers: operateHeaders });
 
-      // Call import API tramite proxy Vite
-      const token = authService.getToken();
-      if (!token) {
-        throw new Error('Sessione scaduta. Effettua nuovamente il login.');
-      }
-      
-      const response = await fetch('/api/v1/import/employees', {
-        method: 'POST',
-        credentials: 'include', // Importante per CORS con cookie
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          employees: selectedEmployees.map(({ _rowIndex, _hasConflict, _conflictWith, ...rest }) => rest),
-          tenantId,
-          defaultCompanyId: selectedCompanyId,
-          overwriteIds
-        })
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          // Token scaduto o invalido - authService gestirà la rimozione
-          throw new Error('Sessione scaduta. Effettua nuovamente il login.');
-        }
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Errore importazione');
-      }
-
-      const result = await response.json();
       setImportResult(result);
 
+      const toastParts = [`${result.created} creati`, `${result.updated} aggiornati`, `${result.skipped} saltati`];
+      if (result.errors?.length) toastParts.push(`${result.errors.length} errori`);
+      if (result.warnings?.length) toastParts.push(`${result.warnings.length} avvisi`);
       showToast({
-        message: `Importazione completata: ${result.created} creati, ${result.updated} aggiornati, ${result.skipped} saltati`,
-        type: 'success'
+        message: `Importazione completata: ${toastParts.join(', ')}`,
+        type: result.errors?.length ? 'warning' : 'success'
       });
 
       if (onImportComplete) {
         onImportComplete();
       }
     } catch (error) {
-      console.error('Errore importazione:', error);
       showToast({
-        message: error instanceof Error ? error.message : 'Errore importazione',
+        message: 'Errore importazione',
         type: 'error'
       });
     } finally {
@@ -665,17 +608,17 @@ const EmployeeImportModal: React.FC<EmployeeImportModalProps> = ({
   const employeesWithConflicts = conflicts.size;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-70 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl dark:shadow-black/30 max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center gap-3">
-            <Users className="w-6 h-6 text-blue-600" />
-            <h2 className="text-2xl font-bold text-gray-900">Importazione Dipendenti</h2>
+            <Users className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-50">Importazione Dipendenti</h2>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors"
           >
             <X className="w-6 h-6" />
           </button>
@@ -685,34 +628,67 @@ const EmployeeImportModal: React.FC<EmployeeImportModalProps> = ({
         <div className="flex-1 overflow-y-auto p-6">
           {importResult ? (
             // Show summary after import
-            <div className="bg-green-50 border border-green-200 rounded-lg p-6">
+            <div className="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700 rounded-lg p-6">
               <div className="flex items-center gap-3 mb-4">
-                <CheckCircle className="w-8 h-8 text-green-600" />
-                <h3 className="text-xl font-bold text-green-900">
+                <CheckCircle className="w-8 h-8 text-green-600 dark:text-green-400" />
+                <h3 className="text-xl font-bold text-green-900 dark:text-green-100">
                   Importazione Completata
                 </h3>
               </div>
 
               <div className="grid grid-cols-3 gap-3 mb-4">
-                <div className="bg-white rounded-lg p-3 border border-green-100">
-                  <div className="text-xs text-gray-600 mb-0.5">Creati</div>
-                  <div className="text-2xl font-bold text-green-600">
+                <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-green-100 dark:border-green-700">
+                  <div className="text-xs text-gray-600 dark:text-gray-400 mb-0.5">Creati</div>
+                  <div className="text-2xl font-bold text-green-600 dark:text-green-400">
                     {importResult.created || 0}
                   </div>
                 </div>
-                <div className="bg-white rounded-lg p-3 border border-blue-100">
-                  <div className="text-xs text-gray-600 mb-0.5">Aggiornati</div>
-                  <div className="text-2xl font-bold text-blue-600">
+                <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-blue-100 dark:border-blue-700">
+                  <div className="text-xs text-gray-600 dark:text-gray-400 mb-0.5">Aggiornati</div>
+                  <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
                     {importResult.updated || 0}
                   </div>
                 </div>
-                <div className="bg-white rounded-lg p-3 border border-gray-100">
-                  <div className="text-xs text-gray-600 mb-0.5">Saltati</div>
-                  <div className="text-2xl font-bold text-gray-600">
+                <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-100 dark:border-gray-700">
+                  <div className="text-xs text-gray-600 dark:text-gray-400 mb-0.5">Saltati</div>
+                  <div className="text-2xl font-bold text-gray-600 dark:text-gray-400">
                     {importResult.skipped || 0}
                   </div>
                 </div>
               </div>
+
+              {/* Errori per singolo dipendente */}
+              {importResult.errors?.length > 0 && (
+                <div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg p-4">
+                  <h4 className="text-sm font-semibold text-red-800 dark:text-red-300 mb-2 flex items-center gap-1.5">
+                    <AlertCircle className="w-4 h-4" />
+                    Errori ({importResult.errors.length})
+                  </h4>
+                  <ul className="space-y-1 max-h-32 overflow-y-auto">
+                    {importResult.errors.map((err: any, idx: number) => (
+                      <li key={idx} className="text-xs text-red-700 dark:text-red-400">
+                        <span className="font-medium">{err.name || err.taxCode}</span>: {err.error}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Avvisi (cross-tenant, FK warnings) */}
+              {importResult.warnings?.length > 0 && (
+                <div className="mb-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg p-4">
+                  <h4 className="text-sm font-semibold text-amber-800 dark:text-amber-300 mb-2">
+                    Avvisi ({importResult.warnings.length})
+                  </h4>
+                  <ul className="space-y-1 max-h-32 overflow-y-auto">
+                    {importResult.warnings.map((w: any, idx: number) => (
+                      <li key={idx} className="text-xs text-amber-700 dark:text-amber-400">
+                        {w.warning || w.name}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               <div className="flex justify-end">
                 <button
@@ -730,27 +706,25 @@ const EmployeeImportModal: React.FC<EmployeeImportModalProps> = ({
             <>
               {/* File Upload */}
               {!file && (
-                <div 
-                  className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-                    isDragging 
-                      ? 'border-blue-500 bg-blue-50' 
-                      : 'border-gray-300 hover:border-gray-400'
-                  }`}
+                <div
+                  className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${isDragging
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30'
+                    : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
+                    }`}
                   onDragEnter={handleDragEnter}
                   onDragLeave={handleDragLeave}
                   onDragOver={handleDragOver}
                   onDrop={handleDrop}
                 >
-                  <Upload className={`w-12 h-12 mx-auto mb-4 ${
-                    isDragging ? 'text-blue-500' : 'text-gray-400'
-                  }`} />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  <Upload className={`w-12 h-12 mx-auto mb-4 ${isDragging ? 'text-blue-500 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'
+                    }`} />
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
                     {isDragging ? 'Rilascia il file qui' : 'Carica file CSV dipendenti'}
                   </h3>
-                  <p className="text-sm text-gray-500 mb-4">
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
                     Trascina il file qui oppure clicca per selezionare
                   </p>
-                  <p className="text-xs text-gray-400 mb-4">
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">
                     Il file deve contenere: Nome, Cognome, Codice Fiscale
                   </p>
                   <label className="inline-flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-full hover:bg-blue-700 transition-colors cursor-pointer shadow-sm">
@@ -763,8 +737,8 @@ const EmployeeImportModal: React.FC<EmployeeImportModalProps> = ({
                       className="hidden"
                     />
                   </label>
-                  <p className="text-xs text-gray-400 mt-3">
-                    o scarica il <a href="/templates/template_employees.csv" className="text-blue-600 hover:underline" download>template CSV</a>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-3">
+                    o scarica il <a href="/templates/template_employees.csv" className="text-blue-600 dark:text-blue-400 hover:underline" download>template CSV</a>
                   </p>
                 </div>
               )}
@@ -777,11 +751,11 @@ const EmployeeImportModal: React.FC<EmployeeImportModalProps> = ({
                     {/* Colonna Sinistra: Stats e Azioni */}
                     <div className="flex flex-col gap-3">
                       {/* Card Statistiche */}
-                      <div className="bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-200 rounded-xl p-4 shadow-sm">
-                        <p className="text-sm font-semibold text-blue-900 mb-2">
+                      <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/40 dark:to-blue-800/30 border-2 border-blue-200 dark:border-blue-700 rounded-xl p-4 shadow-sm">
+                        <p className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-2">
                           {employees.length} dipendenti totali
                         </p>
-                        <div className="text-xs text-blue-700">
+                        <div className="text-xs text-blue-700 dark:text-blue-300">
                           <div className="flex items-center gap-1.5">
                             <span className="font-medium">✅ {validEmployeesCount} validi</span>
                             {employeesWithErrors > 0 && <span>• ⚠️ {employeesWithErrors} errori</span>}
@@ -790,10 +764,10 @@ const EmployeeImportModal: React.FC<EmployeeImportModalProps> = ({
                           </div>
                         </div>
                       </div>
-                      
+
                       {/* Card Azioni */}
-                      <div className="bg-white border-2 border-gray-200 rounded-xl p-4 shadow-sm">
-                        <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-3">Azioni</h4>
+                      <div className="bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm">
+                        <h4 className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-3">Azioni</h4>
                         <div className="flex flex-col gap-2">
                           <label className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white text-sm font-medium rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all cursor-pointer shadow-md hover:shadow-lg">
                             <Upload className="w-4 h-4" />
@@ -805,10 +779,10 @@ const EmployeeImportModal: React.FC<EmployeeImportModalProps> = ({
                               className="hidden"
                             />
                           </label>
-                          <a 
-                            href="/templates/template_employees.csv" 
+                          <a
+                            href="/templates/template_employees.csv"
                             download
-                            className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-white border-2 border-gray-300 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-50 hover:border-gray-400 transition-all shadow-sm"
+                            className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-white dark:bg-gray-700 border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 text-sm font-medium rounded-xl hover:bg-gray-50 dark:hover:bg-gray-600 hover:border-gray-400 dark:hover:border-gray-500 transition-all shadow-sm"
                           >
                             <Download className="w-4 h-4" />
                             Template CSV
@@ -816,7 +790,7 @@ const EmployeeImportModal: React.FC<EmployeeImportModalProps> = ({
                         </div>
                       </div>
                     </div>
-                    
+
                     {/* Colonna Destra: Bulk Company Assignment */}
                     <div>
                       <BulkCompanyAssignmentPanel
@@ -843,10 +817,10 @@ const EmployeeImportModal: React.FC<EmployeeImportModalProps> = ({
                   </div>
 
                   {/* Data Table */}
-                  <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
                     <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
-                      <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
+                      <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                        <thead className="bg-gray-50 dark:bg-gray-900/50 sticky top-0">
                           <tr>
                             <th className="px-4 py-3 text-left">
                               <input
@@ -865,63 +839,63 @@ const EmployeeImportModal: React.FC<EmployeeImportModalProps> = ({
                                     setSelectedRows(new Set());
                                   }
                                 }}
-                                className="rounded border-gray-300"
+                                className="rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700"
                               />
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                               #
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                               Nome
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                               Cognome
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                               CF
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                               Email
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                               Telefono
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                               Data Nascita
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                               Profilo Prof.
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                               Indirizzo
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                               Città
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                               Provincia
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                               CAP
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                               Data Assunzione
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                               Ruolo
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                               Azienda
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                               Sede
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                               Stato
                             </th>
                           </tr>
                         </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
+                        <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                           {employees.map((emp, idx) => {
                             const errors = validationErrors.get(idx);
                             const warnings = validationWarnings.get(idx);
@@ -943,9 +917,8 @@ const EmployeeImportModal: React.FC<EmployeeImportModalProps> = ({
                             return (
                               <React.Fragment key={idx}>
                                 <tr
-                                  className={`${
-                                    hasError ? 'bg-red-50' : hasWarning ? 'bg-yellow-50' : hasConflict ? 'bg-orange-50' : ''
-                                  }`}
+                                  className={`${hasError ? 'bg-red-50' : hasWarning ? 'bg-yellow-50' : hasConflict ? 'bg-orange-50' : ''
+                                    }`}
                                 >
                                   <td className="px-4 py-3">
                                     <input
@@ -953,136 +926,136 @@ const EmployeeImportModal: React.FC<EmployeeImportModalProps> = ({
                                       checked={isSelected}
                                       disabled={hasError}
                                       onChange={() => toggleRowSelection(idx)}
-                                      className="rounded border-gray-300"
+                                      className="rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700"
                                     />
                                   </td>
-                                  <td className="px-4 py-3 text-sm text-gray-500">{idx + 1}</td>
-                                  <td className={`px-4 py-3 text-sm ${isDifferent('firstName') ? 'bg-yellow-100 font-semibold' : ''}`}>
+                                  <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{idx + 1}</td>
+                                  <td className={`px-4 py-3 text-sm ${isDifferent('firstName') ? 'bg-yellow-100 dark:bg-yellow-900/40 font-semibold' : ''}`}>
                                     {emp.firstName}
                                     {hasConflict && existingPerson && isDifferent('firstName') && (
-                                      <div className="text-xs text-gray-500 mt-1">DB: {existingPerson.firstName}</div>
+                                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">DB: {existingPerson.firstName}</div>
                                     )}
                                   </td>
-                                  <td className={`px-4 py-3 text-sm ${isDifferent('lastName') ? 'bg-yellow-100 font-semibold' : ''}`}>
+                                  <td className={`px-4 py-3 text-sm ${isDifferent('lastName') ? 'bg-yellow-100 dark:bg-yellow-900/40 font-semibold' : ''}`}>
                                     {emp.lastName}
                                     {hasConflict && existingPerson && isDifferent('lastName') && (
-                                      <div className="text-xs text-gray-500 mt-1">DB: {existingPerson.lastName}</div>
+                                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">DB: {existingPerson.lastName}</div>
                                     )}
                                   </td>
-                                  <td className="px-4 py-3 text-sm font-mono text-gray-900">
+                                  <td className="px-4 py-3 text-sm font-mono text-gray-900 dark:text-gray-100">
                                     {emp.taxCode}
                                   </td>
-                                  <td className={`px-4 py-3 text-sm ${isDifferent('email') ? 'bg-yellow-100 font-semibold' : ''}`}>
+                                  <td className={`px-4 py-3 text-sm ${isDifferent('email') ? 'bg-yellow-100 dark:bg-yellow-900/40 font-semibold' : ''}`}>
                                     {emp.email || '-'}
                                     {hasConflict && existingPerson && isDifferent('email') && (
-                                      <div className="text-xs text-gray-500 mt-1">DB: {existingPerson.email || '-'}</div>
+                                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">DB: {existingPerson.email || '-'}</div>
                                     )}
                                   </td>
-                                  <td className={`px-4 py-3 text-sm ${isDifferent('phone') ? 'bg-yellow-100 font-semibold' : ''}`}>
+                                  <td className={`px-4 py-3 text-sm ${isDifferent('phone') ? 'bg-yellow-100 dark:bg-yellow-900/40 font-semibold' : ''}`}>
                                     {emp.phone || '-'}
                                     {hasConflict && existingPerson && isDifferent('phone') && (
-                                      <div className="text-xs text-gray-500 mt-1">DB: {existingPerson.phone || '-'}</div>
+                                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">DB: {existingPerson.phone || '-'}</div>
                                     )}
                                   </td>
-                                  <td className="px-4 py-3 text-sm text-gray-900">
+                                  <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
                                     {emp.birthDate || '-'}
                                   </td>
-                                  <td className="px-4 py-3 text-sm text-gray-900">
+                                  <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
                                     {emp.professionalProfile || '-'}
                                   </td>
-                                  <td className="px-4 py-3 text-sm text-gray-900">
+                                  <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
                                     {emp.address || '-'}
                                   </td>
-                                  <td className="px-4 py-3 text-sm text-gray-900">
+                                  <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
                                     {emp.city || '-'}
                                   </td>
-                                  <td className="px-4 py-3 text-sm text-gray-900">
+                                  <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
                                     {emp.province || '-'}
                                   </td>
-                                  <td className="px-4 py-3 text-sm text-gray-900">
+                                  <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
                                     {emp.postalCode || '-'}
                                   </td>
-                                  <td className="px-4 py-3 text-sm text-gray-900">
+                                  <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
                                     {emp.hiringDate || '-'}
                                   </td>
-                                  <td className="px-4 py-3 text-sm text-gray-900">
+                                  <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
                                     {emp.role || 'Employee'}
                                   </td>
-                                <td className="px-4 py-3 text-sm">
-                                  {emp.company ? (
-                                    <div className="flex items-center gap-1">
-                                      {emp.companyId ? (
-                                        <>
-                                          <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" />
-                                          <span className="text-gray-900 truncate text-xs">{emp.company}</span>
-                                        </>
-                                      ) : (
-                                        <>
-                                          <AlertCircle className="w-4 h-4 text-yellow-600 flex-shrink-0" />
-                                          <span className="text-yellow-700 truncate text-xs" title="Azienda non trovata - assegnala manualmente">
-                                            {emp.company}
-                                          </span>
-                                        </>
-                                      )}
-                                    </div>
-                                  ) : (
-                                    <span className="text-gray-400 text-xs">-</span>
-                                  )}
-                                </td>
-                                <td className="px-4 py-3 text-sm">
-                                  {emp.siteName ? (
-                                    <div className="flex items-center gap-1">
-                                      {emp.companySiteId ? (
-                                        <>
-                                          <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" />
-                                          <span className="text-gray-900 truncate text-xs">
-                                            {emp.siteName}
-                                            {/* Mostra badge se auto-assegnata */}
-                                            {companies.find(c => c.id === emp.companyId)?.sites?.length === 1 && (
-                                              <span className="ml-1 text-blue-600 italic">(auto)</span>
-                                            )}
-                                          </span>
-                                        </>
-                                      ) : (
-                                        <>
-                                          <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
-                                          <span className="text-red-600 truncate text-xs">{emp.siteName}</span>
-                                        </>
-                                      )}
-                                    </div>
-                                  ) : (
-                                    <span className="text-gray-400 text-xs">-</span>
-                                  )}
-                                </td>
-                                <td className="px-4 py-3 text-sm">
-                                  {hasError ? (
-                                    <div className="flex items-center gap-1 text-red-600">
-                                      <AlertCircle className="w-4 h-4" />
-                                      <span className="text-xs">
-                                        {errors.join(', ')}
-                                      </span>
-                                    </div>
-                                  ) : hasWarning ? (
-                                    <div className="flex items-center gap-1 text-yellow-600">
-                                      <AlertCircle className="w-4 h-4" />
-                                      <span className="text-xs">
-                                        {warnings.join(', ')}
-                                      </span>
-                                    </div>
-                                  ) : hasConflict ? (
-                                    <div className="flex items-center gap-1 text-orange-600">
-                                      <AlertCircle className="w-4 h-4" />
-                                      <span className="text-xs">Conflitto</span>
-                                    </div>
-                                  ) : (
-                                    <div className="flex items-center gap-1 text-green-600">
-                                      <CheckCircle className="w-4 h-4" />
-                                      <span className="text-xs">Valido</span>
-                                    </div>
-                                  )}
-                                </td>
-                              </tr>
-                            </React.Fragment>
+                                  <td className="px-4 py-3 text-sm">
+                                    {emp.company ? (
+                                      <div className="flex items-center gap-1">
+                                        {emp.companyId ? (
+                                          <>
+                                            <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400 flex-shrink-0" />
+                                            <span className="text-gray-900 dark:text-gray-100 truncate text-xs">{emp.company}</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <AlertCircle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
+                                            <span className="text-yellow-700 dark:text-yellow-400 truncate text-xs" title="Azienda non trovata - assegnala manualmente">
+                                              {emp.company}
+                                            </span>
+                                          </>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <span className="text-gray-400 dark:text-gray-500 text-xs">-</span>
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm">
+                                    {emp.siteName ? (
+                                      <div className="flex items-center gap-1">
+                                        {emp.companySiteId ? (
+                                          <>
+                                            <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400 flex-shrink-0" />
+                                            <span className="text-gray-900 dark:text-gray-100 truncate text-xs">
+                                              {emp.siteName}
+                                              {/* Mostra badge se auto-assegnata */}
+                                              {companies.find(c => c.id === emp.companyId)?.sites?.length === 1 && (
+                                                <span className="ml-1 text-blue-600 dark:text-blue-400 italic">(auto)</span>
+                                              )}
+                                            </span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0" />
+                                            <span className="text-red-600 dark:text-red-400 truncate text-xs">{emp.siteName}</span>
+                                          </>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <span className="text-gray-400 dark:text-gray-500 text-xs">-</span>
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm">
+                                    {hasError ? (
+                                      <div className="flex items-center gap-1 text-red-600 dark:text-red-400">
+                                        <AlertCircle className="w-4 h-4" />
+                                        <span className="text-xs">
+                                          {errors.join(', ')}
+                                        </span>
+                                      </div>
+                                    ) : hasWarning ? (
+                                      <div className="flex items-center gap-1 text-yellow-600 dark:text-yellow-400">
+                                        <AlertCircle className="w-4 h-4" />
+                                        <span className="text-xs">
+                                          {warnings.join(', ')}
+                                        </span>
+                                      </div>
+                                    ) : hasConflict ? (
+                                      <div className="flex items-center gap-1 text-orange-600 dark:text-orange-400">
+                                        <AlertCircle className="w-4 h-4" />
+                                        <span className="text-xs">Conflitto</span>
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-center gap-1 text-green-600 dark:text-green-400">
+                                        <CheckCircle className="w-4 h-4" />
+                                        <span className="text-xs">Valido</span>
+                                      </div>
+                                    )}
+                                  </td>
+                                </tr>
+                              </React.Fragment>
                             );
                           })}
                         </tbody>
@@ -1097,15 +1070,15 @@ const EmployeeImportModal: React.FC<EmployeeImportModalProps> = ({
 
         {/* Footer */}
         {!importResult && file && employees.length > 0 && (
-          <div className="border-t p-6 bg-gray-50">
+          <div className="border-t border-gray-200 dark:border-gray-700 p-6 bg-gray-50 dark:bg-gray-900/50">
             <div className="flex items-center justify-between">
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-gray-600 dark:text-gray-400">
                 <span className="font-medium">{selectedRows.size}</span> dipendenti selezionati
               </div>
               <div className="flex gap-3">
                 <button
                   onClick={onClose}
-                  className="px-6 py-2.5 border border-gray-300 rounded-full text-gray-700 text-sm font-medium hover:bg-gray-100 transition-colors"
+                  className="px-6 py-2.5 border border-gray-300 dark:border-gray-600 rounded-full text-gray-700 dark:text-gray-200 text-sm font-medium hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                 >
                   Annulla
                 </button>

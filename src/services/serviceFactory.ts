@@ -1,12 +1,15 @@
 import { apiGet, apiDelete, apiPost, apiPut } from './api';
 
+// Tipo per opzioni API con headers multi-tenant
+type ApiOptions = Record<string, unknown> & { headers?: Record<string, string> };
+
 interface ServiceMethods<T, C, U> {
   getAll: () => Promise<T[]>;
   getById: (id: string) => Promise<T>;
-  create: (data: C) => Promise<T>;
-  update: (id: string, data: U) => Promise<T>;
-  delete: (id: string) => Promise<void>;
-  deleteMultiple: (ids: string[]) => Promise<void>;
+  create: (data: C, options?: ApiOptions) => Promise<T>;
+  update: (id: string, data: U, options?: ApiOptions) => Promise<T>;
+  delete: (id: string, options?: ApiOptions) => Promise<void>;
+  deleteMultiple: (ids: string[], options?: ApiOptions) => Promise<void>;
   extend: <E>(methods: E) => ServiceMethods<T, C, U> & E;
 }
 
@@ -29,23 +32,23 @@ export const createService = <
       return await apiGet<T>(`${basePath}/${id}`);
     },
 
-    create: async (data: C): Promise<T> => {
-      return await apiPost<T>(basePath, data);
+    create: async (data: C, options?: ApiOptions): Promise<T> => {
+      return await apiPost<T>(basePath, data, options);
     },
 
-    update: async (id: string, data: U): Promise<T> => {
-      return await apiPut<T>(`${basePath}/${id}`, data);
+    update: async (id: string, data: U, options?: ApiOptions): Promise<T> => {
+      return await apiPut<T>(`${basePath}/${id}`, data, options);
     },
 
-    delete: async (id: string): Promise<void> => {
-      return await apiDelete(`${basePath}/${id}`);
+    delete: async (id: string, options?: ApiOptions): Promise<void> => {
+      return await apiDelete(`${basePath}/${id}`, options);
     },
 
-    deleteMultiple: async (ids: string[]): Promise<void> => {
+    deleteMultiple: async (ids: string[], options?: ApiOptions): Promise<void> => {
       const deletePromises = ids.map(id => {
-        return apiDelete(`${basePath}/${id}`);
+        return apiDelete(`${basePath}/${id}`, options);
       });
-      
+
       await Promise.all(deletePromises);
     },
 

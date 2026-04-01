@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { 
+import {
   ArrowRight,
   Award,
   ChevronDown,
@@ -88,7 +88,7 @@ export const GroupedCourseCard: React.FC<GroupedCourseCardProps> = ({
   return (
     <div className="bg-white rounded-2xl shadow-md hover:shadow-lg transition-shadow duration-300 overflow-hidden group">
       {/* Image */}
-      <div className="relative h-48 bg-gradient-to-br from-primary-500 to-primary-600 overflow-hidden">
+      <div className="relative h-48 overflow-hidden" style={{ backgroundImage: 'linear-gradient(to bottom right, var(--color-primary-500), var(--color-primary-600))' }}>
         {mainCourse.image1Url ? (
           <img
             src={mainCourse.image1Url}
@@ -100,7 +100,7 @@ export const GroupedCourseCard: React.FC<GroupedCourseCardProps> = ({
             <Award className="w-16 h-16 text-white/80" />
           </div>
         )}
-        
+
         {/* Variants Count Badge */}
         {variants.length > 1 && (
           <div className="absolute top-4 right-4">

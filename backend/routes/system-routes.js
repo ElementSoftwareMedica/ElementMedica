@@ -10,6 +10,7 @@ import prisma from '../config/prisma-optimization.js';
 import { authMiddleware, requirePermission } from '../middleware/auth.js';
 import { tenantMiddleware } from '../middleware/tenant.js';
 import logger from '../utils/logger.js';
+import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 
 const router = express.Router();
 
@@ -25,6 +26,7 @@ const router = express.Router();
 router.get('/logs',
     authMiddleware,
     tenantMiddleware,
+    requirePermission('system:read'),
     async (req, res) => {
         try {
             const {
@@ -41,7 +43,7 @@ router.get('/logs',
             const userGlobalRole = req.person?.globalRole;
             const isGlobalAdmin = userGlobalRole === 'SUPER_ADMIN' || userGlobalRole === 'ADMIN';
 
-            const tenantId = req.person.tenantId;
+            const tenantId = getEffectiveTenantId(req);
 
             // Admin globali possono vedere tutti i log, altri utenti solo quelli del proprio tenant
             const where = {};
@@ -106,7 +108,11 @@ router.get('/logs',
                                 id: true,
                                 firstName: true,
                                 lastName: true,
-                                email: true
+                                tenantProfiles: {
+                                    where: { deletedAt: null },
+                                    take: 1,
+                                    select: { email: true }
+                                }
                             }
                         }
                     }
@@ -114,20 +120,26 @@ router.get('/logs',
             ]);
 
             // Formatta i log per il frontend
-            const formattedLogs = logs.map(log => ({
-                id: log.id,
-                timestamp: log.timestamp,
-                action: log.action,
-                resource: log.action?.split('_')[0]?.toLowerCase() || 'system',
-                details: log.details,
-                user: log.person ? {
-                    id: log.person.id,
-                    name: `${log.person.firstName || ''} ${log.person.lastName || ''}`.trim() || log.person.email,
-                    email: log.person.email
-                } : null,
-                personId: log.personId,
-                tenantId: log.tenantId
-            }));
+            const formattedLogs = logs.map(log => {
+                const personEmail = log.person?.tenantProfiles?.[0]?.email || '';
+                return {
+                    id: log.id,
+                    timestamp: log.timestamp,
+                    action: log.action,
+                    resource: log.resource || log.action?.split('_')[0]?.toLowerCase() || 'system',
+                    resourceId: log.resourceId || null,
+                    category: log.category || null,
+                    metadata: log.metadata || null,
+                    details: log.details,
+                    user: log.person ? {
+                        id: log.person.id,
+                        name: `${log.person.firstName || ''} ${log.person.lastName || ''}`.trim() || personEmail,
+                        email: personEmail
+                    } : null,
+                    personId: log.personId,
+                    tenantId: log.tenantId
+                };
+            });
 
             return res.json({
                 success: true,
@@ -141,7 +153,7 @@ router.get('/logs',
             logger.error({
                 component: 'system-routes',
                 action: 'getLogs',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 stack: error.stack
             }, 'Error fetching system logs');
 
@@ -201,9 +213,10 @@ const DEFAULT_CONFIG = {
 router.get('/settings/config',
     authMiddleware,
     tenantMiddleware,
+    requirePermission('system:settings'),
     async (req, res) => {
         try {
-            const tenantId = req.person.tenantId;
+            const tenantId = getEffectiveTenantId(req);
 
             // Prova a caricare configurazioni personalizzate dal database
             let customConfig = {};
@@ -238,7 +251,7 @@ router.get('/settings/config',
             logger.error({
                 component: 'system-routes',
                 action: 'getConfig',
-                error: error.message
+                error: 'Operazione non riuscita'
             }, 'Error fetching system config');
 
             // Restituisci comunque i default in caso di errore
@@ -260,7 +273,7 @@ router.put('/settings/config',
     tenantMiddleware,
     async (req, res) => {
         try {
-            const tenantId = req.person.tenantId;
+            const tenantId = getEffectiveTenantId(req);
             const updates = req.body;
 
             if (!updates || typeof updates !== 'object') {
@@ -311,7 +324,7 @@ router.put('/settings/config',
             logger.error({
                 component: 'system-routes',
                 action: 'updateConfig',
-                error: error.message
+                error: 'Operazione non riuscita'
             }, 'Error updating system config');
 
             return res.status(500).json({
@@ -332,7 +345,7 @@ router.post('/settings/config/reset',
     tenantMiddleware,
     async (req, res) => {
         try {
-            const tenantId = req.person.tenantId;
+            const tenantId = getEffectiveTenantId(req);
 
             // Elimina tutte le configurazioni personalizzate
             try {
@@ -359,7 +372,7 @@ router.post('/settings/config/reset',
             logger.error({
                 component: 'system-routes',
                 action: 'resetConfig',
-                error: error.message
+                error: 'Operazione non riuscita'
             }, 'Error resetting system config');
 
             return res.status(500).json({

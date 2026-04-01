@@ -50,6 +50,7 @@ import {
     type CreatePersonDocumentInput
 } from '../../../../services/clinicaApi';
 import { useToast } from '../../../../hooks/useToast';
+import { useTenantFilter } from '../../../../context/TenantFilterContext';
 import { getAllSpecialties, addCustomSpecialty as addSpecialtyToStore } from '../../../../constants/specialties';
 
 // Modular components
@@ -57,6 +58,7 @@ import CredentialsModal from './CredentialsModal';
 import ConflictModal from './ConflictModal';
 import DocumentUploadModal from './DocumentUploadModal';
 import DocumentsList from './DocumentsList';
+import PrestazioniAbilitateSelector from './PrestazioniAbilitateSelector';
 
 // Types and constants
 import {
@@ -72,7 +74,15 @@ import {
 } from './types';
 
 // Import Element Medica theme
+import { DatePickerElegante } from '../../../../components/ui/DatePickerElegante';
 import '../../../../styles/clinica-theme.css';
+
+// CF utilities
+import {
+    generateTaxCode,
+    extractBirthPlaceFromTaxCode,
+    extractGenderFromTaxCode,
+} from '../../../../utils/codiceFiscale';
 
 const MedicoForm: React.FC = () => {
     const navigate = useNavigate();
@@ -81,6 +91,9 @@ const MedicoForm: React.FC = () => {
     const queryClient = useQueryClient();
     const { showToast } = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // P61: Tenant filter for prestazioni - rispetta X-Operate-Tenant-Id
+    const { getTenantFilterParams, tenantFilterKey, isReady: tenantReady } = useTenantFilter();
 
     // Credentials modal state
     const [credentialsModal, setCredentialsModal] = useState<CredentialsModalState>({
@@ -101,11 +114,8 @@ const MedicoForm: React.FC = () => {
     const [availableSpecialties, setAvailableSpecialties] = useState<string[]>(getAllSpecialties());
     const specialtiesRef = useRef<HTMLDivElement>(null);
 
-    // Prestazioni state
-    const [showPrestazioniDropdown, setShowPrestazioniDropdown] = useState(false);
-    const [prestazioniSearch, setPrestazioniSearch] = useState('');
+    // Prestazioni state - only showAllPrestazioni needed for the new selector
     const [showAllPrestazioni, setShowAllPrestazioni] = useState(false);
-    const prestazioniRef = useRef<HTMLDivElement>(null);
 
     // Documents state
     const [showDocumentModal, setShowDocumentModal] = useState(false);
@@ -122,11 +132,12 @@ const MedicoForm: React.FC = () => {
     const [formData, setFormData] = useState<MedicoFormData>(getInitialFormData());
     const [errors, setErrors] = useState<Partial<Record<keyof MedicoFormData, string>>>({});
 
-    // Fetch prestazioni for selection
+    // Fetch prestazioni for selection - P61: Uses tenant filter to get prestazioni from selected tenant
     const { data: prestazioniResponse } = useQuery({
-        queryKey: ['prestazioni'],
-        queryFn: () => prestazioniApi.getAll(),
-        staleTime: 5 * 60 * 1000
+        queryKey: ['prestazioni', tenantFilterKey],
+        queryFn: () => prestazioniApi.getAll({ ...getTenantFilterParams(), limit: 500 }),
+        staleTime: 5 * 60 * 1000,
+        enabled: tenantReady
     });
     const prestazioniList = prestazioniResponse?.data || [];
 
@@ -151,23 +162,62 @@ const MedicoForm: React.FC = () => {
             if (specialtiesRef.current && !specialtiesRef.current.contains(event.target as Node)) {
                 setShowSpecialtiesDropdown(false);
             }
-            if (prestazioniRef.current && !prestazioniRef.current.contains(event.target as Node)) {
-                setShowPrestazioniDropdown(false);
-            }
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    // Auto-extract birthDate from taxCode
+    // Auto-extract birthDate, gender, birthPlace, birthProvince from taxCode (16 chars)
     useEffect(() => {
-        if (formData.taxCode && formData.taxCode.length >= 11 && !formData.birthDate) {
-            const extractedDate = extractBirthDateFromCF(formData.taxCode);
-            if (extractedDate) {
-                setFormData(prev => ({ ...prev, birthDate: extractedDate }));
+        if (formData.taxCode && formData.taxCode.length === 16) {
+            const updates: Partial<typeof formData> = {};
+
+            if (!formData.birthDate) {
+                const extractedDate = extractBirthDateFromCF(formData.taxCode);
+                if (extractedDate) updates.birthDate = extractedDate;
+            }
+            if (!formData.gender) {
+                const g = extractGenderFromTaxCode(formData.taxCode);
+                if (g) updates.gender = g as typeof formData.gender;
+            }
+            if (!formData.birthPlace) {
+                const bp = extractBirthPlaceFromTaxCode(formData.taxCode);
+                if (bp) {
+                    updates.birthPlace = bp.comune;
+                    if (!formData.birthProvince && bp.provincia) {
+                        updates.birthProvince = bp.provincia;
+                    }
+                }
+            }
+
+            if (Object.keys(updates).length > 0) {
+                setFormData(prev => ({ ...prev, ...updates }));
             }
         }
-    }, [formData.taxCode, formData.birthDate]);
+    }, [formData.taxCode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Auto-calculate taxCode when all required fields are set and taxCode is empty
+    useEffect(() => {
+        if (
+            !formData.taxCode &&
+            formData.firstName &&
+            formData.lastName &&
+            formData.birthDate &&
+            formData.gender &&
+            formData.birthPlace
+        ) {
+            const computed = generateTaxCode(
+                formData.lastName,
+                formData.firstName,
+                formData.birthDate,
+                formData.gender || 'MALE',
+                formData.birthPlace
+            );
+            if (computed) {
+                setFormData(prev => ({ ...prev, taxCode: computed }));
+            }
+        }
+    }, [formData.firstName, formData.lastName, formData.birthDate, formData.gender, formData.birthPlace]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Fetch existing medico for edit
     const { data: medicoData, isLoading: isLoadingMedico } = useQuery({
@@ -190,6 +240,9 @@ const MedicoForm: React.FC = () => {
                 phone: medicoData.phone || '',
                 taxCode: medicoData.taxCode || '',
                 birthDate: data.birthDate ? String(data.birthDate).split('T')[0] : '',
+                gender: (data.gender as typeof formData.gender) || '',
+                birthPlace: (data.birthPlace as string) || '',
+                birthProvince: (data.birthProvince as string) || '',
                 pec: (data.pec as string) || '',
                 residenceAddress: (data.residenceAddress as string) || '',
                 residenceCity: (data.residenceCity as string) || '',
@@ -251,13 +304,13 @@ const MedicoForm: React.FC = () => {
                 const responseData = error.response?.data;
                 setConflictModal({
                     open: true,
-                    message: responseData?.error || error.message || 'Codice fiscale già presente nel sistema',
+                    message: responseData?.error || 'Codice fiscale già presente nel sistema',
                     existingPersonId: responseData?.existingPersonId,
                     existingPersonName: responseData?.existingPersonName,
                     canEnable: responseData?.canEnable
                 });
             } else {
-                showToast({ type: 'error', message: error.message || 'Errore nella creazione' });
+                showToast({ type: 'error', message: 'Errore nella creazione' });
             }
         }
     });
@@ -273,7 +326,7 @@ const MedicoForm: React.FC = () => {
             navigate('/poliambulatorio/personale/medici');
         },
         onError: (error: Error) => {
-            showToast({ type: 'error', message: error.message || 'Errore nell\'abilitazione' });
+            showToast({ type: 'error', message: 'Errore nell\'abilitazione' });
         }
     });
 
@@ -295,7 +348,7 @@ const MedicoForm: React.FC = () => {
             showToast({ type: 'success', message: 'Documento caricato con successo' });
         },
         onError: (error: Error) => {
-            showToast({ type: 'error', message: error.message || 'Errore nel caricamento' });
+            showToast({ type: 'error', message: 'Errore nel caricamento' });
         }
     });
 
@@ -307,7 +360,7 @@ const MedicoForm: React.FC = () => {
             showToast({ type: 'success', message: 'Documento eliminato' });
         },
         onError: (error: Error) => {
-            showToast({ type: 'error', message: error.message || 'Errore nell\'eliminazione' });
+            showToast({ type: 'error', message: 'Errore nell\'eliminazione' });
         }
     });
 
@@ -328,7 +381,7 @@ const MedicoForm: React.FC = () => {
             navigate(`/poliambulatorio/personale/medici/${id}`);
         },
         onError: (error: Error) => {
-            showToast({ type: 'error', message: error.message || 'Errore nell\'aggiornamento' });
+            showToast({ type: 'error', message: 'Errore nell\'aggiornamento' });
         }
     });
 
@@ -386,39 +439,6 @@ const MedicoForm: React.FC = () => {
         }
     };
 
-    // Handle prestazione toggle
-    const togglePrestazione = (prestazioneId: string) => {
-        setFormData(prev => ({
-            ...prev,
-            prestazioniIds: prev.prestazioniIds.includes(prestazioneId)
-                ? prev.prestazioniIds.filter(id => id !== prestazioneId)
-                : [...prev.prestazioniIds, prestazioneId]
-        }));
-    };
-
-    // Filter prestazioni based on search and specializzazioni
-    const filteredPrestazioni = prestazioniList.filter(p => {
-        const matchesSearch = p.nome?.toLowerCase().includes(prestazioniSearch.toLowerCase()) ||
-            p.codice?.toLowerCase().includes(prestazioniSearch.toLowerCase());
-
-        if (!matchesSearch) return false;
-        if (showAllPrestazioni) return true;
-        if (!formData.specialties || formData.specialties.length === 0) return true;
-
-        const branche = p.brancheSpecialistiche && p.brancheSpecialistiche.length > 0
-            ? p.brancheSpecialistiche
-            : (p.brancaSpecialistica ? [p.brancaSpecialistica] : []);
-
-        if (branche.length === 0) return true;
-
-        return branche.some(branca =>
-            formData.specialties.some(spec =>
-                branca.toLowerCase().includes(spec.toLowerCase()) ||
-                spec.toLowerCase().includes(branca.toLowerCase())
-            )
-        );
-    });
-
     // Filter specialties based on search
     const filteredSpecializzazioni = availableSpecialties.filter(s =>
         s.toLowerCase().includes(specialtySearch.toLowerCase())
@@ -462,6 +482,9 @@ const MedicoForm: React.FC = () => {
             phone: formData.phone || undefined,
             taxCode: formData.taxCode,
             birthDate: formData.birthDate || undefined,
+            gender: formData.gender || undefined,
+            birthPlace: formData.birthPlace || undefined,
+            birthProvince: formData.birthProvince || undefined,
             pec: formData.pec || undefined,
             residenceAddress: formData.residenceAddress || undefined,
             residenceCity: formData.residenceCity || undefined,
@@ -669,17 +692,40 @@ const MedicoForm: React.FC = () => {
                                 <CreditCard className="inline h-4 w-4 mr-1" />
                                 Codice Fiscale *
                             </label>
-                            <input
-                                type="text"
-                                value={formData.taxCode}
-                                onChange={(e) => setFormData({ ...formData, taxCode: e.target.value.toUpperCase() })}
-                                maxLength={16}
-                                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent font-mono uppercase ${errors.taxCode ? 'border-red-500' : 'border-gray-200'
-                                    }`}
-                                placeholder="RSSMRA80A01H501U"
-                            />
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={formData.taxCode}
+                                    onChange={(e) => setFormData({ ...formData, taxCode: e.target.value.toUpperCase() })}
+                                    maxLength={16}
+                                    className={`flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent font-mono uppercase ${errors.taxCode ? 'border-red-500' : formData.taxCode.length === 16 ? 'border-teal-400' : 'border-gray-200'}`}
+                                    placeholder="RSSMRA80A01H501U"
+                                />
+                                {(formData.firstName && formData.lastName && formData.birthDate && formData.gender && formData.birthPlace) && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const computed = generateTaxCode(
+                                                formData.lastName, formData.firstName,
+                                                formData.birthDate, formData.gender || 'MALE', formData.birthPlace
+                                            );
+                                            if (computed) setFormData(prev => ({ ...prev, taxCode: computed }));
+                                        }}
+                                        className="px-3 py-2 text-xs font-medium text-teal-700 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100 whitespace-nowrap"
+                                        title="Ricalcola il codice fiscale dai dati anagrafici"
+                                    >
+                                        Ricalcola
+                                    </button>
+                                )}
+                            </div>
                             {errors.taxCode && (
                                 <p className="text-sm text-red-500 mt-1">{errors.taxCode}</p>
+                            )}
+                            {!errors.taxCode && formData.taxCode.length === 16 && (
+                                <p className="text-xs text-teal-600 mt-1">✓ Codice fiscale compilato</p>
+                            )}
+                            {!formData.taxCode && formData.firstName && formData.lastName && formData.birthDate && formData.gender && formData.birthPlace && (
+                                <p className="text-xs text-amber-600 mt-1">Usa "Ricalcola" per generarlo automaticamente</p>
                             )}
                         </div>
 
@@ -688,15 +734,70 @@ const MedicoForm: React.FC = () => {
                                 <Calendar className="inline h-4 w-4 mr-1" />
                                 Data di Nascita
                             </label>
-                            <input
-                                type="date"
+                            <DatePickerElegante
                                 value={formData.birthDate}
-                                onChange={(e) => setFormData({ ...formData, birthDate: e.target.value })}
-                                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                onChange={(date) => setFormData({ ...formData, birthDate: date ? date.toISOString().split('T')[0] : '' })}
+                                theme="teal"
                             />
                             <p className="text-xs text-gray-500 mt-1">
                                 Auto-calcolata dal codice fiscale
                             </p>
+                        </div>
+
+                        {/* Sesso */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <User className="inline h-4 w-4 mr-1" />
+                                Sesso
+                            </label>
+                            <select
+                                value={formData.gender}
+                                onChange={(e) => setFormData({ ...formData, gender: e.target.value as typeof formData.gender })}
+                                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white"
+                            >
+                                <option value="">— Seleziona —</option>
+                                <option value="MALE">Maschile (M)</option>
+                                <option value="FEMALE">Femminile (F)</option>
+                                <option value="OTHER">Altro</option>
+                                <option value="NOT_SPECIFIED">Non specificato</option>
+                            </select>
+                            <p className="text-xs text-gray-500 mt-1">Auto-ricavato dal codice fiscale</p>
+                        </div>
+
+                        {/* Comune di nascita */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <MapPin className="inline h-4 w-4 mr-1" />
+                                Comune di Nascita
+                            </label>
+                            <input
+                                type="text"
+                                value={formData.birthPlace}
+                                onChange={(e) => setFormData({ ...formData, birthPlace: e.target.value })}
+                                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                placeholder="es. Milano"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">Necessario per calcolare il codice fiscale</p>
+                        </div>
+
+                        {/* Provincia di nascita */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <MapPin className="inline h-4 w-4 mr-1" />
+                                Provincia di Nascita
+                            </label>
+                            <select
+                                value={formData.birthProvince}
+                                onChange={(e) => setFormData({ ...formData, birthProvince: e.target.value })}
+                                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white"
+                            >
+                                <option value="">— Seleziona —</option>
+                                <option value="EE">Estero (EE)</option>
+                                {PROVINCE.map(p => (
+                                    <option key={p} value={p}>{p}</option>
+                                ))}
+                            </select>
+                            <p className="text-xs text-gray-500 mt-1">Auto-ricavata dal codice fiscale</p>
                         </div>
                     </div>
                 </div>
@@ -1057,132 +1158,15 @@ const MedicoForm: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Prestazioni Abilitate */}
-                <div className="bg-white rounded-xl border border-gray-200 p-6">
-                    <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                        <Stethoscope className="h-5 w-5 text-teal-600" />
-                        Prestazioni Abilitate
-                        {formData.prestazioniIds.length > 0 && (
-                            <span className="ml-2 px-2 py-0.5 bg-teal-100 text-teal-800 rounded-full text-sm">
-                                {formData.prestazioniIds.length}
-                            </span>
-                        )}
-                    </h2>
-
-                    <div className="space-y-4">
-                        {/* Info */}
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                            <div className="flex items-start gap-2">
-                                <Info className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                                <p className="text-sm text-blue-800">
-                                    {formData.specialties.length > 0
-                                        ? `Mostrando prestazioni coerenti con le specializzazioni: ${formData.specialties.join(', ')}`
-                                        : 'Seleziona prima le specializzazioni per filtrare le prestazioni pertinenti'}
-                                </p>
-                            </div>
-                        </div>
-
-                        {/* Toggle all prestazioni */}
-                        <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
-                            <input
-                                type="checkbox"
-                                checked={showAllPrestazioni}
-                                onChange={(e) => setShowAllPrestazioni(e.target.checked)}
-                                className="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
-                            />
-                            Mostra tutte le prestazioni (anche non coerenti con specializzazioni)
-                        </label>
-
-                        {/* Prestazioni dropdown */}
-                        <div ref={prestazioniRef} className="relative">
-                            {/* Selected prestazioni */}
-                            <div className="flex flex-wrap gap-2 mb-2">
-                                {formData.prestazioniIds.map(prestazioneId => {
-                                    const prestazione = prestazioniList.find(p => p.id === prestazioneId);
-                                    return prestazione && (
-                                        <span
-                                            key={prestazioneId}
-                                            className="inline-flex items-center gap-1 px-3 py-1 bg-indigo-100 text-indigo-800 rounded-full text-sm"
-                                        >
-                                            {prestazione.codice} - {prestazione.nome}
-                                            <button
-                                                type="button"
-                                                onClick={() => togglePrestazione(prestazioneId)}
-                                                className="p-0.5 hover:bg-indigo-200 rounded-full"
-                                            >
-                                                <X className="h-3 w-3" />
-                                            </button>
-                                        </span>
-                                    );
-                                })}
-                            </div>
-
-                            {/* Dropdown trigger */}
-                            <button
-                                type="button"
-                                onClick={() => setShowPrestazioniDropdown(!showPrestazioniDropdown)}
-                                className="w-full px-3 py-2 border border-gray-200 rounded-lg flex items-center justify-between hover:border-teal-400 transition-colors"
-                            >
-                                <span className="text-gray-500">
-                                    {formData.prestazioniIds.length > 0
-                                        ? `${formData.prestazioniIds.length} prestazioni selezionate`
-                                        : 'Seleziona prestazioni...'}
-                                </span>
-                                <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${showPrestazioniDropdown ? 'rotate-180' : ''
-                                    }`} />
-                            </button>
-
-                            {/* Dropdown */}
-                            {showPrestazioniDropdown && (
-                                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-hidden">
-                                    {/* Search */}
-                                    <div className="p-2 border-b border-gray-100">
-                                        <input
-                                            type="text"
-                                            value={prestazioniSearch}
-                                            onChange={(e) => setPrestazioniSearch(e.target.value)}
-                                            className="w-full px-3 py-1.5 border border-gray-200 rounded text-sm focus:ring-1 focus:ring-teal-500 focus:border-transparent"
-                                            placeholder="Cerca per nome o codice..."
-                                        />
-                                    </div>
-
-                                    {/* Options */}
-                                    <div className="max-h-48 overflow-y-auto">
-                                        {filteredPrestazioni.length > 0 ? (
-                                            filteredPrestazioni.map(prestazione => (
-                                                <button
-                                                    key={prestazione.id}
-                                                    type="button"
-                                                    onClick={() => togglePrestazione(prestazione.id)}
-                                                    className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between ${formData.prestazioniIds.includes(prestazione.id) ? 'bg-indigo-50 text-indigo-700' : ''
-                                                        }`}
-                                                >
-                                                    <span>
-                                                        <span className="font-medium">{prestazione.codice}</span>
-                                                        <span className="mx-1">-</span>
-                                                        {prestazione.nome}
-                                                        {prestazione.brancaSpecialistica && (
-                                                            <span className="ml-2 text-xs text-gray-500">
-                                                                ({prestazione.brancaSpecialistica})
-                                                            </span>
-                                                        )}
-                                                    </span>
-                                                    {formData.prestazioniIds.includes(prestazione.id) && (
-                                                        <span className="text-indigo-600">✓</span>
-                                                    )}
-                                                </button>
-                                            ))
-                                        ) : (
-                                            <div className="px-3 py-4 text-center text-gray-500 text-sm">
-                                                Nessuna prestazione trovata
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
+                {/* Prestazioni Abilitate - Two Column Selector */}
+                <PrestazioniAbilitateSelector
+                    prestazioni={prestazioniList}
+                    selectedIds={formData.prestazioniIds}
+                    onSelectionChange={(ids) => setFormData(prev => ({ ...prev, prestazioniIds: ids }))}
+                    specialties={formData.specialties}
+                    showAllPrestazioni={showAllPrestazioni}
+                    onShowAllChange={setShowAllPrestazioni}
+                />
 
                 {/* Documenti (solo in modifica) */}
                 {isEdit && (

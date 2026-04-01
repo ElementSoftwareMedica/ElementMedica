@@ -36,7 +36,7 @@ export function ConflictResolver({
         />
         <span className="text-xs text-gray-600 font-medium">Importa</span>
       </div>
-      
+
       {conflict.type === 'duplicate' && (
         <>
           <div className="flex items-center justify-center text-blue-600 bg-blue-50 px-2 py-1 rounded-md border border-blue-200 w-full">
@@ -45,22 +45,20 @@ export function ConflictResolver({
           <div className="flex space-x-1 w-full">
             <button
               onClick={() => onResolutionChange(rowIndex, { resolution: 'skip' })}
-              className={`flex-1 px-2 py-1 text-xs rounded font-medium transition-colors ${
-                conflict.resolution === 'skip' 
-                  ? 'bg-red-500 text-white shadow-sm' 
+              className={`flex-1 px-2 py-1 text-xs rounded font-medium transition-colors ${conflict.resolution === 'skip'
+                  ? 'bg-red-500 text-white shadow-sm'
                   : 'bg-gray-100 text-gray-700 hover:bg-red-50 hover:text-red-600 border border-gray-300'
-              }`}
+                }`}
               title="Mantieni il record esistente"
             >
               Salta
             </button>
             <button
               onClick={() => onResolutionChange(rowIndex, { resolution: 'overwrite' })}
-              className={`flex-1 px-2 py-1 text-xs rounded font-medium transition-colors ${
-                conflict.resolution === 'overwrite' 
-                  ? 'bg-blue-500 text-white shadow-sm' 
+              className={`flex-1 px-2 py-1 text-xs rounded font-medium transition-colors ${conflict.resolution === 'overwrite'
+                  ? 'bg-blue-500 text-white shadow-sm'
                   : 'bg-gray-100 text-gray-700 hover:bg-blue-50 hover:text-blue-600 border border-gray-300'
-              }`}
+                }`}
               title="Sostituisci con i nuovi dati"
             >
               Sovrascrivi
@@ -68,7 +66,7 @@ export function ConflictResolver({
           </div>
         </>
       )}
-      
+
       {conflict.type === 'invalid_company' && (
         <>
           <div className="flex items-center justify-center text-orange-600 bg-orange-50 px-2 py-1 rounded-md border border-orange-200 w-full">
@@ -78,10 +76,10 @@ export function ConflictResolver({
             value={conflict.selectedCompanyId || ''}
             onChange={(e) => {
               const selectedCompany = availableCompanies.find(c => c.id === e.target.value);
-              onResolutionChange(rowIndex, { 
+              onResolutionChange(rowIndex, {
                 resolution: e.target.value ? 'assign_company' : undefined,
                 selectedCompanyId: e.target.value || undefined,
-                selectedCompanyName: selectedCompany?.ragioneSociale || selectedCompany?.name
+                selectedCompanyName: selectedCompany?.ragioneSociale
               });
             }}
             className="w-full text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"

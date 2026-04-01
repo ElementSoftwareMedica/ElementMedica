@@ -174,7 +174,7 @@ export async function getQueuesHealth() {
     });
     return {
       healthy: false,
-      error: error.message,
+      error: 'Queue health check failed',
     };
   }
 }

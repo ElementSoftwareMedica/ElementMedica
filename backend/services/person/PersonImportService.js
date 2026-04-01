@@ -1,5 +1,7 @@
+import crypto from 'crypto';
 import logger from '../../utils/logger.js';
 import prisma from '../../config/prisma-optimization.js';
+import PersonUtils from './utils/PersonUtils.js'; // F317: consolidato da PersonUtils
 
 /**
  * Servizio dedicato per l'importazione di persone
@@ -18,17 +20,17 @@ class PersonImportService {
       const csvContent = file.buffer.toString('utf-8');
       const lines = csvContent.split('\n');
       const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
-      
+
       let imported = 0;
       const errors = [];
-      
+
       for (let i = 1; i < lines.length; i++) {
         if (!lines[i].trim()) continue;
-        
+
         try {
           const values = lines[i].split(',').map(v => v.replace(/"/g, '').trim());
           const personData = {};
-          
+
           headers.forEach((header, index) => {
             if (values[index]) {
               const headerLower = header.toLowerCase().replace(/[_\s]/g, '');
@@ -92,47 +94,47 @@ class PersonImportService {
               }
             }
           });
-          
+
           // Validazione campi obbligatori
           if (!personData.firstName || !personData.lastName) {
             errors.push({ row: i + 1, error: 'Dati obbligatori mancanti (nome, cognome)' });
             continue;
           }
-          
+
           // Controlla duplicati
           const duplicateInfo = await this.checkDuplicates(personData, tenantId);
           if (duplicateInfo.length > 0) {
             errors.push({ row: i + 1, error: `Persona già esistente con ${duplicateInfo.join(' o ')}` });
             continue;
           }
-          
+
           // Risolvi azienda se specificata
           let resolvedCompanyId = companyId;
           if (personData.companyName && !companyId) {
             resolvedCompanyId = await this.resolveCompanyId(personData.companyName, null, tenantId);
           }
-          
+
           // Prepara i dati per la creazione
           const preparedData = await this.preparePersonData(personData);
-          
+
           // Mappa il ruolo
           const roleType = this.personService.constructor.mapRoleType(personData.roleType);
-          
+
           // Rimuovi campi non necessari per la creazione
           delete preparedData.companyName;
           delete preparedData.roleType;
-          
+
           // Crea la persona con account
           // Importa PersonCore per chiamare direttamente il metodo con tutti i parametri
           const { default: PersonCore } = await import('./core/PersonCore.js');
           await PersonCore.createPerson(preparedData, roleType, resolvedCompanyId, tenantId);
           imported++;
-          
+
         } catch (error) {
-          errors.push({ row: i + 1, error: error.message });
+          errors.push({ row: i + 1, error: 'Errore durante l\'importazione della riga' });
         }
       }
-      
+
       return { imported, errors };
     } catch (error) {
       logger.error('Error importing persons from CSV:', { error: error.message });
@@ -150,21 +152,21 @@ class PersonImportService {
       warnings: []
     };
 
-    logger.info('Starting JSON import:', { 
-      personsCount: persons.length, 
-      overwriteIdsCount: overwriteIds.length 
+    logger.info('Starting JSON import:', {
+      personsCount: persons.length,
+      overwriteIdsCount: overwriteIds.length
     });
 
     for (let i = 0; i < persons.length; i++) {
       try {
         const result = await this.processPersonImport(
-          persons[i], 
-          overwriteIds, 
-          companyId, 
-          tenantId, 
+          persons[i],
+          overwriteIds,
+          companyId,
+          tenantId,
           i + 1
         );
-        
+
         if (result.success) {
           results.imported++;
           if (result.warning) {
@@ -173,12 +175,12 @@ class PersonImportService {
         } else {
           results.errors.push(result.error);
         }
-        
+
       } catch (error) {
         logger.error('Unexpected error in import:', { row: i + 1, error: error.message });
-        results.errors.push({ 
-          row: i + 1, 
-          error: `Errore imprevisto: ${error.message}` 
+        results.errors.push({
+          row: i + 1,
+          error: 'Errore imprevisto durante l\'importazione'
         });
       }
     }
@@ -194,9 +196,9 @@ class PersonImportService {
     // 1. Validazione base
     const validation = this.validatePersonData(personData);
     if (!validation.valid) {
-      return { 
-        success: false, 
-        error: { row: rowNumber, error: validation.error } 
+      return {
+        success: false,
+        error: { row: rowNumber, error: validation.error }
       };
     }
 
@@ -213,8 +215,8 @@ class PersonImportService {
     if (duplicateCheck.found && !overwriteIds.includes(duplicateCheck.existingPerson.id)) {
       return {
         success: false,
-        error: { 
-          row: rowNumber, 
+        error: {
+          row: rowNumber,
           error: `Persona già esistente: ${duplicateCheck.reason}`,
           existingPersonId: duplicateCheck.existingPerson.id
         }
@@ -223,7 +225,7 @@ class PersonImportService {
 
     // 4. Prepara i dati
     const preparedData = await this.preparePersonData(personData);
-    
+
     // 5. Risolvi azienda - usa _companyId se presente, altrimenti companyName
     let resolvedCompanyId = null;
     if (personData._companyId) {
@@ -238,9 +240,9 @@ class PersonImportService {
     try {
       if (duplicateCheck.found && overwriteIds.includes(duplicateCheck.existingPerson.id)) {
         // Aggiorna persona esistente
-        await this.updateExistingPerson(duplicateCheck.existingPerson.id, preparedData);
-        return { 
-          success: true, 
+        await this.updateExistingPerson(duplicateCheck.existingPerson.id, preparedData, tenantId);
+        return {
+          success: true,
           warning: { row: rowNumber, message: 'Persona aggiornata' }
         };
       } else {
@@ -255,7 +257,7 @@ class PersonImportService {
       logger.error('Error creating/updating person:', { row: rowNumber, error: error.message });
       return {
         success: false,
-        error: { row: rowNumber, error: `Errore durante la creazione: ${error.message}` }
+        error: { row: rowNumber, error: 'Errore durante la creazione della persona' }
       };
     }
   }
@@ -277,51 +279,50 @@ class PersonImportService {
 
   /**
    * Controlla se esistono duplicati per codice fiscale o email
+   * P48: email ora è in PersonTenantProfile
    */
   async checkForDuplicates(personData, tenantId = null) {
-    const whereConditions = [];
-    
+    // Check taxCode on Person (global)
     if (personData.taxCode) {
-      // Normalizza il taxCode per il confronto (CRITICO per evitare falsi negativi)
       const normalizedTaxCode = personData.taxCode.toUpperCase().trim();
-      whereConditions.push({ taxCode: normalizedTaxCode });
-    }
-    
-    if (personData.email) {
-      whereConditions.push({ email: personData.email.toLowerCase().trim() });
-    }
+      const whereClause = { taxCode: normalizedTaxCode, deletedAt: null };
+      if (tenantId) whereClause.tenantId = tenantId;
 
-    if (whereConditions.length === 0) {
-      return { found: false };
-    }
+      const existingByTaxCode = await prisma.person.findFirst({
+        where: whereClause
+      });
 
-    const whereClause = {
-      OR: whereConditions,
-      deletedAt: null
-    };
-
-    // Filtra per tenant se fornito
-    if (tenantId) {
-      whereClause.tenantId = tenantId;
-    }
-
-    const existingPerson = await prisma.person.findFirst({
-      where: whereClause
-    });
-
-    if (existingPerson) {
-      let reason = '';
-      if (personData.taxCode && existingPerson.taxCode === personData.taxCode.toUpperCase().trim()) {
-        reason = `codice fiscale ${personData.taxCode}`;
-      } else if (personData.email && existingPerson.email === personData.email.toLowerCase().trim()) {
-        reason = `email ${personData.email}`;
+      if (existingByTaxCode) {
+        return {
+          found: true,
+          existingPerson: existingByTaxCode,
+          reason: `codice fiscale ${personData.taxCode}`
+        };
       }
+    }
 
-      return { 
-        found: true, 
-        existingPerson, 
-        reason 
+    // P48: Check email in PersonTenantProfile
+    if (personData.email) {
+      const normalizedEmail = personData.email.toLowerCase().trim();
+      const emailWhereClause = {
+        email: normalizedEmail,
+        deletedAt: null,
+        isActive: true
       };
+      if (tenantId) emailWhereClause.tenantId = tenantId;
+
+      const existingProfile = await prisma.personTenantProfile.findFirst({
+        where: emailWhereClause,
+        include: { person: true }
+      });
+
+      if (existingProfile?.person) {
+        return {
+          found: true,
+          existingPerson: existingProfile.person,
+          reason: `email ${personData.email}`
+        };
+      }
     }
 
     return { found: false };
@@ -329,16 +330,17 @@ class PersonImportService {
 
   /**
    * Controlla duplicati per CSV (versione semplificata)
+   * P48: email ora è in PersonTenantProfile
    */
   async checkDuplicates(personData, tenantId = null) {
     const duplicateInfo = [];
-    
+
     if (personData.taxCode) {
       // Normalizza il taxCode per il confronto (CRITICO per coerenza)
       const normalizedTaxCode = personData.taxCode.toUpperCase().trim();
       const whereClause = { taxCode: normalizedTaxCode, deletedAt: null };
       if (tenantId) whereClause.tenantId = tenantId;
-      
+
       const existingByTaxCode = await prisma.person.findFirst({
         where: whereClause
       });
@@ -346,19 +348,25 @@ class PersonImportService {
         duplicateInfo.push('codice fiscale');
       }
     }
-    
+
+    // P48: Check email in PersonTenantProfile
     if (personData.email) {
-      const whereClause = { email: personData.email.toLowerCase().trim(), deletedAt: null };
-      if (tenantId) whereClause.tenantId = tenantId;
-      
-      const existingByEmail = await prisma.person.findFirst({
-        where: whereClause
+      const normalizedEmail = personData.email.toLowerCase().trim();
+      const emailWhereClause = {
+        email: normalizedEmail,
+        deletedAt: null,
+        isActive: true
+      };
+      if (tenantId) emailWhereClause.tenantId = tenantId;
+
+      const existingProfile = await prisma.personTenantProfile.findFirst({
+        where: emailWhereClause
       });
-      if (existingByEmail) {
+      if (existingProfile) {
         duplicateInfo.push('email');
       }
     }
-    
+
     return duplicateInfo;
   }
 
@@ -384,7 +392,7 @@ class PersonImportService {
       if (validStatuses.includes(upperStatusValue)) {
         prepared.status = upperStatusValue;
       } else {
-        console.warn(`Valore status non valido: ${prepared.status}, impostato su ACTIVE`);
+        logger.warn(`Valore status non valido: ${prepared.status}, impostato su ACTIVE`);
         prepared.status = 'ACTIVE';
       }
     }
@@ -398,7 +406,7 @@ class PersonImportService {
         parsedDate.setUTCHours(0, 0, 0, 0);
         prepared.birthDate = parsedDate.toISOString(); // Formato ISO-8601 completo
       } else {
-        console.warn(`Data di nascita non valida: ${prepared.birthDate}, rimossa`);
+        logger.warn(`Data di nascita non valida: ${prepared.birthDate}, rimossa`);
         delete prepared.birthDate;
       }
     } else if (prepared.taxCode) {
@@ -412,7 +420,7 @@ class PersonImportService {
         }
       } catch (error) {
         // Ignora errori di estrazione data
-        console.warn(`Errore nell'estrazione data dal codice fiscale ${prepared.taxCode}:`, error.message);
+        logger.warn(`Errore nell'estrazione data dal codice fiscale ${prepared.taxCode}:`, error.message);
       }
     }
 
@@ -421,9 +429,10 @@ class PersonImportService {
       prepared.username = await this.generateUniqueUsername(prepared.firstName, prepared.lastName);
     }
 
-    // Imposta password di default se non fornita
+    // Imposta password sicura se non fornita
     if (!prepared.password) {
-      prepared.password = 'Password123!';
+      // Security: Generate secure random password instead of hardcoded
+      prepared.password = `Imp${crypto.randomBytes(10).toString('base64url')}!`;
     }
 
     return prepared;
@@ -442,16 +451,16 @@ class PersonImportService {
       if (tenantId) {
         whereClause.tenantId = tenantId;
       }
-      
+
       const company = await prisma.company.findFirst({
         where: whereClause
       });
-      
+
       if (company) {
-        console.log(`✅ Azienda trovata per ID: ${companyName} -> ${company.ragioneSociale} (${company.id})`);
+        logger.info(`Azienda trovata per ID: ${companyName} -> ${company.ragioneSociale} (${company.id})`);
         return company.id;
       } else {
-        console.warn(`❌ Azienda con ID ${companyName} non trovata nel tenant ${tenantId}`);
+        logger.warn(`❌ Azienda con ID ${companyName} non trovata nel tenant ${tenantId}`);
         return defaultCompanyId;
       }
     }
@@ -481,11 +490,11 @@ class PersonImportService {
     }
 
     if (company) {
-      console.log(`✅ Azienda trovata per nome: ${companyName} -> ${company.ragioneSociale} (${company.id})`);
+      logger.info(`Azienda trovata per nome: ${companyName} -> ${company.ragioneSociale} (${company.id})`);
       return company.id;
     }
 
-    console.warn(`❌ Azienda non trovata: ${companyName} nel tenant ${tenantId}`);
+    logger.warn(`❌ Azienda non trovata: ${companyName} nel tenant ${tenantId}`);
     return defaultCompanyId; // Usa defaultCompanyId come fallback
   }
 
@@ -499,45 +508,65 @@ class PersonImportService {
 
   /**
    * Aggiorna una persona esistente
+   * P48: separa campi Person (globali) da PersonTenantProfile (tenant-specifici)
    */
-  async updateExistingPerson(personId, personData) {
-    // Rimuovi campi che non devono essere aggiornati
-    const updateData = { ...personData };
-    delete updateData.username; // Non aggiornare username
-    delete updateData.password; // Non aggiornare password
-    delete updateData.companyName;
-    delete updateData.roleType;
+  async updateExistingPerson(personId, personData, tenantId) {
+    // Campi validi su Person (globali/immutabili)
+    const PERSON_FIELDS = new Set([
+      'firstName', 'lastName', 'taxCode', 'vatNumber',
+      'birthDate', 'birthPlace', 'birthProvince', 'gender',
+      'profileImage', 'gdprConsentDate', 'gdprConsentVersion'
+    ]);
+    // Campi validi su PersonTenantProfile (tenant-specifici)
+    const PROFILE_FIELDS = new Set([
+      'email', 'phone', 'status', 'isActive',
+      'residenceAddress', 'residenceCity', 'province', 'postalCode',
+      'title', 'hiredDate', 'hourlyRate', 'iban',
+      'registerCode', 'registerCode2', 'specialties', 'certifications',
+      'notes', 'shortDescription', 'fullDescription'
+    ]);
 
-    await prisma.person.update({
-      where: { id: personId },
-      data: updateData
-    });
-  }
+    const personUpdateData = {};
+    const profileUpdateData = {};
 
-  /**
-   * Genera un username unico
-   */
-  async generateUniqueUsername(firstName, lastName) {
-    const baseUsername = `${firstName.toLowerCase()}.${lastName.toLowerCase()}`.replace(/[^a-z.]/g, '');
-    let username = baseUsername;
-    let counter = 1;
-
-    while (await this.usernameExists(username)) {
-      username = `${baseUsername}${counter}`;
-      counter++;
+    for (const [key, value] of Object.entries(personData)) {
+      if (PERSON_FIELDS.has(key)) {
+        personUpdateData[key] = value;
+      } else if (PROFILE_FIELDS.has(key)) {
+        profileUpdateData[key] = value;
+      }
+      // Ignora tutti gli altri campi (username, password, companyName, roleType, _companyId, ecc.)
     }
 
-    return username;
+    if (Object.keys(personUpdateData).length > 0) {
+      await prisma.person.update({
+        where: { id: personId },
+        data: personUpdateData
+      });
+    }
+
+    // P48: Aggiorna PersonTenantProfile per dati tenant-specifici
+    if (Object.keys(profileUpdateData).length > 0 && tenantId) {
+      await prisma.personTenantProfile.updateMany({
+        where: { personId, tenantId, deletedAt: null },
+        data: profileUpdateData
+      });
+    }
   }
 
   /**
-   * Verifica se un username esiste già
+   * Genera un username unico.
+   * F317: Delegato a PersonUtils.generateUniqueUsername per consistenza e correctness
+   * (MAX_BASE 47 chars, suffix logic, deletedAt:null su username check)
    */
-  async usernameExists(username) {
-    const existing = await prisma.person.findFirst({
-      where: { username, deletedAt: null }
-    });
-    return !!existing;
+  async generateUniqueUsername(firstName, lastName) {
+    const checkExistence = async (username) => {
+      const existing = await prisma.person.findFirst({
+        where: { username, deletedAt: null }
+      });
+      return !!existing;
+    };
+    return await PersonUtils.generateUniqueUsername(firstName, lastName, checkExistence);
   }
 
   /**
@@ -567,7 +596,7 @@ class PersonImportService {
     const currentYear = new Date().getFullYear();
     const currentCentury = Math.floor(currentYear / 100) * 100;
     let year = parseInt(yearPart);
-    
+
     if (year <= 30) {
       year += currentCentury;
     } else {
@@ -604,7 +633,7 @@ class PersonImportService {
    */
   parseDate(dateString) {
     if (!dateString) return null;
-    
+
     // Prova vari formati
     const formats = [
       /^(\d{4})-(\d{2})-(\d{2})$/, // YYYY-MM-DD
@@ -627,7 +656,7 @@ class PersonImportService {
           month = parseInt(match[2]) - 1; // JavaScript months are 0-based
           day = parseInt(match[1]);
         }
-        
+
         // Usa UTC per evitare problemi di fuso orario
         return new Date(Date.UTC(year, month, day));
       }
@@ -639,7 +668,7 @@ class PersonImportService {
       // Converte in UTC per consistenza
       return new Date(Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()));
     }
-    
+
     return null;
   }
 }

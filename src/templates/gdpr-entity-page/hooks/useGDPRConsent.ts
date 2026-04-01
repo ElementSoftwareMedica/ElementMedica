@@ -115,9 +115,8 @@ export function useGDPRConsent({
         lastCheck: new Date()
       }));
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error.name !== 'AbortError') {
-        console.error('Errore nel caricamento consensi:', error);
         setState(prev => ({
           ...prev,
           loading: false,
@@ -216,7 +215,6 @@ export function useGDPRConsent({
       await loadConsents();
       
     } catch (error) {
-      console.error('Errore nella richiesta consenso:', error);
       setState(prev => ({
         ...prev,
         loading: false,
@@ -246,7 +244,6 @@ export function useGDPRConsent({
       await loadConsents();
       
     } catch (error) {
-      console.error('Errore nella revoca consenso:', error);
       setState(prev => ({
         ...prev,
         loading: false,

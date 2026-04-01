@@ -50,7 +50,6 @@ export const useUserPreferences = (): UseUserPreferencesReturn => {
       await contextUpdatePreferences(updates);
       // Toast handled by calling component
     } catch (error) {
-      console.error('Error updating preferences:', error);
       // Toast handled by calling component
       throw error;
     }
@@ -64,7 +63,6 @@ export const useUserPreferences = (): UseUserPreferencesReturn => {
       await contextResetPreferences();
       // Toast handled by calling component
     } catch (error) {
-      console.error('Error resetting preferences:', error);
       // Toast handled by calling component
       throw error;
     }
@@ -75,7 +73,6 @@ export const useUserPreferences = (): UseUserPreferencesReturn => {
    */
   const exportPreferences = useCallback(() => {
     if (!preferences) {
-      console.error('Nessuna preferenza da esportare');
       return;
     }
 
@@ -92,7 +89,6 @@ export const useUserPreferences = (): UseUserPreferencesReturn => {
       
       // Toast handled by calling component
     } catch (error) {
-      console.error('Error exporting preferences:', error);
       // Toast handled by calling component
     }
   }, [preferences]);
@@ -140,7 +136,6 @@ export const useUserPreferences = (): UseUserPreferencesReturn => {
       await contextUpdatePreferences(updates);
       // Toast handled by calling component
     } catch (error) {
-      console.error('Error importing preferences:', error);
       // Toast handled by calling component
       throw error;
     }

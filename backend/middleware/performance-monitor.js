@@ -38,11 +38,11 @@ class PerformanceMetrics {
         peak: 0
       }
     };
-    
+
     // Start memory monitoring
     this.startMemoryMonitoring();
   }
-  
+
   // Record API request metrics
   recordRequest(duration, success = true) {
     this.metrics.requests.total++;
@@ -51,17 +51,17 @@ class PerformanceMetrics {
     } else {
       this.metrics.requests.errors++;
     }
-    
+
     this.metrics.requests.responseTimes.push(duration);
-    
+
     // Keep only last 1000 response times
     if (this.metrics.requests.responseTimes.length > 1000) {
       this.metrics.requests.responseTimes.shift();
     }
-    
+
     // Record in cache for persistence
     cacheService.recordMetric('api_response_time', duration);
-    
+
     // Log slow requests
     if (duration > 2000) {
       logger.warn('Slow API request detected', {
@@ -70,17 +70,17 @@ class PerformanceMetrics {
       });
     }
   }
-  
+
   // Record database query metrics
   recordDatabaseQuery(duration, query = '') {
     this.metrics.database.queries++;
     this.metrics.database.queryTimes.push(duration);
-    
+
     // Keep only last 1000 query times
     if (this.metrics.database.queryTimes.length > 1000) {
       this.metrics.database.queryTimes.shift();
     }
-    
+
     // Track slow queries
     if (duration > 1000) {
       this.metrics.database.slowQueries++;
@@ -90,11 +90,11 @@ class PerformanceMetrics {
         threshold: '1000ms'
       });
     }
-    
+
     // Record in cache for persistence
     cacheService.recordMetric('db_query_time', duration);
   }
-  
+
   // Record cache metrics
   recordCacheOperation(type, hit = false) {
     this.metrics.cache.operations++;
@@ -103,17 +103,17 @@ class PerformanceMetrics {
     } else {
       this.metrics.cache.misses++;
     }
-    
+
     // Record in cache for persistence
     cacheService.recordMetric('cache_hit_rate', hit ? 1 : 0);
   }
-  
+
   // Start memory monitoring
   startMemoryMonitoring() {
     setInterval(() => {
       const memUsage = process.memoryUsage();
       const heapUsed = memUsage.heapUsed / 1024 / 1024; // MB
-      
+
       this.metrics.memory.usage.push({
         timestamp: Date.now(),
         heapUsed,
@@ -121,20 +121,20 @@ class PerformanceMetrics {
         external: memUsage.external / 1024 / 1024,
         rss: memUsage.rss / 1024 / 1024
       });
-      
+
       // Update peak memory usage
       if (heapUsed > this.metrics.memory.peak) {
         this.metrics.memory.peak = heapUsed;
       }
-      
+
       // Keep only last 100 memory readings
       if (this.metrics.memory.usage.length > 100) {
         this.metrics.memory.usage.shift();
       }
-      
+
       // Record in cache for persistence
       cacheService.recordMetric('memory_usage', heapUsed);
-      
+
       // Alert on high memory usage
       if (heapUsed > 500) { // 500MB threshold
         logger.warn('High memory usage detected', {
@@ -144,40 +144,40 @@ class PerformanceMetrics {
       }
     }, 30000); // Every 30 seconds
   }
-  
+
   // Get performance summary
   getSummary() {
     const now = Date.now();
     const responseTimes = this.metrics.requests.responseTimes;
     const queryTimes = this.metrics.database.queryTimes;
-    
+
     // Calculate averages
-    const avgResponseTime = responseTimes.length > 0 
-      ? responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length 
+    const avgResponseTime = responseTimes.length > 0
+      ? responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length
       : 0;
-      
+
     const avgQueryTime = queryTimes.length > 0
       ? queryTimes.reduce((a, b) => a + b, 0) / queryTimes.length
       : 0;
-    
+
     // Calculate percentiles
     const sortedResponseTimes = [...responseTimes].sort((a, b) => a - b);
     const p95ResponseTime = sortedResponseTimes[Math.floor(sortedResponseTimes.length * 0.95)] || 0;
     const p99ResponseTime = sortedResponseTimes[Math.floor(sortedResponseTimes.length * 0.99)] || 0;
-    
+
     // Calculate cache hit rate
     const cacheHitRate = this.metrics.cache.operations > 0
       ? (this.metrics.cache.hits / this.metrics.cache.operations * 100).toFixed(2)
       : 0;
-    
+
     // Calculate error rate
     const errorRate = this.metrics.requests.total > 0
       ? (this.metrics.requests.errors / this.metrics.requests.total * 100).toFixed(2)
       : 0;
-    
+
     // Get current memory usage
     const currentMemory = this.metrics.memory.usage[this.metrics.memory.usage.length - 1] || {};
-    
+
     return {
       timestamp: now,
       requests: {
@@ -193,7 +193,7 @@ class PerformanceMetrics {
         totalQueries: this.metrics.database.queries,
         slowQueries: this.metrics.database.slowQueries,
         avgQueryTime: `${avgQueryTime.toFixed(2)}ms`,
-        slowQueryRate: this.metrics.database.queries > 0 
+        slowQueryRate: this.metrics.database.queries > 0
           ? `${(this.metrics.database.slowQueries / this.metrics.database.queries * 100).toFixed(2)}%`
           : '0%'
       },
@@ -210,7 +210,7 @@ class PerformanceMetrics {
       }
     };
   }
-  
+
   // Reset metrics
   reset() {
     this.metrics = {
@@ -244,16 +244,16 @@ const performanceMetrics = new PerformanceMetrics();
 // Express middleware for request performance monitoring
 const requestPerformanceMiddleware = (req, res, next) => {
   const startTime = Date.now();
-  
+
   // Override res.end to capture response time
   const originalEnd = res.end;
-  res.end = function(...args) {
+  res.end = function (...args) {
     const duration = Date.now() - startTime;
     const success = res.statusCode < 400;
-    
+
     // Record metrics
     performanceMetrics.recordRequest(duration, success);
-    
+
     // Log request details
     logger.info('Request completed', {
       method: req.method,
@@ -263,11 +263,11 @@ const requestPerformanceMiddleware = (req, res, next) => {
       userAgent: req.get('User-Agent'),
       ip: req.ip
     });
-    
+
     // Call original end
     originalEnd.apply(this, args);
   };
-  
+
   next();
 };
 
@@ -275,21 +275,21 @@ const requestPerformanceMiddleware = (req, res, next) => {
 const databasePerformanceMiddleware = {
   query: async (params, next) => {
     const startTime = Date.now();
-    
+
     try {
       const result = await next(params);
       const duration = Date.now() - startTime;
-      
+
       // Record metrics
       performanceMetrics.recordDatabaseQuery(duration, `${params.model}.${params.action}`);
-      
+
       return result;
     } catch (error) {
       const duration = Date.now() - startTime;
-      
+
       // Record failed query
       performanceMetrics.recordDatabaseQuery(duration, `${params.model}.${params.action} (ERROR)`);
-      
+
       // Log error
       logger.error('Database query failed', {
         model: params.model,
@@ -297,7 +297,7 @@ const databasePerformanceMiddleware = {
         duration: `${duration}ms`,
         error: error.message
       });
-      
+
       throw error;
     }
   }
@@ -313,7 +313,7 @@ const getPerformanceDashboard = async (req, res) => {
   try {
     const summary = performanceMetrics.getSummary();
     const cacheStatus = await cacheService.healthCheck();
-    
+
     const dashboard = {
       ...summary,
       cache: {
@@ -324,18 +324,18 @@ const getPerformanceDashboard = async (req, res) => {
       nodeVersion: process.version,
       platform: process.platform
     };
-    
+
     res.json(dashboard);
   } catch (error) {
     logger.error('Failed to generate performance dashboard', { error: error.message });
-    res.status(500).json({ error: 'Failed to generate performance dashboard' });
+    res.status(500).json({ error: 'Errore nella generazione del dashboard di performance' });
   }
 };
 
 // Performance alerts
 const checkPerformanceAlerts = () => {
   const summary = performanceMetrics.getSummary();
-  
+
   // Check error rate
   const errorRate = parseFloat(summary.requests.errorRate);
   if (errorRate > 5) { // 5% threshold
@@ -344,7 +344,7 @@ const checkPerformanceAlerts = () => {
       threshold: '5%'
     });
   }
-  
+
   // Check response time
   const avgResponseTime = parseFloat(summary.requests.avgResponseTime);
   if (avgResponseTime > 1000) { // 1 second threshold
@@ -353,7 +353,7 @@ const checkPerformanceAlerts = () => {
       threshold: '1000ms'
     });
   }
-  
+
   // Check cache hit rate
   const cacheHitRate = parseFloat(summary.cache.hitRate);
   if (cacheHitRate < 70 && summary.cache.operations > 100) { // 70% threshold with minimum operations
@@ -369,13 +369,13 @@ const checkPerformanceAlerts = () => {
 const startPerformanceMonitoring = () => {
   // Check alerts every 5 minutes
   setInterval(checkPerformanceAlerts, 5 * 60 * 1000);
-  
+
   // Log performance summary every 10 minutes
   setInterval(() => {
     const summary = performanceMetrics.getSummary();
     logger.info('Performance summary', summary);
   }, 10 * 60 * 1000);
-  
+
   logger.info('Performance monitoring started');
 };
 

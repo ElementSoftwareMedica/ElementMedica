@@ -20,16 +20,14 @@ import {
     Trash2,
     Eye,
     CheckCircle,
-    XCircle
+    XCircle,
 } from 'lucide-react';
 import { poliambulatoriApi } from '../../../services/clinicaApi';
 import type { Poliambulatorio } from '../../../services/clinicaApi';
 import { useToast } from '../../../hooks/useToast';
-import { useAuth } from '../../../context/AuthContext';
+import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
 import { useTenantFilter } from '../../../context/TenantFilterContext';
-import ActionMenu, { createCrudActions } from '../../../components/clinica/ActionMenu';
-import ViewModeToggle from '../../../components/clinica/ViewModeToggle';
-import { useViewMode, type ViewMode } from '../../../hooks/useViewMode';
+import { CRUDButton } from '../../../components/shared/CRUDButton';
 
 // Import Element Medica theme
 import '../../../styles/clinica-theme.css';
@@ -46,16 +44,7 @@ const PoliambulatoriPage: React.FC = () => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const { showToast } = useToast();
-    const { user } = useAuth();
-
-    // Tenant filter from global context
-    const { selectedTenantIds, hasMultipleTenants, getTenantFilterParams, isReady, tenantFilterKey } = useTenantFilter();
-
-    // Check if user is admin
-    const isAdmin = user?.role === 'Admin' ||
-        user?.globalRole === 'ADMIN' ||
-        user?.globalRole === 'SUPER_ADMIN' ||
-        user?.role === 'admin';
+    const { confirmDelete } = useConfirmDialog();
 
     // State
     const [searchTerm, setSearchTerm] = useState('');
@@ -66,51 +55,26 @@ const PoliambulatoriPage: React.FC = () => {
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
     const [filterActive, setFilterActive] = useState<'all' | 'active' | 'inactive'>('all');
 
-    // View mode with localStorage persistence
-    const { viewMode, setViewMode } = useViewMode({ storageKey: 'poliambulatori' });
+    // TenantFilter per refresh automatico quando cambiano i tenant selezionati
+    const { getTenantFilterParams, tenantFilterKey, isReady } = useTenantFilter();
 
-    // Query - uses tenant filter from global context
-    // Uses tenantFilterKey (stable string) instead of selectedTenantIds array to avoid re-renders
+    // Query - include tenantFilterKey per refresh automatico quando cambiano i tenant
     const { data, isLoading, error } = useQuery({
-        queryKey: ['poliambulatori', {
-            page: currentPage,
-            limit: pageSize,
-            search: searchTerm,
-            sortBy,
-            sortOrder,
-            stato: filterActive,
-            tenantFilter: tenantFilterKey // Stable string key
-        }],
+        queryKey: ['poliambulatori', tenantFilterKey, { page: currentPage, limit: pageSize, search: searchTerm, sortBy, sortOrder, stato: filterActive }],
         queryFn: async () => {
-            // Get fresh tenant params inside queryFn to avoid stale closure
-            const currentTenantParams = getTenantFilterParams();
-            console.log('[PoliambulatoriPage] Fetching data with tenant filter:', {
-                selectedTenantIds,
-                hasMultipleTenants,
-                tenantParams: currentTenantParams,
-                tenantFilterKey
-            });
-            const result = await poliambulatoriApi.getAll({
+            const tenantParams = getTenantFilterParams();
+            return poliambulatoriApi.getAll({
                 page: currentPage,
                 limit: pageSize,
                 search: searchTerm,
                 sortBy,
                 sortOrder,
                 ...(filterActive !== 'all' && { stato: filterActive === 'active' ? 'ATTIVO' : 'INATTIVO' }),
-                // Use tenant filter from global context
-                ...(currentTenantParams.tenantIds && { tenantIds: currentTenantParams.tenantIds.join(',') }),
-                ...(currentTenantParams.allTenants && { allTenants: 'true' })
+                ...(tenantParams.tenantIds && { tenantIds: tenantParams.tenantIds.join(',') }),
+                ...(tenantParams.allTenants && { allTenants: 'true' })
             });
-            console.log('[PoliambulatoriPage] API result:', {
-                hasResult: !!result,
-                hasData: !!result?.data,
-                dataLength: result?.data?.length,
-                pagination: result?.pagination
-            });
-            return result;
         },
-        // Only enable query when tenant filter is ready
-        enabled: isReady
+        enabled: isReady, // Aspetta che TenantFilter sia pronto
     });
 
     // Mutations
@@ -138,11 +102,11 @@ const PoliambulatoriPage: React.FC = () => {
         navigate(`/poliambulatorio/poliambulatori/${id}`);
     }, [navigate]);
 
-    const handleDelete = useCallback((id: string) => {
-        if (confirm('Sei sicuro di voler eliminare questo poliambulatorio?')) {
+    const handleDelete = useCallback(async (id: string) => {
+        if (await confirmDelete('questo poliambulatorio')) {
             deleteMutation.mutate(id);
         }
-    }, [deleteMutation]);
+    }, [deleteMutation, confirmDelete]);
 
     const handleSort = useCallback((key: string) => {
         if (sortBy === key) {
@@ -277,13 +241,14 @@ const PoliambulatoriPage: React.FC = () => {
                     <h1 className="text-2xl font-bold text-gray-900">Poliambulatori</h1>
                     <p className="text-gray-500 mt-1">Gestione delle strutture sanitarie</p>
                 </div>
-                <div className="flex items-center gap-3">
-                    <ViewModeToggle viewMode={viewMode} onViewModeChange={setViewMode} />
-                    <button onClick={handleCreate} className="btn-clinica-primary inline-flex items-center gap-2">
-                        <Plus className="h-4 w-4" />
-                        Nuovo Poliambulatorio
-                    </button>
-                </div>
+                <CRUDButton
+                    operation="create"
+                    onClick={handleCreate}
+                    className="btn-clinica-primary inline-flex items-center gap-2"
+                >
+                    <Plus className="h-4 w-4" />
+                    Nuovo Poliambulatorio
+                </CRUDButton>
             </div>
 
             {/* Filters */}
@@ -311,96 +276,26 @@ const PoliambulatoriPage: React.FC = () => {
                             <option value="inactive">Solo inattivi</option>
                         </select>
                     </div>
-                    {/* Note: Tenant filter is now managed globally via TenantSelector in header */}
+                    {/* Nota: Il filtro tenant è ora gestito dal TenantModeSelector nel header */}
                 </div>
             </div>
 
-            {/* Content */}
-            {isLoading ? (
-                <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-teal-600 border-t-transparent mx-auto"></div>
-                    <p className="text-gray-500 mt-2">Caricamento...</p>
-                </div>
-            ) : poliambulatori.length === 0 ? (
-                <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-                    <Building2 className="h-12 w-12 mx-auto text-gray-300 mb-3" />
-                    <p className="text-gray-500">Nessun poliambulatorio trovato</p>
-                    <button onClick={handleCreate} className="btn-clinica-primary mt-4">
-                        Crea il primo poliambulatorio
-                    </button>
-                </div>
-            ) : viewMode === 'grid' ? (
-                /* Grid View */
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                    {poliambulatori.map((item: Poliambulatorio) => {
-                        const isActive = item.stato === 'ATTIVO';
-                        const isSuspended = item.stato === 'SOSPESO';
-                        return (
-                            <div
-                                key={item.id}
-                                onClick={() => handleView(item.id)}
-                                className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-lg hover:border-teal-300 transition-all cursor-pointer group"
-                            >
-                                <div className="flex items-start justify-between mb-4">
-                                    <div className="p-2.5 rounded-lg bg-teal-50 group-hover:bg-teal-100 transition-colors">
-                                        <Building2 className="h-6 w-6 text-teal-600" />
-                                    </div>
-                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${isActive ? 'bg-emerald-100 text-emerald-700' :
-                                            isSuspended ? 'bg-amber-100 text-amber-700' :
-                                                'bg-gray-100 text-gray-600'
-                                        }`}>
-                                        {isActive ? <CheckCircle className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
-                                        {isActive ? 'Attivo' : isSuspended ? 'Sospeso' : 'Inattivo'}
-                                    </span>
-                                </div>
-
-                                <h3 className="font-semibold text-gray-900 mb-1 group-hover:text-teal-700 transition-colors">
-                                    {item.nome}
-                                </h3>
-                                {item.codice && (
-                                    <p className="text-xs text-gray-500 mb-3">{item.codice}</p>
-                                )}
-
-                                <div className="space-y-2 text-sm text-gray-600 mb-4">
-                                    {item.indirizzo && (
-                                        <div className="flex items-center gap-2">
-                                            <MapPin className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
-                                            <span className="truncate">
-                                                {item.indirizzo}{item.citta && `, ${item.citta}`}
-                                            </span>
-                                        </div>
-                                    )}
-                                    {item.telefono && (
-                                        <div className="flex items-center gap-2">
-                                            <Phone className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
-                                            <span>{item.telefono}</span>
-                                        </div>
-                                    )}
-                                    {item.email && (
-                                        <div className="flex items-center gap-2">
-                                            <Mail className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
-                                            <span className="truncate">{item.email}</span>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="pt-3 border-t border-gray-100" onClick={(e) => e.stopPropagation()}>
-                                    <ActionMenu
-                                        actions={createCrudActions(
-                                            () => handleView(item.id),
-                                            () => handleEdit(item.id),
-                                            () => handleDelete(item.id)
-                                        )}
-                                        size="sm"
-                                    />
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            ) : (
-                /* List View */
-                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            {/* Table */}
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                {isLoading ? (
+                    <div className="p-8 text-center">
+                        <div className="animate-spin rounded-full h-8 w-8 border-2 border-teal-600 border-t-transparent mx-auto"></div>
+                        <p className="text-gray-500 mt-2">Caricamento...</p>
+                    </div>
+                ) : poliambulatori.length === 0 ? (
+                    <div className="p-8 text-center">
+                        <Building2 className="h-12 w-12 mx-auto text-gray-300 mb-3" />
+                        <p className="text-gray-500">Nessun poliambulatorio trovato</p>
+                        <CRUDButton operation="create" onClick={handleCreate} className="btn-clinica-primary mt-4">
+                            Crea il primo poliambulatorio
+                        </CRUDButton>
+                    </div>
+                ) : (
                     <table className="table-clinica">
                         <thead>
                             <tr>
@@ -431,12 +326,8 @@ const PoliambulatoriPage: React.FC = () => {
                         </thead>
                         <tbody>
                             {poliambulatori.map((item: Poliambulatorio) => (
-                                <tr
-                                    key={item.id}
-                                    className={`${selectedItems.has(item.id) ? 'bg-teal-50' : ''} hover:bg-gray-50 cursor-pointer transition-colors`}
-                                    onClick={() => handleView(item.id)}
-                                >
-                                    <td onClick={(e) => e.stopPropagation()}>
+                                <tr key={item.id} className={selectedItems.has(item.id) ? 'bg-teal-50' : ''}>
+                                    <td>
                                         <input
                                             type="checkbox"
                                             checked={selectedItems.has(item.id)}
@@ -452,50 +343,65 @@ const PoliambulatoriPage: React.FC = () => {
                                             }
                                         </td>
                                     ))}
-                                    <td onClick={(e) => e.stopPropagation()}>
-                                        <ActionMenu
-                                            actions={createCrudActions(
-                                                () => handleView(item.id),
-                                                () => handleEdit(item.id),
-                                                () => handleDelete(item.id)
-                                            )}
-                                            size="sm"
-                                        />
+                                    <td>
+                                        <div className="flex items-center gap-1">
+                                            <button
+                                                onClick={() => handleView(item.id)}
+                                                className="p-1.5 rounded hover:bg-gray-100 text-gray-500 hover:text-teal-600"
+                                                title="Visualizza"
+                                            >
+                                                <Eye className="h-4 w-4" />
+                                            </button>
+                                            <button
+                                                onClick={() => handleEdit(item.id)}
+                                                className="p-1.5 rounded hover:bg-gray-100 text-gray-500 hover:text-teal-600"
+                                                title="Modifica"
+                                            >
+                                                <Edit className="h-4 w-4" />
+                                            </button>
+                                            <button
+                                                onClick={() => handleDelete(item.id)}
+                                                className="p-1.5 rounded hover:bg-gray-100 text-gray-500 hover:text-red-600"
+                                                title="Elimina"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
                         </tbody>
                     </table>
-                </div>
-            )}
+                )}
 
-            {/* Pagination */}
-            {totalPages > 1 && (
-                <div className="bg-white rounded-xl border border-gray-200 flex items-center justify-between px-4 py-3">
-                    <div className="text-sm text-gray-500">
-                        Mostrando {((currentPage - 1) * pageSize) + 1} - {Math.min(currentPage * pageSize, totalItems)} di {totalItems}
+                {/* Pagination */}
+                {totalPages > 1 && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200">
+                        <div className="text-sm text-gray-500">
+                            Mostrando {((currentPage - 1) * pageSize) + 1} - {Math.min(currentPage * pageSize, totalItems)} di {totalItems}
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                disabled={currentPage === 1}
+                                className="px-3 py-1.5 rounded border border-gray-300 text-sm disabled:opacity-50"
+                            >
+                                Precedente
+                            </button>
+                            <span className="text-sm text-gray-600">
+                                Pagina {currentPage} di {totalPages}
+                            </span>
+                            <button
+                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                disabled={currentPage === totalPages}
+                                className="px-3 py-1.5 rounded border border-gray-300 text-sm disabled:opacity-50"
+                            >
+                                Successiva
+                            </button>
+                        </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                            disabled={currentPage === 1}
-                            className="px-3 py-1.5 rounded border border-gray-300 text-sm disabled:opacity-50"
-                        >
-                            Precedente
-                        </button>
-                        <span className="text-sm text-gray-600">
-                            Pagina {currentPage} di {totalPages}
-                        </span>
-                        <button
-                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                            disabled={currentPage === totalPages}
-                            className="px-3 py-1.5 rounded border border-gray-300 text-sm disabled:opacity-50"
-                        >
-                            Successiva
-                        </button>
-                    </div>
-                </div>
-            )}
+                )}
+            </div>
         </div>
     );
 };

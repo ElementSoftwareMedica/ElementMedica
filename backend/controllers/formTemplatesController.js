@@ -1,9 +1,9 @@
 import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/prisma-optimization.js';
 import crypto from 'crypto';
 import logger from '../utils/logger.js';
+import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 
-const prisma = new PrismaClient();
 
 // Schema di validazione per form template
 const formTemplateSchema = z.object({
@@ -45,7 +45,7 @@ const formFieldSchema = z.object({
  */
 const getFormTemplates = async (req, res) => {
   try {
-    const { tenantId } = req.person;
+    const tenantId = getEffectiveTenantId(req);
     const { type, isActive, page = 1, limit = 20 } = req.query;
 
     const where = {
@@ -115,13 +115,13 @@ const getFormTemplates = async (req, res) => {
     logger.error('Failed to retrieve form templates list', {
       component: 'formTemplatesController',
       action: 'getFormTemplates',
-      error: error.message,
+      error: 'Errore interno del server',
       stack: error.stack
     });
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
-      error: error.message
+      error: 'Errore interno del server'
     });
   }
 };
@@ -133,7 +133,7 @@ const getFormTemplates = async (req, res) => {
 const getFormTemplate = async (req, res) => {
   try {
     const { id } = req.params;
-    const { tenantId } = req.person;
+    const tenantId = getEffectiveTenantId(req);
 
     const template = await prisma.formTemplate.findFirst({
       where: {
@@ -168,13 +168,13 @@ const getFormTemplate = async (req, res) => {
       component: 'formTemplatesController',
       action: 'getTemplate',
       templateId: req.params.id,
-      error: error.message,
+      error: 'Errore interno del server',
       stack: error.stack
     });
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
-      error: error.message
+      error: 'Errore interno del server'
     });
   }
 };
@@ -185,7 +185,8 @@ const getFormTemplate = async (req, res) => {
  */
 const createFormTemplate = async (req, res) => {
   try {
-    const { tenantId, id: userId } = req.person;
+    const tenantId = getEffectiveTenantId(req);
+    const { id: userId } = req.person;
 
     // Validazione dati
     const validatedData = formTemplateSchema.parse(req.body);
@@ -251,8 +252,8 @@ const createFormTemplate = async (req, res) => {
     });
 
     // Recupera template completo
-    const completeTemplate = await prisma.formTemplate.findUnique({
-      where: { id: result.id },
+    const completeTemplate = await prisma.formTemplate.findFirst({
+      where: { id: result.id, tenantId, deletedAt: null },
       include: {
         formFields: {
           where: { isActive: true },
@@ -281,13 +282,13 @@ const createFormTemplate = async (req, res) => {
     logger.error('Failed to create form template', {
       component: 'formTemplatesController',
       action: 'createTemplate',
-      error: error.message,
+      error: 'Errore interno del server',
       stack: error.stack
     });
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
-      error: error.message
+      error: 'Errore interno del server'
     });
   }
 };
@@ -299,7 +300,7 @@ const createFormTemplate = async (req, res) => {
 const updateFormTemplate = async (req, res) => {
   try {
     const { id } = req.params;
-    const { tenantId } = req.person;
+    const tenantId = getEffectiveTenantId(req);
 
     // Validazione dati
     const validatedData = formTemplateSchema.partial().parse(req.body);
@@ -379,8 +380,8 @@ const updateFormTemplate = async (req, res) => {
     });
 
     // Recupera template completo
-    const completeTemplate = await prisma.formTemplate.findUnique({
-      where: { id },
+    const completeTemplate = await prisma.formTemplate.findFirst({
+      where: { id, tenantId, deletedAt: null },
       include: {
         formFields: {
           where: { isActive: true },
@@ -410,13 +411,13 @@ const updateFormTemplate = async (req, res) => {
       component: 'formTemplatesController',
       action: 'updateTemplate',
       templateId: req.params.id,
-      error: error.message,
+      error: 'Errore interno del server',
       stack: error.stack
     });
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
-      error: error.message
+      error: 'Errore interno del server'
     });
   }
 };
@@ -428,7 +429,7 @@ const updateFormTemplate = async (req, res) => {
 const deleteFormTemplate = async (req, res) => {
   try {
     const { id } = req.params;
-    const { tenantId } = req.person;
+    const tenantId = getEffectiveTenantId(req);
 
     // Verifica esistenza template
     const template = await prisma.formTemplate.findFirst({
@@ -464,13 +465,13 @@ const deleteFormTemplate = async (req, res) => {
       component: 'formTemplatesController',
       action: 'deleteTemplate',
       templateId: req.params.id,
-      error: error.message,
+      error: 'Errore interno del server',
       stack: error.stack
     });
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
-      error: error.message
+      error: 'Errore interno del server'
     });
   }
 };
@@ -482,7 +483,8 @@ const deleteFormTemplate = async (req, res) => {
 const duplicateFormTemplate = async (req, res) => {
   try {
     const { id } = req.params;
-    const { tenantId, id: userId } = req.person;
+    const tenantId = getEffectiveTenantId(req);
+    const { id: userId } = req.person;
     const { name } = req.body;
 
     if (!name) {
@@ -574,8 +576,8 @@ const duplicateFormTemplate = async (req, res) => {
     });
 
     // Recupera template completo
-    const completeTemplate = await prisma.formTemplate.findUnique({
-      where: { id: result.id },
+    const completeTemplate = await prisma.formTemplate.findFirst({
+      where: { id: result.id, tenantId, deletedAt: null },
       include: {
         formFields: {
           where: { isActive: true },
@@ -597,13 +599,13 @@ const duplicateFormTemplate = async (req, res) => {
       component: 'formTemplatesController',
       action: 'duplicateTemplate',
       templateId: req.params.id,
-      error: error.message,
+      error: 'Errore interno del server',
       stack: error.stack
     });
     res.status(500).json({
       success: false,
       message: 'Errore interno del server',
-      error: error.message
+      error: 'Errore interno del server'
     });
   }
 };

@@ -4,10 +4,9 @@
  * Include logica per trovare test per riskLevel/courseType
  */
 
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/prisma-optimization.js';
 import logger from '../utils/logger.js';
 
-const prisma = new PrismaClient();
 
 /**
  * Ottiene tutte le associazioni test-corso per un tenant
@@ -108,7 +107,12 @@ export const getCourseTestAssignment = async (id, tenantId) => {
                                 id: true,
                                 firstName: true,
                                 lastName: true,
-                                email: true
+                                // P48: email su PersonTenantProfile
+                                tenantProfiles: {
+                                    where: { deletedAt: null, isActive: true },
+                                    take: 1,
+                                    select: { email: true }
+                                }
                             }
                         }
                     }
@@ -481,7 +485,12 @@ export const saveTestResult = async (data, tenantId) => {
                         id: true,
                         firstName: true,
                         lastName: true,
-                        email: true
+                        // P48: email su PersonTenantProfile
+                        tenantProfiles: {
+                            where: { deletedAt: null, isActive: true },
+                            take: 1,
+                            select: { email: true }
+                        }
                     }
                 },
                 assignment: {
@@ -539,7 +548,12 @@ export const getTestResultsForSchedule = async (scheduleId, tenantId) => {
                         id: true,
                         firstName: true,
                         lastName: true,
-                        email: true
+                        // P48: email su PersonTenantProfile
+                        tenantProfiles: {
+                            where: { deletedAt: null, isActive: true },
+                            take: 1,
+                            select: { email: true }
+                        }
                     }
                 },
                 assignment: {
@@ -559,9 +573,18 @@ export const getTestResultsForSchedule = async (scheduleId, tenantId) => {
                 }
             },
             orderBy: [
-                { assignment: { testType: 'asc' } },
-                { person: { lastName: 'asc' } }
+                { createdAt: 'asc' }
             ]
+        });
+
+        // Ordina in applicazione per testType (da assignment) e poi lastName (da person)
+        results.sort((a, b) => {
+            const testTypeA = a.assignment?.testType || '';
+            const testTypeB = b.assignment?.testType || '';
+            if (testTypeA !== testTypeB) return testTypeA.localeCompare(testTypeB);
+            const lastNameA = a.person?.lastName || '';
+            const lastNameB = b.person?.lastName || '';
+            return lastNameA.localeCompare(lastNameB);
         });
 
         return results;

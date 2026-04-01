@@ -54,7 +54,6 @@ class PerformanceMonitor {
       navObserver.observe({ entryTypes: ['navigation'] });
       this.observers.push(navObserver);
     } catch (error) {
-      console.warn('Navigation timing observer not supported:', error);
     }
 
     // Track paint timing
@@ -70,7 +69,6 @@ class PerformanceMonitor {
       paintObserver.observe({ entryTypes: ['paint'] });
       this.observers.push(paintObserver);
     } catch (error) {
-      console.warn('Paint timing observer not supported:', error);
     }
 
     // Track LCP
@@ -83,7 +81,6 @@ class PerformanceMonitor {
       lcpObserver.observe({ entryTypes: ['largest-contentful-paint'] });
       this.observers.push(lcpObserver);
     } catch (error) {
-      console.warn('LCP observer not supported:', error);
     }
 
     // Track CLS
@@ -102,7 +99,6 @@ class PerformanceMonitor {
       clsObserver.observe({ entryTypes: ['layout-shift'] });
       this.observers.push(clsObserver);
     } catch (error) {
-      console.warn('CLS observer not supported:', error);
     }
 
     // Track resource loading
@@ -121,7 +117,6 @@ class PerformanceMonitor {
       resourceObserver.observe({ entryTypes: ['resource'] });
       this.observers.push(resourceObserver);
     } catch (error) {
-      console.warn('Resource timing observer not supported:', error);
     }
   }
 
@@ -152,7 +147,6 @@ class PerformanceMonitor {
       this.metrics.routeLoadTimes?.set(route, loadTime);
       this.routeStartTimes.delete(route);
       
-      console.log(`📊 Route ${route} loaded in ${loadTime.toFixed(2)}ms`);
     }
   }
 
@@ -250,7 +244,6 @@ class PerformanceMonitor {
    * Log performance metrics to console
    */
   logMetrics() {
-    console.log(this.generateReport());
   }
 
   /**

@@ -2,9 +2,10 @@ const prisma = new PrismaClient();
 
 async function verifyRolePermissions() {
   console.log('🔍 Verifica permessi ruoli dopo correzione...\n');
-  
+
   try {
     // 1. Verifica PersonRole esistenti
+    // P48: Include tenantProfiles per email
     const personRoles = await prisma.personRole.findMany({
       where: {
         deletedAt: null,
@@ -12,17 +13,26 @@ async function verifyRolePermissions() {
       },
       include: {
         person: {
-          select: { email: true }
+          select: {
+            firstName: true,
+            lastName: true,
+            tenantProfiles: {
+              where: { deletedAt: null, isActive: true },
+              select: { email: true, isPrimary: true }
+            }
+          }
         }
       }
     });
-    
+
     console.log(`📋 PersonRole attivi: ${personRoles.length}`);
-    
+
     // 2. Per ogni PersonRole, mostra i permessi
     for (const personRole of personRoles) {
-      console.log(`\n👤 ${personRole.person.email} - ${personRole.roleType}:`);
-      
+      const profile = personRole.person?.tenantProfiles?.find(p => p.isPrimary) || personRole.person?.tenantProfiles?.[0] || {};
+      const email = profile.email || 'N/A';
+      console.log(`\n👤 ${email} - ${personRole.roleType}:`);
+
       const rolePermissions = await prisma.rolePermission.findMany({
         where: {
           personRoleId: personRole.id,
@@ -32,22 +42,22 @@ async function verifyRolePermissions() {
           permission: 'asc'
         }
       });
-      
+
       console.log(`  📝 Permessi totali: ${rolePermissions.length}`);
-      
+
       const grantedPermissions = rolePermissions.filter(rp => rp.isGranted);
       const deniedPermissions = rolePermissions.filter(rp => !rp.isGranted);
-      
+
       console.log(`  ✅ Permessi concessi: ${grantedPermissions.length}`);
       console.log(`  ❌ Permessi negati: ${deniedPermissions.length}`);
-      
+
       if (grantedPermissions.length > 0) {
         console.log('  📋 Permessi concessi:');
         grantedPermissions.forEach(rp => {
           console.log(`    - ${rp.permission}`);
         });
       }
-      
+
       if (deniedPermissions.length > 0) {
         console.log('  📋 Permessi negati:');
         deniedPermissions.forEach(rp => {
@@ -55,31 +65,31 @@ async function verifyRolePermissions() {
         });
       }
     }
-    
+
     // 3. Statistiche generali
     console.log('\n📊 Statistiche generali:');
     const totalRolePermissions = await prisma.rolePermission.count({
       where: { deletedAt: null }
     });
-    
+
     const grantedCount = await prisma.rolePermission.count({
-      where: { 
+      where: {
         deletedAt: null,
         isGranted: true
       }
     });
-    
+
     const deniedCount = await prisma.rolePermission.count({
-      where: { 
+      where: {
         deletedAt: null,
         isGranted: false
       }
     });
-    
+
     console.log(`  📝 Totale RolePermission: ${totalRolePermissions}`);
     console.log(`  ✅ Permessi concessi: ${grantedCount}`);
     console.log(`  ❌ Permessi negati: ${deniedCount}`);
-    
+
     // 4. Test query per SUPER_ADMIN (come nel debug originale)
     console.log('\n🧪 Test query SUPER_ADMIN:');
     const superAdminRole = await prisma.personRole.findFirst({
@@ -89,7 +99,7 @@ async function verifyRolePermissions() {
         deletedAt: null
       }
     });
-    
+
     if (superAdminRole) {
       const superAdminPermissions = await prisma.rolePermission.findMany({
         where: {
@@ -98,12 +108,12 @@ async function verifyRolePermissions() {
           deletedAt: null
         }
       });
-      
+
       console.log(`  ✅ SUPER_ADMIN trovato con ${superAdminPermissions.length} permessi concessi`);
     } else {
       console.log('  ❌ Nessun SUPER_ADMIN trovato');
     }
-    
+
   } catch (error) {
     console.error('❌ Errore durante la verifica:', error);
     throw error;

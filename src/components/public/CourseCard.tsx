@@ -1,6 +1,6 @@
 import React from 'react';
 // removed react-router-dom imports; navigation handled via PublicButton.to
-import { 
+import {
   ArrowRight,
   Award,
   Clock,
@@ -95,7 +95,7 @@ export const CourseCard: React.FC<CourseCardProps> = ({
   return (
     <div className="bg-white rounded-2xl shadow-md hover:shadow-lg transition-shadow duration-300 overflow-hidden group">
       {/* Image */}
-      <div className="relative h-48 bg-gradient-to-br from-primary-500 to-primary-600 overflow-hidden">
+      <div className="relative h-48 overflow-hidden" style={{ backgroundImage: 'linear-gradient(to bottom right, var(--color-primary-500), var(--color-primary-600))' }}>
         {course.image1Url ? (
           <img
             src={course.image1Url}
@@ -107,7 +107,7 @@ export const CourseCard: React.FC<CourseCardProps> = ({
             <Award className="w-16 h-16 text-white/80" />
           </div>
         )}
-        
+
         {/* Badges */}
         <div className="absolute top-4 left-4 flex flex-col gap-2">
           <PublicBadge variant={getRiskLevelVariant(course.riskLevel)} size="sm" className="flex items-center">

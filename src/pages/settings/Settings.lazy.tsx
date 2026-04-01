@@ -12,7 +12,7 @@ const Settings = React.lazy(() => import('./Settings'));
 export const SettingsLazy: React.FC = () => {
   return (
     <ErrorBoundary>
-      <Suspense fallback={<LoadingFallback message="Loading Settings..." />}>
+      <Suspense fallback={<LoadingFallback message="Caricamento impostazioni..." />}>
         <Settings />
       </Suspense>
     </ErrorBoundary>

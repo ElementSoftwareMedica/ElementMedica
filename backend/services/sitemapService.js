@@ -141,6 +141,18 @@ class SitemapService {
       });
 
       const results = [];
+
+      // Priority mapping for key SEO landing pages
+      const highPrioritySlugs = new Set([
+        'homepage', 'medica-homepage',
+        'medicina-del-lavoro', 'medica-medicina-del-lavoro',
+        'corsi', 'rspp',
+        'medica-visite-specialistiche', 'servizi',
+      ]);
+      const lowPrioritySlugs = new Set([
+        'privacy-policy', 'cookie-policy', 'termini', 'carriere',
+      ]);
+
       for (const page of pages) {
         const url = `${baseUrl}/${page.slug}`;
         const entry = await this.upsertSitemapEntry({
@@ -148,8 +160,11 @@ class SitemapService {
           entityType: 'page',
           entityId: page.id,
           tenantId,
-          changefreq: 'weekly',
-          priority: page.slug === 'home' ? 1.0 : 0.8
+          changefreq: highPrioritySlugs.has(page.slug) ? 'weekly' : 'monthly',
+          priority: page.slug === 'homepage' || page.slug === 'medica-homepage' ? 1.0
+            : highPrioritySlugs.has(page.slug) ? 0.9
+              : lowPrioritySlugs.has(page.slug) ? 0.4
+                : 0.7,
         });
         results.push(entry);
       }
@@ -180,7 +195,7 @@ class SitemapService {
 
       const results = [];
       for (const course of courses) {
-        const url = `${baseUrl}/courses/${course.slug}`;
+        const url = `${baseUrl}/corsi/${course.slug}`;
         const entry = await this.upsertSitemapEntry({
           url,
           entityType: 'course',
@@ -214,14 +229,59 @@ class SitemapService {
         this.regenerateFromCourses(tenantId, baseUrl)
       ]);
 
-      const totalEntries = pagesResults.length + coursesResults.length;
+      // Aggiungi pagine statiche pubbliche (non CMS) al sitemap
+      const staticRoutes = [
+        { path: '/prenota', priority: 0.9, changefreq: 'weekly' },
+        { path: '/medici', priority: 0.8, changefreq: 'weekly' },
+        { path: '/corsi', priority: 0.9, changefreq: 'weekly' },
+        { path: '/gruppo-servizi', priority: 0.6, changefreq: 'monthly' },
+      ];
+      const staticResults = [];
+      for (const route of staticRoutes) {
+        const entry = await this.upsertSitemapEntry({
+          url: `${baseUrl}${route.path}`,
+          entityType: 'static',
+          entityId: `static-${route.path}`,
+          tenantId,
+          changefreq: route.changefreq,
+          priority: route.priority,
+        });
+        staticResults.push(entry);
+      }
+
+      // Aggiungi profili medici pubblici (medici con almeno uno slot visibile pubblicamente)
+      const doctors = await prisma.person.findMany({
+        where: {
+          deletedAt: null,
+          tenantProfiles: { some: { tenantId, deletedAt: null, isActive: true } },
+          personRoles: { some: { tenantId, deletedAt: null, roleType: { in: ['MEDICO', 'MEDICO_COMPETENTE'] } } },
+          slotDisponibilita: { some: { tenantId, deletedAt: null, visibilePubblico: true, data: { gte: new Date() } } },
+        },
+        select: { id: true },
+      }).catch(() => []);
+      const doctorResults = [];
+      for (const doc of doctors) {
+        const entry = await this.upsertSitemapEntry({
+          url: `${baseUrl}/medici/${doc.id}`,
+          entityType: 'doctor',
+          entityId: doc.id,
+          tenantId,
+          changefreq: 'monthly',
+          priority: 0.7,
+        });
+        doctorResults.push(entry);
+      }
+
+      const totalEntries = pagesResults.length + coursesResults.length + staticResults.length + doctorResults.length;
       logger.info(`Full sitemap regeneration complete: ${totalEntries} total entries`);
 
       return {
         success: true,
         pages: pagesResults.length,
-        Course: coursesResults.length,
-        total: totalEntries
+        courses: coursesResults.length,
+        static: staticResults.length,
+        doctors: doctorResults.length,
+        total: totalEntries,
       };
     } catch (error) {
       logger.error('Error regenerating full sitemap:', { error: error.message });

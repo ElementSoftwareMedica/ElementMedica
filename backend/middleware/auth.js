@@ -7,6 +7,7 @@ import prisma from '../config/prisma-optimization.js';
 import logger from '../utils/logger.js';
 import { RBACService } from './rbac.js';
 import { JWTService } from '../auth/jwt.js';
+import { matchPermission } from '../constants/permissions.js';
 
 /**
  * Basic JWT Authentication Middleware
@@ -23,43 +24,57 @@ const authenticate = async (req, res, next) => {
 
     const decoded = JWTService.verifyAccessToken(token);
 
-    const person = await prisma.person.findUnique({
-      where: { id: decoded.personId },
+    // P48: Include tenantProfiles per ottenere email/status/phone
+    // F197: findFirst con deletedAt: null — impedisce accesso a persone soft-deleted
+    const person = await prisma.person.findFirst({
+      where: { id: decoded.personId, deletedAt: null },
       include: {
         personRoles: {
-          where: { isActive: true },
+          where: { isActive: true, deletedAt: null }, // F250: added deletedAt
           include: {
             permissions: {
               where: { isGranted: true }
             }
+          }
+        },
+        // P48: Include tenant profiles
+        tenantProfiles: {
+          where: {
+            deletedAt: null,
+            isActive: true
           }
         }
       }
     });
 
     if (!person) {
-      return res.status(401).json({ error: 'Utente non trovato' });
+      return res.status(401).json({ error: 'Utente non trovato o non attivo' });
     }
 
-    // Ottieni i permessi usando il servizio RBAC
-    const permissions = await RBACService.getPersonPermissions(person.id);
+    // P48: Prendi il profilo primario o il primo disponibile
+    const primaryProfile = person.tenantProfiles?.find(p => p.isPrimary) || person.tenantProfiles?.[0] || {};
 
-    // Determina il tenantId effettivo:
-    // 1. Se l'utente ha header X-Tenant-ID, usa quello (dopo verifica accesso)
-    // 2. Altrimenti usa il tenantId della persona
-    let effectiveTenantId = person.tenantId;
+    // P48: Calcola globalRole dai personRoles PRIMA di determinare il tenant override
+    const roleTypes = person.personRoles.map(pr => pr.roleType).filter(Boolean);
+    const globalRole = roleTypes.includes('SUPER_ADMIN') ? 'SUPER_ADMIN' :
+      roleTypes.includes('ADMIN') ? 'ADMIN' :
+        roleTypes[0] || null;
+
+    // P63: Determina il tenantId effettivo SOLO da PersonTenantProfile
+    // Person.tenantId è stato RIMOSSO - usare sempre primaryProfile.tenantId
+    let effectiveTenantId = primaryProfile.tenantId || null;
     const requestedTenantId = req.headers['x-tenant-id'];
 
-    if (requestedTenantId && requestedTenantId !== person.tenantId) {
+    if (requestedTenantId && requestedTenantId !== effectiveTenantId) {
       // Verifica che l'utente abbia accesso al tenant richiesto
       // Gli admin globali hanno accesso a tutti i tenant
-      if (person.globalRole === 'ADMIN' || person.globalRole === 'SUPER_ADMIN') {
+      if (globalRole === 'ADMIN' || globalRole === 'SUPER_ADMIN') {
         effectiveTenantId = requestedTenantId;
         logger.info({
           component: 'auth-middleware',
           action: 'tenant-override',
           personId: person.id,
-          originalTenantId: person.tenantId,
+          defaultTenantId: primaryProfile.tenantId,
           effectiveTenantId: requestedTenantId,
           reason: 'admin-global-access'
         }, 'Admin accessing different tenant');
@@ -80,34 +95,139 @@ const authenticate = async (req, res, next) => {
             component: 'auth-middleware',
             action: 'tenant-override',
             personId: person.id,
-            originalTenantId: person.tenantId,
+            defaultTenantId: primaryProfile.tenantId,
             effectiveTenantId: requestedTenantId,
             reason: 'person-tenant-access'
           }, 'User accessing different tenant via PersonTenantAccess');
         } else {
-          logger.warn({
-            component: 'auth-middleware',
-            action: 'tenant-override-denied',
-            personId: person.id,
-            requestedTenantId,
-            reason: 'no-access'
-          }, 'Tenant access denied');
-          // Non bloccare, ma usa il tenant originale
+          // P48: Anche controllare se l'utente ha un PersonTenantProfile sul tenant richiesto
+          const hasProfile = person.tenantProfiles?.some(p => p.tenantId === requestedTenantId);
+          if (hasProfile) {
+            effectiveTenantId = requestedTenantId;
+            logger.info({
+              component: 'auth-middleware',
+              action: 'tenant-override',
+              personId: person.id,
+              defaultTenantId: primaryProfile.tenantId,
+              effectiveTenantId: requestedTenantId,
+              reason: 'person-tenant-profile'
+            }, 'User accessing different tenant via PersonTenantProfile');
+          } else {
+            logger.warn({
+              component: 'auth-middleware',
+              action: 'tenant-override-denied',
+              personId: person.id,
+              requestedTenantId,
+              reason: 'no-access'
+            }, 'Tenant access denied');
+            // Non bloccare, ma usa il tenant originale
+          }
         }
       }
     }
 
-    // Costruisci l'oggetto person con i ruoli e permessi
+    // Ottieni i permessi usando il servizio RBAC, filtrati per il tenant effettivo
+    const permissions = await RBACService.getPersonPermissions(person.id, effectiveTenantId);
+
+    // Verifica che il tenant sia attivo e abbonamento valido (blocca accesso se tenant disattivato/scaduto)
+    // SUPER_ADMIN/ADMIN globali possono accedere anche a tenant inattivi per gestione
+    if (effectiveTenantId && globalRole !== 'SUPER_ADMIN' && globalRole !== 'ADMIN') {
+      const tenantRecord = await prisma.tenant.findFirst({
+        where: { id: effectiveTenantId, deletedAt: null },
+        select: { isActive: true, subscriptionStatus: true, subscriptionExpiresAt: true, gracePeriodUntil: true, trialEndsAt: true }
+      });
+
+      if (tenantRecord && !tenantRecord.isActive) {
+        return res.status(403).json({
+          error: 'TENANT_INACTIVE',
+          code: 'TENANT_INACTIVE',
+          message: 'L\'abbonamento del tuo tenant non è attivo. Contatta l\'amministratore per rinnovare.'
+        });
+      }
+
+      // Verifica subscription status in tempo reale (non solo al login)
+      if (tenantRecord) {
+        const now = new Date();
+        const { subscriptionStatus, subscriptionExpiresAt, gracePeriodUntil, trialEndsAt } = tenantRecord;
+
+        if (subscriptionStatus === 'cancelled') {
+          return res.status(403).json({
+            error: 'SUBSCRIPTION_CANCELLED',
+            code: 'SUBSCRIPTION_CANCELLED',
+            message: 'L\'abbonamento è stato cancellato. Contatta l\'amministratore per riattivarlo.'
+          });
+        }
+
+        if (subscriptionStatus === 'suspended') {
+          return res.status(403).json({
+            error: 'SUBSCRIPTION_SUSPENDED',
+            code: 'SUBSCRIPTION_SUSPENDED',
+            message: 'L\'abbonamento è stato sospeso per mancato pagamento. Contatta l\'amministratore.'
+          });
+        }
+
+        // Subscription scaduto e grace period terminato
+        if (subscriptionExpiresAt && subscriptionExpiresAt < now) {
+          const graceExpired = !gracePeriodUntil || gracePeriodUntil < now;
+          if (graceExpired) {
+            return res.status(403).json({
+              error: 'SUBSCRIPTION_EXPIRED',
+              code: 'SUBSCRIPTION_EXPIRED',
+              message: 'L\'abbonamento è scaduto. Contatta l\'amministratore per il rinnovo.'
+            });
+          }
+        }
+
+        // Trial terminato
+        if (subscriptionStatus === 'trial' && trialEndsAt && trialEndsAt < now) {
+          return res.status(403).json({
+            error: 'TRIAL_EXPIRED',
+            code: 'TRIAL_EXPIRED',
+            message: 'Il periodo di prova è terminato. Attiva un abbonamento per continuare.'
+          });
+        }
+      }
+    }
+
     req.person = {
       ...person,
-      roles: person.personRoles.map(pr => pr.roleType).filter(Boolean),
+      // P48: Includi esplicitamente tenantProfiles per validateUserTenant
+      tenantProfiles: person.tenantProfiles || [],
+      // P49: Flatten campi da tenantProfiles per convenienza API (evita req.person.tenantProfiles[0].email)
+      email: primaryProfile.email || null,
+      phone: primaryProfile.phone || null,
+      status: primaryProfile.status || 'ACTIVE',
+      companyTenantProfileId: primaryProfile.companyTenantProfileId || null,
+      siteId: primaryProfile.siteId || null,
+      // Keep other computed values
+      roles: roleTypes,
+      globalRole: globalRole, // P48: backward compatibility for admin checks
       permissions: permissions,
-      tenantId: effectiveTenantId, // Usa il tenant effettivo
-      originalTenantId: person.tenantId, // Mantieni riferimento al tenant originale
-      companyId: person.companyId
+      tenantId: effectiveTenantId, // P63: Sempre da PersonTenantProfile, mai da Person.tenantId
+      // P48: Mantieni riferimento al profilo primario
+      _primaryProfile: primaryProfile
     };
 
     // NOTA: req.tenantId rimosso - usare req.person.tenantId per tutte le query
+
+    // F313: Se mustChangePassword=true, blocca tutte le richieste eccetto
+    // le rotte di cambio password, logout e refresh token.
+    if (person.mustChangePassword === true) {
+      const ALLOWED_PATHS_WHEN_MUST_CHANGE = [
+        '/api/v1/auth/change-password',
+        '/api/v1/auth/logout',
+        '/api/v1/auth/refresh',
+        '/health'
+      ];
+      const isAllowed = ALLOWED_PATHS_WHEN_MUST_CHANGE.some(p => req.path === p || req.path.startsWith(p));
+      if (!isAllowed) {
+        return res.status(403).json({
+          error: 'Cambio password obbligatorio',
+          code: 'MUST_CHANGE_PASSWORD',
+          message: 'È necessario cambiare la password prima di poter accedere all\'applicazione.'
+        });
+      }
+    }
 
     next();
   } catch (error) {
@@ -127,6 +247,7 @@ const authenticate = async (req, res, next) => {
 /**
  * Optional Authentication Middleware
  * Authenticates user if token is present, but doesn't require it
+ * P48: Include tenantProfiles per email/status
  */
 export async function optionalAuth(req, res, next) {
   try {
@@ -147,35 +268,49 @@ export async function optionalAuth(req, res, next) {
     if (decoded) {
       const { personId } = decoded;
 
-      const person = await prisma.person.findUnique({
-        where: { id: personId },
+      // P48: Include tenantProfiles
+      // F197: deletedAt: null — skip soft-deleted persons in optionalAuth
+      const person = await prisma.person.findFirst({
+        where: { id: personId, deletedAt: null },
         include: {
           personRoles: {
-            where: { isActive: true },
+            where: { isActive: true, deletedAt: null }, // F250: added deletedAt
             include: {
               permissions: {
                 where: { isGranted: true }
               }
             }
+          },
+          tenantProfiles: {
+            where: { deletedAt: null, isActive: true }
           }
         }
       });
 
-      if (person && person.status === 'ACTIVE') {
+      // P48: Prendi il profilo primario per status check
+      const primaryProfile = person?.tenantProfiles?.find(p => p.isPrimary) || person?.tenantProfiles?.[0] || {};
+      const profileStatus = primaryProfile.status || 'PENDING';
+
+      // P48: Verifica status da tenantProfiles invece che da Person
+      if (person && profileStatus === 'ACTIVE') {
         // Ottieni i permessi usando il servizio RBAC
         const permissions = await RBACService.getPersonPermissions(person.id);
 
         req.person = {
           id: person.id,
           personId: person.id,
-          email: person.email,
+          // P49: Email/phone da tenantProfiles
+          email: primaryProfile.email || null,
+          phone: primaryProfile.phone || null,
+          status: profileStatus,
           firstName: person.firstName,
           lastName: person.lastName,
-          companyId: person.companyId,
-          tenantId: person.tenantId,
+          companyTenantProfileId: primaryProfile.companyTenantProfileId || null,
+          tenantId: primaryProfile.tenantId, // P63: SOLO da PersonTenantProfile
           roles: person.personRoles.map(pr => pr.roleType),
           permissions: permissions,
-          lastLogin: person.lastLogin
+          lastLogin: person.lastLogin,
+          _primaryProfile: primaryProfile
         };
       }
     }
@@ -202,7 +337,7 @@ export function requireRoles(...roles) {
   return (req, res, next) => {
     if (!req.person) {
       return res.status(401).json({
-        error: 'Authentication required',
+        error: 'Autenticazione richiesta',
         code: 'AUTH_REQUIRED'
       });
     }
@@ -211,10 +346,8 @@ export function requireRoles(...roles) {
 
     if (!hasRole) {
       return res.status(403).json({
-        error: 'Insufficient permissions',
-        code: 'AUTH_INSUFFICIENT_PERMISSIONS',
-        required: roles,
-        current: req.person.roles
+        error: 'Permessi insufficienti',
+        code: 'AUTH_INSUFFICIENT_PERMISSIONS'
       });
     }
 
@@ -236,7 +369,7 @@ export function requirePermission(permission) {
   return async (req, res, next) => {
     if (!req.person) {
       return res.status(401).json({
-        error: 'Authentication required',
+        error: 'Autenticazione richiesta',
         code: 'AUTH_REQUIRED'
       });
     }
@@ -249,14 +382,21 @@ export function requirePermission(permission) {
 
     if (person.permissions) {
       if (Array.isArray(person.permissions)) {
-        // Array format: ['companies:read', 'employees:write', '*']
-        hasPermission = person.permissions.includes(permission) ||
-          person.permissions.includes('*');
+        // Array format: ['clinica.visite:read', 'companies:read', '*']
+        for (const userPerm of person.permissions) {
+          if (matchPermission(userPerm, permission)) {
+            hasPermission = true;
+            break;
+          }
+        }
       } else if (typeof person.permissions === 'object') {
-        // Object format: { 'companies:read': true, '*': true }
-        hasPermission = person.permissions[permission] === true ||
-          person.permissions['*'] === true ||
-          person.permissions['all:*'] === true;
+        // Object format: { 'clinica.visite:read': true, '*': true }
+        for (const userPerm of Object.keys(person.permissions)) {
+          if (person.permissions[userPerm] === true && matchPermission(userPerm, permission)) {
+            hasPermission = true;
+            break;
+          }
+        }
       }
     }
 
@@ -274,9 +414,8 @@ export function requirePermission(permission) {
 
     if (!hasPermission) {
       return res.status(403).json({
-        error: 'Insufficient permissions',
-        code: 'AUTH_INSUFFICIENT_PERMISSIONS',
-        required: permission
+        error: 'Permessi insufficienti',
+        code: 'AUTH_INSUFFICIENT_PERMISSIONS'
       });
     }
 

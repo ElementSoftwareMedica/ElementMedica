@@ -4,7 +4,7 @@
  */
 
 import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import logger from '../utils/logger.js';
 
@@ -108,13 +108,23 @@ export class JWTService {
         // NOTE: Permissions removed from JWT to avoid 431 Header Too Large errors
         // Permissions are loaded server-side in authenticate middleware via RBACService
 
+        // P63: tenantId viene SOLO da PersonTenantProfile (Person.tenantId è stato RIMOSSO)
+        const effectiveTenantId =
+            user.tenantProfiles?.find(p => p.isActive || p.isPrimary)?.tenantId ||
+            user.tenantProfiles?.[0]?.tenantId ||
+            user.personRoles?.find(r => r.tenantId)?.tenantId ||
+            null;
+
+        // P48: email è su PersonTenantProfile, non su Person
+        const primaryProfile = user.tenantProfiles?.find(p => p.isActive || p.isPrimary) || user.tenantProfiles?.[0];
+        const effectiveEmail = primaryProfile?.email || user._loginProfile?.email || null;
+
         const payload = {
             personId: user.id,
-            email: user.email,
+            email: effectiveEmail,
             username: user.username,
             taxCode: user.taxCode,
-            companyId: user.companyId,
-            tenantId: user.tenantId || null,
+            tenantId: effectiveTenantId,
             roles
         };
 
@@ -160,6 +170,21 @@ export class JWTService {
         const days = rememberMe ? 30 : 7;
         refreshTokenExpiry.setDate(refreshTokenExpiry.getDate() + days);
 
+        // P63: tenantId is required for RefreshToken - SOLO da PersonTenantProfile
+        const refreshTenantId =
+            user.tenantProfiles?.find(p => p.isActive || p.isPrimary)?.tenantId ||
+            user.tenantProfiles?.[0]?.tenantId ||
+            user.personRoles?.find(r => r.tenantId)?.tenantId;
+
+        if (!refreshTenantId) {
+            logger.error('[JWT] Cannot create RefreshToken: tenantId is required but not found', {
+                personId: user.id,
+                hasTenantProfiles: !!user.tenantProfiles?.length,
+                hasPersonRoles: !!user.personRoles?.length
+            });
+            throw new Error('Cannot create session: user has no active tenant association');
+        }
+
         await prisma.refreshToken.create({
             data: {
                 personId: user.id,
@@ -169,7 +194,7 @@ export class JWTService {
                     userAgent: deviceInfo.userAgent || 'Unknown',
                     ipAddress: deviceInfo.ip || '127.0.0.1'
                 },
-                tenantId: user.tenantId || null
+                tenantId: refreshTenantId
             }
         });
 
@@ -183,11 +208,13 @@ export class JWTService {
     }
 
     /**
-     * Refresh access token
+     * Refresh access token with token rotation.
+     * Revokes the old refresh token and issues a new token pair.
+     * Returns both a new access token and a new refresh token.
      */
     static async refreshAccessToken(refreshToken) {
         try {
-            // Verify refresh token
+            // Verify refresh token signature first (fast fail before DB query)
             const decoded = this.verifyRefreshToken(refreshToken);
             void decoded; // keep for potential auditing
 
@@ -204,7 +231,7 @@ export class JWTService {
                     person: {
                         include: {
                             personRoles: {
-                                where: { isActive: true },
+                                where: { isActive: true, deletedAt: null },
                                 include: {
                                     permissions: true
                                 }
@@ -218,26 +245,68 @@ export class JWTService {
                 throw new Error('Invalid or expired refresh token');
             }
 
-            // Generate new access token
             const user = refreshTokenRecord.person;
+            const tenantId = refreshTokenRecord.tenantId;
+
+            // P48: Get tenant profile for email (Person is global, email on PersonTenantProfile)
+            let profileEmail = null;
+            if (tenantId) {
+                const profile = await prisma.personTenantProfile.findFirst({
+                    where: { personId: user.id, tenantId, deletedAt: null },
+                    select: { email: true, companyTenantProfileId: true }
+                });
+                profileEmail = profile?.email || null;
+            }
+
+            // --- Token Rotation ---
+            // 1. Revoke the consumed refresh token immediately to prevent reuse
+            await prisma.refreshToken.update({
+                where: { id: refreshTokenRecord.id },
+                data: { revokedAt: new Date() }
+            });
+
+            // 2. Build a new token pair
             const roles = (user.personRoles || []).map(pr => pr.roleType).filter(Boolean);
 
             // NOTE: Permissions NOT included in JWT to avoid 431 Header Too Large errors
             // Permissions are loaded server-side in authenticate middleware via RBACService
-
             const payload = {
                 personId: user.id,
-                email: user.email,
-                companyId: user.companyId,
-                tenantId: user.tenantId || null,
+                email: profileEmail,
+                tenantId: tenantId || null,
                 roles
-                // permissions omitted to keep JWT size manageable
             };
 
-            const newAccessToken = this.generateAccessToken(payload);
+            const jti = typeof crypto.randomUUID === 'function'
+                ? crypto.randomUUID()
+                : crypto.randomBytes(16).toString('hex');
+
+            const newAccessToken = this.generateAccessToken(payload, { expiresIn: JWT_EXPIRES_IN });
+            const newRefreshToken = this.generateRefreshToken(
+                { personId: user.id, jti },
+                { expiresIn: JWT_REFRESH_EXPIRES_IN }
+            );
+
+            // 3. Persist the new refresh token to DB
+            const refreshTokenExpiry = new Date();
+            refreshTokenExpiry.setDate(refreshTokenExpiry.getDate() + 7);
+
+            await prisma.refreshToken.create({
+                data: {
+                    personId: user.id,
+                    token: newRefreshToken,
+                    expiresAt: refreshTokenExpiry,
+                    deviceInfo: refreshTokenRecord.deviceInfo || {
+                        userAgent: 'rotated',
+                        ipAddress: '0.0.0.0'
+                    },
+                    tenantId
+                }
+            });
 
             return {
                 accessToken: newAccessToken,
+                refreshToken: newRefreshToken,
                 expiresIn: JWT_EXPIRES_IN,
                 tokenType: 'Bearer'
             };
@@ -279,16 +348,19 @@ export class JWTService {
 
     /**
      * Clean expired sessions
+     * F207: Also removes revoked tokens older than 30 days to prevent table bloat
      */
     static async cleanExpiredSessions() {
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
         const result = await prisma.refreshToken.deleteMany({
             where: {
-                expiresAt: {
-                    lt: new Date()
-                }
+                OR: [
+                    { expiresAt: { lt: new Date() } },
+                    { revokedAt: { lt: thirtyDaysAgo } }
+                ]
             }
         });
-        logger.info(`Cleaned ${result.count} expired refresh tokens`, { component: 'jwt-manager' });
+        logger.info(`Cleaned ${result.count} expired/revoked refresh tokens`, { component: 'jwt-manager' });
         return result.count;
     }
 }
@@ -316,13 +388,27 @@ export class PasswordService {
      * Generate secure random password
      */
     static generateRandomPassword(length = 12) {
+        // F301: use crypto.randomBytes for cryptographic security (Math.random is not CSPRNG)
         const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+        const charsetLength = charset.length;
         let password = '';
-
-        for (let i = 0; i < length; i++) {
-            password += charset.charAt(Math.floor(Math.random() * charset.length));
+        const randomBytes = crypto.randomBytes(length * 2); // oversample to avoid modulo bias
+        let byteIndex = 0;
+        while (password.length < length) {
+            const byte = randomBytes[byteIndex++];
+            if (byte < Math.floor(256 / charsetLength) * charsetLength) {
+                password += charset[byte % charsetLength];
+            }
+            // refill if we exhaust the buffer (rare with 2x oversampling)
+            if (byteIndex >= randomBytes.length && password.length < length) {
+                const extra = crypto.randomBytes(length);
+                extra.forEach(b => {
+                    if (password.length < length && b < Math.floor(256 / charsetLength) * charsetLength) {
+                        password += charset[b % charsetLength];
+                    }
+                });
+            }
         }
-
         return password;
     }
 

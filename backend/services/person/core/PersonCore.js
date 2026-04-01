@@ -2,6 +2,9 @@ import logger from '../../../utils/logger.js';
 import prisma from '../../../config/prisma-optimization.js';
 import PersonUtils from '../utils/PersonUtils.js';
 import PersonRoleMapping from '../utils/PersonRoleMapping.js';
+import { EventBus, PersonEvents } from '../../events/index.js';
+import { generateNameVariants } from '../../../utils/nameNormalization.js';
+import { JWTService } from '../../../auth/jwt.js';
 
 /**
  * Operazioni CRUD principali per le persone
@@ -9,25 +12,42 @@ import PersonRoleMapping from '../utils/PersonRoleMapping.js';
 class PersonCore {
   /**
    * Ottiene persone per ruolo
+   * P48: Filtra per tenant attraverso PersonRole.tenantId (non più su Person)
    * @param {string|Array} roleType - Tipo/i di ruolo
-   * @param {Object} filters - Filtri aggiuntivi
+   * @param {Object} filters - Filtri aggiuntivi (tenantId, companyTenantProfileId)
    * @returns {Promise<Array>} Array di persone
    */
   static async getPersonsByRole(roleType, filters = {}) {
     try {
+      // Estrai tenantId dai filtri per applicarlo correttamente su personRoles
+      const { tenantId, companyTenantProfileId, ...otherFilters } = filters;
+
+      // P48: Costruisci il filtro per personRoles includendo tenantId
+      const personRolesFilter = {
+        roleType: Array.isArray(roleType) ? { in: roleType } : roleType,
+        isActive: true,
+        deletedAt: null
+      };
+
+      // Se c'è un tenantId, filtra per ruoli di quel tenant specifico
+      if (tenantId) {
+        personRolesFilter.tenantId = tenantId;
+      }
+
+      // Se c'è un companyTenantProfileId, filtra anche per quello
+      if (companyTenantProfileId) {
+        personRolesFilter.companyTenantProfileId = companyTenantProfileId;
+      }
+
       const where = {
         deletedAt: null, // Escludi i record eliminati (soft delete)
         personRoles: {
-          some: {
-            roleType: Array.isArray(roleType) ? { in: roleType } : roleType,
-            isActive: true
-          }
+          some: personRolesFilter
         },
-        ...filters
+        ...otherFilters
       };
 
-      // DEBUG LOG TEMPORANEO
-      // Debug: getPersonsByRole chiamato
+      logger.debug('getPersonsByRole query', { roleType, tenantId, where: JSON.stringify(where) });
 
       // Determina l'ordinamento in base al tipo di ruolo
       let orderBy = { lastName: 'asc' };
@@ -67,7 +87,50 @@ class PersonCore {
         return null;
       }
 
-      return this.addOnlineStatus([person])[0];
+      // P48/P63: Trova il miglior profile da usare per il flatten
+      // Priorità: 1) Profile con companyTenantProfileId, 2) Profile con isPrimary, 3) Primo profile
+      const profiles = person.tenantProfiles || [];
+      const profileWithCompany = profiles.find(p => p.companyTenantProfileId);
+      const primaryProfile = profiles.find(p => p.isPrimary);
+      const profile = profileWithCompany || primaryProfile || profiles[0] || {};
+
+      const activeRole = person.personRoles?.find(r => r.isActive);
+      const companyId = profile.companyTenantProfileId
+        || activeRole?.companyTenantProfileId
+        || null;
+
+      const flattenedPerson = {
+        ...person,
+        email: profile.email || null,
+        phone: profile.phone || null,
+        pec: profile.pec || null,
+        status: profile.status || 'PENDING',
+        title: profile.title || null,
+        companyId: companyId,
+        companyTenantProfileId: companyId,
+        siteId: profile.siteId || null,
+        repartoId: profile.repartoId || null,
+        protocolloSanitarioId: profile.protocolloSanitarioId || null,
+        hiredDate: profile.hiredDate || null,
+        endDate: profile.endDate || null,
+        hourlyRate: profile.hourlyRate || null,
+        monthlyRate: profile.monthlyRate || null,
+        iban: profile.iban || null,
+        registerCode: profile.registerCode || null,
+        registerCode2: profile.registerCode2 || null,
+        specialties: profile.specialties || [],
+        certifications: profile.certifications || [],
+        shortDescription: profile.shortDescription || null,
+        fullDescription: profile.fullDescription || null,
+        notes: profile.notes || null,
+        preferences: profile.preferences || null,
+        residenceAddress: profile.residenceAddress || null,
+        residenceCity: profile.residenceCity || null,
+        postalCode: profile.postalCode || null,
+        province: profile.province || null
+      };
+
+      return this.addOnlineStatus([flattenedPerson])[0];
     } catch (error) {
       logger.error('Error getting person by ID:', { error: error.message, id });
       throw error;
@@ -76,6 +139,7 @@ class PersonCore {
 
   /**
    * Crea una nuova persona con ruolo
+   * P48: Separa Person (dati globali) da PersonTenantProfile (dati tenant-specific)
    * @param {Object} data - Dati della persona
    * @param {string} roleType - Tipo di ruolo
    * @param {string} companyId - ID dell'azienda (opzionale)
@@ -89,30 +153,218 @@ class PersonCore {
         throw new Error('TenantId is required for person creation');
       }
 
-      const { roles, ...personData } = data;
+      const { roles, ...inputData } = data;
 
-      // Normalizza taxCode e email per consistenza
+      // P48: Campi globali su Person
+      const PERSON_GLOBAL_FIELDS = [
+        'firstName', 'lastName', 'birthDate', 'birthPlace', 'birthProvince',
+        'gender', 'taxCode', 'vatNumber', 'username', 'password',
+        'gdprConsentDate', 'gdprConsentVersion', 'dataRetentionUntil', 'profileImage'
+      ];
+
+      // P48: Campi tenant-specific su PersonTenantProfile
+      const PROFILE_FIELDS = [
+        'email', 'phone', 'pec', 'residenceAddress', 'residenceCity',
+        'postalCode', 'province', 'status', 'title', 'hiredDate', 'endDate',
+        'hourlyRate', 'monthlyRate', 'iban', 'registerCode', 'registerCode2',
+        'specialties', 'certifications', 'shortDescription', 'fullDescription',
+        'notes', 'preferences', 'siteId', 'repartoId', 'protocolloSanitarioId'
+      ];
+
+      // Separa i dati
+      const personData = {};
+      const profileData = {};
+
+      for (const key of Object.keys(inputData)) {
+        if (inputData[key] === undefined) continue;
+        if (PERSON_GLOBAL_FIELDS.includes(key)) {
+          personData[key] = inputData[key];
+        } else if (PROFILE_FIELDS.includes(key)) {
+          profileData[key] = inputData[key];
+        }
+      }
+
+      // Normalizza taxCode
       if (personData.taxCode) {
         personData.taxCode = personData.taxCode.toUpperCase().trim();
       }
-      if (personData.email) {
-        personData.email = personData.email.toLowerCase().trim();
+
+      // Sanitize VarChar(2) field: birthProvince deve essere max 2 chars
+      if (personData.birthProvince && personData.birthProvince.length > 2) {
+        logger.warn('birthProvince value exceeds VarChar(2), truncating', { original: personData.birthProvince });
+        personData.birthProvince = personData.birthProvince.substring(0, 2).toUpperCase();
       }
+
+      // Normalizza email nel profile
+      if (profileData.email) {
+        profileData.email = profileData.email.toLowerCase().trim();
+      }
+
+      // Sanitize VarChar(2) field: province (residenza) deve essere max 2 chars
+      if (profileData.province && profileData.province.length > 2) {
+        logger.warn('province (residence) value exceeds VarChar(2), truncating', { original: profileData.province });
+        profileData.province = profileData.province.substring(0, 2).toUpperCase();
+      }
+
+      // ===== P57: AUTO-IMPORT EXISTING PERSON =====
+      // Se taxCode o vatNumber sono forniti, verifica se la Person esiste già globalmente
+      // Se esiste ma NON ha profilo nel tenant corrente, auto-importa con consenso GDPR automatico per ANAGRAFICA
+      if (personData.taxCode || personData.vatNumber) {
+        const existingWhere = {
+          deletedAt: null,
+          OR: []
+        };
+        if (personData.taxCode) {
+          existingWhere.OR.push({ taxCode: personData.taxCode });
+        }
+        if (personData.vatNumber) {
+          existingWhere.OR.push({ vatNumber: personData.vatNumber });
+        }
+
+        const existingPerson = await prisma.person.findFirst({
+          where: existingWhere,
+          include: {
+            tenantProfiles: {
+              where: { tenantId, deletedAt: null }
+            }
+          }
+        });
+
+        if (existingPerson) {
+          // Person esiste già - verifica se ha profilo nel tenant corrente
+          if (existingPerson.tenantProfiles.length > 0) {
+            // Persona esiste già nel tenant corrente - non duplicare
+            throw new Error(`La persona con codice fiscale ${personData.taxCode || personData.vatNumber} esiste già in questo tenant`);
+          }
+
+          // AUTO-IMPORT: Crea profilo nel nuovo tenant senza richiedere consenso esplicito per ANAGRAFICA
+          logger.info('P57 Auto-import: Person exists globally, creating profile in new tenant', {
+            existingPersonId: existingPerson.id,
+            taxCode: personData.taxCode,
+            targetTenantId: tenantId
+          });
+
+          const mappedRoleType = PersonRoleMapping.mapRoleType(roleType);
+
+          // Converti hiredDate nel profile da stringa a Date se necessario
+          if (profileData.hiredDate && typeof profileData.hiredDate === 'string') {
+            try {
+              const dateStr = profileData.hiredDate.trim();
+              if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                profileData.hiredDate = new Date(dateStr + 'T00:00:00.000Z');
+              } else {
+                profileData.hiredDate = new Date(dateStr);
+              }
+              if (isNaN(profileData.hiredDate.getTime())) {
+                logger.warn('Invalid hiredDate provided, setting to null', { hiredDate: data.hiredDate });
+                profileData.hiredDate = null;
+              }
+            } catch (error) {
+              logger.warn('Error parsing hiredDate, setting to null', { hiredDate: data.hiredDate, error: error.message });
+              profileData.hiredDate = null;
+            }
+          }
+
+          // Transazione per auto-import GDPR-compliant
+          const result = await prisma.$transaction(async (tx) => {
+            // 1. Crea consenso GDPR automatico per ANAGRAFICA (dati pubblici/fiscali)
+            // NOTA: Solo ANAGRAFICA è auto-consentita (taxCode, nome, cognome, nascita)
+            await tx.personDataShareConsent.create({
+              data: {
+                personId: existingPerson.id,
+                sourceTenantId: existingPerson.tenantProfiles?.[0]?.tenantId || tenantId,
+                targetTenantId: tenantId,
+                sharedDataTypes: ['ANAGRAFICA'], // Solo dati anagrafici core auto-condivisi
+                consentGiven: true,
+                consentDate: new Date(),
+                consentMethod: 'AUTO_IMPORT_ANAGRAFICA',
+                legalBasis: 'GDPR Art.6.1.b - Esecuzione contratto / Art.6.1.c - Obbligo legale (codice fiscale)'
+              }
+            });
+
+            // 2. Crea PersonTenantProfile nel nuovo tenant
+            const newProfile = await tx.personTenantProfile.create({
+              data: {
+                personId: existingPerson.id,
+                tenantId,
+                companyTenantProfileId: companyId,
+                status: profileData.status || 'ACTIVE',
+                isActive: true,
+                isPrimary: false, // Profilo importato non è primario
+                ...profileData
+              }
+            });
+
+            // 3. Crea ruolo nel tenant
+            await tx.personRole.create({
+              data: {
+                personId: existingPerson.id,
+                roleType: mappedRoleType,
+                isActive: true,
+                isPrimary: false, // Ruolo importato non è primario
+                companyTenantProfileId: companyId,
+                tenantId
+              }
+            });
+
+            // 4. Audit log GDPR
+            await tx.gdprAuditLog.create({
+              data: {
+                personId: existingPerson.id,
+                action: 'AUTO_IMPORT_CROSS_TENANT',
+                resourceType: 'PERSON_PROFILE',
+                resourceId: newProfile.id,
+                dataAccessed: {
+                  profileId: newProfile.id,
+                  sharedDataTypes: ['ANAGRAFICA'],
+                  targetTenantId: tenantId,
+                  autoImport: true,
+                  reason: 'Person already exists globally, auto-imported for ANAGRAFICA data'
+                },
+                tenantId
+              }
+            });
+
+            return newProfile;
+          });
+
+          // Recupera la persona completa con il nuovo profilo
+          const importedPerson = await prisma.person.findFirst({
+            where: { id: existingPerson.id, deletedAt: null },
+            include: this.getDefaultInclude()
+          });
+
+          // Emit event
+          await EventBus.publish(PersonEvents.CREATED, {
+            personId: existingPerson.id,
+            firstName: existingPerson.firstName,
+            lastName: existingPerson.lastName,
+            email: profileData.email || null,
+            roleType: mappedRoleType,
+            tenantId,
+            autoImported: true
+          });
+
+          logger.info('P57 Auto-import completed successfully', {
+            personId: existingPerson.id,
+            newProfileId: result.id,
+            tenantId
+          });
+
+          return importedPerson;
+        }
+      }
+      // ===== END P57: AUTO-IMPORT EXISTING PERSON =====
 
       // Converti birthDate da stringa a Date se necessario
       if (personData.birthDate && typeof personData.birthDate === 'string') {
         try {
-          // Supporta formati YYYY-MM-DD e ISO string
           const dateStr = personData.birthDate.trim();
           if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-            // Formato YYYY-MM-DD: aggiungi orario per evitare problemi timezone
             personData.birthDate = new Date(dateStr + 'T00:00:00.000Z');
           } else {
-            // Altri formati: usa costruttore Date standard
             personData.birthDate = new Date(dateStr);
           }
-
-          // Verifica che la data sia valida
           if (isNaN(personData.birthDate.getTime())) {
             logger.warn('Invalid birthDate provided, setting to null', { birthDate: data.birthDate });
             personData.birthDate = null;
@@ -123,23 +375,22 @@ class PersonCore {
         }
       }
 
-      // Converti hiredDate da stringa a Date se necessario
-      if (personData.hiredDate && typeof personData.hiredDate === 'string') {
+      // Converti hiredDate nel profile da stringa a Date se necessario
+      if (profileData.hiredDate && typeof profileData.hiredDate === 'string') {
         try {
-          const dateStr = personData.hiredDate.trim();
+          const dateStr = profileData.hiredDate.trim();
           if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-            personData.hiredDate = new Date(dateStr + 'T00:00:00.000Z');
+            profileData.hiredDate = new Date(dateStr + 'T00:00:00.000Z');
           } else {
-            personData.hiredDate = new Date(dateStr);
+            profileData.hiredDate = new Date(dateStr);
           }
-
-          if (isNaN(personData.hiredDate.getTime())) {
+          if (isNaN(profileData.hiredDate.getTime())) {
             logger.warn('Invalid hiredDate provided, setting to null', { hiredDate: data.hiredDate });
-            personData.hiredDate = null;
+            profileData.hiredDate = null;
           }
         } catch (error) {
           logger.warn('Error parsing hiredDate, setting to null', { hiredDate: data.hiredDate, error: error.message });
-          personData.hiredDate = null;
+          profileData.hiredDate = null;
         }
       }
 
@@ -149,52 +400,87 @@ class PersonCore {
           personData.firstName,
           personData.lastName,
           async (username) => {
-            const existing = await prisma.person.findUnique({ where: { username } });
+            const existing = await prisma.person.findFirst({ where: { username, deletedAt: null } }); // F246: findFirst+deletedAt
             return !!existing;
           }
         );
       }
 
       // Imposta password di default se non fornita e hash della password
+      // IMPORTANTE: Salviamo la password in chiaro per poterla comunicare all'utente
+      let plainTextPassword = null;
       if (!personData.password) {
-        personData.password = PersonUtils.generateTemporaryPassword();
+        plainTextPassword = PersonUtils.generateTemporaryPassword();
+        personData.password = plainTextPassword;
+      } else {
+        // Se la password è stata fornita, la consideriamo temporanea solo se non è già hashata
+        if (!personData.password.startsWith('$2')) {
+          plainTextPassword = personData.password;
+        }
       }
 
-      // Hash della password se presente
-      if (personData.password) {
-        const bcrypt = await import('bcryptjs');
+      // Hash della password se presente e non già hashata
+      if (personData.password && !personData.password.startsWith('$2')) {
+        const bcrypt = await import('bcrypt');
         personData.password = await bcrypt.default.hash(personData.password, 12);
       }
-
-      // Rimuovi campi undefined per evitare errori Prisma
-      Object.keys(personData).forEach(key => {
-        if (personData[key] === undefined) {
-          delete personData[key];
-        }
-      });
 
       // Mappa il ruolo se necessario
       const mappedRoleType = PersonRoleMapping.mapRoleType(roleType);
 
+      // P48: Crea Person con PersonTenantProfile nested
+      // P63: Person.tenantId RIMOSSO - tenantId va SOLO su personRoles e tenantProfiles
       const createData = {
         ...personData,
-        tenantId, // Aggiungi tenantId direttamente ai dati della persona
-        companyId, // Aggiungi companyId direttamente ai dati della persona
+        // Flag per forzare cambio password al primo accesso
+        mustChangePassword: plainTextPassword !== null,
         personRoles: {
           create: {
             roleType: mappedRoleType,
             isActive: true,
             isPrimary: true,
-            companyId,
+            companyTenantProfileId: companyId, // P49: companyId è ora companyTenantProfileId
             tenantId
+          }
+        },
+        // P48: Crea PersonTenantProfile con dati tenant-specific
+        tenantProfiles: {
+          create: {
+            tenantId,
+            companyTenantProfileId: companyId, // P49: companyId è ora companyTenantProfileId
+            status: profileData.status || 'ACTIVE',
+            isActive: true,
+            isPrimary: true,
+            ...profileData
           }
         }
       };
 
-      return await prisma.person.create({
+      const createdPerson = await prisma.person.create({
         data: createData,
         include: this.getDefaultInclude()
       });
+
+      // P48: Email viene da tenantProfiles per evento
+      const primaryProfile = createdPerson.tenantProfiles?.[0] || {};
+
+      // Project 47 - Emit domain event for notification system
+      await EventBus.publish(PersonEvents.CREATED, {
+        personId: createdPerson.id,
+        firstName: createdPerson.firstName,
+        lastName: createdPerson.lastName,
+        email: primaryProfile.email || null,
+        roleType: mappedRoleType,
+        tenantId
+      });
+
+      // Restituisce la persona creata con la password temporanea in chiaro (se generata)
+      // La password in chiaro serve per comunicarla all'utente (email o scheda stampabile)
+      // NON viene mai salvata in chiaro nel database
+      return {
+        ...createdPerson,
+        _temporaryPassword: plainTextPassword // Prefisso _ indica campo non persistente
+      };
     } catch (error) {
       logger.error('Error creating person:', { error: error.message, data });
       throw error;
@@ -203,58 +489,197 @@ class PersonCore {
 
   /**
    * Aggiorna una persona
+   * P48: Separa Person (dati globali) da PersonTenantProfile (dati tenant-specific)
    * @param {string} id - ID della persona
    * @param {Object} data - Dati da aggiornare
+   * @param {string} tenantId - ID del tenant per aggiornare il profilo corretto (opzionale)
    * @returns {Promise<Object>} Persona aggiornata
    */
-  static async updatePerson(id, data) {
+  static async updatePerson(id, data, tenantId = null) {
     try {
-      const { roles, ...personData } = data;
+      const { roles, ...inputData } = data;
 
-      // Hash della password se presente e non è già hashata
-      if (personData.password && !personData.password.startsWith('$2')) {
-        const bcrypt = await import('bcryptjs');
-        personData.password = await bcrypt.default.hash(personData.password, 12);
-      }
-
-      // Lista dei campi validi nel modello Person (Prisma)
-      const validPersonFields = [
-        'firstName', 'lastName', 'email', 'phone', 'birthDate', 'taxCode',
-        'vatNumber', 'residenceAddress', 'residenceCity', 'postalCode', 'province',
-        'username', 'password', 'status', 'title', 'hiredDate', 'hourlyRate',
-        'iban', 'registerCode', 'certifications', 'specialties', 'profileImage',
-        'notes', 'lastLogin', 'failedAttempts', 'lockedUntil', 'globalRole',
-        'tenantId', 'companyId', 'gdprConsentDate', 'gdprConsentVersion',
-        'dataRetentionUntil', 'preferences', 'siteId', 'reparto', 'repartoId'
+      // P48: Campi globali su Person
+      const PERSON_GLOBAL_FIELDS = [
+        'firstName', 'lastName', 'birthDate', 'birthPlace', 'birthProvince',
+        'gender', 'taxCode', 'vatNumber', 'username', 'password',
+        'gdprConsentDate', 'gdprConsentVersion', 'dataRetentionUntil', 'profileImage',
+        'lastLogin', 'failedAttempts', 'lockedUntil'
       ];
 
-      // Filtra solo i campi validi per evitare errori Prisma
-      const filteredData = {};
-      for (const key of Object.keys(personData)) {
-        if (validPersonFields.includes(key) && personData[key] !== undefined) {
-          filteredData[key] = personData[key];
+      // P48/P49: Campi tenant-specific su PersonTenantProfile
+      // NOTA: companyTenantProfileId (P49) sostituisce companyId deprecato
+      const PROFILE_FIELDS = [
+        'email', 'phone', 'pec', 'residenceAddress', 'residenceCity',
+        'postalCode', 'province', 'status', 'title', 'hiredDate', 'endDate',
+        'hourlyRate', 'monthlyRate', 'iban', 'registerCode', 'registerCode2',
+        'specialties', 'certifications', 'companyTenantProfileId', 'siteId', 'repartoId',
+        'shortDescription', 'fullDescription', 'notes', 'preferences', 'protocolloSanitarioId'
+      ];
+
+      // P49: Mappa companyId legacy a companyTenantProfileId
+      if (inputData.companyId && !inputData.companyTenantProfileId) {
+        inputData.companyTenantProfileId = inputData.companyId;
+        delete inputData.companyId;
+      }
+
+      // Separa i dati
+      const personUpdateData = {};
+      const profileUpdateData = {};
+
+      for (const key of Object.keys(inputData)) {
+        if (inputData[key] === undefined) continue;
+        if (PERSON_GLOBAL_FIELDS.includes(key)) {
+          personUpdateData[key] = inputData[key];
+        } else if (PROFILE_FIELDS.includes(key)) {
+          profileUpdateData[key] = inputData[key];
         }
       }
 
-      // Converti campi data se sono stringhe
-      if (filteredData.birthDate && typeof filteredData.birthDate === 'string') {
-        filteredData.birthDate = new Date(filteredData.birthDate);
-      }
-      if (filteredData.hiredDate && typeof filteredData.hiredDate === 'string') {
-        filteredData.hiredDate = new Date(filteredData.hiredDate);
-      }
-      if (filteredData.hourlyRate !== undefined) {
-        filteredData.hourlyRate = parseFloat(filteredData.hourlyRate) || null;
+      // Hash della password se presente e non è già hashata
+      if (personUpdateData.password && !personUpdateData.password.startsWith('$2')) {
+        const bcrypt = await import('bcrypt');
+        personUpdateData.password = await bcrypt.default.hash(personUpdateData.password, 12);
       }
 
-      return await prisma.person.update({
-        where: { id },
-        data: {
-          ...filteredData,
-          updatedAt: new Date()
-        },
-        include: this.getDefaultInclude()
+      // Normalizza email
+      if (profileUpdateData.email) {
+        profileUpdateData.email = profileUpdateData.email.toLowerCase().trim();
+      }
+
+      // Normalizza taxCode
+      if (personUpdateData.taxCode) {
+        personUpdateData.taxCode = personUpdateData.taxCode.toUpperCase().trim();
+      }
+
+      // Converti campi data se sono stringhe
+      if (personUpdateData.birthDate && typeof personUpdateData.birthDate === 'string') {
+        personUpdateData.birthDate = new Date(personUpdateData.birthDate);
+      }
+      if (profileUpdateData.hiredDate && typeof profileUpdateData.hiredDate === 'string') {
+        profileUpdateData.hiredDate = new Date(profileUpdateData.hiredDate);
+      }
+      if (profileUpdateData.hourlyRate !== undefined) {
+        profileUpdateData.hourlyRate = parseFloat(profileUpdateData.hourlyRate) || null;
+      }
+
+      // Converti stringhe vuote in null per campi FK opzionali
+      const NULLABLE_FK_FIELDS = ['protocolloSanitarioId', 'companyTenantProfileId', 'siteId', 'repartoId'];
+      for (const fk of NULLABLE_FK_FIELDS) {
+        if (profileUpdateData[fk] === '' || profileUpdateData[fk] === null) {
+          profileUpdateData[fk] = null;
+        }
+      }
+
+      // Valida FK references prima della transazione
+      if (profileUpdateData.protocolloSanitarioId) {
+        const protocollo = await prisma.protocolloSanitario.findUnique({
+          where: { id: profileUpdateData.protocolloSanitarioId },
+          select: { id: true }
+        });
+        if (!protocollo) {
+          const err = new Error('Protocollo sanitario non trovato');
+          err.code = 'FK_VALIDATION';
+          err.field = 'protocolloSanitarioId';
+          throw err;
+        }
+      }
+      if (profileUpdateData.siteId) {
+        const site = await prisma.companySite.findUnique({
+          where: { id: profileUpdateData.siteId },
+          select: { id: true }
+        });
+        if (!site) {
+          const err = new Error('Sede non trovata');
+          err.code = 'FK_VALIDATION';
+          err.field = 'siteId';
+          throw err;
+        }
+      }
+      if (profileUpdateData.repartoId) {
+        const reparto = await prisma.reparto.findUnique({
+          where: { id: profileUpdateData.repartoId },
+          select: { id: true }
+        });
+        if (!reparto) {
+          const err = new Error('Reparto non trovato');
+          err.code = 'FK_VALIDATION';
+          err.field = 'repartoId';
+          throw err;
+        }
+      }
+
+      // Track if password is being changed
+      const passwordChanged = !!inputData.password;
+
+      // P48: Transazione per aggiornare Person e PersonTenantProfile
+      const result = await prisma.$transaction(async (tx) => {
+        // Aggiorna Person se ci sono campi globali
+        let updatedPerson;
+        if (Object.keys(personUpdateData).length > 0) {
+          updatedPerson = await tx.person.update({
+            where: { id },
+            data: {
+              ...personUpdateData,
+              updatedAt: new Date()
+            }
+          });
+        }
+
+        // Aggiorna PersonTenantProfile se ci sono campi tenant-specific
+        if (Object.keys(profileUpdateData).length > 0) {
+          // Trova il profilo per questo tenant o il profilo primario
+          const existingProfile = await tx.personTenantProfile.findFirst({
+            where: {
+              personId: id,
+              deletedAt: null,
+              ...(tenantId ? { tenantId } : { isPrimary: true })
+            }
+          });
+
+          if (existingProfile) {
+            await tx.personTenantProfile.update({
+              where: { id: existingProfile.id },
+              data: {
+                ...profileUpdateData,
+                updatedAt: new Date()
+              }
+            });
+          } else if (tenantId) {
+            // Crea nuovo profilo per questo tenant se non esiste
+            await tx.personTenantProfile.create({
+              data: {
+                personId: id,
+                tenantId,
+                status: 'ACTIVE',
+                isActive: true,
+                isPrimary: false,
+                ...profileUpdateData
+              }
+            });
+          }
+        }
+
+        // Ritorna la persona aggiornata con tutti gli include
+        return await tx.person.findFirst({ // F246: findFirst+deletedAt
+          where: { id, deletedAt: null },
+          include: PersonCore.getDefaultInclude()
+        });
       });
+
+      // Project 47 - Emit domain event if password was changed
+      if (passwordChanged) {
+        const primaryProfile = result.tenantProfiles?.[0] || {};
+        await EventBus.publish(PersonEvents.PASSWORD_CHANGED, {
+          personId: result.id,
+          email: primaryProfile.email || null,
+          firstName: result.firstName,
+          lastName: result.lastName,
+          tenantId: primaryProfile.tenantId || null
+        });
+      }
+
+      return result;
     } catch (error) {
       logger.error('Error updating person:', { error: error.message, id, data });
       throw error;
@@ -263,38 +688,143 @@ class PersonCore {
 
   /**
    * Soft delete di una persona
+   * P48: status è ora su PersonTenantProfile
+   * P58: con ownership check e GDPR logging
    * @param {string} id - ID della persona
-   * @returns {Promise<Object>} Persona aggiornata
+   * @param {Object} options - Opzioni eliminazione
+   * @param {string} options.tenantId - Tenant ID per ownership check
+   * @param {string} options.deletedBy - Person ID che sta eliminando
+   * @param {string} options.deletionReason - Motivo eliminazione (GDPR)
+   * @returns {Promise<Object>} Persona eliminata
    */
-  static async deletePerson(id) {
+  static async deletePerson(id, options = {}) {
+    const { tenantId, deletedBy, deletionReason } = options;
+
     try {
-      return await prisma.person.update({
-        where: { id },
-        data: {
-          deletedAt: new Date(),
-          status: 'INACTIVE'
+      // P58: Verifica esistenza e ownership
+      const existing = await prisma.person.findFirst({
+        where: { id, deletedAt: null },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          tenantProfiles: {
+            where: { deletedAt: null },
+            select: { tenantId: true }
+          }
         }
       });
+
+      if (!existing) {
+        throw new Error('Person not found');
+      }
+
+      // P58: Verifica ownership - la persona deve avere un profilo nel tenant del richiedente
+      if (tenantId) {
+        const hasProfileInTenant = existing.tenantProfiles.some(p => p.tenantId === tenantId);
+        if (!hasProfileInTenant) {
+          throw new Error('NOT_OWNER: Non sei il proprietario di questa persona. Solo il tenant owner può eliminarla.');
+        }
+      }
+
+      // P58: Transazione per soft delete Person, profiles, revoca consent e GDPR audit
+      return await prisma.$transaction(async (tx) => {
+        // 1. Soft delete la persona
+        const deletedPerson = await tx.person.update({
+          where: { id },
+          data: { deletedAt: new Date() }
+        });
+
+        // 2. Imposta status INACTIVE su tutti i profili tenant
+        await tx.personTenantProfile.updateMany({
+          where: {
+            personId: id,
+            deletedAt: null
+          },
+          data: {
+            status: 'INACTIVE',
+            isActive: false,
+            deletedAt: new Date()
+          }
+        });
+
+        // 3. P58: Revoca automatica di TUTTI i consent cross-tenant dove questa person è condivisa
+        // Quando l'owner elimina, tutti i tenant che avevano accesso perdono l'accesso
+        await tx.personDataShareConsent.updateMany({
+          where: {
+            personId: id,
+            isRevoked: false
+          },
+          data: {
+            isRevoked: true,
+            revokedAt: new Date(),
+            revokedBy: deletedBy || 'system',
+            revokedReason: deletionReason || 'Owner ha eliminato i dati'
+          }
+        });
+
+        // 4. P58: GDPR Audit Log
+        if (tenantId && deletedBy) {
+          await tx.gdprAuditLog.create({
+            data: {
+              personId: id,
+              action: 'DELETE',
+              resourceType: 'Person',
+              resourceId: id,
+              tenantId: tenantId,
+              dataAccessed: {
+                personName: `${existing.firstName || ''} ${existing.lastName || ''}`.trim(),
+                deletionReason: deletionReason || 'Eliminazione persona',
+                deletedAt: new Date().toISOString(),
+                deletedBy: deletedBy,
+                operation: 'SOFT_DELETE',
+                crossTenantConsentsRevoked: true
+              }
+            }
+          });
+        }
+
+        return deletedPerson;
+      });
     } catch (error) {
-      logger.error('Error deleting person:', { error: error.message, id });
+      logger.error('Error deleting person:', { error: error.message, id, tenantId });
       throw error;
     }
   }
 
   /**
    * Ripristina una persona eliminata (soft delete)
+   * P48: status è ora su PersonTenantProfile
    * @param {string} id - ID della persona da ripristinare
    * @returns {Promise<Object>} Persona ripristinata
    */
   static async restorePerson(id) {
     try {
-      return await prisma.person.update({
-        where: { id },
-        data: {
-          deletedAt: null,
-          status: 'ACTIVE',
-          updatedAt: new Date()
-        }
+      // P48: Transazione per ripristinare Person e profili
+      return await prisma.$transaction(async (tx) => {
+        // Ripristina la persona
+        const restoredPerson = await tx.person.update({
+          where: { id },
+          data: {
+            deletedAt: null,
+            updatedAt: new Date()
+          }
+        });
+
+        // P48: Ripristina tutti i profili tenant con status ACTIVE
+        await tx.personTenantProfile.updateMany({
+          where: {
+            personId: id
+          },
+          data: {
+            status: 'ACTIVE',
+            isActive: true,
+            deletedAt: null,
+            updatedAt: new Date()
+          }
+        });
+
+        return restoredPerson;
       });
     } catch (error) {
       logger.error('Error restoring person:', { error: error.message, id });
@@ -303,17 +833,26 @@ class PersonCore {
   }
 
   /**
-   * Elimina più persone
+   * Elimina più persone con ownership check e GDPR logging
+   * P58: Solo il tenant owner può eliminare, delegati possono solo revocare consent
+   * 
    * @param {Array} personIds - Array di ID delle persone
+   * @param {Object} options - Opzioni eliminazione
+   * @param {string} options.tenantId - Tenant ID per ownership check
+   * @param {string} options.deletedBy - Person ID che sta eliminando
+   * @param {string} options.deletionReason - Motivo eliminazione (GDPR)
    * @returns {Promise<Object>} Risultato dell'operazione
    */
-  static async deleteMultiplePersons(personIds) {
+  static async deleteMultiplePersons(personIds, options = {}) {
+    const { tenantId, deletedBy, deletionReason } = options;
+
     try {
       // Normalizza input: rimuovi falsy, deduplica
       const uniqueIds = Array.from(new Set((personIds || []).filter(Boolean)));
 
       const results = {
         deleted: 0,
+        skipped: 0,
         errors: []
       };
 
@@ -321,36 +860,136 @@ class PersonCore {
         return results;
       }
 
-      // Recupera gli ID effettivamente esistenti per evitare errori Prisma
+      // P58: Recupera persone con i loro profili tenant per ownership check
       const existing = await prisma.person.findMany({
         where: {
           id: { in: uniqueIds },
-          deletedAt: null // ✅ FIX: Exclude soft-deleted persons (GDPR compliance)
+          deletedAt: null
         },
-        select: { id: true }
-      });
-      const existingIds = existing.map(p => p.id);
-
-      // Esegui soft delete in blocco sugli ID trovati
-      const updateResult = await prisma.person.updateMany({
-        where: { id: { in: existingIds } },
-        data: {
-          deletedAt: new Date(),
-          status: 'INACTIVE'
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          tenantProfiles: {
+            where: { deletedAt: null },
+            select: { tenantId: true }
+          }
         }
       });
 
-      results.deleted = updateResult.count || 0;
+      if (existing.length === 0) {
+        for (const missingId of uniqueIds) {
+          results.errors.push({ personId: missingId, error: 'Person not found or already deleted' });
+        }
+        return results;
+      }
+
+      // P58: Separa persone che l'utente può eliminare (owner) da quelle che non può (delegato)
+      const canDelete = [];
+      const cannotDelete = [];
+
+      for (const person of existing) {
+        // Una persona può essere eliminata se ha un profilo nel tenant del richiedente
+        const hasProfileInTenant = person.tenantProfiles.some(p => p.tenantId === tenantId);
+
+        if (hasProfileInTenant) {
+          canDelete.push(person);
+        } else {
+          cannotDelete.push(person);
+          results.errors.push({
+            personId: person.id,
+            error: 'Non sei il proprietario di questa persona. Solo il tenant owner può eliminarla.',
+            code: 'NOT_OWNER'
+          });
+        }
+      }
+
+      results.skipped = cannotDelete.length;
+
+      if (canDelete.length === 0) {
+        return results;
+      }
+
+      const idsToDelete = canDelete.map(p => p.id);
+
+      // P58: Transazione per soft delete Person, profiles, revoca consent e GDPR audit log
+      await prisma.$transaction(async (tx) => {
+        // 1. Soft delete Person
+        await tx.person.updateMany({
+          where: { id: { in: idsToDelete } },
+          data: { deletedAt: new Date() }
+        });
+
+        // 2. Soft delete e disattiva tutti i profili tenant associati
+        await tx.personTenantProfile.updateMany({
+          where: {
+            personId: { in: idsToDelete },
+            deletedAt: null
+          },
+          data: {
+            status: 'INACTIVE',
+            isActive: false,
+            deletedAt: new Date()
+          }
+        });
+
+        // 3. P58: Revoca automatica di TUTTI i consent cross-tenant dove questa person è condivisa
+        // Quando l'owner elimina, tutti i tenant che avevano accesso perdono l'accesso
+        await tx.personDataShareConsent.updateMany({
+          where: {
+            personId: { in: idsToDelete },
+            isRevoked: false
+          },
+          data: {
+            isRevoked: true,
+            revokedAt: new Date(),
+            revokedBy: deletedBy,
+            revokedReason: deletionReason || 'Owner ha eliminato i dati'
+          }
+        });
+
+        // 4. P58: GDPR Audit Log per ogni persona eliminata
+        const auditLogs = canDelete.map(person => ({
+          personId: person.id,
+          action: 'DELETE',
+          resourceType: 'Person',
+          resourceId: person.id,
+          tenantId: tenantId,
+          dataAccessed: {
+            personName: `${person.firstName || ''} ${person.lastName || ''}`.trim(),
+            deletionReason: deletionReason || 'Eliminazione massiva',
+            deletedAt: new Date().toISOString(),
+            deletedBy: deletedBy,
+            bulkOperation: true,
+            totalInBatch: idsToDelete.length,
+            operation: 'SOFT_DELETE',
+            crossTenantConsentsRevoked: true
+          }
+        }));
+
+        await tx.gdprAuditLog.createMany({ data: auditLogs });
+      });
+
+      results.deleted = idsToDelete.length;
 
       // Segnala come errore gli ID non trovati
+      const existingIds = existing.map(p => p.id);
       const missingIds = uniqueIds.filter(id => !existingIds.includes(id));
       for (const missingId of missingIds) {
         results.errors.push({ personId: missingId, error: 'Person not found' });
       }
 
+      logger.info('Bulk person deletion completed', {
+        deleted: results.deleted,
+        skipped: results.skipped,
+        errors: results.errors.length,
+        tenantId,
+        deletedBy
+      });
+
       return results;
     } catch (error) {
-      logger.error('Error deleting multiple persons:', { error: error.message, personIds });
+      logger.error('Error deleting multiple persons:', { error: error.message, personIds, tenantId });
       throw error;
     }
   }
@@ -367,9 +1006,13 @@ class PersonCore {
       const where = {
         deletedAt: null,
         OR: [
-          { firstName: { contains: query, mode: 'insensitive' } },
-          { lastName: { contains: query, mode: 'insensitive' } },
-          { email: { contains: query, mode: 'insensitive' } },
+          // P53-S23: Fuzzy name matching — search all name variants (accents, apostrophes, hyphens, spaces)
+          ...generateNameVariants(query).flatMap(v => [
+            { firstName: { contains: v, mode: 'insensitive' } },
+            { lastName: { contains: v, mode: 'insensitive' } }
+          ]),
+          // P48: email is on PersonTenantProfile, not Person
+          { tenantProfiles: { some: { email: { contains: query, mode: 'insensitive' }, deletedAt: null } } },
           { username: { contains: query, mode: 'insensitive' } }
         ],
         ...filters
@@ -407,17 +1050,27 @@ class PersonCore {
   static async resetPersonPassword(id) {
     try {
       const temporaryPassword = PersonUtils.generateTemporaryPassword();
-      const bcrypt = await import('bcryptjs');
+      const bcrypt = await import('bcrypt');
       const hashedPassword = await bcrypt.default.hash(temporaryPassword, 12);
 
       await prisma.person.update({
         where: { id },
         data: {
           password: hashedPassword,
-          passwordResetRequired: true,
+          mustChangePassword: true,
           updatedAt: new Date()
         }
       });
+
+      // F309: Revoke all active refresh tokens on password reset to force re-authentication.
+      // Prevents continued session access after a password change by an admin.
+      try {
+        await JWTService.revokeAllPersonSessions(id);
+        logger.info('Revoked all sessions after password reset', { personId: id });
+      } catch (revokeError) {
+        // Log but don't fail the password reset if revocation fails
+        logger.warn('Failed to revoke sessions after password reset', { personId: id, error: revokeError.message });
+      }
 
       return { temporaryPassword };
     } catch (error) {
@@ -460,24 +1113,25 @@ class PersonCore {
   static async isEmailAvailable(email, excludePersonId = null) {
     try {
       const where = {
-        email,
-        deletedAt: null // ✅ FIX: Exclude soft-deleted persons (GDPR compliance - allow email reuse)
+        email: email.toLowerCase().trim(),
+        deletedAt: null // ✅ P48: email è su PersonTenantProfile, non su Person
       };
       if (excludePersonId) {
-        where.id = { not: excludePersonId };
+        where.personId = { not: excludePersonId };
       }
 
-      const existingPerson = await prisma.person.findFirst({ where });
+      const existingProfile = await prisma.personTenantProfile.findFirst({ where });
 
-      return !existingPerson;
+      return !existingProfile;
     } catch (error) {
-      logger.error('Error checking email availability:', { error: error.message, email });
+      logger.error('Error checking email availability:', { error: error.message, email: email?.replace(/(.{2}).*@/, '$1***@') });
       throw error;
     }
   }
 
   /**
    * Include di default per le query
+   * P48/P49: company, site, status, email sono ora in PersonTenantProfile
    * @returns {Object} Oggetto include
    */
   static getDefaultInclude() {
@@ -485,13 +1139,28 @@ class PersonCore {
       personRoles: {
         where: { isActive: true },
         include: {
-          company: true,
+          companyTenantProfile: {
+            include: {
+              company: { select: { id: true, ragioneSociale: true } }
+            }
+          },
           tenant: true
         }
       },
-      company: true,
-      tenant: true,
-      site: true, // ✅ Include sede aziendale
+      // P48/P49: Include tenant profiles per dati tenant-specific
+      tenantProfiles: {
+        where: { deletedAt: null, isActive: true },
+        include: {
+          companyTenantProfile: {
+            include: {
+              company: { select: { id: true, ragioneSociale: true } }
+            }
+          },
+          site: true,
+          tenant: true
+        }
+      },
+      // P63: Person.Tenant RIMOSSO - usare tenantProfiles.tenant
       personSessions: {
         where: {
           isActive: true,
@@ -503,96 +1172,93 @@ class PersonCore {
           id: true,
           lastActivityAt: true
         }
+      },
+      // Mansioni attive del lavoratore per la lista
+      mansioni: {
+        where: { isAttiva: true, deletedAt: null },
+        include: {
+          mansione: { select: { id: true, denominazione: true, codice: true } }
+        },
+        orderBy: [{ isPrimaria: 'desc' }, { dataInizio: 'desc' }],
+        take: 3
       }
     };
   }
 
   /**
-   * Aggiunge lo status online alle persone
+   * Aggiunge lo status online alle persone e fa il flatten dei tenantProfiles
+   * P48: Estrae email, phone, companyTenantProfileId etc. dal primo tenantProfile
+   * P63: Fallback su personRoles per companyTenantProfileId (dati legacy)
    * @param {Array} persons - Array di persone
-   * @returns {Array} Array di persone con status online
+   * @returns {Array} Array di persone con status online e campi flattened
    */
   static addOnlineStatus(persons) {
-    return persons.map(person => ({
-      ...person,
-      isOnline: person.personSessions && person.personSessions.length > 0
-    }));
-  }
+    return persons.map(person => {
+      // P48/P63: Trova il miglior profile da usare per il flatten
+      // Priorità: 1) Profile con companyTenantProfileId, 2) Profile con isPrimary, 3) Primo profile
+      const profiles = person.tenantProfiles || [];
+      const profileWithCompany = profiles.find(p => p.companyTenantProfileId);
+      const primaryProfile = profiles.find(p => p.isPrimary);
+      const profile = profileWithCompany || primaryProfile || profiles[0] || {};
 
-  /**
-   * Ottiene dipendenti (backward compatibility)
-   * @param {Object} filters - Filtri
-   * @returns {Promise<Array>} Array di dipendenti
-   */
-  static async getEmployees(filters = {}) {
-    // Secondo la gerarchia dei ruoli, gli "employees" includono tutti i ruoli
-    // da COMPANY_ADMIN (Responsabile Aziendale) in giù, escludendo solo ADMIN, SUPER_ADMIN, TENANT_ADMIN
-    const employeeRoleTypes = [
-      'COMPANY_ADMIN', 'HR_MANAGER', 'MANAGER', 'DEPARTMENT_HEAD',
-      'TRAINER_COORDINATOR', 'SENIOR_TRAINER', 'TRAINER', 'EXTERNAL_TRAINER',
-      'EMPLOYEE', 'COMPANY_MANAGER', 'TRAINING_ADMIN', 'CLINIC_ADMIN',
-      'VIEWER', 'OPERATOR', 'COORDINATOR', 'SUPERVISOR', 'GUEST',
-      'CONSULTANT', 'AUDITOR'
-    ];
-    return this.getPersonsByRole(employeeRoleTypes, filters);
-  }
+      // P63: companyTenantProfileId può essere in tenantProfiles O in personRoles
+      // Fallback su personRoles per dati legacy pre-P48/P49
+      const activeRole = person.personRoles?.find(r => r.isActive);
+      const companyId = profile.companyTenantProfileId
+        || activeRole?.companyTenantProfileId
+        || null;
 
-  /**
-   * Ottiene formatori (backward compatibility)
-   * @param {Object} filters - Filtri
-   * @returns {Promise<Array>} Array di formatori
-   */
-  static async getTrainers(filters = {}) {
-    // Allinea alla famiglia di ruoli trainer usata nella paginazione
-    const trainerRoleTypes = ['TRAINER', 'SENIOR_TRAINER', 'TRAINER_COORDINATOR', 'EXTERNAL_TRAINER'];
-    return this.getPersonsByRole(trainerRoleTypes, filters);
-  }
-
-  /**
-   * Ottiene utenti sistema (backward compatibility)
-   * @param {Object} filters - Filtri
-   * @returns {Promise<Array>} Array di utenti sistema
-   */
-  static async getSystemUsers(filters = {}) {
-    try {
-      const where = {
-        deletedAt: null, // Escludi i record eliminati (soft delete)
-        personRoles: {
-          some: {
-            roleType: { in: ['ADMIN', 'COMPANY_ADMIN', 'MANAGER', 'SUPER_ADMIN', 'TENANT_ADMIN'] },
-            isActive: true
-          }
-        },
-        ...filters
+      return {
+        ...person,
+        isOnline: person.personSessions && person.personSessions.length > 0,
+        // P48: Campi da PersonTenantProfile al livello top per compatibilità frontend
+        email: profile.email || null,
+        phone: profile.phone || null,
+        pec: profile.pec || null,
+        status: profile.status || 'PENDING',
+        title: profile.title || null,
+        companyId: companyId,
+        companyTenantProfileId: companyId,
+        siteId: profile.siteId || null,
+        repartoId: profile.repartoId || null,
+        hiredDate: profile.hiredDate || null,
+        endDate: profile.endDate || null,
+        hourlyRate: profile.hourlyRate || null,
+        monthlyRate: profile.monthlyRate || null,
+        iban: profile.iban || null,
+        registerCode: profile.registerCode || null,
+        registerCode2: profile.registerCode2 || null,
+        specialties: profile.specialties || [],
+        certifications: profile.certifications || [],
+        shortDescription: profile.shortDescription || null,
+        fullDescription: profile.fullDescription || null,
+        notes: profile.notes || null,
+        preferences: profile.preferences || null,
+        residenceAddress: profile.residenceAddress || null,
+        residenceCity: profile.residenceCity || null,
+        postalCode: profile.postalCode || null,
+        province: profile.province || null
       };
-
-      const users = await prisma.person.findMany({
-        where,
-        include: this.getDefaultInclude(),
-        orderBy: {
-          lastLogin: 'desc' // Ordina per login più recente
-        }
-      });
-
-      return this.addOnlineStatus(users);
-    } catch (error) {
-      logger.error('Error getting system persons:', { error: error.message });
-      throw error;
-    }
+    });
   }
 
   /**
-   * Ottiene persone con paginazione e filtri
+   * Ottiene persone con paginazione e filtri (multi-tenant support)
    * @param {Object} options - Opzioni di paginazione e filtri
+   * @param {string} options.tenantId - Single tenant ID filter
+   * @param {string[]} options.tenantIds - Array of tenant IDs filter (multi-tenant)
    * @returns {Promise<Object>} Risultato paginato
    */
   static async getPersonsWithPagination(options = {}) {
     try {
       const {
         roleType,
+        specialty,
         isActive,
         companyId,
-        tenantId, // Multi-tenancy filter
+        tenantId, // Single tenant filter
+        tenantIds, // Multi-tenant filter (array)
+        includeWithoutRoles, // P69: Include persons with tenant profile but no roles (permissions page)
         search,
         sortBy = 'lastLogin',
         sortOrder = 'desc',
@@ -604,9 +1270,18 @@ class PersonCore {
         deletedAt: null // Escludi i record eliminati (soft delete)
       };
 
-      // Multi-tenancy: filter by tenantId when provided
-      if (tenantId) {
-        where.tenantId = tenantId;
+      // P48: Build personRoles filter conditions
+      // In P48 model, tenantId is on PersonRole, not on Person directly
+      const personRolesFilter = {
+        isActive: true,
+        deletedAt: null
+      };
+
+      // Multi-tenancy: filter through personRoles.tenantId
+      if (tenantIds && tenantIds.length > 0) {
+        personRolesFilter.tenantId = { in: tenantIds };
+      } else if (tenantId) {
+        personRolesFilter.tenantId = tenantId;
       }
 
       // Filtro per ruolo
@@ -620,25 +1295,61 @@ class PersonCore {
           'VIEWER', 'OPERATOR', 'COORDINATOR', 'SUPERVISOR', 'GUEST',
           'CONSULTANT', 'AUDITOR'
         ];
-        let roleCondition;
-        if (Array.isArray(roleType)) {
-          roleCondition = { in: roleType };
-        } else if (roleType === 'TRAINER') {
-          // Interpreta 'TRAINER' come famiglia dei ruoli trainer per la vista formatori
-          roleCondition = { in: trainerFamily };
-        } else if (roleType === 'EMPLOYEE') {
-          // Interpreta 'EMPLOYEE' come famiglia dei ruoli dipendenti per la vista employees
-          roleCondition = { in: employeeFamily };
-        } else {
-          roleCondition = roleType;
+
+        // P59 Fix: Supporta stringhe separate da virgola (es. "RSPP,CONSULENTE_SICUREZZA")
+        let parsedRoleType = roleType;
+        if (typeof roleType === 'string' && roleType.includes(',')) {
+          parsedRoleType = roleType.split(',').map(r => r.trim()).filter(Boolean);
         }
 
-        where.personRoles = {
-          some: {
-            roleType: roleCondition,
-            // Se isActive è specificato, applicalo al ruolo; altrimenti default true
-            isActive: (typeof isActive !== 'undefined') ? !!isActive : true
+        if (Array.isArray(parsedRoleType)) {
+          personRolesFilter.roleType = { in: parsedRoleType };
+        } else if (parsedRoleType === 'TRAINER') {
+          // Interpreta 'TRAINER' come famiglia dei ruoli trainer per la vista formatori
+          personRolesFilter.roleType = { in: trainerFamily };
+        } else if (parsedRoleType === 'EMPLOYEE') {
+          // Interpreta 'EMPLOYEE' come famiglia dei ruoli dipendenti per la vista employees
+          personRolesFilter.roleType = { in: employeeFamily };
+        } else {
+          personRolesFilter.roleType = parsedRoleType;
+        }
+
+        // Se isActive è specificato, applicalo al ruolo
+        if (typeof isActive !== 'undefined') {
+          personRolesFilter.isActive = !!isActive;
+        }
+      }
+
+      // P48: Apply personRoles filter if we have tenant or role conditions
+      // P69: When includeWithoutRoles is true, filter by tenantProfiles instead of personRoles
+      // This ensures persons without any PersonRole (e.g., doctors not yet assigned) still appear
+      if (includeWithoutRoles && (personRolesFilter.tenantId) && !personRolesFilter.roleType) {
+        // Filter by PersonTenantProfile OR PersonRole in this tenant
+        // This ensures persons without a TenantProfile but with a role still appear
+        const tenantFilter = personRolesFilter.tenantId;
+        where.OR = [
+          {
+            tenantProfiles: {
+              some: {
+                tenantId: tenantFilter,
+                deletedAt: null,
+                isActive: true
+              }
+            }
+          },
+          {
+            personRoles: {
+              some: {
+                tenantId: tenantFilter,
+                isActive: true,
+                deletedAt: null
+              }
+            }
           }
+        ];
+      } else if (personRolesFilter.tenantId || personRolesFilter.roleType) {
+        where.personRoles = {
+          some: personRolesFilter
         };
       }
 
@@ -648,18 +1359,126 @@ class PersonCore {
         where.status = isActive ? 'ACTIVE' : 'INACTIVE';
       }
 
-      // Filtro per azienda
+      // P59: Per ruoli specializzati (RSPP, MC, etc.), cerca anche nelle specialties
+      // Questo permette di trovare formatori che hanno RSPP come specializzazione
+      const specialtyRoleTypes = ['RSPP', 'MEDICO_COMPETENTE', 'CONSULENTE_SICUREZZA', 'TECNICO_SICUREZZA', 'ASPP', 'RLS'];
+      // P59 Fix: Mapping tra roleType e possibili varianti nelle specialties
+      const specialtyVariants = {
+        'RSPP': ['RSPP', 'Responsabile Servizio Prevenzione', 'responsabile sicurezza'],
+        'MEDICO_COMPETENTE': ['Medico del Lavoro', 'Medicina del Lavoro', 'Medico Competente'],
+        'CONSULENTE_SICUREZZA': ['Consulente Sicurezza', 'consulente sicurezza'],
+        'TECNICO_SICUREZZA': ['Tecnico Sicurezza', 'tecnico sicurezza'],
+        'ASPP': ['ASPP', 'Addetto Servizio Prevenzione'],
+        'RLS': ['RLS', 'Rappresentante Lavoratori']
+      };
+
+      // P59 Fix: Gestisce anche stringhe separate da virgola per requestedRoleTypes
+      let parsedRoleTypeForSpecialty = roleType;
+      if (typeof roleType === 'string' && roleType.includes(',')) {
+        parsedRoleTypeForSpecialty = roleType.split(',').map(r => r.trim()).filter(Boolean);
+      }
+      const requestedRoleTypes = Array.isArray(parsedRoleTypeForSpecialty) ? parsedRoleTypeForSpecialty : (parsedRoleTypeForSpecialty ? [parsedRoleTypeForSpecialty] : []);
+      const specialtyMatches = requestedRoleTypes.filter(r => specialtyRoleTypes.includes(r));
+
+      // P59 Fix: Determina il tenantId effettivo per filtrare anche le specialità
+      const effectiveTenantIdForSpecialty = tenantIds?.length > 0 ? tenantIds : (tenantId ? [tenantId] : null);
+
+      if (specialtyMatches.length > 0 && where.personRoles) {
+        // Build OR condition: match by roleType OR by specialties containing one of the role names
+        // P59 Fix: Cerca tutte le possibili varianti delle specialties
+        const specialtyConditions = [];
+        for (const specialty of specialtyMatches) {
+          const variants = specialtyVariants[specialty] || [specialty];
+          for (const variant of variants) {
+            specialtyConditions.push({
+              tenantProfiles: {
+                some: {
+                  deletedAt: null,
+                  specialties: { has: variant },
+                  // P59 Fix: Filtra per tenant anche nelle specialità
+                  ...(effectiveTenantIdForSpecialty && effectiveTenantIdForSpecialty.length === 1
+                    ? { tenantId: effectiveTenantIdForSpecialty[0] }
+                    : effectiveTenantIdForSpecialty?.length > 1
+                      ? { tenantId: { in: effectiveTenantIdForSpecialty } }
+                      : {})
+                }
+              }
+            });
+          }
+        }
+
+        // Create OR between roleType match and specialty match
+        where.OR = [
+          { personRoles: where.personRoles },
+          ...specialtyConditions
+        ];
+        delete where.personRoles;
+      }
+
+      // Filtro per specialità specifica (AND condition)
+      if (specialty) {
+        const specialtyTenantFilter = {};
+        if (tenantIds && tenantIds.length > 0) {
+          specialtyTenantFilter.tenantId = { in: tenantIds };
+        } else if (tenantId) {
+          specialtyTenantFilter.tenantId = tenantId;
+        }
+        const specialtyFilter = {
+          tenantProfiles: {
+            some: {
+              deletedAt: null,
+              specialties: { has: specialty },
+              ...specialtyTenantFilter
+            }
+          }
+        };
+        // Combina con l'OR esistente se presente, altrimenti aggiungi come AND
+        if (where.OR) {
+          // Aggiungi il filtro specialty come condizione AND sopra all'OR
+          where.AND = [
+            { OR: where.OR },
+            specialtyFilter
+          ];
+          delete where.OR;
+        } else {
+          Object.assign(where, specialtyFilter);
+        }
+      }
+
+      // P48/P49: Filtro per azienda tramite tenantProfiles.companyTenantProfileId
+      // companyId può essere sia un CompanyTenantProfile.id che un global Company.id
       if (companyId) {
-        where.companyId = companyId;
+        // Risolvi: se companyId è un global Company.id, trova il CTP corrispondente
+        let resolvedCtpId = companyId;
+        const effectiveTenantId = tenantId || (tenantIds && tenantIds[0]);
+        if (effectiveTenantId) {
+          const ctp = await prisma.companyTenantProfile.findFirst({
+            where: { companyId: companyId, tenantId: effectiveTenantId, deletedAt: null },
+            select: { id: true }
+          });
+          if (ctp) {
+            resolvedCtpId = ctp.id;
+          }
+        }
+        where.tenantProfiles = {
+          ...where.tenantProfiles,
+          some: {
+            ...(where.tenantProfiles?.some || {}),
+            companyTenantProfileId: resolvedCtpId,
+            deletedAt: null
+          }
+        };
       }
 
       // Filtro ricerca testuale
+      // P48/P63: email ora è su tenantProfiles, non su Person
       if (search) {
         where.OR = [
           { firstName: { contains: search, mode: 'insensitive' } },
           { lastName: { contains: search, mode: 'insensitive' } },
-          { email: { contains: search, mode: 'insensitive' } },
-          { username: { contains: search, mode: 'insensitive' } }
+          { username: { contains: search, mode: 'insensitive' } },
+          // P48: cerca email in tenantProfiles
+          { tenantProfiles: { some: { email: { contains: search, mode: 'insensitive' }, deletedAt: null } } }
         ];
       }
 

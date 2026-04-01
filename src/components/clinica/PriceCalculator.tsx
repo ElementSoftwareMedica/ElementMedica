@@ -265,7 +265,7 @@ export const PriceCalculator: React.FC<PriceCalculatorProps> = ({
                             Errore nel calcolo del prezzo
                         </p>
                         <p className="text-xs text-red-600 dark:text-red-300 mt-1">
-                            {error instanceof Error ? error.message : 'Si è verificato un errore'}
+                            {'Si è verificato un errore'}
                         </p>
                     </div>
                 </div>

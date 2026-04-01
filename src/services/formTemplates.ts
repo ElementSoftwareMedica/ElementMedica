@@ -15,6 +15,7 @@ interface BackendFormTemplate {
   name: string;
   description?: string;
   form_fields?: FormFieldType[];
+  formFields?: FormFieldType[];  // camelCase da Prisma (relazione include)
   fields?: FormFieldType[];
   settings?: TemplateSettings;
   isPublic?: boolean;
@@ -57,10 +58,11 @@ interface BackendFormSubmission {
  * Trasforma i dati del template dal formato backend (snake_case) al formato frontend (camelCase)
  */
 function transformFormTemplate(template: BackendFormTemplate): FormTemplate {
-  const { form_fields, submissionsCount, ...rest } = template;
+  // Backend Prisma restituisce formFields (camelCase relation), ma alcune API usano form_fields (snake_case)
+  const { form_fields, formFields, submissionsCount, ...rest } = template;
   return {
     ...rest,
-    fields: form_fields || template.fields || [],
+    fields: form_fields || formFields || template.fields || [],
     settings: template.settings || undefined,
     isPublic: template.isPublic || false,
     allowAnonymous: template.allowAnonymous || false,
@@ -75,7 +77,7 @@ function transformFormTemplates(templates: BackendFormTemplate[]): FormTemplate[
   return templates.map(transformFormTemplate);
 }
 
-// Re-export types from forms.ts with backward-compatible aliases
+// Re-export types from forms.ts for convenience
 export type FormField = FormFieldType;
 export type FormTemplate = FormTemplateType;
 export type FormSubmission = FormSubmissionType;
@@ -129,26 +131,19 @@ export interface FormSubmissionFilters {
 
 class FormTemplatesService {
   // Form Templates
-  async getFormTemplates(): Promise<FormTemplate[]> {
-    const response = await apiGet<{ success: boolean; data: BackendFormTemplate[]; pagination: { total: number; pages: number } }>(`${BASE_URL}/templates`);
+  async getFormTemplates(params?: { tenantIds?: string; allTenants?: string }): Promise<FormTemplate[]> {
+    const queryParams = new URLSearchParams();
+    if (params?.tenantIds) queryParams.append('tenantIds', params.tenantIds);
+    if (params?.allTenants) queryParams.append('allTenants', params.allTenants);
+    const queryString = queryParams.toString();
+    const url = queryString ? `${BASE_URL}/templates?${queryString}` : `${BASE_URL}/templates`;
+    const response = await apiGet<{ success: boolean; data: BackendFormTemplate[]; pagination: { total: number; pages: number } }>(url);
     return transformFormTemplates(response.data);
   }
 
   async getFormTemplate(id: string): Promise<FormTemplate> {
     const response = await apiGet<{ success: boolean; data: BackendFormTemplate }>(`${BASE_URL}/templates/${id}`);
-    console.log('🔍 getFormTemplate raw response:', {
-      id,
-      responseKeys: Object.keys(response),
-      hasData: !!response.data,
-      dataKeys: response.data ? Object.keys(response.data) : [],
-      hasFormFields: !!response.data?.form_fields,
-      formFieldsCount: response.data?.form_fields?.length || 0
-    });
     const transformed = transformFormTemplate(response.data);
-    console.log('🔍 getFormTemplate transformed:', {
-      id,
-      fieldsCount: transformed.fields?.length || 0
-    });
     return transformed;
   }
 

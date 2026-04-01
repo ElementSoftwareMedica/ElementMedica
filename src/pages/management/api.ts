@@ -14,7 +14,8 @@ import type {
     FeaturesResponse,
     FeaturePreset,
     TenantAccessLevel,
-    Tenant
+    Tenant,
+    TenantFeatureRecord,
 } from './types';
 
 const BASE_URL = '/api/v1/person-tenant-access';
@@ -390,10 +391,35 @@ export const managementApi = {
      */
     async deleteTenant(id: string): Promise<{ success: boolean; message?: string }> {
         return apiDelete<{ success: boolean; message?: string }>(`${TENANTS_URL}/${id}`);
-    }
+    },
+
+    // =============================================
+    // TENANT FEATURES API
+    // =============================================
+
+    /**
+     * Lista feature abilitate per un tenant
+     */
+    async getTenantFeatures(tenantId: string): Promise<{ success: boolean; data: TenantFeatureRecord[] }> {
+        return apiGet<{ success: boolean; data: TenantFeatureRecord[] }>(`${TENANTS_URL}/${tenantId}/features`);
+    },
+
+    /**
+     * Abilita/disabilita una feature per un tenant
+     */
+    async setTenantFeature(tenantId: string, featureKey: string, data: {
+        isEnabled: boolean;
+        tier?: string;
+        config?: Record<string, unknown>;
+        usageLimit?: number | null;
+        validUntil?: string | null;
+        notes?: string;
+    }): Promise<{ success: boolean; data: TenantFeatureRecord }> {
+        return apiPut<{ success: boolean; data: TenantFeatureRecord }>(`${TENANTS_URL}/${tenantId}/features/${featureKey}`, data);
+    },
 };
 
 // Re-export types
-export type { Tenant, PersonTenantAccess, TenantAccessLevel, Feature } from './types';
+export type { Tenant, PersonTenantAccess, TenantAccessLevel, Feature, TenantFeatureRecord } from './types';
 
 export default managementApi;

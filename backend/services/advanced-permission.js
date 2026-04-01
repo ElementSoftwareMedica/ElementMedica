@@ -22,7 +22,7 @@ class AdvancedPermissionService {
      */
     async checkPermission(params) {
         const { personId, resource, action, targetCompanyId, targetSiteId, requestedFields } = params;
-        
+
         try {
             // Validazione parametri obbligatori
             if (!personId) {
@@ -32,19 +32,27 @@ class AdvancedPermissionService {
                     allowedFields: []
                 };
             }
-            
-            // BYPASS TEMPORANEO: Query semplificata per evitare timeout
-            const person = await prisma.person.findUnique({
-                where: { id: personId },
+
+            // P63: Person.tenantId RIMOSSO - usa PersonTenantProfile.tenantId
+            // P49: companyId non esiste più su PersonTenantProfile, ora è companyTenantProfileId
+            const person = await prisma.person.findFirst({ // F242: findFirst+deletedAt
+                where: { id: personId, deletedAt: null },
                 select: {
                     id: true,
-                    globalRole: true,
-                    companyId: true,
+                    // P63: tenantId RIMOSSO da Person - ottienilo da tenantProfiles
                     personRoles: {
-                        where: { isActive: true },
+                        where: { isActive: true, deletedAt: null }, // F242: added deletedAt
                         select: {
                             roleType: true
                         }
+                    },
+                    tenantProfiles: {
+                        where: { deletedAt: null, isActive: true },
+                        select: {
+                            tenantId: true,
+                            companyTenantProfileId: true
+                        },
+                        take: 1
                     }
                 }
             });
@@ -58,24 +66,23 @@ class AdvancedPermissionService {
             }
 
             // BYPASS TEMPORANEO: Logica semplificata
-            // Determina globalRole dal campo globalRole o dai personRoles
+            // P49: Determina globalRole dai personRoles (non esiste più il campo)
             const roles = person.personRoles.map(pr => pr.roleType);
-            let globalRole = person.globalRole;
-            
-            if (!globalRole) {
-                if (roles.includes('SUPER_ADMIN')) {
-                    globalRole = 'SUPER_ADMIN';
-                } else if (roles.includes('ADMIN')) {
-                    globalRole = 'ADMIN';
-                } else if (roles.includes('COMPANY_ADMIN')) {
-                    globalRole = 'COMPANY_ADMIN';
-                } else if (roles.includes('MANAGER')) {
-                    globalRole = 'MANAGER';
-                } else if (roles.includes('EMPLOYEE')) {
-                    globalRole = 'EMPLOYEE';
-                }
+            const personCompanyTenantProfileId = person.tenantProfiles?.[0]?.companyTenantProfileId;
+            let globalRole = null;
+
+            if (roles.includes('SUPER_ADMIN')) {
+                globalRole = 'SUPER_ADMIN';
+            } else if (roles.includes('ADMIN')) {
+                globalRole = 'ADMIN';
+            } else if (roles.includes('COMPANY_ADMIN')) {
+                globalRole = 'COMPANY_ADMIN';
+            } else if (roles.includes('MANAGER')) {
+                globalRole = 'MANAGER';
+            } else if (roles.includes('EMPLOYEE')) {
+                globalRole = 'EMPLOYEE';
             }
-            
+
             // Verifica se è SUPER_ADMIN o ADMIN (accesso completo)
             if (globalRole === 'SUPER_ADMIN' || roles.includes('SUPER_ADMIN')) {
                 return {
@@ -85,7 +92,7 @@ class AdvancedPermissionService {
                     reason: 'SUPER_ADMIN access'
                 };
             }
-            
+
             // ADMIN ha accesso completo come SUPER_ADMIN
             if (globalRole === 'ADMIN' || roles.includes('ADMIN')) {
                 return {
@@ -98,8 +105,8 @@ class AdvancedPermissionService {
 
             // Per COMPANY_ADMIN, verifica se può accedere alla compagnia target
             if (globalRole === 'COMPANY_ADMIN' || roles.includes('COMPANY_ADMIN')) {
-                // Se non c'è targetCompanyId o corrisponde alla sua compagnia
-                if (!targetCompanyId || targetCompanyId === person.companyId) {
+                // P49: Confronta companyTenantProfileId invece di companyId
+                if (!targetCompanyId || targetCompanyId === personCompanyTenantProfileId) {
                     return {
                         allowed: true,
                         allowedFields: requestedFields || ['*'],
@@ -134,7 +141,7 @@ class AdvancedPermissionService {
                 resource,
                 action
             });
-            
+
             return {
                 allowed: false,
                 reason: 'Errore interno',
@@ -156,21 +163,21 @@ class AdvancedPermissionService {
             case 'ALL_COMPANY_SITES':
                 // Accesso a tutte le sedi della compagnia
                 return { allowed: true };
-            
+
             case 'ASSIGNED_SITE_ONLY':
                 // Accesso solo alla sede assegnata
                 if (!permission.siteId) {
                     return { allowed: false, reason: 'Sede non specificata nel permesso' };
                 }
-                
+
                 // Se targetSiteId non è specificato, permetti l'accesso (es. per liste generali)
                 // Se targetSiteId è specificato, verifica che corrisponda alla sede del permesso
                 if (targetSiteId && permission.siteId !== targetSiteId) {
                     return { allowed: false, reason: 'Accesso limitato alla sede assegnata' };
                 }
-                
+
                 return { allowed: true };
-            
+
             default:
                 return { allowed: false, reason: 'Tipo di accesso sede non riconosciuto' };
         }
@@ -178,27 +185,28 @@ class AdvancedPermissionService {
 
     /**
      * Verifica lo scope del permesso
+     * P49: person.companyTenantProfileId invece di person.companyId
      */
     checkScope(scope, person, targetCompanyId) {
         switch (scope) {
             case 'global':
                 return { allowed: true };
-            
+
             case 'company':
-                if (!person.companyId) {
+                if (!person.companyTenantProfileId) {
                     return { allowed: false, reason: 'Persona non associata a nessuna compagnia' };
                 }
                 // Se targetCompanyId non è specificato, permetti l'accesso (es. per liste generali)
                 // Se targetCompanyId è specificato, verifica che corrisponda alla compagnia della persona
-                if (targetCompanyId && person.companyId !== targetCompanyId) {
+                if (targetCompanyId && person.companyTenantProfileId !== targetCompanyId) {
                     return { allowed: false, reason: 'Accesso limitato alla propria compagnia' };
                 }
                 return { allowed: true };
-            
+
             case 'self':
                 // Per scope 'self', la verifica deve essere fatta a livello di route
                 return { allowed: true };
-            
+
             default:
                 return { allowed: false, reason: 'Scope non riconosciuto' };
         }
@@ -224,11 +232,11 @@ class AdvancedPermissionService {
         if (!allowedFields || allowedFields.includes('*')) {
             return requestedFields || ['*'];
         }
-        
+
         if (!requestedFields) {
             return allowedFields;
         }
-        
+
         return requestedFields.filter(field => allowedFields.includes(field));
     }
 
@@ -250,12 +258,12 @@ class AdvancedPermissionService {
         } else if (roles.includes('EMPLOYEE')) {
             globalRole = 'EMPLOYEE';
         }
-        
+
         // SUPER_ADMIN e ADMIN hanno accesso completo
         if (globalRole === 'SUPER_ADMIN' || globalRole === 'ADMIN') {
             return true;
         }
-        
+
         // Per altri ruoli, verifica permessi specifici
         const permissionMap = {
             'companies': {
@@ -296,7 +304,7 @@ class AdvancedPermissionService {
         };
 
         const requiredPermissions = permissionMap[resource]?.[action] || [];
-        
+
         for (const role of person.personRoles) {
             for (const permission of role.permissions) {
                 if (requiredPermissions.includes(permission.permission)) {
@@ -304,7 +312,7 @@ class AdvancedPermissionService {
                 }
             }
         }
-        
+
         return false;
     }
 
@@ -358,7 +366,7 @@ class AdvancedPermissionService {
      */
     async createAdvancedPermission(params) {
         const { personRoleId, resource, action, scope, siteAccess, siteId, allowedFields, conditions } = params;
-        
+
         try {
             return await prisma.advancedPermission.create({
                 data: {
@@ -388,11 +396,11 @@ class AdvancedPermissionService {
      */
     async getPersonAdvancedPermissions(personId) {
         try {
-            const person = await prisma.person.findUnique({
-                where: { id: personId },
+            const person = await prisma.person.findFirst({ // F242: findFirst+deletedAt
+                where: { id: personId, deletedAt: null },
                 include: {
                     personRoles: {
-                        where: {},
+                        where: { isActive: true, deletedAt: null }, // F242: added deletedAt
                         include: {
                             advancedPermissions: {
                                 include: {
@@ -400,7 +408,7 @@ class AdvancedPermissionService {
                                         select: {
                                             id: true,
                                             siteName: true,
-                                            companyId: true
+                                            companyTenantProfileId: true
                                         }
                                     }
                                 }
@@ -433,13 +441,28 @@ class AdvancedPermissionService {
 
     /**
      * Ottiene una persona per ID
+     * P49: companyId non esiste più su Person, va preso companyTenantProfileId da tenantProfiles
      */
     async getPersonById(personId) {
         try {
-            return await prisma.person.findUnique({
-                where: { id: personId },
-                select: { id: true, companyId: true }
+            const person = await prisma.person.findFirst({ // F242: findFirst+deletedAt
+                where: { id: personId, deletedAt: null },
+                select: {
+                    id: true,
+                    tenantProfiles: {
+                        select: { companyTenantProfileId: true },
+                        take: 1
+                    }
+                }
             });
+
+            if (!person) return null;
+
+            // Flatten companyTenantProfileId for backward compatibility
+            return {
+                id: person.id,
+                companyTenantProfileId: person.tenantProfiles?.[0]?.companyTenantProfileId || null
+            };
         } catch (error) {
             logger.error('Error getting person by ID', {
                 component: 'advanced-permission-service',

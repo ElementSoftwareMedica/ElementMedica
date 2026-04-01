@@ -21,6 +21,21 @@ const tenantMiddleware = async (req, res, next) => {
       '/api/v1/auth/reset-password',  // Percorso v1 per reset password
       '/api/v1/public/verify-attestato', // Verifica pubblica attestati
       '/api/public/verify-attestato',    // Verifica pubblica attestati (legacy)
+      '/api/v1/public/queue',    // P53: Mobile queue check-in
+      '/api/public/queue',       // P53: Mobile queue check-in (legacy)
+      '/api/v1/public/booking',  // P67: Public online booking
+      '/api/public/booking',     // P67: Public online booking
+      '/api/v1/public/doctors',  // Profili medici pubblici
+      '/api/public/doctors',     // Profili medici pubblici
+      '/api/public/courses',     // Corsi pubblici
+      '/api/public/schedules',   // Calendario corsi pubblico
+      '/api/public/forms',       // Form pubblici
+      '/api/public/contact-submissions', // Richieste info corsi
+      '/api/public/analytics',   // Analytics tracking pubblico
+      '/api/public/embed',       // P75: Widget embed (autenticati via API key nel path)
+      '/api/v1/public/bridge',   // Bridge auto-activation (autenticato via license key)
+      '/api/public/bridge',      // Bridge auto-activation (legacy)
+      '/api/v1/cms/pages',       // CMS pagine pubbliche
       '/api/roles/public',    // Solo l'endpoint pubblico dei ruoli
       '/api/roles/test-simple', // Endpoint di test semplice
 
@@ -60,7 +75,7 @@ const tenantMiddleware = async (req, res, next) => {
 
     if (!host) {
       return res.status(400).json({
-        error: 'Host header required for tenant resolution'
+        error: 'Header host obbligatorio per la risoluzione del tenant'
       });
     }
 
@@ -85,28 +100,31 @@ const tenantMiddleware = async (req, res, next) => {
 
         if (tenant) {
           req.tenant = tenant;
-          req.tenantId = tenant.id;
           return next();
         }
       }
 
-      // Only if no tenantId is provided, use default tenant for development
-      if (!tenantId && process.env.NODE_ENV === 'development') {
-        tenant = await prisma.tenant.findFirst({
-          where: {
-            isActive: true,
-            deletedAt: null
-          },
-          orderBy: {
-            createdAt: 'asc'
-          }
-        });
+      // Only if no tenantId is provided, try to use user's tenant (from auth middleware)
+      // P48/P63: Il tenant viene SEMPRE risolto da PersonTenantProfile via auth middleware
+      if (!tenantId) {
+        const userTenantId = req.person?.tenantId;
+        if (userTenantId) {
+          tenant = await prisma.tenant.findFirst({
+            where: {
+              id: userTenantId,
+              isActive: true,
+              deletedAt: null
+            }
+          });
 
-        if (tenant) {
-          req.tenant = tenant;
-          req.tenantId = tenant.id;
-          return next();
+          if (tenant) {
+            req.tenant = tenant;
+            return next();
+          }
         }
+
+        // NO FALLBACK: se l'utente è autenticato ma non ha un tenant valido, errore
+        // Questo comportamento è uguale in development e production
       }
     } else {
       // For production domains, try domain and subdomain resolution in one query
@@ -130,6 +148,8 @@ const tenantMiddleware = async (req, res, next) => {
     if (!tenant) {
       // Fallback GENERICO e SICURO: se è stato passato esplicitamente un tenantId via header/query,
       // prova a risolverlo anche in produzione (validateUserTenant verificherà comunque l'appartenenza)
+      // Fallback: se è stato passato esplicitamente un tenantId via header/query,
+      // prova a risolverlo (validateUserTenant verificherà comunque l'appartenenza)
       const explicitTenantId = req.headers['x-tenant-id'] || req.headers['X-Tenant-ID'] || req.query.tenantId;
       if (explicitTenantId) {
         try {
@@ -145,8 +165,7 @@ const tenantMiddleware = async (req, res, next) => {
           });
           if (fallbackTenant) {
             req.tenant = fallbackTenant;
-            req.tenantId = fallbackTenant.id;
-            logger.info('[DEBUG] tenantMiddleware - FALLBACK header/query tenant applied', {
+            logger.info('[DEBUG] tenantMiddleware - Explicit tenant from header/query applied', {
               from: 'header/query',
               value: explicitTenantId,
               tenantId: fallbackTenant.id,
@@ -157,38 +176,21 @@ const tenantMiddleware = async (req, res, next) => {
             return next();
           }
         } catch (e) {
-          logger.error('[DEBUG] tenantMiddleware - FALLBACK lookup error', { error: e?.message });
+          logger.error('[DEBUG] tenantMiddleware - Header/query tenant lookup error', { error: e?.message });
         }
       }
-      // For development, allow access to some endpoints without strict tenant requirement
-      if (process.env.NODE_ENV === 'development' && (req.path === '/api/roles' || req.path === '/api/roles/public' || req.path === '/api/roles/test-simple' || req.path.startsWith('/api/users') || req.path.startsWith('/api/settings') || req.path.startsWith('/api/tenants') || req.path === '/api/counters' || req.path.startsWith('/api/dashboard') || req.path.startsWith('/api/v1/persons') || req.path.startsWith('/api/persons') || req.path === '/api/v1/submissions')) {
-        // Use the first available tenant for development
-        tenant = await prisma.tenant.findFirst({
-          where: {
-            isActive: true,
-            deletedAt: null
-          },
-          orderBy: {
-            createdAt: 'asc'
-          }
-        });
 
-        if (tenant) {
-          req.tenant = tenant;
-          req.tenantId = tenant.id;
-          logger.info('[DEBUG] tenantMiddleware - Development tenant found and set:', {
-            tenantId: tenant.id,
-            tenantSlug: tenant.slug,
-            tenantName: tenant.name,
-            path: req.path
-          });
-          return next();
-        }
-      }
+      // RIMOSSO: Fallback development "primo tenant" - comportamento ora uguale in dev/prod
+      // Il tenant DEVE essere risolto da:
+      // 1. Domain/subdomain (production)
+      // 2. req.person.tenantId (authenticated user)
+      // 3. X-Tenant-ID header (explicit)
 
       logger.error('[DEBUG] tenantMiddleware - FAILED - Tenant not found or inactive:', {
         host: host,
         path: req.path || req.originalUrl || req.url,
+        hasAuthenticatedUser: !!req.person,
+        userTenantId: req.person?.tenantId,
         headers: {
           'x-tenant-id': req.headers['x-tenant-id'],
           'X-Tenant-ID': req.headers['X-Tenant-ID']
@@ -198,20 +200,13 @@ const tenantMiddleware = async (req, res, next) => {
       });
 
       return res.status(404).json({
-        error: 'Tenant not found or inactive',
-        host: host,
-        path: req.path || req.originalUrl || req.url,
-        debug: {
-          url: req.url,
-          originalUrl: req.originalUrl,
-          path: req.path
-        }
+        error: 'Tenant non trovato o non attivo',
+        code: 'TENANT_NOT_FOUND'
       });
     }
 
     // Set tenant context in request
     req.tenant = tenant;
-    req.tenantId = tenant.id;
 
     // Skip the expensive $executeRaw for better performance
     // Row Level Security can be handled at the query level instead
@@ -219,10 +214,9 @@ const tenantMiddleware = async (req, res, next) => {
 
     next();
   } catch (error) {
-    console.error('Error resolving tenant:', error);
+    logger.error('Error resolving tenant:', { error: error?.message });
     res.status(500).json({
-      error: 'Tenant resolution failed',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      error: 'Risoluzione del tenant fallita'
     });
   }
 };
@@ -237,17 +231,14 @@ const validateUserTenant = async (req, res, next) => {
     const person = req.person;
     const tenant = req.tenant;
 
-    logger.info('[DEBUG] validateUserTenant - person:', !!person, person?.id);
-    logger.info('[DEBUG] validateUserTenant - tenant:', !!tenant, tenant?.id);
-
     if (!person) {
       logger.info('[DEBUG] validateUserTenant - Missing person');
-      return res.status(401).json({ error: 'Authentication required' });
+      return res.status(401).json({ error: 'Autenticazione richiesta' });
     }
 
     if (!tenant) {
       logger.info('[DEBUG] validateUserTenant - Missing tenant');
-      return res.status(401).json({ error: 'Tenant context required' });
+      return res.status(401).json({ error: 'Contesto tenant obbligatorio' });
     }
 
     // Super admin and admin can access any tenant (cross-tenant access)
@@ -255,22 +246,31 @@ const validateUserTenant = async (req, res, next) => {
       return next();
     }
 
+    // P63: tenantId viene SEMPRE da PersonTenantProfile, non da Person.tenantId
+    const effectiveUserTenantId =
+      person.tenantProfiles?.find(p => p.isActive || p.isPrimary)?.tenantId ||
+      person.tenantProfiles?.[0]?.tenantId ||
+      req.person?.tenantId || // From auth middleware (already resolved from tenantProfiles)
+      null;
+
     // Check if user belongs to the current tenant
-    // Compare tenantId from person with current tenant id
-    if (person.tenantId !== tenant.id) {
+    // P48: Also check if user has a tenantProfile for this tenant
+    const belongsToTenant =
+      effectiveUserTenantId === tenant.id ||
+      person.tenantProfiles?.some(p => p.tenantId === tenant.id && !p.deletedAt);
+
+    if (!belongsToTenant) {
       return res.status(403).json({
-        error: 'Access denied: User does not belong to this tenant',
-        userTenant: person.tenantId,
-        requestTenant: tenant.id
+        error: 'Accesso negato: l\'utente non appartiene a questo tenant'
       });
     }
 
     next();
   } catch (error) {
-    console.error('Error in validateUserTenant:', error);
+    logger.error('Error in validateUserTenant:', { error: error.message });
     res.status(500).json({
       success: false,
-      error: 'Internal server error during tenant validation'
+      error: 'Errore interno del server durante la validazione del tenant'
     });
   }
 };
@@ -302,7 +302,7 @@ const isAdminOrSuperAdmin = (user) => {
 const requireSuperAdmin = (req, res, next) => {
   if (!req.person || !isAdminOrSuperAdmin(req.person)) {
     return res.status(403).json({
-      error: 'Admin access required'
+      error: 'Accesso amministratore richiesto'
     });
   }
   next();

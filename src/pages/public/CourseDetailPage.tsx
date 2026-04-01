@@ -4,6 +4,9 @@ import { PublicLayout } from '../../components/public/PublicLayout';
 import { PublicButton } from '../../components/public/PublicButton';
 import { useToast } from '../../hooks/useToast';
 import { apiGet } from '../../services/api';
+import { getCurrentBrand } from '@/config/brands.config';
+import SEOHead from '../../components/seo/SEOHead';
+import { generateEducationalOrganizationSchema } from '../../components/seo/MedicalSchemas';
 
 interface Course {
   id: string;
@@ -53,11 +56,10 @@ const CourseDetailPage: React.FC = () => {
       try {
         setLoading(true);
         setError(null);
-        // Tenta di caricare il corso dall'API
-        const response = await apiGet<Course>(`/api/v1/courses/slug/${slug}`);
+        // Tenta di caricare il corso dall'API pubblica
+        const response = await apiGet<Course>(`/api/public/courses/${slug}`, { _skipGdprCheck: true });
         setCourse(response);
-      } catch (err: any) {
-        console.error('Error loading course:', err);
+      } catch (err: unknown) {
         setError('Corso non trovato');
         setCourse(null);
       } finally {
@@ -92,11 +94,24 @@ const CourseDetailPage: React.FC = () => {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Implementare invio richiesta
-    console.log('Request data:', requestForm);
-    showToast({ type: 'success', message: 'Richiesta inviata con successo! Ti contatteremo presto.' });
+    try {
+      const { submitContactForm } = await import('../../services/contactSubmissions');
+      await submitContactForm({
+        name: requestForm.name,
+        email: requestForm.email,
+        phone: requestForm.phone,
+        company: requestForm.company,
+        subject: `Richiesta ${requestForm.requestType === 'info' ? 'Informazioni' : requestForm.requestType === 'preventivo' ? 'Preventivo' : 'Iscrizione'} - ${course?.title || 'Corso'}`,
+        message: requestForm.message || `Richiesta per il corso: ${course?.title}`,
+        privacyAccepted: true,
+      });
+      showToast({ type: 'success', message: 'Richiesta inviata con successo! Ti contatteremo presto.' });
+      setRequestForm({ name: '', email: '', phone: '', company: '', message: '', requestType: 'info' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Errore durante l\'invio. Riprova più tardi.' });
+    }
   };
 
   // Mostra loading
@@ -104,7 +119,7 @@ const CourseDetailPage: React.FC = () => {
     return (
       <PublicLayout>
         <div className="flex items-center justify-center min-h-[400px]">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
         </div>
       </PublicLayout>
     );
@@ -120,7 +135,7 @@ const CourseDetailPage: React.FC = () => {
           </svg>
           <h2 className="text-xl font-semibold text-gray-800 mb-2">Corso non trovato</h2>
           <p className="text-gray-600 mb-4">{error || 'Il corso richiesto non esiste o non è più disponibile.'}</p>
-          <Link to="/corsi" className="text-purple-600 hover:text-purple-800 font-medium">
+          <Link to="/corsi" className="text-primary-600 hover:text-primary-800 font-medium">
             ← Torna ai corsi
           </Link>
         </div>
@@ -128,8 +143,32 @@ const CourseDetailPage: React.FC = () => {
     );
   }
 
+  const brand = getCurrentBrand();
+
   return (
     <PublicLayout>
+      <SEOHead
+        title={`${course.title} - ${getCourseTypeLabel(course.courseType)} | ${brand.displayName}`}
+        description={course.shortDescription || `Corso ${course.title}: ${getRiskLevelLabel(course.riskLevel)}, durata ${course.duration}h. Formazione sicurezza sul lavoro D.Lgs. 81/08 a Selvazzano Dentro (PD).`}
+        keywords={['corso sicurezza lavoro', course.title, course.category, getRiskLevelLabel(course.riskLevel), 'formazione D.Lgs. 81/08', 'Padova', 'Selvazzano Dentro'].filter(Boolean)}
+        canonicalUrl={`${brand.contacts.website}/corsi/${course.slug}`}
+        ogType="article"
+        ogImage={course.image1Url || undefined}
+        structuredData={{
+          '@context': 'https://schema.org',
+          '@type': 'Course',
+          name: course.title,
+          description: course.shortDescription || course.fullDescription,
+          provider: { '@type': 'Organization', name: brand.displayName, url: brand.contacts.website },
+          hasCourseInstance: {
+            '@type': 'CourseInstance',
+            courseMode: 'Blended',
+            duration: `PT${course.duration}H`,
+          },
+          occupationalCategory: course.category,
+          educationalLevel: getRiskLevelLabel(course.riskLevel),
+        }}
+      />
       {/* Breadcrumb */}
       <section className="bg-gray-50 py-4">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -192,10 +231,10 @@ const CourseDetailPage: React.FC = () => {
                 <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-primary-600 text-white">
                   {course.category}
                 </span>
-                <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-600 text-white">
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-primary-600 text-white">
                   {getRiskLevelLabel(course.riskLevel)}
                 </span>
-                <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-purple-600 text-white">
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-primary-600 text-white">
                   {getCourseTypeLabel(course.courseType)}
                 </span>
               </div>
@@ -275,7 +314,7 @@ const CourseDetailPage: React.FC = () => {
                 <ul className="space-y-3">
                   {course.objectives.map((objective, index) => (
                     <li key={index} className="flex items-start">
-                      <svg className="w-5 h-5 text-green-500 mr-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                      <svg className="w-5 h-5 text-primary-500 mr-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                       </svg>
                       <span className="text-gray-600">{objective}</span>
@@ -345,7 +384,7 @@ const CourseDetailPage: React.FC = () => {
                       name="requestType"
                       value={requestForm.requestType}
                       onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
                     >
                       <option value="info">Informazioni generali</option>
                       <option value="quote">Richiesta preventivo</option>
@@ -365,7 +404,7 @@ const CourseDetailPage: React.FC = () => {
                       required
                       value={requestForm.name}
                       onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
                       placeholder="Il tuo nome"
                     />
                   </div>
@@ -381,7 +420,7 @@ const CourseDetailPage: React.FC = () => {
                       required
                       value={requestForm.email}
                       onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
                       placeholder="la-tua-email@esempio.com"
                     />
                   </div>
@@ -396,7 +435,7 @@ const CourseDetailPage: React.FC = () => {
                       name="phone"
                       value={requestForm.phone}
                       onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
                       placeholder="+39 123 456 7890"
                     />
                   </div>
@@ -411,7 +450,7 @@ const CourseDetailPage: React.FC = () => {
                       name="company"
                       value={requestForm.company}
                       onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
                       placeholder="Nome azienda"
                     />
                   </div>
@@ -426,7 +465,7 @@ const CourseDetailPage: React.FC = () => {
                       rows={3}
                       value={requestForm.message}
                       onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
                       placeholder="Descrivi la tua richiesta..."
                     />
                   </div>
@@ -445,13 +484,13 @@ const CourseDetailPage: React.FC = () => {
                     <svg className="w-5 h-5 text-primary-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                     </svg>
-                    <span className="text-sm text-gray-700">+39 02 1234 5678</span>
+                    <span className="text-sm text-gray-700">{getCurrentBrand().contacts.phone}</span>
                   </div>
                   <div className="flex items-center">
                     <svg className="w-5 h-5 text-primary-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                     </svg>
-                    <span className="text-sm text-gray-700">corsi@elementformazione.it</span>
+                    <span className="text-sm text-gray-700">{getCurrentBrand().contacts.email}</span>
                   </div>
                 </div>
               </div>

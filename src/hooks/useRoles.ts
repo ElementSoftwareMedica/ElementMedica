@@ -35,13 +35,11 @@ export const useRoles = () => {
   const loadRoles = useCallback(async (forceRefresh = false) => {
     // Evita richieste multiple simultanee
     if (loadingRef.current && !forceRefresh) {
-      console.log('🔄 useRoles: Request already in progress, skipping');
       return;
     }
 
     // Controlla cache se non è un refresh forzato
     if (!forceRefresh && rolesCache && Date.now() - rolesCache.timestamp < CACHE_DURATION) {
-      console.log('📦 useRoles: Using cached data');
       setRoles(rolesCache.data);
       return;
     }
@@ -56,16 +54,15 @@ export const useRoles = () => {
         loadingRef.current = true;
         setLoading(true);
         setError(null);
-        
-        console.log('🔄 useRoles: Loading roles and hierarchy...');
-        
+
+
         // Carica prima la gerarchia (più leggera) poi i ruoli
         const hierarchyResponse = await getRoleHierarchy();
         const rolesResponse = await getRoles();
-        
+
         // Gestisce il formato del response dei ruoli base
         const rolesArray = rolesResponse.roles || [];
-        
+
         // Integra i ruoli con le informazioni dalla gerarchia
         const enrichedRoles = rolesArray.map(role => {
           const hierarchyInfo = hierarchyResponse[role.type];
@@ -79,7 +76,7 @@ export const useRoles = () => {
             permissions: hierarchyInfo?.permissions || role.permissions || []
           };
         });
-        
+
         // Aggiungi ruoli dalla gerarchia che non sono nei ruoli base (custom roles)
         Object.entries(hierarchyResponse).forEach(([roleType, hierarchyRole]: [string, { name: string; description: string; level: number; permissions?: string[] }]) => {
           if (!enrichedRoles.find(r => r.type === roleType)) {
@@ -94,21 +91,19 @@ export const useRoles = () => {
             });
           }
         });
-        
+
         // Ordina per livello gerarchico
         enrichedRoles.sort((a, b) => (a.level || 999) - (b.level || 999));
-        
+
         // Aggiorna cache
         rolesCache = {
           data: enrichedRoles,
           timestamp: Date.now()
         };
-        
+
         setRoles(enrichedRoles);
-        console.log('✅ useRoles: Roles loaded successfully', { count: enrichedRoles.length });
       } catch (err: unknown) {
-        console.error('❌ useRoles: Error loading roles:', err);
-        
+
         // Gestione errori specifica per ERR_INSUFFICIENT_RESOURCES
         const error = err as { code?: string; message?: string };
         if (error.code === 'ERR_INSUFFICIENT_RESOURCES' || error.message?.includes('ERR_INSUFFICIENT_RESOURCES')) {
@@ -118,10 +113,9 @@ export const useRoles = () => {
         } else {
           setError('Errore nel caricamento dei ruoli');
         }
-        
+
         // Usa cache se disponibile in caso di errore
         if (rolesCache && Date.now() - rolesCache.timestamp < CACHE_DURATION * 2) {
-          console.log('📦 useRoles: Using cached data due to error');
           setRoles(rolesCache.data);
         } else {
           setRoles([]);
@@ -138,7 +132,6 @@ export const useRoles = () => {
       const permissions = await getRolePermissions(roleType);
       setSelectedRole(prev => prev ? { ...prev, permissions } : null);
     } catch (err) {
-      console.error('Error loading role permissions:', err);
     }
   }, []);
 
@@ -149,7 +142,6 @@ export const useRoles = () => {
       const permissions = await getRolePermissions(role.type);
       setSelectedRole({ ...role, permissions });
     } catch (err) {
-      console.error('Error loading role permissions:', err);
       setSelectedRole(role);
     }
   }, []);
@@ -161,33 +153,30 @@ export const useRoles = () => {
       const permissions = await getRolePermissions(role.type);
       setSelectedRole({ ...role, permissions });
     } catch (err) {
-      console.error('Error loading role permissions:', err);
       setSelectedRole(role);
     }
   }, []);
 
   const deleteRole = useCallback(async (roleType: string) => {
     try {
-      await apiDelete(`/api/roles/${roleType}`);
+      await apiDelete(`/api/v1/roles/${roleType}`);
       await loadRoles();
       if (selectedRole?.type === roleType) {
         setSelectedRole(null);
       }
     } catch (err) {
-      console.error('Error deleting role:', err);
       throw err;
     }
   }, [selectedRole, loadRoles]);
 
   const handleDeleteRole = useCallback(async (roleType: string) => {
     try {
-      await apiDelete(`/api/roles/${roleType}`);
+      await apiDelete(`/api/v1/roles/${roleType}`);
       await loadRoles();
       if (selectedRole?.type === roleType) {
         setSelectedRole(null);
       }
     } catch (err) {
-      console.error('Error deleting role:', err);
       throw err;
     }
   }, [selectedRole, loadRoles]);

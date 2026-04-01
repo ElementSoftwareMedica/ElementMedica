@@ -91,7 +91,7 @@ export const useCalendarEvents = (schedulesData: Schedule[]) => {
           }).join('<br>');
 
           // Aziende senza duplicati
-          const aziende = [...new Set((s.companies || []).map((c) => c.company?.ragioneSociale || c.company?.name))].join(', ');
+          const aziende = [...new Set((s.companies || []).map((c) => c.company?.ragioneSociale))].filter(Boolean).join(', ');
 
           // Orari del giorno
           const sortedSessions = [...sessions].sort((a, b) => a.start.localeCompare(b.start));
@@ -121,7 +121,7 @@ export const useCalendarEvents = (schedulesData: Schedule[]) => {
         });
       } else {
         // fallback: usa startDate/endDate della schedule
-        const aziende = [...new Set((s.companies || []).map((c) => c.company?.ragioneSociale || c.company?.name))].join(', ');
+        const aziende = [...new Set((s.companies || []).map((c) => c.company?.ragioneSociale))].filter(Boolean).join(', ');
         grouped.push({
           id: s.id,
           scheduleId: s.id,
@@ -162,7 +162,7 @@ export const useCalendarEvents = (schedulesData: Schedule[]) => {
             return `<span style='color:${isCurrent ? '#2563eb' : '#1e293b'};font-weight:${isCurrent ? 700 : 400}'>Sessione ${i + 1}: ${dateStr}, ${orario}${trainer}</span>`;
           }).join('<br>');
 
-          const aziende = [...new Set((s.companies || []).map((c) => c.company?.ragioneSociale || c.company?.name))].join(', ');
+          const aziende = [...new Set((s.companies || []).map((c) => c.company?.ragioneSociale))].filter(Boolean).join(', ');
 
           return {
             id: s.id + '-' + (sess.id || idx),
@@ -178,7 +178,7 @@ export const useCalendarEvents = (schedulesData: Schedule[]) => {
           };
         });
       } else {
-        const aziende = [...new Set((s.companies || []).map((c) => c.company?.ragioneSociale || c.company?.name))].join(', ');
+        const aziende = [...new Set((s.companies || []).map((c) => c.company?.ragioneSociale))].filter(Boolean).join(', ');
         return [{
           id: s.id,
           scheduleId: s.id,
@@ -201,23 +201,12 @@ export const useCalendarEvents = (schedulesData: Schedule[]) => {
       return;
     }
 
-    // DEBUG: Verifica stati dal backend
-    if (schedulesData.length > 0) {
-      console.log('[DEBUG useCalendarEvents] Primo schedule.status dal backend:', schedulesData[0].status);
-      console.log('[DEBUG useCalendarEvents] Tradotto con dbStatusToItalian:', dbStatusToItalian(schedulesData[0].status));
-    }
-
     // Scegli mapping in base alla vista (default: month)
     let events: ScheduleEvent[];
     if (calendarView === 'month') {
       events = groupSessionsByDay(schedulesData);
     } else {
       events = mapSessionsIndividually(schedulesData);
-    }
-
-    // DEBUG: Verifica event.status processato
-    if (events.length > 0) {
-      console.log('[DEBUG useCalendarEvents] Primo event.status processato:', events[0].status);
     }
 
     setCalendarEvents(events);

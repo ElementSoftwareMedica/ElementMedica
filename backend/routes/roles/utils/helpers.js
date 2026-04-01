@@ -14,7 +14,7 @@ export function createRoleType(name) {
   if (!name || typeof name !== 'string') {
     throw new Error('Role name is required and must be a string');
   }
-  
+
   return name.toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_]/g, '');
 }
 
@@ -27,7 +27,7 @@ export function formatRoleDisplayName(roleType) {
   if (!roleType || typeof roleType !== 'string') {
     return '';
   }
-  
+
   return roleType
     .replace(/_/g, ' ')
     .toLowerCase()
@@ -43,21 +43,21 @@ export function groupPermissionsByResource(permissions) {
   if (!Array.isArray(permissions)) {
     return {};
   }
-  
+
   return permissions.reduce((grouped, permission) => {
     const resource = permission.resource || 'general';
-    
+
     if (!grouped[resource]) {
       grouped[resource] = [];
     }
-    
+
     grouped[resource].push({
       action: permission.action,
       scope: permission.scope,
       allowedFields: permission.allowedFields,
       conditions: permission.conditions
     });
-    
+
     return grouped;
   }, {});
 }
@@ -81,7 +81,7 @@ export function calculateOffset(page, limit) {
  */
 export function createPaginationResponse(page, limit, total) {
   const totalPages = Math.ceil(total / limit);
-  
+
   return {
     currentPage: page,
     totalPages,
@@ -101,7 +101,7 @@ export function sanitizeUserData(user) {
   if (!user || typeof user !== 'object') {
     return null;
   }
-  
+
   const {
     password,
     passwordHash,
@@ -109,7 +109,7 @@ export function sanitizeUserData(user) {
     verificationToken,
     ...sanitizedUser
   } = user;
-  
+
   return sanitizedUser;
 }
 
@@ -121,30 +121,30 @@ export function sanitizeUserData(user) {
  */
 export function buildWhereClause(filters, tenantId) {
   const whereClause = { tenantId };
-  
+
   if (filters.roleType) {
     whereClause.roleType = filters.roleType;
   }
-  
+
   if (filters.companyId) {
     whereClause.companyId = filters.companyId;
   }
-  
+
   if (filters.departmentId) {
     whereClause.departmentId = filters.departmentId;
   }
-  
+
   if (filters.isActive !== undefined) {
     whereClause.isActive = filters.isActive;
   }
-  
+
   if (filters.status) {
     whereClause.status = filters.status;
   }
-  
+
   // Esclude i record eliminati
   whereClause.deletedAt = null;
-  
+
   return whereClause;
 }
 
@@ -157,7 +157,7 @@ export function transformRoleForResponse(role) {
   if (!role) {
     return null;
   }
-  
+
   return {
     id: role.id,
     type: role.roleType || role.type,
@@ -184,9 +184,9 @@ export function transformUserForResponse(user) {
   if (!user) {
     return null;
   }
-  
+
   const sanitized = sanitizeUserData(user);
-  
+
   return {
     id: sanitized.id,
     firstName: sanitized.firstName,
@@ -214,11 +214,10 @@ export function getCacheBustingTimestamp() {
  * @param {Error} error - Errore originale
  * @returns {Object} Oggetto errore standardizzato
  */
-export function createErrorResponse(operation, error) {
+export function createErrorResponse(operation) {
   return {
     success: false,
-    error: `Failed to ${operation}`,
-    details: error?.message || 'Unknown error',
+    error: operation,
     timestamp: new Date().toISOString()
   };
 }
@@ -229,7 +228,7 @@ export function createErrorResponse(operation, error) {
  * @param {string} message - Messaggio di successo
  * @returns {Object} Oggetto risposta standardizzato
  */
-export function createSuccessResponse(data, message = 'Operation completed successfully') {
+export function createSuccessResponse(data, message = 'Operazione completata con successo') {
   return {
     success: true,
     data,
@@ -247,7 +246,7 @@ export function isValidUUID(value) {
   if (!value || typeof value !== 'string') {
     return false;
   }
-  
+
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   return uuidRegex.test(value);
 }
@@ -262,11 +261,11 @@ export function ensureArray(value, separator = ',') {
   if (Array.isArray(value)) {
     return value;
   }
-  
+
   if (typeof value === 'string') {
     return value.split(separator).map(item => item.trim()).filter(Boolean);
   }
-  
+
   return [];
 }
 
@@ -289,13 +288,13 @@ export function mergePermissions(permissions1, permissions2) {
  */
 export function extractSafeQueryParams(query, allowedParams) {
   const safeParams = {};
-  
+
   allowedParams.forEach(param => {
     if (query[param] !== undefined) {
       safeParams[param] = query[param];
     }
   });
-  
+
   return safeParams;
 }
 

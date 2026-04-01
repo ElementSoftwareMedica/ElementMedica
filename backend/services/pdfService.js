@@ -2,13 +2,18 @@
  * PDF Service - Generazione PDF da HTML tramite Puppeteer
  * 
  * Utilizza browser pool per ottimizzare performance
- * - Min 2 istanze browser
- * - Max 10 istanze browser
- * - Reuse browser instances per ridurre memory footprint
+ * - Min 1 istanza browser (abbassato da 2 per ridurre consumo memoria idle)
+ * - Max 3 istanze browser in produzione (default era 10 → OOM risk)
+ * - Idle destroy dopo 2 minuti (da 5 → libera memoria prima)
  * 
  * GDPR Compliant:
  * - Nessun dato salvato in cache browser
  * - Session isolate per ogni generazione
+ *
+ * Memory tuning (env vars):
+ *   PUPPETEER_MIN_BROWSERS=1   (produzione: 1, dev: 1)
+ *   PUPPETEER_MAX_BROWSERS=3   (produzione: 3, dev: 2)
+ *   PUPPETEER_ACQUIRE_TIMEOUT=15000
  */
 
 import puppeteer from 'puppeteer';
@@ -16,9 +21,10 @@ import genericPool from 'generic-pool';
 import { logger } from '../utils/logger.js';
 
 // Configurazione browser pool
-const MIN_BROWSERS = parseInt(process.env.PUPPETEER_MIN_BROWSERS || '2');
-const MAX_BROWSERS = parseInt(process.env.PUPPETEER_MAX_BROWSERS || '10');
-const ACQUIRE_TIMEOUT = parseInt(process.env.PUPPETEER_ACQUIRE_TIMEOUT || '10000');
+// Produzione: impostare PUPPETEER_MIN_BROWSERS=1 PUPPETEER_MAX_BROWSERS=3 in env
+const MIN_BROWSERS = parseInt(process.env.PUPPETEER_MIN_BROWSERS || '1');
+const MAX_BROWSERS = parseInt(process.env.PUPPETEER_MAX_BROWSERS || '3');
+const ACQUIRE_TIMEOUT = parseInt(process.env.PUPPETEER_ACQUIRE_TIMEOUT || '15000');
 
 /**
  * Browser Pool Factory
@@ -34,12 +40,23 @@ const browserPoolFactory = {
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
+          // Use /tmp for shm to avoid /dev/shm exhaustion in containers
           '--disable-dev-shm-usage',
           '--disable-accelerated-2d-canvas',
           '--disable-gpu',
           '--no-first-run',
+          // --no-zygote reduces per-process overhead without --single-process instability
           '--no-zygote',
-          '--single-process', // Reduce memory usage
+          // Memory/network optimizations for server-side PDF
+          '--disable-background-networking',
+          '--disable-extensions',
+          '--disable-default-apps',
+          '--disable-sync',
+          '--disable-translate',
+          '--hide-scrollbars',
+          '--metrics-recording-only',
+          '--mute-audio',
+          '--safebrowsing-disable-auto-update',
         ],
         executablePath: process.env.PUPPETEER_EXECUTABLE_PATH, // Optional: custom Chrome path
       });
@@ -87,8 +104,10 @@ const browserPool = genericPool.createPool(browserPoolFactory, {
   min: MIN_BROWSERS,
   max: MAX_BROWSERS,
   acquireTimeoutMillis: ACQUIRE_TIMEOUT,
-  idleTimeoutMillis: 300000, // 5 minutes idle before destroy
-  evictionRunIntervalMillis: 60000, // Check every minute for idle browsers
+  // Idle browsers destroyed after 2 minutes → frees ~200-400MB per instance
+  idleTimeoutMillis: 120000,
+  // Check for idle browsers every 30s (was 60s)
+  evictionRunIntervalMillis: 30000,
   testOnBorrow: true,
 });
 
@@ -113,23 +132,11 @@ class PDFService {
     let browser = null;
     let page = null;
 
-    // Debug log to see what HTML we're receiving
     logger.debug('generatePDF called', {
       service: 'pdfService',
       htmlLength: html?.length,
-      htmlPreview: html?.substring(0, 300),
       options: JSON.stringify(options)
     });
-
-    // TEMP DEBUG: Save HTML to file for inspection
-    try {
-      const fs = await import('fs');
-      const debugPath = '/tmp/last_pdf_html.html';
-      await fs.promises.writeFile(debugPath, html || '');
-      logger.debug('Saved HTML to ' + debugPath);
-    } catch (e) {
-      logger.warn('Could not save debug HTML', { error: e.message });
-    }
 
     try {
       // Acquire browser from pool
@@ -152,9 +159,14 @@ class PDFService {
       });
 
       // Set HTML content
+      // baseURL è necessario per risolvere URL relativi (es: /uploads/logos/xxx.png)
+      // Nota: NON usare 'networkidle0' - attende che TUTTE le richieste di rete
+      // si azzerino (Google Fonts, risorse esterne) causando timeout da 30s+.
+      // Con 'load' il DOM è pronto e le immagini base64/locali sono caricate.
       await page.setContent(html, {
-        waitUntil: ['domcontentloaded', 'networkidle0', 'load'],
-        timeout: 30000,
+        waitUntil: ['domcontentloaded', 'load'],
+        timeout: 45000,
+        baseURL: process.env.APP_URL || `http://127.0.0.1:${process.env.API_PORT || 4001}`,
       });
 
       // Attendi caricamento immagini (importante per logo e altre immagini)
@@ -165,7 +177,7 @@ class PDFService {
             .map(img => new Promise((resolve, reject) => {
               img.addEventListener('load', resolve);
               img.addEventListener('error', () => {
-                console.warn('Image failed to load:', img.src);
+                logger.warn('Image failed to load in PDF generation', { src: img.src });
                 resolve(); // Non fallire per immagini mancanti
               });
               // Timeout per singola immagine
@@ -215,10 +227,13 @@ class PDFService {
       });
       throw error;
     } finally {
-      // Cleanup
+      // Cleanup con timeout guards per evitare hang su browser in stato errato
       if (page) {
         try {
-          await page.close();
+          await Promise.race([
+            page.close(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('page.close timeout')), 5000))
+          ]);
         } catch (error) {
           logger.warn('Failed to close page', {
             service: 'pdfService',
@@ -230,13 +245,18 @@ class PDFService {
       // Release browser back to pool
       if (browser) {
         try {
-          await browserPool.release(browser);
+          await Promise.race([
+            browserPool.release(browser),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('browserPool.release timeout')), 5000))
+          ]);
           logger.debug('Browser released to pool', { service: 'pdfService' });
         } catch (error) {
           logger.error('Failed to release browser', {
             service: 'pdfService',
             error: error.message,
           });
+          // Force destroy se il release fallisce in modo permanente
+          try { await browserPool.destroy(browser); } catch (_) { /* ignore */ }
         }
       }
     }
@@ -258,8 +278,8 @@ class PDFService {
       page = await browser.newPage();
 
       await page.goto(url, {
-        waitUntil: ['domcontentloaded', 'networkidle0'],
-        timeout: 30000,
+        waitUntil: ['domcontentloaded', 'load'],
+        timeout: 45000,
       });
 
       const pdfOptions = {

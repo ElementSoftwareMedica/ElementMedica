@@ -129,7 +129,7 @@ export function validateVirtualEntityMembership(virtualEntityName) {
       if (!belongsToEntity) {
         return res.status(403).json({
           success: false,
-          message: `La persona non appartiene all'entità ${virtualEntityName}`
+          message: `La persona non appartiene all\'entità ${virtualEntityName}`
         });
       }
 

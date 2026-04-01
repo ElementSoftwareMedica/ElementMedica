@@ -12,6 +12,11 @@ export { default as ActionMenu, createCrudActions } from './ActionMenu';
 export { default as AddEntityDropdown } from './AddEntityDropdown';
 export { default as BatchEditButton } from './BatchEditButton';
 export { default as ColumnSelector } from './ColumnSelector';
+export { default as DateFilterBar } from './DateFilterBar';
+export type { DateFilterBarProps } from './DateFilterBar';
+
+// CRUD Button Components (Tenant Mode integrated)
+export { CRUDButton, CRUDPrimaryButton, CRUDDeleteButton } from '../shared/CRUDButton';
 
 // Validation Components
 export {
@@ -47,6 +52,23 @@ export { Switch } from './switch';
 export { Input } from './input';
 export { Textarea } from './textarea';
 export { ImageUpload } from './image-upload';
+export { ComuneAutocomplete } from './ComuneAutocomplete';
+export type { ComuneAutocompleteProps } from './ComuneAutocomplete';
+
+// Theme Toggle (P60 Dark Mode)
+export { ThemeToggle } from './ThemeToggle';
+
+// Date Picker Components
+export { DatePickerElegante, DateRangePicker } from './DatePickerElegante';
+export type { DatePickerEleganteProps, DateRangePickerProps } from './DatePickerElegante';
+export { DateRangeCalendar } from './DateRangeCalendar';
+export type { DateRangeCalendarProps, DateRange } from './DateRangeCalendar';
+export { TimeRangePicker } from './TimeRangePicker';
+export type { TimeRangePickerProps, TimeRange } from './TimeRangePicker';
+export { LocationSelector } from './LocationSelector';
+export type { LocationSelectorProps, LocationSelection } from './LocationSelector';
+export { PageFiltersBar } from './PageFiltersBar';
+export type { PageFiltersBarProps, FilterOption } from './PageFiltersBar';
 
 // Design System Re-exports
 export { Card, CardContent, CardHeader, CardTitle } from './card';

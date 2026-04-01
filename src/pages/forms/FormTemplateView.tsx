@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '../../design-system/atoms/Button';
 import { formTemplatesService } from '../../services/formTemplates';
 import { useToast } from '../../hooks/useToast';
@@ -33,10 +33,16 @@ interface FormField {
 const FormTemplateView: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { showToast } = useToast();
   const { confirmDelete } = useConfirmDialog();
   const [loading, setLoading] = useState(true);
   const [template, setTemplate] = useState<FormTemplate | null>(null);
+
+  // Detect context: CMS management or Test section
+  const contextBasePath = location.pathname.includes('/management/cms')
+    ? '/management/cms/forms'
+    : '/test';
 
   useEffect(() => {
     if (id) {
@@ -52,9 +58,8 @@ const FormTemplateView: React.FC = () => {
       const templateData = await formTemplatesService.getFormTemplate(id);
       setTemplate(templateData as unknown as FormTemplate);
     } catch (error) {
-      console.error('Errore nel caricamento del template:', error);
       showToast({ message: 'Errore nel caricamento del template', type: 'error' });
-      navigate('/forms');
+      navigate(contextBasePath);
     } finally {
       setLoading(false);
     }
@@ -69,9 +74,8 @@ const FormTemplateView: React.FC = () => {
     try {
       await formTemplatesService.duplicateFormTemplate(template.id, newName);
       showToast({ message: 'Template duplicato con successo', type: 'success' });
-      navigate('/forms');
+      navigate(contextBasePath);
     } catch (error) {
-      console.error('Errore nella duplicazione del template:', error);
       showToast({ message: 'Errore nella duplicazione del template', type: 'error' });
     }
   };
@@ -85,9 +89,8 @@ const FormTemplateView: React.FC = () => {
     try {
       await formTemplatesService.deleteFormTemplate(template.id);
       showToast({ message: 'Template eliminato con successo', type: 'success' });
-      navigate('/forms');
+      navigate(contextBasePath);
     } catch (error) {
-      console.error('Errore nell\'eliminazione del template:', error);
       showToast({ message: 'Errore nell\'eliminazione del template', type: 'error' });
     }
   };
@@ -108,8 +111,8 @@ const FormTemplateView: React.FC = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <p className="text-gray-600">Template non trovato</p>
-          <Button onClick={() => navigate('/forms')} className="mt-4">
-            Torna ai Form
+          <Button onClick={() => navigate(contextBasePath)} className="mt-4">
+            {contextBasePath.includes('/management') ? 'Torna ai Form CMS' : 'Torna ai Test'}
           </Button>
         </div>
       </div>
@@ -126,8 +129,8 @@ const FormTemplateView: React.FC = () => {
                 <h1 className="text-2xl font-bold text-gray-900">{template.name}</h1>
                 <div className="flex items-center space-x-4 mt-2">
                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${template.isActive
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-red-100 text-red-800'
+                    ? 'bg-green-100 text-green-800'
+                    : 'bg-red-100 text-red-800'
                     }`}>
                     {template.isActive ? 'Attivo' : 'Inattivo'}
                   </span>
@@ -146,13 +149,13 @@ const FormTemplateView: React.FC = () => {
               <div className="flex space-x-2">
                 <Button
                   variant="outline"
-                  onClick={() => navigate('/forms')}
+                  onClick={() => navigate(contextBasePath)}
                 >
-                  Torna ai Form
+                  {contextBasePath.includes('/management') ? 'Torna ai Form CMS' : 'Torna ai Test'}
                 </Button>
                 <Button
                   variant="secondary"
-                  onClick={() => navigate(`/forms/templates/${template.id}/edit`)}
+                  onClick={() => navigate(`${contextBasePath}/templates/${template.id}/edit`)}
                 >
                   <Edit className="w-4 h-4 mr-2" />
                   Modifica

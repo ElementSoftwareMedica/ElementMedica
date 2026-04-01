@@ -26,8 +26,10 @@ interface Module {
   shortLabel: string;
   description: string;
   icon: React.ComponentType<{ className?: string }>;
+  logoPath?: string; // Round logo image path (overrides icon when set)
   href: string;
-  port: number;
+  devPort: number;       // Porta per sviluppo locale (0 = stesso dominio)
+  prodDomain: string;    // Dominio produzione (vuoto = stesso dominio)
   color: string;
   bgColor: string;
   hoverBgColor: string;
@@ -40,10 +42,12 @@ const modules: Module[] = [
     shortLabel: 'Sicurezza',
     description: 'Sicurezza e Formazione',
     icon: GraduationCap,
+    logoPath: '/assets/logos/element-sicurezza-icon.png',
     href: '/dashboard',
-    port: 5173,
+    devPort: 5173,
+    prodDomain: 'www.elementsicurezza.com',
     color: 'text-blue-600',
-    bgColor: 'bg-blue-100',
+    bgColor: 'bg-blue-50',
     hoverBgColor: 'hover:bg-blue-50'
   },
   {
@@ -52,10 +56,12 @@ const modules: Module[] = [
     shortLabel: 'Medica',
     description: 'Poliambulatorio',
     icon: Activity,
+    logoPath: '/assets/logos/element-medica-icon.png',
     href: '/poliambulatorio',
-    port: 5174,
+    devPort: 5174,
+    prodDomain: 'www.elementmedica.com',
     color: 'text-teal-600',
-    bgColor: 'bg-teal-100',
+    bgColor: 'bg-teal-50',
     hoverBgColor: 'hover:bg-teal-50'
   },
   {
@@ -64,10 +70,12 @@ const modules: Module[] = [
     shortLabel: 'Management',
     description: 'Amministrazione sistema',
     icon: Settings,
+    logoPath: '/assets/logos/element-logo-completo.png',
     href: '/management',
-    port: 0, // Same domain
+    devPort: 0, // Same domain
+    prodDomain: '',    // Same domain
     color: 'text-purple-600',
-    bgColor: 'bg-purple-100',
+    bgColor: 'bg-purple-50',
     hoverBgColor: 'hover:bg-purple-50'
   }
 ];
@@ -79,18 +87,46 @@ interface ModuleSwitcherProps {
 }
 
 /**
+ * Check if running in development (localhost)
+ */
+const isDev = (): boolean => {
+  const hostname = window.location.hostname;
+  return hostname === 'localhost' || hostname === '127.0.0.1';
+};
+
+/**
  * Get the correct URL for cross-domain navigation
  */
 const getModuleUrl = (module: Module, currentPort: number): string => {
-  // If same domain (port 0) or same port, just return the href
-  if (module.port === 0 || module.port === currentPort) {
-    return module.href;
+  if (isDev()) {
+    // Dev: port-based navigation
+    if (module.devPort === 0 || module.devPort === currentPort) {
+      return module.href;
+    }
+    const protocol = window.location.protocol;
+    const hostname = window.location.hostname;
+    return `${protocol}//${hostname}:${module.devPort}${module.href}`;
   }
 
-  // Cross-domain navigation
-  const protocol = window.location.protocol;
-  const hostname = window.location.hostname;
-  return `${protocol}//${hostname}:${module.port}${module.href}`;
+  // Produzione: domain-based navigation
+  if (!module.prodDomain) {
+    return module.href;
+  }
+  // Se siamo già sul dominio corretto, usa solo href
+  if (window.location.hostname === module.prodDomain) {
+    return module.href;
+  }
+  return `https://${module.prodDomain}${module.href}`;
+};
+
+/**
+ * Check if module is on the same domain/port
+ */
+const isSameDomainModule = (module: Module, currentPort: number): boolean => {
+  if (isDev()) {
+    return module.devPort === 0 || module.devPort === currentPort;
+  }
+  return !module.prodDomain || window.location.hostname === module.prodDomain;
 };
 
 /**
@@ -117,7 +153,7 @@ export const ModuleSwitcher: React.FC<ModuleSwitcherProps> = ({
 
   const handleModuleClick = (module: Module, e: React.MouseEvent) => {
     // For cross-domain navigation, we need to use window.location
-    if (module.port !== 0 && module.port !== currentPort) {
+    if (!isSameDomainModule(module, currentPort)) {
       e.preventDefault();
       const url = getModuleUrl(module, currentPort);
       window.location.href = url;
@@ -130,10 +166,13 @@ export const ModuleSwitcher: React.FC<ModuleSwitcherProps> = ({
       <div className={`space-y-1 ${className}`}>
         {availableModules.map((module) => {
           const Icon = module.icon;
-          const isSameDomain = module.port === 0 || module.port === currentPort;
+          const sameDomain = isSameDomainModule(module, currentPort);
           const url = getModuleUrl(module, currentPort);
+          const logoEl = module.logoPath
+            ? <img src={module.logoPath} alt={module.label} className="w-8 h-8 rounded-lg object-contain" />
+            : <div className={`w-8 h-8 ${module.bgColor} rounded-lg flex items-center justify-center`}><Icon className={`h-4 w-4 ${module.color}`} /></div>;
 
-          if (isSameDomain) {
+          if (sameDomain) {
             return (
               <Link
                 key={module.id}
@@ -141,9 +180,7 @@ export const ModuleSwitcher: React.FC<ModuleSwitcherProps> = ({
                 className={`flex items-center justify-center p-2 rounded-lg ${module.hoverBgColor} transition-colors`}
                 title={module.label}
               >
-                <div className={`w-8 h-8 ${module.bgColor} rounded-lg flex items-center justify-center`}>
-                  <Icon className={`h-4 w-4 ${module.color}`} />
-                </div>
+                {logoEl}
               </Link>
             );
           }
@@ -156,9 +193,7 @@ export const ModuleSwitcher: React.FC<ModuleSwitcherProps> = ({
               className={`flex items-center justify-center p-2 rounded-lg ${module.hoverBgColor} transition-colors`}
               title={module.label}
             >
-              <div className={`w-8 h-8 ${module.bgColor} rounded-lg flex items-center justify-center`}>
-                <Icon className={`h-4 w-4 ${module.color}`} />
-              </div>
+              {logoEl}
             </a>
           );
         })}
@@ -173,19 +208,20 @@ export const ModuleSwitcher: React.FC<ModuleSwitcherProps> = ({
       )}
       {availableModules.map((module) => {
         const Icon = module.icon;
-        const isSameDomain = module.port === 0 || module.port === currentPort;
+        const sameDomain = isSameDomainModule(module, currentPort);
         const url = getModuleUrl(module, currentPort);
+        const logoEl = module.logoPath
+          ? <img src={module.logoPath} alt={module.label} className="w-6 h-6 rounded object-contain" />
+          : <div className={`w-6 h-6 ${module.bgColor} rounded flex items-center justify-center`}><Icon className={`h-4 w-4 ${module.color}`} /></div>;
 
-        if (isSameDomain) {
+        if (sameDomain) {
           return (
             <Link
               key={module.id}
               to={module.href}
               className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-600 ${module.hoverBgColor} transition-colors group`}
             >
-              <div className={`w-6 h-6 ${module.bgColor} rounded flex items-center justify-center`}>
-                <Icon className={`h-4 w-4 ${module.color}`} />
-              </div>
+              {logoEl}
               <span className={`group-hover:${module.color.replace('text-', 'text-')}`}>
                 {module.shortLabel}
               </span>
@@ -200,9 +236,7 @@ export const ModuleSwitcher: React.FC<ModuleSwitcherProps> = ({
             onClick={(e) => handleModuleClick(module, e)}
             className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-600 ${module.hoverBgColor} transition-colors group`}
           >
-            <div className={`w-6 h-6 ${module.bgColor} rounded flex items-center justify-center`}>
-              <Icon className={`h-4 w-4 ${module.color}`} />
-            </div>
+            {logoEl}
             <span>{module.shortLabel}</span>
             <ChevronRight className="h-3 w-3 ml-auto text-gray-400 group-hover:translate-x-0.5 transition-transform" />
           </a>

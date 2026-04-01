@@ -16,6 +16,10 @@ import { getContactSubmissions } from '../../services/contactSubmissionsManageme
 
 interface FormSubmissionsPageProps {
   hideHeader?: boolean;
+  /** Filtra per tipo di form (es. 'COURSE_TEST') */
+  formType?: string;
+  /** Base path per la navigazione interna (default: '/forms') */
+  basePath?: string;
 }
 
 interface TemplateWithSubmissionCount {
@@ -28,7 +32,7 @@ interface TemplateWithSubmissionCount {
   lastSubmissionAt?: string;
 }
 
-const FormSubmissionsPage: React.FC<FormSubmissionsPageProps> = ({ hideHeader = false }) => {
+const FormSubmissionsPage: React.FC<FormSubmissionsPageProps> = ({ hideHeader = false, formType, basePath = '/test' }) => {
   const navigate = useNavigate();
   const [templates, setTemplates] = useState<TemplateWithSubmissionCount[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,25 +50,24 @@ const FormSubmissionsPage: React.FC<FormSubmissionsPageProps> = ({ hideHeader = 
       setLoading(true);
       setError(null);
 
-      console.log('📊 Loading templates with submission counts...');
-
       // Carica tutti i template
       const allTemplates = await formTemplatesService.getFormTemplates();
-      console.log(`📋 Found ${allTemplates.length} templates`);
+
+      // Filtra per tipo se specificato
+      const filteredByType = formType
+        ? allTemplates.filter(t => (t as typeof t & { type?: string }).type === formType)
+        : allTemplates;
 
       // Per ogni template, conta le submissions
       const templatesWithCounts = await Promise.all(
-        allTemplates.map(async (template) => {
+        filteredByType.map(async (template) => {
           try {
-            console.log(`🔍 Checking submissions for template: ${template.name} (${template.id})`);
             // CRITICAL: Use templateName instead of templateId - backend stores templateName not templateId
             const submissions = await getContactSubmissions({
               templateName: template.name,
               page: 1,
               limit: 1
             });
-
-            console.log(`✅ Template ${template.name}: ${submissions.pagination?.total || 0} submissions`);
 
             return {
               id: template.id,
@@ -76,7 +79,6 @@ const FormSubmissionsPage: React.FC<FormSubmissionsPageProps> = ({ hideHeader = 
               lastSubmissionAt: submissions.submissions?.[0]?.createdAt
             };
           } catch (err) {
-            console.error(`❌ Error counting submissions for template ${template.id}:`, err);
             return {
               id: template.id,
               name: template.name,
@@ -94,12 +96,10 @@ const FormSubmissionsPage: React.FC<FormSubmissionsPageProps> = ({ hideHeader = 
 
       // Filtra solo template con submissions > 0
       const templatesWithSubmissions = templatesWithCounts.filter(t => t.submissionCount > 0);
-      console.log(`📊 Templates with submissions: ${templatesWithSubmissions.length}`);
 
       setTemplates(templatesWithSubmissions);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Errore nel caricamento dei form');
-      console.error('❌ Error loading templates:', err);
+      setError('Errore nel caricamento dei form');
     } finally {
       setLoading(false);
     }
@@ -190,7 +190,7 @@ const FormSubmissionsPage: React.FC<FormSubmissionsPageProps> = ({ hideHeader = 
           <Card
             key={template.id}
             className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
-            onClick={() => navigate(`/forms/templates/${template.id}/submissions`)}
+            onClick={() => navigate(`${basePath}/templates/${template.id}/submissions`)}
           >
             <div className="p-6">
               {/* Header del Template */}
@@ -231,7 +231,7 @@ const FormSubmissionsPage: React.FC<FormSubmissionsPageProps> = ({ hideHeader = 
                   className="w-full justify-center"
                   onClick={(e) => {
                     e.stopPropagation();
-                    navigate(`/forms/templates/${template.id}/submissions`);
+                    navigate(`${basePath}/templates/${template.id}/submissions`);
                   }}
                 >
                   <Eye className="h-4 w-4 mr-2" />

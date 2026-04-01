@@ -59,11 +59,6 @@ export const defaultProcessFile = async (
     transformHeader: (header: string) => header.trim(),
   });
   
-  console.log('🔍 Stage 1 result:', {
-    dataLength: parseResult.data.length,
-    firstRowKeys: parseResult.data.length > 0 ? Object.keys(parseResult.data[0] as object) : [],
-    columnCount: parseResult.data.length > 0 ? Object.keys(parseResult.data[0] as object).length : 0
-  });
   
   // Stage 2: Try semicolon delimiter if single column detected OR if data is empty
   const needsRetry = !parseResult.data || 
@@ -72,7 +67,6 @@ export const defaultProcessFile = async (
                       Object.keys(parseResult.data[0] as object).some(k => k.includes(';'));
   
   if (needsRetry) {
-    console.log('⚠️ Retrying with semicolon delimiter');
     parseResult = Papa.parse(cleanText, {
       header: true,
       delimiter: ';',
@@ -80,15 +74,10 @@ export const defaultProcessFile = async (
       transformHeader: (header: string) => header.trim(),
     });
     
-    console.log('🔍 Stage 2 (semicolon) result:', {
-      dataLength: parseResult.data.length,
-      columnCount: parseResult.data.length > 0 ? Object.keys(parseResult.data[0] as object).length : 0
-    });
   }
   
   // Stage 3: Auto-detect delimiter if still single column
   if (parseResult.data.length > 0 && Object.keys(parseResult.data[0] as object).length === 1) {
-    console.log('⚠️ Still single column, trying auto-detect delimiter');
     parseResult = Papa.parse(cleanText, {
       header: true,
       delimiter: '', // Auto-detect
@@ -99,7 +88,6 @@ export const defaultProcessFile = async (
   
   // Stage 4: Try comma delimiter if still single column
   if (parseResult.data.length > 0 && Object.keys(parseResult.data[0] as object).length === 1) {
-    console.log('⚠️ Still single column, trying comma delimiter');
     parseResult = Papa.parse(cleanText, {
       header: true,
       delimiter: ',',
@@ -110,7 +98,6 @@ export const defaultProcessFile = async (
   
   // Stage 5: Manual parsing fallback with semicolon
   if (parseResult.data.length > 0 && Object.keys(parseResult.data[0] as object).length === 1) {
-    console.log('⚠️ Falling back to manual parsing with semicolon');
     const lines = cleanText.split('\n');
     const headers = lines[0].split(';').map(h => h.trim());
     if (headers.length > 1) {
@@ -121,7 +108,6 @@ export const defaultProcessFile = async (
   
   // Stage 6: Manual parsing fallback with comma
   if (parseResult.data.length > 0 && Object.keys(parseResult.data[0] as object).length === 1) {
-    console.log('⚠️ Falling back to manual parsing with comma');
     const lines = cleanText.split('\n');
     const headers = lines[0].split(',').map(h => h.trim());
     if (headers.length > 1) {
@@ -152,8 +138,6 @@ export const defaultProcessFile = async (
     .map(h => h.trim());
   const expectedHeaders = Object.keys(csvHeaderMap);
   
-  console.log('📋 CSV Headers trovate:', csvHeaders);
-  console.log('📋 Headers attese:', expectedHeaders);
   
   // Check header compatibility (almeno 1 header deve matchare)
   const matchingHeaders = csvHeaders.filter(csvHeader => 
@@ -162,7 +146,6 @@ export const defaultProcessFile = async (
     )
   );
   
-  console.log('✅ Headers che matchano:', matchingHeaders);
   
   if (matchingHeaders.length === 0) {
     throw new Error(

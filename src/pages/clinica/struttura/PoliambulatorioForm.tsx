@@ -23,6 +23,7 @@ import {
 import { poliambulatoriApi } from '../../../services/clinicaApi';
 import type { Poliambulatorio } from '../../../services/clinicaApi';
 import { useToast } from '../../../hooks/useToast';
+import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
 
 // Import Element Medica theme
 import '../../../styles/clinica-theme.css';
@@ -71,6 +72,7 @@ const PoliambulatorioForm: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const queryClient = useQueryClient();
     const { showToast } = useToast();
+    const { confirmWarning } = useConfirmDialog();
     const isEditing = Boolean(id);
 
     const [formData, setFormData] = useState<FormData>(initialFormData);
@@ -119,7 +121,7 @@ const PoliambulatorioForm: React.FC = () => {
                 setErrors(prev => ({ ...prev, codice: 'Esiste già un poliambulatorio con questo codice. Inserisci un codice diverso.' }));
                 showToast({ type: 'error', message: 'Codice poliambulatorio già esistente. Scegli un codice diverso.' });
             } else {
-                showToast({ type: 'error', message: error.message || 'Errore durante la creazione' });
+                showToast({ type: 'error', message: 'Errore durante la creazione' });
             }
         }
     });
@@ -133,7 +135,7 @@ const PoliambulatorioForm: React.FC = () => {
             navigate('/poliambulatorio/poliambulatori');
         },
         onError: (error: Error) => {
-            showToast({ type: 'error', message: error.message || 'Errore durante l\'aggiornamento' });
+            showToast({ type: 'error', message: 'Errore durante l\'aggiornamento' });
         }
     });
 
@@ -231,8 +233,8 @@ const PoliambulatorioForm: React.FC = () => {
         }
     };
 
-    const handleCancel = () => {
-        if (isDirty && !confirm('Hai modifiche non salvate. Sei sicuro di voler uscire?')) {
+    const handleCancel = async () => {
+        if (isDirty && !(await confirmWarning('Modifiche non salvate', 'Hai modifiche non salvate. Sei sicuro di voler uscire?'))) {
             return;
         }
         navigate('/poliambulatorio/poliambulatori');

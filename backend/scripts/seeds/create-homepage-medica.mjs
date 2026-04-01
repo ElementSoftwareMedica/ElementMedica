@@ -184,9 +184,9 @@ async function createHomepageMedica() {
     await prisma.cMSPage.update({
       where: { id: page.id },
       data: {
-        title: 'Element Medica - Poliambulatorio Milano',
+        title: 'Element Medica - Poliambulatorio Padova',
         content: htmlContent,
-        seoTitle: 'Element Medica - Poliambulatorio e Medicina del Lavoro Milano',
+        seoTitle: 'Element Medica - Poliambulatorio e Medicina del Lavoro Padova',
         seoDescription: 'Poliambulatorio specializzato: medicina del lavoro, visite specialistiche, diagnostica strumentale. Prenota online la tua visita.',
         status: 'published',
         updatedAt: new Date()
@@ -198,12 +198,12 @@ async function createHomepageMedica() {
     await prisma.cMSPage.create({
       data: {
         slug: 'homepage-medica',
-        title: 'Element Medica - Poliambulatorio Milano',
+        title: 'Element Medica - Poliambulatorio Padova',
         content: htmlContent,
         tenantId: 'tenant-id-medica',
         status: 'published',
         layout: 'full-width',
-        seoTitle: 'Element Medica - Poliambulatorio e Medicina del Lavoro Milano',
+        seoTitle: 'Element Medica - Poliambulatorio e Medicina del Lavoro Padova',
         seoDescription: 'Poliambulatorio specializzato: medicina del lavoro, visite specialistiche, diagnostica strumentale. Prenota online la tua visita.',
         createdAt: new Date(),
         updatedAt: new Date()

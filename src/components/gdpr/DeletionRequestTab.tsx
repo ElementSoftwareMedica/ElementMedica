@@ -89,7 +89,7 @@ export const DeletionRequestTab: React.FC<DeletionRequestTabProps> = ({ hook }) 
 
   const handleFormChange = (field: keyof DeletionRequestFormData, value: string | boolean) => {
     setRequestForm(prev => ({ ...prev, [field]: value }));
-    
+
     // Clear error for this field
     if (formErrors[field]) {
       setFormErrors(prev => ({ ...prev, [field]: '' }));
@@ -98,7 +98,7 @@ export const DeletionRequestTab: React.FC<DeletionRequestTabProps> = ({ hook }) 
 
   const handleSubmitRequest = async () => {
     const validation = validateFormData(requestForm);
-    
+
     if (!validation.isValid) {
       setFormErrors(validation.errors);
       return;
@@ -119,7 +119,6 @@ export const DeletionRequestTab: React.FC<DeletionRequestTabProps> = ({ hook }) 
       });
       setFormErrors({});
     } catch (error) {
-      console.error('Error submitting deletion request:', error);
     } finally {
       setProcessingRequest(null);
     }
@@ -130,7 +129,6 @@ export const DeletionRequestTab: React.FC<DeletionRequestTabProps> = ({ hook }) 
       setProcessingRequest(requestId);
       await cancelDeletionRequest(requestId);
     } catch (error) {
-      console.error('Error cancelling deletion request:', error);
     } finally {
       setProcessingRequest(null);
     }
@@ -159,32 +157,32 @@ export const DeletionRequestTab: React.FC<DeletionRequestTabProps> = ({ hook }) 
 
   const steps = [
     {
-      label: 'Provide Reason',
-      description: 'Explain why you want to delete your data'
+      label: 'Fornisci motivazione',
+      description: 'Spiega perché desideri eliminare i tuoi dati'
     },
     {
-      label: 'Confirm Identity',
-      description: 'Verify your email address'
+      label: 'Conferma identità',
+      description: 'Verifica il tuo indirizzo email'
     },
     {
-      label: 'Review & Submit',
-      description: 'Review your request before submission'
+      label: 'Revisione e invio',
+      description: 'Rivedi la tua richiesta prima dell\'invio'
     }
   ];
 
   const handleNext = () => {
     if (activeStep === 0) {
       if (!requestForm.reason || requestForm.reason.trim().length < 10) {
-        setFormErrors({ reason: 'Please provide a detailed reason (minimum 10 characters)' });
+        setFormErrors({ reason: 'Fornisci una motivazione dettagliata (minimo 10 caratteri)' });
         return;
       }
     } else if (activeStep === 1) {
       if (!requestForm.confirmEmail) {
-        setFormErrors({ confirmEmail: 'Email confirmation is required' });
+        setFormErrors({ confirmEmail: 'La conferma dell\'email è obbligatoria' });
         return;
       }
     }
-    
+
     setFormErrors({});
     setActiveStep(prev => prev + 1);
   };
@@ -198,22 +196,22 @@ export const DeletionRequestTab: React.FC<DeletionRequestTabProps> = ({ hook }) 
       {/* Header */}
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
         <Typography variant="h6" component="h2">
-          Data Deletion Requests
+          Richieste di eliminazione dati
         </Typography>
-        
+
         <Stack direction="row" spacing={1} alignItems="center">
           <Chip
-            label={`${stats.active} Active`}
+            label={`${stats.active} Attive`}
             color={stats.active > 0 ? 'warning' : 'default'}
             size="small"
           />
-          
-          <Tooltip title="Refresh deletion requests">
+
+          <Tooltip title="Aggiorna richieste di eliminazione">
             <IconButton onClick={refreshRequests} disabled={loading} size="small">
               <RefreshIcon />
             </IconButton>
           </Tooltip>
-          
+
           <Button
             variant="contained"
             startIcon={<DeleteIcon />}
@@ -221,7 +219,7 @@ export const DeletionRequestTab: React.FC<DeletionRequestTabProps> = ({ hook }) 
             disabled={!canSubmitNewRequest() || loading}
             color="error"
           >
-            Request Deletion
+            Richiedi eliminazione
           </Button>
         </Stack>
       </Stack>
@@ -236,18 +234,18 @@ export const DeletionRequestTab: React.FC<DeletionRequestTabProps> = ({ hook }) 
       {/* Cannot Submit Alert */}
       {!canSubmitNewRequest() && (
         <Alert severity="warning" sx={{ mb: 3 }}>
-          You already have an active deletion request. Only one deletion request can be active at a time.
+          Hai già una richiesta di eliminazione attiva. È possibile avere una sola richiesta attiva alla volta.
         </Alert>
       )}
 
       {/* Warning Alert */}
       <Alert severity="warning" sx={{ mb: 3 }}>
         <Typography variant="subtitle2" gutterBottom>
-          Important: Data Deletion is Permanent
+          Importante: l'eliminazione dei dati è permanente
         </Typography>
         <Typography variant="body2">
-          Once your data deletion request is approved and processed, all your personal information 
-          will be permanently removed from our systems. This action cannot be undone.
+          Una volta approvata e processata la richiesta di eliminazione, tutte le informazioni personali
+          verranno rimosse permanentemente dai nostri sistemi. Questa azione non può essere annullata.
         </Typography>
       </Alert>
 
@@ -266,40 +264,40 @@ export const DeletionRequestTab: React.FC<DeletionRequestTabProps> = ({ hook }) 
               {stats.total}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Total Requests
+              Richieste totali
             </Typography>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent>
             <Typography variant="h6" color="warning.main" gutterBottom>
               {stats.pending}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Pending Review
+              In attesa di revisione
             </Typography>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent>
             <Typography variant="h6" color="success.main" gutterBottom>
               {stats.completed}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Completed
+              Completate
             </Typography>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent>
             <Typography variant="h6" color="error.main" gutterBottom>
               {stats.rejected}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Rejected
+              Rifiutate
             </Typography>
           </CardContent>
         </Card>
@@ -310,9 +308,9 @@ export const DeletionRequestTab: React.FC<DeletionRequestTabProps> = ({ hook }) 
         <Card sx={{ mb: 3 }}>
           <CardContent>
             <Typography variant="h6" gutterBottom>
-              Latest Request Status
+              Stato ultima richiesta
             </Typography>
-            
+
             <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
               {getStatusIcon(latestRequest.status)}
               <Chip
@@ -321,25 +319,25 @@ export const DeletionRequestTab: React.FC<DeletionRequestTabProps> = ({ hook }) 
                 variant="outlined"
               />
               <Typography variant="body2" color="text.secondary">
-                Submitted {formatDistanceToNow(new Date(latestRequest.requestDate))} ago
+                Inviata {formatDistanceToNow(new Date(latestRequest.requestDate))} fa
               </Typography>
             </Stack>
-            
+
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               {getStatusDescription(latestRequest.status)}
             </Typography>
-            
+
             {latestRequest.adminNotes && (
               <Alert severity="info">
                 <Typography variant="subtitle2" gutterBottom>
-                  Admin Notes:
+                  Note amministratore:
                 </Typography>
                 <Typography variant="body2">
                   {latestRequest.adminNotes}
                 </Typography>
               </Alert>
             )}
-            
+
             {canCancel(latestRequest) && (
               <Box sx={{ mt: 2 }}>
                 <Button
@@ -349,7 +347,7 @@ export const DeletionRequestTab: React.FC<DeletionRequestTabProps> = ({ hook }) 
                   onClick={() => handleCancelRequest(latestRequest.id)}
                   disabled={processingRequest === latestRequest.id}
                 >
-                  Cancel Request
+                  Annulla richiesta
                 </Button>
               </Box>
             )}
@@ -361,23 +359,23 @@ export const DeletionRequestTab: React.FC<DeletionRequestTabProps> = ({ hook }) 
       <Card>
         <CardContent>
           <Typography variant="h6" gutterBottom>
-            Request History
+            Storico richieste
           </Typography>
-          
+
           {loading && deletionRequests.length === 0 ? (
             <Box sx={{ py: 3 }}>
               <LinearProgress />
               <Typography variant="body2" sx={{ mt: 2, textAlign: 'center' }}>
-                Loading deletion requests...
+                Caricamento richieste di eliminazione...
               </Typography>
             </Box>
           ) : deletionRequests.length === 0 ? (
             <Box sx={{ py: 6, textAlign: 'center' }}>
               <Typography variant="body1" color="text.secondary" gutterBottom>
-                No deletion requests found
+                Nessuna richiesta di eliminazione trovata
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                You have not submitted any data deletion requests yet.
+                Non hai ancora inviato richieste di eliminazione dati.
               </Typography>
             </Box>
           ) : (
@@ -385,17 +383,17 @@ export const DeletionRequestTab: React.FC<DeletionRequestTabProps> = ({ hook }) 
               <Table>
                 <TableHead>
                   <TableRow>
-                    <TableCell>Status</TableCell>
-                    <TableCell>Reason</TableCell>
-                    <TableCell>Submitted</TableCell>
-                    <TableCell>Processed</TableCell>
-                    <TableCell align="right">Actions</TableCell>
+                    <TableCell>Stato</TableCell>
+                    <TableCell>Motivazione</TableCell>
+                    <TableCell>Inviata</TableCell>
+                    <TableCell>Processata</TableCell>
+                    <TableCell align="right">Azioni</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {deletionRequests.map((request) => {
                     const formattedRequest = formatRequestForDisplay(request);
-                    
+
                     return (
                       <TableRow key={request.id}>
                         <TableCell>
@@ -409,34 +407,34 @@ export const DeletionRequestTab: React.FC<DeletionRequestTabProps> = ({ hook }) 
                             />
                           </Stack>
                         </TableCell>
-                        
+
                         <TableCell>
                           <Typography variant="body2" sx={{ maxWidth: 200 }}>
-                            {request.reason.length > 50 
+                            {request.reason.length > 50
                               ? `${request.reason.substring(0, 50)}...`
                               : request.reason
                             }
                           </Typography>
                         </TableCell>
-                        
+
                         <TableCell>
                           <Typography variant="body2">
                             {formattedRequest.formattedRequestDate}
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
-                            {formattedRequest.daysSinceRequest} days ago
+                            {formattedRequest.daysSinceRequest} giorni fa
                           </Typography>
                         </TableCell>
-                        
+
                         <TableCell>
                           <Typography variant="body2">
-                            {formattedRequest.formattedProcessedDate || 'Not processed'}
+                            {formattedRequest.formattedProcessedDate || 'Non ancora processata'}
                           </Typography>
                         </TableCell>
-                        
+
                         <TableCell align="right">
                           {canCancel(request) && (
-                            <Tooltip title="Cancel request">
+                            <Tooltip title="Annulla richiesta">
                               <IconButton
                                 size="small"
                                 onClick={() => handleCancelRequest(request.id)}
@@ -462,30 +460,30 @@ export const DeletionRequestTab: React.FC<DeletionRequestTabProps> = ({ hook }) 
       <Accordion sx={{ mt: 3 }}>
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
           <Typography variant="subtitle1">
-            Right to be Forgotten - Information
+            Diritto all'oblio - Informazioni
           </Typography>
         </AccordionSummary>
         <AccordionDetails>
           <Typography variant="body2" paragraph>
-            Under GDPR Article 17, you have the right to request the deletion of your personal data 
-            in certain circumstances:
+            Ai sensi dell'articolo 17 del GDPR, hai il diritto di richiedere la cancellazione dei tuoi dati personali
+            in determinate circostanze:
           </Typography>
-          
+
           <ul>
-            <li>The personal data is no longer necessary for the original purpose</li>
-            <li>You withdraw consent and there's no other legal basis for processing</li>
-            <li>Your personal data has been unlawfully processed</li>
-            <li>Deletion is required for compliance with a legal obligation</li>
+            <li>I dati personali non sono più necessari per lo scopo originale</li>
+            <li>Revochi il consenso e non esiste altra base giuridica per il trattamento</li>
+            <li>I tuoi dati personali sono stati trattati illecitamente</li>
+            <li>La cancellazione è necessaria per conformità a un obbligo legale</li>
           </ul>
-          
+
           <Typography variant="body2" paragraph>
-            Please note that we may not be able to delete your data if:
+            Tieni presente che potremmo non essere in grado di eliminare i tuoi dati se:
           </Typography>
-          
+
           <ul>
-            <li>We need to keep it for legal compliance</li>
-            <li>It's necessary for the establishment, exercise, or defense of legal claims</li>
-            <li>There are legitimate interests that override your right to deletion</li>
+            <li>Dobbiamo conservarli per conformità legale</li>
+            <li>È necessario per l'accertamento, l'esercizio o la difesa di un diritto in sede giudiziaria</li>
+            <li>Esistono interessi legittimi che prevalgono sul diritto alla cancellazione</li>
           </ul>
         </AccordionDetails>
       </Accordion>
@@ -500,20 +498,20 @@ export const DeletionRequestTab: React.FC<DeletionRequestTabProps> = ({ hook }) 
         <DialogTitle>
           <Stack direction="row" spacing={1} alignItems="center">
             <WarningIcon color="error" />
-            Request Data Deletion
+            Richiedi eliminazione dati
           </Stack>
         </DialogTitle>
-        
+
         <DialogContent>
           <Alert severity="error" sx={{ mb: 3 }}>
             <Typography variant="subtitle2" gutterBottom>
-              Warning: This action is irreversible
+              Attenzione: questa azione è irreversibile
             </Typography>
             <Typography variant="body2">
-              Once approved, all your personal data will be permanently deleted from our systems.
+              Una volta approvata, tutti i tuoi dati personali verranno eliminati permanentemente dai nostri sistemi.
             </Typography>
           </Alert>
-          
+
           <Stepper activeStep={activeStep} orientation="vertical">
             {steps.map((step, index) => (
               <Step key={step.label}>
@@ -524,85 +522,85 @@ export const DeletionRequestTab: React.FC<DeletionRequestTabProps> = ({ hook }) 
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                     {step.description}
                   </Typography>
-                  
+
                   {index === 0 && (
                     <TextField
                       fullWidth
                       multiline
                       rows={4}
-                      label="Reason for deletion *"
+                      label="Motivazione dell'eliminazione *"
                       value={requestForm.reason}
                       onChange={(e) => handleFormChange('reason', e.target.value)}
                       error={!!formErrors.reason}
-                      helperText={formErrors.reason || 'Please provide a detailed explanation (minimum 10 characters)'}
-                      placeholder="Please explain why you want to delete your data..."
+                      helperText={formErrors.reason || 'Fornisci una spiegazione dettagliata (minimo 10 caratteri)'}
+                      placeholder="Spiega perché desideri eliminare i tuoi dati..."
                     />
                   )}
-                  
+
                   {index === 1 && (
                     <Box>
                       <TextField
                         fullWidth
-                        label="Confirm your email address *"
+                        label="Conferma il tuo indirizzo email *"
                         type="email"
                         value={requestForm.confirmEmail}
                         onChange={(e) => handleFormChange('confirmEmail', e.target.value)}
                         error={!!formErrors.confirmEmail}
-                        helperText={formErrors.confirmEmail || 'Enter your account email to confirm your identity'}
+                        helperText={formErrors.confirmEmail || 'Inserisci l\'email del tuo account per confermare la tua identità'}
                         sx={{ mb: 2 }}
                       />
-                      
+
                       <TextField
                         fullWidth
                         multiline
                         rows={3}
-                        label="Additional information (optional)"
+                        label="Informazioni aggiuntive (opzionale)"
                         value={requestForm.additionalInfo}
                         onChange={(e) => handleFormChange('additionalInfo', e.target.value)}
-                        helperText="Any additional context or specific requests"
-                        placeholder="Optional: Any additional information..."
+                        helperText="Contesto aggiuntivo o richieste specifiche"
+                        placeholder="Opzionale: informazioni aggiuntive..."
                       />
                     </Box>
                   )}
-                  
+
                   {index === 2 && (
                     <Box>
                       <Typography variant="subtitle2" gutterBottom>
-                        Review Your Request:
+                        Rivedi la tua richiesta:
                       </Typography>
-                      
+
                       <Paper sx={{ p: 2, bgcolor: 'grey.50' }}>
                         <Typography variant="body2" gutterBottom>
-                          <strong>Reason:</strong> {requestForm.reason}
+                          <strong>Motivazione:</strong> {requestForm.reason}
                         </Typography>
                         <Typography variant="body2" gutterBottom>
                           <strong>Email:</strong> {requestForm.confirmEmail}
                         </Typography>
                         {requestForm.additionalInfo && (
                           <Typography variant="body2">
-                            <strong>Additional Info:</strong> {requestForm.additionalInfo}
+                            <strong>Info aggiuntive:</strong> {requestForm.additionalInfo}
                           </Typography>
                         )}
                       </Paper>
                     </Box>
                   )}
-                  
+
                   <Box sx={{ mt: 2 }}>
                     <Button
                       variant="contained"
                       onClick={index === steps.length - 1 ? handleSubmitRequest : handleNext}
                       disabled={processingRequest === 'new'}
                     >
-                      {index === steps.length - 1 ? 'Submit Request' : 'Next'}
+                      {index === steps.length - 1 ? 'Invia richiesta' : 'Avanti'}
                     </Button>
-                    
+
                     {index > 0 && (
                       <Button
                         onClick={handleBack}
                         sx={{ ml: 1 }}
                         disabled={processingRequest === 'new'}
                       >
-                        Back
+                        Indietro
                       </Button>
                     )}
                   </Box>
@@ -611,9 +609,9 @@ export const DeletionRequestTab: React.FC<DeletionRequestTabProps> = ({ hook }) 
             ))}
           </Stepper>
         </DialogContent>
-        
+
         <DialogActions>
-          <Button 
+          <Button
             onClick={() => {
               setNewRequestDialog(false);
               setActiveStep(0);
@@ -621,7 +619,7 @@ export const DeletionRequestTab: React.FC<DeletionRequestTabProps> = ({ hook }) 
             }}
             disabled={processingRequest === 'new'}
           >
-            Cancel
+            Annulla
           </Button>
         </DialogActions>
       </Dialog>

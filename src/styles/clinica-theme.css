@@ -134,26 +134,39 @@
    CLINICA COMPONENT VARIANTS
    ============================================ */
 
-/* Primary Button - Teal */
-.btn-clinica-primary {
-    background: linear-gradient(135deg, var(--clinica-primary-600) 0%, var(--clinica-primary-700) 100%);
-    color: white;
+/* Primary Button - Teal 600 - Consistent with project */
+.btn-clinica-primary,
+.clinica-button-primary {
+    background-color: #0d9488 !important;
+    color: white !important;
     padding: 0.625rem 1.25rem;
     border-radius: 0.5rem;
     font-weight: 500;
     font-size: 0.875rem;
     transition: all 0.2s ease;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    border: none !important;
 }
 
-.btn-clinica-primary:hover {
-    background: linear-gradient(135deg, var(--clinica-primary-700) 0%, var(--clinica-primary-800) 100%);
+.btn-clinica-primary:hover:not(:disabled),
+.clinica-button-primary:hover:not(:disabled) {
+    background-color: #0f766e !important;
     box-shadow: 0 4px 12px rgba(13, 148, 136, 0.3);
     transform: translateY(-1px);
 }
 
-.btn-clinica-primary:active {
+.btn-clinica-primary:active:not(:disabled),
+.clinica-button-primary:active:not(:disabled) {
     transform: translateY(0);
+}
+
+.btn-clinica-primary:disabled,
+.clinica-button-primary:disabled {
+    background-color: #9ca3af !important;
+    color: #e5e7eb !important;
+    cursor: not-allowed;
+    opacity: 0.7;
+    box-shadow: none;
 }
 
 /* Secondary Button */

@@ -21,6 +21,13 @@ export interface LetteraIncarico {
   markers?: Record<string, any>;
   generatedBy?: string;
   fileSize?: number;
+  // Firma formatore (P65)
+  firmaFormatore?: string | null;
+  firmaFormatoreAt?: string | null;
+  firmaFormatoreId?: string | null;
+  firmaDatoreLavoro?: string | null;
+  firmaDatoreLavoroAt?: string | null;
+  signedAt?: string | null;
   scheduledCourse?: {
     id: string;
     course: {
@@ -78,6 +85,11 @@ export interface GenerateLetteraResponse {
     status: string;
   };
   downloadUrl: string;
+  preventivoCompenso?: {
+    id: string;
+    numero: string;
+    importoFinale: number;
+  } | null;
 }
 
 export interface BatchJobResponse {
@@ -196,7 +208,6 @@ class LettereIncaricoService {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Error downloading ZIP:', error);
       throw error;
     }
   }

@@ -3,7 +3,8 @@
  */
 
 import React from 'react';
-import { Lock, RotateCw, QrCode } from 'lucide-react';
+import { Lock, RotateCw, QrCode, Building2, ImageIcon } from 'lucide-react';
+import { sanitizeRichHtml } from '../../../utils/sanitize';
 import ContentEditableText from './ContentEditableText';
 import type { SlideElement } from './types';
 import { RESIZE_HANDLES } from './types';
@@ -306,7 +307,7 @@ const SlideElementRenderer: React.FC<SlideElementRendererProps> = ({
                         />
                     ) : (
                         <div
-                            dangerouslySetInnerHTML={{ __html: element.content || '' }}
+                            dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(element.content || '') }}
                             style={{
                                 pointerEvents: 'none',
                                 whiteSpace: 'pre-wrap',
@@ -349,6 +350,47 @@ const SlideElementRenderer: React.FC<SlideElementRendererProps> = ({
                         }}>
                             QR Code Verifica
                         </div>
+                    </div>
+                )}
+                {element.type === 'logo' && (
+                    <div
+                        style={{
+                            width: '100%',
+                            height: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            overflow: 'hidden',
+                        }}
+                    >
+                        {element.src ? (
+                            <img
+                                src={element.src}
+                                alt={element.logoType === 'branch' ? 'Logo Sede' : 'Logo Tenant'}
+                                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                                draggable={false}
+                            />
+                        ) : (
+                            <div style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                gap: 2,
+                                opacity: 0.5,
+                            }}>
+                                {element.logoType === 'branch'
+                                    ? <Building2 className="w-6 h-6 text-teal-400" />
+                                    : <ImageIcon className="w-6 h-6 text-indigo-400" />
+                                }
+                                <span style={{
+                                    fontSize: 8,
+                                    color: element.logoType === 'branch' ? '#0d9488' : '#6366f1',
+                                    fontWeight: 500,
+                                }}>
+                                    {element.logoType === 'branch' ? 'Logo Sede' : 'Logo Ente'}
+                                </span>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

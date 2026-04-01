@@ -11,6 +11,7 @@ export { default as MergedDetailsModal } from './MergedDetailsModal';
 export { default as ApplyScontoModal } from './ApplyScontoModal';
 export { default as QuicklookModal } from './QuicklookModal';
 export { default as EditPreventivoModal } from './EditPreventivoModal';
+export { GenerateMDLModal } from './GenerateMDLModal';
 
 // Type exports
 export type { SearchableDropdownProps, SearchableDropdownOption } from './SearchableDropdown';

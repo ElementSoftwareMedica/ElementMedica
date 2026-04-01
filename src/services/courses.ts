@@ -13,10 +13,13 @@ export type CourseUpdate = Partial<Course>;
 // Creazione del servizio base usando la factory
 const baseService = createService<Course, CourseCreate, CourseUpdate>('/api/v1/courses');
 
+// Tipo per opzioni API con headers multi-tenant
+type ApiOptions = Record<string, unknown> & { headers?: Record<string, string> };
+
 // Estensione del servizio con metodi specifici e conversione dei campi
 const courseService = baseService.extend({
   // Sovrascriviamo i metodi standard per convertire i campi numerici
-  create: async (data: CourseCreate): Promise<Course> => {
+  create: async (data: CourseCreate, options?: ApiOptions): Promise<Course> => {
     // Garantiamo che i campi numerici siano del tipo corretto
     const processedData = {
       ...data,
@@ -32,11 +35,11 @@ const courseService = baseService.extend({
       duration: (data as any).duration !== undefined ? (String((data as any).duration).trim() || undefined) : undefined,
       practicalHours: (data as any).practicalHours !== undefined ? (Number((data as any).practicalHours) || undefined) : undefined,
     };
-    
-    return baseService.create(processedData);
+
+    return baseService.create(processedData, options);
   },
-  
-  update: async (id: string, data: CourseUpdate): Promise<Course> => {
+
+  update: async (id: string, data: CourseUpdate, options?: ApiOptions): Promise<Course> => {
     // Garantiamo che i campi numerici siano del tipo corretto
     const processedData = {
       ...data,
@@ -52,10 +55,10 @@ const courseService = baseService.extend({
       duration: (data as any).duration !== undefined ? (String((data as any).duration).trim() || undefined) : undefined,
       practicalHours: (data as any).practicalHours !== undefined ? (Number((data as any).practicalHours) || undefined) : undefined,
     };
-    
-    return baseService.update(id, processedData);
+
+    return baseService.update(id, processedData, options);
   },
-  
+
   // Helper interno per mappare le enrollments del backend (person) nel tipo frontend atteso (employee)
   _mapEnrollments: (enrollments: any[]): CourseEnrollment[] => {
     return (enrollments || []).map((e: any) => ({
@@ -67,30 +70,30 @@ const courseService = baseService.extend({
       updatedAt: e.updatedAt,
       employee: e.person
         ? {
-            id: e.person.id,
-            firstName: e.person.firstName,
-            lastName: e.person.lastName,
-            email: e.person.email,
-            company: e.person.company
-              ? { id: e.person.company.id, name: e.person.company.name }
-              : undefined,
-          }
+          id: e.person.id,
+          firstName: e.person.firstName,
+          lastName: e.person.lastName,
+          email: e.person.email,
+          company: e.person.company
+            ? { id: e.person.company.id, name: e.person.company.name }
+            : undefined,
+        }
         : e.employee,
     }));
   },
-  
+
   // Metodi specifici per i corsi
   createCourseSchedule: async (schedule: Omit<CourseSchedule, 'id' | 'createdAt' | 'updatedAt'>): Promise<CourseSchedule> => {
     // Backend espone POST /api/v1/schedules
     return await apiPost<CourseSchedule>('/api/v1/schedules', schedule);
   },
-  
+
   enrollEmployees: async (scheduleId: string, employeeIds: string[]): Promise<CourseEnrollment[]> => {
     // Backend: aggiornamento iscrizioni tramite PUT /api/v1/schedules/:id con { personIds }
     const updatedSchedule = await apiPut<any>(`/api/v1/schedules/${scheduleId}`, { personIds: employeeIds });
     return courseService._mapEnrollments(updatedSchedule?.enrollments || []);
   },
-  
+
   getCourseEnrollments: async (scheduleId: string): Promise<CourseEnrollment[]> => {
     // Backend non espone /schedules/:id/enrollments, si utilizza GET /schedules/:id e si estraggono le iscrizioni
     const schedule = await apiGet<any>(`/api/v1/schedules/${scheduleId}`);

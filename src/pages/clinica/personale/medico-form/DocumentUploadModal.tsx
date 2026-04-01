@@ -9,6 +9,7 @@ import { FileText, Upload, Loader2 } from 'lucide-react';
 import Modal from '../../../../design-system/molecules/Modal/Modal';
 import { DOCUMENT_TYPES, type DocumentFormState } from './types';
 import type { TipoDocumentoPersonale } from '../../../../services/clinicaApi';
+import { DatePickerElegante } from '../../../../components/ui/DatePickerElegante';
 
 interface DocumentUploadModalProps {
     isOpen: boolean;
@@ -150,11 +151,10 @@ const DocumentUploadModal: React.FC<DocumentUploadModalProps> = ({
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                             Data Scadenza
                         </label>
-                        <input
-                            type="date"
+                        <DatePickerElegante
                             value={documentForm.dataScadenza}
-                            onChange={(e) => setDocumentForm(prev => ({ ...prev, dataScadenza: e.target.value }))}
-                            className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                            onChange={(date) => setDocumentForm(prev => ({ ...prev, dataScadenza: date ? date.toISOString().split('T')[0] : '' }))}
+                            theme="teal"
                         />
                         <p className="text-xs text-gray-500 mt-1">
                             Riceverai una notifica quando il documento sta per scadere

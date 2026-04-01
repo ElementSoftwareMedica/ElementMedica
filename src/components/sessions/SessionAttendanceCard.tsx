@@ -54,7 +54,6 @@ export default function SessionAttendanceCard({
       const result = await registriPresenzeService.list({ sessionId: session.id });
       setRegistri(result);
     } catch (error) {
-      console.error('Failed to load registri:', error);
     } finally {
       setLoading(false);
     }
@@ -68,7 +67,6 @@ export default function SessionAttendanceCard({
       await registriPresenzeService.delete(id);
       await loadRegistri();
     } catch (error) {
-      console.error('Failed to delete registro:', error);
       showToast({ message: 'Errore durante l\'eliminazione del registro', type: 'error' });
     }
   };
@@ -77,7 +75,6 @@ export default function SessionAttendanceCard({
     try {
       await registriPresenzeService.download(id);
     } catch (error) {
-      console.error('Failed to download registro:', error);
       showToast({ message: 'Errore durante il download del registro', type: 'error' });
     }
   };

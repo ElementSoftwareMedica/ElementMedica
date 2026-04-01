@@ -429,7 +429,6 @@ export function validateAndSanitizeCMSContent(
   content: any
 ): CMSPageContent | null {
   if (!isCMSPageContent(content)) {
-    console.error('Invalid CMS content structure:', content);
     return null;
   }
 

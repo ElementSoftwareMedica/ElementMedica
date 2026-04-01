@@ -59,7 +59,6 @@ export const useEntityData = <T extends Record<string, any>>({
     } else if (Array.isArray(response)) {
       return response;
     } else {
-      console.warn(`⚠️ Risposta API non è un array:`, response);
       return [];
     }
   }, [apiEndpoint]);
@@ -70,20 +69,14 @@ export const useEntityData = <T extends Record<string, any>>({
       setLoading(true);
       setError(null);
       
-      console.log(`🔄 Caricamento ${entityDisplayNamePlural}...`);
-      
       const apiUrl = buildApiUrl(apiEndpoint);
-      console.log(`📡 Chiamata API: ${apiUrl}`);
       
       const response = await apiGet<any>(apiUrl);
-      console.log(`📊 Risposta API ${entityNamePlural}:`, response);
       
       const processedEntities = processApiResponse(response);
       setEntities(processedEntities);
-      console.log(`✅ ${entityDisplayNamePlural} caricate:`, processedEntities.length);
       
-    } catch (err: any) {
-      console.error(`❌ Errore caricamento ${entityDisplayNamePlural}:`, err);
+    } catch (err: unknown) {
       const errorMessage = getLoadingErrorMessage(
         (entityNamePlural as keyof typeof import('../../../utils/errorUtils').errorMessages.loading) || 'generic', 
         err
@@ -92,7 +85,7 @@ export const useEntityData = <T extends Record<string, any>>({
       setEntities([]);
       
       showToastRef.current({
-        message: `Errore durante il caricamento dei ${entityDisplayNamePlural.toLowerCase()}: ${err instanceof Error ? err.message : 'Errore sconosciuto'}`,
+        message: `Errore durante il caricamento dei ${entityDisplayNamePlural.toLowerCase()}: ${'Errore sconosciuto'}`,
         type: 'error'
       });
     } finally {

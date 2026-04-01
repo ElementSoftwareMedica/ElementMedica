@@ -438,6 +438,7 @@ model Convenzione {
   // Relations
   poliambulatori        ConvenzionePoliambulatorio[]
   listiniPrezzo         ListinoPrezzo[]
+  appuntamenti          Appuntamento[]
   
   @@unique([tenantId, codice])
   @@index([tenantId])
@@ -527,12 +528,16 @@ model Appuntamento {
   // Stato
   stato                 StatoAppuntamento   @default(PRENOTATO)
   
+  // Overbooking
+  isOverbooking         Boolean             @default(false)
+  
   // Note
   note                  String?
   noteInterne           String?
   
   // Convenzione applicata
   convenzioneId         String?
+  convenzione           Convenzione?        @relation(fields: [convenzioneId], references: [id])
   
   // Promemoria
   promemoriaSms         Boolean             @default(false)
@@ -564,6 +569,7 @@ model Appuntamento {
   @@index([medicoId])
   @@index([dataOra])
   @@index([stato])
+  @@index([convenzioneId])
   @@index([tenantId, dataOra])
   @@index([medicoId, dataOra])
   @@map("appuntamenti")
@@ -600,7 +606,6 @@ model Visita {
   
   // Dati strutturati (campi dinamici da template)
   datiStrutturati       Json?           @default("{}")
-  templateUsato         String?         // ID template campi visita
   
   // Prescrizioni
   prescrizioni          String?
@@ -678,39 +683,10 @@ model Referto {
 }
 
 // ===========================================
-// TEMPLATE CAMPO VISITA - Campi dinamici
+// P65.7: TemplateCampoVisita RIMOSSO
+// Consolidato in VisitTemplate con scope=CATALOGO
+// Vedere schema.prisma principale
 // ===========================================
-
-model TemplateCampoVisita {
-  id                    String        @id @default(uuid())
-  codice                String
-  nome                  String
-  descrizione           String?
-  
-  // Tipo prestazione associato
-  tipoPrestazione       TipoPrestazione?
-  specializzazione      String?       // Es: Cardiologia
-  
-  // Definizione campi (JSON schema)
-  schema                Json          // Array di definizioni campi
-  
-  // Attivo/versioning
-  attivo                Boolean       @default(true)
-  versione              Int           @default(1)
-  
-  // Metadata
-  tenantId              String
-  createdAt             DateTime      @default(now())
-  updatedAt             DateTime      @updatedAt
-  deletedAt             DateTime?
-  createdBy             String?
-  
-  @@unique([tenantId, codice, versione])
-  @@index([tenantId])
-  @@index([tipoPrestazione])
-  @@index([specializzazione])
-  @@map("template_campi_visita")
-}
 
 // ===========================================
 // DOCUMENTO CLINICO - Documenti generici

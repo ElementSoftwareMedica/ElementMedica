@@ -41,7 +41,6 @@ export const useEntitySelection = <T extends Record<string, any>>({
   const handleSelectAll = useCallback(() => {
     // Validazione di sicurezza per assicurarsi che entities sia un array
     if (!Array.isArray(entities)) {
-      console.error('useEntitySelection: entities deve essere un array, ricevuto:', typeof entities, entities);
       return;
     }
     
@@ -70,7 +69,6 @@ export const useEntitySelection = <T extends Record<string, any>>({
   useEffect(() => {
     // Validazione di sicurezza per assicurarsi che entities sia un array
     if (!Array.isArray(entities)) {
-      console.error('useEntitySelection: entities deve essere un array nel useEffect, ricevuto:', typeof entities, entities);
       setSelectAll(false);
       return;
     }

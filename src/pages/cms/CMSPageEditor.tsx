@@ -23,6 +23,7 @@ import cmsPagesService from '../../services/cmsPagesService';
 interface CMSPageEditorProps {
   page: CMSPage | null;
   isCreating: boolean;
+  targetTenantId?: string;
   onClose: () => void;
   onSave: () => void;
 }
@@ -44,6 +45,7 @@ interface FormData {
 const CMSPageEditor: React.FC<CMSPageEditorProps> = ({
   page,
   isCreating,
+  targetTenantId,
   onClose,
   onSave,
 }) => {
@@ -76,7 +78,7 @@ const CMSPageEditor: React.FC<CMSPageEditorProps> = ({
       const heroTitle = page.content?.hero?.title || page.content?.heroTitle || '';
       const heroSubtitle = page.content?.hero?.subtitle || page.content?.heroSubtitle || '';
       const heroDescription = page.content?.hero?.description || page.content?.heroDescription || '';
-      
+
       setFormData({
         title: page.title || '',
         slug: page.slug || '',
@@ -89,11 +91,9 @@ const CMSPageEditor: React.FC<CMSPageEditorProps> = ({
         heroSubtitle,
         heroDescription,
       });
-      
+
       // Initialize JSON editor with full content
       const contentJson = JSON.stringify(page.content || {}, null, 2);
-      console.log('🔧 CMSPageEditor: Initializing JSON content:', contentJson.substring(0, 100) + '...');
-      console.log('🔧 Full content object:', page.content);
       setJsonContent(contentJson);
     } else {
       // Reset when no page (creating new)
@@ -148,12 +148,11 @@ const CMSPageEditor: React.FC<CMSPageEditorProps> = ({
 
     try {
       let content;
-      
+
       // If advanced editor is used and JSON is modified, use that
       if (showAdvancedEditor && jsonContent.trim()) {
         try {
           content = JSON.parse(jsonContent);
-          console.log('Using JSON from advanced editor');
         } catch (error) {
           setErrors({ json: 'JSON non valido. Controlla la sintassi.' });
           return;
@@ -167,7 +166,7 @@ const CMSPageEditor: React.FC<CMSPageEditorProps> = ({
 
         // Preserve existing content structure
         const existingContent = page?.content || {};
-        
+
         // Build hero object in correct format
         const hero = {
           ...(existingContent.hero || {}),
@@ -200,6 +199,7 @@ const CMSPageEditor: React.FC<CMSPageEditorProps> = ({
           content,
           seoTitle: formData.seoTitle || undefined,
           seoDescription: formData.seoDescription || undefined,
+          ...(targetTenantId && { tenantId: targetTenantId }),
         };
 
         await createMutation.mutateAsync(data);
@@ -219,7 +219,7 @@ const CMSPageEditor: React.FC<CMSPageEditorProps> = ({
 
       onSave();
     } catch (error) {
-      console.error('Save error:', error);
+      if (import.meta.env.DEV) console.error('Save error:', error);
     }
   };
 
@@ -261,9 +261,8 @@ const CMSPageEditor: React.FC<CMSPageEditorProps> = ({
               name="title"
               value={formData.title}
               onChange={handleChange}
-              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                errors.title ? 'border-red-500' : 'border-gray-300'
-              }`}
+              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.title ? 'border-red-500' : 'border-gray-300'
+                }`}
               placeholder="Es. Home Page"
             />
             {errors.title && (
@@ -285,9 +284,8 @@ const CMSPageEditor: React.FC<CMSPageEditorProps> = ({
               name="slug"
               value={formData.slug}
               onChange={handleChange}
-              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm ${
-                errors.slug ? 'border-red-500' : 'border-gray-300'
-              }`}
+              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm ${errors.slug ? 'border-red-500' : 'border-gray-300'
+                }`}
               placeholder="es. home-page"
             />
             {errors.slug && (
@@ -335,8 +333,8 @@ const CMSPageEditor: React.FC<CMSPageEditorProps> = ({
           {page && !isCreating && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
               <p className="text-sm text-blue-800">
-                <strong>ℹ️ Pagina "{page.slug}":</strong> Stai modificando contenuti esistenti. 
-                I campi qui sotto mostrano solo l'Hero section. Per modificare sezioni, statistiche, 
+                <strong>ℹ️ Pagina "{page.slug}":</strong> Stai modificando contenuti esistenti.
+                I campi qui sotto mostrano solo l'Hero section. Per modificare sezioni, statistiche,
                 card e altri contenuti avanzati, usa l'Editor Avanzato sotto.
               </p>
             </div>
@@ -354,7 +352,7 @@ const CMSPageEditor: React.FC<CMSPageEditorProps> = ({
               value={formData.heroTitle}
               onChange={handleChange}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Es. Benvenuti in Element Formazione"
+              placeholder="Es. Benvenuti in Element Sicurezza"
             />
           </div>
 
@@ -395,8 +393,6 @@ const CMSPageEditor: React.FC<CMSPageEditorProps> = ({
             <button
               type="button"
               onClick={() => {
-                console.log('🔧 Toggle Advanced Editor - Current jsonContent length:', jsonContent.length);
-                console.log('🔧 jsonContent preview:', jsonContent.substring(0, 200));
                 setShowAdvancedEditor(!showAdvancedEditor);
               }}
               className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 font-medium"
@@ -404,12 +400,12 @@ const CMSPageEditor: React.FC<CMSPageEditorProps> = ({
               <FileText className="w-4 h-4" />
               {showAdvancedEditor ? 'Nascondi' : 'Mostra'} Editor Avanzato (JSON Completo)
             </button>
-            
+
             {showAdvancedEditor && (
               <div className="mt-4">
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-3">
                   <p className="text-sm text-yellow-800">
-                    <strong>⚠️ Editor Avanzato:</strong> Qui puoi vedere e modificare il contenuto JSON completo della pagina, 
+                    <strong>⚠️ Editor Avanzato:</strong> Qui puoi vedere e modificare il contenuto JSON completo della pagina,
                     incluse tutte le sezioni (cards, features, stats, ecc.). Modifica con cautela per evitare errori di sintassi.
                   </p>
                 </div>

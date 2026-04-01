@@ -172,8 +172,8 @@ export class NotificationSchedulerService {
             }
 
             // Get tenant clinic info
-            const tenant = await prisma.tenant.findUnique({
-                where: { id: tenantId },
+            const tenant = await prisma.tenant.findFirst({
+                where: { id: tenantId, deletedAt: null },
                 select: {
                     name: true,
                     settings: true
@@ -191,6 +191,7 @@ export class NotificationSchedulerService {
                 const windowEnd = new Date(targetTime.getTime() + 60 * 60 * 1000);
 
                 // Find appointments in window
+                // P48 fixes: promemoriaEmail (not promemoria), promemoriaInviato is DateTime
                 const appointments = await prisma.appuntamento.findMany({
                     where: {
                         tenantId,
@@ -200,34 +201,40 @@ export class NotificationSchedulerService {
                             gte: windowStart,
                             lte: windowEnd
                         },
-                        promemoria: true, // Only if reminders enabled for this appointment
-                        promemoriaInviato: false // Not already sent
+                        promemoriaEmail: true,  // era: promemoria (non esiste)
+                        promemoriaInviato: null  // era: false — è un DateTime nullable
                     },
                     include: {
                         paziente: {
                             select: {
                                 id: true,
-                                nome: true,
-                                cognome: true,
-                                email: true,
-                                preferenzeContatto: true
+                                firstName: true,  // era: nome
+                                lastName: true,   // era: cognome
+                                tenantProfiles: {
+                                    where: { tenantId, deletedAt: null },
+                                    select: { email: true, phone: true, preferences: true },
+                                    take: 1
+                                }
                             }
                         },
                         prestazione: {
                             select: { id: true, nome: true }
                         },
                         medico: {
-                            select: { id: true, nome: true, cognome: true }
+                            select: { id: true, firstName: true, lastName: true }  // era: nome, cognome
                         }
                     },
                     take: 100 // Batch limit
                 });
 
                 for (const appointment of appointments) {
-                    // Check if patient has email and hasn't opted out
-                    if (!appointment.paziente?.email) continue;
+                    // P48: leggi email da tenantProfile
+                    const pazienteProfile = appointment.paziente?.tenantProfiles?.[0];
+                    const pazienteEmail = pazienteProfile?.email;
+                    if (!pazienteEmail) continue;
 
-                    const prefs = appointment.paziente.preferenzeContatto || {};
+                    const prefs = (pazienteProfile?.preferences && typeof pazienteProfile.preferences === 'object')
+                        ? pazienteProfile.preferences : {};
                     if (config.respectOptOut && prefs.emailOptOut) continue;
 
                     try {
@@ -239,21 +246,29 @@ export class NotificationSchedulerService {
                             email: tenant.settings?.email || ''
                         };
 
+                        // Build flat patient object for EmailService
+                        const pazienteFlat = {
+                            id: appointment.paziente.id,
+                            firstName: appointment.paziente.firstName,
+                            lastName: appointment.paziente.lastName,
+                            email: pazienteEmail
+                        };
+
                         // Send reminder
                         await EmailService.sendAppointmentReminder(
                             appointment,
-                            appointment.paziente,
+                            pazienteFlat,
                             clinicInfo,
                             reminderType === '1day' ? 'tomorrow' :
                                 reminderType === '3days' ? '3days' : 'week',
                             tenantId
                         );
 
-                        // Mark reminder as sent
+                        // Mark reminder as sent (DateTime: new Date())
                         await prisma.appuntamento.update({
-                            where: { id: appointment.id },
+                            where: { id: appointment.id, deletedAt: null },
                             data: {
-                                promemoriaInviato: true
+                                promemoriaInviato: new Date()
                             }
                         });
 
@@ -295,6 +310,7 @@ export class NotificationSchedulerService {
             const twoHoursLater = new Date(now.getTime() + 2 * 60 * 60 * 1000);
 
             // Find appointments starting in 2 hours
+            // P48: promemoriaEmail (not promemoria), promemoriaInviato is DateTime
             const appointments = await prisma.appuntamento.findMany({
                 where: {
                     deletedAt: null,
@@ -303,32 +319,27 @@ export class NotificationSchedulerService {
                         gte: now,
                         lte: twoHoursLater
                     },
-                    promemoria: true,
-                    promemoriaInviato: false
+                    promemoriaEmail: true,   // era: promemoria (non esiste)
+                    promemoriaInviato: null  // era: false — è DateTime nullable
                 },
                 include: {
                     paziente: {
                         select: {
                             id: true,
-                            nome: true,
-                            cognome: true,
-                            email: true,
-                            cellulare: true,
-                            preferenzeContatto: true
-                        }
-                    },
-                    tenant: {
-                        select: {
-                            id: true,
-                            name: true,
-                            settings: true
+                            firstName: true,  // era: nome
+                            lastName: true,   // era: cognome
+                            tenantProfiles: {
+                                where: { deletedAt: null },
+                                select: { tenantId: true, email: true, phone: true, preferences: true },
+                                take: 1
+                            }
                         }
                     },
                     prestazione: {
                         select: { nome: true }
                     },
                     medico: {
-                        select: { nome: true, cognome: true }
+                        select: { firstName: true, lastName: true }  // era: nome, cognome
                     }
                 },
                 take: 50
@@ -337,27 +348,46 @@ export class NotificationSchedulerService {
             let sent = 0;
 
             for (const appointment of appointments) {
-                if (!appointment.paziente?.email) continue;
+                // P48: leggi email da tenantProfile (filtra per tenantId dell'appuntamento)
+                const pazienteProfile = appointment.paziente?.tenantProfiles?.find(
+                    p => p.tenantId === appointment.tenantId
+                ) || appointment.paziente?.tenantProfiles?.[0];
+                const pazienteEmail = pazienteProfile?.email;
+                if (!pazienteEmail) continue;
 
                 try {
+                    // Fetch tenant info separately (Appuntamento non ha direct Tenant relation)
+                    const tenant = await prisma.tenant.findFirst({
+                        where: { id: appointment.tenantId, deletedAt: null },
+                        select: { name: true, settings: true }
+                    });
+
                     const clinicInfo = {
-                        name: appointment.tenant.name,
-                        address: appointment.tenant.settings?.indirizzo || '',
-                        phone: appointment.tenant.settings?.telefono || ''
+                        name: tenant?.name || '',
+                        address: tenant?.settings?.indirizzo || '',
+                        phone: tenant?.settings?.telefono || ''
+                    };
+
+                    const pazienteFlat = {
+                        id: appointment.paziente.id,
+                        firstName: appointment.paziente.firstName,
+                        lastName: appointment.paziente.lastName,
+                        email: pazienteEmail
                     };
 
                     await EmailService.sendAppointmentReminder(
                         appointment,
-                        appointment.paziente,
+                        pazienteFlat,
                         clinicInfo,
                         'today',
                         appointment.tenantId
                     );
 
+                    // P48: promemoriaInviato è DateTime → new Date()
                     await prisma.appuntamento.update({
-                        where: { id: appointment.id },
+                        where: { id: appointment.id, deletedAt: null },
                         data: {
-                            promemoriaInviato: true
+                            promemoriaInviato: new Date()
                         }
                     });
 
@@ -406,59 +436,71 @@ export class NotificationSchedulerService {
                     paziente: {
                         select: {
                             id: true,
-                            nome: true,
-                            cognome: true,
-                            email: true
+                            firstName: true,  // era: nome
+                            lastName: true,   // era: cognome
+                            tenantProfiles: {
+                                where: { tenantId, deletedAt: null },
+                                select: { email: true },
+                                take: 1
+                            }
                         }
                     },
                     prestazione: {
                         select: { nome: true }
                     },
                     medico: {
-                        select: { nome: true, cognome: true }
-                    },
-                    tenant: {
-                        select: {
-                            name: true,
-                            settings: true
-                        }
+                        select: { firstName: true, lastName: true }  // era: nome, cognome
                     }
                 }
             });
 
             if (!appointment) {
-                throw new Error('Appointment not found');
+                throw new Error('Appuntamento non trovato');
             }
 
-            if (!appointment.paziente?.email) {
-                throw new Error('Patient has no email address');
+            const pazienteEmail = appointment.paziente?.tenantProfiles?.[0]?.email;
+            if (!pazienteEmail) {
+                throw new Error('Il paziente non ha un indirizzo email');
             }
+
+            // Fetch tenant info separately (Appuntamento non ha Tenant relation)
+            const tenantInfo = await prisma.tenant.findFirst({
+                where: { id: tenantId, deletedAt: null },
+                select: { name: true, settings: true }
+            });
 
             const clinicInfo = {
-                name: appointment.tenant.name,
-                address: appointment.tenant.settings?.indirizzo || '',
-                phone: appointment.tenant.settings?.telefono || '',
-                email: appointment.tenant.settings?.email || ''
+                name: tenantInfo?.name || '',
+                address: tenantInfo?.settings?.indirizzo || '',
+                phone: tenantInfo?.settings?.telefono || '',
+                email: tenantInfo?.settings?.email || ''
+            };
+
+            const pazienteFlat = {
+                id: appointment.paziente.id,
+                firstName: appointment.paziente.firstName,
+                lastName: appointment.paziente.lastName,
+                email: pazienteEmail
             };
 
             if (type === 'confirmation') {
                 return await EmailService.sendAppointmentConfirmation(
                     appointment,
-                    appointment.paziente,
+                    pazienteFlat,
                     clinicInfo,
                     tenantId
                 );
             } else if (type === 'reminder') {
                 return await EmailService.sendAppointmentReminder(
                     appointment,
-                    appointment.paziente,
+                    pazienteFlat,
                     clinicInfo,
                     'manual',
                     tenantId
                 );
             }
 
-            throw new Error(`Unknown notification type: ${type}`);
+            throw new Error(`Tipo di notifica sconosciuto: ${type}`);
         } catch (error) {
             logger.error('Failed to send appointment notification', {
                 component: 'NotificationScheduler',
@@ -509,7 +551,7 @@ export class NotificationSchedulerService {
 
             if (existing) {
                 return await prisma.tenantConfiguration.update({
-                    where: { id: existing.id },
+                    where: { id: existing.id, deletedAt: null },
                     data: {
                         configValue: { ...DEFAULT_REMINDER_CONFIG, ...config }
                     }

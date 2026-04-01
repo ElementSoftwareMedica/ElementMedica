@@ -8,16 +8,17 @@
 import prisma from '../../config/prisma-optimization.js';
 import logger from '../../utils/logger.js';
 
-// Stati referto validi
-const STATI_REFERTO = ['BOZZA', 'IN_REVISIONE', 'FIRMATO', 'CONSEGNATO', 'ARCHIVIATO'];
+// Stati referto validi (must match Prisma enum StatoReferto)
+const STATI_REFERTO = ['BOZZA', 'IN_ELABORAZIONE', 'DA_FIRMARE', 'FIRMATO', 'CONSEGNATO', 'ANNULLATO'];
 
 // Transizioni stato consentite
 const TRANSIZIONI_STATO = {
-    'BOZZA': ['IN_REVISIONE', 'FIRMATO'],
-    'IN_REVISIONE': ['BOZZA', 'FIRMATO'],
-    'FIRMATO': ['CONSEGNATO', 'ARCHIVIATO'],
-    'CONSEGNATO': ['ARCHIVIATO'],
-    'ARCHIVIATO': [] // Stato finale
+    'BOZZA': ['IN_ELABORAZIONE', 'DA_FIRMARE'],
+    'IN_ELABORAZIONE': ['BOZZA', 'DA_FIRMARE'],
+    'DA_FIRMARE': ['FIRMATO', 'BOZZA'],
+    'FIRMATO': ['CONSEGNATO'],
+    'CONSEGNATO': [], // Stato finale
+    'ANNULLATO': [] // Stato finale
 };
 
 export class RefertoService {
@@ -92,7 +93,11 @@ export class RefertoService {
                                     id: true,
                                     firstName: true,
                                     lastName: true,
-                                    registerCode: true
+                                    tenantProfiles: {
+                                        where: { deletedAt: null, isActive: true },
+                                        select: { registerCode: true, isPrimary: true },
+                                        take: 1
+                                    }
                                 }
                             }
                         }
@@ -140,7 +145,11 @@ export class RefertoService {
                                     lastName: true,
                                     birthDate: true,
                                     taxCode: true,
-                                    email: true
+                                    tenantProfiles: {
+                                        where: { deletedAt: null, isActive: true },
+                                        select: { email: true, isPrimary: true },
+                                        take: 1
+                                    }
                                 }
                             },
                             medico: {
@@ -148,9 +157,11 @@ export class RefertoService {
                                     id: true,
                                     firstName: true,
                                     lastName: true,
-                                    specialties: true,
-                                    registerCode: true,
-                                    email: true
+                                    tenantProfiles: {
+                                        where: { deletedAt: null, isActive: true },
+                                        select: { specialties: true, registerCode: true, email: true, isPrimary: true },
+                                        take: 1
+                                    }
                                 }
                             },
                             prestazione: {
@@ -191,11 +202,41 @@ export class RefertoService {
      */
     static async getAll(tenantId, filters = {}, options = {}) {
         try {
-            const { page = 1, limit = 20 } = options;
+            const {
+                page = 1,
+                limit = 20,
+                tenantIds = null,
+                allTenants = false,
+                accessibleTenantIds = []
+            } = options;
             const skip = (page - 1) * limit;
 
+            // Determine tenant filter based on user's access (multi-tenant support)
+            let tenantFilter = {};
+
+            if (tenantIds) {
+                const requestedIds = Array.isArray(tenantIds)
+                    ? tenantIds
+                    : (typeof tenantIds === 'string' ? tenantIds.split(',').map(id => id.trim()) : []);
+                const allowedIds = accessibleTenantIds.length > 0
+                    ? requestedIds.filter(id => accessibleTenantIds.includes(id))
+                    : requestedIds;
+
+                if (allowedIds.length > 0) {
+                    tenantFilter = allowedIds.length === 1
+                        ? { tenantId: allowedIds[0] }
+                        : { tenantId: { in: allowedIds } };
+                } else {
+                    tenantFilter = tenantId ? { tenantId } : {};
+                }
+            } else if (allTenants && accessibleTenantIds.length > 0) {
+                tenantFilter = { tenantId: { in: accessibleTenantIds } };
+            } else if (tenantId) {
+                tenantFilter = { tenantId };
+            }
+
             const where = {
-                tenantId,
+                ...tenantFilter,
                 deletedAt: null
             };
 
@@ -434,9 +475,9 @@ export class RefertoService {
                 throw new Error('Only the visit doctor can sign the report');
             }
 
-            // Can only sign BOZZA or IN_REVISIONE reports
-            if (!['BOZZA', 'IN_REVISIONE'].includes(existing.stato)) {
-                throw new Error(`Cannot sign report in status ${existing.stato}. Must be BOZZA or IN_REVISIONE`);
+            // Can only sign BOZZA, IN_ELABORAZIONE or DA_FIRMARE reports
+            if (!['BOZZA', 'IN_ELABORAZIONE', 'DA_FIRMARE'].includes(existing.stato)) {
+                throw new Error(`Cannot sign report in status ${existing.stato}. Must be BOZZA, IN_ELABORAZIONE or DA_FIRMARE`);
             }
 
             const referto = await prisma.referto.update({
@@ -457,7 +498,16 @@ export class RefertoService {
                                 select: { id: true, firstName: true, lastName: true }
                             },
                             medico: {
-                                select: { id: true, firstName: true, lastName: true, registerCode: true }
+                                select: {
+                                    id: true,
+                                    firstName: true,
+                                    lastName: true,
+                                    tenantProfiles: {
+                                        where: { deletedAt: null, isActive: true },
+                                        select: { registerCode: true, isPrimary: true },
+                                        take: 1
+                                    }
+                                }
                             }
                         }
                     }
@@ -674,7 +724,7 @@ export class RefertoService {
             const where = {
                 tenantId,
                 deletedAt: null,
-                stato: { in: ['BOZZA', 'IN_REVISIONE'] }
+                stato: { in: ['BOZZA', 'IN_ELABORAZIONE', 'DA_FIRMARE'] }
             };
 
             if (medicoId) {

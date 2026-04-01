@@ -3,10 +3,9 @@
  * Gestisce le submission dei form pubblici e privati
  */
 
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/prisma-optimization.js';
 import logger from '../utils/logger.js';
 
-const prisma = new PrismaClient();
 
 /**
  * Crea una nuova submission
@@ -140,7 +139,7 @@ const createSubmission = async (req, res) => {
       });
     }
 
-    const submission = await prisma.ContactSubmission.create({
+    const submission = await prisma.contactSubmission.create({
       data: {
         type,
         name: name.trim(),
@@ -173,7 +172,7 @@ const createSubmission = async (req, res) => {
     logger.error('Failed to create contact submission', {
       component: 'contactSubmissionController',
       action: 'createSubmission',
-      error: error.message,
+      error: 'Errore interno del server',
       stack: error.stack
     });
     res.status(500).json({
@@ -221,6 +220,7 @@ const getSubmissions = async (req, res) => {
     // Build base where clause
     const where = {
       tenantId,
+      deletedAt: null,
       ...(status && { status }),
       ...(type && { type }),
       ...(search && {
@@ -233,18 +233,19 @@ const getSubmissions = async (req, res) => {
       })
     };
 
-    // Add template filter: match by templateName OR by formTemplateId in metadata
+    // Add template filter: match by templateName
     if (templateFilter) {
-      where.OR = [
+      const templateConditions = [
         { templateName: templateFilter },
-        { templateName: { contains: templateFilter, mode: 'insensitive' } },
-        {
-          metadata: {
-            path: ['formTemplateId'],
-            equals: templateFilter
-          }
-        }
+        { templateName: { contains: templateFilter, mode: 'insensitive' } }
       ];
+      // Use AND to avoid overwriting existing OR (from search filter)
+      if (where.OR) {
+        where.AND = [{ OR: where.OR }, { OR: templateConditions }];
+        delete where.OR;
+      } else {
+        where.OR = templateConditions;
+      }
     }
 
     // Calcola offset
@@ -252,15 +253,15 @@ const getSubmissions = async (req, res) => {
 
     // Ottieni submissions con conteggio totale
     const [submissions, total] = await Promise.all([
-      prisma.ContactSubmission.findMany({
+      prisma.contactSubmission.findMany({
         where,
         include: {
           assignedTo: {
             select: {
               id: true,
               firstName: true,
-              lastName: true,
-              email: true
+              lastName: true
+              // P48: email è in PersonTenantProfile, non in Person
             }
           }
         },
@@ -270,7 +271,7 @@ const getSubmissions = async (req, res) => {
         skip: offset,
         take: parseInt(limit)
       }),
-      prisma.ContactSubmission.count({ where })
+      prisma.contactSubmission.count({ where })
     ]);
 
     res.json({
@@ -287,7 +288,7 @@ const getSubmissions = async (req, res) => {
     logger.error('Failed to retrieve submissions list', {
       component: 'contactSubmissionController',
       action: 'getSubmissions',
-      error: error.message,
+      error: 'Errore interno del server',
       stack: error.stack
     });
     res.status(500).json({ error: 'Errore interno del server' });
@@ -303,18 +304,19 @@ const getSubmissionById = async (req, res) => {
     const { id } = req.params;
     const tenantId = req.person?.tenantId;
 
-    const submission = await prisma.ContactSubmission.findFirst({
+    const submission = await prisma.contactSubmission.findFirst({
       where: {
         id,
-        tenantId
+        tenantId,
+        deletedAt: null
       },
       include: {
         assignedTo: {
           select: {
             id: true,
             firstName: true,
-            lastName: true,
-            email: true
+            lastName: true
+            // P48: email è in PersonTenantProfile, non in Person
           }
         }
       }
@@ -326,7 +328,7 @@ const getSubmissionById = async (req, res) => {
 
     // Marca come letta se non lo è già
     if (submission.status === 'NEW') {
-      await prisma.ContactSubmission.update({
+      await prisma.contactSubmission.update({
         where: { id },
         data: {
           status: 'READ',
@@ -344,7 +346,7 @@ const getSubmissionById = async (req, res) => {
       component: 'contactSubmissionController',
       action: 'getSubmission',
       submissionId: req.params.id,
-      error: error.message,
+      error: 'Errore interno del server',
       stack: error.stack
     });
     res.status(500).json({ error: 'Errore interno del server' });
@@ -371,7 +373,7 @@ const updateSubmissionStatus = async (req, res) => {
     }
 
     // Verifica esistenza submission
-    const submission = await prisma.ContactSubmission.findFirst({
+    const submission = await prisma.contactSubmission.findFirst({
       where: { id, tenantId }
     });
 
@@ -398,7 +400,7 @@ const updateSubmissionStatus = async (req, res) => {
       updateData.assignedToId = assignedToId;
     }
 
-    const updatedSubmission = await prisma.ContactSubmission.update({
+    const updatedSubmission = await prisma.contactSubmission.update({
       where: { id },
       data: updateData,
       include: {
@@ -406,8 +408,8 @@ const updateSubmissionStatus = async (req, res) => {
           select: {
             id: true,
             firstName: true,
-            lastName: true,
-            email: true
+            lastName: true
+            // P48: email è in PersonTenantProfile, non in Person
           }
         }
       }
@@ -423,7 +425,7 @@ const updateSubmissionStatus = async (req, res) => {
       component: 'contactSubmissionController',
       action: 'updateSubmission',
       submissionId: req.params.id,
-      error: error.message,
+      error: 'Errore interno del server',
       stack: error.stack
     });
     res.status(500).json({ error: 'Errore interno del server' });
@@ -439,7 +441,7 @@ const deleteSubmission = async (req, res) => {
     const { id } = req.params;
     const tenantId = req.person?.tenantId;
 
-    const submission = await prisma.ContactSubmission.findFirst({
+    const submission = await prisma.contactSubmission.findFirst({
       where: { id, tenantId }
     });
 
@@ -447,7 +449,7 @@ const deleteSubmission = async (req, res) => {
       return res.status(404).json({ error: 'Submission non trovata' });
     }
 
-    await prisma.ContactSubmission.update({
+    await prisma.contactSubmission.update({
       where: { id },
       data: {
         status: 'ARCHIVED',
@@ -465,7 +467,7 @@ const deleteSubmission = async (req, res) => {
       component: 'contactSubmissionController',
       action: 'deleteSubmission',
       submissionId: req.params.id,
-      error: error.message,
+      error: 'Errore interno del server',
       stack: error.stack
     });
     res.status(500).json({ error: 'Errore interno del server' });
@@ -508,49 +510,55 @@ const getSubmissionStats = async (req, res) => {
       recentSubmissions
     ] = await Promise.all([
       // Totale submissions
-      prisma.ContactSubmission.count({
+      prisma.contactSubmission.count({
         where: {
           tenantId,
+          deletedAt: null,
           createdAt: { gte: startDate }
         }
       }),
       // Nuove submissions
-      prisma.ContactSubmission.count({
+      prisma.contactSubmission.count({
         where: {
           tenantId,
+          deletedAt: null,
           status: 'NEW',
           createdAt: { gte: startDate }
         }
       }),
       // In progress
-      prisma.ContactSubmission.count({
+      prisma.contactSubmission.count({
         where: {
           tenantId,
+          deletedAt: null,
           status: 'IN_PROGRESS',
           createdAt: { gte: startDate }
         }
       }),
       // Risolte
-      prisma.ContactSubmission.count({
+      prisma.contactSubmission.count({
         where: {
           tenantId,
+          deletedAt: null,
           status: 'RESOLVED',
           createdAt: { gte: startDate }
         }
       }),
       // Per tipo
-      prisma.ContactSubmission.groupBy({
+      prisma.contactSubmission.groupBy({
         by: ['type'],
         where: {
           tenantId,
+          deletedAt: null,
           createdAt: { gte: startDate }
         },
         _count: true
       }),
       // Recenti
-      prisma.ContactSubmission.findMany({
+      prisma.contactSubmission.findMany({
         where: {
           tenantId,
+          deletedAt: null,
           createdAt: { gte: startDate }
         },
         select: {
@@ -586,7 +594,7 @@ const getSubmissionStats = async (req, res) => {
     logger.error('Failed to retrieve submission statistics', {
       component: 'contactSubmissionController',
       action: 'getStatistics',
-      error: error.message,
+      error: 'Errore interno del server',
       stack: error.stack
     });
     res.status(500).json({ error: 'Errore interno del server' });

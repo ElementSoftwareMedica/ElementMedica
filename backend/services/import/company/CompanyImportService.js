@@ -4,9 +4,9 @@
  * Gestisce validazione, duplicate detection, conflict resolution
  */
 
-import { PrismaClient } from '@prisma/client';
+import prisma from '../../../config/prisma-optimization.js';
 import logger from '../../../utils/logger.js';
-import { 
+import {
   validateVATNumber,
   detectDuplicates,
   findConflicts,
@@ -14,7 +14,6 @@ import {
   validateRequiredFields
 } from '../../../utils/import/importValidation.js';
 
-const prisma = new PrismaClient();
 
 class CompanyImportService {
   /**
@@ -83,32 +82,53 @@ class CompanyImportService {
     // Rileva duplicati interni al CSV
     const duplicates = detectDuplicates(companies, 'vatNumber');
 
-    // Carica aziende esistenti per il tenant
+    // P48: Company è globale, filtra via tenantProfiles
     const existingCompanies = await prisma.company.findMany({
-      where: { tenantId },
+      where: {
+        deletedAt: null,
+        tenantProfiles: {
+          some: { tenantId, deletedAt: null }
+        }
+      },
       select: {
         id: true,
         ragioneSociale: true,
         piva: true,
-        mail: true,
-        telefono: true,
-        sedeAzienda: true,
-        citta: true,
-        provincia: true,
-        cap: true,
-        sites: {
+        tenantProfiles: {
+          where: { tenantId, deletedAt: null },
           select: {
             id: true,
-            siteName: true,
-            indirizzo: true,
-            citta: true
+            emailGenerale: true,
+            telefonoGenerale: true,
+            sites: {
+              where: { deletedAt: null },
+              select: {
+                id: true,
+                siteName: true,
+                indirizzo: true,
+                citta: true
+              }
+            }
           }
         }
       }
     });
 
+    // Flatten per compatibilità con findConflicts
+    const flattenedCompanies = existingCompanies.map(c => {
+      const profile = c.tenantProfiles[0];
+      return {
+        id: c.id,
+        ragioneSociale: c.ragioneSociale,
+        piva: c.piva,
+        mail: profile?.emailGenerale || null,
+        telefono: profile?.telefonoGenerale || null,
+        sites: profile?.sites || []
+      };
+    });
+
     // Trova conflitti con DB (vatNumber nei CSV, piva nel DB)
-    const conflicts = findConflicts(companies, existingCompanies, 'vatNumber', 'piva');
+    const conflicts = findConflicts(companies, flattenedCompanies, 'vatNumber', 'piva');
 
     return { duplicates, conflicts };
   }
@@ -127,29 +147,44 @@ class CompanyImportService {
 
     try {
       for (const company of companies) {
-        // Cerca azienda esistente per P.IVA
+        // P48: Cerca azienda esistente per P.IVA (Company è globale, filtra via tenantProfiles)
         const existing = await prisma.company.findFirst({
           where: {
             piva: company.vatNumber,
-            tenantId
+            deletedAt: null,
+            tenantProfiles: {
+              some: { tenantId, deletedAt: null }
+            }
+          },
+          include: {
+            tenantProfiles: {
+              where: { tenantId, deletedAt: null },
+              take: 1
+            }
           }
         });
 
         if (existing) {
           // Conflitto: update solo se in overwriteIds
           if (overwriteIds.includes(existing.id)) {
+            // Aggiorna Company globale (solo campi globali)
             await prisma.company.update({
               where: { id: existing.id },
               data: {
-                ragioneSociale: company.ragioneSociale || company.businessName,
-                mail: company.email || existing.mail,
-                telefono: company.phone || existing.telefono,
-                sedeAzienda: company.address || existing.sedeAzienda,
-                citta: company.city || existing.citta,
-                provincia: company.province || existing.provincia,
-                cap: company.postalCode || existing.cap
+                ragioneSociale: company.ragioneSociale || company.businessName
               }
             });
+            // Aggiorna CompanyTenantProfile (campi per-tenant)
+            const profile = existing.tenantProfiles[0];
+            if (profile) {
+              await prisma.companyTenantProfile.update({
+                where: { id: profile.id },
+                data: {
+                  ...(company.email && { emailGenerale: company.email }),
+                  ...(company.phone && { telefonoGenerale: company.phone })
+                }
+              });
+            }
             updated++;
             logger.info(`[COMPANY_IMPORT] Updated company ${existing.id} (${company.vatNumber})`);
           } else {
@@ -157,22 +192,24 @@ class CompanyImportService {
             logger.info(`[COMPANY_IMPORT] Skipped company ${company.vatNumber} (conflict)`);
           }
         } else {
-          // Nuova azienda: create
-          const data = {
-            ragioneSociale: company.ragioneSociale || company.businessName,
-            piva: company.vatNumber,
-            tenantId
-          };
-          
-          // Aggiungi campi opzionali solo se definiti
-          if (company.email) data.mail = company.email;
-          if (company.phone) data.telefono = company.phone;
-          if (company.address) data.sedeAzienda = company.address;
-          if (company.city) data.citta = company.city;
-          if (company.province) data.provincia = company.province;
-          if (company.postalCode) data.cap = company.postalCode;
-          
-          const newCompany = await prisma.company.create({ data });
+          // P48: Crea Company globale + CompanyTenantProfile
+          const newCompany = await prisma.company.create({
+            data: {
+              ragioneSociale: company.ragioneSociale || company.businessName,
+              piva: company.vatNumber
+            }
+          });
+
+          await prisma.companyTenantProfile.create({
+            data: {
+              companyId: newCompany.id,
+              tenantId,
+              emailGenerale: company.email || null,
+              telefonoGenerale: company.phone || null,
+              status: 'ACTIVE'
+            }
+          });
+
           created++;
           logger.info(`[COMPANY_IMPORT] Created company ${newCompany.id} (${company.vatNumber})`);
         }
@@ -193,20 +230,32 @@ class CompanyImportService {
 
   /**
    * Crea nuova sede per un'azienda
-   * @param {string} companyId - ID azienda
+   * @param {string} companyId - ID azienda globale
    * @param {Object} siteData - Dati sede
+   * @param {string} tenantId - ID tenant
    * @returns {Promise<Object>}
    */
   async createCompanySite(companyId, siteData, tenantId) {
     try {
+      // P48: Trova o crea CompanyTenantProfile, poi crea CompanySite con companyTenantProfileId
+      let profile = await prisma.companyTenantProfile.findFirst({
+        where: { companyId, tenantId, deletedAt: null }
+      });
+
+      if (!profile) {
+        profile = await prisma.companyTenantProfile.create({
+          data: { companyId, tenantId, status: 'ACTIVE' }
+        });
+      }
+
       const site = await prisma.companySite.create({
         data: {
-          siteName: siteData.name,
-          indirizzo: siteData.address,
-          citta: siteData.city,
-          provincia: siteData.province,
-          cap: siteData.postalCode,
-          companyId,
+          siteName: siteData.name || siteData.siteName,
+          indirizzo: siteData.address || siteData.indirizzo || null,
+          citta: siteData.city || siteData.citta || null,
+          provincia: siteData.province || siteData.provincia || null,
+          cap: siteData.postalCode || siteData.cap || null,
+          companyTenantProfileId: profile.id,
           tenantId
         }
       });

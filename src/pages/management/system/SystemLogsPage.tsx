@@ -9,6 +9,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
     Activity,
     Search,
@@ -35,12 +36,18 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../../hooks/auth/useAuth';
 import { apiGet } from '../../../services/api';
+import { useTenantFilter } from '../../../context/TenantFilterContext';
+import { DatePickerElegante } from '../../../components/ui/DatePickerElegante';
 
 // Log types and interfaces
 interface LogEntry {
     id: string;
-    resource: string;
+    resource: string | null;
+    resourceId?: string | null;
+    metadata?: Record<string, unknown> | null;
     action: string;
+    category?: string | null;
+    success?: boolean;
     userId?: string;
     personId?: string;
     user?: {
@@ -216,7 +223,87 @@ const RESOURCE_NAMES: Record<string, string> = {
     'system': 'Sistema',
     'search': 'Ricerca',
     'logs': 'Log',
-    'activity': 'Attività'
+    'activity': 'Attività',
+    // Normalized names from ActivityTypes.js
+    'Company': 'Azienda',
+    'Person': 'Persona',
+    'Course': 'Corso',
+    'Schedule': 'Programmazione',
+    'Document': 'Documento',
+    'Template': 'Template',
+    'Visit': 'Visita',
+    'Prescription': 'Prescrizione',
+    'Certificate': 'Attestato',
+    'Tenant': 'Tenant',
+    'Role': 'Ruolo',
+    'Permission': 'Permesso',
+    'Site': 'Sede',
+    'Room': 'Stanza',
+    'Preventivo': 'Preventivo',
+    'LetteraIncarico': 'Lettera di Incarico',
+    'AttendanceRegister': 'Registro Presenze',
+    'VisitaSpecialistica': 'Visita Specialistica',
+    'MedicalJudgement': 'Giudizio di Idoneità',
+    'Report': 'Referto',
+    'DVR': 'DVR',
+    'Sopralluogo': 'Sopralluogo',
+    'Deadline': 'Scadenza',
+    'FormTemplate': 'Template Form',
+    'Form': 'Form',
+    'Submission': 'Risposta Form',
+    'Signature': 'Firma',
+    'GDPRRequest': 'Richiesta GDPR',
+    'PersonTenantProfile': 'Profilo Persona',
+    'CourseTest': 'Test Corso',
+    'CodiceSconto': 'Codice Sconto',
+    'Backup': 'Backup',
+    // Legacy: action-split fallback values (old logs)
+    'entity': 'Risorsa'
+};
+
+// Helper function to infer a display label for the resource when resource is null
+// Uses category, action prefix, or metadata fields as fallbacks
+const inferResourceLabel = (log: LogEntry, meta: Record<string, unknown>): string => {
+    // 1. Use explicit resource field if available
+    const explicit = getResourceName(log.resource);
+    if (explicit) return explicit;
+
+    // 2. Try to get entity type from metadata
+    const metaEntity = (meta.entityType || meta.entity || meta.type) as string | undefined;
+    if (metaEntity) {
+        const mapped = getResourceName(metaEntity);
+        if (mapped) return mapped;
+    }
+
+    // 3. Infer from category
+    const cat = log.category?.toUpperCase();
+    if (cat === 'AUTH') return 'Autenticazione';
+    if (cat === 'DOCUMENT') return 'Documenti';
+    if (cat === 'TRAINING') return 'Formazione';
+    if (cat === 'CLINICAL') return 'Clinica';
+    if (cat === 'ADMIN') return 'Amministrazione';
+    if (cat === 'NAVIGATION') return 'Navigazione';
+
+    // 4. Infer from action prefix
+    const action = log.action?.toUpperCase() || '';
+    if (action.startsWith('AUTH_')) return 'Autenticazione';
+    if (action.startsWith('DOCUMENT_')) return 'Documenti';
+    if (action.startsWith('CERTIFICATE_')) return 'Attestati';
+    if (action.startsWith('COURSE_')) return 'Corsi';
+    if (action.startsWith('VISIT_')) return 'Visite';
+    if (action.startsWith('PERMISSION_') || action.startsWith('ROLE_')) return 'Permessi';
+    if (action.startsWith('SYSTEM_')) return 'Sistema';
+
+    return 'Sistema';
+};
+
+// Convenience: compute resource display label from a log entry (no meta arg needed)
+const getLogResource = (log: LogEntry): string => {
+    const meta: Record<string, unknown> = log.metadata || {};
+    if (!log.metadata && log.details) {
+        try { Object.assign(meta, JSON.parse(log.details)); } catch { /* ignore */ }
+    }
+    return inferResourceLabel(log, meta);
 };
 
 // Helper function to get action info
@@ -229,27 +316,61 @@ const getActionInfo = (action: string) => {
 };
 
 // Helper function to get resource name in Italian
-const getResourceName = (resource: string) => {
-    return RESOURCE_NAMES[resource?.toLowerCase()] || resource || 'Sistema';
+const getResourceName = (resource: string | null | undefined) => {
+    if (!resource) return null;
+    return RESOURCE_NAMES[resource] || RESOURCE_NAMES[resource.toLowerCase()] || resource;
+};
+
+// Map resource type → route path for clickable navigation
+const RESOURCE_ROUTE_MAP: Record<string, string> = {
+    'Company': '/companies',
+    'company': '/companies',
+    'Person': '/management/persons',
+    'person': '/management/persons',
+    'Course': '/courses',
+    'course': '/courses',
+    'Schedule': '/schedules',
+    'schedule': '/schedules',
+    'Visit': '/clinica/visite',
+    'visit': '/clinica/visite',
+    'VisitaSpecialistica': '/clinica/visite',
+    'Preventivo': '/preventivi',
+    'preventivo': '/preventivi',
+    'Site': '/management/sites',
+    'site': '/management/sites',
+    'PersonTenantProfile': '/management/persons',
+};
+
+const getResourceUrl = (resource: string | null | undefined, resourceId: string | null | undefined): string | null => {
+    if (!resource || !resourceId) return null;
+    const basePath = RESOURCE_ROUTE_MAP[resource];
+    if (!basePath) return null;
+    return `${basePath}/${resourceId}`;
 };
 
 // Helper function to build a human-readable description
 const buildActivityDescription = (log: LogEntry): string => {
     const actionInfo = getActionInfo(log.action);
-    const resource = getResourceName(log.resource);
-    const userName = log.user?.firstName && log.user?.lastName
-        ? `${log.user.firstName} ${log.user.lastName}`
-        : log.user?.email || 'Sistema';
-
-    // Parse details for additional context
-    let details: Record<string, unknown> = {};
-    if (log.details) {
+    // Metadata from the structured field (preferred) or parsed from details string
+    const meta: Record<string, unknown> = log.metadata || {};
+    if (!log.metadata && log.details) {
         try {
-            details = JSON.parse(log.details);
+            Object.assign(meta, JSON.parse(log.details));
         } catch {
             // ignore parse errors
         }
     }
+    const resource = inferResourceLabel(log, meta);
+    const userName = log.user?.firstName && log.user?.lastName
+        ? `${log.user.firstName} ${log.user.lastName}`
+        : log.user?.email || 'Sistema';
+
+    // Helper to get entity label with resource + optional resourceId suffix
+    const entityLabel = (name?: string): string => {
+        const base = name ? `"${name}"` : resource;
+        const idPart = log.resourceId ? ` (${log.resourceId.substring(0, 8)}…)` : '';
+        return `${base}${idPart}`;
+    };
 
     // Build specific descriptions based on action type
     switch (log.action) {
@@ -258,40 +379,62 @@ const buildActivityDescription = (log: LogEntry): string => {
         case 'AUTH_LOGOUT':
             return `${userName} si è disconnesso dal sistema`;
         case 'AUTH_PASSWORD_RESET_REQUEST':
-            return `Richiesta reset password per ${details.email || 'utente'}`;
+            return `Richiesta reset password per ${(meta.email as string) || userName}`;
         case 'AUTH_PASSWORD_RESET_COMPLETE':
             return `Password reimpostata con successo per ${userName}`;
         case 'ENTITY_CREATE':
-            return `${userName} ha creato ${details.entityName || 'un nuovo elemento'} in ${resource}`;
+            return `${userName} ha creato ${entityLabel((meta.entityName || meta.name || meta.title) as string | undefined)} in ${resource}`;
         case 'ENTITY_UPDATE':
-            return `${userName} ha modificato ${details.entityName || 'un elemento'} in ${resource}`;
+            return `${userName} ha modificato ${entityLabel((meta.entityName || meta.name || meta.title) as string | undefined)} in ${resource}`;
         case 'ENTITY_DELETE':
-            return `${userName} ha eliminato ${details.entityName || 'un elemento'} da ${resource}`;
+            return `${userName} ha eliminato ${entityLabel((meta.entityName || meta.name || meta.title) as string | undefined)} da ${resource}`;
+        case 'ENTITY_READ':
+            return `${userName} ha visualizzato ${resource}${log.resourceId ? ` (${log.resourceId.substring(0, 8)}…)` : ''}`;
         case 'ENTITY_LIST':
             return `${userName} ha consultato l'elenco di ${resource}`;
-        case 'DOCUMENT_GENERATE':
-            return `${userName} ha generato ${details.documentName || 'un documento'} (${details.templateType || 'documento'})`;
+        case 'CERTIFICATE_GENERATED':
+        case 'DOCUMENT_GENERATE': {
+            const docName = (meta.filename || meta.documentName) as string | undefined;
+            const docType = (meta.type || meta.templateType || log.resource) as string | undefined;
+            const entityRef = log.resourceId ? ` per ${resource} (${log.resourceId.substring(0, 8)}…)` : '';
+            return `${userName} ha generato ${docName ? `"${docName}"` : 'un documento'}${docType ? ` [${docType}]` : ''}${entityRef}`;
+        }
         case 'DOCUMENT_DOWNLOAD':
-            return `${userName} ha scaricato ${details.documentName || 'un documento'}`;
+            return `${userName} ha scaricato ${(meta.documentName || meta.filename) as string | undefined ? `"${meta.documentName || meta.filename}"` : 'un documento'}`;
+        case 'VISIT_CREATED':
+            return `${userName} ha creato una visita${log.resourceId ? ` (${log.resourceId.substring(0, 8)}…)` : ''}`;
+        case 'VISIT_COMPLETED':
+            return `${userName} ha completato una visita${log.resourceId ? ` (${log.resourceId.substring(0, 8)}…)` : ''}`;
+        case 'TEST_PASSED':
+            return `${userName} ha superato un test${log.resourceId ? ` (${log.resourceId.substring(0, 8)}…)` : ''}`;
+        case 'TEST_FAILED':
+            return `${userName} non ha superato un test${log.resourceId ? ` (${log.resourceId.substring(0, 8)}…)` : ''}`;
         case 'PERMISSION_GRANTED':
-            return `${userName} ha concesso il permesso "${details.permission || 'N/A'}" a ${details.targetUser || 'un utente'}`;
+            return `${userName} ha concesso il permesso "${(meta.permission as string) || 'N/A'}" a ${(meta.targetUser as string) || 'un utente'}`;
         case 'PERMISSION_REVOKED':
-            return `${userName} ha revocato il permesso "${details.permission || 'N/A'}" da ${details.targetUser || 'un utente'}`;
+            return `${userName} ha revocato il permesso "${(meta.permission as string) || 'N/A'}" da ${(meta.targetUser as string) || 'un utente'}`;
         case 'ROLE_ASSIGNED':
-            return `${userName} ha assegnato il ruolo "${details.role || 'N/A'}" a ${details.targetUser || 'un utente'}`;
+            return `${userName} ha assegnato il ruolo "${(meta.role as string) || 'N/A'}" a ${(meta.targetUser as string) || 'un utente'}`;
         case 'SEARCH_PERFORMED':
-            return `${userName} ha cercato "${details.query || 'N/A'}" in ${resource}`;
-        case 'PAGE_VIEW':
-            return `${userName} ha visitato la pagina ${details.path || details.page || resource}`;
+            return `${userName} ha cercato "${(meta.query as string) || 'N/A'}" in ${resource}`;
+        case 'PAGE_VIEW': {
+            // meta.path/page or plain string details as fallback
+            const pagePath = (meta.path || meta.page || meta.url) as string | undefined;
+            const plainPath = !pagePath && log.details && !log.details.startsWith('{') ? log.details.trim() : undefined;
+            const display = pagePath || plainPath || resource;
+            return `${userName} ha aperto: ${display}`;
+        }
         case 'SETTINGS_CHANGED':
-            return `${userName} ha modificato le impostazioni di ${details.settingKey || 'sistema'}`;
+            return `${userName} ha modificato le impostazioni di ${(meta.settingKey as string) || 'sistema'}`;
         default:
-            return `${userName} - ${actionInfo.label} su ${resource}`;
+            return `${userName} - ${actionInfo.label} su ${resource}${log.resourceId ? ` (${log.resourceId.substring(0, 8)}…)` : ''}`;
     }
 };
 
 const SystemLogsPage: React.FC = () => {
     const { user } = useAuth();
+    const navigate = useNavigate();
+    const { getTenantFilterParams, tenantFilterKey, isReady } = useTenantFilter();
 
     // State
     const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -331,15 +474,23 @@ const SystemLogsPage: React.FC = () => {
             if (dateFrom) params.dateFrom = dateFrom;
             if (dateTo) params.dateTo = dateTo;
 
+            // Multi-tenant support
+            const tenantParams = getTenantFilterParams();
+            if (tenantParams.tenantIds) {
+                params.tenantIds = tenantParams.tenantIds.join(',');
+            }
+            if (tenantParams.allTenants) {
+                params.allTenants = 'true';
+            }
+
             const response = await apiGet<LogsResponse>('/api/v1/logs', params);
 
             if (response) {
                 setLogs(response.logs || []);
                 setTotalLogs(response.total || response.logs?.length || 0);
             }
-        } catch (err: any) {
-            console.error('Error loading logs:', err);
-            setError(err.message || 'Errore nel caricamento dei log');
+        } catch (err: unknown) {
+            setError('Errore nel caricamento dei log');
             // Try alternative endpoint
             try {
                 const altResponse = await apiGet<{ data: LogEntry[] }>('/api/v1/activity-logs');
@@ -353,11 +504,13 @@ const SystemLogsPage: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, [page, pageSize, resourceFilter, actionFilter, dateFrom, dateTo]);
+    }, [page, pageSize, resourceFilter, actionFilter, dateFrom, dateTo, getTenantFilterParams, tenantFilterKey]);
 
     useEffect(() => {
-        loadLogs();
-    }, [loadLogs]);
+        if (isReady) {
+            loadLogs();
+        }
+    }, [loadLogs, isReady]);
 
     // Filter logs by search term
     const filteredLogs = useMemo(() => {
@@ -401,7 +554,6 @@ const SystemLogsPage: React.FC = () => {
             setCopiedField(fieldName);
             setTimeout(() => setCopiedField(null), 2000);
         } catch (err) {
-            console.error('Failed to copy:', err);
         }
     };
 
@@ -601,22 +753,22 @@ const SystemLogsPage: React.FC = () => {
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Da Data
                             </label>
-                            <input
-                                type="date"
+                            <DatePickerElegante
                                 value={dateFrom}
-                                onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                onChange={(date) => { setDateFrom(date ? date.toISOString().split('T')[0] : ''); setPage(1); }}
+                                theme="blue"
+                                size="sm"
                             />
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                 A Data
                             </label>
-                            <input
-                                type="date"
+                            <DatePickerElegante
                                 value={dateTo}
-                                onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                onChange={(date) => { setDateTo(date ? date.toISOString().split('T')[0] : ''); setPage(1); }}
+                                theme="blue"
+                                size="sm"
                             />
                         </div>
                     </div>
@@ -734,7 +886,29 @@ const SystemLogsPage: React.FC = () => {
                                                             <span className="text-lg" title={log.action}>{actionInfo.icon}</span>
                                                             <span className="font-medium text-gray-900">{actionInfo.label}</span>
                                                         </div>
-                                                        <span className="text-xs text-gray-500">{getResourceName(log.resource)}</span>
+                                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                                            {(() => {
+                                                                const resourceUrl = getResourceUrl(log.resource, log.resourceId);
+                                                                const resourceLabel = getLogResource(log);
+                                                                if (resourceUrl) {
+                                                                    return (
+                                                                        <button
+                                                                            onClick={() => navigate(resourceUrl)}
+                                                                            className="text-xs text-teal-600 hover:text-teal-800 hover:underline cursor-pointer"
+                                                                            title={`Vai a ${resourceLabel}`}
+                                                                        >
+                                                                            {resourceLabel}
+                                                                        </button>
+                                                                    );
+                                                                }
+                                                                return <span className="text-xs text-gray-500">{resourceLabel}</span>;
+                                                            })()}
+                                                            {log.resourceId && (
+                                                                <span className="text-xs font-mono bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded" title={log.resourceId}>
+                                                                    #{log.resourceId.substring(0, 8)}
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </td>
                                                 <td className="px-4 py-3">
@@ -862,6 +1036,43 @@ const SystemLogsPage: React.FC = () => {
                                                                         <div className="text-xs text-gray-500 mt-1">{actionInfo.description}</div>
                                                                     </div>
                                                                 </div>
+
+                                                                {/* Resource + ResourceId */}
+                                                                {(log.resource || log.resourceId) && (
+                                                                    <div className="space-y-1">
+                                                                        <label className="text-xs font-medium text-gray-500 uppercase">Entità</label>
+                                                                        <div className="text-sm text-gray-900">
+                                                                            {(() => {
+                                                                                const resourceUrl = getResourceUrl(log.resource, log.resourceId);
+                                                                                const resourceLabel = getLogResource(log);
+                                                                                if (resourceUrl) {
+                                                                                    return (
+                                                                                        <button
+                                                                                            onClick={() => navigate(resourceUrl)}
+                                                                                            className="font-medium text-teal-600 hover:text-teal-800 hover:underline cursor-pointer"
+                                                                                        >
+                                                                                            {resourceLabel}
+                                                                                        </button>
+                                                                                    );
+                                                                                }
+                                                                                return <div className="font-medium">{resourceLabel}</div>;
+                                                                            })()}
+                                                                            {log.resourceId && (
+                                                                                <div className="flex items-center gap-2 mt-1">
+                                                                                    <code className="text-xs text-gray-600 bg-gray-100 px-2 py-0.5 rounded font-mono">
+                                                                                        {log.resourceId}
+                                                                                    </code>
+                                                                                    <button
+                                                                                        onClick={(e) => { e.stopPropagation(); copyToClipboard(log.resourceId || '', 'resource-id'); }}
+                                                                                        className="text-gray-400 hover:text-gray-600"
+                                                                                    >
+                                                                                        {copiedField === 'resource-id' ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+                                                                                    </button>
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
                                                             </div>
 
                                                             {/* Activity Description */}

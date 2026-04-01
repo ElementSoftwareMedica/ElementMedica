@@ -14,7 +14,7 @@ export const CMSPage: React.FC = () => {
   const location = useLocation();
 
   // Brand detection
-  const brandId = import.meta.env.VITE_BRAND_ID || 'element-formazione';
+  const brandId = import.meta.env.VITE_BRAND_ID || 'element-sicurezza';
 
   // Determina lo slug dalla URL
   // Se path è "/" → slug "homepage" o "homepage-medica"

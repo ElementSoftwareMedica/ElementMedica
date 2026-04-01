@@ -10,7 +10,7 @@
 
 import express from 'express';
 import logger from '../../utils/logger.js';
-import middleware from '../../auth/middleware.js';
+import middleware from '../../middleware/auth.js';
 import { checkAdvancedPermission } from '../../middleware/advanced-permissions.js';
 import { clinicalValidators } from '../../config/validation-clinical.js';
 import { RefertoService } from '../../services/clinical/RefertoService.js';
@@ -30,7 +30,7 @@ const { authenticate: authenticateToken } = middleware;
  * @access Authenticated + VIEW_REFERTI
  */
 router.get('/pending',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('referti', 'read'),
     auditClinico('list_referti_pending'),
     async (req, res) => {
@@ -48,14 +48,13 @@ router.get('/pending',
         } catch (error) {
             logger.error('Failed to get pending referti', {
                 component: 'referti-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero dei referti',
-                message: error.message
             });
         }
     }
@@ -67,7 +66,7 @@ router.get('/pending',
  * @access Authenticated + VIEW_REFERTI
  */
 router.get('/da-firmare',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('referti', 'read'),
     auditClinico('list_referti_da_firmare'),
     async (req, res) => {
@@ -85,14 +84,13 @@ router.get('/da-firmare',
         } catch (error) {
             logger.error('Failed to get referti da firmare', {
                 component: 'referti-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero dei referti',
-                message: error.message
             });
         }
     }
@@ -104,7 +102,7 @@ router.get('/da-firmare',
  * @access Authenticated
  */
 router.get('/stati',
-    authenticateToken(),
+    authenticateToken,
     async (req, res) => {
         try {
             const stati = RefertoService.getStati();
@@ -117,13 +115,12 @@ router.get('/stati',
         } catch (error) {
             logger.error('Failed to get referti stati', {
                 component: 'referti-routes',
-                error: error.message
+                error: 'Operazione non riuscita'
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero degli stati',
-                message: error.message
             });
         }
     }
@@ -135,7 +132,7 @@ router.get('/stati',
  * @access Authenticated + VIEW_REFERTI
  */
 router.get('/visita/:visitaId',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('referti', 'read'),
     auditClinico('list_referti_visita'),
     async (req, res) => {
@@ -149,7 +146,7 @@ router.get('/visita/:visitaId',
         } catch (error) {
             logger.error('Failed to list referti by visita', {
                 component: 'referti-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 visitaId: req.params.visitaId,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -157,7 +154,6 @@ router.get('/visita/:visitaId',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero dei referti',
-                message: error.message
             });
         }
     }
@@ -169,7 +165,7 @@ router.get('/visita/:visitaId',
  * @access Authenticated + VIEW_REFERTI
  */
 router.get('/paziente/:pazienteId',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('referti', 'read'),
     auditClinico('list_referti_paziente'),
     async (req, res) => {
@@ -183,7 +179,7 @@ router.get('/paziente/:pazienteId',
         } catch (error) {
             logger.error('Failed to list referti by paziente', {
                 component: 'referti-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 pazienteId: req.params.pazienteId,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -191,7 +187,6 @@ router.get('/paziente/:pazienteId',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero dei referti',
-                message: error.message
             });
         }
     }
@@ -207,7 +202,7 @@ router.get('/paziente/:pazienteId',
  * @access Authenticated + VIEW_REFERTI
  */
 router.get('/',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('referti', 'read'),
     clinicalValidators.referto.query,
     auditClinico('list_referti'),
@@ -237,14 +232,13 @@ router.get('/',
         } catch (error) {
             logger.error('Failed to list referti', {
                 component: 'referti-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero dei referti',
-                message: error.message
             });
         }
     }
@@ -256,7 +250,7 @@ router.get('/',
  * @access Authenticated + CREATE_REFERTI
  */
 router.post('/',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('referti', 'create'),
     clinicalValidators.referto.create,
     auditClinico('create_referto'),
@@ -279,7 +273,7 @@ router.post('/',
         } catch (error) {
             logger.error('Failed to create referto', {
                 component: 'referti-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
@@ -293,7 +287,6 @@ router.post('/',
             res.status(500).json({
                 success: false,
                 error: 'Errore nella creazione del referto',
-                message: error.message
             });
         }
     }
@@ -309,7 +302,7 @@ router.post('/',
  * @access Authenticated + VIEW_REFERTI
  */
 router.get('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('referti', 'read'),
     clinicalValidators.params.id,
     auditClinico('view_referto'),
@@ -324,7 +317,7 @@ router.get('/:id',
         } catch (error) {
             logger.error('Failed to get referto', {
                 component: 'referti-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 refertoId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -339,7 +332,6 @@ router.get('/:id',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero del referto',
-                message: error.message
             });
         }
     }
@@ -355,7 +347,7 @@ router.get('/:id',
  * @access Authenticated + UPDATE_REFERTI
  */
 router.put('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('referti', 'update'),
     clinicalValidators.params.id,
     clinicalValidators.referto.update,
@@ -379,7 +371,7 @@ router.put('/:id',
         } catch (error) {
             logger.error('Failed to update referto', {
                 component: 'referti-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 refertoId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -395,14 +387,12 @@ router.put('/:id',
                 return res.status(409).json({
                     success: false,
                     error: 'Operazione non consentita',
-                    message: error.message
                 });
             }
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nell\'aggiornamento del referto',
-                message: error.message
             });
         }
     }
@@ -418,7 +408,7 @@ router.put('/:id',
  * @access Authenticated + DELETE_REFERTI
  */
 router.delete('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('referti', 'delete'),
     clinicalValidators.params.id,
     auditClinico('delete_referto'),
@@ -436,7 +426,7 @@ router.delete('/:id',
         } catch (error) {
             logger.error('Failed to delete referto', {
                 component: 'referti-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 refertoId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -452,14 +442,12 @@ router.delete('/:id',
                 return res.status(409).json({
                     success: false,
                     error: 'Impossibile eliminare il referto',
-                    message: error.message
                 });
             }
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nell\'eliminazione del referto',
-                message: error.message
             });
         }
     }
@@ -475,7 +463,7 @@ router.delete('/:id',
  * @access Authenticated + UPDATE_REFERTI
  */
 router.put('/:id/status',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('referti', 'update'),
     clinicalValidators.params.id,
     clinicalValidators.referto.changeStatus,
@@ -497,7 +485,7 @@ router.put('/:id/status',
         } catch (error) {
             logger.error('Failed to change referto status', {
                 component: 'referti-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 refertoId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -513,7 +501,6 @@ router.put('/:id/status',
                 return res.status(400).json({
                     success: false,
                     error: 'Transizione stato non valida',
-                    message: error.message,
                     validStates: RefertoService.getStati(),
                     transitions: RefertoService.getTransizioni()
                 });
@@ -522,7 +509,6 @@ router.put('/:id/status',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel cambio stato',
-                message: error.message
             });
         }
     }
@@ -538,7 +524,7 @@ router.put('/:id/status',
  * @access Authenticated + UPDATE_REFERTI
  */
 router.post('/:id/sign',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('referti', 'update'),
     clinicalValidators.params.id,
     clinicalValidators.referto.sign,
@@ -560,7 +546,7 @@ router.post('/:id/sign',
         } catch (error) {
             logger.error('Failed to sign referto', {
                 component: 'referti-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 refertoId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -576,7 +562,6 @@ router.post('/:id/sign',
                 return res.status(403).json({
                     success: false,
                     error: 'Non autorizzato',
-                    message: error.message
                 });
             }
 
@@ -584,14 +569,12 @@ router.post('/:id/sign',
                 return res.status(400).json({
                     success: false,
                     error: 'Impossibile firmare il referto',
-                    message: error.message
                 });
             }
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nella firma del referto',
-                message: error.message
             });
         }
     }
@@ -607,7 +590,7 @@ router.post('/:id/sign',
  * @access Authenticated + UPDATE_REFERTI
  */
 router.post('/:id/deliver',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('referti', 'update'),
     clinicalValidators.params.id,
     clinicalValidators.referto.deliver,
@@ -631,7 +614,7 @@ router.post('/:id/deliver',
         } catch (error) {
             logger.error('Failed to deliver referto', {
                 component: 'referti-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 refertoId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -647,14 +630,12 @@ router.post('/:id/deliver',
                 return res.status(400).json({
                     success: false,
                     error: 'Impossibile consegnare il referto',
-                    message: error.message
                 });
             }
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nella consegna del referto',
-                message: error.message
             });
         }
     }

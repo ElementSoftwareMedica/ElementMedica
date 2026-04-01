@@ -86,7 +86,7 @@ class PersonImport {
             } else {
               results.errors.push({
                 data: personData,
-                error: `Person already exists: ${existingPerson.firstName} ${existingPerson.lastName} (${existingPerson.taxCode || existingPerson.email})`
+                error: `Person already exists: ${existingPerson.firstName} ${existingPerson.lastName} (${existingPerson.taxCode || ''})`
               });
               continue;
             }
@@ -146,7 +146,7 @@ class PersonImport {
 
     try {
       const lines = csvContent.split('\n').filter(line => line.trim());
-      
+
       if (lines.length === 0) {
         throw new Error('CSV file is empty');
       }
@@ -160,7 +160,7 @@ class PersonImport {
       } else {
         // Headers di default se non presenti
         headers = [
-          'firstName', 'lastName', 'email', 'username', 
+          'firstName', 'lastName', 'email', 'username',
           'phone', 'dateOfBirth', 'fiscalCode', 'role'
         ];
       }
@@ -283,7 +283,7 @@ class PersonImport {
     } else if (defaults.defaultRole) {
       normalized.role = defaults.defaultRole;
     }
-    
+
     // Rimuovi roleType dai dati normalizzati se presente
     if (normalized.roleType) {
       delete normalized.roleType;
@@ -293,7 +293,9 @@ class PersonImport {
     if (defaults.defaultCompanyId && !normalized.companyId) {
       normalized.companyId = defaults.defaultCompanyId;
     }
-    if (defaults.defaultTenantId && !normalized.tenantId) {
+    // F319: defaultTenantId (da JWT/getEffectiveTenantId) SEMPRE prioritario su
+    // qualsiasi tenantId per-record nel payload. Previene cross-tenant import bypass.
+    if (defaults.defaultTenantId) {
       normalized.tenantId = defaults.defaultTenantId;
     }
 
@@ -367,9 +369,9 @@ class PersonImport {
         const isAvailable = await PersonCore.checkUsernameAvailability(username);
         return !isAvailable; // Inverti il risultato
       };
-      
+
       normalized.username = await PersonUtils.generateUniqueUsername(
-        normalized.firstName, 
+        normalized.firstName,
         normalized.lastName,
         checkExistence
       );
@@ -459,53 +461,120 @@ class PersonImport {
    * @param {Object} options - Opzioni di ricerca
    * @returns {Promise<Object|null>} Persona esistente o null con info su soft-delete
    */
+  /**
+   * P48: Cerca persona esistente per taxCode, username o email (in PersonTenantProfile)
+   */
   static async findExistingPerson(personData, options = {}) {
     try {
       const { includeSoftDeleted = true } = options;
       const conditions = [];
 
-      // Cerca per email
-      if (personData.email) {
-        conditions.push({ email: personData.email });
-      }
-
-      // Cerca per username
+      // Cerca per username (campo globale su Person)
       if (personData.username) {
         conditions.push({ username: personData.username });
       }
 
-      // Cerca per codice fiscale (taxCode)
+      // Cerca per codice fiscale (taxCode - campo globale su Person)
       if (personData.taxCode) {
         conditions.push({ taxCode: personData.taxCode });
       }
 
-      if (conditions.length === 0) {
-        return null;
-      }
-
-      // Prima cerca persone attive
-      const activeResult = await prisma.person.findFirst({
-        where: {
-          OR: conditions,
-          deletedAt: null
-        }
-      });
-
-      if (activeResult) {
-        return { person: activeResult, isSoftDeleted: false };
-      }
-
-      // Se includeSoftDeleted è true, cerca anche persone soft-deleted
-      if (includeSoftDeleted) {
-        const softDeletedResult = await prisma.person.findFirst({
+      // Prima cerca persone attive per username/taxCode
+      if (conditions.length > 0) {
+        const activeResult = await prisma.person.findFirst({
           where: {
             OR: conditions,
-            deletedAt: { not: null }
+            deletedAt: null
+          },
+          include: {
+            tenantProfiles: {
+              where: { deletedAt: null, isActive: true },
+              select: { email: true, isPrimary: true }
+            }
           }
         });
 
-        if (softDeletedResult) {
-          return { person: softDeletedResult, isSoftDeleted: true };
+        if (activeResult) {
+          // P48: Flatten email from tenantProfiles for error message
+          const primaryProfile = activeResult.tenantProfiles?.find(p => p.isPrimary) || activeResult.tenantProfiles?.[0];
+          activeResult.email = primaryProfile?.email || null;
+          return { person: activeResult, isSoftDeleted: false };
+        }
+
+        // Se includeSoftDeleted è true, cerca anche persone soft-deleted
+        if (includeSoftDeleted) {
+          const softDeletedResult = await prisma.person.findFirst({
+            where: {
+              OR: conditions,
+              deletedAt: { not: null }
+            },
+            include: {
+              tenantProfiles: {
+                select: { email: true, isPrimary: true }
+              }
+            }
+          });
+
+          if (softDeletedResult) {
+            const primaryProfile = softDeletedResult.tenantProfiles?.find(p => p.isPrimary) || softDeletedResult.tenantProfiles?.[0];
+            softDeletedResult.email = primaryProfile?.email || null;
+            return { person: softDeletedResult, isSoftDeleted: true };
+          }
+        }
+      }
+
+      // P48: Cerca per email in PersonTenantProfile
+      if (personData.email) {
+        const normalizedEmail = personData.email.toLowerCase().trim();
+
+        const profileResult = await prisma.personTenantProfile.findFirst({
+          where: {
+            email: normalizedEmail,
+            deletedAt: null,
+            isActive: true
+          },
+          include: {
+            person: {
+              include: {
+                tenantProfiles: {
+                  where: { deletedAt: null, isActive: true },
+                  select: { email: true, isPrimary: true }
+                }
+              }
+            }
+          }
+        });
+
+        if (profileResult?.person) {
+          profileResult.person.email = normalizedEmail;
+          return { person: profileResult.person, isSoftDeleted: false };
+        }
+
+        // Cerca anche profili soft-deleted se richiesto
+        if (includeSoftDeleted) {
+          const softDeletedProfile = await prisma.personTenantProfile.findFirst({
+            where: {
+              email: normalizedEmail,
+              OR: [
+                { deletedAt: { not: null } },
+                { person: { deletedAt: { not: null } } }
+              ]
+            },
+            include: {
+              person: {
+                include: {
+                  tenantProfiles: {
+                    select: { email: true, isPrimary: true }
+                  }
+                }
+              }
+            }
+          });
+
+          if (softDeletedProfile?.person) {
+            softDeletedProfile.person.email = normalizedEmail;
+            return { person: softDeletedProfile.person, isSoftDeleted: true };
+          }
         }
       }
 
@@ -576,8 +645,8 @@ class PersonImport {
    * @returns {Object} Statistiche dettagliate
    */
   static getImportStats(importResult) {
-    const total = importResult.imported + importResult.updated + 
-                  importResult.skipped + importResult.errors.length;
+    const total = importResult.imported + importResult.updated +
+      importResult.skipped + importResult.errors.length;
 
     return {
       total,
@@ -626,7 +695,7 @@ class PersonImport {
     } catch (error) {
       return {
         isValid: false,
-        error: error.message
+        error: 'Validazione import non riuscita'
       };
     }
   }

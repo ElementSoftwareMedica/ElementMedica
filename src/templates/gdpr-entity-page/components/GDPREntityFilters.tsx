@@ -15,15 +15,16 @@
 import React, { useState } from 'react';
 import { Button, Input, Select, Badge } from '../../../design-system';
 import { Card } from '../../../design-system';
-import { 
-  X, 
-  Filter, 
+import {
+  X,
+  Filter,
   Search,
   RotateCcw,
   ChevronDown,
   ChevronUp
 } from 'lucide-react';
 import { FilterConfig, EntityField } from '../types';
+import { DatePickerElegante } from '../../../components/ui/DatePickerElegante';
 
 /**
  * Tipo per valore filtro
@@ -52,25 +53,25 @@ export interface ActiveFilter {
 export interface GDPREntityFiltersProps {
   /** Configurazione filtri disponibili */
   filterConfig: FilterConfig[];
-  
+
   /** Campi entità per filtri dinamici */
   fields: EntityField[];
-  
+
   /** Filtri attivi */
   activeFilters: ActiveFilter[];
-  
+
   /** Callback per aggiornamento filtri */
   onFiltersChange: (filters: ActiveFilter[]) => void;
-  
+
   /** Callback per reset filtri */
   onResetFilters: () => void;
-  
+
   /** Mostra filtri compatti */
   compact?: boolean;
-  
+
   /** Mostra contatore filtri */
   showCount?: boolean;
-  
+
   /** Classi CSS personalizzate */
   className?: string;
 }
@@ -92,7 +93,7 @@ export function GDPREntityFilters({
   const [selectedField, setSelectedField] = useState<string>('');
   const [filterValue, setFilterValue] = useState<string>('');
   const [filterOperator, setFilterOperator] = useState<string>('contains');
-  
+
   // Operatori disponibili per tipo
   const operatorsByType = {
     text: [
@@ -122,14 +123,14 @@ export function GDPREntityFilters({
       { value: 'equals', label: 'Uguale a' }
     ]
   };
-  
+
   // Aggiungi nuovo filtro
   const handleAddFilter = () => {
     if (!selectedField || !filterValue) return;
-    
+
     const field = fields.find(f => f.key === selectedField);
     if (!field) return;
-    
+
     // Mappa i tipi di campo ai tipi di filtro supportati
     const getFilterType = (fieldType: string | undefined): FilterType => {
       switch (fieldType) {
@@ -149,7 +150,7 @@ export function GDPREntityFilters({
           return 'text';
       }
     };
-    
+
     const newFilter: ActiveFilter = {
       key: selectedField,
       label: field.label,
@@ -157,7 +158,7 @@ export function GDPREntityFilters({
       operator: filterOperator as ActiveFilter['operator'],
       type: getFilterType(field.type)
     };
-    
+
     // Evita duplicati
     const existingIndex = activeFilters.findIndex(f => f.key === selectedField);
     if (existingIndex >= 0) {
@@ -167,28 +168,28 @@ export function GDPREntityFilters({
     } else {
       onFiltersChange([...activeFilters, newFilter]);
     }
-    
+
     // Reset form
     setSelectedField('');
     setFilterValue('');
     setFilterOperator('contains');
   };
-  
+
   // Rimuovi filtro
   const handleRemoveFilter = (index: number) => {
     const updatedFilters = activeFilters.filter((_, i) => i !== index);
     onFiltersChange(updatedFilters);
   };
-  
+
   // Campi filtrabili
-  const filterableFields = fields.filter(field => 
-    field.filterable !== false && 
+  const filterableFields = fields.filter(field =>
+    field.filterable !== false &&
     !['id', 'createdAt', 'updatedAt'].includes(field.key)
   );
-  
+
   // Campo selezionato
   const selectedFieldConfig = filterableFields.find(f => f.key === selectedField);
-  
+
   // Mappa il tipo di campo al tipo di filtro supportato
   const getFilterType = (fieldType: string | undefined): FilterType => {
     switch (fieldType) {
@@ -208,23 +209,23 @@ export function GDPREntityFilters({
         return 'text';
     }
   };
-  
+
   const selectedFieldType = selectedFieldConfig ? getFilterType(selectedFieldConfig.type) : 'text';
   const availableOperators = operatorsByType[selectedFieldType] || operatorsByType.text;
-  
+
   // Renderizza valore filtro
   const renderFilterValue = (filter: ActiveFilter) => {
     if (filter.type === 'boolean') {
       return filter.value ? 'Sì' : 'No';
     }
-    
+
     if (filter.type === 'date' && filter.value instanceof Date) {
       return filter.value.toLocaleDateString('it-IT');
     }
-    
+
     return String(filter.value);
   };
-  
+
   return (
     <div className={`gdpr-entity-filters ${className || ''}`}>
       {/* Header con toggle */}
@@ -238,7 +239,7 @@ export function GDPREntityFilters({
             </Badge>
           )}
         </div>
-        
+
         <div className="flex items-center gap-2">
           {activeFilters.length > 0 && (
             <Button
@@ -251,7 +252,7 @@ export function GDPREntityFilters({
               Reset
             </Button>
           )}
-          
+
           {compact && (
             <Button
               variant="ghost"
@@ -267,7 +268,7 @@ export function GDPREntityFilters({
           )}
         </div>
       </div>
-      
+
       {/* Filtri attivi */}
       {activeFilters.length > 0 && (
         <div className="mb-4">
@@ -295,13 +296,13 @@ export function GDPREntityFilters({
           </div>
         </div>
       )}
-      
+
       {/* Form aggiunta filtri */}
       {isExpanded && (
         <Card className="p-4">
           <div className="space-y-4">
             <div className="text-sm font-medium">Aggiungi filtro</div>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
               {/* Selezione campo */}
               <div>
@@ -321,7 +322,7 @@ export function GDPREntityFilters({
                   ))}
                 </select>
               </div>
-              
+
               {/* Selezione operatore */}
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">
@@ -340,7 +341,7 @@ export function GDPREntityFilters({
                   ))}
                 </select>
               </div>
-              
+
               {/* Input valore */}
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">
@@ -357,11 +358,11 @@ export function GDPREntityFilters({
                     <option value="false">No</option>
                   </select>
                 ) : selectedFieldConfig?.type === 'date' ? (
-                  <Input
-                    type="date"
+                  <DatePickerElegante
                     value={filterValue}
-                    onChange={(e) => setFilterValue(e.target.value)}
-                    placeholder="Seleziona data"
+                    onChange={(date) => setFilterValue(date ? date.toISOString().split('T')[0] : '')}
+                    theme="teal"
+                    size="sm"
                   />
                 ) : selectedFieldConfig?.type === 'number' ? (
                   <Input
@@ -392,7 +393,7 @@ export function GDPREntityFilters({
                   />
                 )}
               </div>
-              
+
               {/* Pulsante aggiungi */}
               <div className="flex items-end">
                 <Button
@@ -408,7 +409,7 @@ export function GDPREntityFilters({
           </div>
         </Card>
       )}
-      
+
       {/* Filtri predefiniti */}
       {filterConfig.length > 0 && isExpanded && (
         <div className="mt-4">

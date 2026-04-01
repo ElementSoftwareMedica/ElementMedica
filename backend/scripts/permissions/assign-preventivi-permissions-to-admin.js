@@ -29,17 +29,19 @@ async function assignPermissionsToAdmin() {
   try {
     logger.info('🚀 Inizio assegnazione permessi preventivi/codici-sconto all\'admin...');
 
-    // 1. Trova utente admin
-    const admin = await prisma.person.findFirst({
-      where: { email: 'admin@example.com' }
+    // P48: Trova utente admin per email nel PersonTenantProfile
+    const adminProfile = await prisma.personTenantProfile.findFirst({
+      where: { email: 'admin@example.com', deletedAt: null },
+      include: { person: true }
     });
+    const admin = adminProfile?.person;
 
     if (!admin) {
       logger.error('❌ Utente admin non trovato!');
       process.exit(1);
     }
 
-    logger.info(`✅ Trovato admin: ${admin.email} (${admin.id})`);
+    logger.info(`✅ Trovato admin: admin@example.com (${admin.id})`);
 
     // 2. Trova o crea PersonRole per admin
     let adminPersonRole = await prisma.personRole.findFirst({
@@ -51,7 +53,7 @@ async function assignPermissionsToAdmin() {
 
     if (!adminPersonRole) {
       logger.info('📝 PersonRole non trovato, ne creo uno nuovo...');
-      
+
       // Crea PersonRole admin
       adminPersonRole = await prisma.personRole.create({
         data: {
@@ -62,7 +64,7 @@ async function assignPermissionsToAdmin() {
           tenantId: admin.tenantId
         }
       });
-      
+
       logger.info(`✅ Creato PersonRole: ${adminPersonRole.id}`);
     } else {
       logger.info(`✅ Trovato PersonRole esistente: ${adminPersonRole.id}`);
@@ -140,7 +142,7 @@ async function assignPermissionsToAdmin() {
 
     logger.info('🎊 Operazione completata con successo!');
     logger.info(`📊 Permessi assegnati: ${PREVENTIVI_PERMISSIONS.length + CODICI_SCONTO_PERMISSIONS.length}`);
-    
+
   } catch (error) {
     logger.error('❌ Errore durante assegnazione permessi:', error);
     throw error;

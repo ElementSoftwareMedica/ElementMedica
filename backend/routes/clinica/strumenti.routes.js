@@ -10,7 +10,7 @@
 
 import express from 'express';
 import logger from '../../utils/logger.js';
-import middleware from '../../auth/middleware.js';
+import middleware from '../../middleware/auth.js';
 import { checkAdvancedPermission } from '../../middleware/advanced-permissions.js';
 import { CLINICAL_ENUMS, clinicalValidators } from '../../config/validation-clinical.js';
 import { StrumentoService } from '../../services/clinical/StrumentoService.js';
@@ -30,7 +30,7 @@ const { authenticate: authenticateToken } = middleware;
  * @access Authenticated
  */
 router.get('/tipologie',
-    authenticateToken(),
+    authenticateToken,
     async (req, res) => {
         try {
             const tipologie = StrumentoService.getTipologieDisponibili();
@@ -38,12 +38,11 @@ router.get('/tipologie',
         } catch (error) {
             logger.error('Failed to get tipologie', {
                 component: 'strumenti-routes',
-                error: error.message
+                error: 'Operazione non riuscita'
             });
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero delle tipologie',
-                message: error.message
             });
         }
     }
@@ -55,7 +54,7 @@ router.get('/tipologie',
  * @access Authenticated
  */
 router.get('/tipologie/count',
-    authenticateToken(),
+    authenticateToken,
     auditClinico('strumenti_tipologie_count'),
     async (req, res) => {
         try {
@@ -65,13 +64,12 @@ router.get('/tipologie/count',
         } catch (error) {
             logger.error('Failed to count strumenti by tipologia', {
                 component: 'strumenti-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
             res.status(500).json({
                 success: false,
                 error: 'Errore nel conteggio per tipologia',
-                message: error.message
             });
         }
     }
@@ -83,7 +81,7 @@ router.get('/tipologie/count',
  * @access Authenticated
  */
 router.get('/by-tipologia/:tipologia',
-    authenticateToken(),
+    authenticateToken,
     auditClinico('strumenti_by_tipologia'),
     async (req, res) => {
         try {
@@ -100,14 +98,13 @@ router.get('/by-tipologia/:tipologia',
         } catch (error) {
             logger.error('Failed to get strumenti by tipologia', {
                 component: 'strumenti-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tipologia: req.params.tipologia,
                 tenantId: getEffectiveTenantId(req)
             });
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero strumenti per tipologia',
-                message: error.message
             });
         }
     }
@@ -119,7 +116,7 @@ router.get('/by-tipologia/:tipologia',
  * @access Authenticated
  */
 router.get('/roi/report',
-    authenticateToken(),
+    authenticateToken,
     auditClinico('strumenti_roi_report'),
     async (req, res) => {
         try {
@@ -136,13 +133,12 @@ router.get('/roi/report',
         } catch (error) {
             logger.error('Failed to generate ROI report', {
                 component: 'strumenti-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
             res.status(500).json({
                 success: false,
                 error: 'Errore nella generazione del report ROI',
-                message: error.message
             });
         }
     }
@@ -154,7 +150,7 @@ router.get('/roi/report',
  * @access Authenticated
  */
 router.post('/roi/compare',
-    authenticateToken(),
+    authenticateToken,
     auditClinico('strumenti_roi_compare'),
     async (req, res) => {
         try {
@@ -178,13 +174,12 @@ router.post('/roi/compare',
         } catch (error) {
             logger.error('Failed to compare strumenti ROI', {
                 component: 'strumenti-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
             res.status(500).json({
                 success: false,
                 error: 'Errore nel confronto ROI strumenti',
-                message: error.message
             });
         }
     }
@@ -200,7 +195,7 @@ router.post('/roi/compare',
  * @access Authenticated + VIEW_STRUMENTI
  */
 router.get('/',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('strumenti', 'read'),
     clinicalValidators.strumento.query,
     auditClinico('list_strumenti'),
@@ -228,13 +223,12 @@ router.get('/',
         } catch (error) {
             logger.error('Failed to list strumenti', {
                 component: 'strumenti-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero degli strumenti',
-                message: error.message
             });
         }
     }
@@ -246,7 +240,7 @@ router.get('/',
  * @access Authenticated + CREATE_STRUMENTI
  */
 router.post('/',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('strumenti', 'create'),
     clinicalValidators.strumento.create,
     auditClinico('create_strumento'),
@@ -268,7 +262,7 @@ router.post('/',
         } catch (error) {
             logger.error('Failed to create strumento', {
                 component: 'strumenti-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 tenantId: getEffectiveTenantId(req)
             });
 
@@ -276,14 +270,12 @@ router.post('/',
                 return res.status(409).json({
                     success: false,
                     error: 'Strumento già esistente',
-                    message: error.message
                 });
             }
 
             res.status(500).json({
                 success: false,
                 error: 'Errore nella creazione dello strumento',
-                message: error.message
             });
         }
     }
@@ -299,7 +291,7 @@ router.post('/',
  * @access Authenticated + VIEW_STRUMENTI
  */
 router.get('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('strumenti', 'read'),
     clinicalValidators.strumento.id,
     auditClinico('view_strumento'),
@@ -314,7 +306,7 @@ router.get('/:id',
         } catch (error) {
             logger.error('Failed to get strumento', {
                 component: 'strumenti-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 strumentoId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -329,7 +321,6 @@ router.get('/:id',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero dello strumento',
-                message: error.message
             });
         }
     }
@@ -345,7 +336,7 @@ router.get('/:id',
  * @access Authenticated + UPDATE_STRUMENTI
  */
 router.put('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('strumenti', 'update'),
     clinicalValidators.strumento.id,
     clinicalValidators.strumento.update,
@@ -365,7 +356,7 @@ router.put('/:id',
         } catch (error) {
             logger.error('Failed to update strumento', {
                 component: 'strumenti-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 strumentoId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -380,7 +371,6 @@ router.put('/:id',
             res.status(500).json({
                 success: false,
                 error: 'Errore nell\'aggiornamento dello strumento',
-                message: error.message
             });
         }
     }
@@ -396,7 +386,7 @@ router.put('/:id',
  * @access Authenticated + DELETE_STRUMENTI
  */
 router.delete('/:id',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('strumenti', 'delete'),
     clinicalValidators.strumento.id,
     auditClinico('delete_strumento'),
@@ -414,7 +404,7 @@ router.delete('/:id',
         } catch (error) {
             logger.error('Failed to delete strumento', {
                 component: 'strumenti-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 strumentoId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -429,7 +419,6 @@ router.delete('/:id',
             res.status(500).json({
                 success: false,
                 error: 'Errore nell\'eliminazione dello strumento',
-                message: error.message
             });
         }
     }
@@ -445,7 +434,7 @@ router.delete('/:id',
  * @access Authenticated + UPDATE_STRUMENTI
  */
 router.put('/:id/stato',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('strumenti', 'update'),
     clinicalValidators.strumento.id,
     auditClinico('update_strumento_stato'),
@@ -474,7 +463,7 @@ router.put('/:id/stato',
         } catch (error) {
             logger.error('Failed to update strumento stato', {
                 component: 'strumenti-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 strumentoId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -489,7 +478,6 @@ router.put('/:id/stato',
             res.status(500).json({
                 success: false,
                 error: 'Errore nell\'aggiornamento dello stato',
-                message: error.message
             });
         }
     }
@@ -505,7 +493,7 @@ router.put('/:id/stato',
  * @access Authenticated + UPDATE_STRUMENTI
  */
 router.post('/:id/assign',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('strumenti', 'update'),
     clinicalValidators.strumento.id,
     auditClinico('assign_strumento'),
@@ -533,7 +521,7 @@ router.post('/:id/assign',
         } catch (error) {
             logger.error('Failed to assign strumento', {
                 component: 'strumenti-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 strumentoId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -555,7 +543,6 @@ router.post('/:id/assign',
             res.status(500).json({
                 success: false,
                 error: 'Errore nell\'assegnazione dello strumento',
-                message: error.message
             });
         }
     }
@@ -567,7 +554,7 @@ router.post('/:id/assign',
  * @access Authenticated + UPDATE_STRUMENTI
  */
 router.delete('/:id/assign',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('strumenti', 'update'),
     clinicalValidators.strumento.id,
     auditClinico('unassign_strumento'),
@@ -587,7 +574,7 @@ router.delete('/:id/assign',
         } catch (error) {
             logger.error('Failed to unassign strumento', {
                 component: 'strumenti-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 strumentoId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -602,7 +589,6 @@ router.delete('/:id/assign',
             res.status(500).json({
                 success: false,
                 error: 'Errore nella rimozione dello strumento',
-                message: error.message
             });
         }
     }
@@ -618,7 +604,7 @@ router.delete('/:id/assign',
  * @access Authenticated + VIEW_STRUMENTI
  */
 router.get('/:id/maintenance',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('strumenti', 'read'),
     clinicalValidators.strumento.id,
     auditClinico('view_strumento_maintenance'),
@@ -633,7 +619,7 @@ router.get('/:id/maintenance',
         } catch (error) {
             logger.error('Failed to get strumento maintenance', {
                 component: 'strumenti-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 strumentoId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -648,7 +634,6 @@ router.get('/:id/maintenance',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero dello schedule manutenzione',
-                message: error.message
             });
         }
     }
@@ -660,7 +645,7 @@ router.get('/:id/maintenance',
  * @access Authenticated + UPDATE_STRUMENTI
  */
 router.post('/:id/maintenance',
-    authenticateToken(),
+    authenticateToken,
     checkAdvancedPermission('strumenti', 'update'),
     clinicalValidators.strumento.id,
     auditClinico('record_strumento_maintenance'),
@@ -686,7 +671,7 @@ router.post('/:id/maintenance',
         } catch (error) {
             logger.error('Failed to record strumento maintenance', {
                 component: 'strumenti-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 strumentoId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -701,7 +686,6 @@ router.post('/:id/maintenance',
             res.status(500).json({
                 success: false,
                 error: 'Errore nella registrazione della manutenzione',
-                message: error.message
             });
         }
     }
@@ -717,7 +701,7 @@ router.post('/:id/maintenance',
  * @access Authenticated
  */
 router.get('/:id/roi',
-    authenticateToken(),
+    authenticateToken,
     clinicalValidators.params.id,
     auditClinico('strumento_roi'),
     async (req, res) => {
@@ -732,7 +716,7 @@ router.get('/:id/roi',
         } catch (error) {
             logger.error('Failed to get strumento ROI', {
                 component: 'strumenti-routes',
-                error: error.message,
+                error: 'Operazione non riuscita',
                 strumentoId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -740,7 +724,6 @@ router.get('/:id/roi',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel calcolo ROI strumento',
-                message: error.message
             });
         }
     }

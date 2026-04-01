@@ -19,8 +19,8 @@ export const CLINICAL_ENUMS = {
     StatoStrumento: ['ATTIVO', 'IN_MANUTENZIONE', 'FUORI_SERVIZIO', 'DISMESSO', 'IN_TARATURA'],
     TipoListino: ['PRIVATO', 'SSN', 'CONVENZIONATO', 'ASSICURAZIONE'],
     StatoAppuntamento: ['PRENOTATO', 'CONFERMATO', 'IN_ATTESA', 'IN_CORSO', 'COMPLETATO', 'ANNULLATO', 'NO_SHOW'],
-    StatoVisita: ['INIZIATA', 'IN_CORSO', 'SOSPESA', 'COMPLETATA', 'ANNULLATA'],
-    StatoReferto: ['BOZZA', 'IN_REVISIONE', 'FIRMATO', 'CONSEGNATO', 'ARCHIVIATO'],
+    StatoVisita: ['PROGRAMMATA', 'IN_CORSO', 'SOSPESA', 'COMPLETATA', 'ANNULLATA'],
+    StatoReferto: ['BOZZA', 'IN_ELABORAZIONE', 'DA_FIRMARE', 'FIRMATO', 'CONSEGNATO', 'ANNULLATO'],
     TipoConvenzione: ['AZIENDALE', 'ASSICURATIVA', 'PUBBLICA', 'PRIVATA']
 };
 
@@ -140,13 +140,17 @@ export const JOI_CLINICAL_SCHEMAS = {
 
         query: Joi.object({
             page: Joi.number().integer().min(1).default(1),
-            limit: Joi.number().integer().min(1).max(100).default(20),
+            limit: Joi.number().integer().min(1).max(200).default(20),
             search: Joi.string().max(200).allow(''),
             poliambulatorioId: Joi.string().uuid(),
+            sedeId: Joi.string().uuid(),  // Filtro per sede
             specializzazione: Joi.string().max(200),
             stato: Joi.string().valid('ATTIVO', 'INATTIVO', 'MANUTENZIONE', 'CHIUSO'),
             orderBy: Joi.string().valid('nome', 'codice', 'specializzazione', 'createdAt').default('nome'),
-            orderDir: Joi.string().valid('asc', 'desc').default('asc')
+            orderDir: Joi.string().valid('asc', 'desc').default('asc'),
+            // Multi-tenancy parameters
+            tenantIds: Joi.string().max(2000).allow(''),  // Comma-separated UUIDs
+            allTenants: Joi.string().valid('true', 'false').allow('')
         })
     },
 
@@ -161,6 +165,11 @@ export const JOI_CLINICAL_SCHEMAS = {
             durataPrevista: Joi.number().integer().min(5).max(480).default(30)
                 .messages({ 'number.min': 'Durata minima 5 minuti', 'number.max': 'Durata massima 8 ore' }),
             prezzoBase: Joi.number().precision(2).min(0).required(),
+            prezzoPrimaVisita: Joi.number().precision(2).min(0).allow(null),
+            prezzoControllo: Joi.number().precision(2).min(0).allow(null),
+            durataPrimaVisita: Joi.number().integer().min(5).max(480).allow(null),
+            durataControllo: Joi.number().integer().min(5).max(480).allow(null),
+            scadenzaDefaultMesi: Joi.number().integer().min(1).max(120).allow(null),
             ivaAliquota: Joi.number().precision(2).min(0).max(100).default(0),
             istruzioniPreparazione: Joi.string().max(2000).allow('', null),
             richiedeStrumento: Joi.boolean().default(false),
@@ -183,6 +192,11 @@ export const JOI_CLINICAL_SCHEMAS = {
             brancheSpecialistiche: Joi.array().items(Joi.string().max(100)),
             durataPrevista: Joi.number().integer().min(5).max(480),
             prezzoBase: Joi.number().precision(2).min(0),
+            prezzoPrimaVisita: Joi.number().precision(2).min(0).allow(null),
+            prezzoControllo: Joi.number().precision(2).min(0).allow(null),
+            durataPrimaVisita: Joi.number().integer().min(5).max(480).allow(null),
+            durataControllo: Joi.number().integer().min(5).max(480).allow(null),
+            scadenzaDefaultMesi: Joi.number().integer().min(1).max(120).allow(null),
             ivaAliquota: Joi.number().precision(2).min(0).max(100),
             istruzioniPreparazione: Joi.string().max(2000).allow('', null),
             richiedeStrumento: Joi.boolean(),
@@ -199,10 +213,13 @@ export const JOI_CLINICAL_SCHEMAS = {
 
         query: Joi.object({
             page: Joi.number().integer().min(1).default(1),
-            limit: Joi.number().integer().min(1).max(100).default(20),
+            limit: Joi.number().integer().min(1).max(500).default(20),
             search: Joi.string().max(200).allow(''),
             tipo: Joi.string().valid(...CLINICAL_ENUMS.TipoPrestazione),
-            attivo: Joi.boolean(),
+            attivo: Joi.alternatives().try(
+                Joi.boolean(),
+                Joi.string().valid('true', 'false')
+            ),
             orderBy: Joi.string().valid('nome', 'codice', 'tipo', 'durataPrevista', 'createdAt').default('nome'),
             orderDir: Joi.string().valid('asc', 'desc').default('asc')
         })
@@ -384,14 +401,20 @@ export const JOI_CLINICAL_SCHEMAS = {
             pazienteId: Joi.string().uuid().required(),
             medicoId: Joi.string().uuid().required(),
             prestazioneId: Joi.string().uuid().required(),
+            ambulatorioId: Joi.string().uuid().required(),
+            visitTemplateId: Joi.string().uuid().allow(null),
+            tipoVisitaMDL: Joi.string().allow(null),
             dataOra: Joi.date().iso().default(() => new Date()),
             anamnesi: Joi.string().max(10000).allow('', null),
             esamObiettivo: Joi.string().max(10000).allow('', null),
+            esamiObiettivo: Joi.string().max(10000).allow('', null),
             diagnosi: Joi.string().max(5000).allow('', null),
+            diagnosiPrincipale: Joi.string().max(5000).allow('', null),
             diagnosiIcd10: Joi.string().max(20).allow('', null),
             terapia: Joi.string().max(5000).allow('', null),
             prescrizioni: Joi.string().max(5000).allow('', null),
             noteClinic: Joi.string().max(5000).allow('', null),
+            noteClinico: Joi.string().max(5000).allow('', null),
             followUpRichiesto: Joi.boolean().default(false),
             followUpData: Joi.date().iso().allow(null),
             followUpNote: Joi.string().max(1000).allow('', null),
@@ -411,7 +434,18 @@ export const JOI_CLINICAL_SCHEMAS = {
             followUpData: Joi.date().iso().allow(null),
             followUpNote: Joi.string().max(1000).allow('', null),
             consensoInformato: Joi.boolean(),
-            consensoTrattamento: Joi.boolean()
+            consensoTrattamento: Joi.boolean(),
+            // P52 - Structured data for dynamic template fields
+            datiStrutturati: Joi.object().allow(null),
+            // P52/P56/P65.7 - Additional visit fields
+            prossimoControllo: Joi.date().iso().allow('', null),
+            noteFollowup: Joi.string().max(5000).allow('', null),
+            durataEffettiva: Joi.number().integer().min(0).allow(null),
+            accessControl: Joi.object().allow(null),
+            confidentiality: Joi.string().valid('NORMAL', 'RESTRICTED', 'HIGHLY_RESTRICTED').allow(null),
+            isPrimaVisita: Joi.boolean(),
+            tipoVisitaMDL: Joi.string().allow('', null),
+            medicoRefertanteId: Joi.string().uuid().allow('', null)
         }),
 
         changeStatus: Joi.object({
@@ -426,12 +460,21 @@ export const JOI_CLINICAL_SCHEMAS = {
         query: Joi.object({
             page: Joi.number().integer().min(1).default(1),
             limit: Joi.number().integer().min(1).max(100).default(20),
+            search: Joi.string().max(200).allow(''),
             pazienteId: Joi.string().uuid(),
             medicoId: Joi.string().uuid(),
             prestazioneId: Joi.string().uuid(),
             stato: Joi.string().valid(...CLINICAL_ENUMS.StatoVisita),
             dataInizio: Joi.date().iso(),
             dataFine: Joi.date().iso(),
+            companyTenantProfileId: Joi.string().uuid(),
+            isVisitaSecundaria: Joi.boolean(),
+            soloSecundarieDaRefertare: Joi.boolean(),
+            oraInizio: Joi.string().pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/),
+            oraFine: Joi.string().pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/),
+            fatturazione: Joi.string().valid('fatturate', 'non_fatturate'),
+            allTenants: Joi.boolean(),
+            tenantIds: Joi.alternatives().try(Joi.string(), Joi.array().items(Joi.string())),
             orderBy: Joi.string().valid('dataOra', 'stato', 'createdAt').default('dataOra'),
             orderDir: Joi.string().valid('asc', 'desc').default('desc')
         })
@@ -507,7 +550,15 @@ export const JOI_CLINICAL_SCHEMAS = {
                 .messages({ 'any.required': 'Data inizio è obbligatoria' }),
             dataFine: Joi.date().iso().min(Joi.ref('dataInizio')).allow(null)
                 .messages({ 'date.min': 'Data fine deve essere successiva a data inizio' }),
-            condizioni: Joi.object().allow(null),
+            condizioni: Joi.object({
+                codiceSconto: Joi.string().allow('', null),
+                companyIds: Joi.array().items(Joi.string().uuid()).allow(null),
+                bundleIds: Joi.array().items(Joi.string().uuid()).allow(null),
+                prestazioniIds: Joi.array().items(Joi.string().uuid()).allow(null),
+                scontoPercentuale: Joi.number().min(0).max(100).allow(null),
+                scontoFisso: Joi.number().min(0).allow(null),
+                note: Joi.string().max(1000).allow('', null)
+            }).options({ stripUnknown: true }).allow(null),
             attiva: Joi.boolean().default(true)
         }),
 
@@ -524,7 +575,15 @@ export const JOI_CLINICAL_SCHEMAS = {
             referente: Joi.string().max(200).allow('', null),
             dataInizio: Joi.date().iso(),
             dataFine: Joi.date().iso().allow(null),
-            condizioni: Joi.object().allow(null),
+            condizioni: Joi.object({
+                codiceSconto: Joi.string().allow('', null),
+                companyIds: Joi.array().items(Joi.string().uuid()).allow(null),
+                bundleIds: Joi.array().items(Joi.string().uuid()).allow(null),
+                prestazioniIds: Joi.array().items(Joi.string().uuid()).allow(null),
+                scontoPercentuale: Joi.number().min(0).max(100).allow(null),
+                scontoFisso: Joi.number().min(0).allow(null),
+                note: Joi.string().max(1000).allow('', null)
+            }).options({ stripUnknown: true }).allow(null),
             attiva: Joi.boolean()
         }),
 
@@ -668,6 +727,7 @@ export const JOI_CLINICAL_SCHEMAS = {
         }),
 
         update: Joi.object({
+            medicoId: Joi.string().uuid(),
             ambulatorioId: Joi.string().uuid(),
             prestazioneId: Joi.string().uuid().allow(null),
             data: Joi.date().iso(),

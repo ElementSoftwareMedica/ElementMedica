@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { cn } from '../../utils';
-import { ChevronRightIcon } from '@heroicons/react/24/outline';
+import { ChevronRight } from 'lucide-react';
 
 export interface BreadcrumbProps extends React.HTMLAttributes<HTMLElement> {
   /** Breadcrumb content */
@@ -59,7 +59,7 @@ export const Breadcrumb: React.FC<BreadcrumbProps> = ({
 }) => {
   return (
     <nav
-      aria-label="breadcrumb"
+      aria-label="Percorso di navigazione"
       className={cn('flex', className)}
       {...props}
     >
@@ -165,7 +165,7 @@ export const BreadcrumbSeparator: React.FC<BreadcrumbSeparatorProps> = ({
       className={cn('[&>svg]:size-3.5', className)}
       {...props}
     >
-      <ChevronRightIcon className="h-4 w-4" />
+      <ChevronRight className="h-4 w-4" />
     </li>
   );
 };

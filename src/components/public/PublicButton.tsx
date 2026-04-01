@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { cn } from '../../design-system/utils';
 
 interface PublicButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'medical';
+  variant?: 'primary' | 'secondary' | 'outline' | 'outline-light' | 'ghost' | 'medical';
   size?: 'sm' | 'md' | 'lg';
   children: React.ReactNode;
   className?: string;
@@ -15,7 +15,7 @@ interface PublicButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement
 }
 
 /**
- * Pulsante pubblico per Element Formazione
+ * Pulsante pubblico per Element Sicurezza
  * Design a pillola full-rounded secondo le specifiche
  */
 export const PublicButton: React.FC<PublicButtonProps> = ({
@@ -54,9 +54,9 @@ export const PublicButton: React.FC<PublicButtonProps> = ({
       'shadow-md hover:shadow-lg'
     ],
     medical: [
-      'bg-teal-600 text-white',
-      'hover:bg-teal-700',
-      'focus:ring-teal-400',
+      'bg-secondary-700 text-white',
+      'hover:bg-secondary-800',
+      'focus:ring-primary-300',
       'shadow-lg hover:shadow-xl',
       'font-bold'
     ],
@@ -64,6 +64,11 @@ export const PublicButton: React.FC<PublicButtonProps> = ({
       'border-2 border-primary-600 text-primary-600 bg-transparent',
       'hover:bg-primary-600 hover:text-white',
       'focus:ring-primary-500'
+    ],
+    'outline-light': [
+      'border-2 border-white/80 text-white bg-white/15 backdrop-blur-sm',
+      'hover:bg-white/25 hover:border-white',
+      'focus:ring-white/50'
     ],
     ghost: [
       'text-primary-600 bg-transparent',

@@ -5,6 +5,7 @@ async function updateAdminPermissions() {
     console.log('🔍 Aggiornamento permessi per il ruolo ADMIN...');
 
     // Trova tutti i PersonRole con roleType ADMIN
+    // P48: Include tenantProfiles per email
     const adminRoles = await prisma.personRole.findMany({
       where: {
         roleType: 'ADMIN',
@@ -17,7 +18,10 @@ async function updateAdminPermissions() {
             id: true,
             firstName: true,
             lastName: true,
-            email: true
+            tenantProfiles: {
+              where: { deletedAt: null, isActive: true },
+              select: { email: true, isPrimary: true }
+            }
           }
         }
       }
@@ -44,18 +48,18 @@ async function updateAdminPermissions() {
       'ADMIN_PANEL', 'SYSTEM_SETTINGS', 'USER_MANAGEMENT', 'TENANT_MANAGEMENT',
       // Permessi per le nuove entità
       'VIEW_FORM_TEMPLATES',
-      'CREATE_FORM_TEMPLATES', 
+      'CREATE_FORM_TEMPLATES',
       'EDIT_FORM_TEMPLATES',
       'DELETE_FORM_TEMPLATES',
       'MANAGE_FORM_TEMPLATES',
-      
+
       'VIEW_FORM_SUBMISSIONS',
       'CREATE_FORM_SUBMISSIONS',
-      'EDIT_FORM_SUBMISSIONS', 
+      'EDIT_FORM_SUBMISSIONS',
       'DELETE_FORM_SUBMISSIONS',
       'MANAGE_FORM_SUBMISSIONS',
       'EXPORT_FORM_SUBMISSIONS',
-      
+
       'VIEW_PUBLIC_CMS',
       'CREATE_PUBLIC_CMS',
       'EDIT_PUBLIC_CMS',
@@ -74,19 +78,21 @@ async function updateAdminPermissions() {
     ];
 
     for (const adminRole of adminRoles) {
-      console.log(`\n👤 Aggiornamento permessi per: ${adminRole.person.firstName} ${adminRole.person.lastName} (${adminRole.person.email})`);
-      
+      const adminProfile = adminRole.person?.tenantProfiles?.find(p => p.isPrimary) || adminRole.person?.tenantProfiles?.[0] || {};
+      const adminEmail = adminProfile.email || 'N/A';
+      console.log(`\n👤 Aggiornamento permessi per: ${adminRole.person.firstName} ${adminRole.person.lastName} (${adminEmail})`);
+
       // Verifica quali permessi mancano
       const existingPermissions = adminRole.permissions.map(p => p.permission);
       const missingPermissions = allAdminPermissions.filter(perm => !existingPermissions.includes(perm));
-      
+
       console.log(`   📝 Permessi attuali: ${existingPermissions.length}`);
       console.log(`   📝 Permessi totali richiesti: ${allAdminPermissions.length}`);
       console.log(`   📝 Permessi mancanti: ${missingPermissions.length}`);
-      
+
       if (missingPermissions.length > 0) {
         console.log(`   🔧 Aggiungendo permessi mancanti...`);
-        
+
         // Aggiungi i permessi mancanti
         for (const permission of missingPermissions) {
           try {

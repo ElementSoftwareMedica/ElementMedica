@@ -2,9 +2,9 @@
  * Middleware per la validazione degli input nelle route del sistema di gestione dei ruoli
  */
 
-import { 
-  validateRoleData, 
-  validateRoleAssignment, 
+import {
+  validateRoleData,
+  validateRoleAssignment,
   validateCustomRoleUpdate,
   validatePaginationParams,
   validateId as validateIdUtil,
@@ -12,7 +12,7 @@ import {
   validateUserFilters as validateUserFiltersUtil,
   validateAndFilterPermissions
 } from '../utils/validators.js';
-import { 
+import {
   filterQueryParams,
   filterCustomRoleData,
   filterRoleAssignmentData,
@@ -33,26 +33,26 @@ export function validateCreateRole(req, res, next) {
   try {
     // Filtra e sanitizza i dati in input
     const filteredData = filterCustomRoleData(req.body);
-    
+
     // Valida i dati filtrati
     const validation = validateRoleData(filteredData);
-    
+
     if (!validation.isValid) {
       return res.status(400).json({
         success: false,
-        error: 'Validation failed',
+        error: 'Validazione fallita',
         details: validation.errors
       });
     }
-    
+
     // Sostituisce i dati originali con quelli filtrati e validati
     req.body = filteredData;
     next();
   } catch (error) {
-    console.error('[VALIDATION_MIDDLEWARE] Error validating role creation:', error);
+    logger.error({ error: error.message }, 'Errore validazione creazione ruolo');
     res.status(500).json({
       success: false,
-      error: 'Validation error'
+      error: 'Errore di validazione'
     });
   }
 }
@@ -73,26 +73,26 @@ export function validateUpdateRole(req, res, next) {
         error: roleTypeValidation.error
       });
     }
-    
+
     // Filtra e valida i dati di aggiornamento
     const filteredData = filterCustomRoleData(req.body);
     const validation = validateCustomRoleUpdate(filteredData);
-    
+
     if (!validation.isValid) {
       return res.status(400).json({
         success: false,
-        error: 'Validation failed',
+        error: 'Validazione fallita',
         details: validation.errors
       });
     }
-    
+
     req.body = filteredData;
     next();
   } catch (error) {
-    console.error('[VALIDATION_MIDDLEWARE] Error validating role update:', error);
+    logger.error({ error: error.message }, 'Errore validazione aggiornamento ruolo');
     res.status(500).json({
       success: false,
-      error: 'Validation error'
+      error: 'Errore di validazione'
     });
   }
 }
@@ -107,25 +107,25 @@ export function validateRoleAssignmentData(req, res, next) {
   try {
     // Filtra i dati di assegnazione
     const filteredData = filterRoleAssignmentData(req.body);
-    
+
     // Valida i dati filtrati
     const validation = validateRoleAssignment(filteredData);
-    
+
     if (!validation.isValid) {
       return res.status(400).json({
         success: false,
-        error: 'Validation failed',
+        error: 'Validazione fallita',
         details: validation.errors
       });
     }
-    
+
     req.body = filteredData;
     next();
   } catch (error) {
-    console.error('[VALIDATION_MIDDLEWARE] Error validating role assignment:', error);
+    logger.error({ error: error.message }, 'Errore validazione assegnazione ruolo');
     res.status(500).json({
       success: false,
-      error: 'Validation error'
+      error: 'Errore di validazione'
     });
   }
 }
@@ -140,17 +140,17 @@ export function validatePagination(req, res, next) {
   try {
     // Gestione sicura dei parametri di query
     const query = req.query || {};
-    
+
     // Filtra e limita i parametri di paginazione con valori di default sicuri
     const limitedParams = limitPaginationParams(query);
     const validatedParams = validatePaginationParams(limitedParams);
-    
+
     // Aggiunge i parametri validati alla request
     req.pagination = validatedParams;
     next();
   } catch (error) {
-    console.error('[VALIDATION_MIDDLEWARE] Error validating pagination:', error);
-    
+    logger.error({ error: error.message }, 'Errore validazione paginazione');
+
     // Invece di restituire un errore 500, usa valori di default e continua
     req.pagination = { page: 1, limit: 20 };
     next();
@@ -167,19 +167,19 @@ export function validateQueryParams(req, res, next) {
   try {
     // Filtra i parametri di query
     const filteredQuery = filterQueryParams(req.query);
-    
+
     // Valida i filtri utente se presenti
     if (Object.keys(filteredQuery).length > 0) {
       const validatedFilters = validateUserFiltersUtil(filteredQuery);
       req.filters = validatedFilters;
     }
-    
+
     next();
   } catch (error) {
-    console.error('[VALIDATION_MIDDLEWARE] Error validating query params:', error);
+    logger.error({ error: error.message }, 'Errore validazione parametri query');
     res.status(500).json({
       success: false,
-      error: 'Validation error'
+      error: 'Errore di validazione'
     });
   }
 }
@@ -194,20 +194,20 @@ export function validateRouteId(paramName = 'id') {
     try {
       const id = req.params[paramName];
       const validation = validateIdUtil(id, paramName);
-      
+
       if (!validation.isValid) {
         return res.status(400).json({
           success: false,
           error: validation.error
         });
       }
-      
+
       next();
     } catch (error) {
-      console.error(`[VALIDATION_MIDDLEWARE] Error validating ${paramName}:`, error);
+      logger.error({ error: 'Operazione non riuscita', paramName }, 'Errore validazione ID parametro');
       res.status(500).json({
         success: false,
-        error: 'Validation error'
+        error: 'Errore di validazione'
       });
     }
   };
@@ -223,10 +223,10 @@ export function validateAdvancedPermissionData(req, res, next) {
   try {
     // Filtra i dati del permesso
     const filteredData = filterAdvancedPermissionData(req.body);
-    
+
     // Valida i dati filtrati
     const validation = validateAdvancedPermission(filteredData);
-    
+
     if (!validation.isValid) {
       return res.status(400).json({
         success: false,
@@ -234,14 +234,14 @@ export function validateAdvancedPermissionData(req, res, next) {
         details: validation.errors
       });
     }
-    
+
     req.body = filteredData;
     next();
   } catch (error) {
-    console.error('[VALIDATION_MIDDLEWARE] Error validating advanced permission:', error);
+    logger.error({ error: error.message }, 'Errore validazione permesso avanzato');
     res.status(500).json({
       success: false,
-      error: 'Validation error'
+      error: 'Errore di validazione'
     });
   }
 }
@@ -252,7 +252,7 @@ export function validateAdvancedPermissionData(req, res, next) {
 export const validateAdvancedPermissions = (req, res, next) => {
   try {
     const { permissions } = req.body;
-    
+
     if (!permissions || !Array.isArray(permissions)) {
       return res.status(400).json(createErrorResponse(
         'Invalid permissions format',
@@ -283,10 +283,10 @@ export const validateAdvancedPermissions = (req, res, next) => {
     next();
   } catch (error) {
     logger.error('Error in validateAdvancedPermissions middleware', {
-      error: error.message,
+      error: 'Operazione non riuscita',
       body: req.body
     });
-    
+
     res.status(500).json(createErrorResponse(
       'Validation error',
       'An error occurred during permission validation'
@@ -300,7 +300,7 @@ export const validateAdvancedPermissions = (req, res, next) => {
 export const validateUserPermissions = (req, res, next) => {
   try {
     const { permissions } = req.body;
-    
+
     if (!permissions) {
       return res.status(400).json(createErrorResponse(
         'Missing permissions',
@@ -316,7 +316,7 @@ export const validateUserPermissions = (req, res, next) => {
     }
 
     const validationResult = validateAndFilterPermissions(permissions);
-    
+
     if (!validationResult.isValid) {
       return res.status(400).json(createErrorResponse(
         'Invalid permissions',
@@ -328,10 +328,10 @@ export const validateUserPermissions = (req, res, next) => {
     next();
   } catch (error) {
     logger.error('Error in validateUserPermissions middleware', {
-      error: error.message,
+      error: 'Operazione non riuscita',
       body: req.body
     });
-    
+
     res.status(500).json(createErrorResponse(
       'Validation error',
       'An error occurred during user permissions validation'
@@ -348,29 +348,29 @@ export const validateUserPermissions = (req, res, next) => {
 export function validateRoleRemoval(req, res, next) {
   try {
     const { personId, roleType, customRoleId } = req.body;
-    
+
     // Valida che sia presente almeno personId
     if (!personId) {
       return res.status(400).json({
         success: false,
-        error: 'Person ID is required'
+        error: 'ID persona obbligatorio'
       });
     }
-    
+
     // Valida che sia presente roleType o customRoleId
     if (!roleType && !customRoleId) {
       return res.status(400).json({
         success: false,
-        error: 'Either role type or custom role ID is required'
+        error: 'Tipo ruolo o ID ruolo personalizzato obbligatorio'
       });
     }
-    
+
     next();
   } catch (error) {
-    console.error('[VALIDATION_MIDDLEWARE] Error validating role removal:', error);
+    logger.error({ error: error.message }, 'Errore validazione rimozione ruolo');
     res.status(500).json({
       success: false,
-      error: 'Validation error'
+      error: 'Errore di validazione'
     });
   }
 }
@@ -384,42 +384,42 @@ export function validateRoleRemoval(req, res, next) {
 export function validateHierarchyMove(req, res, next) {
   try {
     const { roleType, newLevel, newParentRoleType } = req.body;
-    
+
     if (!roleType) {
       return res.status(400).json({
         success: false,
-        error: 'Role type is required'
+        error: 'Tipo ruolo obbligatorio'
       });
     }
-    
+
     if (newLevel === undefined) {
       return res.status(400).json({
         success: false,
-        error: 'New level is required'
+        error: 'Nuovo livello obbligatorio'
       });
     }
-    
+
     const level = parseInt(newLevel);
     if (isNaN(level) || level < 1 || level > 6) {
       return res.status(400).json({
         success: false,
-        error: 'Level must be a number between 1 and 6'
+        error: 'Il livello deve essere un numero tra 1 e 6'
       });
     }
-    
+
     // Sanitizza i dati
     req.body = {
       roleType: roleType.trim(),
       newLevel: level,
       newParentRoleType: newParentRoleType ? newParentRoleType.trim() : undefined
     };
-    
+
     next();
   } catch (error) {
-    console.error('[VALIDATION_MIDDLEWARE] Error validating hierarchy move:', error);
+    logger.error({ error: error.message }, 'Errore validazione spostamento gerarchia');
     res.status(500).json({
       success: false,
-      error: 'Validation error'
+      error: 'Errore di validazione'
     });
   }
 }
@@ -433,27 +433,27 @@ export function validateHierarchyMove(req, res, next) {
 export function validatePermissionAssignment(req, res, next) {
   try {
     const { targetUserId, permissions } = req.body;
-    
+
     if (!targetUserId) {
       return res.status(400).json({
         success: false,
-        error: 'Target user ID is required'
+        error: 'ID utente destinatario obbligatorio'
       });
     }
-    
+
     if (!Array.isArray(permissions)) {
       return res.status(400).json({
         success: false,
-        error: 'Permissions must be an array'
+        error: 'I permessi devono essere un array'
       });
     }
-    
+
     next();
   } catch (error) {
-    console.error('[VALIDATION_MIDDLEWARE] Error validating permission assignment:', error);
+    logger.error({ error: error.message }, 'Errore validazione assegnazione permessi');
     res.status(500).json({
       success: false,
-      error: 'Validation error'
+      error: 'Errore di validazione'
     });
   }
 }
@@ -468,7 +468,7 @@ export function validateRequest(req, res, next) {
   // Applica validazioni di base
   validateQueryParams(req, res, (err) => {
     if (err) return next(err);
-    
+
     validatePagination(req, res, next);
   });
 }

@@ -1,5 +1,5 @@
 import { useMemo, useCallback } from 'react';
-import type { FormData } from './useFormData';
+import type { FormData } from '../types';
 import type { Training } from '../types';
 import { validateScheduleForm } from '../utils';
 
@@ -32,14 +32,14 @@ interface UseFormValidationReturn {
   isValid: boolean;
   errors: ValidationError[];
   fieldErrors: Record<string, string>;
-  
+
   // Step-specific validation
   isStep0Valid: boolean;
   isStep1Valid: boolean;
   isStep2Valid: boolean;
   isStep3Valid: boolean;
   isStep4Valid: boolean;
-  
+
   // Validation functions
   validateCurrentStep: () => ValidationResult;
   validateAllSteps: () => ValidationResult;
@@ -63,31 +63,31 @@ export function useFormValidation({
   selectedCompanies = [],
   selectedPersons = []
 }: UseFormValidationProps): UseFormValidationReturn {
-  
+
   // Validazione Step 0: Dettagli corso
   const step0Validation = useMemo(() => {
     const errors: ValidationError[] = [];
-    
+
     // Validazione corso selezionato
     if (!selectedCourse) {
       errors.push({ field: 'course', message: 'Seleziona un corso' });
     }
-    
+
     // Validazione livello di rischio (richiesto solo se esistono varianti > 1)
     if ((dynamicRiskOptions.length > 1) && !formData.risk_level) {
       errors.push({ field: 'risk_level', message: 'Seleziona il livello di rischio' });
     }
-    
+
     // Validazione tipo corso (richiesto solo se esistono varianti > 1)
     if ((dynamicCourseTypeOptions.length > 1) && !formData.course_type) {
       errors.push({ field: 'course_type', message: 'Seleziona il tipo di corso' });
     }
-    
+
     // Validazione modalità di erogazione
     if (!formData.delivery_mode) {
       errors.push({ field: 'delivery_mode', message: 'Seleziona la modalità di erogazione' });
     }
-    
+
     // Validazione date, orari e formatori per data
     if (!formData.dates || formData.dates.length === 0) {
       errors.push({ field: 'dates', message: 'Aggiungi almeno una data' });
@@ -102,19 +102,19 @@ export function useFormValidation({
         if (!date.end) {
           errors.push({ field: `dates.${index}.end`, message: `Orario fine ${index + 1} è obbligatorio` });
         }
-        
+
         // Validazione logica orari
         if (date.start && date.end) {
           const startMinutes = timeStringToMinutes(date.start);
           const endMinutes = timeStringToMinutes(date.end);
           if (startMinutes >= endMinutes) {
-            errors.push({ 
-              field: `dates.${index}.time`, 
-              message: `L'orario di fine deve essere successivo all'orario di inizio per la data ${index + 1}` 
+            errors.push({
+              field: `dates.${index}.time`,
+              message: `L'orario di fine deve essere successivo all'orario di inizio per la data ${index + 1}`
             });
           }
         }
-        
+
         // Validazione trainer per data (accesso tipizzato)
         const trainerId = (date as { trainerId?: string | number }).trainerId;
         if (!trainerId || String(trainerId).trim() === '') {
@@ -126,17 +126,18 @@ export function useFormValidation({
         }
       });
     }
-    
+
     // Validazione ore selezionate vs durata del corso
+    // Blocca SOLO se le ore sono MENO della durata prevista.
+    // Se le ore sono uguali o SUPERIORI, è consentito (warning visivo in DateTimeManager).
     const durationNum = Number(courseDuration ?? 0);
     const totalHoursNum = Number(totalSelectedHours ?? 0);
     const hasDuration = Number.isFinite(durationNum) && durationNum > 0;
     const hasTotalHours = Number.isFinite(totalHoursNum) && totalHoursNum >= 0;
     if (hasDuration && hasTotalHours) {
-      // Tolleranza per floating point
-      const areEqual = Math.abs(totalHoursNum - durationNum) < 1e-6;
-      if (!areEqual) {
-        errors.push({ field: 'totalSelectedHours', message: 'Le ore selezionate non coincidono con la durata del corso' });
+      const isUnder = totalHoursNum < durationNum - 1e-6;
+      if (isUnder) {
+        errors.push({ field: 'totalSelectedHours', message: 'Le ore selezionate sono inferiori alla durata del corso' });
       }
     }
 
@@ -146,37 +147,37 @@ export function useFormValidation({
       fieldErrors: errors.reduce((acc, error) => ({ ...acc, [error.field]: error.message }), {})
     };
   }, [formData, selectedCourse, dynamicRiskOptions, dynamicCourseTypeOptions, timeStringToMinutes, courseDuration, totalSelectedHours]);
-  
+
   // Validazione Step 1: Partecipanti
   const step1Validation = useMemo(() => {
     const errors: ValidationError[] = [];
-    
+
     if (!selectedCompanies || selectedCompanies.length === 0) {
       errors.push({ field: 'companies', message: 'Seleziona almeno un\'azienda' });
     }
-    
+
     return {
       isValid: errors.length === 0,
       errors,
       fieldErrors: errors.reduce((acc, error) => ({ ...acc, [error.field]: error.message }), {})
     };
   }, [selectedCompanies]);
-  
+
   // Validazione Step 2: Presenze
   const step2Validation = useMemo(() => {
     const errors: ValidationError[] = [];
-    
+
     if (!selectedPersons || selectedPersons.length === 0) {
       errors.push({ field: 'persons', message: 'Seleziona almeno un partecipante' });
     }
-    
+
     return {
       isValid: errors.length === 0,
       errors,
       fieldErrors: errors.reduce((acc, error) => ({ ...acc, [error.field]: error.message }), {})
     };
   }, [selectedPersons]);
-  
+
   // Validazione Step 3: Documenti (opzionale)
   const step3Validation = useMemo(() => {
     return {
@@ -185,7 +186,7 @@ export function useFormValidation({
       fieldErrors: {}
     };
   }, []);
-  
+
   // Validazione Step 4: Riepilogo (sempre valido se si arriva qui)
   const step4Validation = useMemo(() => {
     return {
@@ -194,7 +195,7 @@ export function useFormValidation({
       fieldErrors: {}
     };
   }, []);
-  
+
   // Validazione step corrente
   const currentStepValidation = useMemo(() => {
     switch (currentStep) {
@@ -206,7 +207,7 @@ export function useFormValidation({
       default: return { isValid: false, errors: [], fieldErrors: {} };
     }
   }, [currentStep, step0Validation, step1Validation, step2Validation, step3Validation, step4Validation]);
-  
+
   // Validazione completa di tutti gli step
   const allStepsValidation = useMemo(() => {
     const allErrors = [
@@ -216,18 +217,18 @@ export function useFormValidation({
       ...step3Validation.errors,
       ...step4Validation.errors
     ];
-    
+
     return {
       isValid: allErrors.length === 0,
       errors: allErrors,
       fieldErrors: allErrors.reduce((acc, error) => ({ ...acc, [error.field]: error.message }), {})
     };
   }, [step0Validation, step1Validation, step2Validation, step3Validation, step4Validation]);
-  
+
   // Funzioni di validazione
   const validateCurrentStep = useCallback(() => currentStepValidation, [currentStepValidation]);
   const validateAllSteps = useCallback(() => allStepsValidation, [allStepsValidation]);
-  
+
   const validateField = useCallback((field: string, value: unknown): ValidationError | null => {
     // Implementazione validazione singolo campo
     switch (field) {
@@ -246,25 +247,25 @@ export function useFormValidation({
         return null;
     }
   }, [dynamicRiskOptions, dynamicCourseTypeOptions]);
-  
+
   const clearErrors = useCallback(() => {
     // Questa funzione può essere utilizzata per pulire gli errori
     // L'implementazione dipende da come si vuole gestire lo stato degli errori
   }, []);
-  
+
   return {
     // Validation results
     isValid: currentStepValidation.isValid,
     errors: currentStepValidation.errors,
     fieldErrors: currentStepValidation.fieldErrors,
-    
+
     // Step-specific validation
     isStep0Valid: step0Validation.isValid,
     isStep1Valid: step1Validation.isValid,
     isStep2Valid: step2Validation.isValid,
     isStep3Valid: step3Validation.isValid,
     isStep4Valid: step4Validation.isValid,
-    
+
     // Validation functions
     validateCurrentStep,
     validateAllSteps,

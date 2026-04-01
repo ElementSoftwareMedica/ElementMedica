@@ -2,10 +2,12 @@ import { useState, useCallback } from 'react';
 import { apiGet, apiPost, apiPut, apiDelete, apiDownloadWithFilename, DownloadResult } from '../../services/api';
 import { useTenantFilter } from '../../context/TenantFilterContext';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 interface ApiResponse<T = any> {
   success: boolean;
-  data: T;
+  data: T; // Tipizzato specificamente per ogni endpoint; usa cast type-narrowing per array/oggetto
   message?: string;
+  error?: string; // Messaggio di errore specifico restituito dal backend
   pagination?: {
     page?: number;
     currentPage?: number;
@@ -93,6 +95,7 @@ interface UsePreventiviReturn {
   generatePdf: (id: string) => Promise<DownloadResult>;
   mergePreventivi: (preventiviIds: string[]) => Promise<{ preventivo: Preventivo }>;
   unmergePreventivo: (id: string) => Promise<{ restoredPreventivi: Array<{ id: string; numero: string }> }>;
+  duplicatePreventivo: (id: string) => Promise<Preventivo>;
 }
 
 interface FetchParams {
@@ -177,11 +180,10 @@ export const usePreventivi = (): UsePreventiviReturn => {
           itemsPerPage: paginationData.limit || 10
         });
       } else {
-        throw new Error((response as any).error || response.message || 'Errore nel recupero dei preventivi');
+        throw new Error(response.error || response.message || 'Errore nel recupero dei preventivi');
       }
-    } catch (err: any) {
-      console.error('Errore fetch preventivi:', err);
-      setError(err.message || 'Errore nel caricamento dei preventivi');
+    } catch (err: unknown) {
+      setError('Errore nel caricamento dei preventivi');
       setPreventivi([]);
     } finally {
       setLoading(false);
@@ -201,11 +203,10 @@ export const usePreventivi = (): UsePreventiviReturn => {
       if (response.success) {
         return response.data;
       } else {
-        throw new Error((response as any).error || response.message || 'Errore nel recupero del preventivo');
+        throw new Error(response.error || response.message || 'Errore nel recupero del preventivo');
       }
-    } catch (err: any) {
-      console.error('Errore get preventivo:', err);
-      setError(err.message || 'Errore nel caricamento del preventivo');
+    } catch (err: unknown) {
+      setError('Errore nel caricamento del preventivo');
       throw err;
     } finally {
       setLoading(false);
@@ -220,17 +221,25 @@ export const usePreventivi = (): UsePreventiviReturn => {
     setError(null);
 
     try {
-      const response = await apiPost<ApiResponse<Preventivo>>('/api/v1/preventivi', data) as ApiResponse<Preventivo>;
+      // Rimuovi campi null/undefined: apiPost converte undefined→null e i validatori
+      // UUID del backend rifiutano null (optional() skips solo undefined, non null)
+      const backendData: Record<string, unknown> = { ...data };
+      for (const key of Object.keys(backendData)) {
+        if (backendData[key] === null || backendData[key] === undefined) {
+          delete backendData[key];
+        }
+      }
+
+      const response = await apiPost<ApiResponse<Preventivo>>('/api/v1/preventivi', backendData) as ApiResponse<Preventivo>;
 
       if (response.success) {
         setPreventivi(prev => [response.data, ...prev]);
         return response.data;
       } else {
-        throw new Error((response as any).error || response.message || 'Errore nella creazione del preventivo');
+        throw new Error(response.error || response.message || 'Errore nella creazione del preventivo');
       }
-    } catch (err: any) {
-      console.error('Errore creazione preventivo:', err);
-      setError(err.message || 'Errore nella creazione del preventivo');
+    } catch (err: unknown) {
+      setError('Errore nella creazione del preventivo');
       throw err;
     } finally {
       setLoading(false);
@@ -239,13 +248,23 @@ export const usePreventivi = (): UsePreventiviReturn => {
 
   /**
    * Aggiorna preventivo esistente
+   * 
+   * Rimuove campi null/undefined per evitare fallimenti validazione UUID.
    */
   const updatePreventivo = useCallback(async (id: string, data: Partial<Preventivo>): Promise<Preventivo> => {
     setLoading(true);
     setError(null);
 
     try {
-      const response = await apiPut<ApiResponse<Preventivo>>(`/api/v1/preventivi/${id}`, data) as ApiResponse<Preventivo>;
+      // Rimuovi campi null/undefined per evitare fallimenti validazione UUID
+      const backendData: Record<string, unknown> = { ...data };
+      for (const key of Object.keys(backendData)) {
+        if (backendData[key] === null || backendData[key] === undefined) {
+          delete backendData[key];
+        }
+      }
+
+      const response = await apiPut<ApiResponse<Preventivo>>(`/api/v1/preventivi/${id}`, backendData) as ApiResponse<Preventivo>;
 
       if (response.success) {
         setPreventivi(prev =>
@@ -253,11 +272,10 @@ export const usePreventivi = (): UsePreventiviReturn => {
         );
         return response.data;
       } else {
-        throw new Error((response as any).error || response.message || 'Errore nell\'aggiornamento del preventivo');
+        throw new Error(response.error || response.message || 'Errore nell\'aggiornamento del preventivo');
       }
-    } catch (err: any) {
-      console.error('Errore update preventivo:', err);
-      setError(err.message || 'Errore nell\'aggiornamento del preventivo');
+    } catch (err: unknown) {
+      setError('Errore nell\'aggiornamento del preventivo');
       throw err;
     } finally {
       setLoading(false);
@@ -277,11 +295,10 @@ export const usePreventivi = (): UsePreventiviReturn => {
       if (response.success) {
         setPreventivi(prev => prev.filter(p => p.id !== id));
       } else {
-        throw new Error((response as any).error || response.message || 'Errore nell\'eliminazione del preventivo');
+        throw new Error(response.error || response.message || 'Errore nell\'eliminazione del preventivo');
       }
-    } catch (err: any) {
-      console.error('Errore delete preventivo:', err);
-      setError(err.message || 'Errore nell\'eliminazione del preventivo');
+    } catch (err: unknown) {
+      setError('Errore nell\'eliminazione del preventivo');
       throw err;
     } finally {
       setLoading(false);
@@ -298,9 +315,8 @@ export const usePreventivi = (): UsePreventiviReturn => {
     try {
       await Promise.all(ids.map(id => apiDelete(`/api/v1/preventivi/${id}`)));
       setPreventivi(prev => prev.filter(p => !ids.includes(p.id)));
-    } catch (err: any) {
-      console.error('Errore bulk delete preventivi:', err);
-      setError(err.message || 'Errore nell\'eliminazione multipla dei preventivi');
+    } catch (err: unknown) {
+      setError('Errore nell\'eliminazione multipla dei preventivi');
       throw err;
     } finally {
       setLoading(false);
@@ -327,12 +343,11 @@ export const usePreventivi = (): UsePreventiviReturn => {
         return response.data;
       } else {
         // Backend returns 'error' for failure messages, 'message' for success
-        const errorMsg = (response as any).error || response.message || 'Errore nel cambio stato del preventivo';
+        const errorMsg = response.error || response.message || 'Errore nel cambio stato del preventivo';
         throw new Error(errorMsg);
       }
-    } catch (err: any) {
-      console.error('Errore cambio stato preventivo:', err);
-      setError(err.message || 'Errore nel cambio stato del preventivo');
+    } catch (err: unknown) {
+      setError('Errore nel cambio stato del preventivo');
       throw err;
     } finally {
       setLoading(false);
@@ -358,11 +373,10 @@ export const usePreventivi = (): UsePreventiviReturn => {
         );
         return response.data;
       } else {
-        throw new Error((response as any).error || response.message || 'Errore nell\'applicazione dello sconto');
+        throw new Error(response.error || response.message || 'Errore nell\'applicazione dello sconto');
       }
-    } catch (err: any) {
-      console.error('Errore apply sconto:', err);
-      setError(err.message || 'Errore nell\'applicazione dello sconto');
+    } catch (err: unknown) {
+      setError('Errore nell\'applicazione dello sconto');
       throw err;
     } finally {
       setLoading(false);
@@ -387,11 +401,10 @@ export const usePreventivi = (): UsePreventiviReturn => {
         );
         return response.data;
       } else {
-        throw new Error((response as any).error || response.message || 'Errore nella rimozione dello sconto');
+        throw new Error(response.error || response.message || 'Errore nella rimozione dello sconto');
       }
-    } catch (err: any) {
-      console.error('Errore remove sconto:', err);
-      setError(err.message || 'Errore nella rimozione dello sconto');
+    } catch (err: unknown) {
+      setError('Errore nella rimozione dello sconto');
       throw err;
     } finally {
       setLoading(false);
@@ -410,9 +423,8 @@ export const usePreventivi = (): UsePreventiviReturn => {
       // Usa apiDownloadWithFilename per ottenere anche il filename dall'header
       const result = await apiDownloadWithFilename(`/api/v1/preventivi/${id}/pdf`);
       return result;
-    } catch (err: any) {
-      console.error('Errore generazione PDF:', err);
-      setError(err.message || 'Errore nella generazione del PDF');
+    } catch (err: unknown) {
+      setError('Errore nella generazione del PDF');
       throw err;
     } finally {
       setLoading(false);
@@ -448,11 +460,10 @@ export const usePreventivi = (): UsePreventiviReturn => {
           mergedPreventivi: response.mergedPreventivi || []
         };
       } else {
-        throw new Error((response as any).error || 'Errore nell\'unione dei preventivi');
+        throw new Error(response.error || 'Errore nell\'unione dei preventivi');
       }
-    } catch (err: any) {
-      console.error('Errore merge preventivi:', err);
-      const errorMsg = err.response?.data?.error || err.message || 'Errore nell\'unione dei preventivi';
+    } catch (err: unknown) {
+      const errorMsg = 'Errore nell\'unione dei preventivi';
       setError(errorMsg);
       throw new Error(errorMsg);
     } finally {
@@ -484,11 +495,39 @@ export const usePreventivi = (): UsePreventiviReturn => {
           restoredPreventivi: response.restoredPreventivi || []
         };
       } else {
-        throw new Error((response as any).error || 'Errore nella separazione del preventivo');
+        throw new Error(response.error || 'Errore nella separazione del preventivo');
       }
-    } catch (err: any) {
-      console.error('Errore unmerge preventivo:', err);
-      const errorMsg = err.response?.data?.error || err.message || 'Errore nella separazione del preventivo';
+    } catch (err: unknown) {
+      const errorMsg = 'Errore nella separazione del preventivo';
+      setError(errorMsg);
+      throw new Error(errorMsg);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  /**
+   * Duplica un preventivo esistente creando una copia in stato BOZZA
+   */
+  const duplicatePreventivo = useCallback(async (id: string): Promise<Preventivo> => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await apiPost<ApiResponse<Preventivo>>(
+        `/api/v1/preventivi/${id}/duplicate`,
+        {}
+      ) as ApiResponse<Preventivo>;
+
+      if (response.success) {
+        // Aggiungi il nuovo preventivo duplicato alla lista
+        setPreventivi(prev => [response.data, ...prev]);
+        return response.data;
+      } else {
+        throw new Error(response.error || response.message || 'Errore nella duplicazione del preventivo');
+      }
+    } catch (err: unknown) {
+      const errorMsg = 'Errore nella duplicazione del preventivo';
       setError(errorMsg);
       throw new Error(errorMsg);
     } finally {
@@ -512,6 +551,7 @@ export const usePreventivi = (): UsePreventiviReturn => {
     removeSconto,
     generatePdf,
     mergePreventivi,
-    unmergePreventivo
+    unmergePreventivo,
+    duplicatePreventivo
   };
 };

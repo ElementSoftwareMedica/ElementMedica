@@ -345,7 +345,7 @@ export function useGDPREntityOperations<T extends BaseEntity>({
       return result;
       
     } catch (error: unknown) {
-       const errorMessage = error instanceof Error ? error.message : 'Errore sconosciuto';
+       const errorMessage = 'Errore sconosciuto';
        setState(prev => ({
          ...prev,
          saving: false,
@@ -431,7 +431,7 @@ export function useGDPREntityOperations<T extends BaseEntity>({
       return result;
       
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Errore sconosciuto';
+      const errorMessage = 'Errore sconosciuto';
       setState(prev => ({
         ...prev,
         loading: false,
@@ -562,7 +562,7 @@ export function useGDPREntityOperations<T extends BaseEntity>({
         removeOptimisticUpdate(id);
       }
       
-      const errorMessage = error instanceof Error ? error.message : 'Errore sconosciuto';
+      const errorMessage = 'Errore sconosciuto';
       setState(prev => ({
         ...prev,
         saving: false,
@@ -663,7 +663,7 @@ export function useGDPREntityOperations<T extends BaseEntity>({
       return result;
       
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Errore sconosciuto';
+      const errorMessage = 'Errore sconosciuto';
       setState(prev => ({
         ...prev,
         deleting: false,

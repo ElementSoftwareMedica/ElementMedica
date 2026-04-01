@@ -10,6 +10,8 @@
 
 import React, { useState, useMemo } from 'react';
 import { useToast } from '../../hooks/useToast';
+import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
+import { DatePickerElegante } from '../ui/DatePickerElegante';
 import {
     Calendar,
     Plus,
@@ -109,6 +111,7 @@ const ChiusureSpecialiEditor: React.FC<ChiusureSpecialiEditorProps> = ({
     readonly = false
 }) => {
     const { showToast } = useToast();
+    const { confirmDelete } = useConfirmDialog();
     const [editingId, setEditingId] = useState<string | null>(null);
     const [showAddForm, setShowAddForm] = useState(false);
     const [showPresets, setShowPresets] = useState(false);
@@ -197,8 +200,9 @@ const ChiusureSpecialiEditor: React.FC<ChiusureSpecialiEditorProps> = ({
     };
 
     // Rimuovi chiusura
-    const handleRemove = (id: string) => {
-        if (confirm('Sei sicuro di voler rimuovere questa chiusura?')) {
+    const handleRemove = async (id: string) => {
+        const confirmed = await confirmDelete('chiusura');
+        if (confirmed) {
             onChange(value.filter(c => c.id !== id));
         }
     };
@@ -416,23 +420,20 @@ const ChiusureSpecialiEditor: React.FC<ChiusureSpecialiEditorProps> = ({
                         {/* Data inizio */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Data Inizio *</label>
-                            <input
-                                type="date"
+                            <DatePickerElegante
                                 value={newChiusura.dataInizio || ''}
-                                onChange={(e) => setNewChiusura({ ...newChiusura, dataInizio: e.target.value })}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-teal-500 focus:border-teal-500"
+                                onChange={(date) => setNewChiusura({ ...newChiusura, dataInizio: date ? date.toISOString().split('T')[0] : '' })}
+                                theme="teal"
                             />
                         </div>
 
                         {/* Data fine */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Data Fine</label>
-                            <input
-                                type="date"
+                            <DatePickerElegante
                                 value={newChiusura.dataFine || ''}
-                                onChange={(e) => setNewChiusura({ ...newChiusura, dataFine: e.target.value })}
-                                min={newChiusura.dataInizio}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-teal-500 focus:border-teal-500"
+                                onChange={(date) => setNewChiusura({ ...newChiusura, dataFine: date ? date.toISOString().split('T')[0] : '' })}
+                                theme="teal"
                             />
                             <p className="text-xs text-gray-500 mt-1">Lascia vuoto per chiusura singola giornata</p>
                         </div>
@@ -587,10 +588,10 @@ const ChiusureSpecialiEditor: React.FC<ChiusureSpecialiEditorProps> = ({
                             <div
                                 key={chiusura.id}
                                 className={`border rounded-xl p-4 transition-all ${!chiusura.attivo
-                                        ? 'bg-gray-50 border-gray-200 opacity-60'
-                                        : isPast
-                                            ? 'bg-gray-50 border-gray-200'
-                                            : 'bg-white border-gray-200 hover:border-teal-300'
+                                    ? 'bg-gray-50 border-gray-200 opacity-60'
+                                    : isPast
+                                        ? 'bg-gray-50 border-gray-200'
+                                        : 'bg-white border-gray-200 hover:border-teal-300'
                                     }`}
                             >
                                 <div className="flex items-start justify-between gap-4">
@@ -655,8 +656,8 @@ const ChiusureSpecialiEditor: React.FC<ChiusureSpecialiEditorProps> = ({
                                                 type="button"
                                                 onClick={() => handleToggleAttivo(chiusura.id!)}
                                                 className={`p-1.5 rounded transition-colors ${chiusura.attivo
-                                                        ? 'text-green-600 hover:bg-green-50'
-                                                        : 'text-gray-400 hover:bg-gray-100'
+                                                    ? 'text-green-600 hover:bg-green-50'
+                                                    : 'text-gray-400 hover:bg-gray-100'
                                                     }`}
                                                 title={chiusura.attivo ? 'Disattiva' : 'Attiva'}
                                             >

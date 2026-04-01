@@ -28,7 +28,9 @@ import {
     Calendar,
     Building2,
     Clock,
-    AlertTriangle
+    AlertTriangle,
+    Grid3X3,
+    List as ListIcon,
 } from 'lucide-react';
 import {
     convenzioniApi,
@@ -37,6 +39,11 @@ import {
 } from '../../../services/clinicaApi';
 import { formatDate, isPast, isFuture } from '../../../utils/dateUtils';
 import { useTenantFilter } from '../../../context/TenantFilterContext';
+import { useViewMode, type ViewMode } from '../../../hooks/useViewMode';
+import { useToast } from '../../../hooks/useToast';
+import { ActionMenu, createCrudActions } from '@/components/ui/ActionMenu';
+import { CRUDButton } from '../../../components/shared/CRUDButton';
+import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
 import '../../../styles/clinica-theme.css';
 
 // =====================================================
@@ -119,9 +126,14 @@ const ValidityBadge: React.FC<{ convenzione: Convenzione }> = ({ convenzione }) 
 export const ConvenzioniPage: React.FC = () => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
+    const { showToast } = useToast();
+    const { confirmDelete } = useConfirmDialog();
 
     // Tenant filter from global context
     const { getTenantFilterParams, isReady, tenantFilterKey } = useTenantFilter();
+
+    // View mode with localStorage persistence
+    const { viewMode, setViewMode } = useViewMode({ storageKey: 'convenzioni', defaultMode: 'grid' });
 
     // State
     const [page, setPage] = useState(1);
@@ -141,7 +153,7 @@ export const ConvenzioniPage: React.FC = () => {
             ...(tenantParams.tenantIds && { tenantIds: tenantParams.tenantIds.join(',') }),
             ...(tenantParams.allTenants && { allTenants: 'true' })
         };
-    }, [page, filters, getTenantFilterParams]);
+    }, [page, filters, getTenantFilterParams, tenantFilterKey]);
 
     // Queries
     const {
@@ -160,7 +172,11 @@ export const ConvenzioniPage: React.FC = () => {
         mutationFn: (id: string) => convenzioniApi.delete(id),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['convenzioni'] });
+            showToast({ type: 'success', message: 'Convenzione eliminata con successo' });
         },
+        onError: () => {
+            showToast({ type: 'error', message: 'Errore durante l\'eliminazione' });
+        }
     });
 
     // Extract data
@@ -178,11 +194,19 @@ export const ConvenzioniPage: React.FC = () => {
         setPage(1);
     }, []);
 
-    const handleDelete = useCallback((id: string) => {
-        if (window.confirm('Sei sicuro di voler eliminare questa convenzione?')) {
+    const handleDelete = useCallback(async (id: string) => {
+        if (await confirmDelete('questa convenzione')) {
             deleteMutation.mutate(id);
         }
-    }, [deleteMutation]);
+    }, [deleteMutation, confirmDelete]);
+
+    const handleView = useCallback((id: string) => {
+        navigate(`/poliambulatorio/catalogo/convenzioni/${id}`);
+    }, [navigate]);
+
+    const handleEdit = useCallback((id: string) => {
+        navigate(`/poliambulatorio/catalogo/convenzioni/${id}/modifica`);
+    }, [navigate]);
 
     // Render
     return (
@@ -206,13 +230,14 @@ export const ConvenzioniPage: React.FC = () => {
                     >
                         <RefreshCw className="w-5 h-5" />
                     </button>
-                    <Link
-                        to="/poliambulatorio/catalogo/convenzioni/nuovo"
+                    <CRUDButton
+                        operation="create"
+                        onClick={() => navigate('/poliambulatorio/catalogo/convenzioni/nuovo')}
                         className="clinica-button-primary flex items-center gap-2"
                     >
                         <Plus className="w-4 h-4" />
                         Nuova Convenzione
-                    </Link>
+                    </CRUDButton>
                 </div>
             </div>
 
@@ -241,6 +266,22 @@ export const ConvenzioniPage: React.FC = () => {
                         <option value="active">Solo attive</option>
                         <option value="inactive">Solo disattive</option>
                     </select>
+
+                    {/* View Toggle */}
+                    <div className="flex items-center border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden">
+                        <button
+                            onClick={() => setViewMode('list')}
+                            className={`p-2 ${viewMode === 'list' ? 'bg-teal-500 text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                        >
+                            <ListIcon className="w-5 h-5" />
+                        </button>
+                        <button
+                            onClick={() => setViewMode('grid')}
+                            className={`p-2 ${viewMode === 'grid' ? 'bg-teal-500 text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                        >
+                            <Grid3X3 className="w-5 h-5" />
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -280,6 +321,95 @@ export const ConvenzioniPage: React.FC = () => {
                         </Link>
                     )}
                 </div>
+            ) : viewMode === 'list' ? (
+                /* Table/List View */
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                    <table className="w-full">
+                        <thead className="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
+                            <tr>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                                    Convenzione
+                                </th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                                    Ente Terzo
+                                </th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                                    Validità
+                                </th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                                    Stato
+                                </th>
+                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                                    Azioni
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                            {convenzioni.map((convenzione) => {
+                                const validity = getValidityStatus(convenzione);
+                                return (
+                                    <tr
+                                        key={convenzione.id}
+                                        onClick={() => handleView(convenzione.id)}
+                                        className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors"
+                                    >
+                                        <td className="px-4 py-3">
+                                            <div className="flex items-center gap-3">
+                                                <div className={`p-2 rounded-lg ${validity.status === 'expired'
+                                                    ? 'bg-red-100 dark:bg-red-900/30'
+                                                    : 'bg-purple-100 dark:bg-purple-900/30'
+                                                    }`}>
+                                                    <Handshake className={`w-4 h-4 ${validity.status === 'expired'
+                                                        ? 'text-red-600 dark:text-red-400'
+                                                        : 'text-purple-600 dark:text-purple-400'
+                                                        }`} />
+                                                </div>
+                                                <div>
+                                                    <p className="font-medium text-gray-900 dark:text-white">
+                                                        {convenzione.nome}
+                                                    </p>
+                                                    <p className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+                                                        {convenzione.codice}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <span className="text-sm text-gray-700 dark:text-gray-300">
+                                                {convenzione.enteTerzo || '-'}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <div className="flex flex-col gap-1">
+                                                <span className="text-sm text-gray-700 dark:text-gray-300">
+                                                    {formatDate(convenzione.dataInizio, 'short')}
+                                                    {convenzione.dataFine ? ` - ${formatDate(convenzione.dataFine, 'short')}` : ''}
+                                                </span>
+                                                <span className={`text-xs px-2 py-0.5 rounded-full w-fit ${validity.color}`}>
+                                                    {validity.label}
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <StatusIndicator isActive={convenzione.attiva} />
+                                        </td>
+                                        <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                                            <ActionMenu
+                                                theme="teal"
+                                                size="sm"
+                                                actions={createCrudActions({
+                                                    onView: () => handleView(convenzione.id),
+                                                    onEdit: () => handleEdit(convenzione.id),
+                                                    onDelete: () => handleDelete(convenzione.id)
+                                                })}
+                                            />
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
             ) : (
                 /* Grid View */
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -289,7 +419,8 @@ export const ConvenzioniPage: React.FC = () => {
                         return (
                             <div
                                 key={convenzione.id}
-                                className={`bg-white dark:bg-gray-800 rounded-xl shadow-sm border hover:shadow-md transition-shadow ${validity.status === 'expired'
+                                onClick={() => handleView(convenzione.id)}
+                                className={`bg-white dark:bg-gray-800 rounded-xl shadow-sm border hover:shadow-lg transition-shadow cursor-pointer ${validity.status === 'expired'
                                     ? 'border-red-200 dark:border-red-800'
                                     : 'border-gray-200 dark:border-gray-700'
                                     } p-5`}
@@ -337,24 +468,17 @@ export const ConvenzioniPage: React.FC = () => {
                                     </div>
                                 )}
 
-                                <div className="flex items-center justify-between pt-3 border-t border-gray-200 dark:border-gray-700">
+                                <div className="flex items-center justify-between pt-3 border-t border-gray-200 dark:border-gray-700" onClick={(e) => e.stopPropagation()}>
                                     <StatusIndicator isActive={convenzione.attiva} />
-                                    <div className="flex items-center gap-2">
-                                        <Link
-                                            to={`/poliambulatorio/catalogo/convenzioni/${convenzione.id}/modifica`}
-                                            className="p-2 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
-                                            title="Modifica"
-                                        >
-                                            <Edit className="w-4 h-4" />
-                                        </Link>
-                                        <button
-                                            onClick={() => handleDelete(convenzione.id)}
-                                            className="p-2 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
-                                            title="Elimina"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
-                                    </div>
+                                    <ActionMenu
+                                        theme="teal"
+                                        size="sm"
+                                        actions={createCrudActions({
+                                            onView: () => handleView(convenzione.id),
+                                            onEdit: () => handleEdit(convenzione.id),
+                                            onDelete: () => handleDelete(convenzione.id)
+                                        })}
+                                    />
                                 </div>
                             </div>
                         );
