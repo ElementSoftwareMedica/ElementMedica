@@ -16,6 +16,7 @@
 import express from 'express';
 import { requireAuth, requirePermission } from '../../middleware/auth.js';
 import ScadenzeMDLService from '../../services/clinical/ScadenzeMDLService.js';
+import MansioneService from '../../services/clinical/MansioneService.js';
 import logger from '../../utils/logger.js';
 import { validateParamId, validateParam } from '../../middleware/validateUUID.js';
 import { getEffectiveTenantId } from '../../utils/tenantHelper.js';
@@ -696,5 +697,29 @@ function getColorByUrgenza(urgenza) {
     };
     return colors[urgenza] || '#6b7280';
 }
+
+/**
+ * POST /api/v1/clinica/scadenze-mdl/genera-iniziali
+ * Genera le scadenze iniziali per tutte le mansioni attive di un lavoratore.
+ * Usato dalla VisitaPage quando il piano di sorveglianza è vuoto.
+ */
+router.post('/genera-iniziali', requirePermission('clinica.visite:update'), async (req, res) => {
+    try {
+        const tenantId = getEffectiveTenantId(req);
+        const { personId } = req.body;
+
+        if (!personId) {
+            return res.status(400).json({ success: false, message: 'personId obbligatorio' });
+        }
+
+        const result = await MansioneService.ensureScadenzeExist(personId, tenantId);
+
+        logger.info({ personId, tenantId, ...result }, 'POST /scadenze-mdl/genera-iniziali');
+        res.json({ success: true, data: result });
+    } catch (error) {
+        logger.error({ error: error.message }, 'Errore POST /scadenze-mdl/genera-iniziali');
+        res.status(500).json({ success: false, message: 'Errore nella generazione delle scadenze' });
+    }
+});
 
 export default router;

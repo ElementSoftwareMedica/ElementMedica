@@ -165,6 +165,31 @@ export const VisitaPage: React.FC = () => {
         staleTime: 30_000,
     });
 
+    // Auto-generate initial scadenze when piano is empty but mansioni exist
+    const scadenzeAutoGenRef = useRef(false);
+    const generaScadenzeMutation = useMutation({
+        mutationFn: (personId: string) => scadenzeMDLApi.generaIniziali(personId),
+        onSuccess: (data) => {
+            if (data?.created && data.created > 0) {
+                queryClient.invalidateQueries({ queryKey: ['scadenze-persona', paziente?.id] });
+            }
+        },
+    });
+    useEffect(() => {
+        if (
+            isMDLVisit &&
+            paziente?.id &&
+            workerRisksData?.mansioni?.length &&
+            scadenzePersona !== undefined &&
+            scadenzePersona?.length === 0 &&
+            !scadenzeAutoGenRef.current &&
+            !generaScadenzeMutation.isPending
+        ) {
+            scadenzeAutoGenRef.current = true;
+            generaScadenzeMutation.mutate(paziente.id);
+        }
+    }, [isMDLVisit, paziente?.id, workerRisksData?.mansioni?.length, scadenzePersona]);
+
     // ============================================
     // MEDICO PRESTAZIONI ABILITATE (Session #12b)
     // Load medico details to get enabled prestazioni

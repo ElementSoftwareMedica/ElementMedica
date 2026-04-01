@@ -5593,7 +5593,12 @@ export const scadenzeMDLApi = {
     /** Riconcilia le date di un gruppo di scadenze pendenti alla stessa data */
     reconciliaDate: (ids: string[], targetDate: string) =>
         apiPost<ApiResponse<{ aggiornate: number }>>(`${CLINICA_BASE}/scadenze-mdl/reconcilia-date`, { ids, targetDate })
-            .then(extractData)
+            .then(extractData),
+
+    /** Genera le scadenze iniziali per tutte le mansioni attive di un lavoratore */
+    generaIniziali: (personId: string) =>
+        apiPost<ApiResponse<{ created: number; skipped: number }>>(`${CLINICA_BASE}/scadenze-mdl/genera-iniziali`, { personId })
+            .then(extractData),
 };
 
 // =====================================================

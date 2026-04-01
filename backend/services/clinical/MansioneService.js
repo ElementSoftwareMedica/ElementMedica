@@ -459,13 +459,11 @@ const MansioneService = {
             }
         }
 
-        // Raccoglie mansioni uniche assegnate al lavoratore (senza duplicati)
+        // Raccoglie mansioni uniche assegnate al lavoratore (con rischiAssociati per editing frontend)
         const mansioniMap = new Map();
         for (const assignment of assignments) {
             if (!mansioniMap.has(assignment.mansione.id)) {
-                // Restituisce la mansione senza il dettaglio rischi (gestito nel risksMap)
-                const { rischiAssociati: _rischi, ...mansionePulita } = assignment.mansione;
-                mansioniMap.set(assignment.mansione.id, mansionePulita);
+                mansioniMap.set(assignment.mansione.id, assignment.mansione);
             }
         }
 
@@ -515,6 +513,41 @@ const MansioneService = {
                 periodicitaMesi: r.periodicitaMesi
             }))
         }, tenantId);
+    },
+
+    /**
+     * Assicura che le scadenze iniziali esistano per tutte le mansioni attive di un lavoratore.
+     * Usato dalla VisitaPage quando il piano di sorveglianza è vuoto.
+     * @param {string} personId
+     * @param {string} tenantId
+     * @returns {Promise<{ created: number; skipped: number }>}
+     */
+    async ensureScadenzeExist(personId, tenantId) {
+        const assignments = await prisma.lavoratoreMansione.findMany({
+            where: { personId, tenantId, isAttiva: true, deletedAt: null },
+            select: { mansioneId: true }
+        });
+
+        let created = 0;
+        let skipped = 0;
+        for (const { mansioneId } of assignments) {
+            try {
+                const before = await prisma.scadenzaPrestazioneProtocollo.count({
+                    where: { personId, mansioneId, tenantId, deletedAt: null }
+                });
+                await this._creaScadenzePrimaVisita(personId, mansioneId, tenantId);
+                const after = await prisma.scadenzaPrestazioneProtocollo.count({
+                    where: { personId, mansioneId, tenantId, deletedAt: null }
+                });
+                if (after > before) created += (after - before);
+                else skipped++;
+            } catch (err) {
+                logger.warn({ personId, mansioneId, tenantId, error: err.message }, 'Errore generazione scadenze iniziali');
+                skipped++;
+            }
+        }
+
+        return { created, skipped };
     },
 
     /**

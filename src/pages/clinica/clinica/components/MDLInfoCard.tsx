@@ -11,7 +11,7 @@ import React, { useState, useMemo } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
     Briefcase, Shield, FileText, ChevronDown, ChevronUp,
-    Edit3, X, Check, Plus, Trash2, AlertTriangle
+    Edit3, X, Plus, Trash2, AlertTriangle, Loader2
 } from 'lucide-react';
 import { useToast } from '../../../../hooks/useToast';
 import type { Mansione, MansioneRischio, ProtocolloSanitario, LivelloRischio, CodiceRischio, CategoriaRischio } from '../../../../services/clinicaApi';
@@ -117,7 +117,6 @@ export default function MDLInfoCard({
     const { showToast } = useToast();
     const [expanded, setExpanded] = useState(true);
     const [editingRischio, setEditingRischio] = useState<string | null>(null);
-    const [editLivello, setEditLivello] = useState<LivelloRischio>('MEDIO');
     const [showAddRischio, setShowAddRischio] = useState(false);
     const [addCodice, setAddCodice] = useState<CodiceRischio | ''>('');
     const [addLivello, setAddLivello] = useState<LivelloRischio>('MEDIO');
@@ -312,13 +311,19 @@ export default function MDLInfoCard({
                                                     <div className="flex gap-0.5">
                                                         {(['BASSO', 'MEDIO', 'ALTO', 'MOLTO_ALTO'] as LivelloRischio[]).map(lv => {
                                                             const c = LIVELLO_CONFIG[lv];
+                                                            const isCurrent = lv === (r.livello ?? (r as any).livelloRischio);
                                                             return (
                                                                 <button
                                                                     key={lv}
                                                                     type="button"
-                                                                    onClick={() => setEditLivello(lv)}
-                                                                    className={`px-1.5 py-0.5 rounded text-[9px] font-medium border transition-colors ${editLivello === lv
-                                                                        ? `${c.bg} ${c.text} ${c.border}`
+                                                                    disabled={updateRischioMutation.isPending}
+                                                                    onClick={() => {
+                                                                        if (isCurrent) { setEditingRischio(null); return; }
+                                                                        const mid = findMansioneForRischio(r.codiceRischio);
+                                                                        if (mid) updateRischioMutation.mutate({ mansioneId: mid, codiceRischio: r.codiceRischio, newLivello: lv });
+                                                                    }}
+                                                                    className={`px-1.5 py-0.5 rounded text-[9px] font-medium border transition-colors ${isCurrent
+                                                                        ? `${c.bg} ${c.text} ${c.border} ring-1 ring-offset-1 ring-teal-400`
                                                                         : 'bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100'
                                                                         }`}
                                                                 >
@@ -327,20 +332,13 @@ export default function MDLInfoCard({
                                                             );
                                                         })}
                                                     </div>
-                                                    <button
-                                                        type="button"
-                                                        disabled={updateRischioMutation.isPending}
-                                                        onClick={() => {
-                                                            const mid = findMansioneForRischio(r.codiceRischio);
-                                                            if (mid) updateRischioMutation.mutate({ mansioneId: mid, codiceRischio: r.codiceRischio, newLivello: editLivello });
-                                                        }}
-                                                        className="p-0.5 text-teal-600 hover:text-teal-700"
-                                                    >
-                                                        <Check className="h-3 w-3" />
-                                                    </button>
-                                                    <button type="button" onClick={() => setEditingRischio(null)} className="p-0.5 text-gray-400 hover:text-gray-600">
-                                                        <X className="h-3 w-3" />
-                                                    </button>
+                                                    {updateRischioMutation.isPending ? (
+                                                        <Loader2 className="h-3 w-3 text-teal-600 animate-spin" />
+                                                    ) : (
+                                                        <button type="button" onClick={() => setEditingRischio(null)} className="p-0.5 text-gray-400 hover:text-gray-600">
+                                                            <X className="h-3 w-3" />
+                                                        </button>
+                                                    )}
                                                 </div>
                                             ) : (
                                                 <>
@@ -359,7 +357,6 @@ export default function MDLInfoCard({
                                                                 type="button"
                                                                 onClick={() => {
                                                                     setEditingRischio(r.codiceRischio);
-                                                                    setEditLivello(r.livello);
                                                                 }}
                                                                 className="p-0.5 text-gray-400 hover:text-teal-600"
                                                                 title="Modifica livello"
