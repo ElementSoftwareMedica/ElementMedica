@@ -11,6 +11,7 @@
 
 import prisma from '../../config/prisma-optimization.js';
 import logger from '../../utils/logger.js';
+import MansioneService from './MansioneService.js';
 
 
 /**
@@ -377,6 +378,38 @@ const ProtocolloSanitarioService = {
         });
 
         logger.info({ protocolloId: id, tenantId }, 'Protocollo sanitario aggiornato');
+
+        // P72_FIX: Rigenera scadenze per lavoratori assegnati alle mansioni del protocollo
+        // quando cambiano prestazioni o mansioni associate
+        if (prestazioni !== undefined || mansioniIds !== undefined) {
+            try {
+                const mansioniDelProtocollo = await prisma.protocolloMansione.findMany({
+                    where: { protocolloSanitarioId: id },
+                    select: { mansioneId: true }
+                });
+                const allMansioneIds = mansioniDelProtocollo.map(m => m.mansioneId);
+                if (allMansioneIds.length > 0) {
+                    const assignments = await prisma.lavoratoreMansione.findMany({
+                        where: { mansioneId: { in: allMansioneIds }, tenantId, isAttiva: true, deletedAt: null },
+                        select: { personId: true }
+                    });
+                    const uniquePersonIds = [...new Set(assignments.map(a => a.personId))];
+                    for (const personId of uniquePersonIds) {
+                        try {
+                            await MansioneService.ensureScadenzeExist(personId, tenantId);
+                        } catch (err) {
+                            logger.warn({ personId, protocolloId: id, error: err.message }, 'Errore rigenerazione scadenze post-update protocollo');
+                        }
+                    }
+                    if (uniquePersonIds.length > 0) {
+                        logger.info({ protocolloId: id, workersUpdated: uniquePersonIds.length }, 'Scadenze rigenerate per lavoratori dopo aggiornamento protocollo');
+                    }
+                }
+            } catch (err) {
+                logger.warn({ protocolloId: id, error: err.message }, 'Errore rigenerazione scadenze post-update protocollo');
+            }
+        }
+
         return updated;
     },
 

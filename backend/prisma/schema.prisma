@@ -7185,6 +7185,7 @@ enum TipoGiudizioIdoneita {
 }
 
 enum StatoGiudizio {
+  BOZZA
   VALIDO
   SCADUTO
   SOSTITUITO

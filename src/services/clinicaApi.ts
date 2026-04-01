@@ -755,7 +755,7 @@ export type TipoGiudizioIdoneita =
     | 'NON_IDONEO_TEMPORANEO'
     | 'NON_IDONEO_PERMANENTE';
 
-export type StatoGiudizio = 'VALIDO' | 'SCADUTO' | 'SOSPESO' | 'REVOCATO' | 'IN_RICORSO';
+export type StatoGiudizio = 'BOZZA' | 'VALIDO' | 'SCADUTO' | 'SOSTITUITO' | 'RICORRIBILE' | 'RICORSO_IN_CORSO';
 
 // Valori enum Prisma per periodicità esami
 export type TipoPeriodicita =

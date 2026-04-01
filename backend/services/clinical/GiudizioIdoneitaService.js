@@ -37,18 +37,25 @@ const GiudizioIdoneitaService = {
             dataScadenza,
             prescrizioniIdoneita,
             limitazioni,
-            motivazioni
+            motivazioni,
+            stato: requestedStato
         } = data;
 
+        const isBozza = requestedStato === 'BOZZA';
+        const statoFinale = isBozza ? 'BOZZA' : 'VALIDO';
+
         // Invalida eventuali giudizi precedenti attivi per la stessa persona
-        await prisma.giudizioIdoneita.updateMany({
-            where: {
-                personId,
-                tenantId,
-                stato: 'VALIDO'
-            },
-            data: { stato: 'SOSTITUITO' }
-        });
+        // (solo se non è una bozza — le bozze non invalidano giudizi validi)
+        if (!isBozza) {
+            await prisma.giudizioIdoneita.updateMany({
+                where: {
+                    personId,
+                    tenantId,
+                    stato: 'VALIDO'
+                },
+                data: { stato: 'SOSTITUITO' }
+            });
+        }
 
         // Calcola data scadenza se non specificata (default 12 mesi)
         const scadenza = dataScadenza || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
@@ -62,7 +69,7 @@ const GiudizioIdoneitaService = {
                 visitaId,
                 medicoCompetenteId,
                 tipoGiudizio,
-                stato: 'VALIDO',
+                stato: statoFinale,
                 dataEmissione: new Date(),
                 dataScadenza: scadenza,
                 prescrizioniIdoneita,

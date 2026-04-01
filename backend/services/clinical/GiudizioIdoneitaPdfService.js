@@ -78,16 +78,16 @@ const GIUDIZIO_LABELS = {
   IDONEO: 'IDONEO',
   IDONEO_CON_PRESCRIZIONI: 'IDONEO CON PRESCRIZIONI',
   IDONEO_CON_LIMITAZIONI: 'IDONEO CON LIMITAZIONI',
-  TEMPORANEAMENTE_NON_IDONEO: 'TEMPORANEAMENTE NON IDONEO',
-  NON_IDONEO: 'NON IDONEO'
+  NON_IDONEO_TEMPORANEO: 'TEMPORANEAMENTE NON IDONEO',
+  NON_IDONEO_PERMANENTE: 'NON IDONEO'
 };
 
 const GIUDIZIO_COLORS = {
   IDONEO: { bg: '#dcfce7', text: '#166534', border: '#86efac' },
   IDONEO_CON_PRESCRIZIONI: { bg: '#fef9c3', text: '#854d0e', border: '#fde047' },
   IDONEO_CON_LIMITAZIONI: { bg: '#ffedd5', text: '#9a3412', border: '#fdba74' },
-  TEMPORANEAMENTE_NON_IDONEO: { bg: '#fee2e2', text: '#991b1b', border: '#fca5a5' },
-  NON_IDONEO: { bg: '#fce7f3', text: '#9d174d', border: '#f9a8d4' }
+  NON_IDONEO_TEMPORANEO: { bg: '#fee2e2', text: '#991b1b', border: '#fca5a5' },
+  NON_IDONEO_PERMANENTE: { bg: '#fce7f3', text: '#9d174d', border: '#f9a8d4' }
 };
 
 function fmtDate(d) {
@@ -99,6 +99,55 @@ function fmtMedico(p) {
   if (!p) return '—';
   const title = p.gender === 'FEMALE' ? 'Dott.ssa' : 'Dott.';
   return `${title} ${p.firstName} ${p.lastName}`;
+}
+
+// ============================================================
+// LABEL DECODERS — convert DB codes to readable Italian labels
+// ============================================================
+
+const PRESCRIZIONI_CODE_MAP = {
+  uso_dpi_guanti: 'Uso obbligatorio DPI: guanti protettivi',
+  uso_dpi_scarpe: 'Uso obbligatorio DPI: scarpe antinfortunistiche',
+  uso_dpi_cuffie: 'Uso obbligatorio DPI: cuffie / tappi antirumore',
+  uso_dpi_mascherina: 'Uso obbligatorio DPI: mascherina FFP2/FFP3',
+  uso_dpi_visiera: 'Uso obbligatorio DPI: visiera / occhiali protettivi',
+  uso_dpi_imbracatura: 'Uso obbligatorio DPI: imbracatura di sicurezza',
+  divieto_mmc_20: 'Divieto movimentazione manuale carichi > 20 kg',
+  divieto_mmc_10: 'Divieto movimentazione manuale carichi > 10 kg',
+  pause_vdt: 'Pause obbligatorie VDT: 15 minuti ogni 2 ore',
+  limitazione_notturno: 'Limitazione turni notturni (max 2 notti/settimana)',
+  controllo_oft_annuale: 'Controllo oftalmologico annuale (videoterminali)',
+  sorveg_rafforzata_semestrale: 'Sorveglianza sanitaria rafforzata semestrale',
+  formazione_rischio_chimico: 'Obbligo formazione specifica rischio chimico',
+  formazione_rischio_biologico: 'Obbligo formazione specifica rischio biologico',
+  evitare_cancerogeni: 'Evitare esposizione a sostanze cancerogene / mutagene',
+  esposizione_rumore_limitata: 'Limitazione esposizione a rumore (< 80 dB)',
+};
+
+const LIMITAZIONI_CODE_MAP = {
+  no_lavoro_quota: 'Non idoneo a lavori in quota (> 2 m)',
+  no_piattaforme_elevabili: 'Non idoneo a lavori su piattaforme elevabili / cestelli',
+  no_guida_mezzi: 'Non idoneo alla conduzione di automezzi / mezzi operativi',
+  no_spazi_confinati: 'Non idoneo a lavori in spazi confinati',
+  limitazione_notturno_mansione: 'Limitata idoneità ai turni notturni',
+  no_vibrazioni: 'Non idoneo a mansioni con esposizione a vibrazioni mano-braccio',
+  no_rumore_85db: 'Non idoneo a mansioni con esposizione a rumore > 85 dB',
+  limitazione_mmc: 'Limitata movimentazione manuale di carichi (< 10 kg)',
+  no_cancerogeni: 'Non idoneo a mansioni con esposizione a cancerogeni / mutageni',
+  limitazione_chimici: 'Limitata esposizione a sostanze chimiche pericolose',
+  no_stress_termico: 'Non idoneo a lavori con stress termico (ambiente caldo / freddo)',
+  no_vdt_prolungato: 'Uso VDT limitato (max 2 ore continuative senza pausa)',
+};
+
+/**
+ * Decodifica codici in etichette leggibili. Se il testo contiene codici noti
+ * (separati da virgola/punto-virgola/newline), li sostituisce con le label.
+ * Il testo libero rimane invariato.
+ */
+function decodeCodesToLabels(text, codeMap) {
+  if (!text) return '';
+  const parts = text.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean);
+  return parts.map(part => codeMap[part] || part).join('\n');
 }
 
 // ============================================================
@@ -341,13 +390,13 @@ function buildLavoratoreHtml(g, tenant) {
   ${g.prescrizioniIdoneita ? `
   <div class="section">
     <h2>Prescrizioni</h2>
-    <div class="text-block">${g.prescrizioniIdoneita}</div>
+    <div class="text-block">${decodeCodesToLabels(g.prescrizioniIdoneita, PRESCRIZIONI_CODE_MAP)}</div>
   </div>` : ''}
 
   ${g.limitazioni ? `
   <div class="section">
     <h2>Limitazioni</h2>
-    <div class="text-block">${g.limitazioni}</div>
+    <div class="text-block">${decodeCodesToLabels(g.limitazioni, LIMITAZIONI_CODE_MAP)}</div>
   </div>` : ''}
 
   ${g.motivazioni ? `
@@ -359,13 +408,13 @@ function buildLavoratoreHtml(g, tenant) {
   ${tf.prescrizioniNormativa.length > 0 ? `
   <div class="section">
     <h2>Prescrizioni ai sensi della Normativa (Art. 41 D.Lgs 81/08)</h2>
-    ${renderMultiChoice(tf.prescrizioniNormativa)}
+    ${renderMultiChoice(tf.prescrizioniNormativa.map(c => PRESCRIZIONI_CODE_MAP[c] || LIMITAZIONI_CODE_MAP[c] || c))}
   </div>` : ''}
 
   ${tf.limitazioniMansione.length > 0 ? `
   <div class="section">
     <h2>Limitazioni alla Mansione Specifica</h2>
-    ${renderMultiChoice(tf.limitazioniMansione)}
+    ${renderMultiChoice(tf.limitazioniMansione.map(c => LIMITAZIONI_CODE_MAP[c] || PRESCRIZIONI_CODE_MAP[c] || c))}
   </div>` : ''}
 
   ${tf.prescrizioniFollowUp ? `
@@ -477,7 +526,7 @@ function buildDatoreHtml(g, tenant) {
     <p style="font-size:9pt;color:#6b7280;margin-bottom:8px;font-style:italic;">
       Le seguenti prescrizioni operative sono comunicabili al datore di lavoro ai sensi dell'Art. 41 c.7.
     </p>
-    <div class="text-block">${g.prescrizioniIdoneita}</div>
+    <div class="text-block">${decodeCodesToLabels(g.prescrizioniIdoneita, PRESCRIZIONI_CODE_MAP)}</div>
   </div>` : ''}
 
   ${g.limitazioni ? `
@@ -486,19 +535,19 @@ function buildDatoreHtml(g, tenant) {
     <p style="font-size:9pt;color:#6b7280;margin-bottom:8px;font-style:italic;">
       Limitazioni da rispettare in ambito lavorativo.
     </p>
-    <div class="text-block">${g.limitazioni}</div>
+    <div class="text-block">${decodeCodesToLabels(g.limitazioni, LIMITAZIONI_CODE_MAP)}</div>
   </div>` : ''}
 
   ${tf.prescrizioniNormativa.length > 0 ? `
   <div class="section">
     <h2>Prescrizioni ai sensi della Normativa (Art. 41 D.Lgs 81/08)</h2>
-    ${renderMultiChoice(tf.prescrizioniNormativa)}
+    ${renderMultiChoice(tf.prescrizioniNormativa.map(c => PRESCRIZIONI_CODE_MAP[c] || LIMITAZIONI_CODE_MAP[c] || c))}
   </div>` : ''}
 
   ${tf.limitazioniMansione.length > 0 ? `
   <div class="section">
     <h2>Limitazioni alla Mansione Specifica</h2>
-    ${renderMultiChoice(tf.limitazioniMansione)}
+    ${renderMultiChoice(tf.limitazioniMansione.map(c => LIMITAZIONI_CODE_MAP[c] || PRESCRIZIONI_CODE_MAP[c] || c))}
   </div>` : ''}
 
   ${tf.prescrizioniAzienda.length > 0 ? `
@@ -507,7 +556,7 @@ function buildDatoreHtml(g, tenant) {
     <p style="font-size:9pt;color:#6b7280;margin-bottom:8px;font-style:italic;">
       Disposizioni operative comunicate al datore di lavoro ai sensi dell'Art. 41 c.7 D.Lgs 81/08.
     </p>
-    ${renderMultiChoice(tf.prescrizioniAzienda)}
+    ${renderMultiChoice(tf.prescrizioniAzienda.map(c => PRESCRIZIONI_CODE_MAP[c] || LIMITAZIONI_CODE_MAP[c] || c))}
   </div>` : ''}
 
   <div class="gdpr-note">

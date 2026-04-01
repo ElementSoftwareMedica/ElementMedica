@@ -746,8 +746,41 @@ export const VisitaPage: React.FC = () => {
         // Segnala che la visita è stata completata in questa sessione (usato per espandere la sidebar nelle visite secondarie)
         setVisitaCompletataThisSession(true);
         // Apri modal giudizio idoneità per visita MDL completata
-        if (isMDLVisit) setIsGiudizioModalOpen(true);
-    }, [handleComplete, isMDLVisit, isNew, visitaId, primaryMansioneId, paziente?.id, prossimoControllo, appuntamento?.dataOra, prestazioniNonProgrammare, pianoDateOverrides, prestazioniAggiuntive]);
+        // SOLO se il campo "Giudizio di Idoneità alla Mansione" nel template non è stato compilato
+        if (isMDLVisit) {
+            const giudizioFieldValue = values?.giudizio_idoneita;
+            if (!giudizioFieldValue || String(giudizioFieldValue).trim() === '') {
+                setIsGiudizioModalOpen(true);
+            } else if (paziente?.id && visitaId) {
+                // Campo compilato → auto-genera giudizio senza aprire il modal
+                const GIUDIZIO_MAP: Record<string, string> = {
+                    'IDONEO alla mansione specifica': 'IDONEO',
+                    'IDONEO CON PRESCRIZIONI alla mansione specifica': 'IDONEO_CON_PRESCRIZIONI',
+                    'IDONEO CON LIMITAZIONI alla mansione specifica': 'IDONEO_CON_LIMITAZIONI',
+                    'TEMPORANEAMENTE NON IDONEO alla mansione specifica': 'NON_IDONEO_TEMPORANEO',
+                    'NON IDONEO alla mansione specifica': 'NON_IDONEO_PERMANENTE',
+                };
+                const tipoGiudizio = GIUDIZIO_MAP[String(giudizioFieldValue)] || 'IDONEO';
+                try {
+                    const giudizio = await giudiziIdoneitaApi.create({
+                        personId: paziente.id,
+                        medicoCompetenteId: visita?.medicoId ?? undefined,
+                        tipoGiudizio,
+                        visitaId,
+                        mansioneIds: primaryMansioneId ? [primaryMansioneId] : [],
+                        prescrizioniIdoneita: values?.prescrizioni ? String(values.prescrizioni) : undefined,
+                        limitazioni: values?.limitazioni ? String(values.limitazioni) : undefined,
+                    } as Parameters<typeof giudiziIdoneitaApi.create>[0]);
+                    if (giudizio?.id) {
+                        await giudiziIdoneitaApi.generateDocuments(giudizio.id);
+                        showToast({ type: 'success', message: 'Giudizio di idoneità generato automaticamente (Art. 41 c.7)' });
+                    }
+                } catch {
+                    showToast({ type: 'warning', message: 'Attenzione: giudizio di idoneità non generato automaticamente. Crealo manualmente.' });
+                }
+            }
+        }
+    }, [handleComplete, isMDLVisit, isNew, visitaId, primaryMansioneId, paziente?.id, prossimoControllo, appuntamento?.dataOra, prestazioniNonProgrammare, pianoDateOverrides, prestazioniAggiuntive, values, visita?.medicoId, showToast]);
 
     const handleCompleteWithFirmaCheck = useCallback(async () => {
         if (!questionariCompilati || questionariCompilati.length === 0) {
@@ -1511,6 +1544,46 @@ export const VisitaPage: React.FC = () => {
             );
         }
     }, [visita?.datiStrutturati, appuntamento]);
+
+    // P72_FIX: Auto-merge prestazioni from protocollo scadenze into prestazioniAggiuntive
+    // When an MDL visit has scadenze but the booking didn't include all prestazioni as AppuntamentoPrestazione,
+    // auto-add the missing ones so the PrestazioniCard shows the full protocol.
+    const scadenzeAutoMergeRef = useRef(false);
+    useEffect(() => {
+        if (!isMDLVisit || !scadenzePersona?.length || scadenzeAutoMergeRef.current) return;
+        // Wait until initial prestazioni are loaded (either from datiStrutturati or appuntamento)
+        if (visita?.id === undefined && !appuntamento) return;
+
+        const mainPrestazioneId = appuntamento?.prestazioneId || visita?.prestazioneId;
+        const existingIds = new Set([
+            ...(mainPrestazioneId ? [mainPrestazioneId] : []),
+            ...prestazioniAggiuntive.map(p => p.id)
+        ]);
+
+        // Find scadenze with prestazioneId not already displayed (exclude questionari)
+        const missing = scadenzePersona
+            .filter(g => g.prestazioneId && !existingIds.has(g.prestazioneId) && g.prestazioneTipo !== 'QUESTIONARIO')
+            .map(g => ({
+                id: g.prestazioneId!,
+                codice: g.prestazioneCodice || '',
+                nome: g.prestazioneName || '',
+                aCaricoTipo: 'azienda' as const,
+            }));
+
+        if (missing.length > 0) {
+            scadenzeAutoMergeRef.current = true;
+            setPrestazioniAggiuntive(prev => {
+                const ids = new Set(prev.map(p => p.id));
+                const toAdd = missing.filter(m => !ids.has(m.id));
+                if (toAdd.length === 0) return prev;
+                const merged = [...prev, ...toAdd];
+                handleFieldChange('_prestazioniAggiuntive', merged);
+                return merged;
+            });
+        } else {
+            scadenzeAutoMergeRef.current = true;
+        }
+    }, [isMDLVisit, scadenzePersona, prestazioniAggiuntive, visita?.id, appuntamento, handleFieldChange]);
 
     // Convert prestazione to PrestazioneItem
     // Note: _prezzoTariffario is enriched on appuntamento.prestazione (via AppuntamentoService.getById),

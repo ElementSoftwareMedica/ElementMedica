@@ -31,7 +31,7 @@ const AccessBadge: React.FC<{ tenant: AccessibleTenant }> = ({ tenant }) => {
       </span>
     );
   }
-  
+
   if (tenant.isPrimary) {
     return (
       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
@@ -40,7 +40,7 @@ const AccessBadge: React.FC<{ tenant: AccessibleTenant }> = ({ tenant }) => {
       </span>
     );
   }
-  
+
   return null;
 };
 
@@ -51,7 +51,7 @@ const FeatureTags: React.FC<{ features: string[] }> = ({ features }) => {
   const maxShow = 3;
   const shown = features.slice(0, maxShow);
   const remaining = features.length - maxShow;
-  
+
   return (
     <div className="flex flex-wrap gap-1 mt-1">
       {shown.map(feature => (
@@ -88,10 +88,10 @@ export const TenantSelector: React.FC<TenantSelectorProps> = ({
     hasMultipleTenants,
     switchTenant,
   } = useTenantAccess();
-  
+
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  
+
   // Chiudi dropdown quando si clicca fuori
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -99,11 +99,11 @@ export const TenantSelector: React.FC<TenantSelectorProps> = ({
         setIsOpen(false);
       }
     };
-    
+
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-  
+
   // Non mostrare se non ci sono tenant o solo uno (e non è admin)
   if (loading) {
     return (
@@ -113,7 +113,7 @@ export const TenantSelector: React.FC<TenantSelectorProps> = ({
       </div>
     );
   }
-  
+
   if (!hasMultipleTenants || !currentTenant) {
     // Mostra tenant singolo senza dropdown
     if (currentTenant) {
@@ -126,20 +126,20 @@ export const TenantSelector: React.FC<TenantSelectorProps> = ({
     }
     return null;
   }
-  
+
   const handleTenantSelect = async (tenant: AccessibleTenant) => {
     if (tenant.id === currentTenant?.id) {
       setIsOpen(false);
       return;
     }
-    
+
     const success = await switchTenant(tenant.id);
     if (success) {
       setIsOpen(false);
       onTenantChange?.(tenant);
     }
   };
-  
+
   return (
     <div ref={dropdownRef} className={`relative ${className}`}>
       {/* Trigger button */}
@@ -166,7 +166,7 @@ export const TenantSelector: React.FC<TenantSelectorProps> = ({
         </span>
         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
-      
+
       {/* Dropdown menu */}
       {isOpen && (
         <div className="absolute z-50 mt-2 w-72 rounded-lg shadow-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 overflow-hidden">
@@ -175,11 +175,11 @@ export const TenantSelector: React.FC<TenantSelectorProps> = ({
               Seleziona Tenant
             </span>
           </div>
-          
+
           <div className="max-h-64 overflow-y-auto">
             {accessibleTenants.map((tenant) => {
               const isSelected = tenant.id === currentTenant?.id;
-              
+
               return (
                 <button
                   key={tenant.id}
@@ -200,7 +200,7 @@ export const TenantSelector: React.FC<TenantSelectorProps> = ({
                       <div className="w-4 h-4" />
                     )}
                   </div>
-                  
+
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className={`font-medium truncate ${isSelected ? 'text-blue-600' : 'text-gray-700 dark:text-gray-300'}`}>
@@ -208,13 +208,13 @@ export const TenantSelector: React.FC<TenantSelectorProps> = ({
                       </span>
                       <AccessBadge tenant={tenant} />
                     </div>
-                    
+
                     {tenant.slug && (
                       <span className="text-xs text-gray-500 dark:text-gray-400">
                         {tenant.slug}
                       </span>
                     )}
-                    
+
                     {showFeatures && tenant.enabledFeatures.length > 0 && (
                       <FeatureTags features={tenant.enabledFeatures} />
                     )}
@@ -223,7 +223,7 @@ export const TenantSelector: React.FC<TenantSelectorProps> = ({
               );
             })}
           </div>
-          
+
           {accessibleTenants.length === 0 && (
             <div className="px-3 py-4 text-center text-sm text-gray-500">
               Nessun tenant disponibile

@@ -97,6 +97,12 @@ const GiudizioEmailService = {
 
         if (!giudizio) throw new Error(`GiudizioIdoneita ${giudizioId} non trovato`);
 
+        // BOZZA: non inviare notifiche – il giudizio non è definitivo
+        if (giudizio.stato === 'BOZZA') {
+            logger.info('GiudizioEmailService: skip notifica per giudizio in BOZZA', { giudizioId });
+            return { lavoratore: 'skipped-bozza', azienda: 'skipped-bozza' };
+        }
+
         const { tenantId } = giudizio;
         const clinicSettings = {
             name: giudizio.tenant.name,

@@ -28,7 +28,8 @@ import {
     mediciApi,
     visiteApi,
     type GiudizioIdoneita,
-    type TipoGiudizioIdoneita
+    type TipoGiudizioIdoneita,
+    type StatoGiudizio
 } from '../../../../services/clinicaApi';
 import { apiGet } from '../../../../services/api';
 import { useTenantFilter } from '../../../../context/TenantFilterContext';
@@ -317,9 +318,16 @@ const GiudizioFormModal: React.FC<GiudizioFormModalProps> = ({
     };
 
     // Submit handler
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent, asBozza = false) => {
         e.preventDefault();
-        if (!validate()) return;
+        if (!asBozza && !validate()) return;
+        // For bozza: only require personId and medicoCompetenteId
+        if (asBozza) {
+            const bozzaErrors: Record<string, string> = {};
+            if (!formState.personId) bozzaErrors.personId = 'Seleziona un lavoratore';
+            if (!formState.medicoCompetenteId) bozzaErrors.medicoCompetenteId = 'Seleziona il medico competente';
+            if (Object.keys(bozzaErrors).length > 0) { setErrors(bozzaErrors); return; }
+        }
 
         setIsSubmitting(true);
         try {
@@ -327,6 +335,7 @@ const GiudizioFormModal: React.FC<GiudizioFormModalProps> = ({
                 personId: formState.personId,
                 medicoCompetenteId: formState.medicoCompetenteId,
                 tipoGiudizio: formState.tipoGiudizio,
+                ...(asBozza && { stato: 'BOZZA' as StatoGiudizio }),
                 ...(formState.visitaId && { visitaId: formState.visitaId }),
                 ...(formState.mansioneIds.length > 0 && { mansioneIds: formState.mansioneIds }),
                 ...(formState.dataScadenza && { dataScadenza: new Date(formState.dataScadenza).toISOString() }),
@@ -655,6 +664,15 @@ const GiudizioFormModal: React.FC<GiudizioFormModalProps> = ({
                         disabled={isSubmitting}
                     >
                         Annulla
+                    </button>
+                    <button
+                        type="button"
+                        onClick={(e) => handleSubmit(e as unknown as React.FormEvent, true)}
+                        className="px-4 py-2 text-amber-700 bg-amber-50 border border-amber-300 rounded-lg hover:bg-amber-100 disabled:opacity-50 flex items-center gap-2"
+                        disabled={isSubmitting || isLoading}
+                    >
+                        {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                        Salva come Bozza
                     </button>
                     <button
                         type="submit"
