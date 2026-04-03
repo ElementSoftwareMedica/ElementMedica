@@ -1,0 +1,71 @@
+appId: com.elementsoftware.elementmedica-desktop
+productName: ElementMedica Desktop
+copyright: Copyright © 2026 Element Software S.r.l.
+
+directories:
+  buildResources: resources
+  output: release
+
+files:
+  - out/**/*
+  - "!out/**/*.map"
+
+# ========== Windows ==========
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: resources/icon.ico
+  artifactName: "${productName}-${version}-Setup.${ext}"
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+  shortcutName: ElementMedica Desktop
+  artifactName: "${productName}-${version}-Setup.${ext}"
+
+# ========== macOS ==========
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
+      arch:
+        - x64
+        - arm64
+  icon: resources/icon.icns
+  category: public.app-category.medical
+  hardenedRuntime: true
+  entitlements: resources/entitlements.mac.plist
+  entitlementsInherit: resources/entitlements.mac.plist
+  artifactName: "${productName}-${version}-${arch}.${ext}"
+
+dmg:
+  artifactName: "${productName}-${version}-${arch}.${ext}"
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+# ========== Linux (optional) ==========
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+  icon: resources/icon.png
+  category: Office
+
+# ========== Auto-update ==========
+publish:
+  provider: generic
+  url: https://updates.elementmedica.com/desktop
+  channel: latest
