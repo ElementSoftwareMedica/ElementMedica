@@ -40,9 +40,8 @@ mac:
         - arm64
   icon: resources/icon.icns
   category: public.app-category.medical
-  hardenedRuntime: true
-  entitlements: resources/entitlements.mac.plist
-  entitlementsInherit: resources/entitlements.mac.plist
+  hardenedRuntime: false
+  gatekeeperAssess: false
   artifactName: "ElementMedica-Desktop-latest-${arch}.${ext}"
 
 dmg:

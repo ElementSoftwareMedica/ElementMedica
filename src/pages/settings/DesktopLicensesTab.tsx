@@ -216,6 +216,29 @@ const DesktopLicensesTab: React.FC = () => {
               </a>
             </div>
 
+            {/* macOS Gatekeeper warning */}
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-amber-900 mb-1">
+                  macOS: "app danneggiata" — come risolvere
+                </p>
+                <p className="text-sm text-amber-800 mb-2">
+                  macOS blocca le app non firmate con certificato Apple. Per aprire l'app la prima volta:
+                </p>
+                <ol className="space-y-1 text-sm text-amber-800">
+                  <li><strong>Metodo 1 (semplice):</strong> Tasto destro sull'app → <em>Apri</em> → clicca <em>Apri</em> nel popup. Funziona solo la prima volta.</li>
+                  <li><strong>Metodo 2 (Terminale):</strong> Apri il Terminale e incolla:</li>
+                </ol>
+                <pre className="mt-2 bg-amber-100 border border-amber-300 rounded-lg px-3 py-2 text-xs text-amber-900 font-mono overflow-x-auto select-all">
+                  {'xattr -cr "/Applications/ElementMedica Desktop.app"'}
+                </pre>
+                <p className="text-xs text-amber-700 mt-2">
+                  Poi riavvia l'app normalmente. Il problema non si ripresenterà.
+                </p>
+              </div>
+            </div>
+
             {/* Installation steps */}
             <div className="bg-white rounded-xl border border-gray-200 p-4">
               <h4 className="text-sm font-semibold text-gray-900 flex items-center gap-1.5 mb-3">
