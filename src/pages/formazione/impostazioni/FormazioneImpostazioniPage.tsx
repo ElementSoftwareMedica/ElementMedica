@@ -16,7 +16,8 @@ import {
     Save,
     Palette,
     PenTool,
-    Activity
+    Activity,
+    MonitorDown
 } from 'lucide-react';
 import { ThemeSelector } from '../../../components/settings/ThemeSelector';
 
@@ -48,6 +49,13 @@ const settingsSections: SettingsSection[] = [
         description: 'Visualizza le attività recenti del sistema',
         icon: Activity,
         link: '/management/logs'
+    },
+    {
+        id: 'desktop-app',
+        title: 'App Desktop MDL',
+        description: 'Scarica l’app per lavorare offline durante le visite in azienda',
+        icon: MonitorDown,
+        link: '/settings/desktop'
     }
 ];
 

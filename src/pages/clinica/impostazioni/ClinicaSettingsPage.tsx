@@ -24,7 +24,8 @@ import {
     Stethoscope,
     Palette,
     PenTool,
-    Cable
+    Cable,
+    MonitorDown
 } from 'lucide-react';
 import { ThemeSelector } from '../../../components/settings/ThemeSelector';
 
@@ -117,6 +118,13 @@ const settingsSections: SettingsSection[] = [
         description: 'Gestione personale, medici e permessi',
         icon: Users,
         link: '/poliambulatorio/personale/medici'
+    },
+    {
+        id: 'desktop-app',
+        title: 'App Desktop MDL',
+        description: 'Scarica l’app per lavorare offline durante le visite in azienda',
+        icon: MonitorDown,
+        link: '/settings/desktop'
     }
 ];
 

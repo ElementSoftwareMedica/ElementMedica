@@ -179,24 +179,27 @@ const DesktopLicensesTab: React.FC = () => {
             {/* Download buttons */}
             <div className="flex flex-wrap gap-3 mb-5">
               <a
-                href="https://releases.elementmedica.com/desktop/ElementMedica-Desktop-latest-Setup.exe"
-                download
+                href="https://www.elementmedica.com/downloads/desktop/ElementMedica-Desktop-latest-Setup.exe"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-xl shadow transition-colors"
               >
                 <ArrowDownToLine className="w-4 h-4" />
                 Scarica per Windows (.exe)
               </a>
               <a
-                href="https://releases.elementmedica.com/desktop/ElementMedica-Desktop-latest-x64.dmg"
-                download
+                href="https://www.elementmedica.com/downloads/desktop/ElementMedica-Desktop-latest-x64.dmg"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 px-4 py-2.5 bg-gray-800 hover:bg-gray-900 text-white text-sm font-medium rounded-xl shadow transition-colors"
               >
                 <Apple className="w-4 h-4" />
                 Scarica per macOS (.dmg)
               </a>
               <a
-                href="https://releases.elementmedica.com/desktop/ElementMedica-Desktop-latest-x64.AppImage"
-                download
+                href="https://www.elementmedica.com/downloads/desktop/ElementMedica-Desktop-latest-x64.AppImage"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 px-4 py-2.5 bg-white hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-xl shadow border border-gray-200 transition-colors"
               >
                 <Download className="w-4 h-4" />
