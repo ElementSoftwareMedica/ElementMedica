@@ -55,7 +55,7 @@ const settingsSections: SettingsSection[] = [
         title: 'App Desktop MDL',
         description: 'Scarica l’app per lavorare offline durante le visite in azienda',
         icon: MonitorDown,
-        link: '/settings/desktop'
+        link: '/formazione/impostazioni/desktop'
     }
 ];
 

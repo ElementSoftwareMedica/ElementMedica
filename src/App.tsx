@@ -49,7 +49,8 @@ import TemplateListPageLazy from './pages/templates/TemplateListPage.lazy';
 import TemplateEditorLazy from './pages/templates/TemplateEditor.lazy';
 
 // Settings & Admin
-import { SettingsLazy } from './pages/settings/Settings.lazy';
+// DesktopLicensesTab — used in both /poliambulatorio/impostazioni/desktop and /formazione/impostazioni/desktop
+const DesktopLicensesTabLazy = React.lazy(() => import('./pages/settings/DesktopLicensesTab'));
 import TenantsPageLazy from './pages/tenants/TenantsPage.lazy';
 import GoogleOAuthCallbackLazy from './pages/settings/templates/GoogleOAuthCallback.lazy';
 // Project 43 - Management Page
@@ -480,11 +481,8 @@ function App() {
                     </Suspense>
                   </Layout>
                 } />
-                <Route path="/settings/*" element={
-                  <Layout>
-                    <SettingsLazy />
-                  </Layout>
-                } />
+                {/* /settings/* rimosso — l'App Desktop è ora in /poliambulatorio/impostazioni/desktop */}
+                <Route path="/settings/*" element={<Navigate to="/poliambulatorio/impostazioni" replace />} />
                 {/* Project 43 - Management Page with dedicated Layout */}
                 <Route path="/management/*" element={
                   <ManagementLayout>
@@ -647,6 +645,15 @@ function App() {
                   </Layout>
                 } />
 
+                {/* App Desktop - accessibile sotto formazione/impostazioni */}
+                <Route path="/formazione/impostazioni/desktop" element={
+                  <Layout>
+                    <Suspense fallback={<LoadingFallback />}>
+                      <DesktopLicensesTabLazy />
+                    </Suspense>
+                  </Layout>
+                } />
+
                 {/* Firma Formatori - ElementSicurezza */}
                 <Route path="/formazione/impostazioni/firma" element={
                   <Layout>
@@ -783,6 +790,13 @@ function App() {
                   <Route path="impostazioni/bridge" element={<BridgeSettingsPageLazy />} />
                   <Route path="impostazioni/email-template" element={<EmailTemplateSettingsPageLazy />} />
                   <Route path="impostazioni/consensi-firma" element={<ConsensiPageLazy />} />
+
+                  {/* App Desktop — accessibile direttamente da /poliambulatorio/impostazioni/desktop */}
+                  <Route path="impostazioni/desktop" element={
+                    <Suspense fallback={<LoadingFallback />}>
+                      <DesktopLicensesTabLazy />
+                    </Suspense>
+                  } />
 
                   {/* P66 - SCADENZE CENTRALIZZATE */}
                   <Route path="scadenze" element={<ScadenzePageLazy />} />
