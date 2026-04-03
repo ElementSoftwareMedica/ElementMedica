@@ -17,7 +17,7 @@ win:
       arch:
         - x64
   icon: resources/icon.ico
-  artifactName: "${productName}-${version}-Setup.${ext}"
+  artifactName: "ElementMedica-Desktop-latest-Setup.${ext}"
 
 nsis:
   oneClick: false
@@ -25,7 +25,7 @@ nsis:
   allowToChangeInstallationDirectory: true
   deleteAppDataOnUninstall: false
   shortcutName: ElementMedica Desktop
-  artifactName: "${productName}-${version}-Setup.${ext}"
+  artifactName: "ElementMedica-Desktop-latest-Setup.${ext}"
 
 # ========== macOS ==========
 mac:
@@ -43,10 +43,10 @@ mac:
   hardenedRuntime: true
   entitlements: resources/entitlements.mac.plist
   entitlementsInherit: resources/entitlements.mac.plist
-  artifactName: "${productName}-${version}-${arch}.${ext}"
+  artifactName: "ElementMedica-Desktop-latest-${arch}.${ext}"
 
 dmg:
-  artifactName: "${productName}-${version}-${arch}.${ext}"
+  artifactName: "ElementMedica-Desktop-latest-${arch}.${ext}"
   contents:
     - x: 130
       y: 220
@@ -63,6 +63,7 @@ linux:
         - x64
   icon: resources/icon.png
   category: Office
+  artifactName: "ElementMedica-Desktop-latest-${arch}.${ext}"
 
 # ========== Auto-update ==========
 publish:

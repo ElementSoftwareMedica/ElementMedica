@@ -188,13 +188,22 @@ const DesktopLicensesTab: React.FC = () => {
                 Scarica per Windows (.exe)
               </a>
               <a
-                href="https://www.elementmedica.com/downloads/desktop/ElementMedica-Desktop-latest-x64.dmg"
+                href="https://www.elementmedica.com/downloads/desktop/ElementMedica-Desktop-latest-arm64.dmg"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 px-4 py-2.5 bg-gray-800 hover:bg-gray-900 text-white text-sm font-medium rounded-xl shadow transition-colors"
               >
                 <Apple className="w-4 h-4" />
-                Scarica per macOS (.dmg)
+                Scarica per macOS Apple Silicon (.dmg)
+              </a>
+              <a
+                href="https://www.elementmedica.com/downloads/desktop/ElementMedica-Desktop-latest-x64.dmg"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-gray-700 hover:bg-gray-800 text-white text-sm font-medium rounded-xl shadow transition-colors"
+              >
+                <Apple className="w-4 h-4" />
+                Scarica per macOS Intel (.dmg)
               </a>
               <a
                 href="https://www.elementmedica.com/downloads/desktop/ElementMedica-Desktop-latest-x64.AppImage"
