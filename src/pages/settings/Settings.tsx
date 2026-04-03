@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import UsersTab from './UsersTab';
 import UserPreferences from './UserPreferences';
+import DesktopLicensesTab from './DesktopLicensesTab';
 import { useAuth } from '../../context/AuthContext';
 import { Settings as SettingsIcon } from 'lucide-react';
 import { TabNavigation } from '../../components/shared';
@@ -9,14 +10,13 @@ import { TabNavigation } from '../../components/shared';
 const Settings: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { hasPermission, user } = useAuth();
-
-  // Helper per verificare se l'utente è admin
-  const isAdmin = user?.role === 'Admin' || user?.roles?.includes('ADMIN') || user?.roles?.includes('SUPER_ADMIN');
+  const { hasPermission } = useAuth();
 
   // Determina quale tab è attivo dalla URL o usa il default
   const getActiveTab = () => {
     if (location.pathname.endsWith('/users')) return 'users';
+    if (location.pathname.endsWith('/desktop')) return 'desktop';
+    if (location.pathname.endsWith('/general')) return 'general';
     return 'general';
   };
 
@@ -26,7 +26,7 @@ const Settings: React.FC = () => {
   // Redirect /settings/logs → /management/logs (tab rimosso, i log sono in Management)
   useEffect(() => {
     if (location.pathname === '/settings' || location.pathname === '/settings/') {
-      navigate('/settings/users', { replace: true });
+      navigate('/settings/general', { replace: true });
     }
     if (location.pathname.endsWith('/logs')) {
       navigate('/management/logs', { replace: true });
@@ -47,6 +47,10 @@ const Settings: React.FC = () => {
   if (hasPermission('users', 'read')) {
     tabs.push({ id: 'users', label: 'Utenti' });
   }
+
+  // Tab App Desktop — visibile a tutti gli utenti autenticati (download + info)
+  // La gestione licenze dentro il tab è comunque protetta da CRUDButton
+  tabs.push({ id: 'desktop', label: 'App Desktop' });
   // Nota: il tab "Log Attività" è stato rimosso — i log si trovano in Management → Log Attività
 
   return (
@@ -71,6 +75,8 @@ const Settings: React.FC = () => {
           {activeTab === 'general' && <UserPreferences />}
 
           {activeTab === 'users' && hasPermission('users', 'read') && <UsersTab />}
+
+          {activeTab === 'desktop' && <DesktopLicensesTab />}
         </div>
       </div>
     </div>

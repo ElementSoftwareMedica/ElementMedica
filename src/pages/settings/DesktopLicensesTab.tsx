@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { CRUDButton, CRUDPrimaryButton } from '../../components/shared/CRUDButton';
 import { useToast } from '../../hooks/useToast';
+import { useAuth } from '../../context/AuthContext';
 
 interface DesktopLicense {
   id: string;
@@ -71,7 +72,10 @@ const STATUS_COLORS: Record<string, string> = {
 const DesktopLicensesTab: React.FC = () => {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  const { user } = useAuth();
   const { getTenantFilterParams, tenantFilterKey, isReady } = useTenantFilter();
+
+  const isAdmin = user?.role === 'Admin' || user?.roles?.includes('ADMIN') || user?.roles?.includes('SUPER_ADMIN');
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newLabel, setNewLabel] = useState('');
@@ -80,11 +84,11 @@ const DesktopLicensesTab: React.FC = () => {
   const [revokeId, setRevokeId] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  // Load licenses
+  // Load licenses — only for admins
   const { data, isLoading, isError, refetch } = useQuery<DesktopLicensesResponse>({
     queryKey: ['desktop-licenses', tenantFilterKey],
     queryFn: () => apiGet('/api/v1/desktop-licenses', getTenantFilterParams()),
-    enabled: isReady,
+    enabled: isReady && isAdmin,
   });
 
   const licenses = data?.data ?? [];
@@ -151,31 +155,12 @@ const DesktopLicensesTab: React.FC = () => {
     return Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86_400_000);
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <Loader2 className="w-6 h-6 text-teal-600 animate-spin mr-2" />
-        <span className="text-gray-500">Caricamento licenze...</span>
-      </div>
-    );
-  }
-
-  if (isError) {
-    return (
-      <div className="flex items-center justify-center py-16 gap-3 text-red-600">
-        <AlertTriangle className="w-5 h-5" />
-        <span>Errore nel caricamento. Verifica che la funzionalità Desktop App MDL sia abilitata per questo tenant.</span>
-        <CRUDButton onClick={() => refetch()}><RefreshCw className="w-4 h-4" /> Riprova</CRUDButton>
-      </div>
-    );
-  }
-
   const daysExpiry = subscription ? getDaysUntilExpiry(subscription.subscriptionExpiresAt) : null;
 
   return (
     <div className="space-y-6">
 
-      {/* ===== DOWNLOAD CARD ===== */}
+      {/* ===== DOWNLOAD CARD — visible to ALL users ===== */}
       <div className="rounded-2xl border border-teal-200 bg-gradient-to-br from-teal-50 to-white p-6">
         <div className="flex flex-col md:flex-row md:items-start gap-6">
           {/* Icon + title */}
@@ -255,8 +240,36 @@ const DesktopLicensesTab: React.FC = () => {
         </div>
       </div>
 
+      {/* ===== LICENSE MANAGEMENT — visible only to admins ===== */}
+      {!isAdmin && (
+        <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 flex items-start gap-3">
+          <KeyRound className="w-5 h-5 text-blue-500 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-blue-900">Hai bisogno di una chiave di licenza?</p>
+            <p className="text-sm text-blue-700 mt-0.5">
+              Contatta il tuo amministratore di sistema per ricevere il codice di attivazione da inserire al primo avvio dell'app.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {isAdmin && isLoading && (
+        <div className="flex items-center justify-center py-10">
+          <Loader2 className="w-6 h-6 text-teal-600 animate-spin mr-2" />
+          <span className="text-gray-500">Caricamento licenze...</span>
+        </div>
+      )}
+
+      {isAdmin && isError && (
+        <div className="flex items-center justify-center py-10 gap-3 text-red-600">
+          <AlertTriangle className="w-5 h-5" />
+          <span>Errore nel caricamento licenze.</span>
+          <CRUDButton onClick={() => refetch()}><RefreshCw className="w-4 h-4" /> Riprova</CRUDButton>
+        </div>
+      )}
+
       {/* Subscription status card */}
-      {subscription && (
+      {isAdmin && subscription && (
         <div className={`rounded-xl border p-4 flex items-start gap-4 ${
           daysExpiry !== null && daysExpiry <= 30
             ? 'bg-amber-50 border-amber-200'
@@ -294,7 +307,7 @@ const DesktopLicensesTab: React.FC = () => {
       )}
 
       {/* Header + create button */}
-      <div className="flex items-center justify-between">
+      {isAdmin && <div className="flex items-center justify-between">
         <div>
           <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
             <Monitor className="w-4 h-4 text-teal-600" />
@@ -309,10 +322,10 @@ const DesktopLicensesTab: React.FC = () => {
         >
           <Plus className="w-4 h-4" /> Nuova Licenza
         </CRUDPrimaryButton>
-      </div>
+      </div>}
 
       {/* Licenses table */}
-      {licenses.length === 0 ? (
+      {isAdmin && licenses.length === 0 && (
         <div className="text-center py-12 border-2 border-dashed border-gray-200 rounded-xl">
           <KeyRound className="w-10 h-10 text-gray-300 mx-auto mb-3" />
           <p className="text-gray-500 font-medium">Nessuna licenza creata</p>
@@ -320,7 +333,9 @@ const DesktopLicensesTab: React.FC = () => {
             Crea una nuova licenza e fornisci il codice all'utente per attivare l'app sul PC.
           </p>
         </div>
-      ) : (
+      )}
+
+      {isAdmin && licenses.length > 0 && (
         <div className="overflow-x-auto rounded-xl border border-gray-200">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
@@ -452,7 +467,7 @@ const DesktopLicensesTab: React.FC = () => {
       )}
 
       {/* Create modal */}
-      {showCreateModal && (
+      {isAdmin && showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-1">Nuova Licenza Desktop</h3>
@@ -489,7 +504,7 @@ const DesktopLicensesTab: React.FC = () => {
       )}
 
       {/* Revoke confirmation modal */}
-      {revokeId && (
+      {isAdmin && revokeId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 text-center">
             <div className="inline-flex items-center justify-center w-12 h-12 bg-red-100 rounded-full mb-4">
