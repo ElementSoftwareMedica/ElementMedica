@@ -22,6 +22,14 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
     console.error('[ErrorBoundary]', error, errorInfo.componentStack)
+    // Report to crash reporter (P98 §6.4)
+    if (typeof window !== 'undefined' && (window as typeof window & { desktopApi?: { crash?: { report: (p: object) => void } } }).desktopApi?.crash) {
+      ;(window as typeof window & { desktopApi: { crash: { report: (p: object) => void } } }).desktopApi.crash.report({
+        message: error.message,
+        stack: error.stack,
+        extra: { componentStack: errorInfo.componentStack ?? undefined },
+      })
+    }
   }
 
   handleReset = (): void => {

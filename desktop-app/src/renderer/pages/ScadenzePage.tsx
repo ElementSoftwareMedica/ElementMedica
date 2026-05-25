@@ -8,10 +8,11 @@ import {
   CheckCircle2,
   Calendar,
   RefreshCw,
-  User,
   Building2,
-  Stethoscope
+  Stethoscope,
+  CheckCheck
 } from 'lucide-react'
+import { usePersistentPageState } from '../hooks/usePersistentPageState'
 
 interface Scadenza {
   id: string
@@ -51,9 +52,10 @@ function getUrgenza(dataScadenza: string): Urgenza {
 export function ScadenzePage(): JSX.Element {
   const [scadenze, setScadenze] = useState<Scadenza[]>([])
   const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [filterUrgenza, setFilterUrgenza] = useState<string>('')
-  const [showCompleted, setShowCompleted] = useState(false)
+  const [searchTerm, setSearchTerm] = usePersistentPageState('scadenze:searchTerm', '')
+  const [filterUrgenza, setFilterUrgenza] = usePersistentPageState<string>('scadenze:filterUrgenza', '')
+  const [showCompleted, setShowCompleted] = usePersistentPageState('scadenze:showCompleted', false)
+  const [markingDone, setMarkingDone] = useState<string | null>(null)
 
   const loadScadenze = useCallback(async () => {
     setLoading(true)
@@ -73,6 +75,30 @@ export function ScadenzePage(): JSX.Element {
   }, [])
 
   useEffect(() => { loadScadenze() }, [loadScadenze])
+
+  const handleMarkDone = useCallback(async (scadenzaId: string): Promise<void> => {
+    if (!window.desktopApi || markingDone) return
+    setMarkingDone(scadenzaId)
+    try {
+      const now = new Date().toISOString()
+      await window.desktopApi.db.update({
+        table: 'scadenze',
+        id: scadenzaId,
+        data: { eseguita: 1, dataEsecuzione: now }
+      })
+      await window.desktopApi.sync.enqueue({
+        type: 'UPDATE',
+        entity: 'scadenze',
+        entityId: scadenzaId,
+        payload: { status: 'COMPLETATA', completatoAt: now }
+      })
+      await loadScadenze()
+    } catch {
+      // Non-blocking
+    } finally {
+      setMarkingDone(null)
+    }
+  }, [loadScadenze, markingDone])
 
   const pending = scadenze.filter(s => !s.eseguita)
   const completed = scadenze.filter(s => !!s.eseguita)
@@ -223,19 +249,29 @@ export function ScadenzePage(): JSX.Element {
                     </div>
                   </div>
 
-                  {/* Date + days */}
-                  <div className="text-right shrink-0">
+                  {/* Date + days + action */}
+                  <div className="text-right shrink-0 flex flex-col items-end gap-2">
                     <p className="text-sm font-medium text-gray-900 flex items-center gap-1 justify-end">
                       <Calendar className="w-3.5 h-3.5 text-gray-400" />
                       {dataScad.toLocaleDateString('it-IT')}
                     </p>
-                    <p className={`text-xs font-medium mt-0.5 ${conf.text}`}>
+                    <p className={`text-xs font-medium ${conf.text}`}>
                       {daysUntil < 0
                         ? `Scaduto da ${Math.abs(daysUntil)} giorni`
                         : daysUntil === 0
                           ? 'Scade oggi'
                           : `Tra ${daysUntil} giorni`}
                     </p>
+                    {!showCompleted && (
+                      <button
+                        onClick={() => handleMarkDone(s.id)}
+                        disabled={markingDone === s.id}
+                        className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium bg-green-50 hover:bg-green-100 text-green-700 rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        <CheckCheck className="w-3 h-3" />
+                        {markingDone === s.id ? 'Salvataggio...' : 'Eseguita'}
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

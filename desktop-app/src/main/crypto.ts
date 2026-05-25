@@ -29,7 +29,8 @@ export function encryptValue(value: string): string {
   }
 
   if (!safeStorage.isEncryptionAvailable()) {
-    return value // Fallback: store unencrypted if OS keychain unavailable
+    console.warn('[GDPR] safeStorage non disponibile — campo PII salvato in chiaro')
+    return value
   }
 
   const encrypted = safeStorage.encryptString(value)
@@ -42,14 +43,15 @@ export function decryptValue(value: string): string {
   }
 
   if (!safeStorage.isEncryptionAvailable()) {
-    return value.slice(ENCRYPTION_PREFIX.length) // Best effort
+    return value // Impossibile decifrare senza OS keychain — restituisce il blob crittografato
   }
 
   try {
     const buffer = Buffer.from(value.slice(ENCRYPTION_PREFIX.length), 'base64')
     return safeStorage.decryptString(buffer)
-  } catch {
-    return value // Return as-is if decryption fails
+  } catch (e) {
+    console.error('[crypto] Decifratura fallita:', e)
+    return value // Restituisce il blob crittografato in caso di errore
   }
 }
 

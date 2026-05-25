@@ -10,14 +10,30 @@ files:
   - out/**/*
   - "!out/**/*.map"
 
+# ========== Medical Device Bridge — bundled binaries ==========
+# Windows: self-contained .exe built with pkg (node18-win-x64)
+# macOS:   arm64 + x64 binaries (pkg node18-macos-*), bridge-process.ts picks the right one
+# Linux:   not bundled (bridge must be installed separately)
+
 # ========== Windows ==========
 win:
+  extraResources:
+    - from: "../medical-device-bridge/dist/medical-bridge-win.exe"
+      to: "bridge/medical-bridge-win.exe"
   target:
     - target: nsis
       arch:
         - x64
   icon: resources/icon.ico
   artifactName: "ElementMedica-Desktop-latest-Setup.${ext}"
+  # Code signing — set env vars in CI/CD:
+  #   CSC_LINK: Path or URL to .pfx certificate
+  #   CSC_KEY_PASSWORD: PFX password
+  #   WIN_CSC_LINK: (alias for CSC_LINK on Windows)
+  #   WIN_CSC_KEY_PASSWORD: (alias for CSC_KEY_PASSWORD on Windows)
+  # When CSC_LINK is not set, build is unsigned (development ok, warn in prod)
+  signingHashAlgorithms:
+    - sha256
 
 nsis:
   oneClick: false
@@ -26,9 +42,15 @@ nsis:
   deleteAppDataOnUninstall: false
   shortcutName: ElementMedica Desktop
   artifactName: "ElementMedica-Desktop-latest-Setup.${ext}"
+  include: resources/nsis-uninstall-previous.nsh
 
 # ========== macOS ==========
 mac:
+  extraResources:
+    - from: "../medical-device-bridge/dist/medical-bridge-mac-arm64"
+      to: "bridge/medical-bridge-mac-arm64"
+    - from: "../medical-device-bridge/dist/medical-bridge-mac-x64"
+      to: "bridge/medical-bridge-mac-x64"
   target:
     - target: dmg
       arch:
@@ -40,8 +62,17 @@ mac:
         - arm64
   icon: resources/icon.icns
   category: public.app-category.medical
-  hardenedRuntime: false
+  # Code signing + notarization — set env vars in CI/CD:
+  #   APPLE_ID: apple_id@example.com
+  #   APPLE_APP_SPECIFIC_PASSWORD: app-specific password from appleid.apple.com
+  #   APPLE_TEAM_ID: Team ID from developer.apple.com
+  #   CSC_LINK: Path or URL to .p12 certificate
+  #   CSC_KEY_PASSWORD: .p12 password
+  # Hardened runtime is required for notarization (macOS 10.15+)
+  hardenedRuntime: true
   gatekeeperAssess: false
+  entitlements: resources/entitlements.mac.plist
+  entitlementsInherit: resources/entitlements.mac.plist
   artifactName: "ElementMedica-Desktop-latest-${arch}.${ext}"
 
 dmg:
@@ -67,5 +98,5 @@ linux:
 # ========== Auto-update ==========
 publish:
   provider: generic
-  url: https://updates.elementmedica.com/desktop
+  url: https://www.elementmedica.com/desktop-updates
   channel: latest

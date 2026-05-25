@@ -15,6 +15,11 @@ import * as desktopSyncController from '../controllers/desktop-sync.controller.j
 
 const router = express.Router();
 
+// Multer middleware lazily resolved (controller exports it)
+const attachmentUploadMiddleware = (req, res, next) => {
+  desktopSyncController.getAttachmentUploadMiddleware()(req, res, next);
+};
+
 // All desktop-sync routes require authentication
 router.use(authenticate);
 
@@ -28,6 +33,12 @@ router.get('/download-day',
   desktopSyncController.downloadDay
 );
 
+// GET /api/v1/desktop-sync/download-full-db - Download intero database tenant
+router.get('/download-full-db',
+  requirePermission('clinica:read'),
+  desktopSyncController.downloadFullDb
+);
+
 // ============================================
 // UPLOAD - Invio operazioni offline
 // ============================================
@@ -38,10 +49,29 @@ router.post('/upload-batch',
   desktopSyncController.uploadBatch
 );
 
+// POST /api/v1/desktop-sync/upload-attachment - Upload allegato binario da client desktop
+router.post('/upload-attachment',
+  requirePermission('clinica:write'),
+  attachmentUploadMiddleware,
+  desktopSyncController.uploadAttachment
+);
+
 // POST /api/v1/desktop-sync/check-conflicts - Controllo conflitti pre-upload
 router.post('/check-conflicts',
   requirePermission('clinica:read'),
   desktopSyncController.checkConflicts
+);
+
+// GET /api/v1/desktop-sync/conflict-data - Dati server per diff conflitto
+router.get('/conflict-data',
+  requirePermission('clinica:read'),
+  desktopSyncController.getConflictData
+);
+
+// POST /api/v1/desktop-sync/error-report - Upload log errori client desktop
+router.post('/error-report',
+  requirePermission('clinica:read'),
+  desktopSyncController.errorReport
 );
 
 // ============================================

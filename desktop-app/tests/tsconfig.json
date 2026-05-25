@@ -1,0 +1,14 @@
+{
+    "extends": "../tsconfig.json",
+    "compilerOptions": {
+        "moduleResolution": "node",
+        "allowImportingTsExtensions": false,
+        "noEmit": true
+    },
+    "include": [
+        "../src/renderer/env.d.ts",
+        "../src/preload/index.ts",
+        "./**/*.ts",
+        "./**/*.tsx"
+    ]
+}

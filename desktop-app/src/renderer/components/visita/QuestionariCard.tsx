@@ -38,13 +38,14 @@ interface Props {
   personId: string
   tenantId: string
   isReadOnly: boolean
+  defaultExpanded?: boolean
 }
 
-export function QuestionariCard({ visitId, personId, tenantId, isReadOnly }: Props): JSX.Element {
+export function QuestionariCard({ visitId, personId, tenantId, isReadOnly, defaultExpanded = false }: Props): JSX.Element {
   const [templates, setTemplates] = useState<VisitTemplate[]>([])
   const [compilati, setCompilati] = useState<QuestionarioCompilato[]>([])
   const [loading, setLoading] = useState(true)
-  const [isExpanded, setIsExpanded] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded)
 
   // Editing state
   const [editingId, setEditingId] = useState<string | null>(null) // null = not editing, 'NEW' = new, or ID
@@ -149,7 +150,7 @@ export function QuestionariCard({ visitId, personId, tenantId, isReadOnly }: Pro
 
         await window.desktopApi.sync.enqueue({
           type: 'CREATE',
-          entity: 'questionarioCompilato',
+          entity: 'questionari_compilati',
           entityId: id,
           payload: data
         })
@@ -162,7 +163,7 @@ export function QuestionariCard({ visitId, personId, tenantId, isReadOnly }: Pro
 
         await window.desktopApi.sync.enqueue({
           type: 'UPDATE',
-          entity: 'questionarioCompilato',
+          entity: 'questionari_compilati',
           entityId: editingId,
           payload: data
         })

@@ -7,6 +7,7 @@ import {
   ChevronRight,
   AlertCircle
 } from 'lucide-react'
+import { formatProtocolloPeriodicity, parseProtocolloPrestazioni } from '../utils/protocolloSanitario'
 
 interface Protocollo {
   id: string
@@ -17,12 +18,6 @@ interface Protocollo {
   mansioneId: string | null
   isActive: number
   prestazioni: string | null // JSON string of associated prestazioni
-}
-
-interface PrestazioneProtocollo {
-  prestazioneNome: string
-  periodicitaMesi: number
-  obbligatoria: boolean
 }
 
 export function ProtocolliPage(): JSX.Element {
@@ -55,11 +50,6 @@ export function ProtocolliPage(): JSX.Element {
     const term = searchTerm.toLowerCase()
     return [p.nome, p.descrizione, p.mansioneNome].some(f => f?.toLowerCase().includes(term))
   })
-
-  function parsePrestazioni(json: string | null): PrestazioneProtocollo[] {
-    if (!json) return []
-    try { return JSON.parse(json) } catch { return [] }
-  }
 
   return (
     <div className="max-w-5xl mx-auto space-y-4">
@@ -109,7 +99,7 @@ export function ProtocolliPage(): JSX.Element {
       ) : (
         <div className="space-y-2">
           {filtered.map(p => {
-            const prestazioni = parsePrestazioni(p.prestazioni)
+            const prestazioni = parseProtocolloPrestazioni(p.prestazioni)
             const isExpanded = expandedId === p.id
 
             return (
@@ -127,8 +117,10 @@ export function ProtocolliPage(): JSX.Element {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-900 truncate">{p.nome || 'Protocollo senza nome'}</p>
                     <div className="flex items-center gap-3 mt-0.5">
-                      {p.mansioneNome && (
+                      {p.mansioneNome ? (
                         <span className="text-xs text-gray-500">Mansione: {p.mansioneNome}</span>
+                      ) : (
+                        <span className="text-xs text-gray-400 italic">Nessuna mansione</span>
                       )}
                       {prestazioni.length > 0 && (
                         <span className="text-xs text-gray-400">{prestazioni.length} prestazioni</span>
@@ -144,29 +136,33 @@ export function ProtocolliPage(): JSX.Element {
                 </button>
 
                 {/* Expanded: prestazioni list */}
-                {isExpanded && prestazioni.length > 0 && (
+                {isExpanded && (
                   <div className="border-t border-gray-100 bg-gray-50/30 px-4 pb-3 pt-2">
-                    <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-2">Prestazioni</p>
-                    <div className="space-y-1.5">
-                      {prestazioni.map((prest, i) => (
-                        <div key={i} className="flex items-center gap-2 text-xs">
-                          <Stethoscope className="w-3 h-3 text-gray-400 shrink-0" />
-                          <span className="text-gray-700 flex-1">{prest.prestazioneNome}</span>
-                          <span className="text-gray-400 shrink-0">ogni {prest.periodicitaMesi} mesi</span>
-                          {prest.obbligatoria && (
-                            <span className="text-[9px] px-1.5 py-0.5 bg-red-50 text-red-600 rounded font-medium">Obbl.</span>
-                          )}
+                    {p.descrizione && (
+                      <p className="text-xs text-gray-500 mb-3 italic">{p.descrizione}</p>
+                    )}
+                    {prestazioni.length > 0 ? (
+                      <>
+                        <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-2">Prestazioni</p>
+                        <div className="space-y-1.5">
+                          {prestazioni.map((prest, i) => (
+                            <div key={i} className="flex items-center gap-2 text-xs">
+                              <Stethoscope className="w-3 h-3 text-gray-400 shrink-0" />
+                              <span className="text-gray-700 flex-1">{prest.prestazioneNome}</span>
+                              <span className="text-gray-400 shrink-0">{formatProtocolloPeriodicity(prest.periodicitaMesi)}</span>
+                              {prest.obbligatoria && (
+                                <span className="text-[9px] px-1.5 py-0.5 bg-red-50 text-red-600 rounded font-medium">Obbl.</span>
+                              )}
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {isExpanded && prestazioni.length === 0 && (
-                  <div className="border-t border-gray-100 bg-gray-50/30 px-4 py-3">
-                    <p className="text-xs text-gray-400 flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3" />
-                      Nessuna prestazione associata
-                    </p>
+                      </>
+                    ) : (
+                      <p className="text-xs text-gray-400 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
+                        Nessuna prestazione associata
+                      </p>
+                    )}
                   </div>
                 )}
               </div>

@@ -47,13 +47,15 @@ interface Props {
   visitId: string
   tenantId: string
   isReadOnly: boolean
+  defaultExpanded?: boolean
 }
 
-export function AllegatiCard({ visitId, tenantId, isReadOnly }: Props): JSX.Element {
+export function AllegatiCard({ visitId, tenantId, isReadOnly, defaultExpanded = false }: Props): JSX.Element {
   const [allegati, setAllegati] = useState<Allegato[]>([])
   const [loading, setLoading] = useState(true)
-  const [isExpanded, setIsExpanded] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded)
   const [isUploading, setIsUploading] = useState(false)
+  const [openError, setOpenError] = useState<string | null>(null)
 
   // ----------------------------------------------------------
   // Load allegati from SQLite
@@ -111,19 +113,8 @@ export function AllegatiCard({ visitId, tenantId, isReadOnly }: Props): JSX.Elem
         }
       })
 
-      await window.desktopApi.sync.enqueue({
-        type: 'CREATE',
-        entity: 'allegato',
-        entityId: id,
-        payload: {
-          tenantId,
-          visitaId: visitId,
-          nome: fileInfo.nome,
-          tipo: fileInfo.tipo,
-          dimensione: fileInfo.dimensione,
-          localPath: fileInfo.localPath,
-        }
-      })
+      // File upload is handled by syncAttachments pipeline (not via batch sync)
+      // No sync.enqueue needed for CREATE — the upload endpoint creates the server record
 
       await loadAllegati()
     } finally {
@@ -148,6 +139,24 @@ export function AllegatiCard({ visitId, tenantId, isReadOnly }: Props): JSX.Elem
     })
 
     setAllegati(prev => prev.filter(a => a.id !== id))
+  }, [])
+
+  const handleOpen = useCallback(async (allegato: Allegato) => {
+    setOpenError(null)
+    try {
+      if (allegato.localPath) {
+        await window.desktopApi.file.openLocalFile(allegato.localPath)
+        return
+      }
+      if (allegato.serverUrl) {
+        const url = allegato.serverUrl.startsWith('http') ? allegato.serverUrl : `https://www.elementmedica.com${allegato.serverUrl}`
+        await window.desktopApi.app.openExternal(url)
+        return
+      }
+      setOpenError('Documento non disponibile')
+    } catch {
+      setOpenError('Impossibile aprire il documento')
+    }
   }, [])
 
   // ----------------------------------------------------------
@@ -185,6 +194,7 @@ export function AllegatiCard({ visitId, tenantId, isReadOnly }: Props): JSX.Elem
                 <p className="text-xs text-gray-400 text-center py-2">Nessun allegato</p>
               ) : (
                 <div className="space-y-2">
+                  {openError && <p className="rounded-lg bg-red-50 px-2 py-1 text-[11px] text-red-600">{openError}</p>}
                   {allegati.map(allegato => {
                     const IconCmp = FILE_ICONS[allegato.tipo || ''] || File
                     return (
@@ -196,6 +206,15 @@ export function AllegatiCard({ visitId, tenantId, isReadOnly }: Props): JSX.Elem
                             {allegato.tipo?.toUpperCase()} · {formatFileSize(allegato.dimensione)}
                           </p>
                         </div>
+                        {(allegato.localPath || allegato.serverUrl) && (
+                          <button
+                            onClick={() => { void handleOpen(allegato) }}
+                            className="px-2 py-1 text-[10px] font-medium text-teal-700 bg-teal-50 rounded-lg hover:bg-teal-100 transition-colors"
+                            title="Apri documento"
+                          >
+                            Apri
+                          </button>
+                        )}
                         {!isReadOnly && (
                           <button
                             onClick={() => handleDelete(allegato.id)}

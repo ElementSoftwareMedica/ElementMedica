@@ -90,6 +90,7 @@ model CompanyTenantProfile {
   malattieProfessionali      MalattiaProfessionale[]        @relation("ProfileMalattieProfessionali")
   personRoles                PersonRole[]
   personProfiles             PersonTenantProfile[]          @relation("ProfileCompanyTenant")
+  statiOccupazionali         StatoOccupazionaleStorico[]     @relation("StoricoOccupazionaleCompanyProfile")
   preventivi                 Preventivo[]
   tariffariAssociations      TariffarioCompanyAssociation[]
   tenantAsSelfCompany        Tenant?                        @relation("TenantSelfCompany")
@@ -198,6 +199,7 @@ model CompanySite {
   nomine                    NominaRuolo[]         @relation("SiteNomine")
   personProfiles            PersonTenantProfile[] @relation("ProfileSite")
   protocolliSanitari        ProtocolloSanitario[] @relation("SiteProtocolli")
+  statiOccupazionali        StatoOccupazionaleStorico[] @relation("StoricoOccupazionaleSite")
 
   @@index([companyTenantProfileId])
   @@index([tenantId])
@@ -1006,6 +1008,7 @@ model Person {
   taxCode                                              String?                         @unique @db.VarChar(16)
   vatNumber                                            String?                         @unique @db.VarChar(11)
   numeroCartaIdentita                                  String?                         @db.VarChar(20)
+  etnia                                                String?                         @db.VarChar(80)
   username                                             String?                         @unique @db.VarChar(50)
   password                                             String?                         @db.VarChar(255)
   mustChangePassword                                   Boolean                         @default(false)
@@ -1077,6 +1080,8 @@ model Person {
   giudiziIdoneita                                      GiudizioIdoneita[]              @relation("PersonGiudizi")
   malattieProfessionali                                MalattiaProfessionale[]         @relation("PersonMalattieProfessionali")
   mansioni                                             LavoratoreMansione[]            @relation("PersonMansioni")
+  rischiAggiuntivi                                     LavoratoreRischioAggiuntivo[]   @relation("PersonRischiAggiuntivi")
+  storicoOccupazionale                                 StatoOccupazionaleStorico[]     @relation("PersonStoricoOccupazionale")
   lettereIncaricoFirmate                               LetteraIncarico[]               @relation("LettereIncaricoSignature")
   lettereIncarico                                      LetteraIncarico[]               @relation("LetteraIncaricoTrainer")
   listiniMedico                                        ListinoPrezzo[]                 @relation("ListinoMedico")
@@ -1122,6 +1127,8 @@ model Person {
   visiteComeMedico                                     Visita[]                        @relation("VisitaMedico")
   visiteComeMedicoRefertante                           Visita[]                        @relation("VisitaMedicoRefertante")
   visiteComePaziente                                   Visita[]                        @relation("VisitaPaziente")
+  tutelati                                             PatientGuardian[]               @relation("PatientGuardianGuardian")
+  tutelanti                                            PatientGuardian[]               @relation("PatientGuardianPatient")
 
   @@index([taxCode])
   @@index([username])
@@ -1179,6 +1186,7 @@ model PersonTenantProfile {
   tenant                 Tenant                @relation("TenantPersonProfiles", fields: [tenantId], references: [id], onDelete: Cascade)
   profiloHR              ProfiloHR?
   queueSessions          QueueSessionMedico[]  @relation("MedicoQueueSessions")
+  storicoOccupazionale   StatoOccupazionaleStorico[] @relation("ProfileStoricoOccupazionale")
 
   @@unique([personId, tenantId])
   @@index([personId])
@@ -1211,6 +1219,9 @@ model ProfiloDiSalutePersona {
   droghe                      String?   @db.VarChar(30)
   attivitaFisica              String?   @db.VarChar(30)
   oreAttivitaSettimana        Decimal?  @db.Decimal(4, 1)
+  peso                        Decimal?  @db.Decimal(5, 2)
+  altezza                     Decimal?  @db.Decimal(5, 2)
+  bmi                         Decimal?  @db.Decimal(4, 1)
   alimentazione               String?   @db.VarChar(50)
   porzioniFruttaVerdure       Int?
   usaDpiPersonali             Boolean   @default(false)
@@ -1221,6 +1232,8 @@ model ProfiloDiSalutePersona {
   mezziAziendali              String[]
   altriMezziAziendali         String?
   noteSalute                  String?
+  sorveglianzaSanitaria       Json?
+  storicoOccupazionale        Json?
   createdAt                   DateTime  @default(now()) @db.Timestamp(6)
   updatedAt                   DateTime  @updatedAt @db.Timestamp(6)
   deletedAt                   DateTime? @db.Timestamp(6)
@@ -1352,6 +1365,31 @@ model PersonDataShareConsent {
   @@index([validUntil])
   @@index([approvalStatus])
   @@map("person_data_share_consents")
+}
+
+model PatientGuardian {
+  id              String    @id @default(uuid())
+  tenantId        String
+  pazienteId      String
+  tutelanteId     String
+  relazione       String    @db.VarChar(50)
+  isLegalGuardian Boolean   @default(false)
+  note            String?
+  validFrom       DateTime  @default(now()) @db.Timestamp(6)
+  validTo         DateTime? @db.Timestamp(6)
+  createdBy       String?
+  createdAt       DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt       DateTime  @updatedAt @db.Timestamp(6)
+  deletedAt       DateTime? @db.Timestamp(6)
+  paziente        Person    @relation("PatientGuardianPatient", fields: [pazienteId], references: [id], onDelete: Cascade)
+  tutelante       Person    @relation("PatientGuardianGuardian", fields: [tutelanteId], references: [id], onDelete: Cascade)
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, pazienteId, tutelanteId, relazione])
+  @@index([tenantId, pazienteId])
+  @@index([tenantId, tutelanteId])
+  @@index([deletedAt])
+  @@map("patient_guardians")
 }
 
 model PersonRole {
@@ -1593,6 +1631,8 @@ model Tenant {
   giudiziIdoneita              GiudizioIdoneita[]
   internalDocuments            InternalDocument[]
   lavoratoriMansioni           LavoratoreMansione[]
+  lavoratoriRischiAggiuntivi   LavoratoreRischioAggiuntivo[]
+  statiOccupazionali           StatoOccupazionaleStorico[]
   lettereIncarico              LetteraIncarico[]
   mansioneRischi               MansioneRischio[]
   mansioni                     Mansione[]
@@ -1609,6 +1649,7 @@ model Tenant {
   sourceConsents               PersonDataShareConsent[]        @relation("SourceTenantConsent")
   targetConsents               PersonDataShareConsent[]        @relation("TargetTenantConsent")
   personDocuments              PersonDocument[]
+  patientGuardians             PatientGuardian[]
   personRoles                  PersonRole[]
   personSessions               PersonSession[]
   personAccesses               PersonTenantAccess[]            @relation("TenantPersonAccesses")
@@ -1632,6 +1673,7 @@ model Tenant {
   configurations               TenantConfiguration[]
   features                     TenantFeature[]
   bridgeLicenses               BridgeLicense[]
+  desktopLicenses              DesktopLicense[]
   usage                        TenantUsage[]
   selfCompanyProfile           CompanyTenantProfile?           @relation("TenantSelfCompany", fields: [selfCompanyProfileId], references: [id])
   timbrature                   Timbratura[]
@@ -1933,6 +1975,7 @@ model Mansione {
   tenant          Tenant                @relation(fields: [tenantId], references: [id])
   protocolli      ProtocolloSanitario[]
   protocolliMansione ProtocolloMansione[]
+  statiOccupazionali StatoOccupazionaleStorico[] @relation("StoricoOccupazionaleMansione")
 
   @@unique([tenantId, codice])
   @@index([tenantId])
@@ -1992,6 +2035,83 @@ model LavoratoreMansione {
   @@index([isAttiva])
   @@index([deletedAt])
   @@map("lavoratore_mansioni")
+}
+
+/// Rischi aggiuntivi per singolo lavoratore (NON condivisi con altri sulla stessa mansione)
+/// Rischi personalizzati per singolo lavoratore.
+/// Quando una mansione viene assegnata, i rischi della mansione vengono copiati qui.
+/// Il lavoratore può poi aggiungere/rimuovere rischi individualmente senza influenzare altri lavoratori.
+model LavoratoreRischioAggiuntivo {
+  id                     String           @id @default(uuid())
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+  deletedAt              DateTime?
+  personId               String
+  tenantId               String
+  codiceRischio          CodiceRischio
+  livello                LivelloRischio   @default(MEDIO)
+  categoria              CategoriaRischio
+  descrizioneEsposizione String?
+  fonteRischio           String?          @db.VarChar(200)
+  periodicitaMesi        Int?
+  note                   String?
+  sourceMansioneId       String?          /// Se copiato da una mansione, traccia l'origine. Null = aggiunto manualmente.
+  person                 Person           @relation("PersonRischiAggiuntivi", fields: [personId], references: [id], onDelete: Cascade)
+  tenant                 Tenant           @relation(fields: [tenantId], references: [id])
+
+  @@unique([personId, codiceRischio])
+  @@index([tenantId])
+  @@index([personId])
+  @@index([deletedAt])
+  @@index([sourceMansioneId])
+  @@map("lavoratore_rischi_aggiuntivi")
+}
+
+model StatoOccupazionaleStorico {
+  id                     String                @id @default(uuid())
+  personId               String
+  tenantId               String
+  personTenantProfileId  String?
+  companyTenantProfileId String?
+  siteId                 String?
+  repartoId              String?
+  mansioneId             String?
+  protocolloSanitarioId  String?
+  titolo                 String?               @db.VarChar(100)
+  status                 PersonStatus?
+  tipoContratto          TipoContratto?
+  oreSettimanali         Int?
+  dataInizio             DateTime              @db.Date
+  dataFine               DateTime?             @db.Date
+  isCorrente             Boolean               @default(true)
+  fonte                  String                @default("PERSON_TENANT_PROFILE") @db.VarChar(80)
+  motivo                 String?               @db.VarChar(255)
+  snapshot               Json?
+  note                   String?
+  createdAt              DateTime              @default(now()) @db.Timestamp(6)
+  updatedAt              DateTime              @updatedAt @db.Timestamp(6)
+  deletedAt              DateTime?             @db.Timestamp(6)
+  companyTenantProfile   CompanyTenantProfile? @relation("StoricoOccupazionaleCompanyProfile", fields: [companyTenantProfileId], references: [id])
+  mansione               Mansione?             @relation("StoricoOccupazionaleMansione", fields: [mansioneId], references: [id])
+  person                 Person                @relation("PersonStoricoOccupazionale", fields: [personId], references: [id], onDelete: Cascade)
+  personTenantProfile    PersonTenantProfile?  @relation("ProfileStoricoOccupazionale", fields: [personTenantProfileId], references: [id])
+  protocolloSanitario    ProtocolloSanitario?  @relation("StoricoOccupazionaleProtocollo", fields: [protocolloSanitarioId], references: [id])
+  reparto                Reparto?              @relation("StoricoOccupazionaleReparto", fields: [repartoId], references: [id])
+  site                   CompanySite?          @relation("StoricoOccupazionaleSite", fields: [siteId], references: [id])
+  tenant                 Tenant                @relation(fields: [tenantId], references: [id])
+
+  @@index([personId])
+  @@index([tenantId])
+  @@index([personId, tenantId, isCorrente])
+  @@index([companyTenantProfileId])
+  @@index([siteId])
+  @@index([repartoId])
+  @@index([mansioneId])
+  @@index([protocolloSanitarioId])
+  @@index([dataInizio])
+  @@index([dataFine])
+  @@index([deletedAt])
+  @@map("stati_occupazionali_storici")
 }
 
 model GiudizioIdoneita {
@@ -2098,6 +2218,7 @@ model ProtocolloSanitario {
   prestazioni           ProtocolloPrestazione[]
   personProfiles        PersonTenantProfile[]  @relation("ProfileProtocolloSanitario")
   questionari           QuestionarioMedicoConfig[]
+  statiOccupazionali    StatoOccupazionaleStorico[] @relation("StoricoOccupazionaleProtocollo")
 
   @@unique([tenantId, codice])
   @@index([tenantId])
@@ -2261,6 +2382,8 @@ model Allegato3B {
   lavoratoriPerFasciaEta   Json?
   visitePerTipologia       Json?
   giudiziPerTipologia      Json?
+  giudiziPerRischio        Json?
+  accertamentiIntegrativi  Json?
   dataCompilazione         DateTime?
   dataInvio                DateTime?
   dataConferma             DateTime?
@@ -2422,6 +2545,7 @@ model Reparto {
   site           CompanySite           @relation(fields: [siteId], references: [id], onDelete: Cascade)
   tenant         Tenant                @relation(fields: [tenantId], references: [id])
   personProfiles PersonTenantProfile[] @relation("ProfileReparto")
+  statiOccupazionali StatoOccupazionaleStorico[] @relation("StoricoOccupazionaleReparto")
 
   @@unique([siteId, nome])
   @@index([siteId])
@@ -4853,6 +4977,7 @@ model DocumentoTemplate {
   contenutoHtml           String?
   contenutoPdf            String?
   campi                   Json?
+  consensoCodici          String[]                        @default([]) @map("consenso_codici")
   branchTypes             BranchType[]
   richiedeFirma           Boolean                         @default(false) @map("richiede_firma")
   richiedeFirmaMedico     Boolean                         @default(false) @map("richiede_firma_medico")
@@ -5660,6 +5785,48 @@ model BridgeLicense {
   @@index([tenantId, status])
   @@index([licenseKey])
   @@map("bridge_licenses")
+}
+
+/// Licenza di attivazione per la Desktop App offline MDL
+/// Ogni licenza consente a un PC di attivare e usare l'app desktop
+model DesktopLicense {
+  id             String                @id @default(uuid())
+  /// Tenant proprietario della licenza
+  tenantId       String
+  /// Codice di attivazione (formato: DESK-XXXX-XXXX-XXXX)
+  licenseKey     String                @unique @db.VarChar(19)
+  /// Etichetta descrittiva (es. "Ambulatorio 3 - PC Medico")
+  label          String                @db.VarChar(100)
+  /// Stato della licenza
+  status         StatoDesktopLicense   @default(PENDING)
+  /// Tipo di licenza: solo app, solo bridge, o entrambi
+  licenseType    TipoDesktopLicense    @default(APP_ONLY)
+  /// Identificativo univoco della macchina (hash hardware)
+  machineId      String?
+  /// Hostname della macchina attivata
+  machineName    String?
+  /// Versione dell'app desktop installata
+  appVersion     String?               @db.VarChar(20)
+  /// Data di attivazione
+  activatedAt    DateTime?             @db.Timestamp(6)
+  /// Ultimo heartbeat (verifica licenza online)
+  lastSeenAt     DateTime?             @db.Timestamp(6)
+  /// Data scadenza abbonamento (copiata dal tenant al check)
+  expiresAt      DateTime?             @db.Timestamp(6)
+  /// Chi ha creato la licenza
+  createdBy      String?
+  createdAt      DateTime              @default(now()) @db.Timestamp(6)
+  updatedAt      DateTime              @updatedAt @db.Timestamp(6)
+  deletedAt      DateTime?             @db.Timestamp(6)
+
+  tenant         Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([tenantId, status])
+  @@index([licenseKey])
+  @@index([machineId])
+  @@map("desktop_licenses")
 }
 
 /// Richiesta di prenotazione da utente anonimo sul sito pubblico
@@ -7212,6 +7379,7 @@ enum EsitoMalattiaProfessionale {
 
 enum TipoRuoloNomina {
   MEDICO_COMPETENTE
+  MEDICO_COMPETENTE_COORDINATO
   RSPP
   ASPP
   RLS
@@ -7766,11 +7934,27 @@ enum StatoBridgeLicense {
   REVOKED
 }
 
+enum StatoDesktopLicense {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  REVOKED
+  EXPIRED
+}
+
+/// Tipo di licenza desktop: solo app offline, solo bridge dispositivi, o entrambi
+enum TipoDesktopLicense {
+  APP_ONLY       // Solo app offline MDL (comportamento storico)
+  BRIDGE_ONLY    // Solo bridge dispositivi medici (senza dati offline)
+  APP_AND_BRIDGE // App offline completa + bridge dispositivi
+}
+
 /// Tipo di dispositivo medico supportato dal Bridge
 enum TipoDispositivoMedico {
   ECG
   SPIROMETRO
   AUDIOMETRO
+  VISIOTEST
 }
 
 /// Stato dell'esame strumentale acquisito dal Bridge

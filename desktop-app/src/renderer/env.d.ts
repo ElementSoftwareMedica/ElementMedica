@@ -2,6 +2,8 @@
 import type { DesktopApi } from '../preload/index'
 
 declare global {
+  const __BUILD_DATE__: string
+
   interface Window {
     desktopApi: DesktopApi
     electron: {
@@ -14,4 +16,4 @@ declare global {
   }
 }
 
-export {}
+export { }

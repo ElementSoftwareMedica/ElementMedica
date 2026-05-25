@@ -104,6 +104,8 @@ import consulenzeMDLRoutes from '../routes/consulenze-mdl-routes.js';
 import movimentoContabileRoutes from '../routes/movimento-contabile-routes.js';
 // Project 43 - Multi-tenant access management
 import personTenantAccessRoutes from '../routes/v1/person-tenant-access.js';
+// Feature Catalog - prezzi e metadati funzionalità
+import featureCatalogRoutes from '../routes/feature-catalog.js';
 // Project 48 - Person Multi-Tenant Routes
 import personTenantProfileRoutes from '../routes/person-tenant-profile-routes.js';
 import personConsentRoutes from '../routes/person-consent-routes.js';
@@ -137,10 +139,14 @@ import scadenzeRoutes from '../routes/scadenze-routes.js';
 import hrRoutes from '../routes/hr/index.js';
 // P74 - Document Management (procedure interne + documenti marketing)
 import internalDocumentsRoutes from '../routes/management/internal-documents.routes.js';
+import controlloGestioneRoutes from '../routes/management/controllo-gestione.routes.js';
 // P97 - Fatturazione Elettronica & SistemaTS Integration
 import entiEmittentiRoutes from '../routes/enti-emittenti-routes.js';
 import fatturazioneElettronicaRoutes from '../routes/fatturazione-elettronica-routes.js';
 import sistemaTsRoutes from '../routes/sistema-ts-routes.js';
+// P98 - Desktop Sync (MDL Offline-First)
+import desktopSyncRoutes from '../routes/desktop-sync-routes.js';
+import desktopLicensesRoutes from '../routes/desktop-licenses.routes.js';
 // Project 47 - WebSocket for real-time notifications
 import NotificationSocketService from '../websocket/NotificationSocketService.js';
 // Project 47 - Fase 2: Event Bus & Domain Events
@@ -168,7 +174,8 @@ import prisma, { createPrismaMiddleware } from '../config/prisma-optimization.js
 // Configurazione ambiente
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-dotenv.config({ path: path.join(__dirname, '../.env') });
+const envFile = process.env.NODE_ENV === 'production' ? '../.env.production' : '../.env';
+dotenv.config({ path: path.join(__dirname, envFile) });
 
 /**
  * Classe API Server Refactorizzata
@@ -394,29 +401,20 @@ class APIServer {
           '/api/roles/public',    // Solo l'endpoint pubblico dei ruoli
           '/healthz',
           '/health',
-          // Route pubbliche per i corsi
-          '/api/public/courses',
-          '/api/public/courses/categories/list',
-          '/api/public/courses/stats',
-          // Route pubbliche per il calendario corsi
-          '/api/public/schedules',
-          // Route pubbliche per i form
-          '/api/public/forms',
-          // Route pubbliche per contact submissions (richieste info corsi)
-          '/api/public/contact-submissions',
+          // Route pubbliche per i corsi, form, contact submissions
+          '/api/v1/public/courses',
+          '/api/v1/public/schedules',
+          '/api/v1/public/forms',
+          '/api/v1/public/contact-submissions',
           // Route pubbliche CMS (per frontend pubblico)
           '/api/v1/cms/pages/slug',
           // Route pubblica per verifica attestati
-          '/api/public/verify-attestato',
           '/api/v1/public/verify-attestato',
           // Route pubbliche per queue check-in (P53.1 Mobile)
-          '/api/public/queue',
           '/api/v1/public/queue',
           // Route pubbliche per prenotazioni online (P67)
-          '/api/public/booking',
           '/api/v1/public/booking',
           // Route pubbliche per profili medici
-          '/api/public/doctors',
           '/api/v1/public/doctors',
           // Route pubblica firma consensi tablet paziente (no auth — token opaco protezione)
           '/api/v1/public/consenso-firma',
@@ -426,9 +424,10 @@ class APIServer {
           '/api/public/analytics/track',
           // P75: Route pubbliche embed widget (autenticati via API key nel path)
           '/api/public/embed',
+          // Legacy path per bundle cachati
+          '/api/public/courses',
           // Bridge auto-activation (autenticato via license key, non JWT)
           '/api/v1/public/bridge',
-          '/api/public/bridge',
           // Route pubblica per activity logs (POST con optionalAuth gestito a livello di route)
           '/api/activity-logs',
           '/api/v1/activity-logs',
@@ -449,8 +448,8 @@ class APIServer {
           if (pathToCheck === route || originalToCheck === route) return true;
           // Controllo per route che iniziano con il pattern (per gestire parametri dinamici)
           if (pathToCheck.startsWith(route) || originalToCheck.startsWith(route)) return true;
-          // Controllo specifico per route con parametri come /api/public/courses/:slug
-          if (route === '/api/public/courses' && (pathToCheck.match(/^\/api\/public\/courses\/[^\/]+$/) || originalToCheck.match(/^\/api\/public\/courses\/[^\/]+$/))) return true;
+          // Controllo specifico per route con parametri come /api/v1/public/courses/:slug
+          if (route === '/api/v1/public/courses' && (pathToCheck.match(/^\/api\/v1\/public\/courses\/[^\/]+$/) || originalToCheck.match(/^\/api\/v1\/public\/courses\/[^\/]+$/))) return true;
           return false;
         });
 
@@ -843,10 +842,25 @@ class APIServer {
       v1Router.use('/billing/sistema-ts', sistemaTsRoutes);
       logger.info('Sistema TS routes registered successfully');
 
+      // P98 - Desktop Sync (MDL Offline-First)
+      logger.info('Registering desktop-sync routes...');
+      v1Router.use('/desktop-sync', desktopSyncRoutes);
+      logger.info('Desktop-sync routes registered successfully');
+
+      // P98 - Desktop App Licenses
+      logger.info('Registering desktop-licenses routes...');
+      v1Router.use('/desktop-licenses', desktopLicensesRoutes);
+      logger.info('Desktop-licenses routes registered successfully');
+
       // Project 43 - Multi-tenant access management
       logger.info('Registering person-tenant-access routes...');
       v1Router.use('/person-tenant-access', personTenantAccessRoutes);
       logger.info('Person-tenant-access routes registered successfully');
+
+      // Feature Catalog
+      logger.info('Registering feature-catalog routes...');
+      v1Router.use('/feature-catalog', featureCatalogRoutes);
+      logger.info('Feature-catalog routes registered successfully');
 
       // Project 48 - Person Multi-Tenant Routes
       logger.info('Registering person-profiles routes...');
@@ -890,6 +904,10 @@ class APIServer {
       v1Router.use('/management/documenti', internalDocumentsRoutes);
       logger.info('Internal documents routes registered successfully');
 
+      logger.info('Registering management control routes...');
+      v1Router.use('/management/controllo-gestione', controlloGestioneRoutes);
+      logger.info('Management control routes registered successfully');
+
       // System routes (logs, config)
       logger.info('Registering system routes...');
       v1Router.use('/', systemRoutes);
@@ -911,40 +929,37 @@ class APIServer {
       // Notification Sending Routes (Email/SMS/WhatsApp channels)
       v1Router.use('/notifications', notificationSendingRoutes);
 
-      // Registra route pubbliche
+      // Registra route pubbliche: /api/v1/public/ (canonical) + /api/public/ (legacy per browser cache)
       logger.info('Registering public courses routes...');
-      this.app.use('/api/public', publicCoursesRoutes);
+      this.app.use('/api/v1/public', publicCoursesRoutes);
+      this.app.use('/api/public', publicCoursesRoutes); // legacy fallback per bundle cachati
       logger.info('Public courses routes registered successfully');
 
       logger.info('Registering public forms routes...');
-      this.app.use('/api/public/forms', publicFormsRoutes);
+      this.app.use('/api/v1/public/forms', publicFormsRoutes);
       logger.info('Public forms routes registered successfully');
 
       logger.info('Registering public contact submissions routes...');
-      this.app.use('/api/public/contact-submissions', publicContactSubmissionsRoutes);
+      this.app.use('/api/v1/public/contact-submissions', publicContactSubmissionsRoutes);
       logger.info('Public contact submissions routes registered successfully');
 
       logger.info('Registering public verify routes...');
       this.app.use('/api/v1/public', publicVerifyRoutes);
-      this.app.use('/api/public', publicVerifyRoutes);
       logger.info('Public verify routes registered successfully');
 
       // P53.1: Mobile Queue Check-in Routes
       logger.info('Registering public queue routes...');
       this.app.use('/api/v1/public/queue', publicQueueRoutes);
-      this.app.use('/api/public/queue', publicQueueRoutes);
       logger.info('Public queue routes registered successfully');
 
       // P67: Public Booking Routes
       logger.info('Registering public booking routes...');
       this.app.use('/api/v1/public', publicBookingRoutes);
-      this.app.use('/api/public', publicBookingRoutes);
       logger.info('Public booking routes registered successfully');
 
       // Public Doctor Profiles
       logger.info('Registering public doctors routes...');
       this.app.use('/api/v1/public', publicDoctorsRoutes);
-      this.app.use('/api/public', publicDoctorsRoutes);
       logger.info('Public doctors routes registered successfully');
 
       // Consenso Firma Tablet (paziente su tablet — no auth)
@@ -965,7 +980,6 @@ class APIServer {
 
       // Bridge Activation (public — bridge si auto-attiva con codice licenza)
       this.app.use('/api/v1/public/bridge', bridgeActivationRoutes);
-      this.app.use('/api/public/bridge', bridgeActivationRoutes);
       logger.info('Bridge activation routes registered successfully');
 
       // NOTE: Legacy routes removed - all clients now use /api/v1/ endpoints directly

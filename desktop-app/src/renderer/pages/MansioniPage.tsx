@@ -5,7 +5,13 @@ import {
   RefreshCw,
   AlertTriangle,
   Shield,
-  ChevronRight
+  ChevronRight,
+  FileText,
+  Pencil,
+  X,
+  Check,
+  Clock,
+  Tag
 } from 'lucide-react'
 
 interface Mansione {
@@ -16,38 +22,103 @@ interface Mansione {
   codice: string | null
   companyName: string | null
   isActive: number
-  rischi: string | null // JSON string of associated risks
+  // Both fields contain the same JSON (rischiAssociati from server)
+  rischi: string | null
+  rischiAssociati: string | null
 }
 
+// Actual structure from server API (MansioneRischio Prisma model)
 interface RischioMansione {
-  nome: string
+  id?: string
+  codiceRischio: string | null
   livello: string
+  categoria: string | null
+  fonteRischio: string | null
   note: string | null
+  // Legacy field name – kept for backward compat
+  nome?: string | null
+}
+
+interface Protocollo {
+  id: string
+  nome: string | null
+  mansioneId: string | null
+  isActive: number
+  prestazioni: string | null
+}
+
+interface PrestazioneProtocollo {
+  prestazioneNome: string
+  periodicitaMesi: number
+  obbligatoria: boolean
+}
+
+interface EditForm {
+  nome: string
+  codice: string
+  descrizione: string
 }
 
 const LIVELLO_COLORS: Record<string, { bg: string; text: string }> = {
+  MOLTO_ALTO: { bg: 'bg-red-100', text: 'text-red-800' },
   ALTO: { bg: 'bg-red-50', text: 'text-red-700' },
   MEDIO: { bg: 'bg-orange-50', text: 'text-orange-700' },
   BASSO: { bg: 'bg-green-50', text: 'text-green-700' },
   NON_RILEVANTE: { bg: 'bg-gray-50', text: 'text-gray-500' }
 }
 
+function parseRischi(json: string | null): RischioMansione[] {
+  if (!json) return []
+  try { return JSON.parse(json) as RischioMansione[] } catch { return [] }
+}
+
+function parsePrestazioni(json: string | null): PrestazioneProtocollo[] {
+  if (!json) return []
+  try { return JSON.parse(json) as PrestazioneProtocollo[] } catch { return [] }
+}
+
+function formatPeriodicity(mesi: number): string {
+  if (mesi >= 12 && mesi % 12 === 0) {
+    const anni = mesi / 12
+    return `ogni ${anni} ann${anni === 1 ? 'o' : 'i'}`
+  }
+  return `ogni ${mesi} mes${mesi === 1 ? 'e' : 'i'}`
+}
+
 export function MansioniPage(): JSX.Element {
   const [mansioni, setMansioni] = useState<Mansione[]>([])
+  const [protocolliMap, setProtocolliMap] = useState<Map<string, Protocollo>>(new Map())
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState<EditForm>({ nome: '', codice: '', descrizione: '' })
+  const [saving, setSaving] = useState(false)
 
-  const loadMansioni = useCallback(async () => {
+  const loadData = useCallback(async () => {
     setLoading(true)
     try {
       if (!window.desktopApi) return
-      const rows = await window.desktopApi.db.query({
-        table: 'mansioni',
-        where: { _isDeleted: 0 },
-        orderBy: { column: 'nome', direction: 'ASC' }
-      }) as Mansione[]
-      setMansioni(rows)
+      const [mansioniRows, protocolliRows] = await Promise.all([
+        window.desktopApi.db.query({
+          table: 'mansioni',
+          where: { _isDeleted: 0 },
+          orderBy: { column: 'nome', direction: 'ASC' }
+        }),
+        window.desktopApi.db.query({
+          table: 'protocolli',
+          where: { _isDeleted: 0 }
+        })
+      ])
+      setMansioni(mansioniRows as Mansione[])
+      // Build map mansioneId → protocollo (one protocollo per mansione)
+      const pmap = new Map<string, Protocollo>()
+      for (const p of protocolliRows as Protocollo[]) {
+        if (p.mansioneId && !pmap.has(p.mansioneId)) {
+          pmap.set(p.mansioneId, p)
+        }
+      }
+      setProtocolliMap(pmap)
     } catch {
       // DB not ready
     } finally {
@@ -55,18 +126,49 @@ export function MansioniPage(): JSX.Element {
     }
   }, [])
 
-  useEffect(() => { loadMansioni() }, [loadMansioni])
+  useEffect(() => { loadData() }, [loadData])
+
+  const handleStartEdit = (m: Mansione): void => {
+    setEditingId(m.id)
+    setEditForm({
+      nome: m.nome || '',
+      codice: m.codice || '',
+      descrizione: m.descrizione || ''
+    })
+  }
+
+  const handleCancelEdit = (): void => {
+    setEditingId(null)
+    setEditForm({ nome: '', codice: '', descrizione: '' })
+  }
+
+  const handleSaveEdit = async (mansioneId: string): Promise<void> => {
+    if (!editForm.nome.trim()) return
+    setSaving(true)
+    try {
+      const updateData = {
+        nome: editForm.nome.trim(),
+        codice: editForm.codice.trim() || null,
+        descrizione: editForm.descrizione.trim() || null
+      }
+      await window.desktopApi.db.update({ table: 'mansioni', id: mansioneId, data: updateData })
+      await window.desktopApi.sync.enqueue({
+        type: 'UPDATE',
+        entity: 'mansione',
+        entityId: mansioneId,
+        payload: updateData
+      })
+      setMansioni(prev => prev.map(m => m.id === mansioneId ? { ...m, ...updateData } : m))
+      setEditingId(null)
+    } catch { /* silent */ }
+    setSaving(false)
+  }
 
   const filtered = mansioni.filter(m => {
     if (!searchTerm) return true
     const term = searchTerm.toLowerCase()
     return [m.nome, m.codice, m.companyName, m.descrizione].some(f => f?.toLowerCase().includes(term))
   })
-
-  function parseRischi(json: string | null): RischioMansione[] {
-    if (!json) return []
-    try { return JSON.parse(json) } catch { return [] }
-  }
 
   return (
     <div className="max-w-5xl mx-auto space-y-4">
@@ -77,7 +179,7 @@ export function MansioniPage(): JSX.Element {
           Mansioni
         </h1>
         <button
-          onClick={loadMansioni}
+          onClick={loadData}
           className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
         >
           <RefreshCw className="w-3.5 h-3.5" />
@@ -116,73 +218,208 @@ export function MansioniPage(): JSX.Element {
       ) : (
         <div className="space-y-2">
           {filtered.map(m => {
-            const rischi = parseRischi(m.rischi)
+            // Use rischi or rischiAssociati (both contain same JSON)
+            const rischi = parseRischi(m.rischi || m.rischiAssociati)
             const isExpanded = expandedId === m.id
+            const isEditing = editingId === m.id
+            const protocollo = protocolliMap.get(m.id) || protocolliMap.get(m._serverId || '')
 
             return (
               <div
                 key={m.id}
                 className="bg-white rounded-2xl border border-gray-200 shadow-card hover:shadow-card-hover transition-all overflow-hidden"
               >
-                <button
-                  onClick={() => setExpandedId(isExpanded ? null : m.id)}
-                  className="w-full p-4 flex items-center gap-3 text-left"
-                >
+                {/* Card header */}
+                <div className="p-4 flex items-center gap-3">
                   <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600 shrink-0">
                     <Briefcase className="w-5 h-5" />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-semibold text-gray-900 truncate">{m.nome || 'Mansione senza nome'}</p>
-                      {m.codice && (
-                        <span className="text-[10px] text-gray-400 font-mono shrink-0">{m.codice}</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3 mt-0.5">
-                      {m.companyName && (
-                        <span className="text-xs text-gray-500">{m.companyName}</span>
-                      )}
-                      {rischi.length > 0 && (
-                        <span className="text-xs text-gray-400 flex items-center gap-1">
-                          <Shield className="w-3 h-3" />{rischi.length} rischi
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {!m.isActive && (
-                      <span className="text-[10px] px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full">Inattiva</span>
-                    )}
-                    <ChevronRight className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
-                  </div>
-                </button>
 
-                {/* Expanded: risks */}
-                {isExpanded && rischi.length > 0 && (
-                  <div className="border-t border-gray-100 bg-gray-50/30 px-4 pb-3 pt-2">
-                    <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-2">Rischi Associati</p>
-                    <div className="space-y-1.5">
-                      {rischi.map((r, i) => {
-                        const level = LIVELLO_COLORS[r.livello] || LIVELLO_COLORS.NON_RILEVANTE
-                        return (
-                          <div key={i} className="flex items-center gap-2 text-xs">
-                            <AlertTriangle className="w-3 h-3 text-gray-400 shrink-0" />
-                            <span className="text-gray-700 flex-1">{r.nome}</span>
-                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${level.bg} ${level.text}`}>
-                              {r.livello}
-                            </span>
-                          </div>
-                        )
-                      })}
+                  {isEditing ? (
+                    /* Inline Edit Form */
+                    <div className="flex-1 space-y-2">
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={editForm.nome}
+                          onChange={e => setEditForm(p => ({ ...p, nome: e.target.value }))}
+                          placeholder="Nome mansione *"
+                          autoFocus
+                          className="flex-1 px-2 py-1 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                        />
+                        <input
+                          type="text"
+                          value={editForm.codice}
+                          onChange={e => setEditForm(p => ({ ...p, codice: e.target.value }))}
+                          placeholder="Codice"
+                          className="w-24 px-2 py-1 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono"
+                        />
+                      </div>
+                      <input
+                        type="text"
+                        value={editForm.descrizione}
+                        onChange={e => setEditForm(p => ({ ...p, descrizione: e.target.value }))}
+                        placeholder="Descrizione (facoltativa)"
+                        className="w-full px-2 py-1 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      />
+                      <div className="flex items-center gap-2 pt-0.5">
+                        <button
+                          onClick={handleCancelEdit}
+                          className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg transition-colors"
+                        >
+                          <X className="w-3 h-3" />Annulla
+                        </button>
+                        <button
+                          onClick={() => { void handleSaveEdit(m.id) }}
+                          disabled={saving || !editForm.nome.trim()}
+                          className="flex items-center gap-1 px-3 py-1 text-xs text-white bg-teal-600 hover:bg-teal-700 rounded-lg disabled:opacity-50 transition-colors"
+                        >
+                          <Check className="w-3 h-3" />
+                          {saving ? 'Salvataggio...' : 'Salva'}
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                )}
-                {isExpanded && rischi.length === 0 && (
-                  <div className="border-t border-gray-100 bg-gray-50/30 px-4 py-3">
-                    <p className="text-xs text-gray-400 flex items-center gap-1">
-                      <Shield className="w-3 h-3" />
-                      Nessun rischio associato
-                    </p>
+                  ) : (
+                    /* Normal display */
+                    <>
+                      <button
+                        onClick={() => setExpandedId(isExpanded ? null : m.id)}
+                        className="flex-1 min-w-0 text-left"
+                      >
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold text-gray-900 truncate">{m.nome || 'Mansione senza nome'}</p>
+                          {m.codice && (
+                            <span className="text-[10px] text-gray-400 font-mono shrink-0">{m.codice}</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 mt-0.5">
+                          {m.companyName && (
+                            <span className="text-xs text-gray-500">{m.companyName}</span>
+                          )}
+                          {rischi.length > 0 && (
+                            <span className="text-xs text-gray-400 flex items-center gap-1">
+                              <Shield className="w-3 h-3" />{rischi.length} rischi
+                            </span>
+                          )}
+                          {protocollo && (
+                            <span className="text-xs text-purple-600 flex items-center gap-1">
+                              <FileText className="w-3 h-3" />Protocollo
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {!m.isActive && (
+                          <span className="text-[10px] px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full">Inattiva</span>
+                        )}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleStartEdit(m) }}
+                          className="p-1.5 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"
+                          title="Modifica mansione"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setExpandedId(isExpanded ? null : m.id)}
+                          className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg transition-colors"
+                        >
+                          <ChevronRight className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Expanded detail panel */}
+                {isExpanded && !isEditing && (
+                  <div className="border-t border-gray-100 bg-gray-50/30 divide-y divide-gray-100">
+
+                    {/* Descrizione */}
+                    {m.descrizione && (
+                      <div className="px-4 py-3">
+                        <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-1">Descrizione</p>
+                        <p className="text-xs text-gray-600">{m.descrizione}</p>
+                      </div>
+                    )}
+
+                    {/* Rischi Associati */}
+                    <div className="px-4 py-3">
+                      <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+                        <Shield className="w-3 h-3" />
+                        Rischi Associati ({rischi.length})
+                      </p>
+                      {rischi.length === 0 ? (
+                        <p className="text-xs text-gray-400 italic">Nessun rischio associato a questa mansione</p>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {rischi.map((r, i) => {
+                            const level = LIVELLO_COLORS[r.livello] || LIVELLO_COLORS.NON_RILEVANTE
+                            // Use codiceRischio as the label (correctly mapped from server)
+                            const label = r.codiceRischio || r.nome || 'Rischio non specificato'
+                            return (
+                              <div key={i} className="flex items-start gap-2 text-xs">
+                                <AlertTriangle className="w-3 h-3 text-gray-400 shrink-0 mt-0.5" />
+                                <div className="flex-1 min-w-0">
+                                  <span className="text-gray-700 font-medium">{label}</span>
+                                  {r.categoria && (
+                                    <span className="ml-1.5 text-gray-400">({r.categoria})</span>
+                                  )}
+                                  {r.fonteRischio && (
+                                    <p className="text-[10px] text-gray-400 mt-0.5">Fonte: {r.fonteRischio}</p>
+                                  )}
+                                </div>
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0 ${level.bg} ${level.text}`}>
+                                  {r.livello}
+                                </span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Protocollo Sanitario Collegato */}
+                    <div className="px-4 py-3">
+                      <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+                        <FileText className="w-3 h-3" />
+                        Protocollo Sanitario
+                      </p>
+                      {!protocollo ? (
+                        <p className="text-xs text-gray-400 italic">Nessun protocollo collegato</p>
+                      ) : (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium text-gray-800">{protocollo.nome || 'Protocollo senza nome'}</p>
+                            {!protocollo.isActive && (
+                              <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded-full">Inattivo</span>
+                            )}
+                          </div>
+                          {(() => {
+                            const prestazioni = parsePrestazioni(protocollo.prestazioni)
+                            return prestazioni.length > 0 ? (
+                              <div className="space-y-1 mt-1">
+                                {prestazioni.map((p, pi) => (
+                                  <div key={pi} className="flex items-center gap-2 text-xs text-gray-600">
+                                    <Tag className="w-3 h-3 text-purple-400 shrink-0" />
+                                    <span className="flex-1 truncate">{p.prestazioneNome}</span>
+                                    <span className="text-gray-400 flex items-center gap-1 shrink-0">
+                                      <Clock className="w-2.5 h-2.5" />
+                                      {formatPeriodicity(p.periodicitaMesi)}
+                                    </span>
+                                    {p.obbligatoria && (
+                                      <span className="text-[10px] text-red-600 font-medium shrink-0">Obbligatoria</span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-gray-400 italic">Nessuna prestazione nel protocollo</p>
+                            )
+                          })()}
+                        </div>
+                      )}
+                    </div>
+
                   </div>
                 )}
               </div>

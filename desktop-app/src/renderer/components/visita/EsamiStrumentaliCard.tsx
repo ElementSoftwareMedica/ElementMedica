@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Activity, Plus, Trash2, Save, ChevronDown, ChevronRight } from 'lucide-react'
+import { Activity, Plus, Trash2, Save, ChevronDown, ChevronRight, Zap, Loader2, CheckCircle2, FileText } from 'lucide-react'
+import { v4 as uuidv4 } from 'uuid'
 
 // ============================================================
 // Types & Constants
@@ -15,12 +16,23 @@ interface EsameStrumentale {
   note: string | null
 }
 
-const TIPI_ESAME: Array<{ value: string; label: string; parametri: string[] }> = [
-  { value: 'SPIROMETRIA', label: 'Spirometria', parametri: ['FVC', 'FEV1', 'FEV1/FVC', 'PEF'] },
-  { value: 'AUDIOMETRIA', label: 'Audiometria', parametri: ['Orecchio DX (dB)', 'Orecchio SX (dB)', 'Deficit'] },
-  { value: 'ECG', label: 'ECG', parametri: ['FC', 'Ritmo', 'Asse', 'Conclusioni'] },
+interface ExamDocument {
+  id: string
+  nome: string
+  tipo: string | null
+  dimensione: number | null
+  localPath: string | null
+  serverUrl: string | null
+}
+
+const TIPI_ESAME: Array<{ value: string; label: string; parametri: string[]; bridgeSupported?: boolean }> = [
+  { value: 'SPIROMETRIA', label: 'Spirometria', parametri: ['FVC', 'FEV1', 'FEV1/FVC', 'PEF'], bridgeSupported: true },
+  { value: 'AUDIOMETRIA', label: 'Audiometria', parametri: ['Orecchio DX (dB)', 'Orecchio SX (dB)', 'Deficit'], bridgeSupported: true },
+  { value: 'ECG', label: 'ECG', parametri: ['FC', 'Ritmo', 'Asse', 'Conclusioni'], bridgeSupported: true },
   { value: 'VISIOTEST', label: 'Visiotest', parametri: ['Visus OD', 'Visus OS', 'Stereopsi', 'Cromatica'] },
   { value: 'EMOCROMO', label: 'Esami Ematochimici', parametri: ['HB', 'GR', 'GB', 'PLT', 'Glicemia', 'Creatinina'] },
+  { value: 'ESAME_LABORATORIO', label: 'Esame di Laboratorio', parametri: ['Materiale', 'Analisi richieste', 'Esito', 'Valori fuori range'] },
+  { value: 'ESAME_MICROBIOLOGICO', label: 'Esame Microbiologico', parametri: ['Campione', 'Ricerca', 'Esito', 'Antibiogramma'] },
   { value: 'DRUG_TEST', label: 'Drug Test', parametri: ['Esito', 'Sostanze testate'] },
   { value: 'ALCOL_TEST', label: 'Alcol Test', parametri: ['Esito', 'Valore BAC'] },
   { value: 'RX_TORACE', label: 'RX Torace', parametri: ['Referto'] },
@@ -43,12 +55,15 @@ interface Props {
   personId: string
   tenantId: string
   isReadOnly: boolean
+  /** Optional patient data for bridge-based exam launch (GDT patient header) */
+  patientData?: { nome?: string; cognome?: string; dataNascita?: string }
+  defaultExpanded?: boolean
 }
 
-export function EsamiStrumentaliCard({ visitId, personId, tenantId, isReadOnly }: Props): JSX.Element {
+export function EsamiStrumentaliCard({ visitId, personId, tenantId, isReadOnly, patientData, defaultExpanded = false }: Props): JSX.Element {
   const [esami, setEsami] = useState<EsameStrumentale[]>([])
   const [loading, setLoading] = useState(true)
-  const [isExpanded, setIsExpanded] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded)
   const [editingId, setEditingId] = useState<string | null>(null)
 
   // New esame form state
@@ -58,6 +73,87 @@ export function EsamiStrumentaliCard({ visitId, personId, tenantId, isReadOnly }
   const [newValori, setNewValori] = useState<Record<string, string>>({})
   const [newNote, setNewNote] = useState('')
   const [isSaving, setIsSaving] = useState(false)
+
+  // Bridge launch state
+  const [bridgeLaunching, setBridgeLaunching] = useState<string | null>(null) // tipo being launched
+  const [bridgeResult, setBridgeResult] = useState<{ sessionId: string; tipo: string } | null>(null)
+  const [examDocuments, setExamDocuments] = useState<ExamDocument[]>([])
+  const [docError, setDocError] = useState<string | null>(null)
+
+  // Bridge exam result listener
+  useEffect(() => {
+    if (!window.desktopApi) return
+    const handler = (_event: unknown, data: {
+      sessionId: string; visitaId?: string; tipo: string
+      risultato?: string; valori?: Record<string, string>
+      note?: string; completedAt: string
+    }) => {
+      if (data.visitaId && data.visitaId !== visitId) return
+      setBridgeResult(null)
+      // Auto-save the received result as an esame
+      const saveResultAsync = async (): Promise<void> => {
+        if (!window.desktopApi) return
+        const esameData = {
+          tenantId,
+          visitaId: visitId,
+          personId,
+          tipo: data.tipo,
+          risultato: data.risultato || null,
+          valori: JSON.stringify(data.valori || {}),
+          dataEsame: data.completedAt.split('T')[0],
+          note: data.note || 'Risultato da Medical Device Bridge',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }
+        const result = await window.desktopApi.db.insert({ table: 'esami_strumentali', data: esameData }) as { id: string; _localId: string }
+        await window.desktopApi.sync.enqueue({
+          type: 'CREATE',
+          entity: 'esami_strumentali',
+          entityId: result.id,
+          localId: result._localId,
+          payload: esameData
+        })
+        setEsami(prev => [...prev, {
+          id: result.id,
+          _localId: result._localId,
+          tipo: data.tipo,
+          risultato: data.risultato || null,
+          valori: JSON.stringify(data.valori || {}),
+          dataEsame: esameData.dataEsame,
+          note: esameData.note,
+        }])
+      }
+      saveResultAsync().catch(() => undefined)
+    }
+    window.desktopApi.on.bridgeExamResult(handler)
+    return () => {
+      window.desktopApi?.on.removeAllListeners('bridge:examResult')
+    }
+  }, [visitId, personId, tenantId])
+
+  // Launch exam via bridge
+  const handleLaunchBridgeExam = useCallback(async (tipo: string) => {
+    if (!window.desktopApi) return
+    setBridgeLaunching(tipo)
+    const sessionId = uuidv4()
+    try {
+      await window.desktopApi.bridge.startExam({
+        tipo,
+        patientData: {
+          nome: patientData?.nome || '',
+          cognome: patientData?.cognome || '',
+          dataNascita: patientData?.dataNascita || '',
+        },
+        visitaId: visitId,
+        sessionId,
+      })
+      setBridgeResult({ sessionId, tipo })
+    } catch {
+      setBridgeResult(null)
+    } finally {
+      setBridgeLaunching(null)
+    }
+  }, [visitId, patientData])
 
   // Load esami for this visit
   useEffect(() => {
@@ -69,8 +165,14 @@ export function EsamiStrumentaliCard({ visitId, personId, tenantId, isReadOnly }
           table: 'esami_strumentali',
           where: { visitaId: visitId, _isDeleted: 0 }
         }) as EsameStrumentale[]
+        const docs = await window.desktopApi.db.query({
+          table: 'allegati',
+          where: { visitaId: visitId, _isDeleted: 0 },
+          orderBy: { column: 'createdAt', direction: 'DESC' }
+        }) as ExamDocument[]
         setEsami(results)
-        if (results.length > 0) setIsExpanded(true)
+        setExamDocuments(docs.filter(d => /laboratorio|microbiologico|microbio|ematochim/i.test(d.nome || '')))
+        if (results.length > 0 || docs.length > 0) setIsExpanded(true)
       } catch {
         // Silent fail
       } finally {
@@ -118,7 +220,7 @@ export function EsamiStrumentaliCard({ visitId, personId, tenantId, isReadOnly }
 
       await window.desktopApi.sync.enqueue({
         type: 'CREATE',
-        entity: 'esameStrumentale',
+        entity: 'esami_strumentali',
         entityId: result.id,
         localId: result._localId,
         payload: data
@@ -144,8 +246,58 @@ export function EsamiStrumentaliCard({ visitId, personId, tenantId, isReadOnly }
   const handleDelete = useCallback(async (esameId: string) => {
     if (!window.desktopApi || isReadOnly) return
     await window.desktopApi.db.softDelete({ table: 'esami_strumentali', id: esameId })
+    await window.desktopApi.sync.enqueue({
+      type: 'DELETE',
+      entity: 'esami_strumentali',
+      entityId: esameId,
+      payload: {}
+    })
     setEsami(prev => prev.filter(e => e.id !== esameId))
   }, [isReadOnly])
+
+  const handleAddDocument = useCallback(async (kind: 'laboratorio' | 'microbiologico') => {
+    if (!window.desktopApi || isReadOnly) return
+    setDocError(null)
+    const result = await window.desktopApi.dialog.openFile()
+    if (result.canceled || !result.filePaths.length) return
+    try {
+      const fileInfo = await window.desktopApi.file.copyToAppData({ sourcePath: result.filePaths[0], visitaId: visitId })
+      const now = new Date().toISOString()
+      const prefix = kind === 'laboratorio' ? 'Laboratorio' : 'Microbiologico'
+      const { id } = await window.desktopApi.db.insert({
+        table: 'allegati',
+        data: {
+          tenantId,
+          visitaId: visitId,
+          nome: `${prefix} - ${fileInfo.nome}`,
+          tipo: fileInfo.tipo,
+          dimensione: fileInfo.dimensione,
+          localPath: fileInfo.localPath,
+          serverUrl: null,
+          createdAt: now,
+          updatedAt: now,
+        }
+      }) as { id: string }
+      setExamDocuments(prev => [{ id, nome: `${prefix} - ${fileInfo.nome}`, tipo: fileInfo.tipo, dimensione: fileInfo.dimensione, localPath: fileInfo.localPath, serverUrl: null }, ...prev])
+    } catch {
+      setDocError('Impossibile caricare il documento')
+    }
+  }, [isReadOnly, tenantId, visitId])
+
+  const handleOpenDocument = useCallback(async (doc: ExamDocument) => {
+    setDocError(null)
+    try {
+      if (doc.localPath) {
+        await window.desktopApi.file.openLocalFile(doc.localPath)
+      } else if (doc.serverUrl) {
+        await window.desktopApi.app.openExternal(doc.serverUrl.startsWith('http') ? doc.serverUrl : `https://www.elementmedica.com${doc.serverUrl}`)
+      } else {
+        setDocError('Documento non disponibile')
+      }
+    } catch {
+      setDocError('Impossibile aprire il documento')
+    }
+  }, [])
 
   if (loading) {
     return (
@@ -332,6 +484,61 @@ export function EsamiStrumentaliCard({ visitId, personId, tenantId, isReadOnly }
               <Plus className="w-3.5 h-3.5" />
               Aggiungi Esame
             </button>
+          )}
+
+          <div className="border-t border-gray-100 pt-3 space-y-2">
+            <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Documenti laboratorio e microbiologia</p>
+            {docError && <p className="rounded-lg bg-red-50 px-2 py-1 text-[11px] text-red-600">{docError}</p>}
+            {examDocuments.length > 0 && (
+              <div className="space-y-1.5">
+                {examDocuments.map(doc => (
+                  <div key={doc.id} className="flex items-center gap-2 rounded-lg bg-gray-50 px-2 py-1.5">
+                    <FileText className="h-3.5 w-3.5 text-gray-400" />
+                    <span className="min-w-0 flex-1 truncate text-xs text-gray-700">{doc.nome}</span>
+                    <button type="button" onClick={() => { void handleOpenDocument(doc) }} className="rounded-md bg-teal-50 px-2 py-1 text-[10px] font-medium text-teal-700 hover:bg-teal-100">Apri</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {!isReadOnly && (
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => { void handleAddDocument('laboratorio') }} className="rounded-xl border border-dashed border-emerald-200 px-3 py-2 text-xs font-medium text-emerald-700 hover:bg-emerald-50">
+                  Carica laboratorio
+                </button>
+                <button type="button" onClick={() => { void handleAddDocument('microbiologico') }} className="rounded-xl border border-dashed border-green-200 px-3 py-2 text-xs font-medium text-green-700 hover:bg-green-50">
+                  Carica microbiologico
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Bridge quick-launch buttons (ECG / Spirometria / Audiometria) */}
+          {!isReadOnly && !showNewForm && (
+            <div className="border-t border-gray-100 pt-3 space-y-1.5">
+              <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Avvia con dispositivo medico</p>
+              <div className="flex flex-wrap gap-2">
+                {TIPI_ESAME.filter(t => t.bridgeSupported).map(t => (
+                  <button
+                    key={t.value}
+                    onClick={() => handleLaunchBridgeExam(t.value)}
+                    disabled={bridgeLaunching !== null}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium rounded-lg border border-violet-200 text-violet-700 bg-violet-50 hover:bg-violet-100 disabled:opacity-50 transition-colors"
+                  >
+                    {bridgeLaunching === t.value
+                      ? <Loader2 className="w-3 h-3 animate-spin" />
+                      : <Zap className="w-3 h-3" />
+                    }
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+              {bridgeResult && (
+                <div className="flex items-center gap-1.5 text-[11px] text-green-600 bg-green-50 border border-green-200 rounded-lg px-2.5 py-1.5">
+                  <CheckCircle2 className="w-3 h-3 shrink-0" />
+                  Esame avviato — in attesa risultato dal dispositivo…
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}

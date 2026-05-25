@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Users,
@@ -8,9 +8,11 @@ import {
   Building2,
   Calendar,
   RefreshCw,
-  Download
+  Download,
+  UserPlus
 } from 'lucide-react'
 import { exportToCSV } from '../utils/exportCSV'
+import { usePersistentPageState } from '../hooks/usePersistentPageState'
 
 interface Paziente {
   id: string
@@ -28,8 +30,10 @@ interface Paziente {
 
 export function PazientiPage(): JSX.Element {
   const [pazienti, setPazienti] = useState<Paziente[]>([])
+  const [filtered, setFiltered] = useState<Paziente[]>([])
   const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
+  const [searchTerm, setSearchTerm] = usePersistentPageState('pazienti:searchTerm', '')
+  const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
   const navigate = useNavigate()
 
   const loadPazienti = useCallback(async () => {
@@ -42,6 +46,7 @@ export function PazientiPage(): JSX.Element {
         orderBy: { column: 'lastName', direction: 'ASC' }
       }) as Paziente[]
       setPazienti(rows)
+      setFiltered(rows)
     } catch {
       // DB not ready
     } finally {
@@ -51,12 +56,48 @@ export function PazientiPage(): JSX.Element {
 
   useEffect(() => { loadPazienti() }, [loadPazienti])
 
-  const filtered = pazienti.filter(p => {
-    if (!searchTerm) return true
-    const term = searchTerm.toLowerCase()
-    return [p.firstName, p.lastName, p.taxCode, p.email, p.phone, p.companyName]
-      .some(f => f?.toLowerCase().includes(term))
-  })
+  // FTS5 search with debounce (150ms)
+  useEffect(() => {
+    if (searchDebounce.current) clearTimeout(searchDebounce.current)
+
+    if (!searchTerm.trim()) {
+      setFiltered(pazienti)
+      return
+    }
+
+    if (searchTerm.trim().length < 2) {
+      // Simple in-memory filter for 1-char queries
+      const term = searchTerm.toLowerCase()
+      setFiltered(pazienti.filter(p =>
+        [p.firstName, p.lastName, p.taxCode, p.email, p.phone, p.companyName]
+          .some(f => f?.toLowerCase().includes(term))
+      ))
+      return
+    }
+
+    searchDebounce.current = setTimeout(async () => {
+      try {
+        if (window.desktopApi?.db?.searchPatients) {
+          const results = await window.desktopApi.db.searchPatients({ query: searchTerm.trim() }) as Paziente[]
+          setFiltered(results)
+        } else {
+          // Fallback: in-memory filter if FTS not available
+          const term = searchTerm.toLowerCase()
+          setFiltered(pazienti.filter(p =>
+            [p.firstName, p.lastName, p.taxCode, p.email, p.phone, p.companyName]
+              .some(f => f?.toLowerCase().includes(term))
+          ))
+        }
+      } catch {
+        // FTS error: fall back to in-memory
+        const term = searchTerm.toLowerCase()
+        setFiltered(pazienti.filter(p =>
+          [p.firstName, p.lastName, p.taxCode, p.email, p.phone, p.companyName]
+            .some(f => f?.toLowerCase().includes(term))
+        ))
+      }
+    }, 150)
+  }, [searchTerm, pazienti])
 
   return (
     <div className="max-w-5xl mx-auto space-y-4">
@@ -67,6 +108,13 @@ export function PazientiPage(): JSX.Element {
           Lavoratori
         </h1>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate('/pazienti/nuovo')}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-colors"
+          >
+            <UserPlus className="w-3.5 h-3.5" />
+            Nuovo
+          </button>
           <button
             onClick={() => exportToCSV('patients')}
             className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
