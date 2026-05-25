@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Check, ClipboardCheck, FileStack, Plus, Save, X } from 'lucide-react'
 
-interface VisitTemplate {
+interface DocumentTemplate {
   id: string
   nome: string
   tipo: string | null
-  fields: string
   campi?: string
   codice?: string | null
   fase?: string | null
   questionarioConfig?: string | null
+  richiedeFirma?: number | boolean
+  richiedeFirmaMedico?: number | boolean
 }
 
 interface FieldDef {
@@ -41,13 +42,21 @@ interface Props {
   isReadOnly: boolean
 }
 
-function isQuestionarioTemplate(t: VisitTemplate): boolean {
-  const text = `${t.tipo || ''} ${t.nome || ''} ${t.codice || ''} ${t.questionarioConfig || ''}`.toLowerCase()
-  return text.includes('questionario') || text.includes('scheda_sorveglianza') || text.includes('alcol') || text.includes('rischio') || text.includes('sintomi') || text.includes('scoring')
+const QUESTIONARIO_TIPO_EXACT = new Set(['ALCOL_SCREENING', 'SCHEDA_SORVEGLIANZA'])
+
+function isQuestionarioTemplate(t: DocumentTemplate): boolean {
+  const tipo = String(t.tipo || '').toUpperCase()
+  if (tipo.startsWith('QUESTIONARIO_') || QUESTIONARIO_TIPO_EXACT.has(tipo)) return true
+  try {
+    const config = JSON.parse(t.questionarioConfig || '{}') as Record<string, unknown>
+    return !!(config.haScoring || config.codiciRischio || config.tipiVisitaMDL || config.compilabileDa)
+  } catch {
+    return false
+  }
 }
 
-function parseFields(template: VisitTemplate | undefined): FieldDef[] {
-  const rawFields = template?.fields || template?.campi
+function parseFields(template: DocumentTemplate | undefined): FieldDef[] {
+  const rawFields = template?.campi
   if (!rawFields) return []
   try {
     const parsed = JSON.parse(rawFields) as FieldDef[]
@@ -65,33 +74,6 @@ function optionLabel(option: string | { label?: string; value?: string }): strin
   return typeof option === 'string' ? option : String(option.label || option.value || '')
 }
 
-function fallbackTemplates(mode: 'questionari' | 'modulistica'): VisitTemplate[] {
-  if (mode === 'questionari') {
-    return [{
-      id: 'offline-questionario-anamnesi-mdl',
-      nome: 'Questionario Anamnesi MDL',
-      tipo: 'QUESTIONARIO_ANAMNESI_MDL',
-      fields: JSON.stringify([
-        { key: 'disturbi_attuali', label: 'Disturbi attuali', tipo: 'textarea' },
-        { key: 'farmaci', label: 'Farmaci assunti', tipo: 'textarea' },
-        { key: 'allergie', label: 'Allergie', tipo: 'textarea' },
-        { key: 'fumatore', label: 'Fumatore', tipo: 'boolean' },
-        { key: 'note', label: 'Note', tipo: 'textarea' },
-      ]),
-    }]
-  }
-  return [{
-    id: 'offline-modulo-generico-visita',
-    nome: 'Modulo visita',
-    tipo: 'MODULO_GENERICO',
-    fields: JSON.stringify([
-      { key: 'oggetto', label: 'Oggetto', tipo: 'text' },
-      { key: 'contenuto', label: 'Contenuto modulo', tipo: 'textarea' },
-      { key: 'note', label: 'Note', tipo: 'textarea' },
-    ]),
-  }]
-}
-
 function fieldKey(field: FieldDef): string {
   return field.key || field.name || String(field.label || 'campo')
 }
@@ -101,7 +83,7 @@ function fieldLabel(field: FieldDef): string {
 }
 
 export function DocumentiVisitaModal({ isOpen, onClose, mode, visitId, personId, tenantId, isReadOnly }: Props): JSX.Element | null {
-  const [templates, setTemplates] = useState<VisitTemplate[]>([])
+  const [templates, setTemplates] = useState<DocumentTemplate[]>([])
   const [compiled, setCompiled] = useState<Compilato[]>([])
   const [selectedTemplate, setSelectedTemplate] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -113,23 +95,18 @@ export function DocumentiVisitaModal({ isOpen, onClose, mode, visitId, personId,
 
   const loadData = useCallback(async () => {
     if (!window.desktopApi || !isOpen) return
-    const [visitTemplateRows, documentTemplateRows, compiledRows] = await Promise.all([
-      window.desktopApi.db.query({ table: 'visit_templates', where: { _isDeleted: 0 }, orderBy: { column: 'nome', direction: 'ASC' } }) as Promise<VisitTemplate[]>,
-      window.desktopApi.db.query({ table: 'document_templates', where: { _isDeleted: 0, isActive: 1 }, orderBy: { column: 'ordine', direction: 'ASC' } }).catch(() => []) as Promise<VisitTemplate[]>,
+    const [documentTemplateRows, compiledRows] = await Promise.all([
+      window.desktopApi.db.query({ table: 'document_templates', where: { _isDeleted: 0, isActive: 1 }, orderBy: { column: 'ordine', direction: 'ASC' } }).catch(() => []) as Promise<DocumentTemplate[]>,
       window.desktopApi.db.query({ table: 'questionari_compilati', where: { visitaId: visitId, _isDeleted: 0 }, orderBy: { column: 'dataCompilazione', direction: 'DESC' } }) as Promise<Compilato[]>,
     ])
-    const templateRows = [
-      ...documentTemplateRows.map(t => ({ ...t, fields: t.campi || t.fields || '[]' })),
-      ...visitTemplateRows,
-    ].filter((t, idx, all) => all.findIndex(x => x.id === t.id) === idx)
+    const templateRows = documentTemplateRows.filter((t, idx, all) => all.findIndex(x => x.id === t.id) === idx)
     const filteredFromDb = templateRows.filter(t => mode === 'questionari' ? isQuestionarioTemplate(t) : !isQuestionarioTemplate(t))
-    const filteredTemplates = filteredFromDb.length > 0 ? filteredFromDb : fallbackTemplates(mode)
-    setTemplates(filteredTemplates)
+    setTemplates(filteredFromDb)
     setCompiled(compiledRows.filter(row => {
       const template = templateRows.find(t => t.id === row.templateId)
       return template ? (mode === 'questionari' ? isQuestionarioTemplate(template) : !isQuestionarioTemplate(template)) : mode === 'questionari'
     }))
-    if (!selectedTemplate && filteredTemplates[0]) setSelectedTemplate(filteredTemplates[0].id)
+    if (!selectedTemplate && filteredFromDb[0]) setSelectedTemplate(filteredFromDb[0].id)
   }, [isOpen, mode, selectedTemplate, visitId])
 
   useEffect(() => { void loadData() }, [loadData])

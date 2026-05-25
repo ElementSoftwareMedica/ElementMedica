@@ -309,7 +309,24 @@ export async function downloadDay(req, res) {
                         indirizzo: true,
                         citta: true,
                         cap: true,
-                        provincia: true
+                        provincia: true,
+                        medicoCompetenteId: true
+                    }
+                },
+                nomine: {
+                    where: {
+                        deletedAt: null,
+                        stato: 'ATTIVA',
+                        tipoRuolo: { in: ['MEDICO_COMPETENTE', 'MEDICO_COMPETENTE_COORDINATO'] }
+                    },
+                    select: {
+                        id: true,
+                        personId: true,
+                        tipoRuolo: true,
+                        dataInizio: true,
+                        dataFine: true,
+                        dataScadenza: true,
+                        person: { select: { id: true, firstName: true, lastName: true } }
                     }
                 }
             }
@@ -327,6 +344,34 @@ export async function downloadDay(req, res) {
                     include: { prestazione: true }
                 }
             }
+        });
+
+        const medici = await prisma.person.findMany({
+            where: {
+                deletedAt: null,
+                tenantProfiles: { some: { tenantId, deletedAt: null } },
+                personRoles: {
+                    some: {
+                        tenantId,
+                        deletedAt: null,
+                        isActive: true,
+                        roleType: { in: ['MEDICO', 'MEDICO_COMPETENTE'] }
+                    }
+                }
+            },
+            select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                gender: true,
+                taxCode: true,
+                tenantProfiles: {
+                    where: { tenantId, deletedAt: null },
+                    select: { email: true, phone: true, status: true, specialties: true },
+                    take: 1
+                }
+            },
+            orderBy: { lastName: 'asc' }
         });
 
         // 15. Visit templates del tenant
@@ -375,7 +420,8 @@ export async function downloadDay(req, res) {
                     rischiAggiuntivi: rischiAggiuntivi.length,
                     protocolli: protocolli.length,
                     visitTemplates: visitTemplates.length,
-                    documentTemplates: documentTemplates.length
+                    documentTemplates: documentTemplates.length,
+                    medici: medici.length
                 }
             },
             appuntamenti,
@@ -392,7 +438,8 @@ export async function downloadDay(req, res) {
             rischiAggiuntivi,
             protocolli,
             visitTemplates,
-            documentTemplates
+            documentTemplates,
+            medici
         };
 
         logger.info({
@@ -504,6 +551,34 @@ export async function downloadFullDb(req, res) {
                 prezzoBase: true, ivaAliquota: true, prezzoPrimaVisita: true, prezzoControllo: true,
                 scadenzaDefaultMesi: true, branchType: true
             }
+        });
+
+        const medici = await prisma.person.findMany({
+            where: {
+                deletedAt: null,
+                tenantProfiles: { some: { tenantId, deletedAt: null } },
+                personRoles: {
+                    some: {
+                        tenantId,
+                        deletedAt: null,
+                        isActive: true,
+                        roleType: { in: ['MEDICO', 'MEDICO_COMPETENTE'] }
+                    }
+                }
+            },
+            select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                gender: true,
+                taxCode: true,
+                tenantProfiles: {
+                    where: { tenantId, deletedAt: null },
+                    select: { email: true, phone: true, status: true, specialties: true },
+                    take: 1
+                }
+            },
+            orderBy: { lastName: 'asc' }
         });
 
         // 6. ALL ambulatori
@@ -665,6 +740,7 @@ export async function downloadFullDb(req, res) {
                     lavoratoriMansioni: lavoratoriMansioni.length,
                     visitTemplates: visitTemplates.length,
                     documentTemplates: documentTemplates.length,
+                    medici: medici.length,
                     rischiAggiuntivi: rischiAggiuntivi.length,
                     visite: visite.length,
                     tariffari: tariffari.length,
@@ -683,6 +759,7 @@ export async function downloadFullDb(req, res) {
             lavoratoriMansioni,
             visitTemplates,
             documentTemplates,
+            medici,
             rischiAggiuntivi,
             visite,
             tariffari,

@@ -44,7 +44,11 @@ export function useDesktopPermission() {
     const canCreateVisite = useCallback((): boolean =>
         isAdmin() || hasPermission('clinica.visite:create'), [hasPermission, isAdmin])
     const canUpdateVisite = useCallback((): boolean =>
-        isAdmin() || hasPermission('clinica.visite:update'), [hasPermission, isAdmin])
+        isAdmin() || hasPermission('clinica.visite:update') || hasPermission('clinica.visite:edit_others'), [hasPermission, isAdmin])
+    const canChangeRefertante = useCallback((): boolean =>
+        isAdmin() || hasPermission('clinica.visite:change_refertante'), [hasPermission, isAdmin])
+    const canEditOtherVisits = useCallback((): boolean =>
+        isAdmin() || hasPermission('clinica.visite:edit_others'), [hasPermission, isAdmin])
 
     // ─── Pazienti / Lavoratori ───────────────────────────────────────────────
     const canReadPazienti = useCallback((): boolean =>
@@ -106,6 +110,8 @@ export function useDesktopPermission() {
         canReadVisite,
         canCreateVisite,
         canUpdateVisite,
+        canChangeRefertante,
+        canEditOtherVisits,
         canReadPazienti,
         canCreatePazienti,
         canUpdatePazienti,
@@ -122,7 +128,7 @@ export function useDesktopPermission() {
         canAccessSettings
     }), [
         isAdmin, isMedicoOnly, isSecretaryOrTenantAdmin, hasPermission, canAccessDashboard, canReadAgenda, canUpdateAppuntamenti,
-        canDeleteAppuntamenti, canReadVisite, canCreateVisite, canUpdateVisite,
+        canDeleteAppuntamenti, canReadVisite, canCreateVisite, canUpdateVisite, canChangeRefertante, canEditOtherVisits,
         canReadPazienti, canCreatePazienti, canUpdatePazienti, canReadAziende,
         canUpdateAziende, canReadScadenze, canReadProtocolli, canReadMansioni,
         canReadTariffari, canReadPrestazioni, canReadConvenzioni, canReadMovimenti,

@@ -349,16 +349,28 @@ export function VisitaDetailPage(): JSX.Element {
     useEffect(() => { formValuesRef.current = formValues }, [formValues])
     const isCompletedLocked = !!visit && visit.stato === 'COMPLETATA' && !editingCompletedVisit
     const isReadOnly = !visit || visit.stato === 'ANNULLATA' || !permissions.canUpdateVisite() || isCompletedLocked
+    const shouldConfirmExit = !!visit && !['COMPLETATA', 'ANNULLATA'].includes(String(visit.stato || '')) && !locationState?.secondaryVisit
 
     useEffect(() => {
-        if (!hasChanges) return
+        if (!hasChanges && !shouldConfirmExit) return
         const handleBeforeUnload = (event: BeforeUnloadEvent): void => {
             event.preventDefault()
             event.returnValue = ''
         }
         window.addEventListener('beforeunload', handleBeforeUnload)
         return () => window.removeEventListener('beforeunload', handleBeforeUnload)
-    }, [hasChanges])
+    }, [hasChanges, shouldConfirmExit])
+
+    useEffect(() => {
+        if (!shouldConfirmExit) return
+        const handlePopState = (): void => {
+            window.history.pushState(null, '', window.location.href)
+            setShowExitDialog(true)
+        }
+        window.history.pushState(null, '', window.location.href)
+        window.addEventListener('popstate', handlePopState)
+        return () => window.removeEventListener('popstate', handlePopState)
+    }, [shouldConfirmExit])
 
     useEffect(() => {
         return () => {
@@ -579,11 +591,17 @@ export function VisitaDetailPage(): JSX.Element {
         if (!window.desktopApi) return
         void Promise.all([
             window.desktopApi.db.query({ table: 'prestazioni', where: { _isDeleted: 0 }, orderBy: { column: 'nome', direction: 'ASC' } }),
+            window.desktopApi.db.query({ table: 'medici', where: { _isDeleted: 0 }, orderBy: { column: 'lastName', direction: 'ASC' } }).catch(() => []),
             window.desktopApi.db.query({ table: 'visits', where: { _isDeleted: 0 }, orderBy: { column: 'medicoLastName', direction: 'ASC' } })
-        ]).then(([prestRows, visitRows]) => {
+        ]).then(([prestRows, mediciRows, visitRows]) => {
             setPrestazioniCatalog(prestRows as PrestazioneCatalogItem[])
             const map = new Map<string, MedicoOption>()
             if (visit?.medicoId) map.set(visit.medicoId, { id: visit.medicoId, firstName: visit.medicoFirstName, lastName: visit.medicoLastName })
+            if (permissions.canChangeRefertante()) {
+                for (const m of mediciRows as Array<{ id: string; firstName: string | null; lastName: string | null }>) {
+                    if (m.id && !map.has(m.id)) map.set(m.id, { id: m.id, firstName: m.firstName, lastName: m.lastName })
+                }
+            }
             for (const v of visitRows as Array<{ medicoId: string | null; medicoFirstName: string | null; medicoLastName: string | null }>) {
                 if (v.medicoId && !map.has(v.medicoId)) {
                     map.set(v.medicoId, { id: v.medicoId, firstName: v.medicoFirstName, lastName: v.medicoLastName })
@@ -591,7 +609,7 @@ export function VisitaDetailPage(): JSX.Element {
             }
             setMediciOptions([...map.values()].filter(m => m.lastName || m.firstName))
         }).catch(() => undefined)
-    }, [visit?.medicoId, visit?.medicoFirstName, visit?.medicoLastName])
+    }, [permissions, visit?.medicoId, visit?.medicoFirstName, visit?.medicoLastName])
 
     // Load appointment prestazioni + resolve tariffario prices
     useEffect(() => {
@@ -1336,12 +1354,12 @@ export function VisitaDetailPage(): JSX.Element {
     }, [isReadOnly])
 
     const handleBackRequest = useCallback(() => {
-        if (hasChanges && !isReadOnly) {
+        if ((hasChanges && !isReadOnly) || shouldConfirmExit) {
             setShowExitDialog(true)
             return
         }
         navigate(backTarget)
-    }, [hasChanges, isReadOnly, navigate, backTarget])
+    }, [hasChanges, isReadOnly, shouldConfirmExit, navigate, backTarget])
 
     const handleExitAction = useCallback(async (action: 'draft' | 'discard' | 'stay') => {
         if (action === 'stay') {
@@ -1554,10 +1572,10 @@ export function VisitaDetailPage(): JSX.Element {
                         {/* PDF Referto: available for completed visits */}
                         {visit.stato === 'COMPLETATA' && !editingCompletedVisit && (
                             <button
-                                onClick={handleDownloadPdf}
+                                onClick={() => { void generatePdfPreview() }}
                                 disabled={pdfGenerating}
                                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-teal-700 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100 disabled:opacity-50 transition-colors"
-                                title="Scarica PDF del referto della visita"
+                                title="Apri anteprima PDF del referto della visita"
                             >
                                 <Download className="w-3.5 h-3.5" />
                                 {pdfGenerating ? 'Generando...' : 'PDF Referto'}
@@ -1694,7 +1712,7 @@ export function VisitaDetailPage(): JSX.Element {
                                                     {action.id === 'precedenti' && (
                                                         <div className="space-y-2">
                                                             {patientVisits.length === 0 ? <p>Nessuna visita precedente.</p> : patientVisits.slice(0, 5).map(v => (
-                                                                <button key={v.id} type="button" onClick={() => navigate(`/visite/${v.id}`, { state: { from: `/visite/${visit.id}` } })} className="w-full rounded-lg bg-white px-2 py-2 text-left hover:bg-purple-50">
+                                                                <button key={v.id} type="button" onClick={() => { setSelectedHistoryVisit(v); setShowHistoryModal(true) }} className="w-full rounded-lg bg-white px-2 py-2 text-left hover:bg-purple-50">
                                                                     <span className="block font-medium text-gray-800">{v.prestazioneNome || 'Visita'}</span>
                                                                     <span className="text-[10px] text-gray-500">{v.dataOra ? new Date(v.dataOra).toLocaleDateString('it-IT') : 'Data non disponibile'} · {v.stato || '—'}</span>
                                                                 </button>
@@ -1902,7 +1920,7 @@ export function VisitaDetailPage(): JSX.Element {
                                     Diverso dal visitante
                                 </span>
                             )}
-                            {!isReadOnly && (
+                            {!isReadOnly && permissions.canChangeRefertante() && (
                                 <div className="relative mt-3">
                                     <button type="button" onClick={() => setMedicoPickerOpen(prev => !prev)} className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-gray-200 text-xs text-gray-700 hover:bg-violet-50">
                                         Cambia medico
@@ -2485,9 +2503,26 @@ export function VisitaDetailPage(): JSX.Element {
                               <p className="text-sm text-gray-600">{selectedHistoryVisit.dataOra ? new Date(selectedHistoryVisit.dataOra).toLocaleString('it-IT') : 'Data non disponibile'} · {selectedHistoryVisit.stato || '—'}</p>
                               <p className="text-xs text-gray-500">Medico: {[selectedHistoryVisit.medicoFirstName, selectedHistoryVisit.medicoLastName].filter(Boolean).join(' ') || 'Non indicato'}</p>
                             </div>
-                            <button type="button" onClick={() => navigate(`/visite/${selectedHistoryVisit.id}`, { state: { from: `/visite/${visit.id}`, secondaryVisit: true } })} className="w-full rounded-xl bg-purple-600 px-3 py-2 text-sm font-medium text-white hover:bg-purple-700">
-                              Apri visita completa
-                            </button>
+                            <div className="rounded-xl border border-gray-100 bg-white p-4 text-sm text-gray-700">
+                              <dl className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <dt className="text-xs uppercase tracking-wider text-gray-400">Prestazione</dt>
+                                  <dd className="font-medium text-gray-900">{selectedHistoryVisit.prestazioneNome || 'Visita'}</dd>
+                                </div>
+                                <div>
+                                  <dt className="text-xs uppercase tracking-wider text-gray-400">Stato</dt>
+                                  <dd className="font-medium text-gray-900">{selectedHistoryVisit.stato || '—'}</dd>
+                                </div>
+                                <div>
+                                  <dt className="text-xs uppercase tracking-wider text-gray-400">Medico</dt>
+                                  <dd>{[selectedHistoryVisit.medicoFirstName, selectedHistoryVisit.medicoLastName].filter(Boolean).join(' ') || 'Non indicato'}</dd>
+                                </div>
+                                <div>
+                                  <dt className="text-xs uppercase tracking-wider text-gray-400">Tipo</dt>
+                                  <dd>{selectedHistoryVisit.isMDL ? 'Medicina del lavoro' : 'Visita clinica'}</dd>
+                                </div>
+                              </dl>
+                            </div>
                           </div>
                         ) : (
                           <div className="flex h-full min-h-80 items-center justify-center rounded-xl bg-gray-50 text-center text-sm text-gray-400">

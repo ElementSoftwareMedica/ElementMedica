@@ -159,6 +159,7 @@ function initializeSchema(database: Database.Database): void {
   preMigrate('ALTER TABLE document_templates ADD COLUMN campi TEXT DEFAULT "[]"')
   preMigrate('ALTER TABLE document_templates ADD COLUMN contenutoHtml TEXT')
   preMigrate('ALTER TABLE document_templates ADD COLUMN richiedeFirma INTEGER DEFAULT 0')
+  preMigrate('ALTER TABLE document_templates ADD COLUMN richiedeFirmaMedico INTEGER DEFAULT 0')
   preMigrate('ALTER TABLE document_templates ADD COLUMN questionarioConfig TEXT DEFAULT "{}"')
   preMigrate('ALTER TABLE movimenti_contabili ADD COLUMN appuntamentoId TEXT')
   preMigrate('ALTER TABLE allegati ADD COLUMN companyTenantProfileId TEXT')
@@ -846,9 +847,35 @@ function initializeSchema(database: Database.Database): void {
       campi TEXT DEFAULT '[]',
       contenutoHtml TEXT,
       richiedeFirma INTEGER DEFAULT 0,
+      richiedeFirmaMedico INTEGER DEFAULT 0,
       questionarioConfig TEXT DEFAULT '{}',
       isActive INTEGER DEFAULT 1,
       ordine INTEGER DEFAULT 0,
+
+      createdAt TEXT,
+      updatedAt TEXT,
+      deletedAt TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS medici (
+      id TEXT PRIMARY KEY,
+      _localId TEXT NOT NULL,
+      _serverId TEXT,
+      _syncStatus TEXT NOT NULL DEFAULT 'SYNCED',
+      _lastSyncAt TEXT,
+      _localUpdatedAt TEXT NOT NULL,
+      _isDeleted INTEGER NOT NULL DEFAULT 0,
+      _version INTEGER NOT NULL DEFAULT 1,
+
+      tenantId TEXT NOT NULL,
+      firstName TEXT,
+      lastName TEXT,
+      gender TEXT,
+      taxCode TEXT,
+      email TEXT,
+      phone TEXT,
+      status TEXT,
+      specialties TEXT DEFAULT '[]',
 
       createdAt TEXT,
       updatedAt TEXT,

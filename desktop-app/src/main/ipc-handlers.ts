@@ -70,7 +70,7 @@ const TENANT_SCOPED_TABLES = new Set([
     'patients', 'companies',
     'mansioni', 'lavoratore_mansioni', 'protocolli',
     'scadenze', 'giudizi_idoneita', 'movimenti_contabili',
-    'prestazioni', 'tariffari', 'convenzioni', 'ambulatori',
+    'prestazioni', 'tariffari', 'convenzioni', 'ambulatori', 'medici',
     'visit_templates', 'document_templates', 'esami_strumentali', 'allegati',
     'questionari_compilati', 'lavoratore_rischi_aggiuntivi'
 ])
@@ -777,6 +777,29 @@ export function setupIpcHandlers(): void {
                 bulkUpsert('prestazioni', flat)
             }
 
+            // ---- 5b. Store medici tenant (for refertante picker and visit permissions parity) ----
+            if (data.medici && Array.isArray(data.medici)) {
+                const flat = data.medici.map((m: Record<string, unknown>) => {
+                    const profiles = Array.isArray(m.tenantProfiles) ? m.tenantProfiles as Record<string, unknown>[] : []
+                    const profile = profiles[0] || {}
+                    return {
+                        id: m.id,
+                        tenantId: data.meta?.tenantId || '',
+                        firstName: m.firstName,
+                        lastName: m.lastName,
+                        gender: m.gender,
+                        taxCode: m.taxCode,
+                        email: profile.email,
+                        phone: profile.phone,
+                        status: profile.status || 'ACTIVE',
+                        specialties: JSON.stringify(profile.specialties || []),
+                        createdAt: m.createdAt,
+                        updatedAt: m.updatedAt
+                    }
+                })
+                bulkUpsert('medici', flat)
+            }
+
             // ---- 6. Store ambulatori (flat — direct from backend) ----
             if (data.ambulatori && Array.isArray(data.ambulatori)) {
                 const flat = data.ambulatori.map((a: Record<string, unknown>) => ({
@@ -1017,6 +1040,7 @@ export function setupIpcHandlers(): void {
                     campi: typeof t.campi === 'string' ? t.campi : JSON.stringify(t.campi || []),
                     contenutoHtml: t.contenutoHtml,
                     richiedeFirma: t.richiedeFirma ? 1 : 0,
+                    richiedeFirmaMedico: t.richiedeFirmaMedico ? 1 : 0,
                     questionarioConfig: typeof t.questionarioConfig === 'string' ? t.questionarioConfig : JSON.stringify(t.questionarioConfig || {}),
                     isActive: t.isActive !== undefined ? (t.isActive ? 1 : 0) : 1,
                     ordine: t.ordine || 0,
@@ -2021,7 +2045,7 @@ const VALID_TABLES = new Set([
     'patients', 'companies', 'company_sites',
     'mansioni', 'lavoratore_mansioni', 'protocolli',
     'scadenze', 'giudizi_idoneita', 'movimenti_contabili',
-    'prestazioni', 'tariffari', 'convenzioni', 'ambulatori',
+    'prestazioni', 'tariffari', 'convenzioni', 'ambulatori', 'medici',
     'visit_templates', 'document_templates', 'esami_strumentali', 'allegati',
     'questionari_compilati', 'lavoratore_rischi_aggiuntivi',
     'operations_queue', 'sync_log'

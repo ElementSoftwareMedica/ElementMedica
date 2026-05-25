@@ -392,7 +392,7 @@ async function performWipeRemoto(): Promise<void> {
             'visits', 'appointments', 'patients', 'companies', 'company_sites',
             'mansioni', 'lavoratore_mansioni', 'protocolli', 'scadenze',
             'giudizi_idoneita', 'movimenti_contabili', 'prestazioni', 'tariffari',
-            'convenzioni', 'ambulatori', 'visit_templates', 'document_templates', 'esami_strumentali',
+            'convenzioni', 'ambulatori', 'medici', 'visit_templates', 'document_templates', 'esami_strumentali',
             'allegati', 'questionari_compilati', 'lavoratore_rischi_aggiuntivi',
             'operations_queue', 'sync_log'
         ]

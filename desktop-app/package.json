@@ -1,6 +1,6 @@
 {
   "name": "elementmedica-desktop",
-  "version": "0.1.22",
+  "version": "0.1.23",
   "description": "ElementMedica Desktop - MDL Offline-First Application",
   "main": "out/main/index.js",
   "private": true,

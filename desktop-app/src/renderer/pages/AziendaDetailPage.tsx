@@ -233,6 +233,18 @@ export function AziendaDetailPage(): JSX.Element {
   const [documenti, setDocumenti] = useState<AllegatoAzienda[]>([])
   const [documentActionMessage, setDocumentActionMessage] = useState<string | null>(null)
   const [companyAction, setCompanyAction] = useState<{ label: string; type: string } | null>(null)
+  const [companyActionForm, setCompanyActionForm] = useState({
+    periodoDa: `${new Date().getFullYear()}-01-01`,
+    periodoA: new Date().toISOString().slice(0, 10),
+    data: new Date().toISOString().slice(0, 10),
+    oraInizio: '09:00',
+    oraFine: '10:00',
+    siteId: '',
+    esecutore: '',
+    tipoDvr: 'NUOVO',
+    oggetto: '',
+    note: '',
+  })
   const [nominaModalOpen, setNominaModalOpen] = useState(false)
   const [expandedAccertamenti, setExpandedAccertamenti] = useState<Record<string, boolean>>({})
   const [booking, setBooking] = useState<BookingState | null>(null)
@@ -522,9 +534,29 @@ export function AziendaDetailPage(): JSX.Element {
     setAzienda(prev => prev ? { ...prev, ...data } : prev)
   }
 
+  const openCompanyAction = (label: string, type: string): void => {
+    setCompanyActionForm(prev => ({
+      ...prev,
+      data: new Date().toISOString().slice(0, 10),
+      periodoDa: `${new Date().getFullYear()}-01-01`,
+      periodoA: new Date().toISOString().slice(0, 10),
+      siteId: sites[0]?.id || '',
+      oggetto: label,
+      note: '',
+    }))
+    setCompanyAction({ label, type })
+  }
+
   const handleCreateCompanyDocument = async (name: string, type: string): Promise<void> => {
     if (!id || !azienda || !permissions.canUpdateAziende()) return
     const now = new Date().toISOString()
+    const pdfBlob = await generateCompanyDocumentPdf(name, type)
+    const url = URL.createObjectURL(pdfBlob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${type}_${(azienda.ragioneSociale || 'azienda').replace(/[^a-z0-9]+/gi, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`
+    a.click()
+    URL.revokeObjectURL(url)
     const doc = {
       id: uuidv4(),
       tenantId: azienda.tenantId || '',
@@ -532,7 +564,7 @@ export function AziendaDetailPage(): JSX.Element {
       visitaId: null,
       nome: name,
       tipo: type,
-      dimensione: 0,
+      dimensione: pdfBlob.size,
       localPath: null,
       serverUrl: null,
       createdAt: now,
@@ -544,6 +576,54 @@ export function AziendaDetailPage(): JSX.Element {
     setDocumentActionMessage(`${name} creato e accodato alla sincronizzazione`)
     setCompanyAction(null)
     setActiveTab('documenti')
+  }
+
+  const generateCompanyDocumentPdf = async (name: string, type: string): Promise<Blob> => {
+    const { pdf, Document, Page, Text, View, StyleSheet } = await import('@react-pdf/renderer')
+    const styles = StyleSheet.create({
+      page: { padding: 36, fontSize: 11, fontFamily: 'Helvetica', color: '#111827' },
+      title: { fontSize: 18, marginBottom: 12, fontWeight: 700 },
+      section: { marginTop: 10, padding: 10, border: '1 solid #E5E7EB' },
+      label: { color: '#6B7280', marginBottom: 2 },
+      value: { marginBottom: 6 },
+    })
+    const isPeriodDoc = type === 'VERBALE_RIUNIONE_PERIODICA' || type === 'RISULTATI_ANONIMI_COLLETTIVI'
+    return pdf(
+      <Document>
+        <Page size="A4" style={styles.page}>
+          <Text style={styles.title}>{name}</Text>
+          <View style={styles.section}>
+            <Text style={styles.label}>Azienda</Text>
+            <Text style={styles.value}>{azienda?.ragioneSociale || 'Azienda'}</Text>
+            <Text style={styles.label}>Tipologia</Text>
+            <Text style={styles.value}>{type}</Text>
+            {isPeriodDoc ? (
+              <>
+                <Text style={styles.label}>Periodo dati</Text>
+                <Text style={styles.value}>{companyActionForm.periodoDa} - {companyActionForm.periodoA}</Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.label}>Data</Text>
+                <Text style={styles.value}>{companyActionForm.data} {companyActionForm.oraInizio} - {companyActionForm.oraFine}</Text>
+                <Text style={styles.label}>Sede</Text>
+                <Text style={styles.value}>{sites.find(s => s.id === companyActionForm.siteId)?.siteName || sites.find(s => s.id === companyActionForm.siteId)?.indirizzo || 'Non indicata'}</Text>
+                <Text style={styles.label}>Esecutore / oggetto</Text>
+                <Text style={styles.value}>{companyActionForm.esecutore || companyActionForm.oggetto || 'Non indicato'}</Text>
+              </>
+            )}
+            {type === 'DVR' && (
+              <>
+                <Text style={styles.label}>Tipo DVR</Text>
+                <Text style={styles.value}>{companyActionForm.tipoDvr}</Text>
+              </>
+            )}
+            <Text style={styles.label}>Note</Text>
+            <Text style={styles.value}>{companyActionForm.note || 'Nessuna nota'}</Text>
+          </View>
+        </Page>
+      </Document>
+    ).toBlob()
   }
 
   const openBookingModal = (worker: Lavoratore, scadenza?: Scadenza): void => {
@@ -1182,7 +1262,7 @@ export function AziendaDetailPage(): JSX.Element {
                   key={String(type)}
                   type="button"
                   disabled={!permissions.canUpdateAziende()}
-                  onClick={() => setCompanyAction({ label: String(label), type: String(type) })}
+                  onClick={() => openCompanyAction(String(label), String(type))}
                   className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-2 py-2 text-xs text-gray-700 hover:bg-teal-50 disabled:opacity-50"
                 >
                   <Icon className="h-3.5 w-3.5 text-teal-600" />
@@ -1578,12 +1658,12 @@ export function AziendaDetailPage(): JSX.Element {
 
       {companyAction && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
             <div className="border-b border-gray-100 px-5 py-4">
               <h2 className="text-base font-semibold text-gray-900">{companyAction.label}</h2>
-              <p className="text-xs text-gray-500">Crea il documento operativo aziendale e accodalo alla sincronizzazione.</p>
+              <p className="text-xs text-gray-500">Compila i campi operativi, scarica il PDF e accoda il documento alla sincronizzazione.</p>
             </div>
-            <div className="space-y-3 p-5">
+            <div className="grid gap-3 p-5 sm:grid-cols-2">
               <label className="block text-xs font-medium text-gray-700">
                 Nome documento
                 <input value={companyAction.label} readOnly className="mt-1 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm" />
@@ -1592,10 +1672,65 @@ export function AziendaDetailPage(): JSX.Element {
                 Tipologia
                 <input value={companyAction.type} readOnly className="mt-1 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm" />
               </label>
+              {(companyAction.type === 'VERBALE_RIUNIONE_PERIODICA' || companyAction.type === 'RISULTATI_ANONIMI_COLLETTIVI') ? (
+                <>
+                  <label className="block text-xs font-medium text-gray-700">
+                    Periodo dal
+                    <input type="date" value={companyActionForm.periodoDa} onChange={e => setCompanyActionForm(prev => ({ ...prev, periodoDa: e.target.value }))} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" />
+                  </label>
+                  <label className="block text-xs font-medium text-gray-700">
+                    Periodo al
+                    <input type="date" value={companyActionForm.periodoA} onChange={e => setCompanyActionForm(prev => ({ ...prev, periodoA: e.target.value }))} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" />
+                  </label>
+                </>
+              ) : (
+                <>
+                  <label className="block text-xs font-medium text-gray-700">
+                    Data
+                    <input type="date" value={companyActionForm.data} onChange={e => setCompanyActionForm(prev => ({ ...prev, data: e.target.value }))} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" />
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="block text-xs font-medium text-gray-700">
+                      Ora inizio
+                      <input type="time" value={companyActionForm.oraInizio} onChange={e => setCompanyActionForm(prev => ({ ...prev, oraInizio: e.target.value }))} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" />
+                    </label>
+                    <label className="block text-xs font-medium text-gray-700">
+                      Ora fine
+                      <input type="time" value={companyActionForm.oraFine} onChange={e => setCompanyActionForm(prev => ({ ...prev, oraFine: e.target.value }))} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" />
+                    </label>
+                  </div>
+                  <label className="block text-xs font-medium text-gray-700">
+                    Sede
+                    <select value={companyActionForm.siteId} onChange={e => setCompanyActionForm(prev => ({ ...prev, siteId: e.target.value }))} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm">
+                      <option value="">Sede non indicata</option>
+                      {sites.map(s => <option key={s.id} value={s.id}>{s.siteName || [s.indirizzo, s.citta].filter(Boolean).join(' - ') || 'Sede'}</option>)}
+                    </select>
+                  </label>
+                  {companyAction.type === 'DVR' ? (
+                    <label className="block text-xs font-medium text-gray-700">
+                      Tipo DVR
+                      <select value={companyActionForm.tipoDvr} onChange={e => setCompanyActionForm(prev => ({ ...prev, tipoDvr: e.target.value }))} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm">
+                        <option value="NUOVO">Nuovo DVR</option>
+                        <option value="AGGIORNAMENTO_CON_MODIFICHE">Aggiornamento con modifiche</option>
+                        <option value="AGGIORNAMENTO_SENZA_MODIFICHE">Aggiornamento senza modifiche</option>
+                      </select>
+                    </label>
+                  ) : (
+                    <label className="block text-xs font-medium text-gray-700">
+                      Esecutore / referente
+                      <input value={companyActionForm.esecutore} onChange={e => setCompanyActionForm(prev => ({ ...prev, esecutore: e.target.value }))} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" />
+                    </label>
+                  )}
+                </>
+              )}
+              <label className="block text-xs font-medium text-gray-700 sm:col-span-2">
+                Note
+                <textarea value={companyActionForm.note} onChange={e => setCompanyActionForm(prev => ({ ...prev, note: e.target.value }))} rows={3} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" />
+              </label>
             </div>
             <div className="flex justify-end gap-2 border-t border-gray-100 px-5 py-4">
               <button type="button" onClick={() => setCompanyAction(null)} className="rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-gray-50">Annulla</button>
-              <button type="button" onClick={() => { void handleCreateCompanyDocument(companyAction.label, companyAction.type) }} className="rounded-lg bg-teal-600 px-3 py-2 text-sm font-medium text-white hover:bg-teal-700">Crea</button>
+              <button type="button" onClick={() => { void handleCreateCompanyDocument(companyAction.label, companyAction.type) }} className="rounded-lg bg-teal-600 px-3 py-2 text-sm font-medium text-white hover:bg-teal-700">Crea e scarica PDF</button>
             </div>
           </div>
         </div>

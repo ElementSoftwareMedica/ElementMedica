@@ -81,8 +81,37 @@ const ALL_RISCHI = Object.entries(CATEGORIE_RISCHIO).flatMap(([cat, items]) =>
   items.map(r => ({ ...r, categoria: cat }))
 )
 
+const RISCHIO_ENUM_LABELS: Record<string, string> = {
+  RUMORE: 'Rumore',
+  VIBRAZIONI: 'Vibrazioni',
+  VIBRAZIONI_MANO_BRACCIO: 'Vibrazioni mano-braccio',
+  VIBRAZIONI_CORPO_INTERO: 'Vibrazioni corpo intero',
+  RADIAZIONI_IONIZZANTI: 'Radiazioni ionizzanti',
+  RADIAZIONI_NON_IONIZZANTI: 'Radiazioni non ionizzanti',
+  CAMPI_ELETTROMAGNETICI: 'Campi elettromagnetici',
+  MICROCLIMA: 'Microclima',
+  CHIMICO: 'Agenti chimici',
+  AGENTI_CHIMICI: 'Agenti chimici',
+  CANCEROGENO: 'Cancerogeni/mutageni',
+  AMIANTO: 'Amianto',
+  BIOLOGICO: 'Agenti biologici',
+  MMC: 'Movimentazione manuale carichi',
+  MOVIMENTI_RIPETITIVI: 'Movimenti ripetitivi',
+  POSTURE_INCONGRUE: 'Posture incongrue',
+  NOTTURNO: 'Lavoro notturno',
+  VIDEOTERMINALE: 'Videoterminale',
+  STRESS_LAVORO_CORRELATO: 'Stress lavoro-correlato',
+  LAVORO_IN_QUOTA: 'Lavoro in quota',
+  SPAZI_CONFINATI: 'Spazi confinati',
+  GUIDA_MEZZI: 'Guida mezzi',
+  CARRELLI_ELEVATORI: 'Carrelli elevatori',
+  ELETTRICO: 'Rischio elettrico',
+  ALCOL: 'Alcol/sostanze',
+}
+
 function getLabelForCode(code: string): string {
-  return ALL_RISCHI.find(r => r.code === code)?.label ?? code
+  const normalized = code.trim().toUpperCase()
+  return ALL_RISCHI.find(r => r.code === normalized)?.label ?? RISCHIO_ENUM_LABELS[normalized] ?? normalized.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
 }
 
 // ============================================================
