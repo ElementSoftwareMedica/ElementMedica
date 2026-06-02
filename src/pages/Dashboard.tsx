@@ -328,6 +328,8 @@ const Dashboard: React.FC = () => {
           }
         })(),
         (async () => {
+          // TRAINER non ha accesso a persons:read — non caricare la lista formatori
+          if (isTrainer) return [];
           const result = await getTrainers();
 
           return result;
@@ -344,7 +346,12 @@ const Dashboard: React.FC = () => {
           rangeEnd.setDate(0);
           const dateFrom = rangeStart.toISOString().split('T')[0];
           const dateTo = rangeEnd.toISOString().split('T')[0];
-          const result = await apiGet(`/api/v1/schedules?dateFrom=${dateFrom}&dateTo=${dateTo}`) as DashboardSchedule[] | undefined;
+          // P57: include tenant filter for cross-tenant admin views
+          const tenantParams = getTenantFilterParams();
+          const scheduleUrl = new URLSearchParams({ dateFrom, dateTo });
+          if (tenantParams.tenantIds) scheduleUrl.set('tenantIds', tenantParams.tenantIds.join(','));
+          if (tenantParams.allTenants) scheduleUrl.set('allTenants', 'true');
+          const result = await apiGet(`/api/v1/schedules?${scheduleUrl.toString()}`) as DashboardSchedule[] | undefined;
           return result;
         })().catch(err => {
           return [];
@@ -568,22 +575,32 @@ const Dashboard: React.FC = () => {
   // Carica preventivi per grafici finanziari (solo per admin/training admin, non per employee)
   useEffect(() => {
     const fetchPreventivi = async () => {
-      // EMPLOYEE non ha accesso ai preventivi - skip per evitare errore 403
-      if (isEmployee) {
+      // EMPLOYEE e TRAINER non hanno accesso ai preventivi - skip per evitare errore 403
+      if (isEmployee || isTrainer) {
         return;
       }
 
       try {
-        const data = await preventiviService.list();
+        // P57: pass tenant filter for cross-tenant admin views
+        const tenantParams = getTenantFilterParams();
+        const startOfYear = new Date(new Date().getFullYear(), 0, 1).toISOString();
+        const listParams: import('../services/preventiviService').PreventiviListParams = {
+          limit: 100,
+          dataInizio: startOfYear,
+        };
+        if (tenantParams.tenantIds) listParams.tenantIds = tenantParams.tenantIds.join(',');
+        if (tenantParams.allTenants) listParams.allTenants = 'true';
+        const data = await preventiviService.list(listParams);
         setPreventivi(data);
       } catch (err) {
+        showToast({ message: 'Impossibile caricare i dati finanziari', type: 'error' });
       }
     };
 
-    if (isAuthenticated && !authLoading) {
+    if (isAuthenticated && !authLoading && tenantFilterReady) {
       fetchPreventivi();
     }
-  }, [isAuthenticated, authLoading, isEmployee]);
+  }, [isAuthenticated, authLoading, isEmployee, getTenantFilterParams, tenantFilterKey, tenantFilterReady]);
 
   // Rimappa gli eventi ogni volta che cambia la vista o i dati
   useEffect(() => {
@@ -927,9 +944,30 @@ const Dashboard: React.FC = () => {
         <StatCard
           title={isTrainer ? "I Miei Corsi da Formatore" : isEmployee ? "I Miei Corsi Iscritti" : "Corsi Programmati Futuri"}
           value={(() => {
-            // Conta solo le schedule la cui PRIMA sessione è futura (una per scheduled-course)
             const now = new Date();
-            // Raggruppa per scheduleId
+            // Per TRAINER: conta schedules dove è formatore (schedule o sessione), ignorando hasFullAccess
+            if (isTrainer && currentUserId) {
+              const myScheduleIds = new Set<string>();
+              schedulesData.forEach((s: any) => {
+                if (s.trainerId === currentUserId || s.coTrainerId === currentUserId) {
+                  myScheduleIds.add(s.id);
+                }
+                s.sessions?.forEach((sess: any) => {
+                  if (sess.trainer?.id === currentUserId || sess.coTrainer?.id === currentUserId) {
+                    myScheduleIds.add(s.id);
+                  }
+                });
+              });
+              const firstSessionBySchedule: Record<string, ScheduleEvent> = {};
+              calendarEvents.forEach(e => {
+                if (!e.scheduleId || !myScheduleIds.has(e.scheduleId)) return;
+                if (!firstSessionBySchedule[e.scheduleId] || e.start < firstSessionBySchedule[e.scheduleId].start) {
+                  firstSessionBySchedule[e.scheduleId] = e;
+                }
+              });
+              return Object.values(firstSessionBySchedule).filter((e) => e.start > now).length.toString();
+            }
+            // Per tutti gli altri: conta schedule future
             const firstSessionBySchedule: Record<string, ScheduleEvent> = {};
             calendarEvents.forEach(e => {
               if (!e.scheduleId) return;
@@ -956,8 +994,8 @@ const Dashboard: React.FC = () => {
           to="/schedules#expiring-courses"
         />
 
-        {/* Card Prossima Sessione - Per Trainer e Employee */}
-        {(isTrainer || isEmployee) && calendarEvents.length > 0 && (
+        {/* Card Prossima Sessione - Per Trainer e Employee (non per admin) */}
+        {!hasFullAccess && (isTrainer || isEmployee) && calendarEvents.length > 0 && (
           <StatCard
             title="Prossima Sessione"
             value={(() => {

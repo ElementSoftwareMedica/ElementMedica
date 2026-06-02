@@ -43,7 +43,17 @@ export const FEATURE_KEYS = {
   WHITE_LABEL: 'WHITE_LABEL',
   SSO_INTEGRATION: 'SSO_INTEGRATION',
   CUSTOM_REPORTS: 'CUSTOM_REPORTS',
-  DATA_EXPORT_ADVANCED: 'DATA_EXPORT_ADVANCED'
+  DATA_EXPORT_ADVANCED: 'DATA_EXPORT_ADVANCED',
+
+  // App esterne
+  BRIDGE_APP: 'BRIDGE_APP',
+  DESKTOP_APP: 'DESKTOP_APP',
+
+  // Limiti account
+  MAX_MEDICI: 'MAX_MEDICI',
+  MAX_SEGRETARIE: 'MAX_SEGRETARIE',
+  MAX_BRIDGE_KEYS: 'MAX_BRIDGE_KEYS',
+  MAX_DESKTOP_KEYS: 'MAX_DESKTOP_KEYS'
 };
 
 /**
@@ -127,6 +137,14 @@ export function requireFeature(featureKey, options = {}) {
       logger.warn({ featureKey, path: req.path }, 'Feature check skipped - no tenant context');
       return next();
     }
+
+    // Global admins (ADMIN/SUPER_ADMIN) bypass feature checks
+    const globalRole = req.person?.globalRole;
+    if (globalRole === 'ADMIN' || globalRole === 'SUPER_ADMIN') {
+      req.feature = { featureKey, isEnabled: true, adminBypass: true };
+      return next();
+    }
+
     const { isEnabled, feature, reason } = await checkFeature(tenantId, featureKey);
 
     if (!isEnabled) {
@@ -233,6 +251,13 @@ export function requireAnyFeature(featureKeys, options = {}) {
   const { trackUsage = false, upgradeUrl = '/settings/subscription' } = options;
 
   return async (req, res, next) => {
+    // Global admins (ADMIN/SUPER_ADMIN) bypass feature checks
+    const globalRole = req.person?.globalRole;
+    if (globalRole === 'ADMIN' || globalRole === 'SUPER_ADMIN') {
+      req.feature = { featureKey: featureKeys[0], isEnabled: true, adminBypass: true };
+      return next();
+    }
+
     const tenantId = getEffectiveTenantId(req);
     if (!tenantId) {
       logger.warn({ featureKeys, path: req.path }, 'Feature check skipped - no tenant context');

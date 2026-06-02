@@ -18,13 +18,14 @@ import { apiPost, apiGet } from '../../services/api';
 import { useToast } from '../../hooks/useToast';
 import { getRiskLevelLabel } from '../../utils/courseLabels';
 import { useTenantMode } from '../../contexts/TenantModeContext';
+import { useAuth } from '../../context/AuthContext';
 // Configurazione colonne per la tabella
-const getCoursesColumns = (): DataTableColumn<Course>[] => [
+const getCoursesColumns = (hidePrice = false): DataTableColumn<Course>[] => [
   {
     key: 'title',
     label: 'Titolo',
     sortable: true,
-    renderCell: (course) => (
+    renderCell: (course: Course) => (
       <div className="flex items-center gap-3">
         <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
           <BookOpen className="h-4 w-4 text-blue-600" />
@@ -40,7 +41,7 @@ const getCoursesColumns = (): DataTableColumn<Course>[] => [
     key: 'category',
     label: 'Categoria',
     sortable: true,
-    renderCell: (course) => (
+    renderCell: (course: Course) => (
       <Badge variant="secondary" size="sm" className="whitespace-normal leading-tight text-center max-w-[120px] block">
         {course.category}
       </Badge>
@@ -50,7 +51,7 @@ const getCoursesColumns = (): DataTableColumn<Course>[] => [
     key: 'riskLevel',
     label: 'Tipo / Rischio',
     sortable: true,
-    renderCell: (course) => {
+    renderCell: (course: Course) => {
       const level = course.riskLevel;
       const riskVariant = level === 'BASSO' ? 'success' : level === 'MEDIO' ? 'warning' : level === 'ALTO' || (level as string) === 'MOLTO_ALTO' ? 'error' : 'outline';
       const isAggiornamento = course.courseType === 'AGGIORNAMENTO';
@@ -75,7 +76,7 @@ const getCoursesColumns = (): DataTableColumn<Course>[] => [
     key: 'duration',
     label: 'Durata',
     sortable: true,
-    renderCell: (course) => (
+    renderCell: (course: Course) => (
       <div className="flex items-center gap-2">
         <Clock className="h-4 w-4 text-gray-400" />
         <span>{course.duration}h</span>
@@ -86,7 +87,7 @@ const getCoursesColumns = (): DataTableColumn<Course>[] => [
     key: 'validityYears',
     label: 'Validità',
     sortable: true,
-    renderCell: (course) => (
+    renderCell: (course: Course) => (
       <div className="flex items-center gap-2">
         <Calendar className="h-4 w-4 text-gray-400" />
         <span>{course.validityYears} anni</span>
@@ -97,7 +98,7 @@ const getCoursesColumns = (): DataTableColumn<Course>[] => [
     key: 'pricePerPerson',
     label: 'Prezzo',
     sortable: true,
-    renderCell: (course) => (
+    renderCell: (course: Course) => (
       <div className="flex items-center gap-2">
         <Euro className="h-4 w-4 text-gray-400" />
         <span className="font-medium">€{Number(course.pricePerPerson || 0).toFixed(2)}</span>
@@ -108,7 +109,7 @@ const getCoursesColumns = (): DataTableColumn<Course>[] => [
     key: 'maxPeople',
     label: 'Max persone',
     sortable: true,
-    renderCell: (course) => (
+    renderCell: (course: Course) => (
       <div className="flex items-center gap-2">
         <Users className="h-4 w-4 text-gray-400" />
         <span>{course.maxPeople}</span>
@@ -119,7 +120,7 @@ const getCoursesColumns = (): DataTableColumn<Course>[] => [
     key: 'certifications',
     label: 'Certificazioni',
     sortable: false,
-    renderCell: (course) => (
+    renderCell: (course: Course) => (
       <div className="flex items-center gap-2">
         <Award className="h-4 w-4 text-gray-400" />
         <span className="text-sm">{course.certifications || 'N/A'}</span>
@@ -130,7 +131,7 @@ const getCoursesColumns = (): DataTableColumn<Course>[] => [
     key: 'regulation',
     label: 'Normativa',
     sortable: false,
-    renderCell: (course) => (
+    renderCell: (course: Course) => (
       <div className="flex items-center gap-2">
         <FileText className="h-4 w-4 text-gray-400" />
         <span className="text-sm">{course.regulation || 'N/A'}</span>
@@ -141,16 +142,16 @@ const getCoursesColumns = (): DataTableColumn<Course>[] => [
     key: 'description',
     label: 'Descrizione',
     sortable: false,
-    renderCell: (course) => (
+    renderCell: (course: Course) => (
       <span className="text-sm text-gray-600 truncate max-w-xs block" title={course.description}>
         {course.description}
       </span>
     )
   }
-];
+].filter(col => !(hidePrice && col.key === 'pricePerPerson'));
 
 // Configurazione card per la vista griglia
-const getCourseCardConfig = () => ({
+const getCourseCardConfig = (hidePrice = false) => ({
   titleField: 'title' as keyof Course,
   subtitleField: 'category' as keyof Course,
   badgeField: 'status' as keyof Course,
@@ -185,11 +186,11 @@ const getCourseCardConfig = () => ({
       value: (course: Course) => `${course.validityYears || 0} anni`,
       icon: <Calendar className="h-4 w-4" />
     },
-    {
+    ...(!hidePrice ? [{
       label: 'Prezzo',
       value: (course: Course) => `€${course.pricePerPerson || 0}`,
       icon: <Euro className="h-4 w-4" />
-    },
+    }] : []),
     {
       label: 'Max partecipanti',
       value: (course: Course) => (course.maxPeople || 0).toString(),
@@ -245,6 +246,14 @@ export default function CoursesPage(): JSX.Element {
   const { showToast } = useToast();
   // P51: Usa operateTenantId per operazioni CRUD multi-tenant
   const { getCreateTenantId, getOperateHeaders } = useTenantMode();
+  const { user } = useAuth();
+
+  // Il TRAINER non deve vedere il prezzo
+  const isTrainerOnly =
+    user?.roleType === 'TRAINER' &&
+    !['ADMIN', 'TRAINING_ADMIN', 'HR_MANAGER', 'COMPANY_MANAGER', 'SITE_MANAGER'].some(r =>
+      user?.roles?.includes(r)
+    );
 
   // Carica i corsi esistenti per supportare la rilevazione duplicati nel modal di import
   React.useEffect(() => {
@@ -345,7 +354,7 @@ export default function CoursesPage(): JSX.Element {
         deletePermission="courses:delete"
         exportPermission="courses:export"
         apiEndpoint="/api/v1/courses"
-        columns={getCoursesColumns()}
+        columns={getCoursesColumns(isTrainerOnly)}
         searchFields={['title', 'code', 'category', 'description', 'certifications', 'regulation', 'contents']}
         defaultSort={{ field: 'title', direction: 'asc' }}
         filterOptions={[
@@ -400,20 +409,20 @@ export default function CoursesPage(): JSX.Element {
               { value: 'high', label: 'Premium (>300€)' }
             ]
           }
-        ]}
+        ].filter(f => !(isTrainerOnly && f.key === 'price_range'))}
         sortOptions={[
           { key: 'title', label: 'Titolo' },
           { key: 'code', label: 'Codice' },
           { key: 'category', label: 'Categoria' },
           { key: 'duration', label: 'Durata' },
-          { key: 'pricePerPerson', label: 'Prezzo' },
+          ...(!isTrainerOnly ? [{ key: 'pricePerPerson', label: 'Prezzo' }] : []),
           { key: 'validityYears', label: 'Validità' },
           { key: 'maxPeople', label: 'Max partecipanti' },
           { key: 'createdAt', label: 'Data creazione' }
         ]}
-        csvHeaders={csvHeaders}
+        csvHeaders={csvHeaders.filter(h => !(isTrainerOnly && h.key === 'pricePerPerson'))}
         csvTemplateData={csvTemplateData}
-        cardConfig={getCourseCardConfig()}
+        cardConfig={getCourseCardConfig(isTrainerOnly)}
         enableBatchOperations={true}
         enableImportExport={true}
         enableColumnSelector={true}

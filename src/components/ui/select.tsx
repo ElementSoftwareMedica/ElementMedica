@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '../../design-system/utils';
 import { ChevronDown } from 'lucide-react';
 
@@ -9,6 +10,7 @@ interface SelectContextType {
   open: boolean;
   setOpen: (open: boolean) => void;
   setDisplayValue?: (displayValue: string) => void;
+  triggerRef: React.MutableRefObject<HTMLButtonElement | null>;
 }
 
 const SelectContext = createContext<SelectContextType | undefined>(undefined);
@@ -30,6 +32,7 @@ export interface SelectProps {
 export const Select: React.FC<SelectProps> = ({ value, onValueChange, children }) => {
   const [open, setOpen] = useState(false);
   const [displayValue, setDisplayValue] = useState<string | undefined>(undefined);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   // S67: Reset displayValue when value is cleared
   useEffect(() => {
@@ -46,7 +49,7 @@ export const Select: React.FC<SelectProps> = ({ value, onValueChange, children }
   };
 
   return (
-    <SelectContext.Provider value={{ value, displayValue, onValueChange: handleValueChange, open, setOpen, setDisplayValue }}>
+    <SelectContext.Provider value={{ value, displayValue, onValueChange: handleValueChange, open, setOpen, setDisplayValue, triggerRef }}>
       <div className="relative">{children}</div>
     </SelectContext.Provider>
   );
@@ -58,11 +61,15 @@ export interface SelectTriggerProps extends React.ButtonHTMLAttributes<HTMLButto
 
 export const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
   ({ className, children, ...props }, ref) => {
-    const { open, setOpen } = useSelect();
+    const { open, setOpen, triggerRef } = useSelect();
 
     return (
       <button
-        ref={ref}
+        ref={(node) => {
+          triggerRef.current = node;
+          if (typeof ref === 'function') ref(node);
+          else if (ref) (ref as React.MutableRefObject<HTMLButtonElement | null>).current = node;
+        }}
         type="button"
         role="combobox"
         aria-expanded={open}
@@ -97,8 +104,29 @@ export interface SelectContentProps {
 }
 
 export const SelectContent: React.FC<SelectContentProps> = ({ children }) => {
-  const { open, setOpen } = useSelect();
+  const { open, setOpen, triggerRef } = useSelect();
   const contentRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState({ top: 0, left: 0, width: 0 });
+
+  useEffect(() => {
+    if (!open) return;
+    const updatePosition = () => {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setPosition({
+        top: rect.bottom + 4,
+        left: rect.left,
+        width: rect.width,
+      });
+    };
+    updatePosition();
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [open, triggerRef]);
 
   // Chiudi il dropdown quando si clicca fuori
   useEffect(() => {
@@ -108,7 +136,7 @@ export const SelectContent: React.FC<SelectContentProps> = ({ children }) => {
       // Verifica se il click è avvenuto all'interno del content o del trigger
       const target = event.target as Node;
       const isInsideContent = contentRef.current?.contains(target);
-      const isInsideTrigger = contentRef.current?.parentElement?.querySelector('[role="combobox"]')?.contains(target);
+      const isInsideTrigger = triggerRef.current?.contains(target);
 
       if (!isInsideContent && !isInsideTrigger) {
         setOpen(false);
@@ -128,17 +156,20 @@ export const SelectContent: React.FC<SelectContentProps> = ({ children }) => {
 
   // S67: Always render children (hidden when closed) so SelectItem useEffect
   // can sync displayValue when value is set programmatically (e.g., pre-compila)
-  return (
+  const content = (
     <div
       ref={contentRef}
+      style={{ top: position.top, left: position.left, width: position.width }}
       className={cn(
-        'absolute top-full z-50 w-full rounded-md border border-gray-200 bg-white py-1 shadow-lg',
+        'fixed z-[9999] max-h-72 overflow-auto rounded-md border border-gray-200 bg-white py-1 shadow-lg',
         !open && 'hidden'
       )}
     >
       {children}
     </div>
   );
+
+  return createPortal(content, document.body);
 };
 
 export interface SelectItemProps {

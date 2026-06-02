@@ -451,6 +451,53 @@ router.get('/:id/features', async (req, res) => {
 });
 
 /**
+ * @route PUT /api/tenants/:id/features/bulk
+ * @desc Abilita/disabilita multiple feature per un tenant in una sola chiamata
+ * @access Super Admin only
+ */
+router.put('/:id/features/bulk', requireSuperAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { features } = req.body;
+
+    if (!Array.isArray(features) || features.length === 0) {
+      return res.status(400).json({ success: false, error: 'Il campo features deve essere un array non vuoto' });
+    }
+
+    const results = await prisma.$transaction(
+      features.map(f => prisma.tenantFeature.upsert({
+        where: { tenantId_featureKey: { tenantId: id, featureKey: f.featureKey } },
+        update: {
+          isEnabled: f.isEnabled ?? true,
+          ...(f.config !== undefined && { config: f.config }),
+          ...(f.validUntil !== undefined && { validUntil: f.validUntil ? new Date(f.validUntil) : null }),
+          ...(f.usageLimit !== undefined && { usageLimit: f.usageLimit }),
+          ...(f.notes !== undefined && { notes: f.notes }),
+          enabledBy: req.person.id,
+          enabledAt: new Date(),
+        },
+        create: {
+          tenantId: id,
+          featureKey: f.featureKey,
+          isEnabled: f.isEnabled ?? true,
+          config: f.config || null,
+          validUntil: f.validUntil ? new Date(f.validUntil) : null,
+          usageLimit: f.usageLimit || null,
+          notes: f.notes || null,
+          enabledBy: req.person.id,
+          enabledAt: new Date(),
+        }
+      }))
+    );
+
+    res.json({ success: true, data: results });
+  } catch (error) {
+    logger.error({ component: 'tenants', error: error.message }, 'Errore aggiornamento bulk features tenant');
+    res.status(500).json({ success: false, error: 'Errore nell\'aggiornamento delle features' });
+  }
+});
+
+/**
  * @route PUT /api/tenants/:id/features/:featureKey
  * @desc Abilita/disabilita una feature per un tenant
  * @access Super Admin only

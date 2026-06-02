@@ -18,8 +18,9 @@ import { logger } from '../../utils/logger.js';
 
 const GIUDIZIO_LABELS = {
     IDONEO: 'Idoneo',
-    IDONEO_CON_PRESCRIZIONI: 'Idoneo con prescrizioni',
-    IDONEO_CON_LIMITAZIONI: 'Idoneo con limitazioni',
+    IDONEO_CON_PRESCRIZIONI: 'Idoneo parziale con prescrizioni',
+    IDONEO_CON_LIMITAZIONI: 'Idoneo parziale con limitazioni',
+    IDONEO_CON_LIMITAZIONI_PRESCRIZIONI: 'Idoneo parziale con limitazioni e prescrizioni',
     NON_IDONEO_TEMPORANEO: 'Temporaneamente non idoneo',
     NON_IDONEO_PERMANENTE: 'Non idoneo permanente'
 };
@@ -28,6 +29,7 @@ const GIUDIZIO_BADGE = {
     IDONEO: 'badge-idoneo',
     IDONEO_CON_PRESCRIZIONI: 'badge-prescrizioni',
     IDONEO_CON_LIMITAZIONI: 'badge-limitazioni',
+    IDONEO_CON_LIMITAZIONI_PRESCRIZIONI: 'badge-limitazioni',
     NON_IDONEO_TEMPORANEO: 'badge-non-idoneo',
     NON_IDONEO_PERMANENTE: 'badge-non-idoneo'
 };

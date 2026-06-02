@@ -18,7 +18,7 @@
 
 import express from 'express';
 import prisma from '../../config/prisma-optimization.js';
-import middleware from '../../middleware/auth.js';
+import { authenticate, requirePermission } from '../../middleware/auth.js';
 import { body, validationResult } from 'express-validator';
 import logger from '../../utils/logger.js';
 import { DocumentService } from '../../services/documentService.js';
@@ -29,6 +29,7 @@ import { fileURLToPath } from 'url';
 import googleDocsService from '../../services/google-docs-service.js';
 import { getValidAccessToken } from '../../services/googleTokenService.js';
 import qrCodeService from '../../services/qrCodeService.js';
+import { requireFeature } from '../../middleware/featureFlags.js';
 
 // Import modular routes
 import crudRoutes from './crud.routes.js';
@@ -42,7 +43,8 @@ const __dirname = path.dirname(__filename);
 const router = express.Router();
 const documentService = new DocumentService();
 
-const { authenticate: authenticateToken, requirePermission } = middleware;
+// Feature gate: tutte le route attestati richiedono BRANCH_FORMAZIONE
+router.use(authenticate, requireFeature('BRANCH_FORMAZIONE'));
 
 // ============================================================================
 // HELPER FUNCTIONS (needed for generation routes)
@@ -110,7 +112,7 @@ router.use('/', emailRoutes); // Includes POST /:id/send-email
  */
 router.post(
   '/generate',
-  authenticateToken,
+  authenticate,
   requirePermission('documents:create'),
   [
     body('scheduleId').isUUID().withMessage('ID calendario non valido'),
@@ -498,7 +500,7 @@ router.post(
  */
 router.post(
   '/generate-batch',
-  authenticateToken,
+  authenticate,
   requirePermission('documents:create'),
   [
     body('scheduleId').isUUID().withMessage('ID calendario non valido'),
@@ -862,7 +864,8 @@ router.post(
         });
       }
 
-      res.status(successCount > 0 ? 201 : 400).json({
+      // 201 = tutti generati, 207 = generazione parziale o totalmente fallita (mantiene il corpo per la UI)
+      res.status(successCount > 0 ? 201 : 207).json({
         batchId,
         total: personIds.length,
         success: successCount,

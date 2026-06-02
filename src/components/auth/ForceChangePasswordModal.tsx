@@ -3,7 +3,7 @@ import { Eye, EyeOff, Lock, AlertTriangle, CheckCircle } from 'lucide-react';
 import { changePassword } from '@/services/auth';
 
 interface ForceChangePasswordModalProps {
-  currentPassword: string;
+  currentPassword?: string; // Opzionale: può essere assente dopo page reload
   onSuccess: () => void;
   onLogout: () => void;
 }
@@ -11,18 +11,24 @@ interface ForceChangePasswordModalProps {
 /**
  * Modal forzato per cambio password al primo accesso.
  * Non può essere chiuso senza cambiare la password o effettuare il logout.
+ * Supporta sia il flusso post-login (currentPassword fornita) che post-reload (currentPassword assente).
  */
 export default function ForceChangePasswordModal({
   currentPassword,
   onSuccess,
   onLogout,
 }: ForceChangePasswordModalProps) {
+  const [currentPasswordInput, setCurrentPasswordInput] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  const effectiveCurrentPassword = currentPassword || currentPasswordInput;
+  const needsCurrentInput = !currentPassword;
 
   // Validazione password
   const hasMinLength = newPassword.length >= 8;
@@ -31,9 +37,10 @@ export default function ForceChangePasswordModal({
   const hasNumber = /[0-9]/.test(newPassword);
   const hasSpecial = /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(newPassword);
   const passwordsMatch = newPassword === confirmPassword && confirmPassword.length > 0;
-  const isDifferentFromCurrent = newPassword !== currentPassword;
+  const isDifferentFromCurrent = newPassword !== effectiveCurrentPassword;
 
   const isValid =
+    (!needsCurrentInput || currentPasswordInput.length > 0) &&
     hasMinLength &&
     hasUppercase &&
     hasLowercase &&
@@ -50,7 +57,7 @@ export default function ForceChangePasswordModal({
     setError('');
 
     try {
-      await changePassword(currentPassword, newPassword);
+      await changePassword(effectiveCurrentPassword, newPassword);
       onSuccess();
     } catch (err) {
       setError(
@@ -104,6 +111,33 @@ export default function ForceChangePasswordModal({
             </div>
           )}
 
+          {/* Password attuale - solo se non viene dal flusso post-login */}
+          {needsCurrentInput && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Password Attuale
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  type={showCurrentPassword ? 'text' : 'password'}
+                  value={currentPasswordInput}
+                  onChange={(e) => setCurrentPasswordInput(e.target.value)}
+                  className="w-full pl-10 pr-10 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-sm"
+                  placeholder="Inserisci la password attuale"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Nuova password */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -117,7 +151,7 @@ export default function ForceChangePasswordModal({
                 onChange={(e) => setNewPassword(e.target.value)}
                 className="w-full pl-10 pr-10 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-sm"
                 placeholder="Inserisci la nuova password"
-                autoFocus
+                autoFocus={!needsCurrentInput}
               />
               <button
                 type="button"

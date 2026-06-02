@@ -13,6 +13,7 @@
 
 import prisma from '../../config/prisma-optimization.js';
 import { logger } from '../../utils/logger.js';
+import MovimentoContabileGenerator from '../management/MovimentoContabileGenerator.js';
 
 
 /**
@@ -127,20 +128,57 @@ class AppuntamentoPrestazioneService {
             throw new Error(`Appuntamento ${appuntamentoId} non trovato`);
         }
 
+        const uniquePrestazioni = Array.from(
+            new Map(
+                prestazioni
+                    .filter(p => p?.prestazioneId)
+                    .map((p, index) => [p.prestazioneId, { ...p, ordine: p.ordine ?? index }])
+            ).values()
+        );
+
         const created = await Promise.all(
-            prestazioni.map(async (p, index) => {
+            uniquePrestazioni.map(async (p, index) => {
                 const stato = p.medicoRefertanteId
                     ? 'IN_ATTESA_REFERTO'
                     : 'DA_ESEGUIRE';
+
+                const existing = await prisma.appuntamentoPrestazione.findUnique({
+                    where: {
+                        appuntamentoId_prestazioneId: {
+                            appuntamentoId,
+                            prestazioneId: p.prestazioneId
+                        }
+                    }
+                });
+
+                const data = {
+                    medicoRefertanteId: p.medicoRefertanteId || existing?.medicoRefertanteId || null,
+                    ordine: p.ordine ?? index,
+                    stato: existing?.stato && existing.stato !== 'ANNULLATA' ? existing.stato : stato,
+                    deletedAt: null,
+                    tenantId
+                };
+
+                if (existing) {
+                    return prisma.appuntamentoPrestazione.update({
+                        where: { id: existing.id },
+                        data,
+                        include: {
+                            prestazione: {
+                                select: { id: true, nome: true, codice: true }
+                            },
+                            medicoRefertante: {
+                                select: { id: true, firstName: true, lastName: true }
+                            }
+                        }
+                    });
+                }
 
                 return prisma.appuntamentoPrestazione.create({
                     data: {
                         appuntamentoId,
                         prestazioneId: p.prestazioneId,
-                        medicoRefertanteId: p.medicoRefertanteId || null,
-                        ordine: p.ordine ?? index,
-                        stato,
-                        tenantId
+                        ...data
                     },
                     include: {
                         prestazione: {
@@ -217,8 +255,31 @@ class AppuntamentoPrestazioneService {
             deletedAt: null,
             stato: { in: statiDaRefertare },
             refertoId: null, // Non ancora refertato
-            // Esclude prestazioni orfane (appuntamento senza visita collegata)
-            appuntamento: { visita: { isNot: null } },
+            OR: [
+                {
+                    visitaSecundaria: {
+                        is: {
+                            deletedAt: null,
+                            stato: { notIn: ['COMPLETATA', 'ANNULLATA'] }
+                        }
+                    }
+                },
+                {
+                    AND: [
+                        { visitaSecundaria: { is: null } },
+                        {
+                            appuntamento: {
+                                visita: {
+                                    is: {
+                                        deletedAt: null,
+                                        stato: { notIn: ['COMPLETATA', 'ANNULLATA'] }
+                                    }
+                                }
+                            }
+                        }
+                    ]
+                }
+            ],
             // Se medicoId fornito, filtra per quel medico; se null (admin) mostra tutte
             ...(medicoId && { medicoRefertanteId: medicoId }),
         };
@@ -246,6 +307,9 @@ class AppuntamentoPrestazioneService {
                     },
                     prestazione: {
                         select: { id: true, nome: true, codice: true }
+                    },
+                    visitaSecundaria: {
+                        select: { id: true, stato: true, medicoId: true, medicoRefertanteId: true }
                     }
                 },
                 orderBy: [
@@ -290,7 +354,18 @@ class AppuntamentoPrestazioneService {
                 deletedAt: null,
                 stato: { in: ['IN_ATTESA_REFERTO', 'ESEGUITA'] },
                 refertoId: null,
-                appuntamento: { visita: { is: null } },
+                OR: [
+                    {
+                        AND: [
+                            { visitaSecundaria: { is: null } },
+                            { appuntamento: { visita: { is: null } } }
+                        ]
+                    },
+                    { visitaSecundaria: { is: { deletedAt: { not: null } } } },
+                    { visitaSecundaria: { is: { stato: 'ANNULLATA' } } },
+                    { appuntamento: { visita: { is: { deletedAt: { not: null } } } } },
+                    { appuntamento: { visita: { is: { stato: 'ANNULLATA' } } } }
+                ],
             },
             select: { id: true }
         });
@@ -369,7 +444,7 @@ class AppuntamentoPrestazioneService {
      * @param {Object} [params.updates] - Altri campi da aggiornare
      * @returns {Promise<Object>} Prestazione aggiornata
      */
-    async updateStato({ id, stato, tenantId, updates = {} }) {
+    async updateStato({ id, stato, tenantId, updates = {}, updatedBy = null }) {
         // Validazione transizione stato
         const current = await prisma.appuntamentoPrestazione.findFirst({
             where: { id, tenantId, deletedAt: null }
@@ -380,12 +455,12 @@ class AppuntamentoPrestazioneService {
         }
 
         const validTransitions = {
-            'DA_ESEGUIRE': ['IN_CORSO', 'ANNULLATA'],
-            'IN_CORSO': ['ESEGUITA', 'IN_ATTESA_REFERTO', 'ANNULLATA'],
-            'ESEGUITA': ['IN_ATTESA_REFERTO', 'REFERTATA', 'ANNULLATA'],
-            'IN_ATTESA_REFERTO': ['REFERTATA', 'ANNULLATA'],
-            'REFERTATA': [],
-            'ANNULLATA': []
+            'DA_ESEGUIRE': ['IN_CORSO', 'ESEGUITA', 'IN_ATTESA_REFERTO', 'ANNULLATA'],
+            'IN_CORSO': ['DA_ESEGUIRE', 'ESEGUITA', 'IN_ATTESA_REFERTO', 'ANNULLATA'],
+            'ESEGUITA': ['DA_ESEGUIRE', 'IN_ATTESA_REFERTO', 'REFERTATA', 'ANNULLATA'],
+            'IN_ATTESA_REFERTO': ['DA_ESEGUIRE', 'ESEGUITA', 'REFERTATA', 'ANNULLATA'],
+            'REFERTATA': ['ESEGUITA', 'IN_ATTESA_REFERTO', 'ANNULLATA'],
+            'ANNULLATA': ['DA_ESEGUIRE', 'ESEGUITA', 'IN_ATTESA_REFERTO']
         };
 
         if (!validTransitions[current.stato]?.includes(stato)) {
@@ -399,6 +474,12 @@ class AppuntamentoPrestazioneService {
 
         if (stato === 'ESEGUITA' || stato === 'IN_CORSO') {
             updateData.dataEsecuzione = updateData.dataEsecuzione || new Date();
+        }
+        if (stato === 'IN_ATTESA_REFERTO') {
+            updateData.dataEsecuzione = updateData.dataEsecuzione || current.dataEsecuzione || new Date();
+        }
+        if (current.stato === 'ANNULLATA' && stato !== 'ANNULLATA') {
+            updateData.deletedAt = null;
         }
 
         const updated = await prisma.appuntamentoPrestazione.update({
@@ -426,6 +507,29 @@ class AppuntamentoPrestazioneService {
             tenantId
         });
 
+        if (stato === 'ANNULLATA') {
+            try {
+                const result = await MovimentoContabileGenerator.annullaPerAppuntamentoPrestazione(id, tenantId, updatedBy);
+                if (result?.annullati > 0) {
+                    logger.info('Movimenti contabili annullati per prestazione non eseguita', {
+                        component: 'AppuntamentoPrestazioneService',
+                        action: 'annulla-movimenti-prestazione-non-eseguita',
+                        id,
+                        annullati: result.annullati,
+                        tenantId
+                    });
+                }
+            } catch (error) {
+                logger.error('Errore annullamento movimenti per prestazione non eseguita', {
+                    component: 'AppuntamentoPrestazioneService',
+                    action: 'annulla-movimenti-prestazione-non-eseguita',
+                    id,
+                    tenantId,
+                    error: error?.message
+                });
+            }
+        }
+
         return updated;
     }
 
@@ -450,28 +554,43 @@ class AppuntamentoPrestazioneService {
             throw new Error(`Prestazione già refertata (referto: ${prestazione.refertoId})`);
         }
 
-        const updated = await prisma.appuntamentoPrestazione.update({
-            where: { id },
-            data: {
-                refertoId,
-                stato: 'REFERTATA'
-            },
-            include: {
-                prestazione: {
-                    select: { id: true, nome: true, codice: true }
+        const [updated] = await prisma.$transaction([
+            prisma.appuntamentoPrestazione.update({
+                where: { id },
+                data: {
+                    refertoId,
+                    stato: 'REFERTATA',
+                    dataEsecuzione: new Date()
                 },
-                medicoRefertante: {
-                    select: { id: true, firstName: true, lastName: true }
+                include: {
+                    prestazione: {
+                        select: { id: true, nome: true, codice: true }
+                    },
+                    medicoRefertante: {
+                        select: { id: true, firstName: true, lastName: true }
+                    },
+                    referto: true
+                }
+            }),
+            prisma.referto.update({
+                where: { id: refertoId },
+                data: { appuntamentoPrestazioneId: id }
+            }),
+            prisma.movimentoContabile.updateMany({
+                where: {
+                    tenantId,
+                    appPrestazioneId: id,
+                    direzione: { in: ['ENTRATA', 'USCITA'] },
+                    stato: 'BOZZA',
+                    deletedAt: null
                 },
-                referto: true
-            }
-        });
-
-        // Aggiorna anche il referto con FK inversa
-        await prisma.referto.update({
-            where: { id: refertoId },
-            data: { appuntamentoPrestazioneId: id }
-        });
+                data: {
+                    stato: 'DA_FATTURARE',
+                    refertoId,
+                    updatedAt: new Date()
+                }
+            })
+        ]);
 
         logger.info('Referto collegato a prestazione', {
             component: 'AppuntamentoPrestazioneService',
@@ -667,9 +786,39 @@ class AppuntamentoPrestazioneService {
      * @returns {Promise<Object>} Prestazione eliminata
      */
     async delete(id, tenantId) {
-        const prestazione = await prisma.appuntamentoPrestazione.findFirst({
-            where: { id, tenantId, deletedAt: null }
+        let prestazione = await prisma.appuntamentoPrestazione.findFirst({
+            where: { id, tenantId, deletedAt: null },
+            include: {
+                visitaSecundaria: {
+                    select: { id: true, stato: true, deletedAt: true }
+                }
+            }
         });
+
+        if (!prestazione) {
+            const alreadyDeleted = await prisma.appuntamentoPrestazione.findFirst({
+                where: { id, tenantId, deletedAt: { not: null } },
+                select: { id: true, deletedAt: true, stato: true }
+            });
+            if (alreadyDeleted) {
+                return alreadyDeleted;
+            }
+
+            const visitaSecondaria = await prisma.visita.findFirst({
+                where: { id, tenantId, appPrestazioneId: { not: null } },
+                select: { appPrestazioneId: true }
+            });
+            if (visitaSecondaria?.appPrestazioneId) {
+                prestazione = await prisma.appuntamentoPrestazione.findFirst({
+                    where: { id: visitaSecondaria.appPrestazioneId, tenantId, deletedAt: null },
+                    include: {
+                        visitaSecundaria: {
+                            select: { id: true, stato: true, deletedAt: true }
+                        }
+                    }
+                });
+            }
+        }
 
         if (!prestazione) {
             throw new Error(`Prestazione ${id} non trovata`);
@@ -679,9 +828,26 @@ class AppuntamentoPrestazioneService {
             throw new Error('Impossibile eliminare: prestazione già refertata');
         }
 
-        const deleted = await prisma.appuntamentoPrestazione.update({
-            where: { id },
-            data: { deletedAt: new Date() }
+        const now = new Date();
+        const deleted = await prisma.$transaction(async (tx) => {
+            if (prestazione.visitaSecundaria && !prestazione.visitaSecundaria.deletedAt) {
+                await tx.referto.updateMany({
+                    where: { visitaId: prestazione.visitaSecundaria.id, deletedAt: null },
+                    data: { deletedAt: now }
+                });
+                await tx.visita.update({
+                    where: { id: prestazione.visitaSecundaria.id },
+                    data: { stato: 'ANNULLATA', deletedAt: now }
+                });
+            }
+
+            return tx.appuntamentoPrestazione.update({
+                where: { id },
+                data: {
+                    stato: 'ANNULLATA',
+                    deletedAt: now
+                }
+            });
         });
 
         logger.info('Prestazione eliminata', {

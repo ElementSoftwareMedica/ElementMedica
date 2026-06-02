@@ -1,14 +1,18 @@
 import express from 'express';
 import prisma from '../config/prisma-optimization.js';
-import middleware from '../middleware/auth.js';
+import { authenticate, requirePermission } from '../middleware/auth.js';
+import { isTrainerOnlyAccess } from '../utils/trainerAccess.js';
 import { body, validationResult } from 'express-validator';
 import logger from '../utils/logger.js';
 import { roleDataFilter, filterResponseFields } from '../middleware/role-data-filter.js';
 import { getEffectiveTenantId } from '../utils/tenantHelper.js';
+import { requireFeature } from '../middleware/featureFlags.js';
+import movimentoContabileService from '../services/management/movimento-contabile-service.js';
 
 const router = express.Router();
 
-const { authenticate: authenticateToken, requirePermission } = middleware;
+// Feature gate: tutte le route pianificazioni richiedono BRANCH_FORMAZIONE
+router.use(authenticate, requireFeature('BRANCH_FORMAZIONE'));
 
 // Validation middleware for schedule creation/update
 const validateSchedule = [
@@ -31,9 +35,10 @@ const validateSchedule = [
 ];
 
 // Get all schedules
-router.get('/', authenticateToken, requirePermission('schedules:read'), roleDataFilter, filterResponseFields, async (req, res) => {
+router.get('/', authenticate, requirePermission('schedules:read'), roleDataFilter, filterResponseFields, async (req, res) => {
   try {
     const person = req.person;
+    const globalRole = person.globalRole;
 
     // Verifica se l'utente è EMPLOYEE (ha solo il ruolo EMPLOYEE, non altri ruoli admin)
     const personRoles = await prisma.personRole.findMany({
@@ -48,18 +53,33 @@ router.get('/', authenticateToken, requirePermission('schedules:read'), roleData
 
     const roleTypes = personRoles.map(pr => pr.roleType);
     const isEmployeeOnly = roleTypes.includes('EMPLOYEE') &&
-      !roleTypes.some(r => ['ADMIN', 'TRAINING_ADMIN', 'HR_MANAGER', 'COMPANY_MANAGER', 'SITE_MANAGER', 'TRAINER'].includes(r));
+      !roleTypes.some(r => ['ADMIN', 'TRAINING_ADMIN', 'HR_MANAGER', 'COMPANY_MANAGER', 'SITE_MANAGER', 'TRAINER', 'TENANT_ADMIN'].includes(r));
+
+    const isTrainerOnly = roleTypes.includes('TRAINER') &&
+      !roleTypes.some(r => ['ADMIN', 'TRAINING_ADMIN', 'HR_MANAGER', 'COMPANY_MANAGER', 'SITE_MANAGER', 'TENANT_ADMIN'].includes(r));
 
     // Build where clause based on query parameters
-    const { courseId, companyId, trainerId, status } = req.query;
+    const { courseId, companyId, trainerId, status, dateFrom, dateTo, tenantIds, allTenants } = req.query;
     // Se è EMPLOYEE, forza il filtro per personId
     let personId = req.query.personId;
     if (isEmployeeOnly) {
       personId = person.id;
     }
 
+    // Multi-tenant support for cross-tenant admin views
+    const isCrossTenantAdmin = globalRole === 'ADMIN' || globalRole === 'SUPER_ADMIN';
+    let tenantFilter;
+    if (isCrossTenantAdmin && allTenants === 'true') {
+      tenantFilter = undefined; // no tenantId restriction
+    } else if (isCrossTenantAdmin && tenantIds) {
+      const ids = tenantIds.split(',').filter(Boolean);
+      tenantFilter = ids.length === 1 ? ids[0] : { in: ids };
+    } else {
+      tenantFilter = getEffectiveTenantId(req);
+    }
+
     const where = {
-      tenantId: getEffectiveTenantId(req),
+      ...(tenantFilter !== undefined && { tenantId: tenantFilter }),
       deletedAt: null
     };
 
@@ -78,7 +98,13 @@ router.get('/', authenticateToken, requirePermission('schedules:read'), roleData
     }
 
     // Filter by trainerId (schedules where this person is trainer at schedule or session level)
-    if (trainerId) {
+    // isTrainerOnly: force-filter to trainer's own schedules regardless of URL param
+    if (isTrainerOnly) {
+      where.OR = [
+        { trainerId: person.id },
+        { sessions: { some: { OR: [{ trainerId: person.id }, { coTrainerId: person.id }] } } }
+      ];
+    } else if (trainerId) {
       where.OR = [
         { trainerId: trainerId },
         { sessions: { some: { OR: [{ trainerId: trainerId }, { coTrainerId: trainerId }] } } }
@@ -97,6 +123,16 @@ router.get('/', authenticateToken, requirePermission('schedules:read'), roleData
     // Filter by status
     if (status) {
       where.status = status;
+    }
+
+    // Filter by date range (schedule overlaps with [dateFrom, dateTo])
+    if (dateFrom || dateTo) {
+      if (dateFrom) {
+        where.endDate = { gte: new Date(dateFrom) };
+      }
+      if (dateTo) {
+        where.startDate = { ...(where.startDate || {}), lte: new Date(dateTo) };
+      }
     }
 
     const schedules = await prisma.courseSchedule.findMany({
@@ -178,7 +214,7 @@ router.get('/', authenticateToken, requirePermission('schedules:read'), roleData
  * - companyId: filtra per azienda
  * - personId: filtra per dipendente
  */
-router.get('/expiring-courses', authenticateToken, requirePermission('schedules:read'), roleDataFilter, filterResponseFields, async (req, res) => {
+router.get('/expiring-courses', authenticate, requirePermission('schedules:read'), roleDataFilter, filterResponseFields, async (req, res) => {
   try {
     const tenantId = getEffectiveTenantId(req);
     const person = req.person;
@@ -205,7 +241,7 @@ router.get('/expiring-courses', authenticateToken, requirePermission('schedules:
     const roleTypes = personRoles.map(pr => pr.roleType);
 
     const isEmployeeOnly = roleTypes.includes('EMPLOYEE') &&
-      !roleTypes.some(r => ['ADMIN', 'TRAINING_ADMIN', 'HR_MANAGER', 'COMPANY_MANAGER', 'SITE_MANAGER', 'TRAINER'].includes(r));
+      !roleTypes.some(r => ['ADMIN', 'TRAINING_ADMIN', 'HR_MANAGER', 'COMPANY_MANAGER', 'SITE_MANAGER', 'TRAINER', 'TENANT_ADMIN'].includes(r));
 
     // Se è EMPLOYEE, forza il filtro per personId (vede solo i propri corsi)
     let personId = req.query.personId;
@@ -488,7 +524,7 @@ router.get('/expiring-courses', authenticateToken, requirePermission('schedules:
  * - courseType: tipo corso
  * - completedDate: data esecuzione corso
  */
-router.post('/import-expiring-courses', authenticateToken, requirePermission('schedules:update'), async (req, res) => {
+router.post('/import-expiring-courses', authenticate, requirePermission('schedules:update'), async (req, res) => {
   try {
     const { tenantId } = req.person;
     const { records } = req.body;
@@ -555,11 +591,26 @@ router.post('/import-expiring-courses', authenticateToken, requirePermission('sc
           ]
         };
 
-        if (riskLevel) {
-          courseWhere.riskLevel = riskLevel;
+        // Normalizza riskLevel dal CSV (mantiene i valori enum validi)
+        const validRiskLevels = ['ALTO', 'MEDIO', 'BASSO', 'A', 'B', 'C'];
+        const normalizedRiskLevel = riskLevel
+          ? (validRiskLevels.includes(riskLevel.trim().toUpperCase()) ? riskLevel.trim().toUpperCase() : null)
+          : null;
+
+        // Normalizza courseType dal CSV (es: 'PRIMO CORSO' → 'PRIMO_CORSO')
+        const validCourseTypes = ['PRIMO_CORSO', 'AGGIORNAMENTO'];
+        const normalizedCourseType = courseType
+          ? (() => {
+            const normalized = courseType.trim().toUpperCase().replace(/\s+/g, '_');
+            return validCourseTypes.includes(normalized) ? normalized : null;
+          })()
+          : null;
+
+        if (normalizedRiskLevel) {
+          courseWhere.riskLevel = normalizedRiskLevel;
         }
-        if (courseType) {
-          courseWhere.courseType = courseType;
+        if (normalizedCourseType) {
+          courseWhere.courseType = normalizedCourseType;
         }
 
         const course = await prisma.course.findFirst({
@@ -569,7 +620,7 @@ router.post('/import-expiring-courses', authenticateToken, requirePermission('sc
         if (!course) {
           results.errors.push({
             record,
-            error: `Corso "${courseName}" non trovato${riskLevel ? ` con livello rischio ${riskLevel}` : ''}${courseType ? ` e tipo corso ${courseType}` : ''}`
+            error: `Corso "${courseName}" non trovato${normalizedRiskLevel ? ` con livello rischio ${normalizedRiskLevel}` : ''}${normalizedCourseType ? ` e tipo corso ${normalizedCourseType}` : ''}`
           });
           continue;
         }
@@ -681,7 +732,7 @@ router.post('/import-expiring-courses', authenticateToken, requirePermission('sc
 });
 
 // Get schedule by ID
-router.get('/:id', authenticateToken, requirePermission('schedules:read'), roleDataFilter, filterResponseFields, async (req, res) => {
+router.get('/:id', authenticate, requirePermission('schedules:read'), roleDataFilter, filterResponseFields, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -727,6 +778,19 @@ router.get('/:id', authenticateToken, requirePermission('schedules:read'), roleD
       });
     }
 
+    // TRAINER access control: a pure TRAINER can only view schedules where they are assigned
+    if (await isTrainerOnlyAccess(req.person.id, getEffectiveTenantId(req))) {
+      const isTrainerForSchedule =
+        schedule.trainerId === req.person.id ||
+        schedule.sessions?.some(s => s.trainerId === req.person.id || s.coTrainerId === req.person.id);
+      if (!isTrainerForSchedule) {
+        return res.status(403).json({
+          error: 'Accesso non autorizzato',
+          message: 'Non sei assegnato come formatore per questa programmazione'
+        });
+      }
+    }
+
     res.json(schedule);
   } catch (error) {
     logger.error('Failed to fetch schedule', {
@@ -745,7 +809,7 @@ router.get('/:id', authenticateToken, requirePermission('schedules:read'), roleD
 });
 
 // Get schedules with attestati
-router.get('/with-attestati', authenticateToken, requirePermission('schedules:read'), roleDataFilter, filterResponseFields, async (req, res) => {
+router.get('/with-attestati', authenticate, requirePermission('schedules:read'), roleDataFilter, filterResponseFields, async (req, res) => {
   try {
     const schedules = await prisma.courseSchedule.findMany({
       where: {
@@ -782,7 +846,7 @@ router.get('/with-attestati', authenticateToken, requirePermission('schedules:re
 
 // Create new schedule
 router.post('/',
-  authenticateToken,
+  authenticate,
   requirePermission('schedules:create'),
   validateSchedule,
   async (req, res) => {
@@ -961,6 +1025,42 @@ router.post('/',
         },
       });
 
+      // 7. Crea MovimentoContabile ENTRATA BOZZA per ogni azienda partecipante
+      if (fullSchedule?.companies?.length > 0) {
+        const userId = req.person.id;
+        for (const sc of fullSchedule.companies) {
+          const companyTenantProfileId = sc.companyTenantProfileId;
+          try {
+            const ragioneSociale = sc.companyTenantProfile?.company?.ragioneSociale || 'Azienda';
+            const corsoTitolo = fullSchedule.course?.title || 'Formazione';
+            await movimentoContabileService.create(tenantId, {
+              direzione: 'ENTRATA',
+              tipo: 'CORSO_FORMAZIONE',
+              tipoSoggetto: 'AZIENDA',
+              stato: 'BOZZA',
+              importoLordo: 0,
+              importoNetto: 0,
+              importoIva: 0,
+              aliquotaIva: 0,
+              dataEsecuzione: new Date(),
+              courseScheduleId: schedule.id,
+              preventivoId: null,
+              companyTenantProfileId,
+              descrizione: `Corso ${corsoTitolo} - ${ragioneSociale}`,
+              branchType: 'FORMAZIONE',
+              createdBy: userId
+            });
+          } catch (movErr) {
+            logger.error('Errore creazione MovimentoContabile ENTRATA BOZZA', {
+              component: 'schedules-routes',
+              scheduleId: schedule.id,
+              companyTenantProfileId,
+              error: movErr.message
+            });
+          }
+        }
+      }
+
       res.status(201).json(fullSchedule);
     } catch (error) {
       logger.error('Failed to create schedule', {
@@ -988,7 +1088,7 @@ router.post('/',
   });
 
 // Update schedule
-router.put('/:id', authenticateToken, requirePermission('schedules:update'), async (req, res) => {
+router.put('/:id', authenticate, requirePermission('schedules:update'), async (req, res) => {
   const {
     courseId,
     startDate,
@@ -1004,6 +1104,8 @@ router.put('/:id', authenticateToken, requirePermission('schedules:update'), asy
     status,     // optional status update
     isPublic,   // optional: visible in public calendar
     source,     // optional: INTERNAL, EXTERNAL, IMPORT
+    riskLevel,  // optional: update course risk level
+    courseType, // optional: update course type
   } = req.body;
 
   try {
@@ -1104,6 +1206,98 @@ router.put('/:id', authenticateToken, requirePermission('schedules:update'), asy
       });
     }
 
+    // Auto-genera MovimentoContabile ENTRATA per ogni azienda partecipante
+    // quando lo schedule passa allo stato ACCETTATO o COMPLETATO (idempotente)
+    if (updateData.status === 'ACCETTATO' || updateData.status === 'COMPLETATO') {
+      try {
+        const tenantId = getEffectiveTenantId(req);
+        const userId = req.person.id;
+        const scheduleConAziende = await prisma.courseSchedule.findUnique({
+          where: { id: schedule.id },
+          include: {
+            companies: {
+              include: {
+                companyTenantProfile: { include: { company: true } }
+              }
+            },
+            course: { select: { title: true } }
+          }
+        });
+
+        if (scheduleConAziende) {
+          for (const sc of scheduleConAziende.companies) {
+            const companyTenantProfileId = sc.companyTenantProfileId;
+
+            const esistenteEntrata = await prisma.movimentoContabile.findFirst({
+              where: {
+                courseScheduleId: schedule.id,
+                companyTenantProfileId,
+                tipo: 'CORSO_FORMAZIONE',
+                direzione: 'ENTRATA',
+                tenantId,
+                deletedAt: null
+              }
+            });
+
+            if (esistenteEntrata) {
+              // Aggiorna lo stato a DA_FATTURARE se era BOZZA o PREVENTIVO
+              if (esistenteEntrata.stato === 'BOZZA' || esistenteEntrata.stato === 'PREVENTIVO') {
+                await prisma.movimentoContabile.update({
+                  where: { id: esistenteEntrata.id },
+                  data: { stato: 'DA_FATTURARE', updatedBy: userId }
+                });
+              }
+            } else {
+              const preventivoAzienda = await prisma.preventivo.findFirst({
+                where: {
+                  scheduledCourseId: schedule.id,
+                  companyTenantProfileId,
+                  tenantId,
+                  deletedAt: null
+                },
+                orderBy: { createdAt: 'desc' }
+              });
+
+              const importo = preventivoAzienda?.importoFinale ? Number(preventivoAzienda.importoFinale) : 0;
+              const ragioneSociale = sc.companyTenantProfile?.company?.ragioneSociale || 'Azienda';
+              const corsoTitolo = scheduleConAziende.course?.title || 'Formazione';
+
+              await movimentoContabileService.create(tenantId, {
+                direzione: 'ENTRATA',
+                tipo: 'CORSO_FORMAZIONE',
+                tipoSoggetto: 'AZIENDA',
+                stato: 'DA_FATTURARE',
+                importoLordo: importo,
+                importoNetto: importo,
+                importoIva: 0,
+                aliquotaIva: 0,
+                dataEsecuzione: new Date(),
+                courseScheduleId: schedule.id,
+                preventivoId: preventivoAzienda?.id || null,
+                companyTenantProfileId,
+                descrizione: `Corso ${corsoTitolo} - ${ragioneSociale}`,
+                branchType: 'FORMAZIONE',
+                createdBy: userId
+              });
+
+              logger.info('MovimentoContabile ENTRATA azienda creato', {
+                component: 'schedules-routes',
+                scheduleId: schedule.id,
+                companyTenantProfileId,
+                importo
+              });
+            }
+          }
+        }
+      } catch (movErr) {
+        logger.error('Errore creazione MovimentoContabile ENTRATA', {
+          component: 'schedules-routes',
+          scheduleId: schedule.id,
+          error: movErr.message
+        });
+      }
+    }
+
     // 2. Update sessions if provided
     if (Array.isArray(dates)) {
       // Delete existing sessions
@@ -1137,11 +1331,19 @@ router.put('/:id', authenticateToken, requirePermission('schedules:update'), asy
     // 3. Update company associations if provided
     // P49: companyIds may contain global Company.id — resolve to CompanyTenantProfile.id
     if (Array.isArray(companyIds)) {
-      // Delete existing associations
       const tenantId = getEffectiveTenantId(req);
-      await prisma.scheduleCompany.deleteMany({ where: { scheduleId: schedule.id, tenantId } });
+      const userId = req.person.id;
+
+      // Cattura le associazioni azienda precedenti prima di eliminarle
+      const vecchieAssociazioni = await prisma.scheduleCompany.findMany({
+        where: { scheduleId: schedule.id, tenantId },
+        select: { companyTenantProfileId: true }
+      });
+      const vecchiCtpIds = new Set(vecchieAssociazioni.map(a => a.companyTenantProfileId));
+
+      // Risolvi i nuovi ctpId
+      const nuoviCtpIds = new Set();
       for (const companyId of companyIds) {
-        // Try as CompanyTenantProfile.id first, then resolve from global Company.id
         let ctpId = companyId;
         const directCtp = await prisma.companyTenantProfile.findFirst({
           where: { id: companyId, tenantId, deletedAt: null },
@@ -1159,12 +1361,94 @@ router.put('/:id', authenticateToken, requirePermission('schedules:update'), asy
             continue;
           }
         }
+        nuoviCtpIds.add(ctpId);
+      }
+
+      // Delete existing associations
+      await prisma.scheduleCompany.deleteMany({ where: { scheduleId: schedule.id, tenantId } });
+      for (const ctpId of nuoviCtpIds) {
         await prisma.scheduleCompany.create({
           data: {
             scheduleId: schedule.id,
             companyTenantProfileId: ctpId,
             tenantId,
           },
+        });
+      }
+
+      // Sincronizza movimenti contabili in base alle variazioni azienda
+      try {
+        const scheduleCorrente = await prisma.courseSchedule.findUnique({
+          where: { id: schedule.id },
+          select: { status: true, course: { select: { title: true } } }
+        });
+        const statoSchedule = scheduleCorrente?.status;
+        const corsoTitolo = scheduleCorrente?.course?.title || 'Formazione';
+
+        // Aziende rimosse → annulla i movimenti esistenti
+        for (const ctpId of vecchiCtpIds) {
+          if (!nuoviCtpIds.has(ctpId)) {
+            await prisma.movimentoContabile.updateMany({
+              where: {
+                courseScheduleId: schedule.id,
+                companyTenantProfileId: ctpId,
+                tipo: 'CORSO_FORMAZIONE',
+                direzione: 'ENTRATA',
+                tenantId,
+                deletedAt: null,
+                stato: { not: 'FATTURATO' }
+              },
+              data: { stato: 'ANNULLATO', updatedBy: userId }
+            });
+          }
+        }
+
+        // Aziende aggiunte → crea movimento appropriato
+        for (const ctpId of nuoviCtpIds) {
+          if (!vecchiCtpIds.has(ctpId)) {
+            const esistente = await prisma.movimentoContabile.findFirst({
+              where: {
+                courseScheduleId: schedule.id,
+                companyTenantProfileId: ctpId,
+                tipo: 'CORSO_FORMAZIONE',
+                direzione: 'ENTRATA',
+                tenantId,
+                deletedAt: null
+              }
+            });
+            if (!esistente) {
+              const statoMov = (statoSchedule === 'ACCETTATO' || statoSchedule === 'COMPLETATO')
+                ? 'DA_FATTURARE' : 'BOZZA';
+              const ctp = await prisma.companyTenantProfile.findFirst({
+                where: { id: ctpId, tenantId, deletedAt: null },
+                include: { company: true }
+              });
+              const ragioneSociale = ctp?.company?.ragioneSociale || 'Azienda';
+              await movimentoContabileService.create(tenantId, {
+                direzione: 'ENTRATA',
+                tipo: 'CORSO_FORMAZIONE',
+                tipoSoggetto: 'AZIENDA',
+                stato: statoMov,
+                importoLordo: 0,
+                importoNetto: 0,
+                importoIva: 0,
+                aliquotaIva: 0,
+                dataEsecuzione: new Date(),
+                courseScheduleId: schedule.id,
+                preventivoId: null,
+                companyTenantProfileId: ctpId,
+                descrizione: `Corso ${corsoTitolo} - ${ragioneSociale}`,
+                branchType: 'FORMAZIONE',
+                createdBy: userId
+              });
+            }
+          }
+        }
+      } catch (movErr) {
+        logger.error('Errore sincronizzazione MovimentoContabile per variazione aziende schedule', {
+          component: 'schedules-routes',
+          scheduleId: schedule.id,
+          error: movErr.message
         });
       }
     }
@@ -1240,7 +1524,7 @@ router.put('/:id', authenticateToken, requirePermission('schedules:update'), asy
 });
 
 // Soft delete schedule
-router.delete('/:id', authenticateToken, requirePermission('schedules:delete'), async (req, res) => {
+router.delete('/:id', authenticate, requirePermission('schedules:delete'), async (req, res) => {
   try {
     const { id } = req.params;
 

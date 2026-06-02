@@ -8,7 +8,6 @@ export { ManagementLazy } from './Management.lazy';
 
 // Components
 export { default as TenantAccessManager } from './components/TenantAccessManager';
-export { default as UsersWithTenantAccess } from './components/UsersWithTenantAccess';
 
 // API
 export { managementApi } from './api';

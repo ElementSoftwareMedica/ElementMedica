@@ -59,6 +59,7 @@ const ProfiloHRFormPage: React.FC = () => {
         noteContrattuali: '',
         supervisoreId: '',
     });
+    const [employeeSearch, setEmployeeSearch] = useState('');
 
     // Query: profilo esistente (se edit)
     const { data: profiloData, isLoading: isLoadingProfilo } = useQuery({
@@ -142,6 +143,7 @@ const ProfiloHRFormPage: React.FC = () => {
                 personTenantProfileId: emp.tenantProfiles?.[0]?.id || '', // PersonTenantProfile ID
                 firstName: emp.firstName,
                 lastName: emp.lastName,
+                taxCode: emp.taxCode,
                 email: emp.email,
                 company: emp.company,
             }))
@@ -150,8 +152,26 @@ const ProfiloHRFormPage: React.FC = () => {
                     !existingProfileIds.has(p.personTenantProfileId) ||
                     (isEdit && profiloData?.data?.personTenantProfileId === p.personTenantProfileId)
                 )
+            )
+            .filter((p) => {
+                const searchText = employeeSearch.trim().toLowerCase();
+                if (!searchText) return true;
+                return [
+                    p.lastName,
+                    p.firstName,
+                    p.taxCode,
+                    p.email,
+                    p.company?.ragioneSociale,
+                ].filter(Boolean).join(' ').toLowerCase().includes(searchText);
+            })
+            .sort((a, b) =>
+                `${a.lastName || ''} ${a.firstName || ''}`.localeCompare(
+                    `${b.lastName || ''} ${b.firstName || ''}`,
+                    'it',
+                    { sensitivity: 'base' }
+                )
             );
-    }, [personTenantProfilesData, existingProfiles, isEdit, profiloData]);
+    }, [personTenantProfilesData, existingProfiles, isEdit, profiloData, employeeSearch]);
 
     // Popola form se edit
     useEffect(() => {
@@ -274,6 +294,12 @@ const ProfiloHRFormPage: React.FC = () => {
 
                     <div className="space-y-2">
                         <Label htmlFor="personTenantProfileId">Seleziona Dipendente *</Label>
+                        <Input
+                            value={employeeSearch}
+                            onChange={(e) => setEmployeeSearch(e.target.value)}
+                            placeholder="Cerca per cognome, nome, codice fiscale, email o azienda"
+                            disabled={isEdit}
+                        />
                         <select
                             id="personTenantProfileId"
                             value={formData.personTenantProfileId}

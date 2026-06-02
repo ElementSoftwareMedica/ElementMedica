@@ -107,9 +107,18 @@ export const CMSPageRenderer: React.FC<CMSPageRendererProps> = ({
     };
   }, [slug]);
 
-  // Traccia la visualizzazione della pagina CMS
+  // Traccia la visualizzazione della pagina CMS (rispetta cookie consent analytics)
   useEffect(() => {
     if (page?.id && !pageViewTracked.current) {
+      // Rispetta il consenso cookie analytics
+      try {
+        const raw = localStorage.getItem('cookie-consent');
+        if (raw) {
+          const consent = JSON.parse(raw);
+          if (consent.analytics === false) return;
+        }
+      } catch { /* localStorage non disponibile */ }
+
       pageViewTracked.current = true;
       pageLoadTime.current = Date.now();
 

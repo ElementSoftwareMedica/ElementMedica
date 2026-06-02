@@ -33,6 +33,8 @@ import { useToast } from '../../../hooks/useToast';
 import { formatDoctorName } from '../../../utils/codiceFiscale';
 import Modal from '../../../design-system/molecules/Modal/Modal';
 import { useTenantFilter } from '../../../context/TenantFilterContext';
+import { useAuth } from '../../../context/AuthContext';
+import { useRoleGuard } from '../../../hooks/useRoleGuard';
 import { useViewMode } from '../../../hooks/useViewMode';
 import { ViewModeToggle } from '../../../components/clinica/ViewModeToggle';
 import { ActionMenu, createCrudActions } from '@/components/ui/ActionMenu';
@@ -46,6 +48,9 @@ const MediciPage: React.FC = () => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const { showToast } = useToast();
+    const { user } = useAuth();
+    const { isMedico, isMedicoCompetente } = useRoleGuard();
+    const currentMedicoPersonId = isMedico && !isMedicoCompetente ? user?.id : undefined;
 
     // Tenant filter from global context
     const { getTenantFilterParams, isReady, tenantFilterKey } = useTenantFilter();
@@ -68,12 +73,13 @@ const MediciPage: React.FC = () => {
 
     // Fetch medici
     const { data: mediciResponse, isLoading, error } = useQuery({
-        queryKey: ['medici', tenantFilterKey],
+        queryKey: ['medici', tenantFilterKey, currentMedicoPersonId],
         queryFn: async () => {
             const tenantParams = getTenantFilterParams();
             return mediciApi.getAll({
                 ...(tenantParams.tenantIds && { tenantIds: tenantParams.tenantIds.join(',') }),
-                ...(tenantParams.allTenants && { allTenants: 'true' })
+                ...(tenantParams.allTenants && { allTenants: 'true' }),
+                ...(currentMedicoPersonId && { medicoId: currentMedicoPersonId })
             });
         },
         enabled: isReady
@@ -94,9 +100,12 @@ const MediciPage: React.FC = () => {
     });
 
     // Extract medici array from response
-    const medici: Medico[] = Array.isArray(mediciResponse)
+    const mediciRaw: Medico[] = Array.isArray(mediciResponse)
         ? mediciResponse
         : mediciResponse?.data || [];
+    const medici = currentMedicoPersonId
+        ? mediciRaw.filter(m => m.id === currentMedicoPersonId || m.personId === currentMedicoPersonId)
+        : mediciRaw;
 
     // Filter medici by search
     const filteredMedici = medici.filter(medico => {
@@ -182,14 +191,16 @@ const MediciPage: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-3">
                     <ViewModeToggle viewMode={viewMode} onViewModeChange={setViewMode} />
-                    <CRUDButton
-                        operation="create"
-                        onClick={() => navigate('/poliambulatorio/personale/medici/nuovo')}
-                        className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
-                    >
-                        <UserPlus className="h-4 w-4" />
-                        Nuovo Medico
-                    </CRUDButton>
+                    {!currentMedicoPersonId && (
+                        <CRUDButton
+                            operation="create"
+                            onClick={() => navigate('/poliambulatorio/personale/medici/nuovo')}
+                            className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+                        >
+                            <UserPlus className="h-4 w-4" />
+                            Nuovo Medico
+                        </CRUDButton>
+                    )}
                 </div>
             </div>
 
@@ -312,21 +323,26 @@ const MediciPage: React.FC = () => {
                                                 </div>
                                             </div>
                                             <ActionMenu
-                                                actions={[
-                                                    ...createCrudActions(
+                                                actions={currentMedicoPersonId
+                                                    ? createCrudActions(
                                                         () => navigate(`/poliambulatorio/personale/medici/${medico.id}`),
-                                                        () => navigate(`/poliambulatorio/personale/medici/${medico.id}/modifica`),
-                                                        () => {
-                                                            setMedicoToDelete(medico);
-                                                            setDeleteModalOpen(true);
+                                                        () => navigate(`/poliambulatorio/personale/medici/${medico.id}/modifica`)
+                                                    ).filter(action => action.label !== 'Elimina')
+                                                    : [
+                                                        ...createCrudActions(
+                                                            () => navigate(`/poliambulatorio/personale/medici/${medico.id}`),
+                                                            () => navigate(`/poliambulatorio/personale/medici/${medico.id}/modifica`),
+                                                            () => {
+                                                                setMedicoToDelete(medico);
+                                                                setDeleteModalOpen(true);
+                                                            }
+                                                        ),
+                                                        {
+                                                            label: 'Gestisci Credenziali',
+                                                            icon: Key,
+                                                            onClick: () => handleManageCredentials(medico),
                                                         }
-                                                    ),
-                                                    {
-                                                        label: 'Gestisci Credenziali',
-                                                        icon: Key,
-                                                        onClick: () => handleManageCredentials(medico),
-                                                    }
-                                                ]}
+                                                    ]}
                                             />
                                         </div>
 
@@ -457,21 +473,26 @@ const MediciPage: React.FC = () => {
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                                     <ActionMenu
-                                                        actions={[
-                                                            ...createCrudActions(
+                                                        actions={currentMedicoPersonId
+                                                            ? createCrudActions(
                                                                 () => navigate(`/poliambulatorio/personale/medici/${medico.id}`),
-                                                                () => navigate(`/poliambulatorio/personale/medici/${medico.id}/modifica`),
-                                                                () => {
-                                                                    setMedicoToDelete(medico);
-                                                                    setDeleteModalOpen(true);
+                                                                () => navigate(`/poliambulatorio/personale/medici/${medico.id}/modifica`)
+                                                            ).filter(action => action.label !== 'Elimina')
+                                                            : [
+                                                                ...createCrudActions(
+                                                                    () => navigate(`/poliambulatorio/personale/medici/${medico.id}`),
+                                                                    () => navigate(`/poliambulatorio/personale/medici/${medico.id}/modifica`),
+                                                                    () => {
+                                                                        setMedicoToDelete(medico);
+                                                                        setDeleteModalOpen(true);
+                                                                    }
+                                                                ),
+                                                                {
+                                                                    label: 'Gestisci Credenziali',
+                                                                    icon: Key,
+                                                                    onClick: () => handleManageCredentials(medico),
                                                                 }
-                                                            ),
-                                                            {
-                                                                label: 'Gestisci Credenziali',
-                                                                icon: Key,
-                                                                onClick: () => handleManageCredentials(medico),
-                                                            }
-                                                        ]}
+                                                            ]}
                                                     />
                                                 </td>
                                             </tr>

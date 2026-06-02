@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
+import axios from 'axios'
 import {
     ArrowLeft,
     Save,
@@ -13,6 +14,7 @@ import {
     FileText,
     Building2,
     AlertTriangle,
+    X,
     XCircle,
     Loader2,
     Timer,
@@ -50,7 +52,12 @@ import { FirmaDigitaleCard } from '../components/visita/FirmaDigitaleCard'
 import { AllegatiCard } from '../components/visita/AllegatiCard'
 import { DocumentiVisitaModal } from '../components/visita/DocumentiVisitaModal'
 import DatePickerElegante from '@/components/ui/DatePickerElegante'
+import { ElegantDateInput, ElegantSelect } from '../components/ElegantControls'
+import { useDesktopAuth } from '../context/DesktopAuthContext'
 import { useDesktopPermission } from '../hooks/useDesktopPermission'
+import { normalizeProtocolloPrestazioni, type ProtocolloPrestazioneRow } from '../utils/protocolloSanitario'
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4001'
 
 // ============================================================
 // Types
@@ -75,7 +82,7 @@ interface VisitField {
     defaultValue?: string
     placeholder?: string
     helpText?: string
-    options?: (string | { value: string; label: string })[]
+    options?: (string | { value: string; label: string; description?: string })[]
     mappedField?: string
 }
 
@@ -111,6 +118,7 @@ interface Visit {
     medicoFirstName: string | null
     medicoLastName: string | null
     companyName: string | null
+    companyTenantProfileId?: string | null
     prestazioneNome: string | null
     prestazioneCodice: string | null
     isMDL: number
@@ -128,6 +136,7 @@ interface Patient {
     email: string | null
     phone: string | null
     companyName: string | null
+    companyTenantProfileId?: string | null
     residenceAddress: string | null
     residenceCity: string | null
     province: string | null
@@ -162,6 +171,10 @@ interface PatientScadenzaItem {
     prestazioneId: string | null
     prestazioneNome: string | null
     mansione: string | null
+    personId?: string | null
+    tenantId?: string | null
+    mansioneId?: string | null
+    protocolloId?: string | null
     dataScadenza: string | null
     periodicitaMesi: number | null
     eseguita: number | null
@@ -178,12 +191,24 @@ interface PrestazioneCatalogItem {
     codice: string | null
     tipo: string | null
     prezzoBase: number | null
+    durataPrevista?: number | null
 }
 
 interface MedicoOption {
     id: string
     firstName: string | null
     lastName: string | null
+    roleTypes?: string | null
+}
+
+function parseMedicoRoleTypes(value: string | null | undefined): string[] {
+    if (!value) return []
+    try {
+        const parsed = JSON.parse(value) as unknown
+        return Array.isArray(parsed) ? parsed.map(item => String(item)).filter(Boolean) : []
+    } catch {
+        return []
+    }
 }
 
 function isMdlCatalogPrestazione(prestazione: { nome?: string | null; tipo?: string | null }): boolean {
@@ -195,6 +220,87 @@ function isMdlCatalogPrestazione(prestazione: { nome?: string | null; tipo?: str
         text.includes('sorveglianza sanitaria') ||
         text.includes('idoneita lavorativa') ||
         text.includes('idoneità lavorativa')
+}
+
+function formatGenderLabel(value: string | null | undefined): string | null {
+    if (!value) return null
+    const normalized = value.toUpperCase()
+    if (normalized === 'M' || normalized === 'MALE' || normalized === 'MASCHIO') return 'Maschio'
+    if (normalized === 'F' || normalized === 'FEMALE' || normalized === 'FEMMINA') return 'Femmina'
+    return value
+}
+
+function addMonthsIso(base: string | null | undefined, months: number | null | undefined): string | null {
+    if (!months || months <= 0) return null
+    const date = base ? new Date(base) : new Date()
+    if (Number.isNaN(date.getTime())) return null
+    date.setMonth(date.getMonth() + months)
+    return date.toISOString()
+}
+
+const MDL_VISIT_TYPE_OPTIONS = [
+    { value: 'PREVENTIVA', label: 'Preventiva' },
+    { value: 'PREVENTIVA_PREASSUNTIVA', label: 'Preventiva preassuntiva' },
+    { value: 'PERIODICA', label: 'Periodica' },
+    { value: 'STRAORDINARIA', label: 'Straordinaria' },
+]
+
+const HEALTH_PROFILE_FIELDS = [
+    'peso', 'altezza', 'bmi', 'fumatore', 'sigaretteGiorno', 'tipoSigaretta', 'etaInizioFumo', 'anniFumo', 'alcol', 'unitaAlcolSettimana',
+    'attivitaFisica', 'oreAttivitaSettimana', 'allergieFarmaci', 'farmaci', 'altrePatologie',
+    'noteSalute', 'usaDpiPersonali', 'dpiPersonali', 'dpiAzienda', 'usaMezziAziendali',
+    'mezziAziendali', 'patenteCategorie', 'patenteScadenza', 'cqc', 'cqcScadenza',
+    'hasInvalidita', 'tipoInvalidita', 'gradoInvaliditaCivile', 'legge104', 'hasDiabete',
+    'hasIpertensione', 'hasCardiopatie', 'hasAsma', 'hasEpilessia', 'alimentazione', 'porzioniFruttaVerdure', 'droghe',
+    'statoCivile', 'numeroFigli', 'professione', 'qualitaSonno', 'oreSonnoNotte',
+    'sonnolenzaDiurna', 'apneaNotturna', 'formazioneGenerale', 'formazioneSpecifica',
+    'addestramentoCompletato', 'tipoDiabete', 'terapiaInsulina', 'sorveglianzaSanitaria',
+    'storicoOccupazionale', 'corsiFormazioneDpi', 'esposizioniLavorative', 'vaccinazioni',
+    'abilitazioniMezzi', 'dpiConsegne'
+] as const
+
+const HEALTH_PROFILE_LIST_FIELDS = new Set(['dpiPersonali', 'dpiAzienda', 'mezziAziendali', 'patenteCategorie'])
+const HEALTH_PROFILE_BOOL_FIELDS = new Set([
+    'usaDpiPersonali', 'usaMezziAziendali', 'cqc', 'hasInvalidita', 'legge104',
+    'hasDiabete', 'hasIpertensione', 'hasCardiopatie', 'hasAsma', 'hasEpilessia',
+    'sonnolenzaDiurna', 'apneaNotturna', 'formazioneGenerale', 'formazioneSpecifica',
+    'addestramentoCompletato', 'terapiaInsulina'
+])
+
+function parseJsonList(value: unknown): string[] {
+    if (Array.isArray(value)) return value.map(String).filter(Boolean)
+    if (typeof value !== 'string') return []
+    try {
+        const parsed = JSON.parse(value) as unknown
+        return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : []
+    } catch {
+        return value.split(',').map(item => item.trim()).filter(Boolean)
+    }
+}
+
+function normalizeHealthProfileRow(row: Record<string, unknown> | undefined): FormValues {
+    if (!row) return {}
+    const normalized: FormValues = {}
+    for (const field of HEALTH_PROFILE_FIELDS) {
+        const value = row[field]
+        if (value === undefined || value === null || value === '') continue
+        if (HEALTH_PROFILE_LIST_FIELDS.has(field)) normalized[field] = parseJsonList(value)
+        else if (HEALTH_PROFILE_BOOL_FIELDS.has(field)) normalized[field] = value === true || value === 1
+        else normalized[field] = value
+    }
+    return normalized
+}
+
+function buildHealthProfilePayload(values: FormValues): Record<string, unknown> {
+    const payload: Record<string, unknown> = {}
+    for (const field of HEALTH_PROFILE_FIELDS) {
+        const value = values[field]
+        if (value === undefined) continue
+        if (HEALTH_PROFILE_LIST_FIELDS.has(field)) payload[field] = Array.isArray(value) ? value : parseJsonList(value)
+        else if (HEALTH_PROFILE_BOOL_FIELDS.has(field)) payload[field] = Boolean(value)
+        else payload[field] = value === '' ? null : value
+    }
+    return payload
 }
 
 // ============================================================
@@ -218,6 +324,7 @@ export function VisitaDetailPage(): JSX.Element {
     const { id } = useParams<{ id: string }>()
     const navigate = useNavigate()
     const location = useLocation()
+    const { accessToken } = useDesktopAuth()
     const permissions = useDesktopPermission()
     const locationState = location.state as { from?: string; secondaryVisit?: boolean } | null
     const backTarget = !locationState?.secondaryVisit && locationState?.from ? locationState.from : '/visite'
@@ -240,7 +347,7 @@ export function VisitaDetailPage(): JSX.Element {
     // Template dinamici (P52): se caricato, usa sezioni e campi dal template
     const [templateFields, setTemplateFields] = useState<VisitField[] | null>(null)
     const [templateSections, setTemplateSections] = useState<{ id: string; label: string }[] | null>(null)
-    const [templateSectionLayout, setTemplateSectionLayout] = useState<'tabs' | 'sections' | 'continuous'>('tabs')
+    const [, setTemplateSectionLayout] = useState<'tabs' | 'sections' | 'continuous'>('tabs')
 
     // Form state
     const [formValues, setFormValues] = useState<FormValues>({})
@@ -272,6 +379,10 @@ export function VisitaDetailPage(): JSX.Element {
     const [selectedHistoryVisit, setSelectedHistoryVisit] = useState<VisitHistoryItem | null>(null)
     const [showExitDialog, setShowExitDialog] = useState(false)
     const [exitActionLoading, setExitActionLoading] = useState(false)
+    const [pendingNavigationTarget, setPendingNavigationTarget] = useState<string | null>(null)
+    const [discardReason, setDiscardReason] = useState('')
+    const [exitError, setExitError] = useState<string | null>(null)
+    const [exitDiscardStep, setExitDiscardStep] = useState(false)
     const [patientForm, setPatientForm] = useState({
         email: '',
         phone: '',
@@ -296,10 +407,13 @@ export function VisitaDetailPage(): JSX.Element {
         fc: '',
         spo2: '',
         temperatura: '',
+        bmi: '',
         prossimoControllo: '',
         periodicitaMesi: '',
         fumatore: '',
         sigaretteGiorno: '',
+        tipoSigaretta: '',
+        etaInizioFumo: '',
         anniFumo: '',
         alcol: '',
         unitaAlcolSettimana: '',
@@ -328,6 +442,8 @@ export function VisitaDetailPage(): JSX.Element {
         hasAsma: false,
         hasEpilessia: false,
         alimentazione: '',
+        porzioniFruttaVerdure: '',
+        droghe: '',
         statoCivile: '',
         numeroFigli: '',
         professione: '',
@@ -351,6 +467,53 @@ export function VisitaDetailPage(): JSX.Element {
     const isReadOnly = !visit || visit.stato === 'ANNULLATA' || !permissions.canUpdateVisite() || isCompletedLocked
     const shouldConfirmExit = !!visit && !['COMPLETATA', 'ANNULLATA'].includes(String(visit.stato || '')) && !locationState?.secondaryVisit
 
+    const resolveOfflineVisitTemplate = useCallback(async (targetVisit: Visit): Promise<string | null> => {
+        if (!window.desktopApi || targetVisit.templateId) return targetVisit.templateId
+        const templates = await window.desktopApi.db.query({
+            table: 'visit_templates',
+            where: { _isDeleted: 0 }
+        }).catch(() => []) as Array<{
+            id: string
+            tenantId?: string | null
+            tipo?: string | null
+            medicoId?: string | null
+            prestazioneId?: string | null
+            isDefault?: number | boolean | null
+        }>
+        const activeTemplates = templates.filter(template => !template.tenantId || template.tenantId === targetVisit.tenantId)
+        const scopeOf = (template: { tipo?: string | null }): string => String(template.tipo || '').toUpperCase()
+        const byMedicoPrestazione = activeTemplates.find(template =>
+            template.medicoId === targetVisit.medicoId &&
+            !!targetVisit.prestazioneId &&
+            template.prestazioneId === targetVisit.prestazioneId
+        )
+        if (byMedicoPrestazione) return byMedicoPrestazione.id
+        const byMedicoGeneric = activeTemplates.find(template =>
+            template.medicoId === targetVisit.medicoId &&
+            !template.prestazioneId &&
+            scopeOf(template) === 'PERSONAL'
+        )
+        if (byMedicoGeneric) return byMedicoGeneric.id
+        const byPrestazione = activeTemplates.find(template =>
+            !!targetVisit.prestazioneId &&
+            template.prestazioneId === targetVisit.prestazioneId &&
+            !template.medicoId &&
+            scopeOf(template) === 'PRESTAZIONE'
+        )
+        if (byPrestazione) return byPrestazione.id
+        const byMedicoDefault = activeTemplates.find(template =>
+            template.medicoId === targetVisit.medicoId &&
+            (template.isDefault === true || template.isDefault === 1)
+        )
+        if (byMedicoDefault) return byMedicoDefault.id
+        const byGlobal = activeTemplates.find(template =>
+            !template.medicoId &&
+            scopeOf(template) === 'GLOBAL' &&
+            (template.isDefault === true || template.isDefault === 1)
+        )
+        return byGlobal?.id || null
+    }, [])
+
     useEffect(() => {
         if (!hasChanges && !shouldConfirmExit) return
         const handleBeforeUnload = (event: BeforeUnloadEvent): void => {
@@ -365,6 +528,8 @@ export function VisitaDetailPage(): JSX.Element {
         if (!shouldConfirmExit) return
         const handlePopState = (): void => {
             window.history.pushState(null, '', window.location.href)
+            setExitError(null)
+            setExitDiscardStep(false)
             setShowExitDialog(true)
         }
         window.history.pushState(null, '', window.location.href)
@@ -407,10 +572,13 @@ export function VisitaDetailPage(): JSX.Element {
             fc: formValues.fc != null ? String(formValues.fc) : '',
             spo2: formValues.spo2 != null ? String(formValues.spo2) : '',
             temperatura: formValues.temperatura != null ? String(formValues.temperatura) : '',
+            bmi: formValues.bmi != null ? String(formValues.bmi) : '',
             prossimoControllo: (formValues.prossimoControllo as string) || '',
             periodicitaMesi: formValues.periodicitaMesi != null ? String(formValues.periodicitaMesi) : '',
             fumatore: (formValues.fumatore as string) || '',
             sigaretteGiorno: formValues.sigaretteGiorno != null ? String(formValues.sigaretteGiorno) : '',
+            tipoSigaretta: (formValues.tipoSigaretta as string) || '',
+            etaInizioFumo: formValues.etaInizioFumo != null ? String(formValues.etaInizioFumo) : '',
             anniFumo: formValues.anniFumo != null ? String(formValues.anniFumo) : '',
             alcol: (formValues.alcol as string) || '',
             unitaAlcolSettimana: formValues.unitaAlcolSettimana != null ? String(formValues.unitaAlcolSettimana) : '',
@@ -439,6 +607,8 @@ export function VisitaDetailPage(): JSX.Element {
             hasAsma: Boolean(formValues.hasAsma),
             hasEpilessia: Boolean(formValues.hasEpilessia),
             alimentazione: (formValues.alimentazione as string) || '',
+            porzioniFruttaVerdure: formValues.porzioniFruttaVerdure != null ? String(formValues.porzioniFruttaVerdure) : '',
+            droghe: (formValues.droghe as string) || '',
             statoCivile: (formValues.statoCivile as string) || '',
             numeroFigli: formValues.numeroFigli != null ? String(formValues.numeroFigli) : '',
             professione: (formValues.professione as string) || '',
@@ -478,19 +648,46 @@ export function VisitaDetailPage(): JSX.Element {
             setVisit(v)
 
             // Parse datiStrutturati + merge flat fields
+            let loadedFormValues: FormValues = {}
             try {
                 const parsed = JSON.parse(v.datiStrutturati || '{}')
-                setFormValues(parsed)
+                loadedFormValues = parsed && typeof parsed === 'object' ? parsed as FormValues : {}
             } catch {
-                setFormValues({})
+                loadedFormValues = {}
+            }
+            if (v.personId) {
+                const healthRows = await window.desktopApi.db.query({
+                    table: 'profili_salute',
+                    where: { personId: v.personId, _isDeleted: 0 },
+                    limit: 1
+                }) as Record<string, unknown>[]
+                loadedFormValues = { ...loadedFormValues, ...normalizeHealthProfileRow(healthRows[0]) }
+            }
+            setFormValues(loadedFormValues)
+            if (!v.appuntamentoId && Array.isArray(loadedFormValues._prestazioniAggiuntive)) {
+                const savedPrestazioni = (loadedFormValues._prestazioniAggiuntive as Array<Record<string, unknown>>)
+                    .map(item => ({
+                        prestazioneId: String(item.id || item.prestazioneId || ''),
+                        nome: String(item.nome || item.name || 'Prestazione'),
+                        codice: (item.codice as string | null) || null,
+                        tipo: (item.tipo as string | null) || null,
+                        prezzoCalcolato: item.prezzoCalcolato != null || item.prezzoBase != null ? Number(item.prezzoCalcolato ?? item.prezzoBase) : null,
+                    }))
+                    .filter(item => item.prestazioneId)
+                if (savedPrestazioni.length > 0) setPrestazioniAppt(savedPrestazioni)
             }
 
-            // Load visit template (P52): parse fields and build section list
-            if (v.templateId) {
+            // Load visit template with the same priority used by the webapp.
+            const resolvedTemplateId = await resolveOfflineVisitTemplate(v)
+            if (resolvedTemplateId && resolvedTemplateId !== v.templateId) {
+                v.templateId = resolvedTemplateId
+                await window.desktopApi.db.update({ table: 'visits', id: v.id, data: { templateId: resolvedTemplateId, updatedAt: new Date().toISOString() } }).catch(() => undefined)
+            }
+            if (resolvedTemplateId) {
                 try {
                     const templates = await window.desktopApi.db.query({
                         table: 'visit_templates',
-                        where: { id: v.templateId, _isDeleted: 0 },
+                        where: { id: resolvedTemplateId, _isDeleted: 0 },
                         limit: 1
                     }) as Array<{ fields: string | null; nome: string; sidebarConfig?: string | null }>
                     if (templates.length > 0) {
@@ -527,7 +724,8 @@ export function VisitaDetailPage(): JSX.Element {
                     where: { id: v.personId, _isDeleted: 0 },
                     limit: 1
                 }) as Patient[]
-                if (patients.length > 0) setPatient(patients[0])
+                const loadedPatient = patients[0]
+                if (loadedPatient) setPatient(loadedPatient)
                 const historyRows = await window.desktopApi.db.query({
                     table: 'visits',
                     where: { personId: v.personId, _isDeleted: 0 },
@@ -550,24 +748,32 @@ export function VisitaDetailPage(): JSX.Element {
                     const allProtocolli = await window.desktopApi.db.query({
                         table: 'protocolli',
                         where: { _isDeleted: 0 }
-                    }) as Array<{ id: string; mansioneId: string | null; nome: string | null; prestazioni: string | null; mansioneNome: string | null }>
+                    }) as Array<{ id: string; mansioneId: string | null; nome: string | null; mansioneNome: string | null }>
+                    const allProtocolloPrestazioni = await window.desktopApi.db.query({
+                        table: 'protocollo_prestazioni',
+                        where: { _isDeleted: 0 }
+                    }).catch(() => []) as Array<ProtocolloPrestazioneRow & { protocolloId: string }>
                     const fallbackScadenze = allProtocolli
-                        .filter(p => p.mansioneId && mansioneIds.includes(p.mansioneId))
+                        .filter(p => (p.id && loadedPatient?.protocolloSanitarioId === p.id) || (p.mansioneId && mansioneIds.includes(p.mansioneId)))
                         .flatMap(p => {
-                            try {
-                                return (JSON.parse(p.prestazioni || '[]') as Array<{ prestazioneId?: string; prestazioneNome?: string; prestazione?: { nome?: string }; periodicitaMesi?: number; periodicitaCustomMesi?: number; scadenzaDefaultMesi?: number }>).map((item, idx) => ({
+                            const dedicated = allProtocolloPrestazioni.filter(row => row.protocolloId === p.id)
+                            if (dedicated.length > 0) {
+                                return normalizeProtocolloPrestazioni(dedicated).map((item, idx) => ({
                                     id: `protocollo:${p.id}:${item.prestazioneId || idx}`,
                                     prestazioneId: item.prestazioneId || null,
-                                    prestazioneNome: item.prestazioneNome || item.prestazione?.nome || 'Accertamento',
+                                    prestazioneNome: item.prestazioneNome,
                                     mansione: p.mansioneNome,
-                                    dataScadenza: null,
-                                    periodicitaMesi: item.periodicitaMesi || item.periodicitaCustomMesi || item.scadenzaDefaultMesi || null,
+                                    personId: v.personId,
+                                    tenantId: v.tenantId,
+                                    mansioneId: p.mansioneId,
+                                    protocolloId: p.id,
+                                    dataScadenza: addMonthsIso(v.dataOra || v.dataInizio, item.periodicitaMesi),
+                                    periodicitaMesi: item.periodicitaMesi,
                                     eseguita: 0,
                                     stato: 'Da programmare',
                                 }))
-                            } catch {
-                                return []
                             }
+                            return []
                         })
                     setPatientScadenze(fallbackScadenze)
                 }
@@ -583,7 +789,7 @@ export function VisitaDetailPage(): JSX.Element {
         } finally {
             setLoading(false)
         }
-    }, [id])
+    }, [id, resolveOfflineVisitTemplate])
 
     useEffect(() => { loadVisit() }, [loadVisit])
 
@@ -593,13 +799,30 @@ export function VisitaDetailPage(): JSX.Element {
             window.desktopApi.db.query({ table: 'prestazioni', where: { _isDeleted: 0 }, orderBy: { column: 'nome', direction: 'ASC' } }),
             window.desktopApi.db.query({ table: 'medici', where: { _isDeleted: 0 }, orderBy: { column: 'lastName', direction: 'ASC' } }).catch(() => []),
             window.desktopApi.db.query({ table: 'visits', where: { _isDeleted: 0 }, orderBy: { column: 'medicoLastName', direction: 'ASC' } })
-        ]).then(([prestRows, mediciRows, visitRows]) => {
+        ]).then(async ([prestRows, mediciRows, visitRows]) => {
             setPrestazioniCatalog(prestRows as PrestazioneCatalogItem[])
             const map = new Map<string, MedicoOption>()
             if (visit?.medicoId) map.set(visit.medicoId, { id: visit.medicoId, firstName: visit.medicoFirstName, lastName: visit.medicoLastName })
             if (permissions.canChangeRefertante()) {
-                for (const m of mediciRows as Array<{ id: string; firstName: string | null; lastName: string | null }>) {
-                    if (m.id && !map.has(m.id)) map.set(m.id, { id: m.id, firstName: m.firstName, lastName: m.lastName })
+                for (const m of mediciRows as Array<{ id: string; firstName: string | null; lastName: string | null; roleTypes?: string | null }>) {
+                    const roles = parseMedicoRoleTypes(m.roleTypes)
+                    const canRefertare = roles.length === 0 || roles.some(role => role === 'MEDICO' || role === 'MEDICO_COMPETENTE')
+                    if (canRefertare && m.id && !map.has(m.id)) map.set(m.id, { id: m.id, firstName: m.firstName, lastName: m.lastName, roleTypes: m.roleTypes })
+                }
+                if (accessToken) {
+                    try {
+                        const response = await axios.get(`${API_BASE}/api/v1/clinica/medici`, {
+                            params: { limit: 500 },
+                            headers: { Authorization: `Bearer ${accessToken}` },
+                            timeout: 30000,
+                        })
+                        const onlineRows = response.data?.data?.data || response.data?.data || []
+                        for (const m of onlineRows as Array<{ id: string; firstName?: string | null; lastName?: string | null; nome?: string | null; cognome?: string | null }>) {
+                            if (m.id && !map.has(m.id)) map.set(m.id, { id: m.id, firstName: m.firstName || m.nome || null, lastName: m.lastName || m.cognome || null })
+                        }
+                    } catch {
+                        // Offline fallback: keep local doctors.
+                    }
                 }
             }
             for (const v of visitRows as Array<{ medicoId: string | null; medicoFirstName: string | null; medicoLastName: string | null }>) {
@@ -609,7 +832,7 @@ export function VisitaDetailPage(): JSX.Element {
             }
             setMediciOptions([...map.values()].filter(m => m.lastName || m.firstName))
         }).catch(() => undefined)
-    }, [permissions, visit?.medicoId, visit?.medicoFirstName, visit?.medicoLastName])
+    }, [accessToken, permissions, visit?.medicoId, visit?.medicoFirstName, visit?.medicoLastName])
 
     // Load appointment prestazioni + resolve tariffario prices
     useEffect(() => {
@@ -633,20 +856,21 @@ export function VisitaDetailPage(): JSX.Element {
                 // Build company-specific tariffario price map
                 const tariffVoci = new Map<string, number>()
                 if (companyId) {
-                    const tariffariRows = await window.desktopApi.db.query({
-                        table: 'tariffari',
-                        where: { _isDeleted: 0, attivo: 1 }
-                    }) as Array<{ companyAssociations: string | null; voci: string | null }>
-                    for (const t of tariffariRows) {
-                        try {
-                            const assoc = JSON.parse(t.companyAssociations || '[]') as Array<{ companyTenantProfileId: string }>
-                            if (assoc.some(a => a.companyTenantProfileId === companyId)) {
-                                const voci = JSON.parse(t.voci || '[]') as Array<{ prestazioneId: string | null; prezzoBase: number }>
-                                for (const v of voci) {
-                                    if (v.prestazioneId && v.prezzoBase > 0) tariffVoci.set(v.prestazioneId, v.prezzoBase)
-                                }
+                    const associations = await window.desktopApi.db.query({
+                        table: 'tariffario_company_associations',
+                        where: { companyTenantProfileId: companyId, _isDeleted: 0, attivo: 1 }
+                    }).catch(() => []) as Array<{ tariffarioId: string }>
+                    const tariffarioIds = new Set(associations.map(a => a.tariffarioId))
+                    if (tariffarioIds.size > 0) {
+                        const voci = await window.desktopApi.db.query({
+                            table: 'tariffario_voci',
+                            where: { _isDeleted: 0, attivo: 1 }
+                        }).catch(() => []) as Array<{ tariffarioAziendaleId: string; prestazioneId: string | null; prezzoBase: number }>
+                        for (const v of voci) {
+                            if (tariffarioIds.has(v.tariffarioAziendaleId) && v.prestazioneId && Number(v.prezzoBase) > 0) {
+                                tariffVoci.set(v.prestazioneId, Number(v.prezzoBase))
                             }
-                        } catch { /* skip malformed */ }
+                        }
                     }
                 }
 
@@ -773,13 +997,36 @@ export function VisitaDetailPage(): JSX.Element {
         }
     }, [patient, visit])
 
+    const fetchServerRefertoPdf = useCallback(async (regenerate: boolean): Promise<{ blob: Blob; filename: string } | null> => {
+        if (!visit?._serverId || !accessToken) return null
+        const headers = { Authorization: `Bearer ${accessToken}` }
+        const request = async (method: 'get' | 'post') => {
+            const response = method === 'post'
+                ? await axios.post(`${API_BASE}/api/v1/clinica/visite/${visit._serverId}/pdf`, {}, { headers, timeout: 60000 })
+                : await axios.get(`${API_BASE}/api/v1/clinica/visite/${visit._serverId}/pdf`, { headers, timeout: 30000 })
+            return response.data?.data as { fileUrl?: string; displayFilename?: string } | null
+        }
+        let referto = regenerate ? await request('post') : await request('get')
+        if (!referto?.fileUrl && !regenerate) referto = await request('post')
+        if (!referto?.fileUrl) return null
+        const fileUrl = referto.fileUrl.startsWith('http') ? referto.fileUrl : `${API_BASE}${referto.fileUrl}`
+        const file = await axios.get(fileUrl, { headers, responseType: 'blob', timeout: 60000 })
+        return {
+            blob: file.data as Blob,
+            filename: referto.displayFilename || `referto_${visit._serverId}.pdf`,
+        }
+    }, [accessToken, visit?._serverId])
+
     const generatePdfPreview = useCallback(async (): Promise<void> => {
         const data = buildPdfData()
         if (!data) return
         setPdfGenerating(true)
         try {
-            const { createVisitaReferroPdfBlob } = await import('../components/visita/VisitaReferroPdf')
-            const blob = await createVisitaReferroPdfBlob(data)
+            const serverPdf = await fetchServerRefertoPdf(true).catch(() => null)
+            const blob = serverPdf?.blob || await (async () => {
+                const { createVisitaReferroPdfBlob } = await import('../components/visita/VisitaReferroPdf')
+                return createVisitaReferroPdfBlob(data)
+            })()
             const url = URL.createObjectURL(blob)
             setPdfPreviewUrl(prev => {
                 if (prev) URL.revokeObjectURL(prev)
@@ -788,7 +1035,7 @@ export function VisitaDetailPage(): JSX.Element {
         } finally {
             setPdfGenerating(false)
         }
-    }, [buildPdfData])
+    }, [buildPdfData, fetchServerRefertoPdf])
 
     const handleHeaderSave = useCallback(async () => {
         if (hasChanges) {
@@ -803,18 +1050,35 @@ export function VisitaDetailPage(): JSX.Element {
         }
     }, [doSave, generatePdfPreview, hasChanges, visit?.stato])
 
+    const handleCancelCompletedEdit = useCallback(async () => {
+        if (hasChanges && window.desktopApi) {
+            const confirmed = await window.desktopApi.app.confirmDialog({
+                title: 'Annulla modifiche visita',
+                message: 'Annullare le modifiche non salvate e bloccare di nuovo la visita?',
+                detail: 'I dati non salvati verranno ricaricati dalla copia locale.',
+                buttons: ['Continua modifica', 'Annulla modifiche'],
+                defaultId: 0,
+                type: 'warning'
+            })
+            if (!confirmed) return
+        }
+        setEditingCompletedVisit(false)
+        setHasChanges(false)
+        await loadVisit()
+    }, [hasChanges, loadVisit])
+
     // Save on section change
     const changeSection = useCallback(async (newSection: string) => {
         if (hasChanges && visit && window.desktopApi) {
             await doSave()
         }
         setActiveSection(newSection)
-        if (layoutMode === 'scroll' || templateSectionLayout !== 'tabs') {
+        if (layoutMode === 'scroll') {
             requestAnimationFrame(() => {
                 sectionRefs.current[newSection]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
             })
         }
-    }, [hasChanges, visit, doSave, layoutMode, templateSectionLayout])
+    }, [hasChanges, visit, doSave, layoutMode])
 
     // ----------------------------------------------------------
     // Complete visit
@@ -894,24 +1158,19 @@ export function VisitaDetailPage(): JSX.Element {
 
                         // Try company-specific tariffario first
                         if (companyTenantProfileId) {
-                            const tariffariRows = await window.desktopApi.db.query({
-                                table: 'tariffari',
-                                where: { _isDeleted: 0, attivo: 1 }
-                            }) as Array<{ id: string; companyAssociations: string | null; voci: string | null }>
-
-                            for (const tariffario of tariffariRows) {
-                                try {
-                                    const assoc: Array<{ companyTenantProfileId: string }> = JSON.parse(tariffario.companyAssociations || '[]')
-                                    if (assoc.some(a => a.companyTenantProfileId === companyTenantProfileId)) {
-                                        const voci: Array<{ prestazioneId: string | null; prezzoBase: number }> = JSON.parse(tariffario.voci || '[]')
-                                        const voce = voci.find(v => v.prestazioneId === prestazioneId)
-                                        if (voce && voce.prezzoBase > 0) {
-                                            importo = voce.prezzoBase
-                                            break
-                                        }
-                                    }
-                                } catch {
-                                    // skip malformed JSON
+                            const associations = await window.desktopApi.db.query({
+                                table: 'tariffario_company_associations',
+                                where: { companyTenantProfileId: companyTenantProfileId, _isDeleted: 0, attivo: 1 }
+                            }).catch(() => []) as Array<{ tariffarioId: string }>
+                            const tariffarioIds = new Set(associations.map(a => a.tariffarioId))
+                            if (tariffarioIds.size > 0) {
+                                const voci = await window.desktopApi.db.query({
+                                    table: 'tariffario_voci',
+                                    where: { prestazioneId, _isDeleted: 0, attivo: 1 }
+                                }).catch(() => []) as Array<{ tariffarioAziendaleId: string; prezzoBase: number }>
+                                const voce = voci.find(v => tariffarioIds.has(v.tariffarioAziendaleId) && Number(v.prezzoBase) > 0)
+                                if (voce) {
+                                    importo = Number(voce.prezzoBase)
                                 }
                             }
                         }
@@ -1000,27 +1259,26 @@ export function VisitaDetailPage(): JSX.Element {
                     const allProtocolli = await window.desktopApi.db.query({
                         table: 'protocolli',
                         where: { _isDeleted: 0 }
-                    }) as Array<{ id: string; mansioneId: string | null; prestazioni: string }>
+                    }) as Array<{ id: string; mansioneId: string | null }>
+                    const allProtocolloPrestazioni = await window.desktopApi.db.query({
+                        table: 'protocollo_prestazioni',
+                        where: { _isDeleted: 0 }
+                    }).catch(() => []) as Array<ProtocolloPrestazioneRow & { protocolloId: string }>
 
                     const relevantProtocolli = allProtocolli.filter(
                         p => p.mansioneId && mansioneIds.includes(p.mansioneId)
                     )
 
                     for (const protocollo of relevantProtocolli) {
-                        type ProtocolloPrestItem = {
-                            prestazioneId?: string
-                            scadenzaDefaultMesi?: number
-                            periodicitaCustomMesi?: number
-                            prestazione?: { nome?: string }
-                        }
-                        let prestazioniItems: ProtocolloPrestItem[]
-                        try { prestazioniItems = JSON.parse(protocollo.prestazioni || '[]') }
-                        catch { continue }
+                        const dedicated = allProtocolloPrestazioni.filter(row => row.protocolloId === protocollo.id)
+                        const prestazioniItems = dedicated.length > 0
+                            ? normalizeProtocolloPrestazioni(dedicated)
+                            : []
 
                         const mansioneId = mansioni.find(m => m.mansioneId === protocollo.mansioneId)?.mansioneId ?? null
 
                         for (const item of prestazioniItems) {
-                            const periodicitaMesi = item.periodicitaCustomMesi ?? item.scadenzaDefaultMesi ?? 0
+                            const periodicitaMesi = item.periodicitaMesi ?? 0
                             if (periodicitaMesi <= 0 || !item.prestazioneId) continue
 
                             // Skip if already pending scadenza for this person + prestazione
@@ -1031,7 +1289,7 @@ export function VisitaDetailPage(): JSX.Element {
                             if (existing.length > 0) continue
 
                             // Resolve prestazione name (from nested object or local table)
-                            let prestazioneNome = item.prestazione?.nome || ''
+                            let prestazioneNome = item.prestazioneNome || ''
                             if (!prestazioneNome) {
                                 const presRows = await window.desktopApi.db.query({
                                     table: 'prestazioni',
@@ -1099,10 +1357,100 @@ export function VisitaDetailPage(): JSX.Element {
             }
         }
 
+        // Auto-generate/update Giudizio di Idoneità for MDL visits only.
+        if (visit.personId && (visit.isMDL || visit.tipoVisitaMDL || visit.prestazioneNome?.toLowerCase().includes('visita medica del lavoro'))) {
+            try {
+                const values = formValuesRef.current
+                const toText = (raw: unknown): string => {
+                    if (Array.isArray(raw)) return raw.filter(Boolean).map(String).join('\n')
+                    return raw == null ? '' : String(raw).trim()
+                }
+                const prescrizioni = toText(values.prescrizioniNormativaMdl)
+                const limitazioni = toText(values.limitazioniMansioneMdl)
+                const rawGiudizio = String(values.giudizioIdoneitaMdl || '').trim()
+                const esitoMap: Record<string, string> = {
+                    idoneo: 'IDONEO',
+                    idoneo_prescrizioni: 'IDONEO_CON_PRESCRIZIONI',
+                    idoneo_limitazioni: 'IDONEO_CON_LIMITAZIONI',
+                    idoneo_limitazioni_prescrizioni: 'IDONEO_CON_LIMITAZIONI_PRESCRIZIONI',
+                    temporaneamente_non_idoneo: 'NON_IDONEO_TEMPORANEO',
+                    non_idoneo: 'NON_IDONEO_PERMANENTE',
+                }
+                const esito = esitoMap[rawGiudizio]
+                    || (prescrizioni && limitazioni ? 'IDONEO_CON_LIMITAZIONI_PRESCRIZIONI'
+                        : prescrizioni ? 'IDONEO_CON_PRESCRIZIONI'
+                            : limitazioni ? 'IDONEO_CON_LIMITAZIONI'
+                                : 'IDONEO')
+                const mdlDeadline = patientScadenze.find(s =>
+                    s.prestazioneNome?.toLowerCase().includes('visita medica del lavoro')
+                )?.dataScadenza || null
+                const existingGiudizi = await window.desktopApi.db.query({
+                    table: 'giudizi_idoneita',
+                    where: { visitaId: visit.id, _isDeleted: 0 }
+                }) as Array<{ id: string; _localId?: string | null }>
+                const giudizioData = {
+                    tenantId: visit.tenantId,
+                    personId: visit.personId,
+                    visitaId: visit.id,
+                    medicoId: visit.medicoRefertanteId || visit.medicoId || null,
+                    tipo: visit.tipoVisitaMDL || null,
+                    esito,
+                    limitazioni: limitazioni || null,
+                    prescrizioni: prescrizioni || null,
+                    dataEmissione: now.split('T')[0],
+                    dataScadenza: mdlDeadline,
+                    note: values.tempisticaGiudizioIdoneitaMdl ? String(values.tempisticaGiudizioIdoneitaMdl) : null,
+                    updatedAt: now,
+                }
+                const syncPayload = {
+                    tenantId: visit.tenantId,
+                    personId: visit.personId,
+                    visitaId: visit._serverId || visit.id,
+                    medicoCompetenteId: visit.medicoRefertanteId || visit.medicoId || null,
+                    tipoGiudizio: esito,
+                    limitazioni: giudizioData.limitazioni,
+                    prescrizioniIdoneita: giudizioData.prescrizioni,
+                    motivazioni: giudizioData.note,
+                    dataEmissione: now,
+                    dataScadenza: mdlDeadline,
+                    stato: 'VALIDO',
+                }
+
+                if (existingGiudizi.length > 0) {
+                    await window.desktopApi.db.update({
+                        table: 'giudizi_idoneita',
+                        id: existingGiudizi[0].id,
+                        data: giudizioData
+                    })
+                    await window.desktopApi.sync.enqueue({
+                        type: 'UPDATE',
+                        entity: 'giudizi_idoneita',
+                        entityId: existingGiudizi[0].id,
+                        localId: existingGiudizi[0]._localId || existingGiudizi[0].id,
+                        payload: syncPayload
+                    })
+                } else {
+                    const { id: giudizioId, _localId } = await window.desktopApi.db.insert({
+                        table: 'giudizi_idoneita',
+                        data: { ...giudizioData, createdAt: now }
+                    })
+                    await window.desktopApi.sync.enqueue({
+                        type: 'CREATE',
+                        entity: 'giudizi_idoneita',
+                        entityId: giudizioId,
+                        localId: _localId,
+                        payload: syncPayload
+                    })
+                }
+            } catch {
+                // Non-blocking: judgement sync failure should not prevent local visit completion.
+            }
+        }
+
         if (timerRef.current) clearInterval(timerRef.current)
         setVisit(prev => prev ? { ...prev, stato: 'COMPLETATA', dataFine: now, durataMinuti } : null)
         await generatePdfPreview()
-    }, [visit, doSave, permissions, generatePdfPreview])
+    }, [visit, doSave, permissions, generatePdfPreview, patientScadenze])
 
     // ----------------------------------------------------------
     // Sospendi visita (salva come bozza)
@@ -1153,6 +1501,18 @@ export function VisitaDetailPage(): JSX.Element {
         if (!visit || pdfGenerating) return
         setPdfGenerating(true)
         try {
+            const serverPdf = await fetchServerRefertoPdf(false).catch(() => null)
+            if (serverPdf) {
+                const url = URL.createObjectURL(serverPdf.blob)
+                const anchor = document.createElement('a')
+                anchor.href = url
+                anchor.download = serverPdf.filename
+                document.body.appendChild(anchor)
+                anchor.click()
+                anchor.remove()
+                URL.revokeObjectURL(url)
+                return
+            }
             const { downloadVisitaReferroPdf } = await import('../components/visita/VisitaReferroPdf')
             const data = buildPdfData()
             if (data) await downloadVisitaReferroPdf(data)
@@ -1161,7 +1521,7 @@ export function VisitaDetailPage(): JSX.Element {
         } finally {
             setPdfGenerating(false)
         }
-    }, [visit, pdfGenerating, buildPdfData])
+    }, [visit, pdfGenerating, buildPdfData, fetchServerRefertoPdf])
 
     const handleSavePatientProfile = useCallback(async () => {
         if (!patient || !window.desktopApi || isReadOnly) return
@@ -1203,6 +1563,29 @@ export function VisitaDetailPage(): JSX.Element {
         setShowPatientEdit(false)
     }, [patient, patientForm, visit, isReadOnly])
 
+    const updateHealthVital = useCallback((field: 'peso' | 'altezza', value: string) => {
+        setHealthForm(prev => {
+            const next = { ...prev, [field]: value }
+            const peso = Number(field === 'peso' ? value : prev.peso)
+            const altezza = Number(field === 'altezza' ? value : prev.altezza)
+            if (peso > 0 && altezza > 0) {
+                next.bmi = String(Math.round((peso / ((altezza / 100) ** 2)) * 10) / 10)
+            }
+            return next
+        })
+    }, [])
+
+    const updateHealthLifestyle = useCallback((field: 'alcol' | 'attivitaFisica', value: string) => {
+        setHealthForm(prev => {
+            if (field === 'alcol') {
+                const preset: Record<string, string> = { no: '0', non_bevitore: '0', occasionale: '1', moderato: '7', elevato: '14' }
+                return { ...prev, alcol: value, unitaAlcolSettimana: preset[value] ?? prev.unitaAlcolSettimana }
+            }
+            const preset: Record<string, string> = { nessuna: '0', sedentaria: '0', leggera: '2', moderata: '4', intensa: '6' }
+            return { ...prev, attivitaFisica: value, oreAttivitaSettimana: preset[value] ?? prev.oreAttivitaSettimana }
+        })
+    }, [])
+
     const handleSaveHealthProfile = useCallback(async () => {
         if (!visit || !window.desktopApi || isReadOnly) return
         const asNumber = (value: string): number | null => value.trim() ? Number(value) : null
@@ -1216,10 +1599,13 @@ export function VisitaDetailPage(): JSX.Element {
             fc: asNumber(healthForm.fc),
             spo2: asNumber(healthForm.spo2),
             temperatura: asNumber(healthForm.temperatura),
+            bmi: asNumber(healthForm.bmi),
             prossimoControllo: healthForm.prossimoControllo || '',
             periodicitaMesi: asNumber(healthForm.periodicitaMesi),
             fumatore: healthForm.fumatore || '',
             sigaretteGiorno: asNumber(healthForm.sigaretteGiorno),
+            tipoSigaretta: healthForm.tipoSigaretta,
+            etaInizioFumo: asNumber(healthForm.etaInizioFumo),
             anniFumo: asNumber(healthForm.anniFumo),
             alcol: healthForm.alcol || '',
             unitaAlcolSettimana: asNumber(healthForm.unitaAlcolSettimana),
@@ -1248,6 +1634,8 @@ export function VisitaDetailPage(): JSX.Element {
             hasAsma: healthForm.hasAsma,
             hasEpilessia: healthForm.hasEpilessia,
             alimentazione: healthForm.alimentazione,
+            porzioniFruttaVerdure: asNumber(healthForm.porzioniFruttaVerdure),
+            droghe: healthForm.droghe,
             statoCivile: healthForm.statoCivile,
             numeroFigli: asNumber(healthForm.numeroFigli),
             professione: healthForm.professione,
@@ -1269,12 +1657,121 @@ export function VisitaDetailPage(): JSX.Element {
             localId: visit._localId,
             payload: { datiStrutturati }
         })
+        if (visit.personId) {
+            const now = new Date().toISOString()
+            const profilePayload = {
+                ...buildHealthProfilePayload(nextValues),
+                personId: visit.personId,
+                tenantId: visit.tenantId,
+                updatedAt: now
+            }
+            const existingProfiles = await window.desktopApi.db.query({
+                table: 'profili_salute',
+                where: { personId: visit.personId, _isDeleted: 0 },
+                limit: 1
+            }) as Array<{ id: string; _localId?: string | null; _serverId?: string | null }>
+            if (existingProfiles.length > 0) {
+                const profile = existingProfiles[0]
+                await window.desktopApi.db.update({ table: 'profili_salute', id: profile.id, data: profilePayload })
+                await window.desktopApi.sync.enqueue({
+                    type: 'UPDATE',
+                    entity: 'profili_salute',
+                    entityId: profile._serverId || profile.id,
+                    localId: profile._localId || undefined,
+                    payload: profilePayload
+                })
+            } else {
+                const profileId = crypto.randomUUID()
+                await window.desktopApi.db.insert({
+                    table: 'profili_salute',
+                    data: { id: profileId, ...profilePayload, createdAt: now }
+                })
+                await window.desktopApi.sync.enqueue({
+                    type: 'CREATE',
+                    entity: 'profili_salute',
+                    entityId: profileId,
+                    payload: { id: profileId, ...profilePayload, createdAt: now }
+                })
+            }
+        }
         setFormValues(nextValues)
         formValuesRef.current = nextValues
         setHasChanges(false)
         setLastSaved(new Date())
         setShowHealthEdit(false)
     }, [visit, healthForm, isReadOnly])
+
+    const resolveCompanyTariffarioPrice = useCallback(async (prestazioneId: string, tipoVisitaMDL?: string | null): Promise<number | null> => {
+        if (!window.desktopApi) return null
+        let companyTenantProfileId: string | null = patient?.companyTenantProfileId || null
+        if (!companyTenantProfileId && visit?.appuntamentoId) {
+            const apptRows = await window.desktopApi.db.query({
+                table: 'appointments',
+                where: { id: visit.appuntamentoId, _isDeleted: 0 },
+                limit: 1
+            }).catch(() => []) as Array<{ companyTenantProfileId: string | null }>
+            companyTenantProfileId = apptRows[0]?.companyTenantProfileId || null
+        }
+        if (!companyTenantProfileId) return null
+        const associations = await window.desktopApi.db.query({
+            table: 'tariffario_company_associations',
+            where: { companyTenantProfileId, _isDeleted: 0, attivo: 1 }
+        }).catch(() => []) as Array<{ tariffarioId: string }>
+        const tariffarioIds = new Set(associations.map(a => a.tariffarioId))
+        if (tariffarioIds.size === 0) return null
+        const voci = await window.desktopApi.db.query({
+            table: 'tariffario_voci',
+            where: { prestazioneId, _isDeleted: 0, attivo: 1 }
+        }).catch(() => []) as Array<{ tariffarioAziendaleId: string; prezzoBase: number; categoriaVisita: string | null }>
+        const voce =
+            (tipoVisitaMDL ? voci.find(v => tariffarioIds.has(v.tariffarioAziendaleId) && v.categoriaVisita === tipoVisitaMDL && Number(v.prezzoBase) > 0) : null) ||
+            voci.find(v => tariffarioIds.has(v.tariffarioAziendaleId) && !v.categoriaVisita && Number(v.prezzoBase) > 0) ||
+            voci.find(v => tariffarioIds.has(v.tariffarioAziendaleId) && Number(v.prezzoBase) > 0)
+        return voce ? Number(voce.prezzoBase) : null
+    }, [patient?.companyTenantProfileId, visit?.appuntamentoId])
+
+    const resolveProtocolloScadenzaTemplate = useCallback(async (prestazioneId: string): Promise<Pick<PatientScadenzaItem, 'mansione' | 'mansioneId' | 'protocolloId' | 'periodicitaMesi' | 'dataScadenza'> | null> => {
+        if (!window.desktopApi || !visit?.personId || !prestazioneId) return null
+        const existing = patientScadenze.find(s => s.prestazioneId === prestazioneId)
+        if (existing) {
+            return {
+                mansione: existing.mansione,
+                mansioneId: existing.mansioneId,
+                protocolloId: existing.protocolloId,
+                periodicitaMesi: existing.periodicitaMesi,
+                dataScadenza: existing.dataScadenza || addMonthsIso(visit.dataOra || new Date().toISOString(), existing.periodicitaMesi),
+            }
+        }
+        const assignments = await window.desktopApi.db.query({
+            table: 'lavoratore_mansioni',
+            where: { personId: visit.personId, _isDeleted: 0 }
+        }).catch(() => []) as Array<{ mansioneId: string | null }>
+        const mansioneIds = assignments.map(a => a.mansioneId).filter(Boolean) as string[]
+        const protocolli = await window.desktopApi.db.query({
+            table: 'protocolli',
+            where: { _isDeleted: 0 }
+        }).catch(() => []) as Array<{ id: string; mansioneId: string | null; mansioneNome?: string | null }>
+        const protocolloIds = protocolli
+            .filter(p => (patient?.protocolloSanitarioId && p.id === patient.protocolloSanitarioId) || (p.mansioneId && mansioneIds.includes(p.mansioneId)))
+            .map(p => p.id)
+        if (protocolloIds.length === 0) return null
+        const rows = await window.desktopApi.db.query({
+            table: 'protocollo_prestazioni',
+            where: { prestazioneId, _isDeleted: 0 }
+        }).catch(() => []) as Array<ProtocolloPrestazioneRow & { protocolloId: string }>
+        const row = rows.find(r => protocolloIds.includes(r.protocolloId))
+        if (!row) return null
+        const protocollo = protocolli.find(p => p.id === row.protocolloId)
+        const normalized = normalizeProtocolloPrestazioni([row])[0]
+        const periodicitaMesi = normalized?.periodicitaMesi || null
+        return {
+            mansione: protocollo?.mansioneNome || 'Mansione protocollo',
+            mansioneId: protocollo?.mansioneId || null,
+            protocolloId: row.protocolloId,
+            periodicitaMesi,
+            dataScadenza: addMonthsIso(visit.dataOra || new Date().toISOString(), periodicitaMesi),
+        }
+    }, [patient?.protocolloSanitarioId, patientScadenze, visit?.dataOra, visit?.personId])
 
     const handleChangeMedicoRefertante = useCallback(async (medico: MedicoOption) => {
         if (!visit || !window.desktopApi || isReadOnly) return
@@ -1296,21 +1793,88 @@ export function VisitaDetailPage(): JSX.Element {
         setMedicoSearch('')
     }, [visit, isReadOnly])
 
+    useEffect(() => {
+        if (!visit?.prestazioneId || prestazioniAppt.length > 0) return
+        void resolveCompanyTariffarioPrice(visit.prestazioneId, visit.tipoVisitaMDL).then(prezzo => {
+            if (prezzo == null && !visit.prestazioneNome) return
+            setPrestazioniAppt([{
+                prestazioneId: visit.prestazioneId || visit.id,
+                nome: visit.prestazioneNome || 'Visita',
+                codice: visit.prestazioneCodice,
+                tipo: null,
+                prezzoCalcolato: prezzo,
+            }])
+        })
+    }, [visit?.prestazioneId, visit?.tipoVisitaMDL, visit?.prestazioneNome, visit?.prestazioneCodice, visit?.id, prestazioniAppt.length, resolveCompanyTariffarioPrice])
+
     const handleAddPrestazione = useCallback(async (prestazione: PrestazioneCatalogItem) => {
         if (!visit || !window.desktopApi || isReadOnly) return
         const now = new Date().toISOString()
+        const prezzoTariffario = await resolveCompanyTariffarioPrice(prestazione.id, visit.tipoVisitaMDL)
+        const prezzoCalcolato = prezzoTariffario ?? prestazione.prezzoBase ?? null
         if (!visit.appuntamentoId) {
+            const current = prestazioniAppt.length > 0
+                ? prestazioniAppt
+                : (visit.prestazioneId ? [{
+                    prestazioneId: visit.prestazioneId,
+                    nome: visit.prestazioneNome || 'Visita',
+                    codice: visit.prestazioneCodice,
+                    tipo: null,
+                    prezzoCalcolato: null,
+                }] : [])
+            if (current.some(p => p.prestazioneId === prestazione.id)) {
+                setPrestazionePickerOpen(false)
+                setPrestazioneSearch('')
+                return
+            }
+            const nextPrestazioni = [...current, { prestazioneId: prestazione.id, nome: prestazione.nome, codice: prestazione.codice, tipo: prestazione.tipo, prezzoCalcolato }]
+            const nextValues = {
+                ...formValuesRef.current,
+                _prestazioniAggiuntive: nextPrestazioni.map(p => ({
+                    id: p.prestazioneId,
+                    nome: p.nome,
+                    codice: p.codice,
+                    tipo: p.tipo,
+                    prezzoBase: p.prezzoCalcolato,
+                }))
+            }
             const data = {
-                prestazioneId: prestazione.id,
-                prestazioneNome: prestazione.nome,
-                prestazioneCodice: prestazione.codice,
-                isMDL: isMdlCatalogPrestazione(prestazione) ? 1 : 0,
-                tipoVisitaMDL: isMdlCatalogPrestazione(prestazione) ? (visit.tipoVisitaMDL || 'PERIODICA') : null,
+                datiStrutturati: JSON.stringify(nextValues),
+                isMDL: visit.isMDL || (isMdlCatalogPrestazione(prestazione) ? 1 : 0),
+                tipoVisitaMDL: visit.tipoVisitaMDL || (isMdlCatalogPrestazione(prestazione) ? 'PERIODICA' : null),
                 updatedAt: now,
             }
             await window.desktopApi.db.update({ table: 'visits', id: visit.id, data })
-            await window.desktopApi.sync.enqueue({ type: 'UPDATE', entity: 'visits', entityId: visit._serverId || visit.id, localId: visit._localId, payload: { prestazioneId: prestazione.id, tipoVisitaMDL: data.tipoVisitaMDL } })
+            await window.desktopApi.sync.enqueue({ type: 'UPDATE', entity: 'visits', entityId: visit._serverId || visit.id, localId: visit._localId, payload: { datiStrutturati: data.datiStrutturati, tipoVisitaMDL: data.tipoVisitaMDL } })
             setVisit(prev => prev ? { ...prev, ...data } : prev)
+            setFormValues(nextValues)
+            setPrestazioniAppt(nextPrestazioni)
+            if ((data.isMDL || visit.isMDL) && visit.personId && !patientScadenze.some(s => s.prestazioneId === prestazione.id)) {
+                const scadenzaId = `local-scadenza-${crypto.randomUUID()}`
+                const template = await resolveProtocolloScadenzaTemplate(prestazione.id)
+                const scadenza: PatientScadenzaItem = {
+                    id: scadenzaId,
+                    personId: visit.personId,
+                    tenantId: visit.tenantId,
+                    prestazioneId: prestazione.id,
+                    prestazioneNome: prestazione.nome,
+                    mansione: template?.mansione || 'Aggiunta in visita',
+                    mansioneId: template?.mansioneId || null,
+                    protocolloId: template?.protocolloId || null,
+                    dataScadenza: template?.dataScadenza || null,
+                    periodicitaMesi: template?.periodicitaMesi || null,
+                    eseguita: 0,
+                    stato: 'Da configurare',
+                }
+                await window.desktopApi.db.insert({
+                    table: 'scadenze',
+                    data: { ...scadenza, tenantId: visit.tenantId, createdAt: now, updatedAt: now }
+                }).catch(() => undefined)
+                if (scadenza.mansioneId && scadenza.prestazioneId) {
+                    await window.desktopApi.sync.enqueue({ type: 'CREATE', entity: 'scadenzaPrestazioneProtocollo', entityId: scadenzaId, payload: { ...scadenza, eseguita: false, createdAt: now, updatedAt: now } })
+                }
+                setPatientScadenze(prev => [...prev, scadenza])
+            }
         } else {
             const exists = prestazioniAppt.some(p => p.prestazioneId === prestazione.id)
             if (!exists) {
@@ -1319,7 +1883,7 @@ export function VisitaDetailPage(): JSX.Element {
                     data: {
                         appuntamentoId: visit.appuntamentoId,
                         prestazioneId: prestazione.id,
-                        prezzo: prestazione.prezzoBase,
+                        prezzo: prezzoCalcolato,
                         quantita: 1,
                         note: null,
                     }
@@ -1328,14 +1892,37 @@ export function VisitaDetailPage(): JSX.Element {
                     type: 'CREATE',
                     entity: 'appointment_prestazioni',
                     entityId: inserted.id,
-                    payload: { appuntamentoId: visit.appuntamentoId, prestazioneId: prestazione.id, prezzo: prestazione.prezzoBase, quantita: 1 }
+                    payload: { appuntamentoId: visit.appuntamentoId, prestazioneId: prestazione.id, prezzo: prezzoCalcolato, quantita: 1 }
                 })
-                setPrestazioniAppt(prev => [...prev, { prestazioneId: prestazione.id, nome: prestazione.nome, codice: prestazione.codice, tipo: prestazione.tipo, prezzoCalcolato: prestazione.prezzoBase }])
+                setPrestazioniAppt(prev => [...prev, { prestazioneId: prestazione.id, nome: prestazione.nome, codice: prestazione.codice, tipo: prestazione.tipo, prezzoCalcolato }])
+                if (visit.isMDL === 1 && visit.personId && !patientScadenze.some(s => s.prestazioneId === prestazione.id)) {
+                    const scadenzaId = `local-scadenza-${crypto.randomUUID()}`
+                    const template = await resolveProtocolloScadenzaTemplate(prestazione.id)
+                    const scadenza: PatientScadenzaItem = {
+                        id: scadenzaId,
+                        personId: visit.personId,
+                        tenantId: visit.tenantId,
+                        prestazioneId: prestazione.id,
+                        prestazioneNome: prestazione.nome,
+                        mansione: template?.mansione || 'Aggiunta in visita',
+                        mansioneId: template?.mansioneId || null,
+                        protocolloId: template?.protocolloId || null,
+                        dataScadenza: template?.dataScadenza || null,
+                        periodicitaMesi: template?.periodicitaMesi || null,
+                        eseguita: 0,
+                        stato: 'Da configurare',
+                    }
+                    await window.desktopApi.db.insert({ table: 'scadenze', data: { ...scadenza, createdAt: now, updatedAt: now } }).catch(() => undefined)
+                    if (scadenza.mansioneId && scadenza.prestazioneId) {
+                        await window.desktopApi.sync.enqueue({ type: 'CREATE', entity: 'scadenzaPrestazioneProtocollo', entityId: scadenzaId, payload: { ...scadenza, eseguita: false, createdAt: now, updatedAt: now } })
+                    }
+                    setPatientScadenze(prev => [...prev, scadenza])
+                }
             }
         }
         setPrestazionePickerOpen(false)
         setPrestazioneSearch('')
-    }, [visit, isReadOnly, prestazioniAppt])
+    }, [visit, isReadOnly, prestazioniAppt, patientScadenze, resolveCompanyTariffarioPrice, resolveProtocolloScadenzaTemplate])
 
     const handleRemovePrestazione = useCallback(async (prestazioneId: string) => {
         if (!visit || !window.desktopApi || isReadOnly) return
@@ -1343,38 +1930,253 @@ export function VisitaDetailPage(): JSX.Element {
             await window.desktopApi.db.deleteWhere({ table: 'appointment_prestazioni', where: { appuntamentoId: visit.appuntamentoId, prestazioneId } })
             await window.desktopApi.sync.enqueue({ type: 'DELETE', entity: 'appointment_prestazioni', entityId: prestazioneId, payload: { appuntamentoId: visit.appuntamentoId, prestazioneId } })
             setPrestazioniAppt(prev => prev.filter(p => p.prestazioneId !== prestazioneId))
+        } else {
+            const nextPrestazioni = prestazioniAppt.filter(p => p.prestazioneId !== prestazioneId)
+            const nextValues = {
+                ...formValuesRef.current,
+                _prestazioniAggiuntive: nextPrestazioni.map(p => ({
+                    id: p.prestazioneId,
+                    nome: p.nome,
+                    codice: p.codice,
+                    tipo: p.tipo,
+                    prezzoBase: p.prezzoCalcolato,
+                }))
+            }
+            const datiStrutturati = JSON.stringify(nextValues)
+            await window.desktopApi.db.update({ table: 'visits', id: visit.id, data: { datiStrutturati, updatedAt: new Date().toISOString() } })
+            await window.desktopApi.sync.enqueue({ type: 'UPDATE', entity: 'visits', entityId: visit._serverId || visit.id, localId: visit._localId, payload: { datiStrutturati } })
+            setPrestazioniAppt(nextPrestazioni)
+            setFormValues(nextValues)
         }
-    }, [visit, isReadOnly])
+        const linkedScadenza = patientScadenze.find(s => s.prestazioneId === prestazioneId && String(s.id).startsWith('local-scadenza-'))
+        if (linkedScadenza) {
+            await window.desktopApi.db.deleteWhere({ table: 'scadenze', where: { id: linkedScadenza.id } }).catch(() => undefined)
+            setPatientScadenze(prev => prev.filter(s => s.id !== linkedScadenza.id))
+        }
+    }, [visit, isReadOnly, prestazioniAppt, patientScadenze])
+
+    const handleChangeTipoVisitaMDL = useCallback(async (tipoVisitaMDL: string) => {
+        if (!visit || !window.desktopApi || isReadOnly) return
+        const now = new Date().toISOString()
+        const currentPrestazioni = prestazioniAppt.length > 0
+            ? prestazioniAppt
+            : (visit.prestazioneId ? [{
+                prestazioneId: visit.prestazioneId,
+                nome: visit.prestazioneNome || 'Visita Medica del Lavoro',
+                codice: visit.prestazioneCodice,
+                tipo: null,
+                prezzoCalcolato: null,
+            }] : [])
+
+        const nextPrestazioni = await Promise.all(currentPrestazioni.map(async p => {
+            const tariffarioPrice = await resolveCompanyTariffarioPrice(p.prestazioneId, tipoVisitaMDL)
+            return { ...p, prezzoCalcolato: tariffarioPrice ?? p.prezzoCalcolato ?? null }
+        }))
+        const totaleCosto = nextPrestazioni.reduce((sum, p) => sum + (Number(p.prezzoCalcolato) || 0), 0)
+
+        await window.desktopApi.db.update({
+            table: 'visits',
+            id: visit.id,
+            data: { tipoVisitaMDL, totaleCosto, updatedAt: now }
+        })
+        await window.desktopApi.sync.enqueue({
+            type: 'UPDATE',
+            entity: 'visits',
+            entityId: visit._serverId || visit.id,
+            localId: visit._localId,
+            payload: { tipoVisitaMDL, totaleCosto, updatedAt: now }
+        })
+
+        if (visit.appuntamentoId) {
+            const rows = await window.desktopApi.db.query({
+                table: 'appointment_prestazioni',
+                where: { appuntamentoId: visit.appuntamentoId, _isDeleted: 0 }
+            }).catch(() => []) as Array<{ id: string; prestazioneId: string | null }>
+            for (const prestazione of nextPrestazioni) {
+                const row = rows.find(r => r.prestazioneId === prestazione.prestazioneId)
+                if (!row) continue
+                await window.desktopApi.db.update({
+                    table: 'appointment_prestazioni',
+                    id: row.id,
+                    data: { prezzo: prestazione.prezzoCalcolato, updatedAt: now }
+                })
+                await window.desktopApi.sync.enqueue({
+                    type: 'UPDATE',
+                    entity: 'appointment_prestazioni',
+                    entityId: row.id,
+                    payload: { prezzo: prestazione.prezzoCalcolato, updatedAt: now }
+                })
+            }
+        }
+
+        setVisit(prev => prev ? { ...prev, tipoVisitaMDL, totaleCosto, updatedAt: now } : prev)
+        setPrestazioniAppt(nextPrestazioni)
+    }, [visit, isReadOnly, prestazioniAppt, resolveCompanyTariffarioPrice])
 
     const handleUpdateScadenzaProtocollo = useCallback(async (scadenzaId: string, data: Partial<PatientScadenzaItem>) => {
-        if (!window.desktopApi || isReadOnly) return
-        await window.desktopApi.db.update({ table: 'scadenze', id: scadenzaId, data })
-        await window.desktopApi.sync.enqueue({ type: 'UPDATE', entity: 'scadenze', entityId: scadenzaId, payload: data })
+        if (!window.desktopApi || isReadOnly || !visit?.personId) return
+        const current = patientScadenze.find(s => s.id === scadenzaId)
+        const next = current ? { ...current, ...data } : null
+        if (scadenzaId.startsWith('protocollo:')) {
+            const localId = `local-scadenza-${crypto.randomUUID()}`
+            const payload = {
+                id: localId,
+                tenantId: visit.tenantId,
+                personId: visit.personId,
+                prestazioneId: next?.prestazioneId || null,
+                prestazioneNome: next?.prestazioneNome || null,
+                mansione: next?.mansione || null,
+                mansioneId: next?.mansioneId || null,
+                protocolloId: next?.protocolloId || null,
+                dataScadenza: next?.dataScadenza || null,
+                periodicitaMesi: next?.periodicitaMesi || null,
+                eseguita: next?.eseguita || 0,
+                stato: next?.stato || 'Da programmare',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+            }
+            await window.desktopApi.db.insert({ table: 'scadenze', data: payload }).catch(() => undefined)
+            setPatientScadenze(prev => prev.map(s => s.id === scadenzaId ? { ...payload } : s))
+            if (payload.mansioneId && payload.prestazioneId) {
+                await window.desktopApi.sync.enqueue({ type: 'CREATE', entity: 'scadenzaPrestazioneProtocollo', entityId: localId, payload })
+            }
+            return
+        }
+        await window.desktopApi.db.update({ table: 'scadenze', id: scadenzaId, data: { ...data, updatedAt: new Date().toISOString() } })
+        const entity = next?.mansioneId && next?.prestazioneId ? 'scadenzaPrestazioneProtocollo' : 'scadenze'
+        await window.desktopApi.sync.enqueue({ type: 'UPDATE', entity, entityId: scadenzaId, payload: data })
         setPatientScadenze(prev => prev.map(s => s.id === scadenzaId ? { ...s, ...data } : s))
-    }, [isReadOnly])
+    }, [isReadOnly, visit, patientScadenze])
+
+    const handleQuickExamDocumentUpload = useCallback(async (kind: 'laboratorio' | 'microbiologico') => {
+        if (!visit || !window.desktopApi || isReadOnly) return
+        setSaveError(null)
+        try {
+            const result = await window.desktopApi.dialog.openFile({
+                filters: [
+                    { name: 'Documenti clinici', extensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx', 'xls', 'xlsx'] },
+                ],
+            })
+            if (result.canceled || !result.filePaths.length) return
+            const fileInfo = await window.desktopApi.file.copyToAppData({ sourcePath: result.filePaths[0], visitaId: visit.id })
+            const now = new Date().toISOString()
+            const prefix = kind === 'laboratorio' ? 'Laboratorio' : 'Microbiologico'
+            await window.desktopApi.db.insert({
+                table: 'allegati',
+                data: {
+                    tenantId: visit.tenantId,
+                    visitaId: visit.id,
+                    nome: `${prefix} - ${fileInfo.nome}`,
+                    tipo: fileInfo.tipo,
+                    dimensione: fileInfo.dimensione,
+                    localPath: fileInfo.localPath,
+                    serverUrl: null,
+                    createdAt: now,
+                    updatedAt: now,
+                },
+            })
+            setLastSaved(new Date())
+        } catch {
+            setSaveError('Impossibile caricare il documento clinico.')
+        }
+    }, [isReadOnly, visit])
 
     const handleBackRequest = useCallback(() => {
         if ((hasChanges && !isReadOnly) || shouldConfirmExit) {
+            setPendingNavigationTarget(backTarget)
+            setExitError(null)
+            setExitDiscardStep(false)
             setShowExitDialog(true)
             return
         }
         navigate(backTarget)
     }, [hasChanges, isReadOnly, shouldConfirmExit, navigate, backTarget])
 
-    const handleExitAction = useCallback(async (action: 'draft' | 'discard' | 'stay') => {
+    const requestGuardedNavigation = useCallback((target: string) => {
+        if ((hasChanges && !isReadOnly) || shouldConfirmExit) {
+            setPendingNavigationTarget(target)
+            setExitError(null)
+            setExitDiscardStep(false)
+            setShowExitDialog(true)
+            return
+        }
+        navigate(target, { state: { from: `/visite/${visit?.id || id}` } })
+    }, [hasChanges, id, isReadOnly, navigate, shouldConfirmExit, visit?.id])
+
+    const handleExitAction = useCallback(async (action: 'draft' | 'complete' | 'discard' | 'stay') => {
         if (action === 'stay') {
             setShowExitDialog(false)
+            setPendingNavigationTarget(null)
+            setExitError(null)
+            setExitDiscardStep(false)
+            return
+        }
+        if (action === 'discard' && discardReason.trim().length < 10) {
+            setExitError('Inserisci un motivo di annullamento di almeno 10 caratteri per il registro GDPR.')
             return
         }
         setExitActionLoading(true)
+        setExitError(null)
         try {
-            if (action === 'draft') await doSave()
+            if (action === 'draft') {
+                await handleSospendi()
+            } else if (action === 'complete') {
+                await handleComplete()
+            } else if (visit && window.desktopApi) {
+                let restoredStatus = 'PRENOTATO'
+                let appointment: { id: string; _localId?: string; _serverId?: string | null; stato?: string | null } | null = null
+                if (visit.appuntamentoId) {
+                    const rows = await window.desktopApi.db.query({
+                        table: 'appointments',
+                        where: { id: visit.appuntamentoId, _isDeleted: 0 },
+                        limit: 1,
+                    }) as Array<{ id: string; _localId?: string; _serverId?: string | null; stato?: string | null }>
+                    appointment = rows[0] || null
+                    const previous = String(appointment?.stato || '').toUpperCase()
+                    restoredStatus = ['IN_ATTESA', 'ACCETTATO', 'ARRIVATO', 'IN_CORSO'].includes(previous) ? 'IN_ATTESA' : 'PRENOTATO'
+                }
+
+                await window.desktopApi.db.softDelete({ table: 'visits', id: visit.id, reason: discardReason.trim() })
+                await window.desktopApi.sync.enqueue({
+                    type: 'DELETE',
+                    entity: 'visits',
+                    entityId: visit._serverId || visit.id,
+                    localId: visit._localId,
+                    payload: {
+                        deletionReason: discardReason.trim(),
+                        appuntamentoId: visit.appuntamentoId,
+                        restoreAppointmentStatus: restoredStatus,
+                    },
+                })
+
+                if (appointment) {
+                    await window.desktopApi.db.update({
+                        table: 'appointments',
+                        id: appointment.id,
+                        data: { stato: restoredStatus },
+                    })
+                    await window.desktopApi.sync.enqueue({
+                        type: 'UPDATE',
+                        entity: 'appointments',
+                        entityId: appointment._serverId || appointment.id,
+                        localId: appointment._localId,
+                        payload: { stato: restoredStatus },
+                    })
+                }
+                setHasChanges(false)
+            }
+            const target = pendingNavigationTarget || backTarget
             setShowExitDialog(false)
-            navigate(backTarget)
+            setPendingNavigationTarget(null)
+            setExitDiscardStep(false)
+            setDiscardReason('')
+            navigate(target)
+        } catch {
+            setExitError('Operazione non completata. Riprova o salva come bozza.')
         } finally {
             setExitActionLoading(false)
         }
-    }, [doSave, navigate, backTarget])
+    }, [backTarget, discardReason, handleComplete, handleSospendi, navigate, pendingNavigationTarget, visit])
 
     // ----------------------------------------------------------
     // BMI calculation
@@ -1488,14 +2290,14 @@ export function VisitaDetailPage(): JSX.Element {
                                 )}
                                 {visit.prestazioneNome || 'Visita'}
                             </p>
-                            {patient && (
-                                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-500">
-                                    {patient.taxCode && <span className="font-mono">{patient.taxCode}</span>}
-                                    {patient.birthDate && <span>{new Date(patient.birthDate).toLocaleDateString('it-IT')} ({calcAge(patient.birthDate)} anni)</span>}
-                                    {patient.gender && <span>{patient.gender === 'M' ? 'Maschio' : patient.gender === 'F' ? 'Femmina' : patient.gender}</span>}
-                                    {patient.phone && <span>{patient.phone}</span>}
-                                    {patient.email && <span>{patient.email}</span>}
-                                    {(patient.residenceCity || patient.province) && <span>{[patient.residenceCity, patient.province].filter(Boolean).join(' ')}</span>}
+                                    {patient && (
+                                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-500">
+                                            {patient.taxCode && <span className="font-mono">{patient.taxCode}</span>}
+                                            {patient.birthDate && <span>{new Date(patient.birthDate).toLocaleDateString('it-IT')} ({calcAge(patient.birthDate)} anni)</span>}
+                                    {patient.gender && <span>{formatGenderLabel(patient.gender)}</span>}
+                                            {patient.phone && <span>{patient.phone}</span>}
+                                            {patient.email && <span>{patient.email}</span>}
+                                            {(patient.residenceCity || patient.province) && <span>{[patient.residenceCity, patient.province].filter(Boolean).join(' ')}</span>}
                                     <button
                                         type="button"
                                         onClick={() => setShowPatientEdit(true)}
@@ -1609,6 +2411,15 @@ export function VisitaDetailPage(): JSX.Element {
                                     <Save className="w-3.5 h-3.5" />
                                     {isSaving ? 'Salvataggio...' : 'Salva'}
                                 </button>
+                                {visit.stato === 'COMPLETATA' && editingCompletedVisit && (
+                                    <button
+                                        onClick={handleCancelCompletedEdit}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
+                                    >
+                                        <X className="w-3.5 h-3.5" />
+                                        Annulla
+                                    </button>
+                                )}
                                 {visit.stato === 'IN_CORSO' && (
                                     <button
                                         onClick={handleSospendi}
@@ -1718,13 +2529,21 @@ export function VisitaDetailPage(): JSX.Element {
                                                                 </button>
                                                             ))}
                                                             <button type="button" onClick={() => setShowHistoryModal(true)} className="w-full rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-purple-700">Visualizza storico visite</button>
-                                                            {patient && <button type="button" onClick={() => navigate(`/pazienti/${patient.id}`, { state: { from: `/visite/${visit.id}` } })} className="w-full text-purple-700 hover:underline">Apri cartella lavoratore</button>}
+                                                            {patient && <button type="button" onClick={() => requestGuardedNavigation(`/pazienti/${patient.id}`)} className="w-full text-purple-700 hover:underline">Apri cartella lavoratore</button>}
                                                         </div>
                                                     )}
                                                     {(action.id === 'laboratorio' || action.id === 'microbio') && (
                                                         <div className="space-y-2">
-                                                            <p>{action.id === 'laboratorio' ? 'Carica esami di laboratorio dalla card Esami Strumentali.' : 'Carica esami microbiologici dalla card Esami Strumentali.'}</p>
-                                                            {!isReadOnly && <button type="button" onClick={() => setLayoutMode('scroll')} className="inline-flex w-full items-center justify-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"><Upload className="h-3 w-3" /> Apri inserimento esami</button>}
+                                                            <p>{action.id === 'laboratorio' ? 'Carica e sincronizza referti di laboratorio.' : 'Carica e sincronizza referti microbiologici.'}</p>
+                                                            {!isReadOnly && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => { void handleQuickExamDocumentUpload(action.id === 'laboratorio' ? 'laboratorio' : 'microbiologico') }}
+                                                                    className="inline-flex w-full items-center justify-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+                                                                >
+                                                                    <Upload className="h-3 w-3" /> Carica documento
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     )}
                                                     {action.id === 'allergie' && (
@@ -1797,10 +2616,15 @@ export function VisitaDetailPage(): JSX.Element {
                                 nome: patient.firstName || '',
                                 cognome: patient.lastName || '',
                                 dataNascita: patient.birthDate || '',
+                                codiceFiscale: patient.taxCode || '',
+                                gender: patient.gender || '',
+                                peso: String((patient as unknown as Record<string, string | number | null | undefined>).peso || (patient as unknown as Record<string, string | number | null | undefined>).weight || ''),
+                                altezza: String((patient as unknown as Record<string, string | number | null | undefined>).altezza || (patient as unknown as Record<string, string | number | null | undefined>).height || ''),
+                                etnia: String((patient as unknown as Record<string, string | number | null | undefined>).etnia || (patient as unknown as Record<string, string | number | null | undefined>).ethnicity || ''),
                             } : undefined}
                         />
 
-                        {templateSectionLayout !== 'tabs' && (
+                        {layoutMode === 'scroll' && (
                             <div className="bg-white rounded-2xl border border-gray-200 shadow-card p-4">
                                 <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
                                     <LayoutList className="w-3.5 h-3.5 text-teal-600" />
@@ -1860,26 +2684,46 @@ export function VisitaDetailPage(): JSX.Element {
                                         codice: visit.prestazioneCodice,
                                         tipo: null,
                                         prezzoCalcolato: null
-                                    }] : [])).map(p => (
-                                        <div key={p.prestazioneId} className="flex items-start justify-between gap-2">
-                                            <div className="min-w-0">
-                                                <p className="text-xs font-medium text-gray-900 truncate">{p.nome}</p>
-                                                {p.codice && <p className="text-[10px] text-gray-400 font-mono">{p.codice}</p>}
-                                            </div>
-                                            <div className="flex items-center gap-1 shrink-0">
-                                                {p.prezzoCalcolato != null && (
-                                                    <span className="text-xs font-semibold text-teal-700">
-                                                        {new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(p.prezzoCalcolato)}
-                                                    </span>
+                                    }] : [])).map(p => {
+                                        const canEditTipoMdl = visit.isMDL === 1 && (
+                                            p.prestazioneId === visit.prestazioneId ||
+                                            /visita\s+medica\s+del\s+lavoro/i.test(p.nome) ||
+                                            isMdlCatalogPrestazione(p)
+                                        )
+                                        return (
+                                            <div key={p.prestazioneId} className="rounded-xl border border-gray-100 px-3 py-2">
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <div className="min-w-0">
+                                                        <p className="text-xs font-medium text-gray-900 truncate">{p.nome}</p>
+                                                        {p.codice && <p className="text-[10px] text-gray-400 font-mono">{p.codice}</p>}
+                                                    </div>
+                                                    <div className="flex items-center gap-1 shrink-0">
+                                                        {p.prezzoCalcolato != null && (
+                                                            <span className="text-xs font-semibold text-teal-700">
+                                                                {new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(p.prezzoCalcolato)}
+                                                            </span>
+                                                        )}
+                                                        {!isReadOnly && prestazioniAppt.length > 1 && (
+                                                            <button type="button" onClick={() => handleRemovePrestazione(p.prestazioneId)} className="p-1 rounded text-gray-300 hover:bg-red-50 hover:text-red-600" title="Rimuovi prestazione">
+                                                                <Trash2 className="w-3 h-3" />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                {canEditTipoMdl && (
+                                                    <div className="mt-2">
+                                                        <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-gray-400">Tipo visita</p>
+                                                        <ElegantSelect
+                                                            value={visit.tipoVisitaMDL || 'PERIODICA'}
+                                                            onChange={handleChangeTipoVisitaMDL}
+                                                            options={MDL_VISIT_TYPE_OPTIONS}
+                                                            disabled={isReadOnly}
+                                                        />
+                                                    </div>
                                                 )}
-                                                {!isReadOnly && prestazioniAppt.length > 1 && (
-                                                    <button type="button" onClick={() => handleRemovePrestazione(p.prestazioneId)} className="p-1 rounded text-gray-300 hover:bg-red-50 hover:text-red-600" title="Rimuovi prestazione">
-                                                        <Trash2 className="w-3 h-3" />
-                                                    </button>
-                                                )}
                                             </div>
-                                        </div>
-                                    ))}
+                                        )
+                                    })}
                                     {prestazioniAppt.length > 1 && (
                                         <div className="pt-1.5 border-t border-gray-100 flex justify-between text-xs">
                                             <span className="text-gray-500">Totale</span>
@@ -1959,32 +2803,63 @@ export function VisitaDetailPage(): JSX.Element {
                                     <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-400">Nessuna scadenza protocollo disponibile offline.</p>
                                 ) : (
                                     <div className="space-y-2">
-                                        {patientScadenze.slice(0, 6).map(s => (
-                                            <div key={s.id} className="rounded-xl border border-gray-100 p-2">
-                                                <p className="text-xs font-medium text-gray-900">{s.prestazioneNome || 'Accertamento'}</p>
-                                                <p className="text-[10px] text-gray-500">{s.mansione || 'Mansione non indicata'} · {s.dataScadenza ? new Date(s.dataScadenza).toLocaleDateString('it-IT') : 'Scadenza non impostata'}</p>
-                                                <p className="text-[10px] text-gray-400">{s.periodicitaMesi ? `Periodicità: ogni ${s.periodicitaMesi} mesi` : 'Periodicità non impostata'} · {s.eseguita ? 'Eseguita' : (s.stato || 'Da programmare')}</p>
+                                        {patientScadenze.slice(0, 6).map(s => {
+                                            const scadenzaPresets = [3, 6, 12, 24].map(months => {
+                                                const iso = addMonthsIso(visit?.dataOra || new Date().toISOString(), months) || new Date().toISOString()
+                                                return {
+                                                    months,
+                                                    label: months === 12 ? '1 anno' : months === 24 ? '2 anni' : `${months} mesi`,
+                                                    date: new Date(iso)
+                                                }
+                                            })
+                                            return (
+                                            <div key={s.id} className="rounded-xl border border-teal-100 bg-teal-50/30 p-3">
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <div className="min-w-0">
+                                                        <p className="truncate text-xs font-semibold text-gray-900">{s.prestazioneNome || 'Accertamento'}</p>
+                                                        <p className="mt-0.5 text-[10px] text-gray-500">{s.mansione || 'Mansione non indicata'}</p>
+                                                    </div>
+                                                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${s.eseguita ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                                                        {s.eseguita ? 'Eseguita' : (s.stato || 'Da programmare')}
+                                                    </span>
+                                                </div>
+                                                <div className="mt-2 grid grid-cols-2 gap-2 text-[10px]">
+                                                    <div className="rounded-lg bg-white px-2 py-1.5">
+                                                        <p className="uppercase tracking-wide text-gray-400">Scadenza</p>
+                                                        <p className="font-medium text-gray-800">{s.dataScadenza ? new Date(s.dataScadenza).toLocaleDateString('it-IT') : 'Non impostata'}</p>
+                                                    </div>
+                                                    <div className="rounded-lg bg-white px-2 py-1.5">
+                                                        <p className="uppercase tracking-wide text-gray-400">Periodicità</p>
+                                                        <p className="font-medium text-gray-800">{s.periodicitaMesi ? `Ogni ${s.periodicitaMesi} mesi` : 'Non impostata'}</p>
+                                                    </div>
+                                                </div>
                                                 {!isReadOnly && (
-                                                    <div className="mt-2 grid grid-cols-2 gap-2">
-                                                        <input
-                                                            type="number"
-                                                            min={1}
-                                                            max={120}
-                                                            value={s.periodicitaMesi || ''}
-                                                            onChange={e => { void handleUpdateScadenzaProtocollo(s.id, { periodicitaMesi: e.target.value ? Number(e.target.value) : null }) }}
-                                                            className="rounded-lg border border-gray-200 px-2 py-1 text-[11px]"
-                                                            placeholder="Mesi"
-                                                        />
-                                                        <input
-                                                            type="date"
-                                                            value={s.dataScadenza ? s.dataScadenza.split('T')[0] : ''}
-                                                            onChange={e => { void handleUpdateScadenzaProtocollo(s.id, { dataScadenza: e.target.value ? new Date(e.target.value).toISOString() : null }) }}
-                                                            className="rounded-lg border border-gray-200 px-2 py-1 text-[11px]"
-                                                        />
+                                                    <div className="mt-2 space-y-2">
+                                                        <label className="block text-[10px] font-medium uppercase tracking-wide text-gray-400">
+                                                            Data scadenza
+                                                            <DatePickerElegante
+                                                                value={s.dataScadenza || null}
+                                                                onChange={date => {
+                                                                    const matchedPreset = date
+                                                                        ? scadenzaPresets.find(p => p.date.toDateString() === date.toDateString())
+                                                                        : null
+                                                                    void handleUpdateScadenzaProtocollo(s.id, {
+                                                                        dataScadenza: date ? date.toISOString() : null,
+                                                                        periodicitaMesi: matchedPreset?.months ?? s.periodicitaMesi
+                                                                    })
+                                                                }}
+                                                                quickPresets={scadenzaPresets.map(({ label, date }) => ({ label, date }))}
+                                                                clearable
+                                                                compact
+                                                                size="sm"
+                                                                className="mt-1 min-w-0"
+                                                            />
+                                                        </label>
                                                     </div>
                                                 )}
                                             </div>
-                                        ))}
+                                            )
+                                        })}
                                     </div>
                                 )}
                             </div>
@@ -2032,7 +2907,7 @@ export function VisitaDetailPage(): JSX.Element {
                     {/* ====== RIGHT FORM AREA ====== */}
                     <div className="col-span-9 space-y-3">
                         {/* Section Tabs — hidden in scroll mode */}
-                        {layoutMode === 'tabs' && templateSectionLayout === 'tabs' && (
+                        {layoutMode === 'tabs' && (
                             <div className="bg-white rounded-2xl border border-gray-200 shadow-card p-3">
                                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-700">Sezioni visita</h3>
                                 <div className="flex gap-1 overflow-x-auto">
@@ -2063,7 +2938,7 @@ export function VisitaDetailPage(): JSX.Element {
 
                             {/* ===== TEMPLATE DINAMICO (P52): se il template ha campi per questa sezione, mostrali ===== */}
                             {templateFields && templateFields.some(f => f.section === activeSection) && (
-                                layoutMode === 'scroll' || templateSectionLayout !== 'tabs'
+                                    layoutMode === 'scroll'
                                     ? (
                                         <div className="space-y-8">
                                             {displaySections.map(section => {
@@ -2383,32 +3258,6 @@ export function VisitaDetailPage(): JSX.Element {
                                                 readOnly={isReadOnly}
                                                 rows={3}
                                             />
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <DatePickerElegante
-                                                    label="Prossimo Controllo"
-                                                    value={(formValues.prossimoControllo as string) || null}
-                                                    onChange={(date) => updateField('prossimoControllo', date ? date.toISOString().split('T')[0] : '')}
-                                                    disabled={isReadOnly}
-                                                    clearable
-                                                    placeholder="Seleziona data"
-                                                />
-                                                <FormNumber
-                                                    label="Periodicità (mesi)"
-                                                    value={formValues.periodicitaMesi as number | undefined}
-                                                    onChange={(v) => updateField('periodicitaMesi', v)}
-                                                    readOnly={isReadOnly}
-                                                    min={1} max={120}
-                                                    placeholder="12"
-                                                />
-                                            </div>
-                                            <FormTextArea
-                                                label="Note Follow-up"
-                                                value={(formValues.noteFollowup as string) || ''}
-                                                onChange={(v) => updateField('noteFollowup', v)}
-                                                placeholder="Piano di follow-up, obiettivi..."
-                                                readOnly={isReadOnly}
-                                                rows={3}
-                                            />
                                         </div>
                                     )}
 
@@ -2550,22 +3399,22 @@ export function VisitaDetailPage(): JSX.Element {
                         <FormInput label="Luogo nascita" value={patientForm.birthPlace} onChange={v => setPatientForm(prev => ({ ...prev, birthPlace: v }))} />
                         <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1">Genere</label>
-                            <select value={patientForm.gender} onChange={e => setPatientForm(prev => ({ ...prev, gender: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm">
-                                <option value="">Non indicato</option>
-                                <option value="M">Maschio</option>
-                                <option value="F">Femmina</option>
-                                <option value="MALE">Maschio</option>
-                                <option value="FEMALE">Femmina</option>
-                            </select>
+                            <ElegantSelect value={patientForm.gender} onChange={gender => setPatientForm(prev => ({ ...prev, gender }))} options={[
+                                { value: '', label: 'Non indicato' },
+                                { value: 'M', label: 'Maschio' },
+                                { value: 'F', label: 'Femmina' },
+                                { value: 'MALE', label: 'Maschio' },
+                                { value: 'FEMALE', label: 'Femmina' },
+                            ]} />
                         </div>
                         <FormInput label="Titolo" value={patientForm.title} onChange={v => setPatientForm(prev => ({ ...prev, title: v }))} />
                         <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1">Stato</label>
-                            <select value={patientForm.status} onChange={e => setPatientForm(prev => ({ ...prev, status: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm">
-                                <option value="">Non indicato</option>
-                                <option value="ACTIVE">Attivo</option>
-                                <option value="INACTIVE">Non attivo</option>
-                            </select>
+                            <ElegantSelect value={patientForm.status} onChange={status => setPatientForm(prev => ({ ...prev, status }))} options={[
+                                { value: '', label: 'Non indicato' },
+                                { value: 'ACTIVE', label: 'Attivo' },
+                                { value: 'INACTIVE', label: 'Non attivo' },
+                            ]} />
                         </div>
                         <FormInput label="Email" value={patientForm.email} onChange={v => setPatientForm(prev => ({ ...prev, email: v }))} />
                         <FormInput label="Telefono" value={patientForm.phone} onChange={v => setPatientForm(prev => ({ ...prev, phone: v }))} />
@@ -2593,35 +3442,89 @@ export function VisitaDetailPage(): JSX.Element {
                         </div>
                         <div>
                             <h2 className="text-base font-semibold text-gray-900">Uscita dalla visita</h2>
-                            <p className="text-sm text-gray-600">Hai modifiche non salvate. Come vuoi procedere?</p>
+                            <p className="text-sm text-gray-600">
+                                {exitDiscardStep ? 'Indica il motivo prima di annullare la visita.' : 'Hai modifiche non salvate. Come vuoi procedere?'}
+                            </p>
                         </div>
                     </div>
                     <div className="space-y-3 p-5">
-                        <button
-                            type="button"
-                            onClick={() => handleExitAction('draft')}
-                            disabled={exitActionLoading}
-                            className="w-full flex items-center gap-4 rounded-xl border border-gray-200 p-4 text-left hover:border-teal-300 hover:bg-teal-50 disabled:opacity-50"
-                        >
-                            <div className="rounded-lg bg-teal-100 p-3"><Save className="h-5 w-5 text-teal-600" /></div>
-                            <div>
-                                <p className="font-medium text-gray-900">Salva come bozza</p>
-                                <p className="text-sm text-gray-500">Salva le modifiche e torna alla pagina precedente</p>
+                        {exitError && (
+                            <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                                {exitError}
                             </div>
-                            {exitActionLoading && <Loader2 className="ml-auto h-4 w-4 animate-spin text-teal-600" />}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => handleExitAction('discard')}
-                            disabled={exitActionLoading}
-                            className="w-full flex items-center gap-4 rounded-xl border border-gray-200 p-4 text-left hover:border-red-300 hover:bg-red-50 disabled:opacity-50"
-                        >
-                            <div className="rounded-lg bg-red-100 p-3"><XCircle className="h-5 w-5 text-red-600" /></div>
-                            <div>
-                                <p className="font-medium text-gray-900">Annulla modifiche</p>
-                                <p className="text-sm text-gray-500">Esce senza salvare le modifiche correnti</p>
-                            </div>
-                        </button>
+                        )}
+                        {!exitDiscardStep ? (
+                            <>
+                                <button
+                                    type="button"
+                                    onClick={() => handleExitAction('draft')}
+                                    disabled={exitActionLoading}
+                                    className="w-full flex items-center gap-4 rounded-xl border border-gray-200 p-4 text-left hover:border-teal-300 hover:bg-teal-50 disabled:opacity-50"
+                                >
+                                    <div className="rounded-lg bg-teal-100 p-3"><Save className="h-5 w-5 text-teal-600" /></div>
+                                    <div>
+                                        <p className="font-medium text-gray-900">Salva come bozza</p>
+                                        <p className="text-sm text-gray-500">Salva le modifiche e torna alla pagina precedente</p>
+                                    </div>
+                                    {exitActionLoading && <Loader2 className="ml-auto h-4 w-4 animate-spin text-teal-600" />}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleExitAction('complete')}
+                                    disabled={exitActionLoading || isSaving}
+                                    className="w-full flex items-center gap-4 rounded-xl border border-gray-200 p-4 text-left hover:border-green-300 hover:bg-green-50 disabled:opacity-50"
+                                >
+                                    <div className="rounded-lg bg-green-100 p-3"><CheckCircle className="h-5 w-5 text-green-600" /></div>
+                                    <div>
+                                        <p className="font-medium text-gray-900">Completa visita</p>
+                                        <p className="text-sm text-gray-500">Salva, chiude la visita e genera il referto PDF locale</p>
+                                    </div>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => { setExitDiscardStep(true); setExitError(null) }}
+                                    disabled={exitActionLoading}
+                                    className="w-full flex items-center gap-4 rounded-xl border border-gray-200 p-4 text-left hover:border-red-300 hover:bg-red-50 disabled:opacity-50"
+                                >
+                                    <div className="rounded-lg bg-red-100 p-3"><XCircle className="h-5 w-5 text-red-600" /></div>
+                                    <div>
+                                        <p className="font-medium text-gray-900">Annulla modifiche</p>
+                                        <p className="text-sm text-gray-500">Richiede motivo GDPR, elimina la visita e ripristina l'appuntamento</p>
+                                    </div>
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                <label className="block text-xs font-medium text-gray-600">
+                                    Motivo annullamento modifiche / visita
+                                    <textarea
+                                        value={discardReason}
+                                        onChange={e => setDiscardReason(e.target.value)}
+                                        rows={4}
+                                        className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-red-400 focus:outline-none focus:ring-2 focus:ring-red-500/20"
+                                        placeholder="Obbligatorio per registro GDPR, minimo 10 caratteri..."
+                                    />
+                                </label>
+                                <div className="flex gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setExitDiscardStep(false)}
+                                        disabled={exitActionLoading}
+                                        className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                    >
+                                        Indietro
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleExitAction('discard')}
+                                        disabled={exitActionLoading || discardReason.trim().length < 10}
+                                        className="flex-1 rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                                    >
+                                        Conferma annullamento
+                                    </button>
+                                </div>
+                            </>
+                        )}
                     </div>
                     <div className="border-t border-gray-100 bg-gray-50 px-5 py-4">
                         <button
@@ -2639,8 +3542,8 @@ export function VisitaDetailPage(): JSX.Element {
 
         {showHealthEdit && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-                <div className="w-full max-w-4xl rounded-2xl bg-white shadow-xl overflow-hidden">
-                    <div className="mb-4 flex items-center justify-between">
+                <div className="flex h-[min(820px,calc(100vh-2rem))] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
+                    <div className="flex items-center justify-between border-b border-gray-100">
                         <div className="px-5 pt-5">
                             <h2 className="text-base font-semibold text-gray-900">Profilo di salute</h2>
                             <p className="text-xs text-gray-500">Clinica, abitudini, DPI, patente e malattie professionali</p>
@@ -2666,11 +3569,15 @@ export function VisitaDetailPage(): JSX.Element {
                             </button>
                         ))}
                     </div>
-                    <div className="max-h-[65vh] overflow-y-auto p-5">
+                    <div className="min-h-0 flex-1 overflow-y-auto p-5">
                         {healthTab === 'clinica' && (
-                            <div className="grid grid-cols-3 gap-3">
-                                <FormInput label="Peso (kg)" type="number" value={healthForm.peso} onChange={v => setHealthForm(prev => ({ ...prev, peso: v }))} />
-                                <FormInput label="Altezza (cm)" type="number" value={healthForm.altezza} onChange={v => setHealthForm(prev => ({ ...prev, altezza: v }))} />
+                            <div className="space-y-4">
+                              <div className="rounded-xl border border-gray-100 p-4">
+                                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Parametri vitali</p>
+                                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                                <FormInput label="Peso (kg)" type="number" value={healthForm.peso} onChange={v => updateHealthVital('peso', v)} />
+                                <FormInput label="Altezza (cm)" type="number" value={healthForm.altezza} onChange={v => updateHealthVital('altezza', v)} />
+                                <FormInput label="BMI" type="number" value={healthForm.bmi} onChange={v => setHealthForm(prev => ({ ...prev, bmi: v }))} />
                                 <FormInput label="Temperatura" type="number" value={healthForm.temperatura} onChange={v => setHealthForm(prev => ({ ...prev, temperatura: v }))} />
                                 <FormInput label="PA sistolica" type="number" value={healthForm.paSistolica} onChange={v => setHealthForm(prev => ({ ...prev, paSistolica: v }))} />
                                 <FormInput label="PA diastolica" type="number" value={healthForm.paDiastolica} onChange={v => setHealthForm(prev => ({ ...prev, paDiastolica: v }))} />
@@ -2678,47 +3585,68 @@ export function VisitaDetailPage(): JSX.Element {
                                 <FormInput label="SpO2" type="number" value={healthForm.spo2} onChange={v => setHealthForm(prev => ({ ...prev, spo2: v }))} />
                                 <FormInput label="Prossimo controllo" type="date" value={healthForm.prossimoControllo} onChange={v => setHealthForm(prev => ({ ...prev, prossimoControllo: v }))} />
                                 <FormInput label="Periodicità mesi" type="number" value={healthForm.periodicitaMesi} onChange={v => setHealthForm(prev => ({ ...prev, periodicitaMesi: v }))} />
+                                </div>
+                              </div>
+                              <div className="rounded-xl border border-gray-100 p-4">
+                                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Condizioni cliniche</p>
+                                <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
                                 <CheckField label="Invalidità" checked={healthForm.hasInvalidita} onChange={v => setHealthForm(prev => ({ ...prev, hasInvalidita: v }))} />
                                 <CheckField label="Legge 104" checked={healthForm.legge104} onChange={v => setHealthForm(prev => ({ ...prev, legge104: v }))} />
-                                <FormInput label="Tipo invalidità" value={healthForm.tipoInvalidita} onChange={v => setHealthForm(prev => ({ ...prev, tipoInvalidita: v }))} />
-                                <FormInput label="Grado invalidità civile (%)" type="number" value={healthForm.gradoInvaliditaCivile} onChange={v => setHealthForm(prev => ({ ...prev, gradoInvaliditaCivile: v }))} />
+                                {healthForm.hasInvalidita && <FormInput label="Tipo invalidità" value={healthForm.tipoInvalidita} onChange={v => setHealthForm(prev => ({ ...prev, tipoInvalidita: v }))} />}
+                                {healthForm.hasInvalidita && <FormInput label="Grado invalidità civile (%)" type="number" value={healthForm.gradoInvaliditaCivile} onChange={v => setHealthForm(prev => ({ ...prev, gradoInvaliditaCivile: v }))} />}
                                 <CheckField label="Diabete" checked={healthForm.hasDiabete} onChange={v => setHealthForm(prev => ({ ...prev, hasDiabete: v }))} />
                                 <CheckField label="Ipertensione" checked={healthForm.hasIpertensione} onChange={v => setHealthForm(prev => ({ ...prev, hasIpertensione: v }))} />
                                 <CheckField label="Cardiopatie" checked={healthForm.hasCardiopatie} onChange={v => setHealthForm(prev => ({ ...prev, hasCardiopatie: v }))} />
                                 <CheckField label="Asma" checked={healthForm.hasAsma} onChange={v => setHealthForm(prev => ({ ...prev, hasAsma: v }))} />
                                 <CheckField label="Epilessia" checked={healthForm.hasEpilessia} onChange={v => setHealthForm(prev => ({ ...prev, hasEpilessia: v }))} />
-                                <div className="col-span-3"><FormInput label="Farmaci" value={healthForm.farmaci} onChange={v => setHealthForm(prev => ({ ...prev, farmaci: v }))} /></div>
-                                <div className="col-span-3"><FormInput label="Allergie farmaci" value={healthForm.allergieFarmaci} onChange={v => setHealthForm(prev => ({ ...prev, allergieFarmaci: v }))} /></div>
-                                <div className="col-span-3"><FormInput label="Altre patologie" value={healthForm.altrePatologie} onChange={v => setHealthForm(prev => ({ ...prev, altrePatologie: v }))} /></div>
+                                <div className="md:col-span-3"><FormInput label="Farmaci" value={healthForm.farmaci} onChange={v => setHealthForm(prev => ({ ...prev, farmaci: v }))} /></div>
+                                <div className="md:col-span-3"><FormInput label="Allergie farmaci" value={healthForm.allergieFarmaci} onChange={v => setHealthForm(prev => ({ ...prev, allergieFarmaci: v }))} /></div>
+                                <div className="md:col-span-3"><FormInput label="Altre patologie" value={healthForm.altrePatologie} onChange={v => setHealthForm(prev => ({ ...prev, altrePatologie: v }))} /></div>
+                                </div>
+                              </div>
                             </div>
                         )}
                         {healthTab === 'abitudini' && (
-                            <div className="grid grid-cols-3 gap-3">
-                                <SelectField label="Fumatore" value={healthForm.fumatore} onChange={v => setHealthForm(prev => ({ ...prev, fumatore: v }))} options={['non_fumatore', 'ex_fumatore', 'fumatore']} />
-                                <FormInput label="Sigarette/giorno" type="number" value={healthForm.sigaretteGiorno} onChange={v => setHealthForm(prev => ({ ...prev, sigaretteGiorno: v }))} />
-                                <FormInput label="Anni fumo" type="number" value={healthForm.anniFumo} onChange={v => setHealthForm(prev => ({ ...prev, anniFumo: v }))} />
-                                <SelectField label="Alcol" value={healthForm.alcol} onChange={v => setHealthForm(prev => ({ ...prev, alcol: v }))} options={['non_bevitore', 'occasionale', 'moderato', 'elevato']} />
-                                <FormInput label="Unità/settimana" type="number" value={healthForm.unitaAlcolSettimana} onChange={v => setHealthForm(prev => ({ ...prev, unitaAlcolSettimana: v }))} />
-                                <SelectField label="Attività fisica" value={healthForm.attivitaFisica} onChange={v => setHealthForm(prev => ({ ...prev, attivitaFisica: v }))} options={['nessuna', 'leggera', 'moderata', 'intensa']} />
-                                <FormInput label="Ore attività/settimana" type="number" value={healthForm.oreAttivitaSettimana} onChange={v => setHealthForm(prev => ({ ...prev, oreAttivitaSettimana: v }))} />
-                                <FormInput label="Alimentazione" value={healthForm.alimentazione} onChange={v => setHealthForm(prev => ({ ...prev, alimentazione: v }))} />
-                                <FormInput label="Stato civile" value={healthForm.statoCivile} onChange={v => setHealthForm(prev => ({ ...prev, statoCivile: v }))} />
-                                <FormInput label="Numero figli" type="number" value={healthForm.numeroFigli} onChange={v => setHealthForm(prev => ({ ...prev, numeroFigli: v }))} />
-                                <FormInput label="Professione" value={healthForm.professione} onChange={v => setHealthForm(prev => ({ ...prev, professione: v }))} />
-                                <SelectField label="Qualità sonno" value={healthForm.qualitaSonno} onChange={v => setHealthForm(prev => ({ ...prev, qualitaSonno: v }))} options={['buona', 'discreta', 'scarsa']} />
-                                <FormInput label="Ore sonno/notte" type="number" value={healthForm.oreSonnoNotte} onChange={v => setHealthForm(prev => ({ ...prev, oreSonnoNotte: v }))} />
-                                <CheckField label="Sonnolenza diurna" checked={healthForm.sonnolenzaDiurna} onChange={v => setHealthForm(prev => ({ ...prev, sonnolenzaDiurna: v }))} />
-                                <CheckField label="Apnea notturna" checked={healthForm.apneaNotturna} onChange={v => setHealthForm(prev => ({ ...prev, apneaNotturna: v }))} />
-                                <div className="col-span-3"><FormInput label="Note salute" value={healthForm.noteSalute} onChange={v => setHealthForm(prev => ({ ...prev, noteSalute: v }))} /></div>
+                            <div className="space-y-4">
+                                <div className="rounded-xl border border-gray-100 p-4">
+                                    <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Stili di vita</p>
+                                    <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+                                        <SelectField label="Fumatore" value={healthForm.fumatore} onChange={v => setHealthForm(prev => ({ ...prev, fumatore: v }))} options={['non_fumatore', 'ex_fumatore', 'fumatore']} />
+                                        {healthForm.fumatore === 'fumatore' && <FormInput label="Sigarette/giorno" type="number" value={healthForm.sigaretteGiorno} onChange={v => setHealthForm(prev => ({ ...prev, sigaretteGiorno: v }))} />}
+                                        {healthForm.fumatore && healthForm.fumatore !== 'non_fumatore' && <FormInput label="Tipo sigaretta" value={healthForm.tipoSigaretta} onChange={v => setHealthForm(prev => ({ ...prev, tipoSigaretta: v }))} />}
+                                        {healthForm.fumatore && healthForm.fumatore !== 'non_fumatore' && <FormInput label="Età inizio fumo" type="number" value={healthForm.etaInizioFumo} onChange={v => setHealthForm(prev => ({ ...prev, etaInizioFumo: v }))} />}
+                                        {healthForm.fumatore && healthForm.fumatore !== 'non_fumatore' && <FormInput label="Anni fumo" type="number" value={healthForm.anniFumo} onChange={v => setHealthForm(prev => ({ ...prev, anniFumo: v }))} />}
+                                        <SelectField label="Alcol" value={healthForm.alcol} onChange={v => updateHealthLifestyle('alcol', v)} options={['no', 'occasionale', 'moderato', 'elevato']} />
+                                        {healthForm.alcol && !['no', 'non_bevitore'].includes(healthForm.alcol) && <FormInput label="Unità/settimana" type="number" value={healthForm.unitaAlcolSettimana} onChange={v => setHealthForm(prev => ({ ...prev, unitaAlcolSettimana: v }))} />}
+                                        <SelectField label="Attività fisica" value={healthForm.attivitaFisica} onChange={v => updateHealthLifestyle('attivitaFisica', v)} options={['nessuna', 'leggera', 'moderata', 'intensa']} />
+                                        {healthForm.attivitaFisica && healthForm.attivitaFisica !== 'nessuna' && <FormInput label="Ore attività/settimana" type="number" value={healthForm.oreAttivitaSettimana} onChange={v => setHealthForm(prev => ({ ...prev, oreAttivitaSettimana: v }))} />}
+                                        <FormInput label="Uso sostanze" value={healthForm.droghe} onChange={v => setHealthForm(prev => ({ ...prev, droghe: v }))} />
+                                    </div>
+                                </div>
+                                <div className="rounded-xl border border-gray-100 p-4">
+                                    <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Alimentazione, sonno e contesto</p>
+                                    <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+                                        <FormInput label="Alimentazione" value={healthForm.alimentazione} onChange={v => setHealthForm(prev => ({ ...prev, alimentazione: v }))} />
+                                        <FormInput label="Porzioni frutta/verdura" type="number" value={healthForm.porzioniFruttaVerdure} onChange={v => setHealthForm(prev => ({ ...prev, porzioniFruttaVerdure: v }))} />
+                                        <FormInput label="Stato civile" value={healthForm.statoCivile} onChange={v => setHealthForm(prev => ({ ...prev, statoCivile: v }))} />
+                                        <FormInput label="Numero figli" type="number" value={healthForm.numeroFigli} onChange={v => setHealthForm(prev => ({ ...prev, numeroFigli: v }))} />
+                                        <FormInput label="Professione" value={healthForm.professione} onChange={v => setHealthForm(prev => ({ ...prev, professione: v }))} />
+                                        <SelectField label="Qualità sonno" value={healthForm.qualitaSonno} onChange={v => setHealthForm(prev => ({ ...prev, qualitaSonno: v }))} options={['buona', 'discreta', 'scarsa']} />
+                                        <FormInput label="Ore sonno/notte" type="number" value={healthForm.oreSonnoNotte} onChange={v => setHealthForm(prev => ({ ...prev, oreSonnoNotte: v }))} />
+                                        <CheckField label="Sonnolenza diurna" checked={healthForm.sonnolenzaDiurna} onChange={v => setHealthForm(prev => ({ ...prev, sonnolenzaDiurna: v }))} />
+                                        <CheckField label="Apnea notturna" checked={healthForm.apneaNotturna} onChange={v => setHealthForm(prev => ({ ...prev, apneaNotturna: v }))} />
+                                        <div className="md:col-span-3"><FormInput label="Note salute" value={healthForm.noteSalute} onChange={v => setHealthForm(prev => ({ ...prev, noteSalute: v }))} /></div>
+                                    </div>
+                                </div>
                             </div>
                         )}
                         {healthTab === 'dpi' && (
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
                                 <CheckField label="Usa DPI personali" checked={healthForm.usaDpiPersonali} onChange={v => setHealthForm(prev => ({ ...prev, usaDpiPersonali: v }))} />
                                 <CheckField label="Usa mezzi aziendali" checked={healthForm.usaMezziAziendali} onChange={v => setHealthForm(prev => ({ ...prev, usaMezziAziendali: v }))} />
-                                <FormInput label="DPI personali" value={healthForm.dpiPersonali} onChange={v => setHealthForm(prev => ({ ...prev, dpiPersonali: v }))} />
+                                {healthForm.usaDpiPersonali && <FormInput label="DPI personali" value={healthForm.dpiPersonali} onChange={v => setHealthForm(prev => ({ ...prev, dpiPersonali: v }))} />}
                                 <FormInput label="DPI azienda" value={healthForm.dpiAzienda} onChange={v => setHealthForm(prev => ({ ...prev, dpiAzienda: v }))} />
-                                <FormInput label="Mezzi aziendali" value={healthForm.mezziAziendali} onChange={v => setHealthForm(prev => ({ ...prev, mezziAziendali: v }))} />
+                                {healthForm.usaMezziAziendali && <FormInput label="Mezzi aziendali" value={healthForm.mezziAziendali} onChange={v => setHealthForm(prev => ({ ...prev, mezziAziendali: v }))} />}
                                 <CheckField label="Formazione generale" checked={healthForm.formazioneGenerale} onChange={v => setHealthForm(prev => ({ ...prev, formazioneGenerale: v }))} />
                                 <CheckField label="Formazione specifica" checked={healthForm.formazioneSpecifica} onChange={v => setHealthForm(prev => ({ ...prev, formazioneSpecifica: v }))} />
                                 <CheckField label="Addestramento completato" checked={healthForm.addestramentoCompletato} onChange={v => setHealthForm(prev => ({ ...prev, addestramentoCompletato: v }))} />
@@ -2729,7 +3657,7 @@ export function VisitaDetailPage(): JSX.Element {
                                 <FormInput label="Categorie patente" value={healthForm.patenteCategorie} onChange={v => setHealthForm(prev => ({ ...prev, patenteCategorie: v }))} />
                                 <FormInput label="Scadenza patente" type="date" value={healthForm.patenteScadenza} onChange={v => setHealthForm(prev => ({ ...prev, patenteScadenza: v }))} />
                                 <CheckField label="CQC" checked={healthForm.cqc} onChange={v => setHealthForm(prev => ({ ...prev, cqc: v }))} />
-                                <FormInput label="Scadenza CQC" type="date" value={healthForm.cqcScadenza} onChange={v => setHealthForm(prev => ({ ...prev, cqcScadenza: v }))} />
+                                {healthForm.cqc && <FormInput label="Scadenza CQC" type="date" value={healthForm.cqcScadenza} onChange={v => setHealthForm(prev => ({ ...prev, cqcScadenza: v }))} />}
                             </div>
                         )}
                         {healthTab === 'malattie' && (
@@ -2859,19 +3787,19 @@ function DynamicFieldRenderer({
                     <label className="block text-xs font-medium text-gray-700 mb-1">
                         {field.label}{field.required ? ' *' : ''}
                     </label>
-                    <select
+                    <ElegantSelect
                         value={strVal}
-                        onChange={(e) => onChange(field.name, e.target.value)}
+                        onChange={(value) => onChange(field.name, value)}
                         disabled={readOnly}
-                        className={`w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 ${readOnly ? 'bg-gray-50 text-gray-500 cursor-default' : ''}`}
-                    >
-                        <option value="">{field.placeholder || '— Seleziona —'}</option>
-                        {opts.map((opt, i) => {
+                        options={[
+                            { value: '', label: field.placeholder || '- Seleziona -' },
+                            ...opts.map((opt) => {
                             const optVal = typeof opt === 'string' ? opt : opt.value
                             const optLabel = typeof opt === 'string' ? opt : opt.label
-                            return <option key={i} value={optVal}>{optLabel}</option>
-                        })}
-                    </select>
+                                return { value: optVal, label: optLabel }
+                            })
+                        ]}
+                    />
                 </div>
             )
         }
@@ -2926,17 +3854,37 @@ function DynamicFieldRenderer({
                 </div>
             )
         case 'VITALS':
-            // VITALS is handled by static section fallback and inline form fields
-            return (
-                <FormTextArea
-                    label={field.label}
-                    value={strVal}
-                    onChange={(v) => onChange(field.name, v)}
-                    placeholder={field.placeholder || 'Parametri vitali...'}
-                    readOnly={readOnly}
-                    rows={2}
-                />
-            )
+            {
+                const vitalsValue = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, number | undefined> : {}
+                const vitalsFields = [
+                    ['sistolica', 'Sistolica (mmHg)'],
+                    ['diastolica', 'Diastolica (mmHg)'],
+                    ['frequenza', 'FC (bpm)'],
+                    ['saturazione', 'SpO2 (%)'],
+                    ['temperatura', 'Temp (°C)'],
+                ] as const
+                return (
+                    <div>
+                        <label className="mb-2 block text-xs font-medium text-gray-700">
+                            {field.label}{field.required ? ' *' : ''}
+                        </label>
+                        <div className="grid grid-cols-2 gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4 md:grid-cols-5">
+                            {vitalsFields.map(([key, label]) => (
+                                <label key={key} className="block text-xs text-gray-500">
+                                    {label}
+                                    <input
+                                        type="number"
+                                        value={vitalsValue[key] ?? ''}
+                                        onChange={event => onChange(field.name, { ...vitalsValue, [key]: event.target.value ? Number(event.target.value) : undefined })}
+                                        disabled={readOnly}
+                                        className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-teal-500 focus:ring-1 focus:ring-teal-500 disabled:bg-gray-100"
+                                    />
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+                )
+            }
         default:
             return null
     }
@@ -3006,11 +3954,19 @@ function FormInput({ label, value, onChange, placeholder, readOnly, type = 'text
     readOnly?: boolean
     type?: string
 }): JSX.Element {
+    if (type === 'date') {
+        return (
+            <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">{label}</label>
+                <ElegantDateInput value={value} onChange={onChange} clearable={!readOnly} />
+            </div>
+        )
+    }
     return (
         <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">{label}</label>
             <input
-                type={type}
+                type={type === 'date' ? 'text' : type}
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
                 placeholder={placeholder}
@@ -3031,10 +3987,7 @@ function SelectField({ label, value, onChange, options }: {
     return (
         <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">{label}</label>
-            <select value={value} onChange={e => onChange(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
-                <option value="">Non indicato</option>
-                {options.map(o => <option key={o} value={o}>{o.replace(/_/g, ' ')}</option>)}
-            </select>
+            <ElegantSelect value={value} onChange={onChange} options={[{ value: '', label: 'Non indicato' }, ...options.map(o => ({ value: o, label: o.replace(/_/g, ' ') }))]} />
         </div>
     )
 }

@@ -129,7 +129,8 @@ class QueueSessionService {
         if (result) return result;
 
         // Fallback multi-medico: se non trovata per slotDisponibilitaId,
-        // cerca sessioni dove il medico è membro tramite QueueSessionMedico
+        // cerca sessioni GENERICHE (senza slot linkato) dove il medico è membro.
+        // NON cerca sessioni linkate ad ALTRI slot per evitare cross-identification.
         if (slotDisponibilitaId && medicoPersonId) {
             // Resolve medicoPersonId (Person.id) → PersonTenantProfile.id
             const profile = await prisma.personTenantProfile.findFirst({
@@ -144,6 +145,7 @@ class QueueSessionService {
                         mode,
                         isActive: true,
                         deletedAt: null,
+                        slotDisponibilitaId: null, // Solo sessioni generiche, non di altri slot
                         medici: {
                             some: { medicoId: profile.id }
                         }
@@ -154,6 +156,111 @@ class QueueSessionService {
         }
 
         return null;
+    }
+
+    /**
+     * Trova sessioni dello stesso medico nella stessa giornata ma su slot diversi.
+     * Usato per proporre all'utente di unire sessioni mattina/pomeriggio o creare separata.
+     * @param {Object} params
+     * @param {string} params.tenantId
+     * @param {Date} params.date
+     * @param {string} params.medicoPersonId - Person.id del medico
+     * @param {string} [params.excludeSlotId] - Slot corrente da escludere dalla ricerca
+     * @returns {Promise<Object[]>} Sessioni dello stesso giorno
+     */
+    async findSameDaySessions({ tenantId, date, medicoPersonId, excludeSlotId }) {
+        // Resolve Person.id → PersonTenantProfile.id
+        const profile = await prisma.personTenantProfile.findFirst({
+            where: { personId: medicoPersonId, tenantId, deletedAt: null },
+            select: { id: true }
+        });
+        if (!profile) return [];
+
+        const sessions = await prisma.queueSession.findMany({
+            where: {
+                tenantId,
+                date: toUTCMidnight(date),
+                isActive: true,
+                deletedAt: null,
+                medici: { some: { medicoId: profile.id } },
+                ...(excludeSlotId && {
+                    slotDisponibilitaId: { not: excludeSlotId }
+                })
+            },
+            include: {
+                slotDisponibilita: {
+                    select: { id: true, oraInizio: true, oraFine: true }
+                },
+                ambulatorio: {
+                    select: { id: true, nome: true }
+                },
+                _count: { select: { entries: true } }
+            }
+        });
+
+        return sessions;
+    }
+
+    /**
+     * Collega uno slot aggiuntivo ad una sessione esistente (unisce mattina/pomeriggio).
+     * Aggiorna la sessione per includere il nuovo slot nei suoi ambulatoriIds.
+     * @param {string} sessionId
+     * @param {string} slotDisponibilitaId - Lo slot da aggiungere
+     * @param {string} tenantId
+     * @returns {Promise<Object>} Sessione aggiornata
+     */
+    async linkAdditionalSlot(sessionId, slotDisponibilitaId, tenantId) {
+        const session = await prisma.queueSession.findFirst({
+            where: { id: sessionId, tenantId, deletedAt: null }
+        });
+        if (!session) throw new Error('Sessione non trovata');
+
+        // Get the slot's ambulatorio to ensure the session covers it
+        const slot = await prisma.slotDisponibilita.findFirst({
+            where: { id: slotDisponibilitaId, tenantId, deletedAt: null },
+            select: { ambulatorioId: true }
+        });
+
+        if (slot?.ambulatorioId) {
+            // Add the ambulatorio to the session if not already present
+            const existingAmb = await prisma.queueSessionAmbulatorio.findFirst({
+                where: { sessionId, ambulatorioId: slot.ambulatorioId }
+            });
+            if (!existingAmb) {
+                const maxOrdine = await prisma.queueSessionAmbulatorio.aggregate({
+                    where: { sessionId },
+                    _max: { ordine: true }
+                });
+                await prisma.queueSessionAmbulatorio.create({
+                    data: {
+                        sessionId,
+                        ambulatorioId: slot.ambulatorioId,
+                        ordine: (maxOrdine._max?.ordine ?? -1) + 1,
+                        isPrimary: false
+                    }
+                });
+            }
+        }
+
+        // Store the linked slot ID in the session's config for tracking
+        const config = session.config || {};
+        const linkedSlots = config.linkedSlotIds || [];
+        if (!linkedSlots.includes(slotDisponibilitaId)) {
+            linkedSlots.push(slotDisponibilitaId);
+        }
+        config.linkedSlotIds = linkedSlots;
+
+        const updated = await prisma.queueSession.update({
+            where: { id: sessionId },
+            data: { config },
+            include: {
+                ambulatorio: { select: { id: true, nome: true } },
+                slotDisponibilita: { select: { id: true, oraInizio: true, oraFine: true } },
+                _count: { select: { entries: true } }
+            }
+        });
+
+        return updated;
     }
 
     /**
@@ -181,31 +288,55 @@ class QueueSessionService {
             ambulatoriIds = []
         } = data;
 
-        // P54: Verifica unicità per slot disponibilità (se fornito) o per ambulatorio
+        if (!slotDisponibilitaId) {
+            throw new Error('La sessione coda deve essere collegata a uno slot disponibilità medico in ambulatorio');
+        }
+
+        const slot = await prisma.slotDisponibilita.findFirst({
+            where: {
+                id: slotDisponibilitaId,
+                tenantId,
+                deletedAt: null,
+                disponibile: true
+            },
+            select: {
+                id: true,
+                data: true,
+                oraInizio: true,
+                oraFine: true,
+                medicoId: true,
+                ambulatorioId: true
+            }
+        });
+
+        if (!slot) {
+            throw new Error('Slot disponibilità non trovato o non disponibile');
+        }
+        if (!slot.medicoId || !slot.ambulatorioId) {
+            throw new Error('Lo slot disponibilità deve avere un medico e un ambulatorio associati');
+        }
+
+        const effectiveAmbulatorioId = slot.ambulatorioId;
+        const effectiveAmbulatoriIds = [...new Set([slot.ambulatorioId, ...ambulatoriIds].filter(Boolean))];
+        const effectiveMediciIds = [...new Set([slot.medicoId, ...mediciIds].filter(Boolean))];
+        const sessionDate = new Date(slot.data);
+
+        // P54: Verifica unicità per slot disponibilità
         const whereClause = {
             tenantId,
-            date: toUTCMidnight(date),
+            date: sessionDate,
             mode,
             isActive: true,
-            deletedAt: null
+            deletedAt: null,
+            slotDisponibilitaId
         };
-
-        // Se slotDisponibilitaId è fornito, controlla unicità per slot
-        if (slotDisponibilitaId) {
-            whereClause.slotDisponibilitaId = slotDisponibilitaId;
-        } else {
-            whereClause.ambulatorioId = ambulatorioId || null;
-        }
 
         const existing = await prisma.queueSession.findFirst({
             where: whereClause
         });
 
         if (existing) {
-            const errorMsg = slotDisponibilitaId
-                ? 'Esiste già una sessione attiva per questo slot di disponibilità'
-                : 'Esiste già una sessione attiva per questa data e ambulatorio';
-            throw new Error(errorMsg);
+            throw new Error('Esiste già una sessione attiva per questo slot di disponibilità');
         }
 
         // Genera QR token solo per modalità Mobile
@@ -221,10 +352,10 @@ class QueueSessionService {
         // P53: Risolvi Person.id → PersonTenantProfile.id per FK QueueSessionMedico
         // SlotDisponibilita.medicoId punta a Person.id, ma QueueSessionMedico.medicoId → PersonTenantProfile.id
         let resolvedMediciIds = [];
-        if (mediciIds.length > 0) {
+        if (effectiveMediciIds.length > 0) {
             const profiles = await prisma.personTenantProfile.findMany({
                 where: {
-                    personId: { in: mediciIds },
+                    personId: { in: effectiveMediciIds },
                     tenantId,
                     deletedAt: null
                 },
@@ -237,7 +368,7 @@ class QueueSessionService {
                 // Check if the IDs are already PersonTenantProfile.ids (not Person.ids)
                 const existingProfiles = await prisma.personTenantProfile.findMany({
                     where: {
-                        id: { in: mediciIds },
+                        id: { in: effectiveMediciIds },
                         tenantId,
                         deletedAt: null
                     },
@@ -248,14 +379,14 @@ class QueueSessionService {
                     resolvedMediciIds = existingProfiles.map(p => p.id);
                     logger.info('mediciIds are already PersonTenantProfile IDs', {
                         service: 'QueueSessionService',
-                        mediciIds,
+                        mediciIds: effectiveMediciIds,
                         resolvedMediciIds,
                         tenantId
                     });
                 } else {
                     logger.error('No PersonTenantProfile found for mediciIds - cannot create session medici', {
                         service: 'QueueSessionService',
-                        mediciIds,
+                        mediciIds: effectiveMediciIds,
                         tenantId
                     });
                     // Skip medici creation instead of causing FK violation
@@ -275,9 +406,9 @@ class QueueSessionService {
             }
             : undefined;
 
-        const ambulatoriData = ambulatoriIds.length > 0
+        const ambulatoriData = effectiveAmbulatoriIds.length > 0
             ? {
-                create: ambulatoriIds.map((ambulatorioId, index) => ({
+                create: effectiveAmbulatoriIds.map((ambulatorioId, index) => ({
                     ambulatorioId,
                     ordine: index,
                     isPrimary: index === 0
@@ -285,25 +416,11 @@ class QueueSessionService {
             }
             : undefined;
 
-        // When linked to a SlotDisponibilita, use the SLOT's date as authoritative
-        // to avoid timezone issues with toUTCMidnight on local-offset date input
-        let sessionDate = toUTCMidnight(date);
-        if (slotDisponibilitaId) {
-            const slot = await prisma.slotDisponibilita.findFirst({
-                where: { id: slotDisponibilitaId, deletedAt: null },
-                select: { data: true }
-            });
-            if (slot?.data) {
-                sessionDate = new Date(slot.data);
-                logger.info({ slotDate: sessionDate.toISOString(), inputDate: date }, 'Using slot date as authoritative for session');
-            }
-        }
-
         const session = await prisma.queueSession.create({
             data: {
                 tenantId,
                 date: sessionDate,
-                ambulatorioId,
+                ambulatorioId: effectiveAmbulatorioId,
                 mode,
                 config: config || this.getDefaultConfig(mode),
                 slotDisponibilitaId,
@@ -364,9 +481,9 @@ class QueueSessionService {
             sessionId: session.id,
             tenantId,
             mode,
-            mediciCount: mediciIds.length,
-            ambulatoriCount: ambulatoriIds.length,
-            date: date.toISOString()
+            mediciCount: effectiveMediciIds.length,
+            ambulatoriCount: effectiveAmbulatoriIds.length,
+            date: sessionDate.toISOString()
         });
 
         return session;
@@ -943,7 +1060,21 @@ class QueueSessionService {
             });
         }
 
+        // Fallback: medicoId might be Person.id (frontend sends personId from slot data)
+        // Resolve Person.id → PersonTenantProfile.id and retry
         if (!record) {
+            const profile = await prisma.personTenantProfile.findFirst({
+                where: { personId: medicoId, tenantId, deletedAt: null }
+            });
+            if (profile) {
+                record = await prisma.queueSessionMedico.findFirst({
+                    where: { sessionId, medicoId: profile.id }
+                });
+            }
+        }
+
+        if (!record) {
+            logger.warn({ sessionId, medicoId, tenantId }, 'removeMedico: medico not found in session (tried PTP.id, QSM.id, Person.id)');
             throw new Error('Medico non associato a questa sessione');
         }
 
@@ -997,6 +1128,7 @@ class QueueSessionService {
                 })
             },
             select: {
+                id: true,
                 medicoId: true,
                 oraInizio: true,
                 oraFine: true,
@@ -1034,7 +1166,7 @@ class QueueSessionService {
                 });
             }
             const entry = mediciMap.get(slot.medicoId);
-            entry.slots.push({ oraInizio: slot.oraInizio, oraFine: slot.oraFine });
+            entry.slots.push({ id: slot.id, oraInizio: slot.oraInizio, oraFine: slot.oraFine, ambulatorioId: slot.ambulatorioId });
             if (slot.ambulatorio) {
                 entry.ambulatori.add(JSON.stringify({
                     id: slot.ambulatorio.id,

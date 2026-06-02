@@ -4,8 +4,15 @@ import {
   Settings,
   X
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { PublicButton } from './PublicButton';
 import { PublicBadge } from './PublicBadge';
+
+// Exported helper: allows the footer or any component to reopen the banner
+export const openCookiePreferences = () => {
+  localStorage.removeItem('cookie-consent');
+  window.dispatchEvent(new CustomEvent('open-cookie-preferences'));
+};
 
 interface CookiePreferences {
   necessary: boolean;
@@ -36,6 +43,14 @@ export const ConsentBanner: React.FC = () => {
       }, 1000);
       return () => clearTimeout(timer);
     }
+
+    // Ascolta l'evento per riaprire manualmente (es. da footer "Gestisci Cookie")
+    const handleOpen = () => {
+      setShowSettings(false);
+      setIsVisible(true);
+    };
+    window.addEventListener('open-cookie-preferences', handleOpen);
+    return () => window.removeEventListener('open-cookie-preferences', handleOpen);
   }, []);
 
   const handleAcceptAll = () => {
@@ -116,12 +131,16 @@ export const ConsentBanner: React.FC = () => {
                 </div>
                 <p className="text-sm text-gray-600 leading-relaxed">
                   Utilizziamo cookie tecnici necessari per il funzionamento del sito e,
-                  con il tuo consenso, cookie di analisi e marketing per migliorare i nostri servizi.
+                  con il tuo consenso, cookie di analisi e marketing per migliorare i nostri servizi.{' '}
+                  <Link to="/cookie-policy" className="text-gray-700 hover:text-gray-900 underline font-medium">
+                    Cookie Policy
+                  </Link>
+                  {' '}·{' '}
                   <button
                     onClick={() => setShowSettings(true)}
-                    className="text-gray-700 hover:text-gray-900 underline ml-1 font-medium"
+                    className="text-gray-700 hover:text-gray-900 underline font-medium"
                   >
-                    Personalizza le preferenze
+                    Personalizza
                   </button>
                 </p>
               </div>
@@ -194,8 +213,8 @@ export const ConsentBanner: React.FC = () => {
                 <button
                   onClick={() => togglePreference('analytics')}
                   className={`w-10 h-6 rounded-full flex items-center transition-colors ${preferences.analytics
-                      ? 'bg-primary-600 justify-end'
-                      : 'bg-gray-300 justify-start'
+                    ? 'bg-primary-600 justify-end'
+                    : 'bg-gray-300 justify-start'
                     }`}
                 >
                   <div className="w-4 h-4 bg-white rounded-full mx-1 shadow-sm"></div>
@@ -213,8 +232,8 @@ export const ConsentBanner: React.FC = () => {
                 <button
                   onClick={() => togglePreference('marketing')}
                   className={`w-10 h-6 rounded-full flex items-center transition-colors ${preferences.marketing
-                      ? 'bg-primary-600 justify-end'
-                      : 'bg-gray-300 justify-start'
+                    ? 'bg-primary-600 justify-end'
+                    : 'bg-gray-300 justify-start'
                     }`}
                 >
                   <div className="w-4 h-4 bg-white rounded-full mx-1 shadow-sm"></div>

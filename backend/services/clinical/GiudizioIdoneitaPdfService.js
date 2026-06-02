@@ -76,8 +76,9 @@ function resolveFirstValidLogo(...paths) {
 
 const GIUDIZIO_LABELS = {
   IDONEO: 'IDONEO',
-  IDONEO_CON_PRESCRIZIONI: 'IDONEO CON PRESCRIZIONI',
-  IDONEO_CON_LIMITAZIONI: 'IDONEO CON LIMITAZIONI',
+  IDONEO_CON_PRESCRIZIONI: 'IDONEO PARZIALE CON PRESCRIZIONI',
+  IDONEO_CON_LIMITAZIONI: 'IDONEO PARZIALE CON LIMITAZIONI',
+  IDONEO_CON_LIMITAZIONI_PRESCRIZIONI: 'IDONEO PARZIALE CON LIMITAZIONI E PRESCRIZIONI',
   NON_IDONEO_TEMPORANEO: 'TEMPORANEAMENTE NON IDONEO',
   NON_IDONEO_PERMANENTE: 'NON IDONEO'
 };
@@ -86,6 +87,7 @@ const GIUDIZIO_COLORS = {
   IDONEO: { bg: '#dcfce7', text: '#166534', border: '#86efac' },
   IDONEO_CON_PRESCRIZIONI: { bg: '#fef9c3', text: '#854d0e', border: '#fde047' },
   IDONEO_CON_LIMITAZIONI: { bg: '#ffedd5', text: '#9a3412', border: '#fdba74' },
+  IDONEO_CON_LIMITAZIONI_PRESCRIZIONI: { bg: '#fff7ed', text: '#9a3412', border: '#fb923c' },
   NON_IDONEO_TEMPORANEO: { bg: '#fee2e2', text: '#991b1b', border: '#fca5a5' },
   NON_IDONEO_PERMANENTE: { bg: '#fce7f3', text: '#9d174d', border: '#f9a8d4' }
 };
@@ -101,42 +103,88 @@ function fmtMedico(p) {
   return `${title} ${p.firstName} ${p.lastName}`;
 }
 
+function fmtList(values) {
+  const unique = [...new Set((values || []).filter(Boolean).map(String))];
+  return unique.length ? unique.join(', ') : '—';
+}
+
+function getCompanyProfile(g) {
+  const mansioneWithSite = g.mansioni?.find(m => m.mansione?.site?.companyTenantProfile);
+  return mansioneWithSite?.mansione?.site?.companyTenantProfile || g.visita?.appuntamento?.companyTenantProfile || null;
+}
+
+function getWorkerProfile(g) {
+  return g.person?.tenantProfiles?.[0] || null;
+}
+
+function getProtocolNames(g) {
+  const fromMansioni = (g.mansioni || []).flatMap(item => {
+    const mansione = item.mansione;
+    return [
+      ...(mansione?.protocolli || []).map(p => p.denominazione),
+      ...(mansione?.protocolliMansione || []).map(pm => pm.protocolloSanitario?.denominazione)
+    ];
+  });
+  const fromProfile = getWorkerProfile(g)?.protocolloSanitario?.denominazione;
+  return fmtList([fromProfile, ...fromMansioni]);
+}
+
+function getRiskNames(g) {
+  const mansioneRisks = (g.mansioni || []).flatMap(item =>
+    (item.mansione?.rischiAssociati || []).map(r => r.descrizioneEsposizione || r.codiceRischio)
+  );
+  const workerRisks = g.person?.rischiAggiuntivi?.map(r => r.descrizioneEsposizione || r.codiceRischio) || [];
+  return fmtList([...mansioneRisks, ...workerRisks]);
+}
+
+function getPerformedPrestazioni(g) {
+  const visitMain = g.visita?.prestazione?.nome;
+  const appPrestazioni = g.visita?.appuntamento?.prestazioni?.map(p => p.prestazione?.nome).filter(Boolean) || [];
+  return fmtList([visitMain, ...appPrestazioni]);
+}
+
+function getNextMdlDeadline(g) {
+  const explicit = g.visita?.scadenzePrestazioni?.find(s =>
+    s.prestazione?.nome?.toLowerCase().includes('visita medica del lavoro')
+  );
+  return explicit?.dataScadenza || g.dataScadenza || null;
+}
+
+function getAlbo(medico) {
+  const profile = medico?.tenantProfiles?.[0];
+  return profile?.registerCode || '';
+}
+
 // ============================================================
 // LABEL DECODERS — convert DB codes to readable Italian labels
 // ============================================================
 
 const PRESCRIZIONI_CODE_MAP = {
-  uso_dpi_guanti: 'Uso obbligatorio DPI: guanti protettivi',
-  uso_dpi_scarpe: 'Uso obbligatorio DPI: scarpe antinfortunistiche',
-  uso_dpi_cuffie: 'Uso obbligatorio DPI: cuffie / tappi antirumore',
-  uso_dpi_mascherina: 'Uso obbligatorio DPI: mascherina FFP2/FFP3',
-  uso_dpi_visiera: 'Uso obbligatorio DPI: visiera / occhiali protettivi',
-  uso_dpi_imbracatura: 'Uso obbligatorio DPI: imbracatura di sicurezza',
-  divieto_mmc_20: 'Divieto movimentazione manuale carichi > 20 kg',
-  divieto_mmc_10: 'Divieto movimentazione manuale carichi > 10 kg',
-  pause_vdt: 'Pause obbligatorie VDT: 15 minuti ogni 2 ore',
-  limitazione_notturno: 'Limitazione turni notturni (max 2 notti/settimana)',
-  controllo_oft_annuale: 'Controllo oftalmologico annuale (videoterminali)',
-  sorveg_rafforzata_semestrale: 'Sorveglianza sanitaria rafforzata semestrale',
-  formazione_rischio_chimico: 'Obbligo formazione specifica rischio chimico',
-  formazione_rischio_biologico: 'Obbligo formazione specifica rischio biologico',
-  evitare_cancerogeni: 'Evitare esposizione a sostanze cancerogene / mutagene',
-  esposizione_rumore_limitata: 'Limitazione esposizione a rumore (< 80 dB)',
+  uso_dpi_specifici: 'Uso obbligatorio dei DPI specifici previsti dal DVR',
+  pause_vdt: 'Pause/alternanza attività per videoterminale',
+  mmc_carichi_limitati: 'Movimentazione manuale carichi entro limiti indicati',
+  evitare_sforzi_incongrui: 'Evitare sforzi incongrui, posture forzate o movimenti ripetitivi prolungati',
+  protezione_rumore: 'Protezione uditiva e rispetto del programma aziendale rumore',
+  protezione_vibrazioni: 'Limitare esposizione a vibrazioni secondo valutazione del rischio',
+  protezione_chimici: 'Evitare o ridurre esposizione ad agenti chimici sensibilizzanti/irritanti',
+  protezione_biologici: 'Applicare misure di prevenzione per rischio biologico',
+  no_alcol_stupefacenti_rischio: 'Rispetto dei divieti/controlli per alcol e sostanze nelle mansioni a rischio',
+  sorveglianza_ravvicinata: 'Sorveglianza sanitaria ravvicinata secondo indicazione del medico competente'
 };
 
 const LIMITAZIONI_CODE_MAP = {
-  no_lavoro_quota: 'Non idoneo a lavori in quota (> 2 m)',
-  no_piattaforme_elevabili: 'Non idoneo a lavori su piattaforme elevabili / cestelli',
-  no_guida_mezzi: 'Non idoneo alla conduzione di automezzi / mezzi operativi',
-  no_spazi_confinati: 'Non idoneo a lavori in spazi confinati',
-  limitazione_notturno_mansione: 'Limitata idoneità ai turni notturni',
-  no_vibrazioni: 'Non idoneo a mansioni con esposizione a vibrazioni mano-braccio',
-  no_rumore_85db: 'Non idoneo a mansioni con esposizione a rumore > 85 dB',
-  limitazione_mmc: 'Limitata movimentazione manuale di carichi (< 10 kg)',
-  no_cancerogeni: 'Non idoneo a mansioni con esposizione a cancerogeni / mutageni',
-  limitazione_chimici: 'Limitata esposizione a sostanze chimiche pericolose',
-  no_stress_termico: 'Non idoneo a lavori con stress termico (ambiente caldo / freddo)',
-  no_vdt_prolungato: 'Uso VDT limitato (max 2 ore continuative senza pausa)',
+  no_lavoro_quota: 'Non adibire a lavori in quota se non compatibili con il giudizio',
+  no_piattaforme_elevabili: 'Non adibire a PLE/cestelli se non compatibili con il giudizio',
+  no_guida_mezzi: 'Limitare conduzione di mezzi/attrezzature ove non compatibile',
+  no_spazi_confinati: 'Non adibire a spazi confinati o sospetti di inquinamento',
+  limitazione_notturno_mansione: 'Limitazione o esclusione dal lavoro notturno',
+  limitazione_mmc: 'Limitazione della movimentazione manuale dei carichi',
+  no_vibrazioni: 'Limitazione esposizione a vibrazioni mano-braccio/corpo intero',
+  no_rumore_85db: 'Limitazione esposizione a rumore elevato',
+  limitazione_chimici: 'Limitazione dell’esposizione ad agenti chimici pericolosi',
+  no_cancerogeni: 'Esclusione/limitazione esposizione ad agenti cancerogeni o mutageni',
+  no_stress_termico: 'Limitazione attività con stress termico severo',
+  no_vdt_prolungato: 'Limitazione uso continuativo del videoterminale'
 };
 
 /**
@@ -330,17 +378,29 @@ function buildLavoratoreHtml(g, tenant) {
   const col = GIUDIZIO_COLORS[g.tipoGiudizio] || GIUDIZIO_COLORS.IDONEO;
   const personName = `${g.person?.lastName ?? ''} ${g.person?.firstName ?? ''}`.trim();
   const mansione = g.mansioni?.map(m => m.mansione?.denominazione).filter(Boolean).join(', ') || '—';
+  const companyProfile = getCompanyProfile(g);
+  const workerProfile = getWorkerProfile(g);
+  const companyName = companyProfile?.company?.ragioneSociale || '—';
+  const sede = g.mansioni?.find(m => m.mansione?.site)?.mansione?.site;
+  const sedeLabel = sede ? fmtList([sede.siteName, sede.indirizzo, sede.citta]) : '—';
+  const reparto = workerProfile?.reparto?.nome || workerProfile?.reparto?.codice || '—';
+  const title = workerProfile?.title || '—';
+  const protocollo = getProtocolNames(g);
+  const rischi = getRiskNames(g);
+  const accertamenti = getPerformedPrestazioni(g);
+  const nextDeadline = getNextMdlDeadline(g);
+  const albo = getAlbo(g.medicoCompetente);
 
   // Estrai campi template visita
   const tf = extractVisitaTemplateFields(g.visita);
 
-  return `${buildSharedHead('Giudizio di Idoneità - Copia Lavoratore')}
+  return `${buildSharedHead('Giudizio di Idoneità alla Mansione')}
 
   <div class="header">
     <div class="header-left">
       ${tenant?.logo ? `<img src="${tenant.logo}" alt="${tenant?.name ?? ''}" style="max-height:60px;max-width:180px;object-fit:contain;margin-bottom:8px;">` : ''}
       <h1>Giudizio di Idoneità alla Mansione</h1>
-      <p>ai sensi dell'Art. 41 c.6 D.Lgs 81/08 — Copia per il Lavoratore</p>
+      <p>ai sensi dell'Art. 41 c.6 e c.7 D.Lgs 81/08</p>
     </div>
     <div class="header-right">
       <strong>${tenant?.name ?? ''}</strong><br>
@@ -351,7 +411,7 @@ function buildLavoratoreHtml(g, tenant) {
 
   <div class="badge-box" style="background:${col.bg}; color:${col.text}; border-color:${col.border};">
     <div class="esito-label">${GIUDIZIO_LABELS[g.tipoGiudizio] ?? g.tipoGiudizio}</div>
-    ${g.dataScadenza ? `<div style="margin-top:6px;font-size:9pt;">Valido fino al: <strong>${fmtDate(g.dataScadenza)}</strong></div>` : ''}
+    ${nextDeadline ? `<div style="margin-top:6px;font-size:9pt;">Scadenza prossima visita periodica: <strong>${fmtDate(nextDeadline)}</strong></div>` : ''}
   </div>
 
   <div class="section">
@@ -370,8 +430,48 @@ function buildLavoratoreHtml(g, tenant) {
         <div class="field-value">${mansione}</div>
       </div>
       <div>
+        <div class="field-label">Profilo professionale</div>
+        <div class="field-value">${title}</div>
+      </div>
+      <div>
         <div class="field-label">Data Visita</div>
         <div class="field-value">${fmtDate(g.visita?.dataOra ?? g.dataEmissione)}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Dati Aziendali e Sorveglianza</h2>
+    <div class="grid">
+      <div>
+        <div class="field-label">Ragione sociale</div>
+        <div class="field-value">${companyName}</div>
+      </div>
+      <div>
+        <div class="field-label">Sede</div>
+        <div class="field-value">${sedeLabel}</div>
+      </div>
+      <div>
+        <div class="field-label">Reparto</div>
+        <div class="field-value">${reparto}</div>
+      </div>
+      <div>
+        <div class="field-label">Protocollo sanitario</div>
+        <div class="field-value">${protocollo}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Fattori di Rischio e Accertamenti</h2>
+    <div class="grid">
+      <div>
+        <div class="field-label">Fattori di rischio</div>
+        <div class="field-value">${rischi}</div>
+      </div>
+      <div>
+        <div class="field-label">Accertamenti eseguiti nella visita</div>
+        <div class="field-value">${accertamenti}</div>
       </div>
     </div>
   </div>
@@ -383,7 +483,12 @@ function buildLavoratoreHtml(g, tenant) {
         <div class="field-label">Medico</div>
         <div class="field-value">${fmtMedico(g.medicoCompetente)}</div>
       </div>
+      <div>
+        <div class="field-label">Iscrizione albo</div>
+        <div class="field-value">${albo || '—'}</div>
+      </div>
       ${g.visita?.tipoVisitaMDL ? `<div><div class="field-label">Tipo Visita</div><div class="field-value">${g.visita.tipoVisitaMDL.replace(/_/g, ' ')}</div></div>` : ''}
+      <div><div class="field-label">Data emissione giudizio</div><div class="field-value">${fmtDate(g.dataEmissione)}</div></div>
     </div>
   </div>
 
@@ -417,29 +522,17 @@ function buildLavoratoreHtml(g, tenant) {
     ${renderMultiChoice(tf.limitazioniMansione.map(c => LIMITAZIONI_CODE_MAP[c] || PRESCRIZIONI_CODE_MAP[c] || c))}
   </div>` : ''}
 
-  ${tf.prescrizioniFollowUp ? `
-  <div class="section">
-    <h2>Prescrizioni e Indicazioni Follow-up</h2>
-    <div class="text-block">${tf.prescrizioniFollowUp}</div>
-  </div>` : ''}
-
   ${tf.esamiProssimaVisita ? `
   <div class="section">
     <h2>Esami da Eseguire alla Prossima Visita</h2>
     <div class="text-block">${tf.esamiProssimaVisita}</div>
   </div>` : ''}
 
-  ${tf.periodicita ? `
-  <div class="section">
-    <h2>Periodicità Sorveglianza Sanitaria</h2>
-    <div class="field-value">${tf.periodicita}</div>
-  </div>` : ''}
-
   ${g.ricorsoEntro ? `
   <div class="ricorso-box">
     <strong>Diritto di ricorso (Art. 41 c.9 D.Lgs 81/08)</strong><br>
-    Il lavoratore può presentare ricorso avverso il presente giudizio entro il
-    <strong>${fmtDate(g.ricorsoEntro)}</strong> all'Organo di Vigilanza territorialmente competente.
+    Il lavoratore o il datore di lavoro possono presentare ricorso avverso il presente giudizio entro il
+    <strong>${fmtDate(g.ricorsoEntro)}</strong> all'ASL/ATS territorialmente competente.
   </div>` : ''}
 
   <div class="firma-section">
@@ -590,15 +683,108 @@ const GiudizioIdoneitaPdfService = {
     return prisma.giudizioIdoneita.findFirst({
       where: { id: giudizioId, tenantId, deletedAt: null },
       include: {
-        person: { select: { id: true, firstName: true, lastName: true, taxCode: true } },
-        medicoCompetente: { select: { id: true, firstName: true, lastName: true, gender: true } },
-        mansioni: { include: { mansione: { select: { id: true, codice: true, denominazione: true } } } },
+        person: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            taxCode: true,
+            rischiAggiuntivi: {
+              where: { tenantId, deletedAt: null },
+              select: { codiceRischio: true, descrizioneEsposizione: true }
+            },
+            tenantProfiles: {
+              where: { tenantId, deletedAt: null, isActive: true },
+              select: {
+                title: true,
+                reparto: { select: { nome: true, codice: true } },
+                protocolloSanitario: { select: { denominazione: true } }
+              },
+              take: 1
+            }
+          }
+        },
+        medicoCompetente: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            gender: true,
+            tenantProfiles: {
+              where: { tenantId, deletedAt: null, isActive: true },
+              select: { registerCode: true },
+              take: 1
+            }
+          }
+        },
+        mansioni: {
+          include: {
+            mansione: {
+              select: {
+                id: true,
+                codice: true,
+                denominazione: true,
+                rischiAssociati: {
+                  where: { tenantId, deletedAt: null },
+                  select: { codiceRischio: true, descrizioneEsposizione: true }
+                },
+                protocolli: {
+                  where: { tenantId, deletedAt: null, isAttivo: true },
+                  select: { denominazione: true }
+                },
+                protocolliMansione: {
+                  select: {
+                    protocolloSanitario: {
+                      select: { denominazione: true }
+                    }
+                  }
+                },
+                site: {
+                  select: {
+                    siteName: true,
+                    indirizzo: true,
+                    citta: true,
+                    companyTenantProfile: {
+                      select: {
+                        id: true,
+                        company: { select: { ragioneSociale: true } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
         visita: {
           select: {
             id: true,
             dataOra: true,
             tipoVisitaMDL: true,
             datiStrutturati: true,
+            prestazione: { select: { nome: true, codice: true } },
+            scadenzePrestazioni: {
+              where: { tenantId, deletedAt: null },
+              select: {
+                dataScadenza: true,
+                prestazione: { select: { nome: true } }
+              }
+            },
+            appuntamento: {
+              select: {
+                companyTenantProfile: {
+                  select: {
+                    id: true,
+                    company: { select: { ragioneSociale: true } }
+                  }
+                },
+                prestazioni: {
+                  select: {
+                    prestazione: { select: { nome: true, codice: true } }
+                  }
+                }
+              }
+            },
             visitTemplate: {
               select: {
                 id: true,
@@ -625,10 +811,8 @@ const GiudizioIdoneitaPdfService = {
     if (!g) throw new Error(`GiudizioIdoneita ${giudizioId} non trovato`);
 
     const ts = g.tenant?.settings || {};
-    const tenant = { name: g.tenant?.name ?? '', logo: resolveFirstValidLogo(ts.branches?.MEDICA?.logo, ts.branches?.FORMAZIONE?.logo, ts.logoUrl, ts.logo) };
-    const html = destinatario === 'lavoratore'
-      ? buildLavoratoreHtml(g, tenant)
-      : buildDatoreHtml(g, tenant);
+    const tenant = { name: g.tenant?.name ?? '', logo: resolveFirstValidLogo(ts.branches?.MDL?.logo, ts.branches?.MEDICA?.logo, ts.branches?.FORMAZIONE?.logo, ts.logoUrl, ts.logo) };
+    const html = buildLavoratoreHtml(g, tenant);
 
     const buffer = await pdfService.generatePDF(html, {
       format: 'A4',
@@ -638,8 +822,7 @@ const GiudizioIdoneitaPdfService = {
 
     const personName = `${g.person?.lastName ?? 'lavoratore'}_${g.person?.firstName ?? ''}`.replace(/\s+/g, '_');
     const dateStr = new Date(g.dataEmissione).toISOString().slice(0, 10);
-    const tipo = destinatario === 'lavoratore' ? 'copia-lavoratore' : 'datore-lavoro';
-    const filename = `giudizio-idoneita_${tipo}_${personName}_${dateStr}.pdf`;
+    const filename = `giudizio-idoneita_${destinatario}_${personName}_${dateStr}.pdf`;
 
     return { buffer, filename, html };
   },
@@ -660,29 +843,20 @@ const GiudizioIdoneitaPdfService = {
     await fs.mkdir(dir, { recursive: true });
 
     const ts = g.tenant?.settings || {};
-    const tenant = { name: g.tenant?.name ?? '', logo: resolveFirstValidLogo(ts.branches?.MEDICA?.logo, ts.branches?.FORMAZIONE?.logo, ts.logoUrl, ts.logo) };
+    const tenant = { name: g.tenant?.name ?? '', logo: resolveFirstValidLogo(ts.branches?.MDL?.logo, ts.branches?.MEDICA?.logo, ts.branches?.FORMAZIONE?.logo, ts.logoUrl, ts.logo) };
     const dateStr = new Date(g.dataEmissione).toISOString().slice(0, 10);
     const personSlug = `${g.person?.lastName ?? 'lavoratore'}_${g.person?.firstName ?? ''}`.replace(/\s+/g, '_');
 
-    // Genera lavoratore
+    // Genera documento unico: stesso contenuto per lavoratore e datore di lavoro.
     const htmlLav = buildLavoratoreHtml(g, tenant);
     const bufLav = await pdfService.generatePDF(htmlLav, {
       format: 'A4', margin: { top: '15mm', right: '15mm', bottom: '15mm', left: '15mm' }, printBackground: true
     });
-    const lavFilename = `giudizio_lavoratore_${personSlug}_${dateStr}_${g.id.substring(0, 8)}.pdf`;
+    const lavFilename = `giudizio_idoneita_${personSlug}_${dateStr}_${g.id.substring(0, 8)}.pdf`;
     const lavPath = path.join(dir, lavFilename);
     await fs.writeFile(lavPath, bufLav);
     const pdfLavoratoreUrl = `/uploads/giudizi-idoneita/${tenantId}/${lavFilename}`;
-
-    // Genera datore
-    const htmlDat = buildDatoreHtml(g, tenant);
-    const bufDat = await pdfService.generatePDF(htmlDat, {
-      format: 'A4', margin: { top: '15mm', right: '15mm', bottom: '15mm', left: '15mm' }, printBackground: true
-    });
-    const datFilename = `giudizio_datore_${personSlug}_${dateStr}_${g.id.substring(0, 8)}.pdf`;
-    const datPath = path.join(dir, datFilename);
-    await fs.writeFile(datPath, bufDat);
-    const pdfDatoreUrl = `/uploads/giudizi-idoneita/${tenantId}/${datFilename}`;
+    const pdfDatoreUrl = pdfLavoratoreUrl;
 
     // Aggiorna record DB
     await prisma.giudizioIdoneita.update({

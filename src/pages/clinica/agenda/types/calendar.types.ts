@@ -80,6 +80,8 @@ export interface CalendarEvent {
     tipoVisitaMDL?: string | null;
     /** P70: Paziente con anagrafica completa (residenceAddress + residenceCity valorizzati) */
     pazienteAnagraficaCompleta?: boolean;
+    /** Consensi base gia validi per visita MDL prenotata */
+    consensiMdlValidi?: boolean;
     /** Dati originali dell'API */
     raw: Appuntamento | SlotDisponibilita;
 }

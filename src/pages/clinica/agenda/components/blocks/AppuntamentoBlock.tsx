@@ -7,7 +7,7 @@
  * @module pages/clinica/agenda/components/blocks
  */
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import {
     GripVertical,
@@ -26,7 +26,8 @@ import {
     Volume2,
     Hash,
     ChevronDown,
-    Loader2
+    Loader2,
+    Receipt
 } from 'lucide-react';
 
 import { CalendarEvent, DragItem } from '../../types';
@@ -55,6 +56,8 @@ export interface AppuntamentoBlockProps {
     onChiamaEVisita?: () => void;
     /** Handler per visualizzare la visita refertata (COMPLETATO/FATTURATO) */
     onViewVisita?: () => void;
+    /** Handler apertura fatturazione per appuntamento refertato */
+    onFattura?: () => void;
     /** Handler modifica appuntamento (naviga alla pagina modifica) */
     onModifica?: () => void;
     /** Handler cambio stato appuntamento */
@@ -115,6 +118,7 @@ export const AppuntamentoBlock: React.FC<AppuntamentoBlockProps> = ({
     onVisita,
     onChiamaEVisita,
     onViewVisita,
+    onFattura,
     onModifica,
     onUpdateStato,
     onDragStart,
@@ -223,22 +227,18 @@ export const AppuntamentoBlock: React.FC<AppuntamentoBlockProps> = ({
             if (elementRef.current) {
                 const rect = elementRef.current.getBoundingClientRect();
                 const tooltipWidth = 350;
-                const tooltipHeight = 400;
                 const margin = 8;
                 const viewportWidth = window.innerWidth;
-                const viewportHeight = window.innerHeight;
 
                 let x = rect.right + margin;
                 let y = rect.top;
 
-                // Prevent overflow
+                // Prevent horizontal overflow
                 if (x + tooltipWidth > viewportWidth - margin) {
                     x = rect.left - tooltipWidth - margin;
                     if (x < margin) x = margin;
                 }
-                if (y + tooltipHeight > viewportHeight - margin) {
-                    y = Math.max(margin, viewportHeight - tooltipHeight - margin);
-                }
+                // Clamp y to stay within viewport (fine-tuned by useLayoutEffect)
                 if (y < margin) y = margin;
 
                 setTooltipPosition({ x, y });
@@ -322,6 +322,36 @@ export const AppuntamentoBlock: React.FC<AppuntamentoBlockProps> = ({
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [showStatoDropdown]);
 
+    // After tooltip renders, measure actual height and readjust position if it overflows viewport
+    useLayoutEffect(() => {
+        if (!showTooltip || !tooltipRef.current) return;
+
+        const rect = tooltipRef.current.getBoundingClientRect();
+        const viewportHeight = window.innerHeight;
+        const viewportWidth = window.innerWidth;
+        const margin = 10;
+
+        let newX = tooltipPosition.x;
+        let newY = tooltipPosition.y;
+        let needsUpdate = false;
+
+        // If tooltip overflows bottom, push it up so it fits
+        if (rect.bottom > viewportHeight - margin) {
+            newY = Math.max(margin, viewportHeight - rect.height - margin);
+            needsUpdate = true;
+        }
+
+        // If tooltip overflows right of viewport
+        if (rect.right > viewportWidth - margin) {
+            newX = Math.max(margin, viewportWidth - rect.width - margin);
+            needsUpdate = true;
+        }
+
+        if (needsUpdate) {
+            setTooltipPosition({ x: newX, y: newY });
+        }
+    }, [showTooltip, tooltipPosition.x, tooltipPosition.y]);
+
     // Early return after all hooks — safe per Rules of Hooks
     if (isOutsideView) return null;
 
@@ -378,8 +408,8 @@ export const AppuntamentoBlock: React.FC<AppuntamentoBlockProps> = ({
                     style={{
                         left: `${tooltipPosition.x}px`,
                         top: `${tooltipPosition.y}px`,
-                        maxHeight: 'calc(100vh - 20px)',
-                        overflow: 'auto',
+                        maxHeight: 'none',
+                        overflow: 'visible',
                         zIndex: 65
                     }}
                     onClick={(e) => e.stopPropagation()}
@@ -674,10 +704,10 @@ export const AppuntamentoBlock: React.FC<AppuntamentoBlockProps> = ({
                                     }}
                                     onMouseDown={(e) => e.stopPropagation()}
                                     className="w-full text-xs py-2.5 px-3 rounded-lg flex items-center justify-center gap-2 transition-colors font-medium shadow-sm bg-teal-700 hover:bg-teal-800 text-white"
-                                    title="Accetta il paziente e apri direttamente la visita medica del lavoro"
+                                    title={event.consensiMdlValidi ? 'Apri la visita del paziente' : 'Accetta il paziente e apri direttamente la visita medica del lavoro'}
                                 >
                                     <Stethoscope className="h-4 w-4" />
-                                    Accetta e Visita
+                                    {event.consensiMdlValidi ? 'Visita Paziente' : 'Accetta e Visita'}
                                 </button>
                             )}
                             {/* Secondary actions row */}
@@ -731,6 +761,21 @@ export const AppuntamentoBlock: React.FC<AppuntamentoBlockProps> = ({
                                     >
                                         <Eye className="h-3.5 w-3.5" />
                                         Visualizza visita
+                                    </button>
+                                )}
+                                {['COMPLETATO', 'FATTURATO'].includes(event.stato || '') && onFattura && (
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            e.preventDefault();
+                                            setShowTooltip(false);
+                                            onFattura();
+                                        }}
+                                        onMouseDown={(e) => e.stopPropagation()}
+                                        className="flex-1 text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 py-2 px-3 rounded flex items-center justify-center gap-1.5 transition-colors"
+                                    >
+                                        <Receipt className="h-3.5 w-3.5" />
+                                        Fattura
                                     </button>
                                 )}
                                 {onDelete && (

@@ -3,7 +3,7 @@
  * @module pages/clinica/agenda/disponibilita/components/MedicoDetail
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
     ArrowLeft,
     User,
@@ -30,6 +30,7 @@ import type {
 } from '../types';
 import { GIORNI_SETTIMANA, MOTIVI_ASSENZA } from '../types';
 import { DatePickerElegante } from '../../../../../components/ui/DatePickerElegante';
+import { TimePickerElegante } from '../../../../../components/ui/TimePickerElegante';
 
 /** Data for creating a weekly slot pattern */
 interface CreateSlotData {
@@ -102,6 +103,7 @@ export const MedicoDetail: React.FC<MedicoDetailProps> = ({
     const [editingSlotId, setEditingSlotId] = useState<string | null>(null);
     const [showSingleSlotForm, setShowSingleSlotForm] = useState(false);
     const [showFerieForm, setShowFerieForm] = useState(false);
+    const [showUpdateConfirm, setShowUpdateConfirm] = useState(false);
 
     const firstName = medico.firstName || medico.nome || '';
     const lastName = medico.lastName || medico.cognome || '';
@@ -133,17 +135,36 @@ export const MedicoDetail: React.FC<MedicoDetailProps> = ({
         note: ''
     });
 
-    // Generate slots state — default date range: today → 3 months from now
-    const defaultDataFine = (() => {
-        const d = new Date();
+    // Generate slots state — smart default: start after latest existing slot, or today
+    const smartStartDate = useMemo(() => {
+        const today = new Date().toISOString().split('T')[0];
+        if (!slots || slots.length === 0) return today;
+        const dates = slots.map(s => s.data).filter(Boolean).sort();
+        const latest = dates[dates.length - 1];
+        if (!latest) return today;
+        // Use day after latest slot, or today if latest is in the past
+        const nextDay = new Date(latest);
+        nextDay.setDate(nextDay.getDate() + 1);
+        const nextDayStr = nextDay.toISOString().split('T')[0];
+        return nextDayStr > today ? nextDayStr : today;
+    }, [slots]);
+    const defaultDataFine = useMemo(() => {
+        const d = new Date(smartStartDate);
         d.setMonth(d.getMonth() + 3);
         return d.toISOString().split('T')[0];
-    })();
+    }, [smartStartDate]);
     const [showGenerateForm, setShowGenerateForm] = useState(false);
     const [generateForm, setGenerateForm] = useState({
-        dataInizio: new Date().toISOString().split('T')[0],
+        dataInizio: smartStartDate,
         dataFine: defaultDataFine
     });
+    // Sync generateForm defaults when smartStartDate changes
+    useEffect(() => {
+        setGenerateForm(prev => ({
+            dataInizio: prev.dataInizio === new Date().toISOString().split('T')[0] ? smartStartDate : prev.dataInizio,
+            dataFine: prev.dataFine
+        }));
+    }, [smartStartDate]);
     const [generateResult, setGenerateResult] = useState<{ created: number; skipped: number; errors: number; details: string[] } | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
 
@@ -189,11 +210,18 @@ export const MedicoDetail: React.FC<MedicoDetailProps> = ({
         setShowSlotForm(true);
     }, []);
 
-    // Update slot handler
+    // Update slot handler — mostra conferma prima di procedere
     const handleUpdateSlot = useCallback(async () => {
         if (!editingSlotId || !onUpdateSlot) return;
         if (slotForm.oraFine <= slotForm.oraInizio) return;
         if (!slotForm.ambulatorioId) return;
+        setShowUpdateConfirm(true);
+    }, [editingSlotId, slotForm, onUpdateSlot]);
+
+    // Conferma aggiornamento disponibilità
+    const confirmUpdateSlot = useCallback(async () => {
+        if (!editingSlotId || !onUpdateSlot) return;
+        setShowUpdateConfirm(false);
         await onUpdateSlot(editingSlotId, {
             medicoId: medico.id,
             giorno: slotForm.giorno,
@@ -280,6 +308,40 @@ export const MedicoDetail: React.FC<MedicoDetailProps> = ({
 
     return (
         <div className="space-y-6">
+            {/* Conferma aggiornamento disponibilità */}
+            {showUpdateConfirm && (
+                <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40">
+                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-6 max-w-md mx-4 space-y-4">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                                <AlertTriangle className="h-5 w-5 text-amber-600" />
+                            </div>
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-50">Conferma modifica</h3>
+                        </div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                            La modifica del pattern settimanale rigenererà automaticamente tutti gli slot futuri non ancora prenotati.
+                            Gli slot con appuntamenti esistenti non verranno toccati.
+                        </p>
+                        <div className="flex gap-3 justify-end">
+                            <button
+                                type="button"
+                                onClick={() => setShowUpdateConfirm(false)}
+                                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
+                            >
+                                Annulla
+                            </button>
+                            <button
+                                type="button"
+                                onClick={confirmUpdateSlot}
+                                className="px-4 py-2 text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 rounded-lg transition-colors"
+                            >
+                                Conferma e rigenera
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Header */}
             <div className="flex items-start gap-4">
                 <button
@@ -463,10 +525,21 @@ export const MedicoDetail: React.FC<MedicoDetailProps> = ({
                                             </div>
 
                                             <div className="flex items-center justify-between">
-                                                <p className="text-xs text-gray-500">
-                                                    Verranno creati slot solo per i giorni con orari configurati. I periodi di ferie saranno esclusi.
-                                                    Slot già esistenti non verranno duplicati.
-                                                </p>
+                                                <div className="text-xs text-gray-500 space-y-0.5">
+                                                    <p>Verranno creati slot solo per i giorni con orari configurati. I periodi di ferie saranno esclusi.
+                                                        Slot già esistenti non verranno duplicati.</p>
+                                                    {disponibilita.filter(d => d.attivo).map(d => {
+                                                        const giorni = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
+                                                        const dal = d.validoDal ? new Date(d.validoDal).toLocaleDateString('it-IT') : '—';
+                                                        const al = d.validoAl ? new Date(d.validoAl).toLocaleDateString('it-IT') : '∞';
+                                                        return (
+                                                            <p key={d.id} className="text-gray-400">
+                                                                {giorni[d.giorno]} {d.oraInizio}–{d.oraFine} • Valido: {dal} → {al}
+                                                                {!d.ambulatorioId && <span className="text-amber-500 ml-1">(⚠ ambulatorio mancante)</span>}
+                                                            </p>
+                                                        );
+                                                    })}
+                                                </div>
                                                 <button
                                                     onClick={handleGenerateSlots}
                                                     disabled={isGenerating || !generateForm.dataInizio || !generateForm.dataFine}
@@ -635,20 +708,21 @@ export const MedicoDetail: React.FC<MedicoDetailProps> = ({
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Ora Inizio</label>
-                                    <input
-                                        type="time"
+                                    <TimePickerElegante
                                         value={slotForm.oraInizio}
-                                        onChange={(e) => setSlotForm({ ...slotForm, oraInizio: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                        onChange={(value) => setSlotForm({ ...slotForm, oraInizio: value })}
+                                        minuteStep={5}
+                                        placeholder="Ora inizio"
                                     />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Ora Fine</label>
-                                    <input
-                                        type="time"
+                                    <TimePickerElegante
                                         value={slotForm.oraFine}
-                                        onChange={(e) => setSlotForm({ ...slotForm, oraFine: e.target.value })}
-                                        className={`w-full px-3 py-2 border rounded-lg ${slotForm.oraFine <= slotForm.oraInizio ? 'border-red-300 bg-red-50' : 'border-gray-300'}`}
+                                        onChange={(value) => setSlotForm({ ...slotForm, oraFine: value })}
+                                        minuteStep={5}
+                                        placeholder="Ora fine"
+                                        className={slotForm.oraFine <= slotForm.oraInizio ? 'rounded-xl ring-2 ring-red-100' : undefined}
                                     />
                                     {slotForm.oraFine <= slotForm.oraInizio && (
                                         <p className="text-xs text-red-500 mt-1">L'ora fine deve essere successiva all'ora inizio</p>
@@ -767,20 +841,20 @@ export const MedicoDetail: React.FC<MedicoDetailProps> = ({
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Ora Inizio</label>
-                                    <input
-                                        type="time"
+                                    <TimePickerElegante
                                         value={singleSlotForm.oraInizio}
-                                        onChange={(e) => setSingleSlotForm({ ...singleSlotForm, oraInizio: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                        onChange={(value) => setSingleSlotForm({ ...singleSlotForm, oraInizio: value })}
+                                        minuteStep={5}
+                                        placeholder="Ora inizio"
                                     />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Ora Fine</label>
-                                    <input
-                                        type="time"
+                                    <TimePickerElegante
                                         value={singleSlotForm.oraFine}
-                                        onChange={(e) => setSingleSlotForm({ ...singleSlotForm, oraFine: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                        onChange={(value) => setSingleSlotForm({ ...singleSlotForm, oraFine: value })}
+                                        minuteStep={5}
+                                        placeholder="Ora fine"
                                     />
                                 </div>
                             </div>

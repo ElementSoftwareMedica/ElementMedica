@@ -20,6 +20,7 @@ interface ContactFormProps {
   showPhoneField?: boolean;
   showSubjectField?: boolean;
   subjects?: Array<{ value: string; label: string }>;
+  defaultSubject?: string;
   onSubmit?: (data: ContactFormData) => void;
   className?: string;
 }
@@ -42,6 +43,7 @@ export const ContactForm: React.FC<ContactFormProps> = ({
     { value: 'medico-lavoro', label: 'Medico del lavoro' },
     { value: 'altro', label: 'Altro' }
   ],
+  defaultSubject = '',
   onSubmit,
   className = ''
 }) => {
@@ -50,7 +52,7 @@ export const ContactForm: React.FC<ContactFormProps> = ({
     email: '',
     phone: '',
     company: '',
-    subject: '',
+    subject: defaultSubject,
     message: '',
     privacyAccepted: false,
     marketingAccepted: false

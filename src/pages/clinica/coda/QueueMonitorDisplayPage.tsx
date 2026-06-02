@@ -36,6 +36,7 @@ import queueApi, { QueueCall, DisplayMonitor } from '@/services/queueApi';
 interface CurrentCallDisplayProps {
     call: QueueCall | null;
     isNew: boolean;
+    waitingCount: number;
 }
 
 interface RecentCallsListProps {
@@ -57,15 +58,34 @@ interface HeaderInfoProps {
 /**
  * Large current call display with animation
  */
-const CurrentCallDisplay: React.FC<CurrentCallDisplayProps> = ({ call, isNew }) => {
+const CurrentCallDisplay: React.FC<CurrentCallDisplayProps> = ({ call, isNew, waitingCount }) => {
     if (!call) {
         return (
-            <div className="flex-1 flex items-center justify-center">
-                <div className="text-center">
-                    <div className="text-4xl text-gray-400 mb-4">
-                        <Clock className="w-24 h-24 mx-auto opacity-50" />
+            <div className="flex-1 flex items-center justify-center px-10">
+                <div className="relative w-full max-w-4xl overflow-hidden rounded-[2rem] border border-white/70 bg-white/85 p-12 text-center shadow-2xl">
+                    <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-teal-500 via-cyan-400 to-sky-500" />
+                    <div className="mx-auto mb-8 flex h-28 w-28 items-center justify-center rounded-full bg-teal-50 ring-8 ring-teal-500/10">
+                        <Monitor className="h-14 w-14 text-teal-600" />
                     </div>
-                    <p className="text-2xl text-gray-500">In attesa della prossima chiamata...</p>
+                    <p className="text-sm font-semibold uppercase tracking-[0.28em] text-teal-700">
+                        Monitor attivo
+                    </p>
+                    <h2 className="mt-3 text-5xl font-black tracking-tight text-slate-900">
+                        Nessuna chiamata in corso
+                    </h2>
+                    <p className="mx-auto mt-5 max-w-2xl text-2xl leading-relaxed text-slate-500">
+                        Restate in attesa: il prossimo numero comparira qui appena chiamato.
+                    </p>
+                    <div className="mt-10 grid grid-cols-2 gap-4">
+                        <div className="rounded-2xl border border-slate-100 bg-slate-50 px-6 py-5">
+                            <p className="text-sm font-semibold uppercase text-slate-400">Pazienti in attesa</p>
+                            <p className="mt-2 text-5xl font-black text-teal-600">{waitingCount}</p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-100 bg-slate-50 px-6 py-5">
+                            <p className="text-sm font-semibold uppercase text-slate-400">Stato display</p>
+                            <p className="mt-3 text-2xl font-bold text-slate-700">Pronto</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         );
@@ -90,13 +110,6 @@ const CurrentCallDisplay: React.FC<CurrentCallDisplayProps> = ({ call, isNew }) 
                     </span>
                 </div>
             </div>
-
-            {/* Custom message */}
-            {call.displayedMessage && (
-                <div className="mt-8 text-3xl text-gray-700 font-medium">
-                    {call.displayedMessage}
-                </div>
-            )}
 
             {/* Instruction */}
             <div className="mt-8 text-2xl text-gray-500">
@@ -162,6 +175,12 @@ const HeaderInfo: React.FC<HeaderInfoProps> = ({ monitorName, ambulatoriNames, w
     return (
         <div className="bg-gray-900 text-white px-6 py-4 flex items-center justify-between">
             <div className="flex items-center gap-4">
+                <img
+                    src="/assets/logos/element-medica-logo-white.png"
+                    alt="Element Medica"
+                    className="h-10 w-auto max-w-[190px] object-contain"
+                />
+                <div className="h-10 w-px bg-white/15" />
                 <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
                 <div>
                     <h1 className="text-xl font-semibold">{monitorName}</h1>
@@ -406,7 +425,7 @@ const QueueMonitorDisplayPage: React.FC = () => {
             {/* Main content */}
             <div className="flex-1 flex">
                 {/* Current call display */}
-                <CurrentCallDisplay call={currentCall} isNew={isNewCall} />
+                <CurrentCallDisplay call={currentCall} isNew={isNewCall} waitingCount={waitingCount} />
 
                 {/* Recent calls sidebar */}
                 <RecentCallsList calls={recentCalls} showRecentCalls={showRecentCalls} />
@@ -441,7 +460,7 @@ const QueueMonitorDisplayPage: React.FC = () => {
                 <div className="bg-gray-800 text-white py-2 overflow-hidden">
                     <div className="animate-marquee whitespace-nowrap">
                         <span className="mx-8">
-                            🏥 {marqueeText || `Benvenuti • ${waitingCount} pazienti in attesa • Vi invitiamo ad attendere il vostro numero • Grazie per la vostra pazienza`}
+                            {marqueeText || `Benvenuti • ${waitingCount} pazienti in attesa • Vi invitiamo ad attendere il vostro numero • Grazie per la vostra pazienza`}
                         </span>
                     </div>
                 </div>

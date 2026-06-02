@@ -37,6 +37,7 @@ import { apiGet, apiPut, apiPost, apiDelete } from '../../../services/api';
 import { useTenantMode } from '../../../contexts/TenantModeContext';
 import { CRUDButton, CRUDPrimaryButton } from '../../../components/shared/CRUDButton';
 import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
+import { useAuth } from '../../../hooks/auth/useAuth';
 
 // Types
 interface UserData {
@@ -119,7 +120,11 @@ const GLOBAL_ROLES = [
 const UserDetailPage: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
+    const { user: currentUser } = useAuth();
     const { canPerformCRUD, getOperateHeaders } = useTenantMode();
+    const isGlobalAdmin = currentUser?.globalRole === 'ADMIN' || currentUser?.globalRole === 'SUPER_ADMIN' ||
+        (currentUser?.roles as string[] | undefined)?.includes('ADMIN') ||
+        (currentUser?.roles as string[] | undefined)?.includes('SUPER_ADMIN');
     const operateHeaders = getOperateHeaders();
     const { confirm: confirmDialog } = useConfirmDialog();
 
@@ -164,8 +169,11 @@ const UserDetailPage: React.FC = () => {
     // Load tenants and roles
     const loadOptions = useCallback(async () => {
         try {
+            const tenantsPromise = isGlobalAdmin
+                ? apiGet<{ success: boolean; data: Tenant[] }>('/api/v1/tenants')
+                : Promise.resolve({ success: true, data: [] as Tenant[] });
             const [tenantsRes, rolesRes] = await Promise.allSettled([
-                apiGet<{ success: boolean; data: Tenant[] }>('/api/v1/tenants'),
+                tenantsPromise,
                 apiGet<{ success: boolean; data: { data: Role[] } }>('/api/v1/roles')
             ]);
 
@@ -178,7 +186,7 @@ const UserDetailPage: React.FC = () => {
             }
         } catch (err) {
         }
-    }, []);
+    }, [isGlobalAdmin]);
 
     useEffect(() => {
         loadUser();

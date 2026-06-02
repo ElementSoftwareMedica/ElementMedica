@@ -12,6 +12,7 @@ export { NotificationPreferences } from './NotificationPreferences';
 export { default as NotificationGroups } from './NotificationGroups';
 export { default as EscalationDashboard } from './EscalationDashboard';
 export { default as AnalyticsDashboard } from './AnalyticsDashboard';
+export { default as AnnouncementComposerPage } from './AnnouncementComposerPage';
 
 // Modals
 export { default as GroupFormModal } from './GroupFormModal';

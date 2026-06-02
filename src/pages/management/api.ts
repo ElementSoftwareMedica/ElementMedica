@@ -6,7 +6,7 @@
  * to ensure proper request interceptor handling and avoid 'toUpperCase' errors.
  */
 
-import { apiGet, apiPost, apiPut, apiDelete } from '../../services/api';
+import { apiGet, apiPost, apiPut, apiDelete, apiPatch } from '../../services/api';
 import type {
     AccessibleTenantsResponse,
     PersonTenantAccess,
@@ -16,6 +16,8 @@ import type {
     TenantAccessLevel,
     Tenant,
     TenantFeatureRecord,
+    FeatureCatalogResponse,
+    FeatureSubscription,
 } from './types';
 
 const BASE_URL = '/api/v1/person-tenant-access';
@@ -417,9 +419,78 @@ export const managementApi = {
     }): Promise<{ success: boolean; data: TenantFeatureRecord }> {
         return apiPut<{ success: boolean; data: TenantFeatureRecord }>(`${TENANTS_URL}/${tenantId}/features/${featureKey}`, data);
     },
+
+    /**
+     * Abilita/disabilita multiple feature per un tenant in una sola chiamata
+     */
+    async bulkSetTenantFeatures(tenantId: string, features: {
+        featureKey: string;
+        isEnabled: boolean;
+        tier?: string;
+        config?: Record<string, unknown>;
+        usageLimit?: number | null;
+        validUntil?: string | null;
+        notes?: string;
+    }[]): Promise<{ success: boolean; data: TenantFeatureRecord[] }> {
+        return apiPut<{ success: boolean; data: TenantFeatureRecord[] }>(`${TENANTS_URL}/${tenantId}/features/bulk`, { features });
+    },
+
+    // =============================================
+    // FEATURE CATALOG API
+    // =============================================
+
+    /**
+     * Ottiene il catalogo completo delle funzionalità con prezzi
+     */
+    async getFeatureCatalog(): Promise<FeatureCatalogResponse> {
+        return apiGet<FeatureCatalogResponse>('/api/v1/feature-catalog');
+    },
+
+    /**
+     * Aggiorna i prezzi delle funzionalità (solo SUPER_ADMIN)
+     */
+    async updateFeaturePricing(updates: Record<string, {
+        price?: number;
+        priceYearly?: number;
+        currency?: string;
+        billingCycle?: string;
+        note?: string;
+        tiers?: import('./types').PricingTier[];
+    }>): Promise<{ success: boolean; message: string }> {
+        return apiPut<{ success: boolean; message: string }>('/api/v1/feature-catalog', { updates });
+    },
+
+    /**
+     * TENANT_ADMIN richiede l'attivazione di una funzionalità con ciclo di fatturazione
+     */
+    async requestFeatureActivation(featureKey: string, billingCycle: 'monthly' | 'yearly'): Promise<{ success: boolean; data: TenantFeatureRecord; message: string }> {
+        return apiPost<{ success: boolean; data: TenantFeatureRecord; message: string }>('/api/v1/feature-catalog/subscribe', { featureKey, billingCycle });
+    },
+
+    /**
+     * ADMIN/SUPER_ADMIN: lista sottoscrizioni (tutti o filtrando per status)
+     */
+    async getFeatureSubscriptions(status?: 'pending' | 'active' | 'rejected'): Promise<{ success: boolean; data: FeatureSubscription[] }> {
+        const url = status ? `/api/v1/feature-catalog/subscriptions?status=${status}` : '/api/v1/feature-catalog/subscriptions';
+        return apiGet<{ success: boolean; data: FeatureSubscription[] }>(url);
+    },
+
+    /**
+     * ADMIN/SUPER_ADMIN: approva una sottoscrizione
+     */
+    async approveFeatureSubscription(id: string): Promise<{ success: boolean; data: TenantFeatureRecord; message: string }> {
+        return apiPatch<{ success: boolean; data: TenantFeatureRecord; message: string }>(`/api/v1/feature-catalog/subscriptions/${id}/approve`, {});
+    },
+
+    /**
+     * ADMIN/SUPER_ADMIN: rifiuta una sottoscrizione
+     */
+    async rejectFeatureSubscription(id: string): Promise<{ success: boolean; data: TenantFeatureRecord; message: string }> {
+        return apiPatch<{ success: boolean; data: TenantFeatureRecord; message: string }>(`/api/v1/feature-catalog/subscriptions/${id}/reject`, {});
+    },
 };
 
 // Re-export types
-export type { Tenant, PersonTenantAccess, TenantAccessLevel, Feature, TenantFeatureRecord } from './types';
+export type { Tenant, PersonTenantAccess, TenantAccessLevel, Feature, TenantFeatureRecord, FeatureCatalogEntry, FeatureCategoryDef, FeaturePricing, PricingTier, FeatureSubscription } from './types';
 
 export default managementApi;

@@ -559,6 +559,14 @@ const SortableCampoItem: React.FC<SortableCampoItemProps> = ({
                                         <option key={idx} value={getOptionValue(opt)}>{getOptionLabel(opt)}</option>
                                     ))}
                                 </select>
+                            ) : campo.type === 'textarea' ? (
+                                <textarea
+                                    value={campo.defaultValue || ''}
+                                    onChange={(e) => onUpdate({ defaultValue: e.target.value || undefined })}
+                                    rows={8}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 resize-y"
+                                    placeholder="Testo mostrato al paziente"
+                                />
                             ) : (
                                 <input
                                     type={campo.type === 'number' ? 'number' : campo.type === 'date' ? 'date' : 'text'}

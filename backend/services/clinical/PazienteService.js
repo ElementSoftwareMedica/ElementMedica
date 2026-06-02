@@ -13,6 +13,45 @@ import logger from '../../utils/logger.js';
 import crypto from 'crypto';
 import { generateNameVariants } from '../../utils/nameNormalization.js';
 
+function buildPatientPreferences(existingPreferences, data) {
+    const current = existingPreferences && typeof existingPreferences === 'object' && !Array.isArray(existingPreferences)
+        ? existingPreferences
+        : {};
+    const patient = current.patientAcceptance && typeof current.patientAcceptance === 'object'
+        ? current.patientAcceptance
+        : {};
+    const nextPatient = { ...patient };
+
+    if (data.tipoCi !== undefined) nextPatient.tipoDocumentoIdentita = data.tipoCi || null;
+    if (data.altroDocumento !== undefined) nextPatient.altroDocumento = data.altroDocumento || null;
+    if (data.isMinore !== undefined) nextPatient.isMinore = !!data.isMinore;
+    if (data.isNonAutonomo !== undefined) nextPatient.isNonAutonomo = !!data.isNonAutonomo;
+
+    return {
+        ...current,
+        patientAcceptance: nextPatient,
+    };
+}
+
+function flattenPatientProfile(person, profile = {}) {
+    const patientAcceptance = profile.preferences?.patientAcceptance || {};
+    return {
+        ...person,
+        email: profile.email || null,
+        phone: profile.phone || null,
+        status: profile.status || 'PENDING',
+        residenceAddress: profile.residenceAddress || null,
+        residenceCity: profile.residenceCity || null,
+        postalCode: profile.postalCode || null,
+        province: profile.province || null,
+        numeroCi: person.numeroCartaIdentita || null,
+        tipoCi: patientAcceptance.tipoDocumentoIdentita || null,
+        altroDocumento: patientAcceptance.altroDocumento || null,
+        isMinore: !!patientAcceptance.isMinore,
+        isNonAutonomo: !!patientAcceptance.isNonAutonomo,
+    };
+}
+
 class PazienteService {
     /**
      * Cerca o crea un paziente
@@ -190,6 +229,9 @@ class PazienteService {
                 if (data.birthProvince) {
                     personUpdates.birthProvince = data.birthProvince;
                 }
+                if (data.numeroCi !== undefined) {
+                    personUpdates.numeroCartaIdentita = data.numeroCi ? data.numeroCi.toUpperCase() : null;
+                }
 
                 if (Object.keys(personUpdates).length > 0) {
                     await prisma.person.update({
@@ -224,6 +266,14 @@ class PazienteService {
                     if (profileData.postalCode) profileUpdates.postalCode = profileData.postalCode;
                     if (profileData.province) profileUpdates.province = profileData.province;
                     if (profileData.email) profileUpdates.email = profileData.email;
+                    if (
+                        data.tipoCi !== undefined ||
+                        data.altroDocumento !== undefined ||
+                        data.isMinore !== undefined ||
+                        data.isNonAutonomo !== undefined
+                    ) {
+                        profileUpdates.preferences = buildPatientPreferences(tenantProfile.preferences, data);
+                    }
 
                     if (Object.keys(profileUpdates).length > 0) {
                         await prisma.personTenantProfile.update({
@@ -252,6 +302,7 @@ class PazienteService {
                             residenceCity: profileData.residenceCity || null,
                             postalCode: profileData.postalCode || null,
                             province: profileData.province || null,
+                            preferences: buildPatientPreferences({}, data),
                             status: 'ACTIVE',
                             isPrimary: false, // Non primario se persona esiste già
                             isActive: true
@@ -277,16 +328,7 @@ class PazienteService {
                 const primaryProfile = updatedPerson.tenantProfiles?.find(p => p.isPrimary) || updatedPerson.tenantProfiles?.[0] || {};
 
                 return {
-                    person: {
-                        ...updatedPerson,
-                        email: primaryProfile.email || null,
-                        phone: primaryProfile.phone || null,
-                        residenceAddress: primaryProfile.residenceAddress || null,
-                        residenceCity: primaryProfile.residenceCity || null,
-                        postalCode: primaryProfile.postalCode || null,
-                        province: primaryProfile.province || null,
-                        status: primaryProfile.status || 'PENDING'
-                    },
+                    person: flattenPatientProfile(updatedPerson, primaryProfile),
                     isNew: false,
                     wasLinked: !hasPazienteRole
                 };
@@ -304,6 +346,7 @@ class PazienteService {
                     gender: data.gender || null,
                     birthPlace: data.birthPlace || null,
                     birthProvince: data.birthProvince || null,
+                    numeroCartaIdentita: data.numeroCi ? data.numeroCi.toUpperCase() : null,
                     // Se fornita email, genera password temporanea
                     password: email ? await this.generateTemporaryPassword() : null,
                     mustChangePassword: !!email, // Forzare cambio password al primo accesso
@@ -319,7 +362,8 @@ class PazienteService {
                             residenceAddress: data.residenceAddress || null,
                             residenceCity: data.residenceCity || null,
                             postalCode: data.postalCode || null,
-                            province: data.province || null
+                            province: data.province || null,
+                            preferences: buildPatientPreferences({}, data)
                         }
                     },
                     personRoles: {
@@ -515,7 +559,13 @@ class PazienteService {
         }
 
         // P48: Include tenantProfiles per ottenere email/phone/status
-        const [total, pazientiRaw] = await Promise.all([
+        const tenantRoleFilter = tenantIdsToFilter.length === 1
+            ? { tenantId: tenantIdsToFilter[0] }
+            : tenantIdsToFilter.length > 1
+                ? { tenantId: { in: tenantIdsToFilter } }
+                : { tenantId };
+
+        const [total, pazientiRaw, totalConVisite, totalConContatto] = await Promise.all([
             prisma.person.count({ where }),
             prisma.person.findMany({
                 where,
@@ -553,22 +603,40 @@ class PazienteService {
                 orderBy: { [sortBy]: sortOrder },
                 skip,
                 take: pageSize
-            })
+            }),
+            prisma.person.count({
+                where: {
+                    ...where,
+                    visiteComePaziente: {
+                        some: {
+                            deletedAt: null,
+                            ...tenantRoleFilter,
+                        }
+                    }
+                }
+            }),
+            prisma.person.count({
+                where: {
+                    ...where,
+                    tenantProfiles: {
+                        some: {
+                            deletedAt: null,
+                            isActive: true,
+                            ...tenantRoleFilter,
+                            OR: [
+                                { email: { not: null } },
+                                { phone: { not: null } },
+                            ],
+                        },
+                    },
+                },
+            }),
         ]);
 
         // P48: Flatten tenantProfiles per backward compatibility
         const pazienti = pazientiRaw.map(p => {
             const profile = p.tenantProfiles?.[0] || {};
-            return {
-                ...p,
-                email: profile.email || null,
-                phone: profile.phone || null,
-                status: profile.status || 'PENDING',
-                residenceAddress: profile.residenceAddress || null,
-                residenceCity: profile.residenceCity || null,
-                postalCode: profile.postalCode || null,
-                province: profile.province || null
-            };
+            return flattenPatientProfile(p, profile);
         });
 
         return {
@@ -580,6 +648,11 @@ class PazienteService {
                 totalPages: Math.ceil(total / pageSize),
                 hasNext: skip + pazienti.length < total,
                 hasPrev: page > 1
+            },
+            stats: {
+                total,
+                conVisite: totalConVisite,
+                conContatto: totalConContatto
             }
         };
     }
@@ -613,6 +686,25 @@ class PazienteService {
                         select: { id: true, titolo: true, stato: true }
                     }
                 }
+            },
+            tutelanti: {
+                where: { tenantId, deletedAt: null },
+                include: {
+                    tutelante: {
+                        select: {
+                            id: true,
+                            firstName: true,
+                            lastName: true,
+                            taxCode: true,
+                            birthDate: true,
+                            tenantProfiles: {
+                                where: { tenantId, deletedAt: null },
+                                select: { email: true, phone: true },
+                                take: 1,
+                            },
+                        },
+                    },
+                },
             }
             // fattureSanitarie rimosso (legacy P97 - usare /api/v1/billing/fatture)
         };
@@ -685,16 +777,7 @@ class PazienteService {
 
         // P48: Flatten tenantProfiles per backward compatibility
         const profile = personRaw.tenantProfiles?.[0] || {};
-        const person = {
-            ...personRaw,
-            email: profile.email || null,
-            phone: profile.phone || null,
-            status: profile.status || 'PENDING',
-            residenceAddress: profile.residenceAddress || null,
-            residenceCity: profile.residenceCity || null,
-            postalCode: profile.postalCode || null,
-            province: profile.province || null
-        };
+        const person = flattenPatientProfile(personRaw, profile);
 
         return person;
     }
@@ -763,6 +846,9 @@ class PazienteService {
         if (data.lastName !== undefined) personData.lastName = data.lastName;
         if (data.taxCode !== undefined) personData.taxCode = data.taxCode ? data.taxCode.toUpperCase() : null;
         if (data.birthDate !== undefined) personData.birthDate = data.birthDate ? new Date(data.birthDate) : null;
+        if (data.gender !== undefined) personData.gender = data.gender || null;
+        if (data.etnia !== undefined) personData.etnia = data.etnia || null;
+        if (data.numeroCi !== undefined) personData.numeroCartaIdentita = data.numeroCi ? data.numeroCi.toUpperCase() : null;
 
         // Dati tenant-specifici su PersonTenantProfile
         if (data.email !== undefined) profileData.email = data.email ? data.email.toLowerCase() : null;
@@ -771,6 +857,14 @@ class PazienteService {
         if (data.residenceCity !== undefined) profileData.residenceCity = data.residenceCity || null;
         if (data.postalCode !== undefined) profileData.postalCode = data.postalCode || null;
         if (data.province !== undefined) profileData.province = data.province || null;
+        if (
+            data.tipoCi !== undefined ||
+            data.altroDocumento !== undefined ||
+            data.isMinore !== undefined ||
+            data.isNonAutonomo !== undefined
+        ) {
+            profileData.preferences = buildPatientPreferences(existing.tenantProfiles?.[0]?.preferences, data);
+        }
 
         // Aggiorna Person
         if (Object.keys(personData).length > 0) {
@@ -813,6 +907,71 @@ class PazienteService {
         });
 
         return updated;
+    }
+
+    async addOrUpdateGuardian(pazienteId, guardianData, tenantId, createdBy = null) {
+        const paziente = await prisma.person.findFirst({
+            where: {
+                id: pazienteId,
+                deletedAt: null,
+                personRoles: {
+                    some: { roleType: 'PAZIENTE', tenantId, isActive: true, deletedAt: null },
+                },
+            },
+            select: { id: true },
+        });
+        if (!paziente) throw new Error('Paziente non trovato');
+
+        let tutelanteId = guardianData.tutelanteId || guardianData.guardianId || null;
+        if (!tutelanteId) {
+            const result = await this.findOrCreatePaziente({
+                firstName: guardianData.firstName || guardianData.nome,
+                lastName: guardianData.lastName || guardianData.cognome,
+                taxCode: guardianData.taxCode || guardianData.codiceFiscale,
+                phone: guardianData.phone || guardianData.telefono || null,
+                email: guardianData.email || null,
+            }, tenantId, createdBy);
+            tutelanteId = result.person.id;
+        }
+
+        if (!tutelanteId) throw new Error('Tutelante non valido');
+        if (tutelanteId === pazienteId) throw new Error('Il tutelante non può coincidere con il paziente');
+
+        const relazione = guardianData.relazione || guardianData.tutelareTipo || 'TUTORE_LEGALE';
+        const isLegalGuardian = !!guardianData.isLegalGuardian || ['GENITORE', 'TUTORE_LEGALE', 'CURATORE'].includes(relazione);
+
+        const relation = await prisma.patientGuardian.upsert({
+            where: {
+                tenantId_pazienteId_tutelanteId_relazione: {
+                    tenantId,
+                    pazienteId,
+                    tutelanteId,
+                    relazione,
+                },
+            },
+            create: {
+                tenantId,
+                pazienteId,
+                tutelanteId,
+                relazione,
+                isLegalGuardian,
+                note: guardianData.note || null,
+                createdBy,
+            },
+            update: {
+                deletedAt: null,
+                isLegalGuardian,
+                note: guardianData.note || null,
+                validTo: guardianData.validTo ? new Date(guardianData.validTo) : null,
+            },
+            include: {
+                tutelante: {
+                    select: { id: true, firstName: true, lastName: true, taxCode: true },
+                },
+            },
+        });
+
+        return relation;
     }
 
     /**
@@ -1071,20 +1230,28 @@ class PazienteService {
                 periodicitaMesi: true,
                 visitaId: true,
                 appuntamentoId: true,
+                isPrimaVisita: true,
                 appuntamento: {
                     select: { dataOra: true, stato: true, tipoVisitaMDL: true }
                 }
             },
             orderBy: [
+                // Preferisci scadenze di rinnovo (isPrimaVisita=false) rispetto a quelle iniziali
+                { isPrimaVisita: 'asc' },
                 // Scadenze con visitaId impostato (aggiornate esplicitamente dal MC) hanno priorità
                 { visitaId: { sort: 'asc', nulls: 'last' } },
                 // A parità, la più prossima nel tempo
                 { dataScadenza: 'asc' }
             ],
-            take: 1
+            take: 5
         });
 
-        const prossima = prossimeScadenze[0] ?? null;
+        // Preferisci la scadenza di rinnovo (non prima visita) se disponibile
+        // Altrimenti prendi la prima disponibile
+        const prossimaRinnovo = prossimeScadenze.find(s => !s.isPrimaVisita);
+        const prossimeScadenzeFiltered = prossimaRinnovo ? [prossimaRinnovo] : prossimeScadenze.slice(0, 1);
+
+        const prossima = prossimeScadenzeFiltered[0] ?? null;
         const prossimaScadenzaMDL = prossima?.dataScadenza ?? null;
         const prossimaScadenzaPeriodicita = prossima?.periodicitaMesi ?? null;
         // Scadenza già coperta da un appuntamento attivo (non annullato/no-show)

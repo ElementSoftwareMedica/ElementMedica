@@ -237,4 +237,6 @@ export interface DynamicFieldProps {
     onOpenFullChart?: (fieldName: string) => void;
     /** R17: Visita ID — needed by STRUMENTARIO_IMPORT fields to fetch bridge device data */
     visitaId?: string;
+    /** Rendering compatto usato nei modal delle visite secondarie */
+    compact?: boolean;
 }

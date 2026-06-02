@@ -14,7 +14,7 @@
  *       • Per ogni azienda: raccoglie i giudizi emessi oggi non ancora inviati
  *       • Genera ZIP con tutti i PDF datore-di-lavoro della giornata
  *       • Invia email ZIP all'azienda
- *       • Invia password via WhatsApp al referente azienda
+ *       • Comunica la password nella PEC/email aziendale
  *       • Traccia invioSicuroAziendaAt su ogni giudizio del batch
  *
  * @project P71 – Invio Referto Mail & Secure Delivery Idoneità
@@ -22,14 +22,20 @@
  * @compliance D.Lgs 81/08 Art. 41, GDPR Art. 9 & 32
  */
 
-import archiver from 'archiver';
 import nodemailer from 'nodemailer';
 import crypto from 'crypto';
+import { mkdtemp, readFile, rm, writeFile } from 'fs/promises';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import prisma from '../../config/prisma-optimization.js';
 import logger from '../../utils/logger.js';
 import SmsService from '../smsService.js';
 import GiudizioIdoneitaPdfService from './GiudizioIdoneitaPdfService.js';
 import TenantPecConfigService from './TenantPecConfigService.js';
+
+const execFileAsync = promisify(execFile);
 
 // ────────────────────────────────────────────
 // HELPERS
@@ -57,46 +63,39 @@ function fmtDate(d) {
 
 /**
  * Crea archivio ZIP con i file forniti.
- * La sicurezza è garantita dall'invio della password via canale separato (WhatsApp),
- * non dalla cifratura del file ZIP (archiver non supporta nativamente AES-256).
- *
  * @param {Array<{name: string, buffer: Buffer}>} files
+ * @param {string} password
  * @returns {Promise<Buffer>}
  */
-async function createZip(files) {
-    return new Promise((resolve, reject) => {
-        const chunks = [];
-        const archive = archiver('zip', { zlib: { level: 9 } });
-
-        archive.on('data', c => chunks.push(c));
-        archive.on('end', () => resolve(Buffer.concat(chunks)));
-        archive.on('error', reject);
-
+async function createZip(files, password) {
+    if (!password) throw new Error('Password ZIP mancante');
+    const dir = await mkdtemp(join(tmpdir(), 'em-giudizi-'));
+    try {
+        const zipPath = join(dir, 'giudizi.zip');
         const instructions = [
             'ISTRUZIONI / INSTRUCTIONS',
             '─────────────────────────────────',
-            'Questo archivio contiene il Giudizio di Idoneità ai sensi del',
-            'D.Lgs 81/08 Art. 41 c.7.',
+            'Questo archivio contiene il Giudizio di Idoneità ai sensi del D.Lgs 81/08 Art. 41 c.7.',
+            'Aprire l’archivio con la password comunicata dal canale indicato nella mail.',
             '',
-            'La password di verifica è stata inviata separatamente tramite',
-            'WhatsApp al numero di telefono registrato.',
-            '',
-            'This archive contains the Fitness for Work Certificate as per',
-            'Italian Occupational Health Law (D.Lgs 81/08 Art. 41 c.7).',
-            '',
-            'The verification code has been sent separately via WhatsApp.',
+            'This archive contains Fitness for Work Certificates under Italian Occupational Health Law.',
+            'Open the archive using the password communicated through the channel stated in the email.',
             '─────────────────────────────────',
             `Generato: ${new Date().toLocaleString('it-IT')}`
         ].join('\n');
-
-        archive.append(Buffer.from(instructions, 'utf-8'), { name: 'LEGGIMI.txt' });
-
-        for (const f of files) {
-            archive.append(f.buffer, { name: f.name });
+        const paths = [join(dir, 'LEGGIMI.txt')];
+        await writeFile(paths[0], instructions, 'utf8');
+        for (const [index, file] of files.entries()) {
+            const safeName = String(file.name || `documento_${index + 1}.pdf`).replace(/[\\/]/g, '_');
+            const filePath = join(dir, safeName);
+            await writeFile(filePath, file.buffer);
+            paths.push(filePath);
         }
-
-        archive.finalize();
-    });
+        await execFileAsync('zip', ['-q', '-P', password, '-j', zipPath, ...paths], { timeout: 30000 });
+        return await readFile(zipPath);
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
 }
 
 // ────────────────────────────────────────────
@@ -144,7 +143,7 @@ function buildWorkerEmailHtml({ lavoratore, medico, mansione, dataEmissione, cli
 </body></html>`;
 }
 
-function buildAziendaEmailHtml({ aziendaName, dataEmissione, count, clinicName, clinicPhone, clinicEmail }) {
+function buildAziendaEmailHtml({ aziendaName, dataEmissione, count, clinicName, clinicPhone, clinicEmail, password }) {
     return `<!DOCTYPE html><html lang="it"><head><meta charset="utf-8">
 <style>
   body{font-family:'Segoe UI',Arial,sans-serif;color:#1f2937;background:#f9fafb;margin:0;padding:0}
@@ -169,8 +168,7 @@ function buildAziendaEmailHtml({ aziendaName, dataEmissione, count, clinicName, 
     </div>
     <div class="warning">
       🔐 <strong>Sicurezza documenti:</strong> L'archivio ZIP allegato è protetto.<br>
-      La <strong>password di accesso</strong> è stata inviata separatamente tramite <strong>WhatsApp</strong>
-      al referente aziendale registrato.
+      Password di accesso: <strong style="font-family:monospace">${password}</strong>
     </div>
     <p style="font-size:13px;color:#374151">
       Ai sensi dell'Art. 41 c.7 D.Lgs 81/08, questa comunicazione è riservata al Datore di Lavoro
@@ -262,7 +260,7 @@ class IdoneityNotificationService {
             const password = generateSecurePassword(10);
             const lavoratoreNome = `${giudizio.person?.firstName || ''} ${giudizio.person?.lastName || ''}`.trim();
             const fileName = `giudizio_idoneita_${(giudizio.person?.lastName || 'doc').toLowerCase()}_${new Date().toISOString().slice(0, 10)}.pdf`;
-            const zipBuffer = await createZip([{ name: fileName, buffer: pdfBuffer }]);
+            const zipBuffer = await createZip([{ name: fileName, buffer: pdfBuffer }], password);
 
             // 6. Info clinica
             const tenant = await prisma.tenant.findUnique({
@@ -393,7 +391,7 @@ class IdoneityNotificationService {
                 const pdfBuffer = await this._generatePdf(giudizioId, 'lavoratore', tenantId);
                 const password = generateSecurePassword(10);
                 const fileName = `giudizio_idoneita_${(giudizio.person?.lastName || 'doc').toLowerCase()}_${new Date().toISOString().slice(0, 10)}.pdf`;
-                const zipBuffer = await createZip([{ name: fileName, buffer: pdfBuffer }]);
+                const zipBuffer = await createZip([{ name: fileName, buffer: pdfBuffer }], password);
 
                 const transporter = buildTransporter(emailCfg);
                 await transporter.sendMail({
@@ -453,7 +451,7 @@ class IdoneityNotificationService {
                 const pdfBuffer = await this._generatePdf(giudizioId, 'datore', tenantId);
                 const password = generateSecurePassword(10);
                 const fileName = `giudizio_datore_${(giudizio.person?.lastName || 'doc').toLowerCase()}_${new Date().toISOString().slice(0, 10)}.pdf`;
-                const zipBuffer = await createZip([{ name: fileName, buffer: pdfBuffer }]);
+                const zipBuffer = await createZip([{ name: fileName, buffer: pdfBuffer }], password);
 
                 const transporter = buildTransporter(emailCfg);
                 await transporter.sendMail({
@@ -518,7 +516,7 @@ class IdoneityNotificationService {
      * Batch giornaliero delle 22:00.
      * Per ogni azienda con giudizi emessi oggi genera un unico ZIP
      * con tutti i PDF "datore di lavoro" e lo invia via email.
-     * La password è inviata via WhatsApp al referente.
+     * La password è comunicata nella PEC/email aziendale.
      *
      * @param {string|null} tenantId - null = tutti i tenant attivi
      * @returns {Promise<{ total: number, companies: number, sent: number, errors: number }>}
@@ -646,7 +644,6 @@ class IdoneityNotificationService {
 
     async _sendCompanyDailyZip({ tenantId, company, tenant, giudizi }, date) {
         const aziendaEmail = company.emailGenerale;
-        const aziendaPhone = company.telefonoGenerale;
         const aziendaName = company.company?.ragioneSociale || 'Azienda';
         const clinicName = tenant?.name || 'Clinica';
         const clinicPhone = tenant?.settings?.clinicPhone || '';
@@ -671,7 +668,7 @@ class IdoneityNotificationService {
         if (files.length === 0) throw new Error('Nessun PDF generabile per il batch');
 
         const password = generateSecurePassword(10);
-        const zipBuffer = await createZip(files);
+        const zipBuffer = await createZip(files, password);
         const dateLabel = date.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
         const emailCfg = await TenantPecConfigService.getConfigForSending(tenantId);
@@ -684,7 +681,7 @@ class IdoneityNotificationService {
             subject: `Giudizi di Idoneità — ${aziendaName} — ${dateLabel} (${files.length} documenti)`,
             html: buildAziendaEmailHtml({
                 aziendaName, dataEmissione: dateLabel,
-                count: files.length, clinicName, clinicPhone, clinicEmail
+                count: files.length, clinicName, clinicPhone, clinicEmail, password
             }),
             attachments: [{
                 filename: `giudizi_${aziendaName.toLowerCase().replace(/\s+/g, '_')}_${date.toISOString().slice(0, 10)}.zip`,
@@ -699,18 +696,6 @@ class IdoneityNotificationService {
             email: `${aziendaEmail.slice(0, 3)}***`
         }, 'P71: ZIP azienda inviato');
 
-        // WhatsApp password al referente azienda
-        if (aziendaPhone) {
-            try {
-                await this._sendPasswordViaWhatsApp(aziendaPhone, password, aziendaName, clinicName, tenantId);
-            } catch (waErr) {
-                logger.warn({
-                    component: 'IdoneityNotificationService',
-                    aziendaName, error: waErr.message
-                }, 'P71: WhatsApp azienda fallito (email consegnata)');
-            }
-        }
-
         // Aggiorna timestamp su tutti i giudizi del batch
         await prisma.giudizioIdoneita.updateMany({
             where: { id: { in: giudizi.map(g => g.id) } },
@@ -722,7 +707,7 @@ class IdoneityNotificationService {
             giudizioId: giudizi[0].id,
             tenantId, performedBy: 'cron_22h',
             action: 'BATCH_ZIP_COMPANY',
-            details: { aziendaName, count: files.length, emailSent: true, whatsappSent: !!aziendaPhone }
+            details: { aziendaName, count: files.length, emailSent: true, passwordChannel: 'pec_email' }
         });
     }
 

@@ -116,7 +116,15 @@ const MODALITA_PAGAMENTO_LABEL = {
 function buildHtml(fattura, tenantSettings) {
   const logoUrl = tenantSettings?.logoUrl || '';
   const tenantName = tenantSettings?.name || fattura.cedenteDenominazione;
-  const tipoLabel = TIPO_DOCUMENTO_LABEL[fattura.tipoDocumento] || 'FATTURA';
+  const isSenzaFattura = String(fattura.numero || '').startsWith('SF-') || String(fattura.note || '').includes('SENZA_FATTURA');
+  const tipoLabel = isSenzaFattura
+    ? 'PROMEMORIA PAGAMENTO'
+    : (TIPO_DOCUMENTO_LABEL[fattura.tipoDocumento] || 'FATTURA');
+  const noteVisibili = String(fattura.note || '')
+    .split('\n')
+    .filter(line => !line.startsWith('AUTO_ACCETTAZIONE:'))
+    .join('\n')
+    .trim();
   const modalita = MODALITA_PAGAMENTO_LABEL[fattura.modalitaPagamento] || fattura.modalitaPagamento || '—';
 
   // Righe fattura
@@ -424,6 +432,12 @@ function buildHtml(fattura, tenantSettings) {
 
   ${notaCreditoHtml}
 
+  ${isSenzaFattura ? `
+  <div class="note-box">
+    <strong>Documento interno:</strong> promemoria di pagamento non valido come fattura elettronica e non trasmesso a SDI/Sistema TS.
+  </div>
+  ` : ''}
+
   <!-- PARTI -->
   <div class="parti">
     <div class="parte-box">
@@ -521,9 +535,9 @@ function buildHtml(fattura, tenantSettings) {
   </div>
 
   <!-- NOTE -->
-  ${fattura.note ? `
+  ${noteVisibili ? `
   <div class="note-box">
-    <strong>Note:</strong> ${escapeHtml(fattura.note)}
+    <strong>Note:</strong> ${escapeHtml(noteVisibili)}
   </div>
   ` : ''}
 
@@ -632,7 +646,9 @@ export async function generateFatturaPdf(fatturaId, tenantId) {
     printBackground: true,
   });
 
-  const tipo = fattura.tipoDocumento === 'NOTA_CREDITO' ? 'NC' : 'FT';
+  const tipo = String(fattura.numero || '').startsWith('SF-') || String(fattura.note || '').includes('SENZA_FATTURA')
+    ? 'SF'
+    : (fattura.tipoDocumento === 'NOTA_CREDITO' ? 'NC' : 'FT');
   const filename = `${tipo}_${fattura.numero.replace(/\//g, '-')}_${new Date().getFullYear()}.pdf`;
 
   logger.info('[FatturaElettronicaPdfService] PDF generato', {

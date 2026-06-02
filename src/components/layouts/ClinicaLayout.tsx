@@ -14,7 +14,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
+import { Link, useLocation, Outlet, useNavigate, Navigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../hooks/auth/useAuth';
 import { useTenantAccess } from '../../hooks/useTenantAccess';
@@ -28,6 +28,7 @@ import Notifications from '../shared/Notifications';
 import NotificationBell from '../notifications/NotificationBell';
 import NotificationPopup from '../notifications/NotificationPopup';
 import { SidebarProvider, useSidebar } from '../../contexts/SidebarContext';
+import { useRoleGuard } from '../../hooks/useRoleGuard';
 
 // Import Element Medica theme
 import '../../styles/clinica-theme.css';
@@ -69,6 +70,7 @@ interface NavItem {
     icon: React.ComponentType<{ className?: string }>;
     children?: NavItem[];
     badge?: number;
+    feature?: string;
 }
 
 /**
@@ -103,14 +105,16 @@ const navigationItems: NavItem[] = [
     {
         label: 'Med. del Lavoro',
         icon: HardHat,
+        feature: 'MDL_BASE',
         children: [
             { label: 'Dashboard Scadenze', href: '/poliambulatorio/mdl/scadenze', icon: Calendar },
+            { label: 'Aziende', href: '/poliambulatorio/mdl/aziende', icon: Building2 },
             { label: 'Allegato 3A', href: '/poliambulatorio/mdl/allegato-3a', icon: FileText },
-            { label: 'Allegato 3B', href: '/poliambulatorio/mdl/allegato-3b', icon: FileText },
+            { label: 'Allegato 3B', href: '/poliambulatorio/mdl/allegato-3b', icon: FileText, feature: 'MDL_ALLEGATO_3B' },
             { label: 'Mansioni', href: '/poliambulatorio/mdl/mansioni', icon: HardHat },
             { label: 'Giudizi Idoneità', href: '/poliambulatorio/mdl/giudizi-idoneita', icon: Scale },
             { label: 'Rischio → Prestazioni', href: '/poliambulatorio/mdl/rischio-prestazioni', icon: ShieldCheck },
-            { label: 'Protocolli Sanitari', href: '/poliambulatorio/mdl/protocolli-sanitari', icon: ClipboardCheck },
+            { label: 'Protocolli Sanitari', href: '/poliambulatorio/mdl/protocolli-sanitari', icon: ClipboardCheck, feature: 'MDL_PROTOCOLLI' },
             { label: 'Nomine Figure', href: '/poliambulatorio/mdl/nomine-ruolo', icon: UserCheck },
             { label: 'Tariffari Aziende', href: '/poliambulatorio/mdl/tariffari-aziende', icon: Euro }
         ]
@@ -166,7 +170,8 @@ const ClinicaLayoutContent: React.FC<ClinicaLayoutProps> = ({ children }) => {
     const navigate = useNavigate();
     const { user, logout, userRole, userRoleType, isAuthenticated, isLoading } = useAuth();
     const { isCollapsed, setCollapsed } = useSidebar();
-    const { currentTenant } = useTenantAccess();
+    const { currentTenant, hasFeature } = useTenantAccess();
+    const { isTrainerOnly, isPazienteOnly, isMedico, isMedicoCompetente } = useRoleGuard();
 
     // Branch-specific branding for clinical module (MEDICA)
     const tenantBranding = getTenantBranding(
@@ -203,17 +208,64 @@ const ClinicaLayoutContent: React.FC<ClinicaLayoutProps> = ({ children }) => {
         ? (prestazioniDaRefertareData as any).total
         : undefined;
 
-    // Versione dinamica di navigationItems con badge "Visite"
+    // Versione dinamica di navigationItems con badge "Visite" e feature gating + filtri per ruolo
     const dynamicNavItems = useMemo((): NavItem[] => {
-        return navigationItems.map(group => ({
+        // PAZIENTE puro: nav ridotta alla sola cartella personale
+        if (isPazienteOnly && user?.id) {
+            return [{
+                label: 'La mia cartella',
+                href: `/poliambulatorio/pazienti/${user.id}`,
+                icon: Users,
+            }];
+        }
+
+        // Gruppi nascosti per MEDICO (base o del lavoro, senza admin)
+        const hiddenForMedico = new Set(['Catalogo', 'Struttura', 'Scadenzario']);
+        // Med. del Lavoro visibile solo per MEDICO_COMPETENTE o per medici con specialità 'Medicina del Lavoro'
+        const medicoSpecialita: string[] = ((user as any)?.specialties ?? []);
+        const hasMdlSpecialty = medicoSpecialita.some(
+            (s: string) => s.toLowerCase().includes('medicina del lavoro') || s.toLowerCase().includes('medicina lavoro')
+        );
+        if (isMedico && !isMedicoCompetente && !hasMdlSpecialty) {
+            hiddenForMedico.add('Med. del Lavoro');
+        }
+
+        let items = navigationItems
+            .filter(group => !group.feature || hasFeature(group.feature))
+            .filter(group => !isMedico || !hiddenForMedico.has(group.label));
+
+        // MEDICO: filtra le voci di Impostazioni (solo template visita, firma, bridge, privacy)
+        if (isMedico) {
+            const allowedMedicoSettings = new Set([
+                '/poliambulatorio/impostazioni/visit-templates',
+                '/poliambulatorio/impostazioni/modulistica',
+                '/poliambulatorio/impostazioni/email-template',
+                '/poliambulatorio/impostazioni/firma',
+                '/poliambulatorio/impostazioni/bridge',
+                '/poliambulatorio/impostazioni/privacy',
+            ]);
+            items = items.map(group => {
+                if (group.label === 'Impostazioni' && group.children) {
+                    return {
+                        ...group,
+                        children: group.children.filter(c => !c.href || allowedMedicoSettings.has(c.href))
+                    };
+                }
+                return group;
+            });
+        }
+
+        return items.map(group => ({
             ...group,
-            children: group.children?.map(child =>
-                child.href === '/poliambulatorio/visite'
-                    ? { ...child, badge: prestazioniDaRefertareBadge }
-                    : child
-            )
+            children: group.children
+                ?.filter(child => !child.feature || hasFeature(child.feature))
+                .map(child =>
+                    child.href === '/poliambulatorio/visite'
+                        ? { ...child, badge: prestazioniDaRefertareBadge }
+                        : child
+                )
         }));
-    }, [prestazioniDaRefertareBadge]);
+    }, [prestazioniDaRefertareBadge, hasFeature, isPazienteOnly, isMedico, isMedicoCompetente, user?.id]);
 
     // Auth protection: redirect to login if not authenticated
     useEffect(() => {
@@ -223,6 +275,46 @@ const ClinicaLayoutContent: React.FC<ClinicaLayoutProps> = ({ children }) => {
             navigate('/poliambulatorio/login', { replace: true });
         }
     }, [isLoading, isAuthenticated, navigate, location.pathname]);
+
+    // Auto-expand active menu — spostato prima degli early return per rispettare le regole degli hook
+    useEffect(() => {
+        if (!isAuthenticated) return;
+        dynamicNavItems.forEach(item => {
+            if (item.children) {
+                const isActive = item.children.some(child =>
+                    child.href && location.pathname.startsWith(child.href)
+                );
+                if (isActive && !expandedItems.includes(item.label)) {
+                    setExpandedItems(prev => [...prev, item.label]);
+                }
+            }
+        });
+    }, [location.pathname, isAuthenticated]);
+
+    // Close mobile menu on Escape — spostato prima degli early return
+    useEffect(() => {
+        const handleEscape = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && mobileMenuOpen) {
+                setMobileMenuOpen(false);
+            }
+        };
+        document.addEventListener('keydown', handleEscape);
+        return () => document.removeEventListener('keydown', handleEscape);
+    }, [mobileMenuOpen]);
+
+    // Raccogli tutti gli href foglia dalla navigazione per il longest-prefix-match —
+    // spostato prima degli early return per rispettare le regole degli hook
+    const allLeafHrefs = useMemo(() => {
+        const hrefs: string[] = [];
+        const collect = (items: NavItem[]) => {
+            for (const item of items) {
+                if (item.href) hrefs.push(item.href);
+                if (item.children) collect(item.children);
+            }
+        };
+        collect(dynamicNavItems);
+        return hrefs;
+    }, [dynamicNavItems]);
 
     // Show loading while checking auth
     if (isLoading) {
@@ -241,6 +333,19 @@ const ClinicaLayoutContent: React.FC<ClinicaLayoutProps> = ({ children }) => {
         return null;
     }
 
+    // --- Guardie di accesso per ruolo ---
+    // TRAINER puro: non ha accesso al Poliambulatorio → reindirizza alla Formazione
+    if (isTrainerOnly) {
+        return <Navigate to="/schedules" replace />;
+    }
+    // PAZIENTE puro: può vedere SOLO la propria cartella
+    if (isPazienteOnly && user?.id) {
+        const cartellaPath = `/poliambulatorio/pazienti/${user.id}`;
+        if (!location.pathname.startsWith(cartellaPath)) {
+            return <Navigate to={cartellaPath} replace />;
+        }
+    }
+
     // Check if user is admin (include TENANT_ADMIN — tenant-scoped via user.roles da /auth/verify)
     const isAdmin = user?.role === 'Admin' ||
         user?.role === 'Administrator' ||
@@ -251,31 +356,6 @@ const ClinicaLayoutContent: React.FC<ClinicaLayoutProps> = ({ children }) => {
         user?.roles?.includes('TENANT_ADMIN') ||
         user?.roles?.includes('COMPANY_ADMIN');
 
-    // Auto-expand active menu
-    useEffect(() => {
-        dynamicNavItems.forEach(item => {
-            if (item.children) {
-                const isActive = item.children.some(child =>
-                    child.href && location.pathname.startsWith(child.href)
-                );
-                if (isActive && !expandedItems.includes(item.label)) {
-                    setExpandedItems(prev => [...prev, item.label]);
-                }
-            }
-        });
-    }, [location.pathname]);
-
-    // Close mobile menu on Escape
-    useEffect(() => {
-        const handleEscape = (e: KeyboardEvent) => {
-            if (e.key === 'Escape' && mobileMenuOpen) {
-                setMobileMenuOpen(false);
-            }
-        };
-        document.addEventListener('keydown', handleEscape);
-        return () => document.removeEventListener('keydown', handleEscape);
-    }, [mobileMenuOpen]);
-
     // Toggle submenu
     const toggleExpand = (label: string) => {
         setExpandedItems(prev =>
@@ -284,19 +364,6 @@ const ClinicaLayoutContent: React.FC<ClinicaLayoutProps> = ({ children }) => {
                 : [...prev, label]
         );
     };
-
-    // Raccogli tutti gli href foglia dalla navigazione per il longest-prefix-match
-    const allLeafHrefs = useMemo(() => {
-        const hrefs: string[] = [];
-        const collect = (items: NavItem[]) => {
-            for (const item of items) {
-                if (item.href) hrefs.push(item.href);
-                if (item.children) collect(item.children);
-            }
-        };
-        collect(dynamicNavItems);
-        return hrefs;
-    }, [dynamicNavItems]);
 
     // Check if nav item is active — usa longest-prefix-match per evitare
     // che /poliambulatorio/coda matchi quando siamo su /poliambulatorio/coda/monitors
@@ -602,11 +669,6 @@ const ClinicaLayoutContent: React.FC<ClinicaLayoutProps> = ({ children }) => {
                                 {/* Advanced Notification System */}
                                 <NotificationBell />
 
-                                {/* Help */}
-                                <button className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
-                                    <HelpCircle className="h-5 w-5 text-gray-500" />
-                                </button>
-
                                 {/* User menu */}
                                 <div className="relative group">
                                     <button className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
@@ -631,7 +693,7 @@ const ClinicaLayoutContent: React.FC<ClinicaLayoutProps> = ({ children }) => {
                                             </span>
                                         </div>
                                         <Link
-                                            to="/profile"
+                                            to="/poliambulatorio/profilo"
                                             className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                                         >
                                             <User className="h-4 w-4" />

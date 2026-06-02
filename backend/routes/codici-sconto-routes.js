@@ -522,7 +522,11 @@ router.put('/:id',
     body('tipoSconto').optional().isIn(['PERCENTUALE', 'VALORE_ASSOLUTO']),
     body('valore').optional().isFloat({ min: 0 }),
     body('dataInizio').optional().isISO8601().toDate(),
-    body('dataFine').optional().isISO8601().toDate(),
+    body('dataFine').optional({ nullable: true }).custom((value) => {
+      if (value === null || value === undefined) return true;
+      if (typeof value === 'string' && !isNaN(Date.parse(value))) return true;
+      throw new Error('Data fine non valida');
+    }),
     body('attivo').optional().isBoolean(),
     body('utilizzoMassimo').optional({ nullable: true }).custom((value) => {
       if (value === null || value === undefined || value === '') return true;
@@ -643,7 +647,7 @@ router.put('/:id',
         ...(req.body.tipoSconto && { tipoSconto: req.body.tipoSconto }),
         ...(req.body.valore !== undefined && { valore: req.body.valore }),
         ...(req.body.dataInizio && { dataInizio: req.body.dataInizio }),
-        ...(req.body.dataFine && { dataFine: req.body.dataFine }),
+        ...(req.body.dataFine !== undefined && { dataFine: req.body.dataFine ? new Date(req.body.dataFine) : null }),
         ...(req.body.attivo !== undefined && { attivo: req.body.attivo }),
         ...(req.body.utilizzoMassimo !== undefined && { utilizzoMassimo: req.body.utilizzoMassimo }),
         ...(req.body.utilizzoPerUtente !== undefined && { utilizzoPerUtente: req.body.utilizzoPerUtente }),

@@ -81,11 +81,12 @@ const MansioniInternePage: React.FC = () => {
     // P68: Carica tutti i ruoli (system + custom) per l'associazione mansione-ruolo
     // P69: Solo CustomRole (FK defaultRoleId punta a custom_roles)
     const { data: rolesData } = useQuery({
-        queryKey: ['roles', 'custom-for-mansioni'],
+        queryKey: ['roles', 'custom-for-mansioni', tenantFilterKey],
         queryFn: async () => {
-            const result = await apiGet<{ data: Array<{ id: string; name: string; displayName?: string }> }>('/api/v1/roles/custom').catch(() => ({ data: [] }));
+            const result = await apiGet<{ data?: Array<{ id: string; name: string; displayName?: string }> } | Array<{ id: string; name: string; displayName?: string }>>('/api/v1/roles/custom', { active: 'all' }).catch(() => ({ data: [] }));
+            const roles = Array.isArray(result) ? result : (result?.data || []);
             return {
-                data: (result?.data || []).map((r) => ({
+                data: roles.map((r) => ({
                     id: r.id,
                     name: r.name,
                     displayName: r.displayName || r.name.replace(/_/g, ' ')
@@ -507,7 +508,9 @@ const MansioniInternePage: React.FC = () => {
                                 <SelectContent>
                                     <SelectItem value="_none">Nessun ruolo</SelectItem>
                                     {allRoles.length === 0 ? (
-                                        <SelectItem value="_loading">Caricamento ruoli...</SelectItem>
+                                        <div className="px-3 py-2 text-sm text-gray-500">
+                                            Nessun ruolo personalizzato disponibile
+                                        </div>
                                     ) : (
                                         allRoles.map((role: { id: string; displayName?: string; name: string }) => (
                                             <SelectItem key={role.id} value={role.id}>

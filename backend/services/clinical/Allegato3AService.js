@@ -25,6 +25,28 @@ import logger from '../../utils/logger.js';
  */
 
 class Allegato3AService {
+    static async resolveCompanyTenantProfileId(companyTenantProfileId, tenantId) {
+        const profile = await prisma.companyTenantProfile.findFirst({
+            where: {
+                id: companyTenantProfileId,
+                tenantId,
+                deletedAt: null
+            },
+            select: { id: true }
+        });
+        if (profile) return profile.id;
+
+        const byCompany = await prisma.companyTenantProfile.findFirst({
+            where: {
+                companyId: companyTenantProfileId,
+                tenantId,
+                deletedAt: null
+            },
+            select: { id: true }
+        });
+        return byCompany?.id || companyTenantProfileId;
+    }
+
     /**
      * Genera i dati per l'Allegato 3A di un lavoratore
      * 
@@ -34,6 +56,7 @@ class Allegato3AService {
      * @returns {Promise<Object>} Dati strutturati per Allegato 3A
      */
     static async generateData(personId, companyTenantProfileId, tenantId) {
+        companyTenantProfileId = await this.resolveCompanyTenantProfileId(companyTenantProfileId, tenantId);
         logger.info({ personId, companyTenantProfileId, tenantId }, 'Generazione dati Allegato 3A');
 
         // 1. Dati lavoratore
@@ -313,17 +336,12 @@ class Allegato3AService {
      * Recupera storico accertamenti sanitari (visite ed esami)
      */
     static async getAccertamentiSanitari(personId, tenantId) {
-        // Visite MDL degli ultimi 5 anni
-        const cinqueAnniFa = new Date();
-        cinqueAnniFa.setFullYear(cinqueAnniFa.getFullYear() - 5);
-
         const visite = await prisma.visita.findMany({
             where: {
                 pazienteId: personId,
                 tenantId,
                 deletedAt: null,
-                tipoVisitaMDL: { not: null },
-                dataOra: { gte: cinqueAnniFa }
+                tipoVisitaMDL: { not: null }
             },
             orderBy: { dataOra: 'desc' },
             select: {
@@ -338,10 +356,30 @@ class Allegato3AService {
                     }
                 }
             },
-            take: 50 // Max 50 visite
+            take: 500
         });
 
-        return visite.map(v => ({
+        const esami = await prisma.esameStrumentale.findMany({
+            where: {
+                pazienteId: personId,
+                tenantId,
+                deletedAt: null
+            },
+            orderBy: { dataEsame: 'desc' },
+            select: {
+                id: true,
+                dataEsame: true,
+                tipoDispositivo: true,
+                tipoEsame: true,
+                stato: true,
+                risultati: true,
+                findings: true,
+                metadata: true
+            },
+            take: 500
+        });
+
+        const visiteAccertamenti = visite.map(v => ({
             id: v.id,
             tipo: this.getTipoVisitaLabel(v.tipoVisitaMDL),
             data: v.dataOra,
@@ -349,6 +387,21 @@ class Allegato3AService {
             medicoEsecutore: v.medico ? `${v.medico.lastName} ${v.medico.firstName}` : null,
             prestazioniEseguite: []
         }));
+
+        const esamiAccertamenti = esami.map(e => ({
+            id: e.id,
+            tipo: e.tipoDispositivo || e.tipoEsame || 'ACCERTAMENTO_INTEGRATIVO',
+            data: e.dataEsame,
+            note: (e.findings || []).join('; '),
+            medicoEsecutore: null,
+            stato: e.stato,
+            valori: e.risultati,
+            metadata: e.metadata,
+            prestazioniEseguite: []
+        }));
+
+        return [...visiteAccertamenti, ...esamiAccertamenti]
+            .sort((a, b) => new Date(b.data || 0).getTime() - new Date(a.data || 0).getTime());
     }
 
     /**
@@ -463,6 +516,7 @@ class Allegato3AService {
      * Genera Allegato 3A per tutti i lavoratori di un'azienda
      */
     static async generateBulkData(companyTenantProfileId, tenantId) {
+        companyTenantProfileId = await this.resolveCompanyTenantProfileId(companyTenantProfileId, tenantId);
         // Trova tutti i lavoratori assegnati a mansioni di questa azienda (mansione attiva)
         const lavoratori = await prisma.lavoratoreMansione.findMany({
             where: {
@@ -488,9 +542,13 @@ class Allegato3AService {
                 tenantId,
                 stato: 'VALIDO',
                 deletedAt: null,
-                mansione: {
-                    site: { companyTenantProfileId, deletedAt: null },
-                    deletedAt: null
+                mansioni: {
+                    some: {
+                        mansione: {
+                            site: { companyTenantProfileId, deletedAt: null },
+                            deletedAt: null
+                        }
+                    }
                 }
             },
             select: { personId: true },
@@ -533,6 +591,7 @@ class Allegato3AService {
      * Restituisce statistiche per l'azienda
      */
     static async getStats(companyTenantProfileId, tenantId) {
+        companyTenantProfileId = await this.resolveCompanyTenantProfileId(companyTenantProfileId, tenantId);
         // Pre-fetch mansione IDs for this company to use stable FK filters
         // (avoids unsupported nested-relation filters on some Prisma versions)
         const mansioneIds = (await prisma.mansione.findMany({

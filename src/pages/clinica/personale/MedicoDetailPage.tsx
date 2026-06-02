@@ -6,7 +6,7 @@
  * @module pages/poliambulatorio/personale/MedicoDetailPage
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -44,6 +44,7 @@ import {
     UserCheck,
     Package,
     Check,
+    FileSpreadsheet,
 } from 'lucide-react';
 import {
     mediciApi,
@@ -66,11 +67,15 @@ import { PersonTenantProfilesWidget } from '../../../components/person/PersonTen
 import { NomineRuoloCard, AttivitaProfessionistaCard } from '../../../components/nomine';
 // Visit permissions card
 import { MedicoVisitPermissionsCard } from './components/MedicoVisitPermissionsCard';
+import { PersonCredentialsModal } from '../../../components/persons/PersonCredentialsModal';
 
 // Import Element Medica theme
 import '../../../styles/clinica-theme.css';
 import { apiGet } from '../../../services/api';
+import movimentiContabiliService, { type StatoMovimento } from '../../../services/movimentiContabiliService';
 import { DateRangeCalendar, DateRange } from '../../../components/ui/DateRangeCalendar';
+import { useAuth } from '../../../context/AuthContext';
+import { useRoleGuard } from '../../../hooks/useRoleGuard';
 
 // ============================================
 // HELPERS
@@ -778,11 +783,31 @@ interface CompensoProfessionista {
     importoLordo: number;
     importoNetto: number;
     compensoTipo: string | null;
+    compensoValore?: number | null;
     importoRiferimento: number | null;
     dataEsecuzione: string | null;
     descrizione: string | null;
     companyTenantProfileId: string | null;
     movimentoCollegato?: { importoNetto: number; importoLordo: number } | null;
+    person?: { firstName?: string | null; lastName?: string | null } | null;
+    paziente?: { firstName?: string | null; lastName?: string | null } | null;
+    prestazioni?: Array<{ nome?: string | null; prestazione?: { nome?: string | null } | null }> | null;
+    site?: { nome?: string | null } | null;
+    sede?: { nome?: string | null } | null;
+    visita?: {
+        person?: { firstName?: string | null; lastName?: string | null } | null;
+        prestazioni?: Array<{ nome?: string | null; prestazione?: { nome?: string | null } | null }> | null;
+        appuntamento?: {
+            ambulatorio?: { nome?: string | null } | null;
+            site?: { nome?: string | null } | null;
+            prestazioni?: Array<{ nome?: string | null; prestazione?: { nome?: string | null } | null }> | null;
+        } | null;
+    } | null;
+    appuntamento?: {
+        ambulatorio?: { nome?: string | null } | null;
+        site?: { nome?: string | null } | null;
+        prestazioni?: Array<{ nome?: string | null; prestazione?: { nome?: string | null } | null }> | null;
+    } | null;
     // enriched: controparte ENTRATA (per USCITA) che porta info sulla company
     controparteCollegata?: {
         companyTenantProfile?: {
@@ -807,10 +832,26 @@ const STATO_COMPENSO_CONFIG: Record<string, { label: string; bg: string; text: s
     BOZZA: { label: 'Bozza', bg: 'bg-gray-100', text: 'text-gray-600' },
     DA_FATTURARE: { label: 'Da Fatturare', bg: 'bg-amber-50 border border-amber-200', text: 'text-amber-700' },
     CONFERMATO: { label: 'Da Fatturare', bg: 'bg-amber-50 border border-amber-200', text: 'text-amber-700' },
+    FATTURATO: { label: 'Fatturato', bg: 'bg-blue-50 border border-blue-200', text: 'text-blue-700' },
     PAGATO: { label: 'Pagato', bg: 'bg-emerald-50 border border-emerald-200', text: 'text-emerald-700' },
     ANNULLATO: { label: 'Annullato', bg: 'bg-red-50 border border-red-200', text: 'text-red-600' },
     STORNATO: { label: 'Stornato', bg: 'bg-gray-100', text: 'text-gray-500' },
 };
+
+const COMPENSI_STATUS_FILTERS: Array<{ key: string; label: string; stati?: StatoMovimento[] }> = [
+    { key: 'TUTTI', label: 'Tutti' },
+    { key: 'DA_FATTURARE', label: 'Da Fatturare', stati: ['DA_FATTURARE', 'CONFERMATO'] },
+    { key: 'FATTURATO', label: 'Fatturati', stati: ['FATTURATO'] },
+    { key: 'PAGATO', label: 'Pagati', stati: ['PAGATO'] },
+    { key: 'BOZZA', label: 'Bozze', stati: ['BOZZA'] },
+];
+
+const COMPENSI_BULK_STATES: Array<{ value: StatoMovimento; label: string }> = [
+    { value: 'DA_FATTURARE', label: 'Da Fatturare' },
+    { value: 'FATTURATO', label: 'Fatturato' },
+    { value: 'PAGATO', label: 'Pagato' },
+    { value: 'ANNULLATO', label: 'Annullato' }
+];
 
 const formatEuroMedico = (n: number) =>
     new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(n);
@@ -820,27 +861,80 @@ const formatDateMedico = (s: string | null | undefined) => {
     return new Date(s).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
+const getCurrentMonthRange = (): DateRange => {
+    const now = new Date();
+    return {
+        start: new Date(now.getFullYear(), now.getMonth(), 1),
+        end: new Date(now.getFullYear(), now.getMonth() + 1, 0)
+    };
+};
+
+const getRollingRange = (months: number): DateRange => {
+    const end = new Date();
+    const start = new Date(end);
+    start.setMonth(start.getMonth() - months);
+    return { start, end };
+};
+
+const getPreviousMonthRange = (): DateRange => {
+    const now = new Date();
+    return {
+        start: new Date(now.getFullYear(), now.getMonth() - 1, 1),
+        end: new Date(now.getFullYear(), now.getMonth(), 0)
+    };
+};
+
+const getYearToDateRange = (): DateRange => {
+    const now = new Date();
+    return { start: new Date(now.getFullYear(), 0, 1), end: now };
+};
+
+const COMPENSI_DATE_PRESETS: Array<{ label: string; getRange: () => DateRange }> = [
+    { label: '1 mese', getRange: () => getRollingRange(1) },
+    { label: '1 anno', getRange: () => getRollingRange(12) },
+    { label: 'Mese precedente', getRange: getPreviousMonthRange },
+    { label: 'Da inizio anno', getRange: getYearToDateRange },
+];
+
+const formatPrestazioniExport = (items?: Array<{ nome?: string | null; prestazione?: { nome?: string | null } | null }> | null) =>
+    (items || [])
+        .map(item => item.prestazione?.nome || item.nome)
+        .filter(Boolean)
+        .join(', ');
+
 const TabCompensiMedico: React.FC<{ medicoId: string }> = ({ medicoId }) => {
+    const { showToast } = useToast();
+    const { hasPermission } = useAuth();
     const [expandedId, setExpandedId] = React.useState<string | null>(null);
-    const [dateRange, setDateRange] = React.useState<DateRange>({ start: null, end: null });
+    const [dateRange, setDateRange] = React.useState<DateRange>(() => getCurrentMonthRange());
+    const [statusFilter, setStatusFilter] = React.useState<string>('TUTTI');
+    const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
+    const [bulkState, setBulkState] = React.useState<StatoMovimento>('FATTURATO');
+    const canManageCompensi = hasPermission('movimenti_contabili', 'write') || hasPermission('movimenti_contabili', 'manage');
+
+    const buildCompensiParams = React.useCallback((pageSize = '100') => {
+        const selectedFilter = COMPENSI_STATUS_FILTERS.find(f => f.key === statusFilter);
+        const params: Record<string, string> = {
+            direzione: 'USCITA',
+            personId: medicoId,
+            pageSize,
+            sortBy: 'dataEsecuzione',
+            sortOrder: 'desc',
+        };
+        if (selectedFilter?.stati?.length) params['stato'] = selectedFilter.stati.join(',');
+        if (dateRange.start) params['dataEsecuzioneDa'] = dateRange.start.toISOString().slice(0, 10);
+        if (dateRange.end) params['dataEsecuzioneA'] = dateRange.end.toISOString().slice(0, 10);
+        return params;
+    }, [dateRange.end, dateRange.start, medicoId, statusFilter]);
 
     const { data, isLoading, isError, refetch, isFetching } = useQuery({
-        queryKey: ['compensi-medico', medicoId, dateRange.start?.toISOString(), dateRange.end?.toISOString()],
+        queryKey: ['compensi-medico', medicoId, dateRange.start?.toISOString(), dateRange.end?.toISOString(), statusFilter],
         queryFn: async () => {
-            const params: Record<string, string> = {
-                direzione: 'USCITA',
-                personId: medicoId,
-                pageSize: '100',
-                sortBy: 'dataEsecuzione',
-                sortOrder: 'desc',
-            };
-            if (dateRange.start) params['dataEsecuzioneDa'] = dateRange.start.toISOString().slice(0, 10);
-            if (dateRange.end) params['dataEsecuzioneA'] = dateRange.end.toISOString().slice(0, 10);
             const resp = await apiGet<{
                 success: boolean;
                 data: CompensoProfessionista[];
                 total: number;
-            }>(`/api/v1/movimenti-contabili`, params);
+            }>(`/api/v1/movimenti-contabili`, buildCompensiParams());
             return resp;
         },
         enabled: !!medicoId,
@@ -848,6 +942,39 @@ const TabCompensiMedico: React.FC<{ medicoId: string }> = ({ medicoId }) => {
     });
 
     const compensi = data?.data ?? [];
+    React.useEffect(() => {
+        setSelectedIds(prev => prev.filter(id => compensi.some(c => c.id === id)));
+    }, [compensi]);
+
+    const bulkMutation = useMutation({
+        mutationFn: async () => movimentiContabiliService.bulkUpdateStatoDetailed(selectedIds, bulkState),
+        onSuccess: (result) => {
+            showToast({
+                type: result.failed ? 'warning' : 'success',
+                message: result.failed
+                    ? `${result.updated} movimenti aggiornati, ${result.failed} non aggiornati`
+                    : `${result.updated} movimenti aggiornati`
+            });
+            setSelectedIds([]);
+            refetch();
+        },
+        onError: () => showToast({ type: 'error', message: 'Errore durante l\'aggiornamento massivo' })
+    });
+
+    const toggleSelected = (id: string) => {
+        setSelectedIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
+    };
+
+    const allVisibleSelected = canManageCompensi && compensi.length > 0 && compensi.every(c => selectedIds.includes(c.id));
+    const toggleAllVisible = () => {
+        if (!canManageCompensi) return;
+        if (allVisibleSelected) {
+            setSelectedIds(prev => prev.filter(id => !compensi.some(c => c.id === id)));
+        } else {
+            setSelectedIds(prev => [...new Set([...prev, ...compensi.map(c => c.id)])]);
+        }
+    };
+
     const totale = compensi.reduce((s, c) => s + (Number(c.importoNetto) || 0), 0);
     const totalePagato = compensi
         .filter(c => c.stato === 'PAGATO')
@@ -855,6 +982,60 @@ const TabCompensiMedico: React.FC<{ medicoId: string }> = ({ medicoId }) => {
     const totaleDaPagare = compensi
         .filter(c => c.stato === 'DA_FATTURARE' || c.stato === 'CONFERMATO')
         .reduce((s, c) => s + (Number(c.importoNetto) || 0), 0);
+
+    const handleDownloadExcel = React.useCallback(async () => {
+        try {
+            const resp = await apiGet<{
+                success: boolean;
+                data: CompensoProfessionista[];
+                total: number;
+            }>('/api/v1/movimenti-contabili', buildCompensiParams('5000'));
+            const rows = (resp.data || []).map(c => {
+                const patient = c.person || c.paziente || c.visita?.person || null;
+                const prestazioni = formatPrestazioniExport(c.prestazioni)
+                    || formatPrestazioniExport(c.visita?.prestazioni)
+                    || formatPrestazioniExport(c.appuntamento?.prestazioni)
+                    || formatPrestazioniExport(c.visita?.appuntamento?.prestazioni)
+                    || c.descrizione
+                    || '';
+                const sede = c.site?.nome
+                    || c.sede?.nome
+                    || c.appuntamento?.ambulatorio?.nome
+                    || c.appuntamento?.site?.nome
+                    || c.visita?.appuntamento?.ambulatorio?.nome
+                    || c.visita?.appuntamento?.site?.nome
+                    || c.controparteCollegata?.companyTenantProfile?.company?.ragioneSociale
+                    || '';
+                return {
+                    Paziente: patient ? `${patient.lastName || ''} ${patient.firstName || ''}`.trim() : '',
+                    Prestazioni: prestazioni,
+                    'Percentuale spettante': c.compensoTipo === 'PERCENTUALE' && c.compensoValore != null ? `${c.compensoValore}%` : '',
+                    'Compenso medico': Number(c.importoNetto || 0),
+                    'Quanto ha pagato il pz': Number(c.importoRiferimento ?? c.movimentoCollegato?.importoLordo ?? c.movimentoCollegato?.importoNetto ?? 0),
+                    'Giorno esecuzione': c.dataEsecuzione ? new Date(c.dataEsecuzione).toLocaleDateString('it-IT') : '',
+                    'Sede esecuzione': sede,
+                    Stato: STATO_COMPENSO_CONFIG[c.stato]?.label || c.stato,
+                    Descrizione: c.descrizione || '',
+                };
+            });
+            const XLSX = await import('xlsx');
+            const workbook = XLSX.utils.book_new();
+            const sheet = XLSX.utils.json_to_sheet(rows);
+            XLSX.utils.book_append_sheet(workbook, sheet, 'Compensi');
+            const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `compensi-medico-${medicoId}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+        } catch {
+            showToast({ type: 'error', message: 'Errore durante il download Excel dei compensi' });
+        }
+    }, [buildCompensiParams, medicoId, showToast]);
 
     if (isLoading) {
         return (
@@ -882,18 +1063,8 @@ const TabCompensiMedico: React.FC<{ medicoId: string }> = ({ medicoId }) => {
 
     return (
         <div className="space-y-5">
-            {/* Filtro periodo */}
-            <DateRangeCalendar
-                value={dateRange}
-                onChange={setDateRange}
-                placeholder="Filtra per periodo..."
-                clearable
-                theme="teal"
-                className="w-full max-w-sm"
-            />
-
             {/* Header con totali */}
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                 <div className="flex items-center gap-2">
                     <TrendingDown className="h-5 w-5 text-teal-600" />
                     <h3 className="font-semibold text-gray-900">Compensi e Pagamenti</h3>
@@ -907,6 +1078,40 @@ const TabCompensiMedico: React.FC<{ medicoId: string }> = ({ medicoId }) => {
                 >
                     <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
                 </button>
+            </div>
+
+            <div className="flex flex-col xl:flex-row xl:items-end gap-3">
+                <DateRangeCalendar
+                    value={dateRange}
+                    onChange={setDateRange}
+                    placeholder="Filtra per periodo..."
+                    clearable
+                    theme="teal"
+                    className="w-full max-w-sm"
+                    customPresets={COMPENSI_DATE_PRESETS}
+                />
+                <button
+                    type="button"
+                    onClick={handleDownloadExcel}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-teal-200 bg-white px-3 py-2 text-sm font-medium text-teal-700 transition-colors hover:border-teal-300 hover:bg-teal-50"
+                >
+                    <FileSpreadsheet className="h-4 w-4" />
+                    Excel
+                </button>
+                <div className="flex flex-wrap gap-2">
+                    {COMPENSI_STATUS_FILTERS.map(filter => (
+                        <button
+                            key={filter.key}
+                            onClick={() => setStatusFilter(filter.key)}
+                            className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${statusFilter === filter.key
+                                ? 'bg-teal-600 border-teal-600 text-white'
+                                : 'bg-white border-gray-200 text-gray-600 hover:border-teal-300 hover:text-teal-700'
+                                }`}
+                        >
+                            {filter.label}
+                        </button>
+                    ))}
+                </div>
             </div>
 
             {/* Summary cards */}
@@ -939,6 +1144,47 @@ const TabCompensiMedico: React.FC<{ medicoId: string }> = ({ medicoId }) => {
                 </div>
             ) : (
                 <div className="space-y-2">
+                    {!canManageCompensi && (
+                        <div className="flex items-start gap-2 p-3 rounded-xl border border-blue-100 bg-blue-50 text-blue-700">
+                            <Info className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                            <p className="text-xs">
+                                Puoi consultare i compensi. Il cambio stato e gestito da chi ha i permessi contabili.
+                            </p>
+                        </div>
+                    )}
+                    {canManageCompensi && (
+                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 p-3 rounded-xl border border-teal-100 bg-teal-50">
+                        <label className="flex items-center gap-2 text-sm font-medium text-teal-900">
+                            <input
+                                type="checkbox"
+                                checked={allVisibleSelected}
+                                onChange={toggleAllVisible}
+                                className="w-4 h-4 rounded border-teal-300 text-teal-600 focus:ring-teal-500"
+                            />
+                            Seleziona movimenti filtrati
+                            {selectedIds.length > 0 && <span className="text-teal-700">({selectedIds.length} selezionati)</span>}
+                        </label>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <select
+                                value={bulkState}
+                                onChange={(e) => setBulkState(e.target.value as StatoMovimento)}
+                                className="px-3 py-2 rounded-lg border border-teal-200 bg-white text-sm text-gray-900 focus:ring-2 focus:ring-teal-500"
+                            >
+                                {COMPENSI_BULK_STATES.map(state => (
+                                    <option key={state.value} value={state.value}>{state.label}</option>
+                                ))}
+                            </select>
+                            <button
+                                onClick={() => bulkMutation.mutate()}
+                                disabled={selectedIds.length === 0 || bulkMutation.isPending}
+                                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {bulkMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                Aggiorna stato
+                            </button>
+                        </div>
+                    </div>
+                    )}
                     {compensi.map(c => {
                         const cfg = TIPO_COMPENSO_CONFIG[c.tipo] || { label: c.tipo, icon: FileText, color: 'text-gray-600' };
                         const statoCfg = STATO_COMPENSO_CONFIG[c.stato] || STATO_COMPENSO_CONFIG['BOZZA'];
@@ -953,6 +1199,23 @@ const TabCompensiMedico: React.FC<{ medicoId: string }> = ({ medicoId }) => {
                                     className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors"
                                     onClick={() => setExpandedId(isExpanded ? null : c.id)}
                                 >
+                                    {canManageCompensi && (
+                                        <span
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                toggleSelected(c.id);
+                                            }}
+                                            className="inline-flex"
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedIds.includes(c.id)}
+                                                onClick={(e) => e.stopPropagation()}
+                                                onChange={() => toggleSelected(c.id)}
+                                                className="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                                            />
+                                        </span>
+                                    )}
                                     <Icon className={`h-4 w-4 flex-shrink-0 ${cfg.color}`} />
                                     <div className="flex-1 min-w-0">
                                         <span className="block text-sm font-medium text-gray-900 truncate">
@@ -1028,11 +1291,22 @@ const TabCompensiMedico: React.FC<{ medicoId: string }> = ({ medicoId }) => {
 const MedicoDetailPage: React.FC = () => {
     const navigate = useNavigate();
     const { id } = useParams<{ id: string }>();
+    const { user } = useAuth();
+    const { isMedico, isMedicoCompetente } = useRoleGuard();
+    const currentMedicoPersonId = isMedico && !isMedicoCompetente ? user?.id : undefined;
     const [searchParams, setSearchParams] = useSearchParams();
     const activeTab = (searchParams.get('tab') as MedicoTab) || 'anagrafica';
     const setActiveTab = (tab: MedicoTab) => {
         setSearchParams(prev => { prev.set('tab', tab); return prev; }, { replace: true });
     };
+    const [showCredentialsModal, setShowCredentialsModal] = useState(false);
+
+    useEffect(() => {
+        const allowedSelfTabs: MedicoTab[] = ['anagrafica', 'compensi'];
+        if (currentMedicoPersonId && !allowedSelfTabs.includes(activeTab)) {
+            setSearchParams(prev => { prev.set('tab', 'anagrafica'); return prev; }, { replace: true });
+        }
+    }, [currentMedicoPersonId, activeTab, setSearchParams]);
 
     // Fetch medico
     const { data: medico, isLoading, error } = useQuery({
@@ -1086,6 +1360,28 @@ const MedicoDetailPage: React.FC = () => {
     }
 
     const notes = getMedicoNotes(medico);
+    const isOwnProfile = !currentMedicoPersonId || medico.id === currentMedicoPersonId || medico.personId === currentMedicoPersonId;
+    const visibleTabs = currentMedicoPersonId
+        ? MEDICO_TABS.filter(tab => tab.id === 'anagrafica' || tab.id === 'compensi')
+        : MEDICO_TABS;
+
+    if (!isOwnProfile) {
+        return (
+            <div className="p-6 clinica-theme">
+                <div className="flex flex-col items-center justify-center py-12 text-gray-600">
+                    <Shield className="h-12 w-12 mb-4 text-teal-600" />
+                    <h3 className="text-lg font-medium">Profilo non accessibile</h3>
+                    <p className="text-sm text-gray-500 mt-1">Puoi visualizzare solo le informazioni del tuo profilo medico.</p>
+                    <button
+                        onClick={() => navigate('/poliambulatorio/personale/medici')}
+                        className="mt-4 px-4 py-2 text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"
+                    >
+                        Torna al mio profilo
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="p-6 clinica-theme" data-brand="element-medica">
@@ -1124,7 +1420,7 @@ const MedicoDetailPage: React.FC = () => {
             {/* Tab Navigation */}
             <div className="bg-white rounded-xl border border-gray-200 mb-6">
                 <nav className="flex overflow-x-auto scrollbar-hide -mb-px px-4 pt-2" aria-label="Tabs">
-                    {MEDICO_TABS.map(tab => {
+                    {visibleTabs.map(tab => {
                         const Icon = tab.icon;
                         const isActive = activeTab === tab.id;
                         return (
@@ -1221,6 +1517,7 @@ const MedicoDetailPage: React.FC = () => {
                         </div>
 
                         {/* Dati Professionali */}
+                        {!currentMedicoPersonId && (
                         <div className="bg-white rounded-xl border border-gray-200 p-6">
                             <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                                 <Stethoscope className="h-5 w-5 text-teal-600" />
@@ -1263,8 +1560,10 @@ const MedicoDetailPage: React.FC = () => {
                                 )}
                             </div>
                         </div>
+                        )}
 
                         {/* Prestazioni Abilitate */}
+                        {!currentMedicoPersonId && (
                         <div className="bg-white rounded-xl border border-gray-200 p-6">
                             <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                                 <Activity className="h-5 w-5 text-teal-600" />
@@ -1311,6 +1610,7 @@ const MedicoDetailPage: React.FC = () => {
                                 </p>
                             )}
                         </div>
+                        )}
                     </div>
 
                     {/* Sidebar */}
@@ -1326,24 +1626,30 @@ const MedicoDetailPage: React.FC = () => {
                         </div>
 
                         {/* P59: Nomine Medico Competente */}
-                        <NomineRuoloCard
-                            personId={medico.id}
-                            filterTipoRuolo="MEDICO_COMPETENTE"
-                            theme="teal"
-                            title="Nomine Medico Competente"
-                        />
+                        {!currentMedicoPersonId && (
+                            <NomineRuoloCard
+                                personId={medico.id}
+                                filterTipoRuolo="MEDICO_COMPETENTE"
+                                theme="teal"
+                                title="Nomine Medico Competente"
+                            />
+                        )}
 
                         {/* P59: Attività eseguite (Sopralluoghi, DVR) */}
-                        <AttivitaProfessionistaCard
-                            personId={medico.id}
-                            theme="teal"
-                            title="Attività Eseguite"
-                        />
+                        {!currentMedicoPersonId && (
+                            <AttivitaProfessionistaCard
+                                personId={medico.id}
+                                theme="teal"
+                                title="Attività Eseguite"
+                            />
+                        )}
 
                         {/* Permessi Visite */}
-                        <MedicoVisitPermissionsCard
-                            medicoId={medico.id}
-                        />
+                        {!currentMedicoPersonId && (
+                            <MedicoVisitPermissionsCard
+                                medicoId={medico.id}
+                            />
+                        )}
 
                         {/* Quick Info */}
                         <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -1401,11 +1707,26 @@ const MedicoDetailPage: React.FC = () => {
                                     <Calendar className="h-4 w-4" />
                                     Vedi Agenda
                                 </button>
+                                <button
+                                    onClick={() => setShowCredentialsModal(true)}
+                                    className="w-full flex items-center gap-2 px-4 py-2 text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+                                >
+                                    <Key className="h-4 w-4" />
+                                    Gestione Credenziali
+                                </button>
                             </div>
                         </div>
                     </div>
                 </div>
             )} {/* end tab anagrafica */}
+
+            {showCredentialsModal && medico && (
+                <PersonCredentialsModal
+                    open={showCredentialsModal}
+                    onOpenChange={setShowCredentialsModal}
+                    persons={[{ id: medico.id, firstName: medico.firstName || '', lastName: medico.lastName || '', email: medico.email ?? undefined }]}
+                />
+            )}
 
             {/* Tab: Tariffario Medico */}
             {activeTab === 'tariffario' && (

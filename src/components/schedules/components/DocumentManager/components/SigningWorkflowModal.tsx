@@ -182,8 +182,10 @@ export const SigningWorkflowModal: React.FC<SigningWorkflowModalProps> = ({
         const canvas = padRef.current;
         if (!canvas) return;
         const ctx = canvas.getContext('2d')!;
-        // Transparent background - only clear, don't fill with white
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // Always fill with white so the dark stroke is visible in both light and dark mode.
+        // removeWhiteBackground() will strip it before embedding the signature in the PDF.
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.strokeStyle = '#1f2937';
         ctx.lineWidth = 2;
         ctx.lineCap = 'round';
@@ -523,7 +525,7 @@ export const SigningWorkflowModal: React.FC<SigningWorkflowModalProps> = ({
                             {signMode === 'draw' ? (
                                 <div>
                                     <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Disegna la tua firma nello spazio sottostante.</p>
-                                    <div className="relative rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 overflow-hidden" style={{ touchAction: 'none' }}>
+                                    <div className="relative rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 bg-white overflow-hidden" style={{ touchAction: 'none' }}>
                                         <canvas
                                             ref={padRef}
                                             width={440}
@@ -555,7 +557,7 @@ export const SigningWorkflowModal: React.FC<SigningWorkflowModalProps> = ({
                                     </label>
                                     {uploadedUrl && (
                                         <div className="mt-3 relative">
-                                            <div className="border rounded-xl overflow-hidden bg-white dark:bg-gray-800 p-3">
+                                            <div className="border rounded-xl overflow-hidden bg-white p-3">
                                                 <img src={uploadedUrl} alt="Anteprima firma" className="max-h-28 max-w-full object-contain mx-auto" />
                                             </div>
                                             <button onClick={() => { setUploadedUrl(null); setHasStroke(false); }}

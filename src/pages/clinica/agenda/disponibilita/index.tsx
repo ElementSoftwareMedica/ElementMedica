@@ -11,6 +11,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Calendar, RefreshCw, Users } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { MediciGrid } from './components/MediciGrid';
 import { MedicoDetail } from './components/MedicoDetail';
 import { useDisponibilitaData } from './hooks/useDisponibilitaData';
@@ -20,6 +21,7 @@ import type { MedicoWithStats, ViewMode } from './types';
 export const DisponibilitaPage: React.FC = () => {
     const { medicoId } = useParams<{ medicoId?: string }>();
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
     const [viewMode, setViewMode] = useState<ViewMode>('grid');
     const [selectedMedico, setSelectedMedico] = useState<MedicoWithStats | null>(null);
 
@@ -50,9 +52,15 @@ export const DisponibilitaPage: React.FC = () => {
             if (medico) {
                 setSelectedMedico(medico);
                 setViewMode('detail');
+            } else {
+                setSelectedMedico(mediciWithStats[0] || null);
+                setViewMode(mediciWithStats[0] ? 'detail' : 'grid');
+                if (mediciWithStats[0]) {
+                    navigate(`/poliambulatorio/disponibilita/${mediciWithStats[0].id}`, { replace: true });
+                }
             }
         }
-    }, [isReady, medicoId, mediciWithStats]);
+    }, [isReady, medicoId, mediciWithStats, navigate]);
 
     // Handle medico selection
     const handleSelectMedico = (medico: MedicoWithStats) => {
@@ -144,7 +152,13 @@ export const DisponibilitaPage: React.FC = () => {
                     onCreateFerie={createFerie}
                     onDeleteFerie={deleteFerie}
                     onGenerateSlots={async (medicoId, dataInizio, dataFine) => {
-                        return disponibilitaApi.generateSlots(medicoId, dataInizio, dataFine);
+                        const result = await disponibilitaApi.generateSlots(medicoId, dataInizio, dataFine);
+                        // Invalida queries per aggiornare la UI dopo la generazione
+                        queryClient.invalidateQueries({ queryKey: ['slots'] });
+                        queryClient.invalidateQueries({ queryKey: ['slots-all'] });
+                        queryClient.invalidateQueries({ queryKey: ['slots-calendario'] });
+                        queryClient.invalidateQueries({ queryKey: ['disponibilita-all'] });
+                        return result;
                     }}
                     isLoading={isCreating || isDeleting}
                 />

@@ -6,10 +6,10 @@
  */
 
 /** Supported medical device types */
-export type DeviceType = 'edan-ecg' | 'mir-spirometer' | 'oscilla-audiometer';
+export type DeviceType = 'edan-ecg' | 'mir-spirometer' | 'oscilla-audiometer' | 'drugtest-analyzer';
 
 /** Supported exam types mapped to devices */
-export type ExamType = 'ecg' | 'spirometry' | 'audiometry';
+export type ExamType = 'ecg' | 'spirometry' | 'audiometry' | 'drugtest';
 
 /** GDT record types (Satzarten) */
 export type GdtRecordType = '6300' | '6301' | '6302' | '6310' | '6311';
@@ -90,6 +90,8 @@ export interface PatientData {
     heightCm?: number;
     /** Weight in kg */
     weightKg?: number;
+    /** Ethnicity/clinical ancestry when needed by the device software */
+    ethnicity?: string;
 }
 
 /** Exam request payload from webapp */

@@ -21,8 +21,10 @@ import {
   aggiornaStatoFatturaSDI,
   creaNataCredito
 } from '../services/billing/FatturazioneService.js';
+import { sincronizzaSistemaTS } from '../services/billing/SistemaTSService.js';
 import { generateFatturaPdf } from '../services/billing/FatturaElettronicaPdfService.js';
 import EmailService from '../services/emailService.js';
+import MovimentoContabileGenerator from '../services/management/MovimentoContabileGenerator.js';
 import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 import { validateParamId } from '../middleware/validateUUID.js';
 
@@ -35,6 +37,132 @@ const requireBillingFeatureAccess = requireAnyFeature([
   FEATURE_KEYS.FATTURAZIONE_PA,
   FEATURE_KEYS.FATTURAZIONE_SPLIT_PAYMENT
 ]);
+
+const isPatientMedicalDocument = (fattura) => (
+  fattura?.clienteType === 'PERSONA' &&
+  !fattura?.clienteAziendaId &&
+  ['VISITA', 'PRESTAZIONE_CLINICA'].includes(fattura?.tipoServizio) &&
+  (fattura?.linee || []).every(linea => Number(linea.aliquotaIva || 0) === 0)
+);
+
+const emitDocumentRespectingHealthRules = async (fatturaId, tenantId) => {
+  const existing = await prisma.fatturaElettronica.findFirst({
+    where: { id: fatturaId, tenantId, deletedAt: null },
+    include: { enteEmittente: true, linee: true }
+  });
+  if (!existing) throw new Error('Fattura non trovata');
+  if (existing.stato !== 'BOZZA') return existing;
+
+  if (isPatientMedicalDocument(existing)) {
+    const fattura = await prisma.fatturaElettronica.update({
+      where: { id: fatturaId },
+      data: {
+        stato: 'EMESSA',
+        acubeStatus: 'BOZZA',
+        acubeUuid: null,
+        acubeLastSync: null,
+      },
+      include: { linee: { orderBy: { numeroLinea: 'asc' } } }
+    });
+
+    if (existing.tipoDocumento !== 'NOTA_CREDITO' && existing.enteEmittente?.sistemaTsAbilitato && Number(existing.sistemaTsFlagOpp ?? 0) === 0) {
+      await sincronizzaSistemaTS(fatturaId, existing.cessionarioCF, tenantId).catch(tsError => {
+        logger.warn('Documento sanitario emesso ma SistemaTS non sincronizzato', {
+          fatturaId,
+          error: tsError.message,
+          tenantId
+        });
+      });
+    }
+    return fattura;
+  }
+
+  return emettiFattura(fatturaId, tenantId);
+};
+
+const selectBillableMovementIds = (movimenti = []) => {
+  const bySource = new Map();
+  for (const movimento of movimenti) {
+    const key = movimento.appPrestazioneId || (movimento.appuntamentoId ? `main:${movimento.appuntamentoId}` : movimento.visitaId) || movimento.id;
+    const existing = bySource.get(key);
+    if (!existing) {
+      bySource.set(key, movimento);
+      continue;
+    }
+    const existingRank = existing.stato === 'BOZZA' ? 0 : 1;
+    const currentRank = movimento.stato === 'BOZZA' ? 0 : 1;
+    const currentIsBetter = currentRank > existingRank
+      || (currentRank === existingRank && new Date(movimento.updatedAt || movimento.createdAt || 0) > new Date(existing.updatedAt || existing.createdAt || 0));
+    if (currentIsBetter) bySource.set(key, movimento);
+  }
+  return Array.from(bySource.values()).map(m => m.id);
+};
+
+const getAppuntamentoIdFromBillingContext = (fattura) => {
+  const fromNote = String(fattura?.note || '').match(/AUTO_ACCETTAZIONE:([0-9a-f-]{36})/i)?.[1] || null;
+  if (fromNote) return fromNote;
+  return fattura?.movimentiContabili?.find(m => m.appuntamentoId)?.appuntamentoId || null;
+};
+
+const syncAppuntamentoAfterBilling = async (fatturaInput, tenantId, personId, mode = 'paid') => {
+  const fattura = fatturaInput?.movimentiContabili
+    ? fatturaInput
+    : await prisma.fatturaElettronica.findFirst({
+      where: { id: fatturaInput?.id, tenantId },
+      include: { movimentiContabili: true }
+    });
+  const appuntamentoId = getAppuntamentoIdFromBillingContext(fattura);
+  if (!appuntamentoId) return;
+
+  const appuntamento = await prisma.appuntamento.findFirst({
+    where: { id: appuntamentoId, tenantId, deletedAt: null },
+    select: { id: true, stato: true }
+  });
+  if (!appuntamento) return;
+
+  if (mode === 'paid') {
+    await prisma.appuntamento.update({
+      where: { id: appuntamentoId },
+      data: {
+        pagamentoAnticipato: true,
+        pagamentoDataOra: new Date(),
+        ...(['COMPLETATO', 'FATTURATO'].includes(appuntamento.stato) ? { stato: 'FATTURATO' } : {}),
+        updatedBy: personId || null,
+      }
+    });
+    await prisma.movimentoContabile.updateMany({
+      where: { tenantId, deletedAt: null, fatturaElettronicaId: fattura.id },
+      data: { stato: 'PAGATO', dataPagamento: new Date(), updatedBy: personId || null }
+    });
+    return;
+  }
+
+  const remainingPaidContext = await prisma.movimentoContabile.findFirst({
+    where: {
+      tenantId,
+      deletedAt: null,
+      appuntamentoId,
+      direzione: 'ENTRATA',
+      stato: { in: ['PAGATO', 'FATTURATO'] },
+      OR: [
+        { fatturaElettronicaId: { not: null } },
+        { note: { contains: 'SENZA_FATTURA' } },
+      ],
+    },
+    select: { id: true },
+  });
+  if (!remainingPaidContext && appuntamento.stato === 'FATTURATO') {
+    await prisma.appuntamento.update({
+      where: { id: appuntamentoId },
+      data: {
+        stato: 'COMPLETATO',
+        pagamentoAnticipato: false,
+        pagamentoDataOra: null,
+        updatedBy: personId || null,
+      }
+    });
+  }
+};
 
 // ---------------------------------------------------------------------------
 // GET /api/v1/billing/fatture
@@ -178,6 +306,51 @@ router.get('/stats',
 );
 
 // ---------------------------------------------------------------------------
+// POST /api/v1/billing/fatture/pagata-senza-fattura
+// Registra incasso senza emissione fattura e genera il compenso medico passivo.
+// ---------------------------------------------------------------------------
+router.post('/pagata-senza-fattura',
+  authenticate,
+  requireBillingFeatureAccess,
+  checkPermission('billing:write'),
+  async (req, res) => {
+    try {
+      const tenantId = getEffectiveTenantId(req);
+      const { visitaId, appPrestazioneId, appuntamentoId, importoRiferimento, descrizione, metodoPagamento, bozzaFatturaId } = req.body || {};
+
+      if (!visitaId && !appPrestazioneId && !appuntamentoId) {
+        return res.status(400).json({ error: 'visitaId, appuntamentoId o appPrestazioneId obbligatorio' });
+      }
+
+      const result = await MovimentoContabileGenerator.generaPagamentoSenzaFattura({
+        visitaId: visitaId || null,
+        appPrestazioneId: appPrestazioneId || null,
+        appuntamentoId: appuntamentoId || null,
+        importoRiferimento,
+        descrizione,
+        bozzaFatturaId: bozzaFatturaId || null,
+        metodoPagamento: metodoPagamento || null,
+      }, tenantId, req.person?.id);
+
+      return res.json({
+        success: true,
+        data: result,
+        message: 'Pagamento registrato senza emissione fattura'
+      });
+    } catch (error) {
+      logger.error('Errore pagamento senza fattura', {
+        error: error.message,
+        stack: error.stack?.split('\n').slice(0, 6).join(' | '),
+        bodyKeys: Object.keys(req.body || {}),
+        tenantId: req.person?.tenantId,
+        personId: req.person?.id
+      });
+      return res.status(500).json({ error: 'Errore interno del server' });
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
 // GET /api/v1/billing/fatture/:id
 // Dettaglio singola fattura con linee e log SistemaTS
 // ---------------------------------------------------------------------------
@@ -236,6 +409,84 @@ router.post('/',
       const tenantId = getEffectiveTenantId(req);
       const input = req.body;
 
+      const contextKey = typeof input.note === 'string' && input.note.startsWith('AUTO_ACCETTAZIONE:')
+        ? input.note
+        : null;
+      const contextAppuntamentoId = input.appuntamentoId
+        || (contextKey ? contextKey.replace('AUTO_ACCETTAZIONE:', '') : null);
+      if (input.visitaId || contextKey || contextAppuntamentoId) {
+        const sourceMovimenti = (!Array.isArray(input.sourceMovimentoIds) || input.sourceMovimentoIds.length === 0) && (input.visitaId || contextAppuntamentoId)
+          ? await prisma.movimentoContabile.findMany({
+            where: {
+              tenantId,
+              deletedAt: null,
+              direzione: 'ENTRATA',
+              fatturaElettronicaId: null,
+              stato: { in: ['BOZZA', 'DA_FATTURARE'] },
+              note: { not: { contains: 'SENZA_FATTURA' } },
+              OR: [
+                ...(input.visitaId ? [{ visitaId: input.visitaId }] : []),
+                ...(contextAppuntamentoId ? [{ appuntamentoId: contextAppuntamentoId }] : []),
+              ],
+            },
+            select: { id: true, stato: true, appuntamentoId: true, visitaId: true, appPrestazioneId: true, createdAt: true, updatedAt: true },
+          })
+          : [];
+
+        const existingContextDocument = await prisma.fatturaElettronica.findFirst({
+          where: {
+            tenantId,
+            deletedAt: null,
+            OR: [
+              ...(input.visitaId ? [{ visitaId: input.visitaId, stato: { in: ['BOZZA', 'EMESSA', 'PAGATA'] } }] : []),
+              ...(contextKey ? [
+                { note: contextKey, stato: { in: ['BOZZA', 'EMESSA', 'PAGATA'] } },
+                { note: { contains: contextKey }, stato: 'PAGATA', numero: { startsWith: `SF-${new Date().getFullYear()}/` } },
+              ] : []),
+            ],
+          },
+          include: {
+            enteEmittente: { select: { id: true, denominazione: true, tipo: true } },
+            linee: { orderBy: { numeroLinea: 'asc' } },
+          },
+          orderBy: { updatedAt: 'desc' },
+        });
+        if (existingContextDocument && (existingContextDocument.stato === 'BOZZA' || sourceMovimenti.length === 0)) {
+          return res.status(200).json({ data: existingContextDocument, deduplicated: true });
+        }
+
+        if (input.visitaId || contextAppuntamentoId) {
+          const linkedMovement = await prisma.movimentoContabile.findFirst({
+            where: {
+              tenantId,
+              deletedAt: null,
+              fatturaElettronicaId: { not: null },
+              OR: [
+                ...(input.visitaId ? [{ visitaId: input.visitaId }] : []),
+                ...(contextAppuntamentoId ? [{ appuntamentoId: contextAppuntamentoId }] : []),
+              ],
+              fatturaElettronica: { deletedAt: null, stato: { in: ['BOZZA', 'EMESSA', 'PAGATA'] } },
+            },
+            include: {
+              fatturaElettronica: {
+                include: {
+                  enteEmittente: { select: { id: true, denominazione: true, tipo: true } },
+                  linee: { orderBy: { numeroLinea: 'asc' } },
+                },
+              },
+            },
+            orderBy: { updatedAt: 'desc' },
+          });
+          if (linkedMovement?.fatturaElettronica && (linkedMovement.fatturaElettronica.stato === 'BOZZA' || sourceMovimenti.length === 0)) {
+            return res.status(200).json({ data: linkedMovement.fatturaElettronica, deduplicated: true });
+          }
+
+          if (sourceMovimenti.length > 0) {
+            input.sourceMovimentoIds = selectBillableMovementIds(sourceMovimenti);
+          }
+        }
+      }
+
       const fattura = await creaFatturaBozza(input, tenantId, req.person.id);
 
       logger.info('Fattura bozza creata', {
@@ -289,7 +540,7 @@ router.put('/:id',
         terzoPaganteTipo, terzoPersonaId, terzoAziendaId,
         condizioniPagamento, modalitaPagamento, iban,
         preventivoId, visitaId, courseScheduleId, nominaId, sopralluogoId, dvrId,
-        linee, sistemaTsFlagOpp
+        linee, sistemaTsFlagOpp, disagioPsicologico, forceBollo, note
       } = req.body;
 
       // Aggiorna campi della fattura
@@ -332,6 +583,12 @@ router.put('/:id',
       if (sopralluogoId !== undefined) updateData.sopralluogoId = sopralluogoId;
       if (dvrId !== undefined) updateData.dvrId = dvrId;
       if (sistemaTsFlagOpp !== undefined) updateData.sistemaTsFlagOpp = sistemaTsFlagOpp;
+      if (disagioPsicologico !== undefined) updateData.disagioPsicologico = !!disagioPsicologico;
+      if (note !== undefined) updateData.note = note || null;
+      if (forceBollo !== undefined) {
+        updateData.bolloVirtuale = !!forceBollo;
+        updateData.importoBollo = forceBollo ? 2 : 0;
+      }
 
       // Se ci sono linee, sostituiscile completamente
       const updatedFattura = await prisma.$transaction(async (tx) => {
@@ -362,7 +619,13 @@ router.put('/:id',
 
             updateData.imponibile = totLinee.imponibile;
             updateData.importoIva = totLinee.iva;
-            updateData.totale = totLinee.imponibile + totLinee.iva;
+            const bollo = updateData.bolloVirtuale === true ? 2 : updateData.bolloVirtuale === false ? 0 : Number(existing.importoBollo || 0);
+            updateData.importoBollo = bollo;
+            updateData.totale = totLinee.imponibile + totLinee.iva + bollo;
+            updateData.aliquotaIva = linee.length > 0
+              ? linee.reduce((acc, l) => acc + Number(l.aliquotaIva ?? 22), 0) / linee.length
+              : 0;
+            updateData.natura = linee.find(l => l.natura)?.natura || null;
           }
         }
 
@@ -400,7 +663,8 @@ router.delete('/:id',
       }
 
       const fattura = await prisma.fatturaElettronica.findFirst({
-        where: { id, tenantId, deletedAt: null }
+        where: { id, tenantId, deletedAt: null },
+        include: { movimentiContabili: true }
       });
 
       if (!fattura) {
@@ -417,17 +681,22 @@ router.delete('/:id',
         where: { id },
         data: { deletedAt: new Date() }
       });
+      await prisma.movimentoContabile.updateMany({
+        where: { tenantId, deletedAt: null, fatturaElettronicaId: id },
+        data: { fatturaElettronicaId: null, updatedBy: req.person.id }
+      });
 
       // GdprAuditLog
       await prisma.gdprAuditLog.create({
         data: {
           tenantId,
-          performedById: req.person.id,
+          personId: req.person.id,
           resourceType: 'FatturaElettronica',
           resourceId: id,
           action: 'DELETE',
-          dataAccessed: ['numero', 'cessionarioCF', 'totale'],
-          reason: deletionReason
+          dataAccessed: ['numero', 'cessionarioCF', 'totale', `motivo:${deletionReason}`],
+          ipAddress: req.ip || null,
+          userAgent: req.get?.('user-agent') || null
         }
       }).catch(err => logger.warn('GdprAuditLog failed', { err: err.message }));
 
@@ -452,7 +721,77 @@ router.post('/:id/emetti',
       const { id } = req.params;
       const tenantId = getEffectiveTenantId(req);
 
-      const fattura = await emettiFattura(id, tenantId);
+      const existing = await prisma.fatturaElettronica.findFirst({
+        where: { id, tenantId, deletedAt: null },
+        include: { enteEmittente: true, linee: true }
+      });
+
+      if (!existing) {
+        return res.status(404).json({ error: 'Fattura non trovata' });
+      }
+
+      const isPatientMedicalInvoice =
+        existing.clienteType === 'PERSONA' &&
+        !existing.clienteAziendaId &&
+        ['VISITA', 'PRESTAZIONE_CLINICA'].includes(existing.tipoServizio) &&
+        existing.linee?.every(linea => Number(linea.aliquotaIva || 0) === 0);
+
+      if (isPatientMedicalInvoice) {
+        if (existing.stato !== 'BOZZA') {
+          return res.status(409).json({ error: 'La fattura non può essere emessa nello stato corrente' });
+        }
+
+        let fattura = await prisma.fatturaElettronica.update({
+          where: { id },
+          data: {
+            stato: ['MP01', 'MP08'].includes(existing.modalitaPagamento) ? 'PAGATA' : 'EMESSA',
+            acubeStatus: 'BOZZA',
+            acubeUuid: null,
+            acubeLastSync: null,
+          },
+          include: { linee: { orderBy: { numeroLinea: 'asc' } }, movimentiContabili: true }
+        });
+
+        if (fattura.stato === 'PAGATA') {
+          await syncAppuntamentoAfterBilling(fattura, tenantId, req.person.id, 'paid');
+          fattura = await prisma.fatturaElettronica.findFirst({
+            where: { id, tenantId, deletedAt: null },
+            include: { linee: { orderBy: { numeroLinea: 'asc' } } }
+          });
+        }
+
+        let sistemaTs = null;
+        if (existing.enteEmittente?.sistemaTsAbilitato && Number(existing.sistemaTsFlagOpp ?? 0) === 0) {
+          try {
+            sistemaTs = await sincronizzaSistemaTS(id, existing.cessionarioCF, tenantId);
+          } catch (tsError) {
+            logger.warn('Fattura sanitaria emessa ma SistemaTS non sincronizzato', {
+              fatturaId: id,
+              error: tsError.message,
+              tenantId
+            });
+          }
+        }
+
+        logger.info('Fattura sanitaria paziente emessa senza SDI', { id, numero: fattura.numero, tenantId });
+        return res.json({
+          data: fattura,
+          sistemaTs,
+          message: sistemaTs
+            ? `Documento sanitario ${fattura.numero} emesso e inviato al Sistema TS`
+            : `Documento sanitario ${fattura.numero} emesso senza invio SDI`
+        });
+      }
+
+      let fattura = await emettiFattura(id, tenantId);
+      if (['MP01', 'MP08'].includes(existing.modalitaPagamento)) {
+        fattura = await prisma.fatturaElettronica.update({
+          where: { id },
+          data: { stato: 'PAGATA' },
+          include: { linee: { orderBy: { numeroLinea: 'asc' } }, movimentiContabili: true }
+        });
+        await syncAppuntamentoAfterBilling(fattura, tenantId, req.person.id, 'paid');
+      }
 
       logger.info('Fattura emessa', {
         id,
@@ -537,6 +876,184 @@ router.post('/:id/nota-credito',
 );
 
 // ---------------------------------------------------------------------------
+// POST /api/v1/billing/fatture/:id/storna-e-rifai
+// Elimina bozze o storna documenti emessi con nota di credito pronta, poi
+// libera i movimenti contabili per rigenerare una fattura corretta.
+// ---------------------------------------------------------------------------
+router.post('/:id/storna-e-rifai',
+  authenticate,
+  requireBillingFeatureAccess,
+  checkPermission('billing:write'),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const tenantId = getEffectiveTenantId(req);
+      const { note } = req.body || {};
+
+      const fattura = await prisma.fatturaElettronica.findFirst({
+        where: { id, tenantId, deletedAt: null },
+        include: {
+          linee: true,
+          movimentiContabili: true,
+          noteCreditoEmesse: {
+            where: { deletedAt: null, stato: { notIn: ['ANNULLATA', 'STORNATA'] } },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+          }
+        }
+      });
+
+      if (!fattura) {
+        return res.status(404).json({ error: 'Fattura non trovata' });
+      }
+      if (fattura.tipoDocumento === 'NOTA_CREDITO') {
+        return res.status(409).json({ error: 'Una nota di credito non può essere stornata da questa azione' });
+      }
+
+      if (fattura.stato === 'BOZZA') {
+        const appuntamentoId = getAppuntamentoIdFromBillingContext(fattura);
+        await prisma.$transaction(async (tx) => {
+          await tx.fatturaElettronica.update({
+            where: { id },
+            data: { deletedAt: new Date() }
+          });
+          await tx.movimentoContabile.updateMany({
+            where: { tenantId, deletedAt: null, fatturaElettronicaId: id },
+            data: { fatturaElettronicaId: null, stato: 'DA_FATTURARE', updatedBy: req.person.id }
+          });
+          await tx.gdprAuditLog.create({
+            data: {
+              tenantId,
+              personId: req.person.id,
+              resourceType: 'FatturaElettronica',
+              resourceId: id,
+              action: 'DELETE',
+              dataAccessed: ['numero', 'totale', 'eliminazione_bozza_storna_e_rifai'],
+              ipAddress: req.ip || null,
+              userAgent: req.get?.('user-agent') || null
+            }
+          }).catch(err => logger.warn('GdprAuditLog failed', { err: err.message }));
+        });
+        if (appuntamentoId) {
+          await syncAppuntamentoAfterBilling({ ...fattura, movimentiContabili: fattura.movimentiContabili }, tenantId, req.person.id, 'reopen');
+        }
+
+        return res.json({
+          data: { fatturaId: id, notaCredito: null, stato: 'BOZZA_ELIMINATA' },
+          message: 'Bozza eliminata. I movimenti sono disponibili per una nuova fattura.'
+        });
+      }
+
+      if (!['EMESSA', 'PAGATA'].includes(fattura.stato)) {
+        return res.status(409).json({ error: `Documento non stornabile nello stato ${fattura.stato}` });
+      }
+
+      const isPagamentoSenzaFattura =
+        String(fattura.numero || '').startsWith('SF-') ||
+        String(fattura.note || '').includes('SENZA_FATTURA');
+
+      if (isPagamentoSenzaFattura) {
+        const linkedUscitaIds = fattura.movimentiContabili
+          .map(m => m.movimentoCollegatoId)
+          .filter(Boolean);
+        await prisma.$transaction(async (tx) => {
+          await tx.fatturaElettronica.update({
+            where: { id },
+            data: { stato: 'ANNULLATA', deletedAt: new Date() }
+          });
+          await tx.movimentoContabile.updateMany({
+            where: { tenantId, deletedAt: null, fatturaElettronicaId: id, direzione: 'ENTRATA' },
+            data: { fatturaElettronicaId: null, stato: 'ANNULLATO', updatedBy: req.person.id }
+          });
+          await tx.movimentoContabile.updateMany({
+            where: { tenantId, deletedAt: null, fatturaElettronicaId: id, direzione: 'USCITA' },
+            data: { fatturaElettronicaId: null, stato: 'ANNULLATO', updatedBy: req.person.id }
+          });
+          if (linkedUscitaIds.length > 0) {
+            await tx.movimentoContabile.updateMany({
+              where: { tenantId, deletedAt: null, id: { in: linkedUscitaIds }, direzione: 'USCITA' },
+              data: { fatturaElettronicaId: null, stato: 'ANNULLATO', updatedBy: req.person.id }
+            });
+          }
+          await tx.gdprAuditLog.create({
+            data: {
+              tenantId,
+              personId: req.person.id,
+              resourceType: 'FatturaElettronica',
+              resourceId: id,
+              action: 'DELETE',
+              dataAccessed: ['pagamento_senza_fattura_annullato', 'storna_e_rifai'],
+              ipAddress: req.ip || null,
+              userAgent: req.get?.('user-agent') || null
+            }
+          }).catch(err => logger.warn('GdprAuditLog failed', { err: err.message }));
+        });
+        await syncAppuntamentoAfterBilling({ ...fattura, movimentiContabili: fattura.movimentiContabili }, tenantId, req.person.id, 'reopen');
+
+        return res.json({
+          data: { fatturaId: id, notaCredito: null, stato: 'PAGAMENTO_SENZA_FATTURA_ANNULLATO' },
+          message: 'Pagamento senza fattura annullato. Puoi emettere una fattura ordinaria.'
+        });
+      }
+
+      let notaCredito = fattura.noteCreditoEmesse?.[0] || null;
+      if (!notaCredito) {
+        notaCredito = await creaNataCredito(
+          id,
+          tenantId,
+          req.person.id,
+          note || 'Storno per rifacimento fattura da accettazione paziente'
+        );
+      }
+      if (notaCredito.stato === 'BOZZA') {
+        notaCredito = await emitDocumentRespectingHealthRules(notaCredito.id, tenantId);
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.fatturaElettronica.update({
+          where: { id },
+          data: { stato: 'STORNATA' }
+        });
+        await tx.movimentoContabile.updateMany({
+          where: { tenantId, deletedAt: null, fatturaElettronicaId: id },
+          data: { fatturaElettronicaId: null, stato: 'DA_FATTURARE', updatedBy: req.person.id }
+        });
+        await tx.gdprAuditLog.create({
+          data: {
+            tenantId,
+            personId: req.person.id,
+            resourceType: 'FatturaElettronica',
+            resourceId: id,
+            action: 'UPDATE',
+            dataAccessed: ['stato:STORNATA', `notaCredito:${notaCredito.id}`],
+            ipAddress: req.ip || null,
+            userAgent: req.get?.('user-agent') || null
+          }
+        }).catch(err => logger.warn('GdprAuditLog failed', { err: err.message }));
+      });
+      await syncAppuntamentoAfterBilling({ ...fattura, movimentiContabili: fattura.movimentiContabili }, tenantId, req.person.id, 'reopen');
+
+      logger.info('Fattura stornata e pronta per rifacimento', {
+        fatturaId: id,
+        notaCreditoId: notaCredito.id,
+        tenantId
+      });
+
+      return res.json({
+        data: { fatturaId: id, notaCredito, stato: 'STORNATA' },
+        message: 'Fattura stornata con nota di credito. Puoi creare una nuova fattura corretta.'
+      });
+    } catch (error) {
+      logger.error('Errore POST fattura/:id/storna-e-rifai', { error: error.message, fatturaId: req.params.id });
+      if (error.message.includes('AcubeAPI')) {
+        return res.status(502).json({ error: 'Errore comunicazione SDI. Riprovare più tardi.' });
+      }
+      return res.status(500).json({ error: 'Errore interno del server' });
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
 // POST /api/v1/billing/fatture/:id/segna-pagata
 // Segna fattura come pagata (riconciliazione manuale)
 // ---------------------------------------------------------------------------
@@ -558,6 +1075,11 @@ router.post('/:id/segna-pagata',
         return res.status(404).json({ error: 'Fattura non trovata' });
       }
 
+      if (fattura.stato === 'PAGATA') {
+        await syncAppuntamentoAfterBilling(fattura, tenantId, req.person.id, 'paid');
+        return res.json({ data: fattura, message: 'Fattura già segnata come pagata' });
+      }
+
       if (fattura.stato !== 'EMESSA') {
         return res.status(409).json({
           error: `Solo le fatture EMESSA possono essere segnate come pagate. Stato attuale: ${fattura.stato}`
@@ -566,8 +1088,10 @@ router.post('/:id/segna-pagata',
 
       const updated = await prisma.fatturaElettronica.update({
         where: { id },
-        data: { stato: 'PAGATA' }
+        data: { stato: 'PAGATA' },
+        include: { movimentiContabili: true }
       });
+      await syncAppuntamentoAfterBilling(updated, tenantId, req.person.id, 'paid');
 
       logger.info('Fattura segnata come pagata', { id, tenantId });
 

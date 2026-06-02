@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { apiGet, apiPost, apiPut, apiDelete, apiDownloadWithFilename, DownloadResult } from '../../services/api';
+import { apiGet, apiPost, apiPut, apiDelete, apiDeleteWithPayload, apiDownloadWithFilename, DownloadResult } from '../../services/api';
 import { useTenantFilter } from '../../context/TenantFilterContext';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -87,8 +87,8 @@ interface UsePreventiviReturn {
   getPreventivo: (id: string) => Promise<Preventivo>;
   createPreventivo: (data: Partial<Preventivo>) => Promise<Preventivo>;
   updatePreventivo: (id: string, data: Partial<Preventivo>) => Promise<Preventivo>;
-  deletePreventivo: (id: string) => Promise<void>;
-  bulkDelete: (ids: string[]) => Promise<void>;
+  deletePreventivo: (id: string, deletionReason?: string, options?: { stornaMovimentiFatturati?: boolean }) => Promise<void>;
+  bulkDelete: (ids: string[], deletionReason?: string, options?: { stornaMovimentiFatturati?: boolean }) => Promise<void>;
   changeStato: (id: string, nuovoStato: string) => Promise<Preventivo>;
   applySconto: (preventivoId: string, codiceSconto: string) => Promise<Preventivo>;
   removeSconto: (preventivoId: string, scontoId: string) => Promise<Preventivo>;
@@ -167,15 +167,13 @@ export const usePreventivi = (): UsePreventiviReturn => {
 
       if (response.success) {
         // Backend returns { success, data: [...], pagination: {...} }
-        // data is the array directly, not data.preventivi
-        const preventiviArray = Array.isArray(response.data) ? response.data : (response.data?.preventivi || []);
+        const preventiviArray = Array.isArray(response.data) ? response.data : [];
         setPreventivi(preventiviArray);
 
-        // Pagination can be at response.pagination or response.data.pagination
-        const paginationData = response.pagination || response.data?.pagination || {};
+        const paginationData = response.pagination || {};
         setPagination({
-          currentPage: paginationData.page || paginationData.currentPage || 1,
-          totalPages: paginationData.totalPages || Math.ceil((paginationData.total || 0) / (paginationData.limit || 10)),
+          currentPage: paginationData.currentPage || paginationData.page || 1,
+          totalPages: paginationData.totalPages || 1,
           totalItems: paginationData.total || 0,
           itemsPerPage: paginationData.limit || 10
         });
@@ -285,12 +283,15 @@ export const usePreventivi = (): UsePreventiviReturn => {
   /**
    * Elimina preventivo (soft delete)
    */
-  const deletePreventivo = useCallback(async (id: string): Promise<void> => {
+  const deletePreventivo = useCallback(async (id: string, deletionReason = 'Eliminazione manuale preventivo', options?: { stornaMovimentiFatturati?: boolean }): Promise<void> => {
     setLoading(true);
     setError(null);
 
     try {
-      const response = await apiDelete<ApiResponse>(`/api/v1/preventivi/${id}`) as ApiResponse;
+      const response = await apiDeleteWithPayload<ApiResponse>(`/api/v1/preventivi/${id}`, {
+        deletionReason,
+        ...(options?.stornaMovimentiFatturati !== undefined && { stornaMovimentiFatturati: options.stornaMovimentiFatturati })
+      }) as ApiResponse;
 
       if (response.success) {
         setPreventivi(prev => prev.filter(p => p.id !== id));
@@ -308,12 +309,15 @@ export const usePreventivi = (): UsePreventiviReturn => {
   /**
    * Elimina multipli preventivi
    */
-  const bulkDelete = useCallback(async (ids: string[]): Promise<void> => {
+  const bulkDelete = useCallback(async (ids: string[], deletionReason = 'Eliminazione multipla preventivi', options?: { stornaMovimentiFatturati?: boolean }): Promise<void> => {
     setLoading(true);
     setError(null);
 
     try {
-      await Promise.all(ids.map(id => apiDelete(`/api/v1/preventivi/${id}`)));
+      await Promise.all(ids.map(id => apiDeleteWithPayload(`/api/v1/preventivi/${id}`, {
+        deletionReason,
+        ...(options?.stornaMovimentiFatturati !== undefined && { stornaMovimentiFatturati: options.stornaMovimentiFatturati })
+      })));
       setPreventivi(prev => prev.filter(p => !ids.includes(p.id)));
     } catch (err: unknown) {
       setError('Errore nell\'eliminazione multipla dei preventivi');

@@ -217,9 +217,12 @@ const authenticate = async (req, res, next) => {
         '/api/v1/auth/change-password',
         '/api/v1/auth/logout',
         '/api/v1/auth/refresh',
+        '/api/v1/auth/verify', // Consente verify: il client rileva mustChangePassword dalla risposta
         '/health'
       ];
-      const isAllowed = ALLOWED_PATHS_WHEN_MUST_CHANGE.some(p => req.path === p || req.path.startsWith(p));
+      // req.path è relativo al router corrente; usare req.originalUrl (percorso assoluto)
+      const urlPath = req.originalUrl ? req.originalUrl.split('?')[0] : req.path;
+      const isAllowed = ALLOWED_PATHS_WHEN_MUST_CHANGE.some(p => urlPath === p || urlPath.startsWith(p));
       if (!isAllowed) {
         return res.status(403).json({
           error: 'Cambio password obbligatorio',

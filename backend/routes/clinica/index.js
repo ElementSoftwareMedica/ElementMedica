@@ -12,6 +12,7 @@ import express from 'express';
 import logger from '../../utils/logger.js';
 import { CLINICAL_ENUMS } from '../../config/validation-clinical.js';
 import middleware from '../../middleware/auth.js';
+import { requireFeature } from '../../middleware/featureFlags.js';
 
 // Import sub-routers (modular)
 import poliambulatoriRouter from './poliambulatori.routes.js';
@@ -89,6 +90,13 @@ router.get('/enums', authenticateToken, (req, res) => {
 });
 
 // ============================================
+// FEATURE GATE: BRANCH_MEDICA
+// Protegge tutte le route cliniche dopo questo punto.
+// Health check e enums sono già registrati sopra e non vengono interessati.
+// ============================================
+router.use(authenticateToken, requireFeature('BRANCH_MEDICA'));
+
+// ============================================
 // MOUNT SUB-ROUTERS
 // ============================================
 
@@ -114,6 +122,7 @@ router.use('/sconti', scontiRouter);
 router.use('/allegato-3a', allegato3aRouter);
 router.use('/allegato-3b', allegato3bRouter);
 router.use('/', consensoFirmaRouter);  // Routes define /appuntamenti/:id/consenso-* paths internally
+router.use('/', consensoModuliRouter);  // Routes define /impostazioni/consensi-moduli internally
 router.use('/consenso-moduli', consensoModuliRouter);
 router.use('/consuntivo', consuntivoRouter);
 router.use('/disponibilita', disponibilitaRouter);

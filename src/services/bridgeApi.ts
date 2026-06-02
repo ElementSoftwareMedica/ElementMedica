@@ -16,8 +16,8 @@ import { apiGet, apiPost, apiDelete, apiDeleteWithPayload, apiDownload } from '.
 // TYPES
 // ============================================
 
-export type TipoDispositivoMedico = 'ECG' | 'SPIROMETRO' | 'AUDIOMETRO';
-export type TipoEsame = 'ecg' | 'spirometria' | 'audiometria';
+export type TipoDispositivoMedico = 'ECG' | 'SPIROMETRO' | 'AUDIOMETRO' | 'VISIOTEST';
+export type TipoEsame = 'ecg' | 'spirometria' | 'audiometria' | 'visiotest';
 export type StatoEsameStrumentale = 'IN_ATTESA' | 'COMPLETATO' | 'PARZIALE' | 'ERRORE' | 'TIMEOUT';
 
 export interface EsameStrumentale {
@@ -100,10 +100,14 @@ export interface StartExamBridgeRequest {
         dateOfBirth: string;
         gender: 'MALE' | 'FEMALE' | 'OTHER' | 'NOT_SPECIFIED';
         taxCode?: string;
+        heightCm?: number;
+        weightKg?: number;
+        ethnicity?: string;
     };
     visitaId: string;
     tenantId: string;
     callbackUrl?: string;
+    metadata?: Record<string, unknown>;
 }
 
 export interface StartExamBridgeResponse {
@@ -129,10 +133,11 @@ const CLINICA_BASE = '/api/v1/clinica';
 const BRIDGE_BASE = `${CLINICA_BASE}/strumenti-bridge`;
 
 // Bridge URL — configurable via localStorage for different workstation setups
-const DEFAULT_BRIDGE_URL = 'http://localhost:3000';
+const DEFAULT_BRIDGE_URL = 'http://127.0.0.1:4050';
 
-// Port candidates to try when auto-discovering the bridge (matches bridge r16 fallback logic)
-const BRIDGE_PORT_CANDIDATES = [3000, 3001, 3002];
+// Port candidates to try when auto-discovering the bridge.
+// 4051 is reserved by the desktop callback server and must not be probed by the webapp.
+const BRIDGE_PORT_CANDIDATES = [4050, 4052, 4053];
 
 // In-memory discovery cache (not localStorage — avoids stale cross-session state)
 let _discoveredBridgeUrl: string | null = null;
@@ -157,14 +162,14 @@ function getBridgeUrlCandidates(): string[] {
         const manual = localStorage.getItem('bridge_local_url');
         if (manual) return [manual];
     } catch { /* ignore */ }
-    return BRIDGE_PORT_CANDIDATES.map(p => `http://localhost:${p}`);
+    return BRIDGE_PORT_CANDIDATES.map(p => `http://127.0.0.1:${p}`);
 }
 
 /**
  * Return a cached discovered bridge URL (the port it is actually running on).
  * Falls back to DEFAULT_BRIDGE_URL when no bridge is reachable.
  */
-async function discoverBridgeUrl(): Promise<string> {
+async function discoverBridgeUrl(): Promise<string | null> {
     const now = Date.now();
     if (_discoveredBridgeUrl && (now - _discoveryTimestamp) < DISCOVERY_CACHE_TTL) {
         return _discoveredBridgeUrl;
@@ -183,7 +188,7 @@ async function discoverBridgeUrl(): Promise<string> {
     }
     // Bridge not found — clear stale cache, return default (callers treat as offline)
     _discoveredBridgeUrl = null;
-    return DEFAULT_BRIDGE_URL;
+    return null;
 }
 
 function getBridgeApiKey(): string {
@@ -209,6 +214,7 @@ const EXAM_TYPE_TO_BRIDGE: Record<TipoEsame, string> = {
     'ecg': 'ecg',
     'spirometria': 'spirometry',
     'audiometria': 'audiometry',
+    'visiotest': 'vision',
 };
 
 async function extractDownloadErrorMessage(error: unknown): Promise<string> {
@@ -350,6 +356,9 @@ export const bridgeDirectApi = {
      */
     startExam: async (request: StartExamBridgeRequest): Promise<StartExamBridgeResponse> => {
         const bridgeUrl = await discoverBridgeUrl();
+        if (!bridgeUrl) {
+            throw new Error('Bridge locale non disponibile da questa origine.');
+        }
         // Map Italian exam type to Bridge's English type
         const bridgeExamType = EXAM_TYPE_TO_BRIDGE[request.examType as TipoEsame] || request.examType;
         const bridgeRequest = { ...request, examType: bridgeExamType };
@@ -380,6 +389,9 @@ export const bridgeDirectApi = {
      */
     getHealth: async (): Promise<{ status: string; uptime: number; version: string }> => {
         const bridgeUrl = await discoverBridgeUrl();
+        if (!bridgeUrl) {
+            throw new Error('Bridge locale non disponibile da questa origine.');
+        }
         const response = await fetch(`${bridgeUrl}/health`, {
             signal: AbortSignal.timeout(3000),
         });
@@ -455,6 +467,9 @@ export const bridgeDirectApi = {
      */
     getDevices: async (): Promise<BridgeDevice[]> => {
         const bridgeUrl = await discoverBridgeUrl();
+        if (!bridgeUrl) {
+            return [];
+        }
         const response = await fetch(`${bridgeUrl}/devices`, {
             headers: getBridgeHeaders(),
         });
@@ -470,6 +485,9 @@ export const bridgeDirectApi = {
      */
     getSessions: async (): Promise<unknown[]> => {
         const bridgeUrl = await discoverBridgeUrl();
+        if (!bridgeUrl) {
+            return [];
+        }
         const response = await fetch(`${bridgeUrl}/sessions`, {
             headers: getBridgeHeaders(),
         });
@@ -486,12 +504,14 @@ export const TIPO_ESAME_LABELS: Record<string, string> = {
     'ecg': 'Elettrocardiogramma (ECG)',
     'spirometria': 'Spirometria',
     'audiometria': 'Audiometria',
+    'visiotest': 'Visiotest',
 };
 
 export const TIPO_DISPOSITIVO_LABELS: Record<TipoDispositivoMedico, string> = {
     'ECG': 'ECG',
     'SPIROMETRO': 'Spirometro',
     'AUDIOMETRO': 'Audiometro',
+    'VISIOTEST': 'Visiotest',
 };
 
 export const STATO_ESAME_CONFIG: Record<StatoEsameStrumentale, { label: string; color: string; icon: string }> = {

@@ -1,6 +1,7 @@
 import prisma from '../../../config/prisma-optimization.js';
 import { logger } from '../../../utils/logger.js';
 import { ROLE_TYPES, ROLE_SCOPES } from '../utils/RoleTypes.js';
+import { seedDefaultPermissions } from '../utils/PermissionSeeder.js';
 
 
 /**
@@ -81,7 +82,7 @@ export async function assignRole(personId, tenantId, roleType, options = {}) {
       });
     } else {
       // Crea un nuovo ruolo
-      return await prisma.personRole.create({
+      const newRole = await prisma.personRole.create({
         data: {
           personId,
           tenantId,
@@ -91,6 +92,8 @@ export async function assignRole(personId, tenantId, roleType, options = {}) {
           validUntil: expiresAt
         }
       });
+      await seedDefaultPermissions(newRole.id, roleType, prisma);
+      return newRole;
     }
   } catch (error) {
     logger.error('[ROLE_CORE] Error assigning role:', error);

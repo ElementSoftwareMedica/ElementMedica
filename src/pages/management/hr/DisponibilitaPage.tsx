@@ -92,6 +92,13 @@ const FASCIA_DEFAULT_HOURS: Record<FasciaOraria, { oraInizio: string; oraFine: s
     FLESSIBILE: { oraInizio: '08:00', oraFine: '16:00' },
 };
 
+type ApiMutationError = Error & {
+    response?: {
+        status?: number;
+        data?: { message?: string };
+    };
+};
+
 // ============================================================================
 // HELPERS - Date in LOCAL timezone (no UTC conversion!)
 // ============================================================================
@@ -148,6 +155,7 @@ const DisponibilitaPage: React.FC = () => {
     const [isDragging, setIsDragging] = useState(false);
     const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
     const dragStartRef = useRef<string | null>(null);
+    const pendingTurniRef = useRef(new Set<string>());
 
     // Dati modificati localmente (prima del salvataggio)
     const [localChanges, setLocalChanges] = useState<Map<string, PreferenzaDisponibilita>>(new Map());
@@ -250,9 +258,17 @@ const DisponibilitaPage: React.FC = () => {
             queryClient.invalidateQueries({ queryKey: ['hr', 'turni'] });
             showToast({ message: 'Turno assegnato', type: 'success' });
         },
-        onError: (error: Error & { response?: { data?: { message?: string } } }) => {
+        onError: (error: ApiMutationError) => {
+            if (error?.response?.status === 409) {
+                queryClient.invalidateQueries({ queryKey: ['hr', 'turni'] });
+                showToast({ message: 'Turno gia presente, calendario aggiornato', type: 'info' });
+                return;
+            }
             const msg = error?.response?.data?.message || 'Errore nell\'assegnazione del turno';
             showToast({ message: msg, type: 'error' });
+        },
+        onSettled: () => {
+            pendingTurniRef.current.clear();
         },
     });
 
@@ -263,8 +279,16 @@ const DisponibilitaPage: React.FC = () => {
             queryClient.invalidateQueries({ queryKey: ['hr', 'turni'] });
             showToast({ message: 'Turno rimosso', type: 'success' });
         },
-        onError: () => {
+        onError: (error: ApiMutationError) => {
+            if (error?.response?.status === 404) {
+                queryClient.invalidateQueries({ queryKey: ['hr', 'turni'] });
+                showToast({ message: 'Turno gia rimosso, calendario aggiornato', type: 'info' });
+                return;
+            }
             showToast({ message: 'Errore nella rimozione', type: 'error' });
+        },
+        onSettled: () => {
+            pendingTurniRef.current.clear();
         },
     });
 
@@ -427,6 +451,8 @@ const DisponibilitaPage: React.FC = () => {
 
         // Check if turno already exists for this profilo+date+fascia
         const turniKey = `${dataKey}_${profiloHRId}`;
+        const operationKey = `${turniKey}_${fascia}`;
+        if (pendingTurniRef.current.has(operationKey)) return;
         const existingTurni = turniMap.get(turniKey) || [];
 
         // Find turno that matches this fascia (by time range)
@@ -437,6 +463,7 @@ const DisponibilitaPage: React.FC = () => {
 
         if (matchingTurno) {
             // Remove turno
+            pendingTurniRef.current.add(operationKey);
             deleteTurnoMutation.mutate(matchingTurno.id);
         } else {
             // Create turno with mansione
@@ -452,6 +479,7 @@ const DisponibilitaPage: React.FC = () => {
                 }
             }
 
+            pendingTurniRef.current.add(operationKey);
             createTurnoMutation.mutate({
                 profiloHRId,
                 data: dataKey,

@@ -51,6 +51,8 @@ import {
 } from '../../../../services/clinicaApi';
 import { useToast } from '../../../../hooks/useToast';
 import { useTenantFilter } from '../../../../context/TenantFilterContext';
+import { useAuth } from '../../../../context/AuthContext';
+import { useRoleGuard } from '../../../../hooks/useRoleGuard';
 import { getAllSpecialties, addCustomSpecialty as addSpecialtyToStore } from '../../../../constants/specialties';
 
 // Modular components
@@ -90,6 +92,9 @@ const MedicoForm: React.FC = () => {
     const isEdit = id && id !== 'nuovo';
     const queryClient = useQueryClient();
     const { showToast } = useToast();
+    const { user } = useAuth();
+    const { isMedico, isMedicoCompetente } = useRoleGuard();
+    const currentMedicoPersonId = isMedico && !isMedicoCompetente ? user?.id : undefined;
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // P61: Tenant filter for prestazioni - rispetta X-Operate-Tenant-Id
@@ -276,14 +281,14 @@ const MedicoForm: React.FC = () => {
             fullDescription?: string;
             prestazioniIds?: string[];
         }) => mediciApi.create(data),
-        onSuccess: (data) => {
+        onSuccess: (response) => {
             queryClient.invalidateQueries({ queryKey: ['medici'] });
             showToast({ type: 'success', message: 'Medico creato con successo' });
 
-            if (data && 'credentials' in data && data.credentials) {
+            if (response?.credentials) {
                 setCredentialsModal({
                     open: true,
-                    credentials: data.credentials as { username: string; temporaryPassword: string }
+                    credentials: response.credentials
                 });
             } else {
                 navigate('/poliambulatorio/personale/medici');
@@ -317,7 +322,7 @@ const MedicoForm: React.FC = () => {
 
     // Enable existing person as medico mutation
     const enableMedicoMutation = useMutation({
-        mutationFn: (data: { personId: string; specialties?: string[]; registerCode?: string; registerCode2?: string }) =>
+        mutationFn: (data: Parameters<typeof mediciApi.enable>[0]) =>
             mediciApi.enable(data),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['medici'] });
@@ -380,8 +385,14 @@ const MedicoForm: React.FC = () => {
             showToast({ type: 'success', message: 'Medico aggiornato con successo' });
             navigate(`/poliambulatorio/personale/medici/${id}`);
         },
-        onError: (error: Error) => {
-            showToast({ type: 'error', message: 'Errore nell\'aggiornamento' });
+        onError: (error: Error & {
+            response?: { status?: number; data?: { error?: string } }
+        }) => {
+            if (error.response?.status === 409) {
+                showToast({ type: 'error', message: error.response.data?.error || 'Codice fiscale già esistente' });
+            } else {
+                showToast({ type: 'error', message: 'Errore nell\'aggiornamento' });
+            }
         }
     });
 
@@ -475,7 +486,7 @@ const MedicoForm: React.FC = () => {
             return;
         }
 
-        const submitData = {
+        const baseAnagraficaData = {
             firstName: formData.firstName,
             lastName: formData.lastName,
             email: formData.email || undefined,
@@ -492,6 +503,10 @@ const MedicoForm: React.FC = () => {
             postalCode: formData.postalCode || undefined,
             iban: formData.iban?.replace(/\s/g, '').toUpperCase() || undefined,
             profileImage: formData.profileImage || undefined,
+        };
+
+        const submitData = currentMedicoPersonId ? baseAnagraficaData : {
+            ...baseAnagraficaData,
             notes: formData.notes || undefined,
             specialties: formData.specialties.length > 0 ? formData.specialties : undefined,
             registerCode: formData.registerCode || undefined,
@@ -505,6 +520,11 @@ const MedicoForm: React.FC = () => {
             })
         };
 
+        if (currentMedicoPersonId && id && id !== currentMedicoPersonId && medicoData?.personId !== currentMedicoPersonId) {
+            showToast({ type: 'error', message: 'Puoi modificare solo il tuo profilo anagrafico' });
+            return;
+        }
+
         if (isEdit) {
             updateMutation.mutate(submitData);
         } else {
@@ -517,9 +537,21 @@ const MedicoForm: React.FC = () => {
         if (conflictModal.existingPersonId) {
             enableMedicoMutation.mutate({
                 personId: conflictModal.existingPersonId,
+                email: formData.email,
+                phone: formData.phone,
+                pec: formData.pec,
+                residenceAddress: formData.residenceAddress,
+                residenceCity: formData.residenceCity,
+                province: formData.province,
+                postalCode: formData.postalCode,
+                iban: formData.iban,
+                notes: formData.notes,
                 specialties: formData.specialties,
                 registerCode: formData.registerCode,
-                registerCode2: formData.registerCode2
+                registerCode2: formData.registerCode2,
+                shortDescription: formData.shortDescription,
+                fullDescription: formData.fullDescription,
+                prestazioniIds: formData.prestazioniIds.length > 0 ? formData.prestazioniIds : undefined
             });
         }
     };
@@ -1158,18 +1190,19 @@ const MedicoForm: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Prestazioni Abilitate - Two Column Selector */}
-                <PrestazioniAbilitateSelector
-                    prestazioni={prestazioniList}
-                    selectedIds={formData.prestazioniIds}
-                    onSelectionChange={(ids) => setFormData(prev => ({ ...prev, prestazioniIds: ids }))}
-                    specialties={formData.specialties}
-                    showAllPrestazioni={showAllPrestazioni}
-                    onShowAllChange={setShowAllPrestazioni}
-                />
+                {!currentMedicoPersonId && (
+                    <PrestazioniAbilitateSelector
+                        prestazioni={prestazioniList}
+                        selectedIds={formData.prestazioniIds}
+                        onSelectionChange={(ids) => setFormData(prev => ({ ...prev, prestazioniIds: ids }))}
+                        specialties={formData.specialties}
+                        showAllPrestazioni={showAllPrestazioni}
+                        onShowAllChange={setShowAllPrestazioni}
+                    />
+                )}
 
                 {/* Documenti (solo in modifica) */}
-                {isEdit && (
+                {isEdit && !currentMedicoPersonId && (
                     <DocumentsList
                         documents={documents}
                         onAddDocument={() => setShowDocumentModal(true)}
@@ -1209,10 +1242,10 @@ const MedicoForm: React.FC = () => {
                                         <Info className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
                                         <div>
                                             <p className="text-sm font-medium text-blue-900">
-                                                Password di default
+                                                Credenziali account
                                             </p>
                                             <p className="text-sm text-blue-700 mt-1">
-                                                L'account verrà creato con la password: <code className="bg-blue-100 px-1 py-0.5 rounded font-mono">{DEFAULT_PASSWORD}</code>
+                                                Le credenziali (username e password) verranno mostrate al completamento della creazione.
                                             </p>
                                             <p className="text-xs text-blue-600 mt-2">
                                                 La password deve essere cambiata al primo accesso

@@ -1,0 +1,211 @@
+{
+    "BRANCH_MEDICA": {
+        "price": 49.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 499.00
+    },
+    "BRANCH_FORMAZIONE": {
+        "price": 39.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 399.00
+    },
+    "BRANCH_LABORATORIO": {
+        "price": 29.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 299.00
+    },
+    "BRANCH_CONSULENZA": {
+        "price": 29.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 299.00
+    },
+    "MDL_BASE": {
+        "price": 0.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 0.00,
+        "note": "Incluso nel piano base"
+    },
+    "MDL_SORVEGLIANZA": {
+        "price": 19.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 189.00
+    },
+    "MDL_ALLEGATO_3B": {
+        "price": 15.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 149.00
+    },
+    "MDL_PROTOCOLLI": {
+        "price": 15.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 149.00
+    },
+    "FATTURAZIONE_ELETTRONICA": {
+        "price": 25.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 249.00
+    },
+    "FATTURAZIONE_PA": {
+        "price": 15.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 149.00
+    },
+    "FATTURAZIONE_SPLIT_PAYMENT": {
+        "price": 10.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 99.00
+    },
+    "PEC_INTEGRATION": {
+        "price": 20.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 199.00
+    },
+    "SMS_NOTIFICATIONS": {
+        "price": 15.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 149.00
+    },
+    "WHATSAPP_INTEGRATION": {
+        "price": 20.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 199.00
+    },
+    "MULTI_SEDE": {
+        "price": 30.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 299.00
+    },
+    "API_ACCESS": {
+        "price": 35.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 349.00
+    },
+    "WHITE_LABEL": {
+        "price": 50.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 499.00
+    },
+    "SSO_INTEGRATION": {
+        "price": 40.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 399.00
+    },
+    "CUSTOM_REPORTS": {
+        "price": 25.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 249.00
+    },
+    "DATA_EXPORT_ADVANCED": {
+        "price": 15.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 149.00
+    },
+    "FIRMA_GRAFOMETRICA": {
+        "price": 30.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 299.00
+    },
+    "FIRMA_FEQ": {
+        "price": 45.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 449.00
+    },
+    "FIRMA_FEA": {
+        "price": 35.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 349.00
+    },
+    "FIRMA_REMOTA": {
+        "price": 30.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 299.00
+    },
+    "FIRMA_BIOMETRICA": {
+        "price": 40.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 399.00
+    },
+    "FSE_EXPORT_CDA": {
+        "price": 25.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 249.00
+    },
+    "FSE_CONSENSI_AVANZATI": {
+        "price": 15.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 149.00
+    },
+    "HR_MANAGEMENT": {
+        "price": 29.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 289.00
+    },
+    "BRIDGE_APP": {
+        "price": 19.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 189.00
+    },
+    "DESKTOP_APP": {
+        "price": 15.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 149.00
+    },
+    "MAX_MEDICI": {
+        "price": 0.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 0.00,
+        "note": "Limite configurabile"
+    },
+    "MAX_SEGRETARIE": {
+        "price": 0.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 0.00,
+        "note": "Limite configurabile"
+    },
+    "MAX_BRIDGE_KEYS": {
+        "price": 0.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 0.00,
+        "note": "Limite configurabile"
+    },
+    "MAX_DESKTOP_KEYS": {
+        "price": 0.00,
+        "currency": "EUR",
+        "billingCycle": "monthly",
+        "priceYearly": 0.00,
+        "note": "Limite configurabile"
+    }
+}

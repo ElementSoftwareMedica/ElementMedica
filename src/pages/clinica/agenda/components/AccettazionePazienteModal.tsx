@@ -13,7 +13,7 @@
  * @module pages/clinica/agenda/components/AccettazionePazienteModal
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -41,6 +41,8 @@ import {
     UserPlus,
     Download,
     Shield,
+    Lock,
+    ExternalLink,
     Clock,
     Play,
     XCircle,
@@ -54,16 +56,17 @@ import {
     Users,
     ShieldCheck,
     Pencil,
-    Settings,
-    Tablet
+    Tablet,
+    Search
 } from 'lucide-react';
 import { apiGet, apiPost, apiDownload } from '../../../../services/api';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ComuneAutocomplete } from '@/components/ui/ComuneAutocomplete';
 import { useToast } from '../../../../hooks/useToast';
+import { DEFAULT_ETHNICITY, ETHNICITY_OPTIONS } from '../../../../constants/ethnicityOptions';
 import { useTenantMode } from '../../../../contexts/TenantModeContext';
-import { pazientiApi, convenzioniApi, appuntamentiApi, prestazioniApi, Appuntamento, Convenzione } from '../../../../services/clinicaApi';
+import { pazientiApi, convenzioniApi, appuntamentiApi, prestazioniApi, scontiApi, Appuntamento, Convenzione } from '../../../../services/clinicaApi';
 import {
     extractGenderFromTaxCode,
     extractBirthDateFromTaxCode,
@@ -76,6 +79,7 @@ import {
 import type { ComuneItaliano } from '../../../../data/comuniItaliani';
 import { getCapByProvincia } from '../../../../data/comuniItaliani';
 import { DatePickerElegante } from '../../../../components/ui/DatePickerElegante';
+import { TimePickerElegante } from '../../../../components/ui/TimePickerElegante';
 import { useBillingAccess } from '../../../../hooks/useBillingAccess';
 import QuickFatturazioneTab, { QuickFatturaContext } from '../../../finance/billing/components/QuickFatturazioneTab';
 
@@ -83,11 +87,53 @@ import QuickFatturazioneTab, { QuickFatturaContext } from '../../../finance/bill
 // TYPES
 // ============================================
 
+type AccettazioneTab = 'anagrafica' | 'residenza' | 'appuntamento' | 'fatturazione';
+
+const CONSENSO_DOC_OPTIONS = [
+    { id: 'gdpr', label: 'Consenso trattamento dati personali', obbligatorio: true, gruppo: 'Privacy' },
+    { id: 'sanitari', label: 'Consenso trattamento dati sanitari', obbligatorio: true, gruppo: 'Privacy' },
+    { id: 'comunicazioni', label: 'Promemoria e comunicazioni di servizio', obbligatorio: false, gruppo: 'Comunicazioni' },
+    { id: 'marketing', label: 'Consenso marketing', obbligatorio: false, gruppo: 'Comunicazioni' },
+    { id: 'fse_alimentazione', label: 'Alimentazione Fascicolo Sanitario Elettronico', obbligatorio: false, gruppo: 'FSE' },
+    { id: 'fse_consultazione', label: 'Consultazione Fascicolo Sanitario Elettronico', obbligatorio: false, gruppo: 'FSE' },
+    { id: 'fse_pregresso', label: 'Recupero dati pregressi FSE', obbligatorio: false, gruppo: 'FSE' },
+    { id: 'mdl_sorveglianza', label: 'Sorveglianza sanitaria Medicina del Lavoro', obbligatorio: true, gruppo: 'Medicina del Lavoro' },
+    { id: 'prestazione', label: 'Consenso alla prestazione sanitaria', obbligatorio: false, gruppo: 'Prestazione' },
+    { id: 'chirurgico', label: 'Consenso intervento chirurgico/invasivo', obbligatorio: false, gruppo: 'Prestazione' },
+] as const;
+
+const getDefaultConsentDocIds = (appuntamento: Appuntamento): string[] => {
+    const allIds = CONSENSO_DOC_OPTIONS.map(doc => doc.id);
+    const rawType = String((appuntamento.prestazione as any)?.tipo || '').toUpperCase();
+    const rawName = String(appuntamento.prestazione?.nome || '').toLowerCase();
+    const isMedicinaLavoro = !!appuntamento.tipoVisitaMDL
+        || rawType.includes('MEDICINA_LAVORO')
+        || rawName.includes('medicina del lavoro');
+    const isIntervento = rawType.includes('INTERVENTO')
+        || rawName.includes('intervento')
+        || rawName.includes('chirurg');
+
+    if (isMedicinaLavoro) return allIds.filter(id => id !== 'chirurgico');
+    if (isIntervento) return allIds.filter(id => id !== 'mdl_sorveglianza');
+    return allIds.filter(id => !['mdl_sorveglianza', 'chirurgico'].includes(id));
+};
+
 export interface AccettazionePazienteModalProps {
     appuntamento: Appuntamento;
     isOpen: boolean;
     onClose: () => void;
     onConfirm: (patientData: PatientFormData) => void;
+    initialTab?: AccettazioneTab;
+    /** Callback per salvare solo le modifiche all'appuntamento (data/ora, note, stato) */
+    onSaveAppointmentOnly?: (appointmentData: {
+        dataOra?: string;
+        note?: string;
+        noteInterne?: string;
+        stato?: string;
+        prestazioneId?: string;
+        pazienteId?: string;
+        convenzioneId?: string | null;
+    }) => void;
     /** Callback per iniziare la visita (chiama paziente) */
     onVisita?: () => void;
     isLoading?: boolean;
@@ -103,20 +149,32 @@ export interface PatientFormData {
     codiceFiscale: string;
     sesso: 'MALE' | 'FEMALE' | '';
     dataNascita: string;
+    etnia: string;
     comuneNascita: string;
     provinciaNascita: string;
 
     // Documento d'identità
     numeroCi?: string;
-    tipoCi?: 'CI' | 'PASSAPORTO' | 'PATENTE' | 'PERMESSO_SOGGIORNO';
+    tipoCi?: 'CI' | 'PASSAPORTO' | 'PATENTE' | 'PERMESSO_SOGGIORNO' | 'ALTRO';
+    altroDocumento?: string;
 
     // Soggetto vulnerabile (minore o non autonomo)
     isMinore?: boolean;
     isNonAutonomo?: boolean;
-    tutelareTipo?: 'GENITORE' | 'TUTORE_LEGALE' | 'CURATORE';
+    tutelareTipo?: 'GENITORE' | 'TUTORE_LEGALE' | 'CURATORE' | 'NONNO' | 'ZIO' | 'PARENTE' | 'ALTRO';
+    tutelareId?: string;
     tutelareNome?: string;
     tutelareCognome?: string;
     tutelareCF?: string;
+    tutelantiAssociati?: Array<{
+        id?: string;
+        tutelanteId?: string;
+        relazione: string;
+        firstName: string;
+        lastName: string;
+        taxCode?: string;
+        isExisting?: boolean;
+    }>;
 
     // Consensi
     consensoGdpr?: boolean;
@@ -299,6 +357,26 @@ const calculateCodiceFiscale = (
     return '';
 };
 
+const normalizeFormValue = (value: unknown): string => String(value ?? '').trim();
+const toMoney = (value: unknown): number => Math.round((Number(value) || 0) * 100) / 100;
+const toDateInputValue = (value: unknown): string => {
+    if (!value) return '';
+    const date = new Date(String(value));
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toISOString().split('T')[0];
+};
+const getInitialAppointmentPrice = (appuntamento: Appuntamento): number => {
+    const raw = appuntamento as any;
+    const value = raw.prezzoScontato
+        ?? raw.prezzoFinale
+        ?? raw.prezzoConvenzionato
+        ?? raw._prezzoFinale
+        ?? raw.prezzo
+        ?? raw.prestazione?.prezzoBase
+        ?? 0;
+    return toMoney(value);
+};
+
 // ============================================
 // SUB-COMPONENTS
 // ============================================
@@ -363,6 +441,8 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
     isOpen,
     onClose,
     onConfirm,
+    initialTab = 'anagrafica',
+    onSaveAppointmentOnly,
     onVisita,
     isLoading = false
 }) => {
@@ -406,6 +486,7 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
         codiceFiscale: '',
         sesso: '',
         dataNascita: '',
+        etnia: DEFAULT_ETHNICITY,
         comuneNascita: '',
         provinciaNascita: '',
         numeroCi: '',
@@ -413,9 +494,11 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
         isMinore: false,
         isNonAutonomo: false,
         tutelareTipo: 'GENITORE',
+        tutelareId: '',
         tutelareNome: '',
         tutelareCognome: '',
         tutelareCF: '',
+        tutelantiAssociati: [],
         consensoGdpr: false,
         consensoDatiSanitari: false,
         consensoPrestazione: false,
@@ -435,6 +518,8 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
     });
 
     const [cardInput, setCardInput] = useState('');
+    const [convenzioneSearch, setConvenzioneSearch] = useState('');
+    const [convenzioneDiscountOverrides, setConvenzioneDiscountOverrides] = useState<Record<string, { tipo: string; valore: number }>>({});
     const [cfValid, setCfValid] = useState<boolean | null>(null);
     const [cfCompatibility, setCfCompatibility] = useState<{
         isCompatible: boolean;
@@ -445,7 +530,7 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
         actualSurnameCode: string;
         actualNameCode: string;
     } | null>(null);
-    const [activeTab, setActiveTab] = useState<'anagrafica' | 'residenza' | 'appuntamento' | 'fatturazione'>('anagrafica');
+    const [activeTab, setActiveTab] = useState<AccettazioneTab>(initialTab);
     const { hasBillingFeature } = useBillingAccess();
     // Appuntamento tab: inline editing per campo
     const [editingAppField, setEditingAppField] = useState<null | 'prestazione' | 'dataora'>(null);
@@ -494,10 +579,7 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
         showDocConfig: boolean;
         isGenerating: boolean;
     }>(() => {
-        const nome = appuntamento.prestazione?.nome?.toLowerCase() ?? '';
-        const docs: string[] = ['gdpr', 'sanitari'];
-        if (nome.includes('chirurg') || nome.includes('intervento')) docs.push('chirurgico');
-        else if (nome.includes('esame') || nome.includes('diagnostica')) docs.push('prestazione');
+        const docs = getDefaultConsentDocIds(appuntamento);
         return {
             token: null,
             url: null,
@@ -508,7 +590,7 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
             firmatoConsensi: [],
             copied: false,
             documentiSelezionati: docs,
-            showDocConfig: false,
+            showDocConfig: true,
             isGenerating: false,
         };
     });
@@ -517,21 +599,19 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
     const [validConsensiPerPaziente, setValidConsensiPerPaziente] = useState<Record<string, string>>({});
     // Consensi per cui si forza una nuova firma (override dei validConsensiPerPaziente)
     const [forzaNuovaFirmaSet, setForzaNuovaFirmaSet] = useState<Set<string>>(new Set());
+    const [guardianSearch, setGuardianSearch] = useState('');
+    const [guardianResults, setGuardianResults] = useState<Array<{ id: string; firstName?: string; lastName?: string; nome?: string; cognome?: string; taxCode?: string; codiceFiscale?: string }>>([]);
+    const [isSearchingGuardian, setIsSearchingGuardian] = useState(false);
+    const consensoDocOptions = useMemo(() => [...CONSENSO_DOC_OPTIONS], []);
+    const defaultConsentDocIds = useMemo(() => getDefaultConsentDocIds(appuntamento), [appuntamento]);
 
     // visitaId locale: aggiornato al volo quando si apre il tab fatturazione
     // (l'appuntamento prop è statico e potrebbe non avere ancora visita.id al momento dell'apertura)
     const [localVisitaId, setLocalVisitaId] = useState<string | undefined>(appuntamento.visita?.id);
 
     // Tab navigation helpers
-    const TABS_ORDER: Array<'anagrafica' | 'residenza' | 'appuntamento' | 'fatturazione'> = hasBillingFeature
-        ? ['anagrafica', 'residenza', 'appuntamento', 'fatturazione']
-        : ['anagrafica', 'residenza', 'appuntamento'];
-
-    useEffect(() => {
-        if (!hasBillingFeature && activeTab === 'fatturazione') {
-            setActiveTab('appuntamento');
-        }
-    }, [activeTab, hasBillingFeature]);
+    const TABS_ORDER: Array<AccettazioneTab> =
+        ['anagrafica', 'residenza', 'appuntamento', 'fatturazione'];
     const currentTabIndex = TABS_ORDER.indexOf(activeTab);
     const isFirstTab = currentTabIndex === 0;
     const isLastTab = currentTabIndex === TABS_ORDER.length - 1;
@@ -548,6 +628,12 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
         }
     }, [currentTabIndex, isLastTab]);
 
+    useEffect(() => {
+        if (isOpen) {
+            setActiveTab(initialTab);
+        }
+    }, [appuntamento.id, initialTab, isOpen]);
+
     // ============================================
     // QUERIES
     // ============================================
@@ -556,7 +642,7 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
     const { data: convenzioniData } = useQuery({
         queryKey: ['convenzioni', 'active'],
         queryFn: () => convenzioniApi.getAll({ limit: 100 }),
-        enabled: isOpen && activeTab === 'appuntamento'
+        enabled: isOpen && (activeTab === 'appuntamento' || activeTab === 'fatturazione' || !!formData.convenzioneId)
     });
 
     // Load prestazioni for the prestazione selector in appuntamento tab
@@ -575,6 +661,189 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
         if (!convenzioniData?.data) return [];
         return convenzioniData.data.filter(c => c.attiva !== false);
     }, [convenzioniData]);
+    const filteredConvenzioni = useMemo(() => {
+        const needle = convenzioneSearch.trim().toLowerCase();
+        if (!needle) return convenzioni;
+        return convenzioni.filter(conv =>
+            conv.nome.toLowerCase().includes(needle)
+            || conv.codice?.toLowerCase().includes(needle)
+            || conv.enteTerzo?.toLowerCase().includes(needle)
+        );
+    }, [convenzioneSearch, convenzioni]);
+    const selectedConvenzione = useMemo(() => {
+        const rawConvenzione = (appuntamento as any).convenzione?.id === formData.convenzioneId
+            ? (appuntamento as any).convenzione as Convenzione
+            : null;
+        const listed = convenzioni.find(conv => conv.id === formData.convenzioneId) || null;
+        const withOverride = (conv: Convenzione | null): Convenzione | null => {
+            if (!conv) return null;
+            const override = convenzioneDiscountOverrides[conv.id];
+            if (!override) return conv;
+            return {
+                ...conv,
+                condizioni: {
+                    ...(conv.condizioni || {}),
+                    scontoInfo: override,
+                },
+            };
+        };
+        if (rawConvenzione && listed) {
+            return withOverride({
+                ...listed,
+                condizioni: {
+                    ...(listed.condizioni || {}),
+                    ...(rawConvenzione.condizioni || {}),
+                },
+            });
+        }
+        return withOverride(rawConvenzione || listed);
+    }, [appuntamento, convenzioni, convenzioneDiscountOverrides, formData.convenzioneId]);
+    const prestazioniAppuntamento = useMemo(() => {
+        const rows = [
+            appuntamento.prestazione ? {
+                id: appuntamento.prestazione.id || appuntamento.prestazioneId || 'main',
+                nome: appuntamento.prestazione.nome || 'Prestazione principale',
+                prezzo: Number((appuntamento.prestazione as any)._prezzoTariffario ?? appuntamento.prestazione.prezzoBase ?? 0),
+            } : null,
+            ...(((appuntamento as any).prestazioni || []) as any[])
+                .filter(p => p?.deletedAt == null)
+                .map(p => ({
+                    id: p.id || p.prestazioneId,
+                    nome: p.prestazione?.nome || p.nome || 'Accertamento',
+                    prezzo: Number(p.movimentiContabili?.[0]?.importoNetto ?? p.prezzo ?? p.prestazione?.prezzoBase ?? 0),
+                })),
+        ].filter(Boolean) as Array<{ id: string; nome: string; prezzo: number }>;
+        const seen = new Set<string>();
+        return rows.filter(row => {
+            const key = row.nome.toLowerCase();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+    }, [appuntamento]);
+    const prezzoPrestazioniBaseTotale = useMemo(() => {
+        const total = prestazioniAppuntamento.reduce((sum, prestazione) => sum + (Number(prestazione.prezzo) || 0), 0);
+        return total > 0 ? Math.round(total * 100) / 100 : 0;
+    }, [prestazioniAppuntamento]);
+    const prezzoConvenzionatoAppuntamento = useMemo(() => {
+        const rawAppointment = appuntamento as any;
+        const value = Number(
+            rawAppointment.prezzoScontato
+            ?? rawAppointment.prezzoFinale
+            ?? rawAppointment.prezzoConvenzionato
+            ?? 0
+        );
+        return Number.isFinite(value) && value > 0 ? value : null;
+    }, [appuntamento]);
+    const prezzoBaseRef = useRef<number | null>(null);
+    const prezzoBasePrestazione = useMemo(() => {
+        const selectedPrestazione = prestazioniList.find(p => p.id === formData.prestazioneId);
+        const rawAppointment = appuntamento as any;
+        const base = [
+            prezzoPrestazioniBaseTotale,
+            rawAppointment._prezzoTotaleMovimenti,
+            rawAppointment._prezzoTariffarioPrestazione,
+            rawAppointment.prezzoBase,
+            rawAppointment.prezzoPrestazione,
+            rawAppointment.prezzo,
+            selectedPrestazione?.prezzoBase,
+            appuntamento.prestazione?.prezzoBase,
+        ].map(value => Number(value || 0)).find(value => Number.isFinite(value) && value > 0) || 0;
+        if (base > 0) {
+            prezzoBaseRef.current = base;
+            return base;
+        }
+        return prezzoBaseRef.current ?? Number(formData.prezzo || 0);
+    }, [appuntamento, appuntamento.prestazione?.prezzoBase, formData.prestazioneId, formData.prezzo, prestazioniList, prezzoPrestazioniBaseTotale]);
+    const getConvenzioneDiscountLabel = useCallback((conv: Convenzione | null) => {
+        if (!conv) return '';
+        if (prezzoConvenzionatoAppuntamento && prezzoBasePrestazione > 0 && prezzoConvenzionatoAppuntamento < prezzoBasePrestazione) {
+            const delta = prezzoBasePrestazione - prezzoConvenzionatoAppuntamento;
+            const percent = Math.round((delta / prezzoBasePrestazione) * 100);
+            return percent > 0 ? `sconto ${percent}%` : `sconto ${delta.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}`;
+        }
+        const condizioni = conv.condizioni || {};
+        const scontoInfo = (condizioni as any).scontoInfo;
+        const tipoSconto = String(scontoInfo?.tipo || '').toUpperCase();
+        const scontoPercentuale = Number(
+            (condizioni as any).scontoPercentuale
+            || (condizioni as any).percentualeSconto
+            || (tipoSconto.includes('PERCENT') ? scontoInfo.valore : 0)
+            || 0
+        );
+        const scontoFisso = Number(
+            (condizioni as any).scontoFisso
+            || (tipoSconto.includes('VALORE') || tipoSconto.includes('FISSO') ? scontoInfo.valore : 0)
+            || 0
+        );
+        if (scontoPercentuale > 0) return `sconto ${scontoPercentuale}%`;
+        if (scontoFisso > 0) return `sconto ${scontoFisso.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}`;
+        if (conv.listiniPrezzo?.length) return 'listino dedicato';
+        return 'condizioni dedicate';
+    }, [prezzoBasePrestazione, prezzoConvenzionatoAppuntamento]);
+    const calculateConvenzionePrice = useCallback((conv: Convenzione | null) => {
+        if (!conv) return prezzoBasePrestazione;
+        if (
+            prezzoConvenzionatoAppuntamento
+            && prezzoBasePrestazione > 0
+            && prezzoConvenzionatoAppuntamento <= prezzoBasePrestazione
+            && ((appuntamento as any).convenzioneId === conv.id || (appuntamento as any).convenzione?.id === conv.id)
+        ) {
+            return Math.round(prezzoConvenzionatoAppuntamento * 100) / 100;
+        }
+        const condizioni = conv.condizioni || {};
+        const listinoPrestazione = (conv.listiniPrezzo || []).find((listino: any) =>
+            listino.prestazioneId === formData.prestazioneId
+            || listino.prestazione?.id === formData.prestazioneId
+        ) as any;
+        const prezzoListino = Number(listinoPrestazione?.prezzoFinale ?? listinoPrestazione?.prezzo ?? listinoPrestazione?.prezzoConvenzionato ?? 0);
+        if (prezzoListino > 0) return Math.round(prezzoListino * 100) / 100;
+        const scontoInfo = (condizioni as any).scontoInfo;
+        const tipoSconto = String(scontoInfo?.tipo || '').toUpperCase();
+        const scontoPercentuale = Number((condizioni as any).scontoPercentuale || (condizioni as any).percentualeSconto || (tipoSconto.includes('PERCENT') ? scontoInfo.valore : 0) || 0);
+        const scontoFisso = Number((condizioni as any).scontoFisso || (tipoSconto.includes('VALORE') || tipoSconto.includes('FISSO') ? scontoInfo.valore : 0) || 0);
+        if (scontoPercentuale > 0) return Math.max(0, Math.round((prezzoBasePrestazione * (1 - scontoPercentuale / 100)) * 100) / 100);
+        if (scontoFisso > 0) return Math.max(0, Math.round((prezzoBasePrestazione - scontoFisso) * 100) / 100);
+        return prezzoBasePrestazione;
+    }, [appuntamento, formData.prestazioneId, prezzoBasePrestazione, prezzoConvenzionatoAppuntamento]);
+
+    useEffect(() => {
+        if (!selectedConvenzione?.id || !isOpen) return;
+        const codiceSconto = String((selectedConvenzione.condizioni as any)?.codiceSconto || '').trim();
+        const hasResolvedDiscount = !!(selectedConvenzione.condizioni as any)?.scontoInfo || !!convenzioneDiscountOverrides[selectedConvenzione.id];
+        if (!codiceSconto || hasResolvedDiscount || prezzoBasePrestazione <= 0) return;
+
+        let cancelled = false;
+        scontiApi.validate({
+            codice: codiceSconto,
+            prezzoBase: prezzoBasePrestazione,
+            prestazioneId: formData.prestazioneId || undefined,
+        }).then(result => {
+            if (cancelled || !result?.valid || !result.sconto) return;
+            const tipo = String((result.sconto as any).tipoSconto || result.sconto.tipo || '').toUpperCase();
+            const normalizedTipo = tipo.includes('PERCENT') ? 'PERCENTUALE' : 'VALORE_ASSOLUTO';
+            const valore = Number(result.sconto.valore || 0);
+            if (!Number.isFinite(valore) || valore <= 0) return;
+            setConvenzioneDiscountOverrides(prev => ({
+                ...prev,
+                [selectedConvenzione.id]: { tipo: normalizedTipo, valore },
+            }));
+        }).catch(() => {
+            // Convenzione comunque selezionabile: se il codice non è validabile resta la tariffa dedicata/listino.
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [convenzioneDiscountOverrides, formData.prestazioneId, isOpen, prezzoBasePrestazione, selectedConvenzione]);
+
+    useEffect(() => {
+        const nextPrice = calculateConvenzionePrice(selectedConvenzione);
+        setFormData(prev => {
+            if (Number(prev.prezzo || 0) === nextPrice) return prev;
+            return { ...prev, prezzo: nextPrice };
+        });
+    }, [calculateConvenzionePrice, selectedConvenzione]);
 
     // Contesto pre-compilato per QuickFatturazioneTab
     // MDL: il cliente è l'azienda, sistemaTsDefault=0
@@ -582,13 +851,18 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
     const fatturaContext = useMemo((): QuickFatturaContext => {
         const isMDL = !!appuntamento.tipoVisitaMDL;
         const cessionarioNome = [formData.nome, formData.cognome].filter(Boolean).join(' ');
+        const prestazioniDescrizione = prestazioniAppuntamento.length > 1
+            ? prestazioniAppuntamento.map(prestazione => prestazione.nome).join(' + ')
+            : null;
         if (isMDL) {
             return {
                 tipoServizio: 'VISITA_MDL',
                 aziendaId: appuntamento.companyTenantProfileId || undefined,
                 personaId: appuntamento.pazienteId,
+                appuntamentoId: appuntamento.id,
                 visitaId: localVisitaId,
-                descrizioneDefault: `${appuntamento.prestazione?.nome || 'Visita MDL'} — ${appuntamento.tipoVisitaMDL}`,
+                contextKey: `AUTO_ACCETTAZIONE:${appuntamento.id}`,
+                descrizioneDefault: `${prestazioniDescrizione || appuntamento.prestazione?.nome || 'Visita MDL'} — ${appuntamento.tipoVisitaMDL}`,
                 prezzoDefault: formData.prezzo,
                 sistemaTsDefault: 0,
             };
@@ -597,10 +871,12 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
         return {
             tipoServizio: 'VISITA',
             personaId: appuntamento.pazienteId,
+            appuntamentoId: appuntamento.id,
             visitaId: localVisitaId,
-            descrizioneDefault: appuntamento.prestazione?.nome || 'Visita medica',
+            contextKey: `AUTO_ACCETTAZIONE:${appuntamento.id}`,
+            descrizioneDefault: prestazioniDescrizione || appuntamento.prestazione?.nome || 'Visita medica',
             prezzoDefault: formData.prezzo,
-            sistemaTsDefault: 1,
+            sistemaTsDefault: 0,
             ...(cessionarioNome ? { cessionarioDenominazione: cessionarioNome } : {}),
             ...(formData.codiceFiscale ? { cessionarioCF: formData.codiceFiscale } : {}),
             ...(formData.indirizzo ? { cessionarioIndirizzo: formData.indirizzo } : {}),
@@ -608,7 +884,7 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
             ...(formData.comune ? { cessionarioCitta: formData.comune } : {}),
             ...(formData.provincia ? { cessionarioProvincia: formData.provincia } : {}),
         };
-    }, [appuntamento, formData, localVisitaId]);
+    }, [appuntamento, formData, localVisitaId, prestazioniAppuntamento]);
 
     // ============================================
     // EFFECTS
@@ -636,25 +912,44 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
                 cognome: paziente?.cognome || paziente?.lastName || '',
                 codiceFiscale: paziente?.codiceFiscale || paziente?.taxCode || '',
                 sesso: paziente?.gender || paziente?.sesso || '',
+                etnia: paziente?.etnia || DEFAULT_ETHNICITY,
                 dataNascita: formattedBirthDate,
                 comuneNascita: paziente?.birthPlace || paziente?.comuneNascita || '',
                 provinciaNascita: paziente?.birthProvince || paziente?.provinciaNascita || '',
+                numeroCi: paziente?.numeroCi || '',
+                tipoCi: (paziente?.tipoCi as PatientFormData['tipoCi']) || 'CI',
+                altroDocumento: paziente?.altroDocumento || '',
+                isMinore: !!paziente?.isMinore,
+                isNonAutonomo: !!paziente?.isNonAutonomo,
+                tutelareTipo: 'GENITORE',
+                tutelareId: '',
+                tutelareNome: '',
+                tutelareCognome: '',
+                tutelareCF: '',
+                tutelantiAssociati: (paziente?.tutelanti || []).map((rel: any) => ({
+                    id: rel.id,
+                    tutelanteId: rel.tutelante?.id,
+                    relazione: rel.relazione,
+                    firstName: rel.tutelante?.firstName || '',
+                    lastName: rel.tutelante?.lastName || '',
+                    taxCode: rel.tutelante?.taxCode || '',
+                    isExisting: true,
+                })),
                 indirizzo: paziente?.residenceAddress || paziente?.indirizzo || '',
                 cap: paziente?.postalCode || paziente?.cap || '',
                 comune: paziente?.residenceCity || paziente?.comune || '',
                 provincia: paziente?.province || paziente?.provincia || '',
                 telefono: paziente?.telefono || paziente?.phone || '',
                 email: paziente?.email || '',
-                convenzioneId: appuntamento.convenzioneId || '',
-                prezzo: appuntamento.prestazione?.prezzoBase || 0,
+                convenzioneId: appuntamento.convenzioneId || (appuntamento as any).convenzione?.id || '',
+                prezzo: (appuntamento as any).prezzoScontato
+                    || (appuntamento as any).prezzoFinale
+                    || (appuntamento as any).prezzo
+                    || appuntamento.prestazione?.prezzoBase
+                    || 0,
                 medicoId: appuntamento.medicoId || '',
                 prestazioneId: appuntamento.prestazioneId || '',
-                // Accettazione modal: auto-imposta "IN_ATTESA" per stati pre-accettazione
-                // Il paziente viene accettato, quindi lo stato target è IN_ATTESA
-                // Se l'utente cambia manualmente, la scelta viene rispettata (Session 10 fix)
-                stato: (['PRENOTATO', 'CONFERMATO'].includes(appuntamento.stato))
-                    ? 'IN_ATTESA'
-                    : (appuntamento.stato || 'IN_ATTESA'),
+                stato: appuntamento.stato || 'PRENOTATO',
                 // P61: Note appuntamento
                 note: appuntamento.note || '',
                 noteInterne: appuntamento.noteInterne || ''
@@ -675,6 +970,16 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
             }
         }
     }, [isOpen, appuntamento]);
+
+    useEffect(() => {
+        if (!isOpen || !appuntamento?.id) return;
+        setConsensoLink(prev => ({
+            ...prev,
+            documentiSelezionati: defaultConsentDocIds,
+            showDocConfig: true,
+        }));
+        setForzaNuovaFirmaSet(new Set());
+    }, [isOpen, appuntamento?.id, defaultConsentDocIds]);
 
     // Re-check CF compatibility when nome/cognome change
     useEffect(() => {
@@ -734,7 +1039,8 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
                 // Aggiorna documentiSelezionati in base ai moduli applicabili configurati
                 if (status?.moduliApplicabili && status.moduliApplicabili.length > 0) {
                     const alreadyValid = new Set(Object.keys(status.validConsensiPerPaziente ?? {}));
-                    const docsNecessari = status.moduliApplicabili.filter(c => !alreadyValid.has(c));
+                    const allowedDefaults = new Set(defaultConsentDocIds);
+                    const docsNecessari = status.moduliApplicabili.filter(c => allowedDefaults.has(c as any) && !alreadyValid.has(c));
                     if (docsNecessari.length > 0) {
                         setConsensoLink(prev => ({ ...prev, documentiSelezionati: docsNecessari }));
                     }
@@ -767,6 +1073,69 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
     const handleInputChange = useCallback((field: keyof PatientFormData, value: string | number | boolean) => {
         setFormData(prev => ({ ...prev, [field]: value }));
     }, []);
+
+    useEffect(() => {
+        const q = guardianSearch.trim();
+        if (!isOpen || q.length < 2) {
+            setGuardianResults([]);
+            return;
+        }
+        let cancelled = false;
+        setIsSearchingGuardian(true);
+        pazientiApi.search(q)
+            .then(results => {
+                if (cancelled) return;
+                setGuardianResults((results || []).filter(p => p.id !== appuntamento.pazienteId).slice(0, 6));
+            })
+            .catch(() => {
+                if (!cancelled) setGuardianResults([]);
+            })
+            .finally(() => {
+                if (!cancelled) setIsSearchingGuardian(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [appuntamento.pazienteId, guardianSearch, isOpen]);
+
+    const addGuardianToForm = useCallback((guardian?: { id?: string; firstName?: string; lastName?: string; nome?: string; cognome?: string; taxCode?: string; codiceFiscale?: string }) => {
+        const firstName = guardian?.firstName || guardian?.nome || formData.tutelareNome || '';
+        const lastName = guardian?.lastName || guardian?.cognome || formData.tutelareCognome || '';
+        const taxCode = guardian?.taxCode || guardian?.codiceFiscale || formData.tutelareCF || '';
+        if (!guardian?.id && (!firstName.trim() || !lastName.trim() || !taxCode.trim())) {
+            showToast({ message: 'Per creare un tutelante inserisci almeno cognome, nome e codice fiscale.', type: 'warning' });
+            return;
+        }
+        const relazione = formData.tutelareTipo || 'GENITORE';
+        setFormData(prev => {
+            const next = prev.tutelantiAssociati || [];
+            const exists = next.some(item =>
+                (guardian?.id && item.tutelanteId === guardian.id && item.relazione === relazione) ||
+                (!guardian?.id && item.taxCode?.toUpperCase() === taxCode.toUpperCase() && item.relazione === relazione)
+            );
+            if (exists) return prev;
+            return {
+                ...prev,
+                tutelantiAssociati: [
+                    ...next,
+                    {
+                        tutelanteId: guardian?.id,
+                        relazione,
+                        firstName,
+                        lastName,
+                        taxCode: taxCode.toUpperCase(),
+                        isExisting: !!guardian?.id,
+                    },
+                ],
+                tutelareId: '',
+                tutelareNome: '',
+                tutelareCognome: '',
+                tutelareCF: '',
+            };
+        });
+        setGuardianSearch('');
+        setGuardianResults([]);
+    }, [formData.tutelareCF, formData.tutelareCognome, formData.tutelareNome, formData.tutelareTipo, showToast]);
 
     /**
      * Handler per selezione comune nascita da autocomplete
@@ -1015,6 +1384,7 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
                 comune: cfSearchResult.person!.residenceCity || prev.comune,
                 cap: cfSearchResult.person!.postalCode || prev.cap,
                 provincia: cfSearchResult.person!.province || prev.provincia,
+                etnia: (cfSearchResult.person as any)!.etnia || prev.etnia || DEFAULT_ETHNICITY,
                 dataNascita: cfSearchResult.person!.birthDate
                     ? new Date(cfSearchResult.person!.birthDate).toISOString().split('T')[0]
                     : prev.dataNascita
@@ -1085,6 +1455,10 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
                 token: res.token,
                 url: null,  // Non mostriamo URL singolo — il tablet permanente rileva il token
                 expiresAt: res.expiresAt,
+                firmato: false,
+                firmatoAt: null,
+                firmatoConsensi: [],
+                firmatoPazienteNome: null,
                 isGenerating: false,
             }));
             showToast({ message: 'Consensi inviati al tablet. In attesa della firma del paziente.', type: 'success' });
@@ -1104,6 +1478,7 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
                     firmatoAt?: string;
                     firmatoConsensi?: string[];
                     firmatoPazienteNome?: string;
+                    validConsensiPerPaziente?: Record<string, string>;
                 }>(`/api/v1/clinica/appuntamenti/${appuntamento.id}/consenso-status`, {}, { headers: getOperateHeaders() });
                 if (status.firmato) {
                     setConsensoLink(prev => ({
@@ -1114,6 +1489,19 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
                         firmatoPazienteNome: status.firmatoPazienteNome ?? null,
                     }));
                     const consensi = status.firmatoConsensi ?? [];
+                    if (status.validConsensiPerPaziente) {
+                        setValidConsensiPerPaziente(status.validConsensiPerPaziente);
+                    } else if (status.firmatoAt) {
+                        setValidConsensiPerPaziente(prev => ({
+                            ...prev,
+                            ...Object.fromEntries(consensi.map(codice => [codice, status.firmatoAt!])),
+                        }));
+                    }
+                    setForzaNuovaFirmaSet(prev => {
+                        const next = new Set(prev);
+                        consensi.forEach(codice => next.delete(codice));
+                        return next;
+                    });
                     if (consensi.includes('gdpr')) handleInputChange('consensoGdpr', true as unknown as string);
                     if (consensi.includes('sanitari')) handleInputChange('consensoDatiSanitari', true as unknown as string);
                     if (consensi.includes('prestazione')) handleInputChange('consensoPrestazione', true as unknown as string);
@@ -1176,6 +1564,7 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
                 taxCode: formData.codiceFiscale,
                 birthDate: formData.dataNascita || undefined,
                 gender: formData.sesso as 'MALE' | 'FEMALE' | undefined,
+                etnia: formData.etnia || DEFAULT_ETHNICITY,
                 birthPlace: formData.comuneNascita || undefined,
                 birthProvince: formData.provinciaNascita || undefined,
                 email: formData.email || undefined,
@@ -1183,15 +1572,38 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
                 residenceAddress: formData.indirizzo || undefined,
                 residenceCity: formData.comune || undefined,
                 postalCode: formData.cap || undefined,
-                province: formData.provincia || undefined
+                province: formData.provincia || undefined,
+                numeroCi: formData.numeroCi || undefined,
+                tipoCi: formData.tipoCi || undefined,
+                altroDocumento: formData.altroDocumento || undefined,
+                isMinore: !!formData.isMinore,
+                isNonAutonomo: !!formData.isNonAutonomo
             });
 
             if (result.success) {
+                const pazienteId = result.data?.id;
+                if (pazienteId && (formData.isMinore || formData.isNonAutonomo)) {
+                    const tutelanti = formData.tutelantiAssociati || [];
+                    for (const tutelante of tutelanti) {
+                        await pazientiApi.addTutelante(pazienteId, {
+                            tutelanteId: tutelante.tutelanteId,
+                            firstName: tutelante.firstName,
+                            lastName: tutelante.lastName,
+                            taxCode: tutelante.taxCode,
+                            relazione: tutelante.relazione,
+                            isLegalGuardian: ['GENITORE', 'TUTORE_LEGALE', 'CURATORE'].includes(tutelante.relazione),
+                        });
+                    }
+                }
                 // Toast gestito dal componente parent (CalendarioPage/AccettazionePage)
                 // per evitare notifiche duplicate
+                const statoAccettazione = ['PRENOTATO', 'CONFERMATO'].includes(appuntamento.stato)
+                    ? 'IN_ATTESA'
+                    : formData.stato;
                 onConfirm({
                     ...formData,
-                    pazienteId: result.data?.id
+                    stato: statoAccettazione,
+                    pazienteId
                 });
             } else {
                 showToast({
@@ -1205,7 +1617,115 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
                 type: 'error'
             });
         }
-    }, [formData, cfValid, cfSearchResult, consentGiven, incompleteDataConfirmed, existingPersonId, appuntamento.pazienteId, onConfirm, showToast]);
+    }, [formData, cfValid, cfSearchResult, consentGiven, incompleteDataConfirmed, existingPersonId, appuntamento.pazienteId, appuntamento.stato, onConfirm, showToast]);
+
+    const hasPatientDataChanges = useMemo(() => {
+        const paziente = appuntamento.paziente as any;
+        const formattedBirthDate = toDateInputValue(paziente?.dataNascita || paziente?.birthDate);
+        const compare: Array<[keyof PatientFormData, unknown]> = [
+            ['nome', paziente?.nome || paziente?.firstName || ''],
+            ['cognome', paziente?.cognome || paziente?.lastName || ''],
+            ['codiceFiscale', paziente?.codiceFiscale || paziente?.taxCode || ''],
+            ['sesso', paziente?.gender || paziente?.sesso || ''],
+            ['dataNascita', formattedBirthDate],
+            ['etnia', paziente?.etnia || DEFAULT_ETHNICITY],
+            ['comuneNascita', paziente?.birthPlace || paziente?.comuneNascita || ''],
+            ['provinciaNascita', paziente?.birthProvince || paziente?.provinciaNascita || ''],
+            ['numeroCi', paziente?.numeroCi || ''],
+            ['tipoCi', paziente?.tipoCi || 'CI'],
+            ['altroDocumento', paziente?.altroDocumento || ''],
+            ['isMinore', !!paziente?.isMinore],
+            ['isNonAutonomo', !!paziente?.isNonAutonomo],
+            ['indirizzo', paziente?.residenceAddress || paziente?.indirizzo || ''],
+            ['cap', paziente?.postalCode || paziente?.cap || ''],
+            ['comune', paziente?.residenceCity || paziente?.comune || ''],
+            ['provincia', paziente?.province || paziente?.provincia || ''],
+            ['telefono', paziente?.telefono || paziente?.phone || ''],
+            ['email', paziente?.email || ''],
+        ];
+        return compare.some(([field, initialValue]) => {
+            const currentValue = formData[field];
+            if (typeof initialValue === 'boolean') return Boolean(currentValue) !== initialValue;
+            return normalizeFormValue(currentValue) !== normalizeFormValue(initialValue);
+        });
+    }, [appuntamento.paziente, formData]);
+
+    // Detect if appointment or patient editable fields changed (for "Salva appuntamento" button)
+    const hasAppointmentOnlyChanges = useMemo(() => {
+        const hasDateChange = !!formData.dataOraModificata && formData.dataOraModificata !== appuntamento.dataOra;
+        const hasPrestChange = !!formData.prestazioneModificataId && formData.prestazioneModificataId !== appuntamento.prestazioneId;
+        const hasNoteChange = (formData.note || '') !== (appuntamento.note || '');
+        const hasNoteInterneChange = (formData.noteInterne || '') !== (appuntamento.noteInterne || '');
+        const hasStatoChange = formData.stato !== appuntamento.stato;
+        const initialConvenzioneId = appuntamento.convenzioneId || (appuntamento as any).convenzione?.id || '';
+        const hasConvenzioneChange = (formData.convenzioneId || '') !== initialConvenzioneId;
+        const hasPriceChange = Math.abs(toMoney(formData.prezzo) - getInitialAppointmentPrice(appuntamento)) >= 0.01;
+        return hasDateChange
+            || hasPrestChange
+            || hasNoteChange
+            || hasNoteInterneChange
+            || hasStatoChange
+            || hasConvenzioneChange
+            || hasPriceChange
+            || hasPatientDataChanges;
+    }, [formData, appuntamento, hasPatientDataChanges]);
+
+    // Handler: save only appointment changes (no patient validation)
+    const handleSaveAppointmentOnly = useCallback(async () => {
+        if (!onSaveAppointmentOnly) return;
+        const changes: Parameters<NonNullable<typeof onSaveAppointmentOnly>>[0] = {};
+        if (formData.dataOraModificata && formData.dataOraModificata !== appuntamento.dataOra) {
+            changes.dataOra = formData.dataOraModificata;
+        }
+        if (formData.prestazioneModificataId && formData.prestazioneModificataId !== appuntamento.prestazioneId) {
+            changes.prestazioneId = formData.prestazioneModificataId;
+        }
+        if ((formData.note || '') !== (appuntamento.note || '')) {
+            changes.note = formData.note || '';
+        }
+        if ((formData.noteInterne || '') !== (appuntamento.noteInterne || '')) {
+            changes.noteInterne = formData.noteInterne || '';
+        }
+        if (formData.stato !== appuntamento.stato) {
+            changes.stato = formData.stato;
+        }
+        const initialConvenzioneId = appuntamento.convenzioneId || (appuntamento as any).convenzione?.id || '';
+        if ((formData.convenzioneId || '') !== initialConvenzioneId) {
+            changes.convenzioneId = formData.convenzioneId || null;
+        }
+        if (hasPatientDataChanges) {
+            if (!formData.cognome || !formData.nome) {
+                showToast({ message: 'Nome e cognome sono obbligatori per salvare l’anagrafica.', type: 'error' });
+                return;
+            }
+            const result = await pazientiApi.findOrCreate({
+                existingPersonId: existingPersonId || appuntamento.pazienteId || undefined,
+                firstName: formData.nome,
+                lastName: formData.cognome,
+                taxCode: formData.codiceFiscale || '',
+                birthDate: formData.dataNascita || undefined,
+                gender: formData.sesso as 'MALE' | 'FEMALE' | undefined,
+                etnia: formData.etnia || DEFAULT_ETHNICITY,
+                birthPlace: formData.comuneNascita || undefined,
+                birthProvince: formData.provinciaNascita || undefined,
+                email: formData.email || undefined,
+                phone: formData.telefono || undefined,
+                residenceAddress: formData.indirizzo || undefined,
+                residenceCity: formData.comune || undefined,
+                postalCode: formData.cap || undefined,
+                province: formData.provincia || undefined,
+                numeroCi: formData.numeroCi || undefined,
+                tipoCi: formData.tipoCi || undefined,
+                altroDocumento: formData.altroDocumento || undefined,
+                isMinore: !!formData.isMinore,
+                isNonAutonomo: !!formData.isNonAutonomo
+            });
+            if (result.success && result.data?.id) {
+                changes.pazienteId = result.data.id;
+            }
+        }
+        onSaveAppointmentOnly(changes);
+    }, [formData, appuntamento, onSaveAppointmentOnly, hasPatientDataChanges, showToast, existingPersonId]);
 
     /**
      * P52 Session #10: Effetto per richiamare handleSubmit dopo conferma dati incompleti
@@ -1343,18 +1863,18 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
                         <Stethoscope className="h-4 w-4 inline-block mr-2" />
                         Appuntamento
                     </button>
-                    {hasBillingFeature && (
-                        <button
-                            onClick={() => setActiveTab('fatturazione')}
-                            className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${activeTab === 'fatturazione'
-                                ? 'text-teal-600 dark:text-teal-400 border-b-2 border-teal-600 dark:border-teal-400 bg-teal-50 dark:bg-teal-900/30'
-                                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'
-                                }`}
-                        >
-                            <Euro className="h-4 w-4 inline-block mr-2" />
-                            Fatturazione
-                        </button>
-                    )}
+                    <button
+                        onClick={() => setActiveTab('fatturazione')}
+                        className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${activeTab === 'fatturazione'
+                            ? 'text-teal-600 dark:text-teal-400 border-b-2 border-teal-600 dark:border-teal-400 bg-teal-50 dark:bg-teal-900/30'
+                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                            }`}
+                    >
+                        {hasBillingFeature
+                            ? <Euro className="h-4 w-4 inline-block mr-2" />
+                            : <Lock className="h-4 w-4 inline-block mr-2" />}
+                        Fatturazione
+                    </button>
                 </div>
 
                 {/* Form Content — flex-1 garantisce altezza costante tra i tab */}
@@ -1373,19 +1893,28 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
                                         onChange={(e) => handleCodiceFiscaleChange(e.target.value)}
                                         maxLength={16}
                                         placeholder="RSSMRA85M01H501Z"
-                                        className={`w-full px-3 py-2 border rounded-lg uppercase font-mono dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400 ${cfValid === true ? 'border-green-500 bg-green-50 dark:bg-green-900/30' :
+                                        className={`w-full px-3 py-2 pr-20 border rounded-lg uppercase font-mono dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400 ${cfValid === true ? 'border-green-500 bg-green-50 dark:bg-green-900/30' :
                                             cfValid === false ? 'border-red-500 bg-red-50 dark:bg-red-900/30' :
                                                 'border-gray-300 dark:border-gray-600'
                                             } focus:outline-none focus:ring-2 focus:ring-teal-500`}
                                     />
+                                    <button
+                                        type="button"
+                                        onClick={handleGenerateCF}
+                                        disabled={!formData.cognome || !formData.nome || !formData.sesso || !formData.dataNascita || !formData.comuneNascita}
+                                        className="absolute right-2 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg border border-teal-200 bg-white text-teal-700 shadow-sm hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-teal-800 dark:bg-gray-800 dark:text-teal-300"
+                                        title="Ricalcola codice fiscale dai dati anagrafici"
+                                    >
+                                        <Calculator className="h-3.5 w-3.5" />
+                                    </button>
                                     {cfValid === true && (
-                                        <CheckCircle className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-500" />
+                                        <CheckCircle className="absolute right-11 top-1/2 -translate-y-1/2 h-5 w-5 text-green-500" />
                                     )}
                                     {cfValid === false && (
-                                        <AlertCircle className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-red-500" />
+                                        <AlertCircle className="absolute right-11 top-1/2 -translate-y-1/2 h-5 w-5 text-red-500" />
                                     )}
                                     {isSearchingCF && (
-                                        <RefreshCw className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-blue-500 animate-spin" />
+                                        <RefreshCw className="absolute right-11 top-1/2 -translate-y-1/2 h-5 w-5 text-blue-500 animate-spin" />
                                     )}
                                 </div>
                                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
@@ -1567,6 +2096,21 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
                                 </div>
                             </div>
 
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Etnia
+                                </label>
+                                <select
+                                    value={formData.etnia}
+                                    onChange={(e) => handleInputChange('etnia', e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600"
+                                >
+                                    {ETHNICITY_OPTIONS.map(option => (
+                                        <option key={option.value || 'empty'} value={option.value}>{option.label}</option>
+                                    ))}
+                                </select>
+                            </div>
+
                             {/* Genera CF automatico */}
                             {canGenerateCF && (
                                 <div className={`p-3 border rounded-lg ${cfCompatibility && !cfCompatibility.isCompatible
@@ -1627,6 +2171,7 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
                                             <option value="PASSAPORTO">Passaporto</option>
                                             <option value="PATENTE">Patente</option>
                                             <option value="PERMESSO_SOGGIORNO">Permesso di Soggiorno</option>
+                                            <option value="ALTRO">Altro documento</option>
                                         </select>
                                     </div>
                                     <div className="col-span-2">
@@ -1642,6 +2187,20 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
                                         />
                                     </div>
                                 </div>
+                                {formData.tipoCi === 'ALTRO' && (
+                                    <div className="mt-3">
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">
+                                            Descrizione altro documento
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={formData.altroDocumento || ''}
+                                            onChange={(e) => handleInputChange('altroDocumento', e.target.value)}
+                                            placeholder="Es: tessera identificativa, documento estero..."
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+                                        />
+                                    </div>
+                                )}
                             </div>
 
                             {/* ===== SOGGETTO VULNERABILE (MINORE / NON AUTONOMO) ===== */}
@@ -1672,10 +2231,34 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
                                 </div>
                                 {(formData.isMinore || formData.isNonAutonomo) && (
                                     <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg space-y-3">
-                                        <p className="text-xs text-amber-700 font-medium">
-                                            È richiesta la presenza del tutelante legale
-                                        </p>
-                                        <div className="grid grid-cols-3 gap-3">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <p className="text-xs text-amber-700 font-medium">
+                                                È richiesta la presenza del tutelante legale
+                                            </p>
+                                            <span className="text-[11px] text-amber-700">
+                                                {(formData.tutelantiAssociati || []).length} associati
+                                            </span>
+                                        </div>
+                                        {(formData.tutelantiAssociati || []).length > 0 && (
+                                            <div className="flex flex-wrap gap-2">
+                                                {(formData.tutelantiAssociati || []).map((tutelante, idx) => (
+                                                    <span key={`${tutelante.tutelanteId || tutelante.taxCode}-${idx}`} className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-white px-2 py-1 text-xs text-amber-800">
+                                                        {tutelante.relazione.replace(/_/g, ' ')} · {tutelante.lastName} {tutelante.firstName}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setFormData(prev => ({
+                                                                ...prev,
+                                                                tutelantiAssociati: (prev.tutelantiAssociati || []).filter((_, i) => i !== idx),
+                                                            }))}
+                                                            className="ml-1 text-amber-500 hover:text-red-500"
+                                                        >
+                                                            <X className="h-3 w-3" />
+                                                        </button>
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                             <div>
                                                 <label className="block text-xs font-medium text-gray-600 mb-1">Relazione</label>
                                                 <select
@@ -1686,10 +2269,43 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
                                                     <option value="GENITORE">Genitore</option>
                                                     <option value="TUTORE_LEGALE">Tutore Legale</option>
                                                     <option value="CURATORE">Curatore</option>
+                                                    <option value="NONNO">Nonno/a</option>
+                                                    <option value="ZIO">Zio/a</option>
+                                                    <option value="PARENTE">Altro parente</option>
+                                                    <option value="ALTRO">Altro</option>
                                                 </select>
                                             </div>
+                                            <div className="md:col-span-2 relative">
+                                                <label className="block text-xs font-medium text-gray-600 mb-1">Cerca paziente già presente</label>
+                                                <Search className="absolute left-2 top-8 h-3.5 w-3.5 text-gray-400" />
+                                                <input
+                                                    type="text"
+                                                    value={guardianSearch}
+                                                    onChange={(e) => setGuardianSearch(e.target.value)}
+                                                    placeholder="Cognome, nome o codice fiscale"
+                                                    className="w-full pl-7 pr-2 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+                                                />
+                                                {(guardianResults.length > 0 || isSearchingGuardian) && (
+                                                    <div className="absolute z-[1500] mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg overflow-hidden">
+                                                        {isSearchingGuardian && <div className="px-3 py-2 text-xs text-gray-500">Ricerca...</div>}
+                                                        {guardianResults.map(result => (
+                                                            <button
+                                                                key={result.id}
+                                                                type="button"
+                                                                onClick={() => addGuardianToForm(result)}
+                                                                className="block w-full px-3 py-2 text-left text-sm hover:bg-amber-50"
+                                                            >
+                                                                <span className="font-medium text-gray-800">{result.lastName || result.cognome} {result.firstName || result.nome}</span>
+                                                                <span className="ml-2 text-xs text-gray-500">{result.taxCode || result.codiceFiscale || ''}</span>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                             <div>
-                                                <label className="block text-xs font-medium text-gray-600 mb-1">Cognome</label>
+                                                <label className="block text-xs font-medium text-gray-600 mb-1">Cognome nuovo tutelante</label>
                                                 <input
                                                     type="text"
                                                     value={formData.tutelareCognome || ''}
@@ -1706,17 +2322,29 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
                                                     className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
                                                 />
                                             </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-600 mb-1">Codice Fiscale</label>
+                                                <input
+                                                    type="text"
+                                                    value={formData.tutelareCF || ''}
+                                                    onChange={(e) => handleInputChange('tutelareCF', e.target.value.toUpperCase())}
+                                                    placeholder="RSSMRA85M01H501Z"
+                                                    maxLength={16}
+                                                    className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm font-mono uppercase"
+                                                />
+                                            </div>
                                         </div>
-                                        <div>
-                                            <label className="block text-xs font-medium text-gray-600 mb-1">Codice Fiscale Tutelante</label>
-                                            <input
-                                                type="text"
-                                                value={formData.tutelareCF || ''}
-                                                onChange={(e) => handleInputChange('tutelareCF', e.target.value.toUpperCase())}
-                                                placeholder="RSSMRA85M01H501Z"
-                                                maxLength={16}
-                                                className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm font-mono uppercase"
-                                            />
+                                        <div className="flex justify-end">
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => addGuardianToForm()}
+                                                className="text-xs border-amber-300 text-amber-800 hover:bg-amber-100"
+                                            >
+                                                <UserPlus className="h-3.5 w-3.5 mr-1" />
+                                                Aggiungi tutelante
+                                            </Button>
                                         </div>
                                     </div>
                                 )}
@@ -1748,18 +2376,8 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
                                             </span>
                                         )}
                                     </div>
-                                    {/* Configura e invia al tablet */}
+                                    {/* Invia al tablet */}
                                     <div className="flex items-center gap-1.5">
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => setConsensoLink(prev => ({ ...prev, showDocConfig: !prev.showDocConfig }))}
-                                            className="flex items-center gap-1 text-xs border-gray-300 text-gray-600 hover:bg-gray-50"
-                                            title="Configura documenti da mostrare"
-                                        >
-                                            <Settings className="h-3.5 w-3.5" />
-                                        </Button>
                                         <Button
                                             type="button"
                                             variant="outline"
@@ -1822,9 +2440,23 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
                                 )}
 
                                 {/* Config documenti da mostrare */}
-                                {consensoLink.showDocConfig && (
-                                    <div className="mb-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                                        <p className="text-xs font-medium text-gray-600 mb-1">Documenti da mostrare sul tablet:</p>
+                                <div className="mb-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                                        <div className="flex items-center justify-between gap-2 mb-2">
+                                            <p className="text-xs font-medium text-gray-600">Documenti da mostrare sul tablet:</p>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const alreadyValid = new Set(Object.keys(validConsensiPerPaziente));
+                                                    const all = consensoDocOptions
+                                                        .map(d => d.id)
+                                                        .filter(c => !alreadyValid.has(c) || forzaNuovaFirmaSet.has(c));
+                                                    setConsensoLink(prev => ({ ...prev, documentiSelezionati: Array.from(new Set(all)) }));
+                                                }}
+                                                className="text-[11px] font-medium text-teal-700 bg-white border border-teal-200 rounded-full px-2 py-0.5 hover:bg-teal-50"
+                                            >
+                                                Seleziona tutti
+                                            </button>
+                                        </div>
                                         {appuntamento.prestazione?.nome && (
                                             <p className="text-xs text-teal-600 mb-2 flex items-center gap-1">
                                                 <Stethoscope className="h-3 w-3 flex-shrink-0" />
@@ -1832,18 +2464,18 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
                                             </p>
                                         )}
                                         <div className="space-y-1">
-                                            {[
-                                                { id: 'gdpr', label: 'Consenso GDPR', obbligatorio: true },
-                                                { id: 'sanitari', label: 'Consenso dati sanitari', obbligatorio: true },
-                                                { id: 'prestazione', label: 'Consenso prestazione', obbligatorio: false },
-                                                { id: 'chirurgico', label: 'Consenso intervento chirurgico', obbligatorio: false },
-                                            ].map((doc) => (
+                                            {consensoDocOptions.map((doc) => (
                                                 <label key={doc.id} className="flex items-center gap-2 text-xs cursor-pointer">
                                                     <input
                                                         type="checkbox"
                                                         checked={consensoLink.documentiSelezionati.includes(doc.id)}
-                                                        disabled={doc.obbligatorio}
                                                         onChange={(e) => {
+                                                            setForzaNuovaFirmaSet(prev => {
+                                                                const next = new Set(prev);
+                                                                if (validConsensiPerPaziente[doc.id] && e.target.checked) next.add(doc.id);
+                                                                if (!e.target.checked) next.delete(doc.id);
+                                                                return next;
+                                                            });
                                                             setConsensoLink(prev => ({
                                                                 ...prev,
                                                                 documentiSelezionati: e.target.checked
@@ -1854,12 +2486,21 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
                                                         className="w-3.5 h-3.5 rounded border-gray-300 text-teal-600"
                                                     />
                                                     <span className={doc.obbligatorio ? 'text-gray-500' : 'text-gray-700'}>{doc.label}</span>
+                                                    <span className="text-[10px] text-gray-400">{doc.gruppo}</span>
                                                     {doc.obbligatorio && <span className="text-red-400 text-xs">*</span>}
+                                                    {validConsensiPerPaziente[doc.id] && !forzaNuovaFirmaSet.has(doc.id) ? (
+                                                        <span className="ml-auto text-[10px] text-emerald-600">
+                                                            già valido dal {new Date(validConsensiPerPaziente[doc.id]).toLocaleDateString('it-IT')}
+                                                        </span>
+                                                    ) : validConsensiPerPaziente[doc.id] && forzaNuovaFirmaSet.has(doc.id) ? (
+                                                        <span className="ml-auto text-[10px] text-blue-600">rinnovo firma</span>
+                                                    ) : (
+                                                        <span className="ml-auto text-[10px] text-amber-600">da firmare</span>
+                                                    )}
                                                 </label>
                                             ))}
                                         </div>
-                                    </div>
-                                )}
+                                </div>
 
                                 {/* Firma ricevuta */}
                                 {consensoLink.firmato && (
@@ -1881,6 +2522,11 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
                                                 const nomi: Record<string, string> = {
                                                     gdpr: 'GDPR', sanitari: 'Dati sanitari',
                                                     prestazione: 'Prestazione', chirurgico: 'Chirurgico',
+                                                    marketing: 'Marketing', comunicazioni: 'Comunicazioni',
+                                                    fse_alimentazione: 'FSE alimentazione',
+                                                    fse_consultazione: 'FSE consultazione',
+                                                    fse_pregresso: 'FSE pregresso',
+                                                    mdl_sorveglianza: 'Medicina del Lavoro',
                                                 };
                                                 return (
                                                     <span key={codice} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800" title={`Firmato il ${new Date(firmatoAt).toLocaleDateString('it-IT')}`}>
@@ -1895,55 +2541,6 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
                                         </p>
                                     </div>
                                 )}
-
-                                <div className="space-y-2">
-                                    {([
-                                        { codice: 'gdpr', field: 'consensoGdpr' as const, label: 'Consenso trattamento dati personali', desc: 'Informativa privacy ai sensi del GDPR (Reg. UE 2016/679)' },
-                                        { codice: 'sanitari', field: 'consensoDatiSanitari' as const, label: 'Consenso trattamento dati sanitari', desc: 'Dati relativi alla salute (ex art. 9 GDPR)' },
-                                        { codice: 'prestazione', field: 'consensoPrestazione' as const, label: 'Consenso alla prestazione sanitaria', desc: 'Consenso informato al trattamento medico' },
-                                    ] as const).map(({ codice, field, label, desc }) => {
-                                        const isValid = !!validConsensiPerPaziente[codice] && !forzaNuovaFirmaSet.has(codice);
-                                        return (
-                                            <div key={codice} className={`flex items-start gap-3 p-2 rounded-lg ${isValid ? 'bg-emerald-50/50' : 'hover:bg-gray-50'}`}>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={!!formData[field]}
-                                                    disabled={isValid}
-                                                    onChange={(e) => handleInputChange(field, e.target.checked as unknown as string)}
-                                                    className={`mt-0.5 w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500 ${isValid ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
-                                                />
-                                                <div className="flex-1 min-w-0">
-                                                    <p className={`text-sm font-medium ${isValid ? 'text-emerald-700' : 'text-gray-700'}`}>{label}</p>
-                                                    <p className="text-xs text-gray-500">{desc}</p>
-                                                    {isValid && (
-                                                        <div className="flex items-center gap-2 mt-1">
-                                                            <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
-                                                                <CheckCircle className="h-3 w-3" />
-                                                                Già valido (firmato il {new Date(validConsensiPerPaziente[codice]).toLocaleDateString('it-IT')})
-                                                            </span>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    setForzaNuovaFirmaSet(prev => new Set(prev).add(codice));
-                                                                    // Re-include document in documentiSelezionati
-                                                                    setConsensoLink(prev => ({
-                                                                        ...prev,
-                                                                        documentiSelezionati: prev.documentiSelezionati.includes(codice)
-                                                                            ? prev.documentiSelezionati
-                                                                            : [...prev.documentiSelezionati, codice],
-                                                                    }));
-                                                                }}
-                                                                className="text-xs text-amber-600 hover:text-amber-800 font-medium underline underline-offset-2"
-                                                            >
-                                                                Forza nuova firma
-                                                            </button>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
                             </div>
                         </div>
                     )}
@@ -2074,12 +2671,26 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
                                                 </button>
                                             </div>
                                         ) : (
-                                            <div className="flex items-center gap-2 group">
-                                                <p className="font-medium text-sm text-gray-900">
-                                                    {formData.prestazioneModificataId
-                                                        ? prestazioniList.find(p => p.id === formData.prestazioneModificataId)?.nome
-                                                        : appuntamento.prestazione?.nome || '—'}
-                                                </p>
+                                            <div className="flex items-start gap-2 group">
+                                                <div className="min-w-0">
+                                                    <p className="font-medium text-sm text-gray-900">
+                                                        {formData.prestazioneModificataId
+                                                            ? prestazioniList.find(p => p.id === formData.prestazioneModificataId)?.nome
+                                                            : appuntamento.prestazione?.nome || '—'}
+                                                    </p>
+                                                    {prestazioniAppuntamento.length > 1 && (
+                                                        <div className="mt-1 flex flex-wrap gap-1">
+                                                            {prestazioniAppuntamento.map((prest, index) => (
+                                                                <span
+                                                                    key={`${prest.id}-${index}`}
+                                                                    className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600"
+                                                                >
+                                                                    {prest.nome}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
                                                 <button
                                                     type="button"
                                                     onClick={() => setEditingAppField('prestazione')}
@@ -2134,8 +2745,7 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
                                                         }}
                                                         theme="teal"
                                                     />
-                                                    <input
-                                                        type="time"
+                                                    <TimePickerElegante
                                                         value={(() => {
                                                             const dt = formData.dataOraModificata || appuntamento.dataOra || '';
                                                             if (!dt) return '09:00';
@@ -2144,14 +2754,16 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
                                                                 return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
                                                             } catch { return '09:00'; }
                                                         })()}
-                                                        onChange={(e) => {
-                                                            const [hours, minutes] = e.target.value.split(':');
+                                                        onChange={(time) => {
+                                                            const [hours, minutes] = time.split(':');
                                                             const baseDt = formData.dataOraModificata || appuntamento.dataOra || new Date().toISOString();
                                                             const d = new Date(baseDt);
                                                             d.setHours(Number(hours), Number(minutes), 0, 0);
                                                             handleInputChange('dataOraModificata', d.toISOString());
                                                         }}
-                                                        className="px-3 py-2 border border-teal-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+                                                        minuteStep={5}
+                                                        minTime="07:00"
+                                                        maxTime="21:00"
                                                     />
                                                 </div>
                                                 <button
@@ -2194,18 +2806,89 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
                                     <FileText className="h-5 w-5 text-teal-600" />
                                     <div className="flex-1">
                                         <label className="text-sm text-gray-500 block mb-1">Convenzione</label>
-                                        <select
-                                            value={formData.convenzioneId}
-                                            onChange={(e) => handleInputChange('convenzioneId', e.target.value)}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white text-sm"
-                                        >
-                                            <option value="">Nessuna convenzione (tariffa privata)</option>
-                                            {convenzioni.map(conv => (
-                                                <option key={conv.id} value={conv.id}>
-                                                    {conv.nome} ({conv.tipo})
-                                                </option>
-                                            ))}
-                                        </select>
+                                        <div className="rounded-xl border border-gray-200 bg-white p-2">
+                                            <div className="relative mb-2">
+                                                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                                                <input
+                                                    value={convenzioneSearch}
+                                                    onChange={(event) => setConvenzioneSearch(event.target.value)}
+                                                    placeholder="Cerca convenzione, ente o codice..."
+                                                    className="h-9 w-full rounded-lg border border-gray-200 bg-gray-50 pl-8 pr-3 text-sm outline-none focus:border-teal-300 focus:bg-white focus:ring-2 focus:ring-teal-100"
+                                                />
+                                            </div>
+                                            <div className="max-h-36 overflow-y-auto rounded-lg border border-gray-100">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setFormData(prev => ({
+                                                            ...prev,
+                                                            convenzioneId: '',
+                                                            prezzo: prezzoBasePrestazione
+                                                        }));
+                                                    }}
+                                                    className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-gray-50 ${!formData.convenzioneId ? 'bg-teal-50 text-teal-700' : 'text-gray-700'}`}
+                                                >
+                                                    <span>Nessuna convenzione</span>
+                                                    <span className="text-xs font-medium text-gray-400">Tariffa privata</span>
+                                                </button>
+                                                {filteredConvenzioni.map(baseConv => {
+                                                    const conv = selectedConvenzione?.id === baseConv.id ? selectedConvenzione : baseConv;
+                                                    const condizioni = conv.condizioni || {};
+                                                    const scontoInfo = (condizioni as any).scontoInfo;
+                                                    const tipoSconto = String(scontoInfo?.tipo || '').toUpperCase();
+                                                    const scontoPercentuale = Number(
+                                                        (condizioni as any).scontoPercentuale
+                                                        || (condizioni as any).percentualeSconto
+                                                        || (tipoSconto.includes('PERCENT') ? scontoInfo.valore : 0)
+                                                        || 0
+                                                    );
+                                                    const scontoFisso = Number(
+                                                        (condizioni as any).scontoFisso
+                                                        || (tipoSconto.includes('VALORE') || tipoSconto.includes('FISSO') ? scontoInfo.valore : 0)
+                                                        || 0
+                                                    );
+                                                    const discountLabel = scontoPercentuale > 0
+                                                        ? `-${scontoPercentuale}%`
+                                                        : scontoFisso > 0
+                                                            ? `-${scontoFisso.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}`
+                                                            : conv.listiniPrezzo?.length
+                                                                ? 'Listino dedicato'
+                                                                : 'Condizioni dedicate';
+                                                    return (
+                                                        <button
+                                                            key={conv.id}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setFormData(prev => ({
+                                                                    ...prev,
+                                                                    convenzioneId: conv.id,
+                                                                    prezzo: calculateConvenzionePrice(conv)
+                                                                }));
+                                                            }}
+                                                            className={`flex w-full items-center justify-between gap-3 border-t border-gray-100 px-3 py-2 text-left text-sm hover:bg-gray-50 ${formData.convenzioneId === conv.id ? 'bg-teal-50 text-teal-700' : 'text-gray-700'}`}
+                                                        >
+                                                            <span className="min-w-0">
+                                                                <span className="block truncate font-medium">{conv.nome}</span>
+                                                                <span className="block truncate text-xs text-gray-400">{conv.enteTerzo || conv.tipo}</span>
+                                                            </span>
+                                                            <span className="shrink-0 rounded-full bg-teal-100 px-2 py-0.5 text-xs font-semibold text-teal-700">
+                                                                {discountLabel}
+                                                            </span>
+                                                        </button>
+                                                    );
+                                                })}
+                                                {filteredConvenzioni.length === 0 && (
+                                                    <p className="px-3 py-4 text-center text-xs text-gray-400">Nessuna convenzione trovata</p>
+                                                )}
+                                            </div>
+                                            {selectedConvenzione && (
+                                                <div className="mt-2 rounded-lg bg-teal-50 px-3 py-2 text-xs text-teal-800">
+                                                    Convenzione applicata: <strong>{selectedConvenzione.nome}</strong>
+                                                    {' '}<span className="font-semibold">({getConvenzioneDiscountLabel(selectedConvenzione)})</span>
+                                                    {selectedConvenzione.descrizione ? ` · ${selectedConvenzione.descrizione}` : ''}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -2227,7 +2910,10 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
                                     />
                                     {appuntamento.convenzioneId && (
                                         <p className="text-xs text-gray-500 mt-1">
-                                            Prezzo convenzionato applicabile
+                                            Tariffa base {prezzoBasePrestazione.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
+                                            {selectedConvenzione && Number(formData.prezzo || 0) < prezzoBasePrestazione
+                                                ? ` · sconto applicato ${getConvenzioneDiscountLabel(selectedConvenzione)}`
+                                                : ''}
                                         </p>
                                     )}
                                 </div>
@@ -2355,12 +3041,31 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
                         </div>
                     )}
 
-                    {hasBillingFeature && activeTab === 'fatturazione' && (
-                        <QuickFatturazioneTab
-                            context={fatturaContext}
-                            compact={false}
-                            autoCreateBozza
-                        />
+                    {activeTab === 'fatturazione' && (
+                        hasBillingFeature
+                            ? <QuickFatturazioneTab
+                                context={fatturaContext}
+                                compact={false}
+                                autoCreateBozza
+                            />
+                            : <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+                                <div className="w-16 h-16 bg-teal-100 dark:bg-teal-900/30 rounded-full flex items-center justify-center mb-4">
+                                    <Lock className="w-8 h-8 text-teal-600 dark:text-teal-400" />
+                                </div>
+                                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                                    Fatturazione Elettronica
+                                </h3>
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 max-w-sm">
+                                    Attiva il modulo di fatturazione elettronica per emettere fatture direttamente dall&apos;accettazione paziente.
+                                </p>
+                                <a
+                                    href="/management/my-tenants"
+                                    className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium"
+                                >
+                                    <ExternalLink className="w-4 h-4" />
+                                    Attiva Fatturazione
+                                </a>
+                            </div>
                     )}
                 </div>
 
@@ -2392,6 +3097,23 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
                     </div>
                     <div className="flex items-center gap-3">
                         {/* P61: Rimosso pulsante Chiudi ridondante - c'è già la X in alto a dx */}
+
+                        {/* Salva solo modifiche appuntamento (data/ora, note, stato) */}
+                        {onSaveAppointmentOnly && hasAppointmentOnlyChanges && (
+                            <Button
+                                onClick={handleSaveAppointmentOnly}
+                                disabled={isLoading}
+                                variant="outline"
+                                className="border-amber-500 text-amber-600 hover:bg-amber-50"
+                            >
+                                {isLoading ? (
+                                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                ) : (
+                                    <Calendar className="h-4 w-4 mr-2" />
+                                )}
+                                Salva Appuntamento
+                            </Button>
+                        )}
 
                         {/* Pulsante principale - cambia in base allo stato */}
                         {appuntamento.stato === 'IN_ATTESA' || appuntamento.stato === 'IN_CORSO' || appuntamento.stato === 'COMPLETATO' || appuntamento.stato === 'FATTURATO' ? (

@@ -138,7 +138,7 @@ export const CourseDetailsForm: React.FC<CourseDetailsFormProps> = ({
           return extractCourses(res);
         } catch (e) {
           try {
-            const pubRes = await apiGet(`/api/public/courses?search=${encodeURIComponent(q)}&limit=50`);
+            const pubRes = await apiGet(`/api/v1/public/courses?search=${encodeURIComponent(q)}&limit=50`);
             return extractCourses(pubRes);
           } catch (pubErr) {
             return [] as Training[];
@@ -187,7 +187,7 @@ export const CourseDetailsForm: React.FC<CourseDetailsFormProps> = ({
           } catch (serverError) {
             // Ultimo fallback: corsi pubblici
             try {
-              const pubRes = await apiGet(`/api/public/courses?limit=100`);
+              const pubRes = await apiGet(`/api/v1/public/courses?limit=100`);
               items = extractCourses(pubRes);
             } catch (apiError) {
               items = [];

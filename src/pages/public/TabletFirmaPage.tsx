@@ -203,7 +203,9 @@ const SignedScreen: React.FC<{
                             {id === 'gdpr' ? 'Consenso GDPR' :
                                 id === 'sanitari' ? 'Consenso dati sanitari' :
                                     id === 'prestazione' ? 'Consenso prestazione' :
-                                        id === 'chirurgico' ? 'Consenso chirurgico' : id}
+                                        id === 'chirurgico' ? 'Consenso chirurgico' :
+                                            id === 'marketing' ? 'Consenso marketing' :
+                                                id === 'comunicazioni' ? 'Comunicazioni di servizio' : id}
                         </li>
                     ))}
                 </ul>

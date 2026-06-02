@@ -78,6 +78,42 @@ class QueueEntryService {
             }
         }
 
+        if (pazienteId) {
+            const existingForPatientInSession = await prisma.numeroChiamata.findFirst({
+                where: {
+                    sessionId,
+                    pazienteId,
+                    tenantId,
+                    deletedAt: null,
+                    stato: { in: ['IN_ATTESA', 'CHIAMATO', 'IN_VISITA'] },
+                },
+                include: {
+                    session: {
+                        select: {
+                            id: true,
+                            mode: true,
+                            ambulatorio: {
+                                select: { nome: true, codice: true }
+                            }
+                        }
+                    }
+                },
+                orderBy: { createdAt: 'asc' },
+            });
+            if (existingForPatientInSession) {
+                logger.info('Queue entry already exists for this patient in session, returning existing', {
+                    service: 'QueueEntryService',
+                    action: 'add-patient-idempotent',
+                    entryId: existingForPatientInSession.id,
+                    pazienteId,
+                    sessionId,
+                    numero: existingForPatientInSession.numero,
+                    tenantId
+                });
+                return existingForPatientInSession;
+            }
+        }
+
         // Ottieni sessione e ambulatorio per sigla (con verifica multi-tenancy)
         const session = await prisma.queueSession.findFirst({
             where: {
@@ -268,39 +304,52 @@ class QueueEntryService {
             where.stato = stato;
         }
 
-        const [total, entries] = await Promise.all([
-            prisma.numeroChiamata.count({ where }),
-            prisma.numeroChiamata.findMany({
-                where,
-                orderBy: [
-                    { priorita: 'desc' }, // EMERGENZA first
-                    { numero: 'asc' }
-                ],
-                skip: (page - 1) * limit,
-                take: limit,
-                include: {
-                    // Use available Prisma relations
-                    session: {
-                        select: {
-                            id: true,
-                            ambulatorio: {
-                                select: { id: true, nome: true, codice: true }
-                            }
+        const entries = await prisma.numeroChiamata.findMany({
+            where,
+            orderBy: [
+                { priorita: 'desc' }, // EMERGENZA first
+                { numero: 'asc' }
+            ],
+            include: {
+                // Use available Prisma relations
+                session: {
+                    select: {
+                        id: true,
+                        ambulatorio: {
+                            select: { id: true, nome: true, codice: true }
                         }
-                    },
-                    prestazione: {
-                        select: { id: true, nome: true }
-                    },
-                    calls: {
-                        orderBy: { createdAt: 'desc' },
-                        take: 1
                     }
+                },
+                prestazione: {
+                    select: { id: true, nome: true }
+                },
+                calls: {
+                    orderBy: { createdAt: 'desc' },
+                    take: 1
                 }
-            })
-        ]);
+            }
+        });
+
+        const uniqueEntries = [];
+        const seen = new Set();
+        for (const entry of entries) {
+            const key = entry.appuntamentoId
+                ? `appt:${entry.appuntamentoId}`
+                : entry.pazienteId
+                    ? `patient:${entry.pazienteId}:${entry.sessionId}`
+                    : entry.displayNumber
+                        ? `display:${entry.displayNumber}:${entry.sessionId}`
+                        : `entry:${entry.id}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            uniqueEntries.push(entry);
+        }
+
+        const total = uniqueEntries.length;
+        const pagedEntries = uniqueEntries.slice((page - 1) * limit, page * limit);
 
         // Fetch appuntamento data separately if appuntamentoId exists
-        const appuntamentoIds = entries
+        const appuntamentoIds = pagedEntries
             .filter(e => e.appuntamentoId)
             .map(e => e.appuntamentoId);
 
@@ -334,7 +383,7 @@ class QueueEntryService {
         }
 
         // Also fetch paziente data for entries with pazienteId but no appuntamento
-        const pazienteIds = entries
+        const pazienteIds = pagedEntries
             .filter(e => e.pazienteId && !e.appuntamentoId)
             .map(e => e.pazienteId);
 
@@ -359,7 +408,7 @@ class QueueEntryService {
         }
 
         // Map to include patient name in a more accessible format
-        const mappedEntries = entries.map(entry => {
+        const mappedEntries = pagedEntries.map(entry => {
             const appuntamento = entry.appuntamentoId ? appuntamentiMap[entry.appuntamentoId] : null;
             const paziente = appuntamento?.paziente || (entry.pazienteId ? pazientiMap[entry.pazienteId] : null);
             const walkIn = entry.walkInData;

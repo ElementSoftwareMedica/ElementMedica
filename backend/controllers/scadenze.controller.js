@@ -50,7 +50,16 @@ export async function getAllDeadlines(req, res) {
 export async function getDeadlineStats(req, res) {
     try {
         const tenantId = getEffectiveTenantId(req);
-        const stats = await DeadlineService.getStats(tenantId);
+        const filters = {
+            categoria: req.query.categoria,
+            status: req.query.status,
+            priorita: req.query.priorita,
+            dataInizio: req.query.dataInizio,
+            dataFine: req.query.dataFine,
+            responsabileId: req.query.responsabileId,
+            search: req.query.search
+        };
+        const stats = await DeadlineService.getStats(tenantId, filters);
         res.json(stats);
     } catch (error) {
         logger.error({ error: error.message }, 'Errore recupero statistiche scadenze');
@@ -135,6 +144,27 @@ export async function completeDeadline(req, res) {
 }
 
 /**
+ * POST /api/v1/scadenze/resolve-derived
+ * Risolve una scadenza automatica agendo sulla sorgente reale.
+ */
+export async function resolveDerivedDeadline(req, res) {
+    try {
+        const tenantId = getEffectiveTenantId(req);
+        const personId = req.person.id;
+
+        const result = await DeadlineService.resolveDerived(tenantId, req.body, personId);
+        res.json({ success: true, data: result });
+    } catch (error) {
+        logger.error({
+            error: error.message,
+            tenantId: getEffectiveTenantId(req),
+            personId: req.person?.id
+        }, 'Errore risoluzione scadenza automatica');
+        res.status(400).json({ error: 'Errore nella risoluzione scadenza automatica' });
+    }
+}
+
+/**
  * DELETE /api/v1/scadenze/:id
  * Elimina scadenza (soft delete)
  */
@@ -172,6 +202,10 @@ export async function getAllFarmaci(req, res) {
             ambulatorioId: req.query.ambulatorioId,
             ubicazione: req.query.ubicazione,
             formaFarmaceutica: req.query.formaFarmaceutica,
+            dataInizio: req.query.dataInizio,
+            dataFine: req.query.dataFine,
+            dataScadenzaDa: req.query.dataScadenzaDa,
+            dataScadenzaA: req.query.dataScadenzaA,
             inScadenza: req.query.inScadenza === 'true',
             sottoScorta: req.query.sottoScorta === 'true',
             search: req.query.search,

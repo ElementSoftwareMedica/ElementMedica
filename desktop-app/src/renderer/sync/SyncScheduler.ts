@@ -70,28 +70,13 @@ export function startAutoSync(callbacks: SchedulerCallbacks): void {
                     isSyncing = false
                     lastSyncTime = Date.now()
                     callbacks.onComplete(summary)
-                    // Native notification: sync completed
-                    if (typeof window !== 'undefined' && (window as typeof window & { desktopApi?: { notify?: { send: (p: object) => void } } }).desktopApi?.notify) {
-                        const syncedCount = (summary as { synced?: number }).synced
-                            ; (window as typeof window & { desktopApi: { notify: { send: (p: object) => void } } }).desktopApi.notify.send({
-                                event: 'sync-complete',
-                                detail: syncedCount ? `${syncedCount} operazion${syncedCount === 1 ? 'e sincronizzata' : 'i sincronizzate'}.` : undefined,
-                            })
-                    }
                 },
                 onError: (message) => {
                     isSyncing = false
                     lastSyncTime = Date.now()
                     callbacks.onError(message)
-                    // Native notification: sync failed
-                    if (typeof window !== 'undefined' && (window as typeof window & { desktopApi?: { notify?: { send: (p: object) => void } } }).desktopApi?.notify) {
-                        ; (window as typeof window & { desktopApi: { notify: { send: (p: object) => void } } }).desktopApi.notify.send({
-                            event: 'sync-failed',
-                            detail: message,
-                        })
-                    }
                 }
-            })
+            }, { notify: false })
         } finally {
             // Belt-and-suspenders: ensure isSyncing is always reset even if executeUploadSync throws
             isSyncing = false
@@ -174,7 +159,7 @@ export async function triggerSyncNow(callbacks: SyncCallbacks): Promise<void> {
                 isSyncing = false
                 callbacks.onError(message)
             }
-        })
+        }, { notify: false })
     } finally {
         isSyncing = false
     }

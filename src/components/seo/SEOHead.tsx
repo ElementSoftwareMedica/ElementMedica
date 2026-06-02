@@ -40,6 +40,9 @@ export interface SEOProps {
 
   // Override default base URL
   baseUrl?: string;
+
+  // Open Graph site name
+  siteName?: string;
 }
 
 const SEOHead: React.FC<SEOProps> = ({
@@ -61,7 +64,8 @@ const SEOHead: React.FC<SEOProps> = ({
   structuredData,
   hreflang,
   preloadImages = [],
-  baseUrl = window.location.origin
+  baseUrl = window.location.origin,
+  siteName
 }) => {
   // Costruisci robots value
   const robotsValue = [
@@ -91,6 +95,7 @@ const SEOHead: React.FC<SEOProps> = ({
       <meta property="og:type" content={ogType} />
       <meta property="og:url" content={currentUrl} />
       {ogImage && <meta property="og:image" content={ogImage} />}
+      {siteName && <meta property="og:site_name" content={siteName} />}
 
       {/* Twitter Card */}
       <meta name="twitter:card" content={twitterCard} />

@@ -19,6 +19,7 @@ import express from 'express';
 import { authenticate, requirePermission } from '../../middleware/auth.js';
 import AppuntamentoPrestazioneService from '../../services/clinical/AppuntamentoPrestazioneService.js';
 import VisitaSecondariaService from '../../services/clinical/VisitaSecondariaService.js';
+import { VisitTemplateService } from '../../services/clinical/VisitTemplateService.js';
 import { logger } from '../../utils/logger.js';
 import prisma from '../../config/prisma-optimization.js';
 import MovimentoContabileGenerator from '../../services/management/MovimentoContabileGenerator.js';
@@ -27,6 +28,175 @@ import { getEffectiveTenantId } from '../../utils/tenantHelper.js';
 
 const router = express.Router();
 router.param('id', validateParamId);
+
+function buildNormalValuesFromTemplate(template) {
+    const values = {};
+    const fields = Array.isArray(template?.fields) ? template.fields : [];
+    for (const field of fields) {
+        if (!field?.name || field.visible === false) continue;
+        const hasNormalPreset = field.metadata && Object.prototype.hasOwnProperty.call(field.metadata, 'normalPreset');
+        const value = hasNormalPreset ? field.metadata.normalPreset : field.defaultValue;
+        if (value !== undefined) values[field.name] = value;
+    }
+    return values;
+}
+
+async function ensureSecondaryVisitWithNormalPreset({ appPrestazioneId, visitaParentId, tenantId, personId }) {
+    const appPrestazione = await prisma.appuntamentoPrestazione.findFirst({
+        where: { id: appPrestazioneId, tenantId, deletedAt: null },
+        select: {
+            id: true,
+            prestazioneId: true,
+            appuntamentoId: true,
+            medicoRefertanteId: true,
+            visitaSecundaria: {
+                select: { id: true, datiStrutturati: true }
+            },
+            appuntamento: {
+                select: { id: true, medicoId: true }
+            }
+        }
+    });
+
+    if (!appPrestazione) return null;
+    const medicoReferenteId = appPrestazione.medicoRefertanteId || appPrestazione.appuntamento?.medicoId;
+    if (!medicoReferenteId) return null;
+
+    const visitaSecondaria = await VisitaSecondariaService.creaVisitaSecondaria({
+        appPrestazioneId: appPrestazione.id,
+        prestazioneId: appPrestazione.prestazioneId,
+        medicoReferenteId,
+        appuntamentoId: appPrestazione.appuntamentoId,
+        visitaParentId: visitaParentId || null,
+        tenantId,
+        createdBy: personId,
+        forceCreateForSameMedico: true
+    });
+
+    if (!visitaSecondaria?.id) return null;
+
+    const template = await VisitTemplateService.ensureSpecialistTemplateForPrestazione(
+        appPrestazione.prestazioneId,
+        tenantId,
+        personId || null
+    );
+    const normalValues = buildNormalValuesFromTemplate(template);
+    if (Object.keys(normalValues).length === 0) return visitaSecondaria;
+
+    const currentValues = (visitaSecondaria.datiStrutturati && typeof visitaSecondaria.datiStrutturati === 'object')
+        ? visitaSecondaria.datiStrutturati
+        : {};
+
+    return prisma.visita.update({
+        where: { id: visitaSecondaria.id },
+        data: {
+            visitTemplateId: template?.id || visitaSecondaria.visitTemplateId || undefined,
+            datiStrutturati: {
+                ...currentValues,
+                ...normalValues
+            },
+            stato: 'COMPLETATA',
+            updatedAt: new Date()
+        }
+    });
+}
+
+async function resolveAppPrestazioneForAction({ id, tenantId, visitaParentId }) {
+    const select = {
+        id: true,
+        prestazioneId: true,
+        appuntamentoId: true,
+        medicoRefertanteId: true,
+        deletedAt: true,
+        appuntamento: {
+            select: { id: true, medicoId: true }
+        }
+    };
+
+    const byAppPrestazioneId = await prisma.appuntamentoPrestazione.findFirst({
+        where: { id, tenantId },
+        select
+    });
+    if (byAppPrestazioneId) {
+        if (!byAppPrestazioneId.deletedAt) return byAppPrestazioneId;
+        return prisma.appuntamentoPrestazione.update({
+            where: { id: byAppPrestazioneId.id },
+            data: { deletedAt: null },
+            select
+        });
+    }
+
+    const bySecondaryVisit = await prisma.visita.findFirst({
+        where: {
+            id,
+            tenantId,
+            deletedAt: null,
+            appPrestazioneId: { not: null }
+        },
+        select: { appPrestazioneId: true }
+    });
+    if (bySecondaryVisit?.appPrestazioneId) {
+        const appPrestazione = await prisma.appuntamentoPrestazione.findFirst({
+            where: { id: bySecondaryVisit.appPrestazioneId, tenantId },
+            select
+        });
+        if (appPrestazione) {
+            if (!appPrestazione.deletedAt) return appPrestazione;
+            return prisma.appuntamentoPrestazione.update({
+                where: { id: appPrestazione.id },
+                data: { deletedAt: null },
+                select
+            });
+        }
+    }
+
+    if (!visitaParentId) return null;
+
+    const parentVisit = await prisma.visita.findFirst({
+        where: { id: visitaParentId, tenantId, deletedAt: null },
+        select: { id: true, appuntamentoId: true, medicoId: true }
+    });
+    if (!parentVisit?.appuntamentoId) return null;
+
+    const catalogPrestazione = await prisma.prestazione.findFirst({
+        where: { id, tenantId, deletedAt: null },
+        select: { id: true }
+    });
+    if (!catalogPrestazione) return null;
+
+    const existingByCatalogPrestazione = await prisma.appuntamentoPrestazione.findUnique({
+        where: {
+            appuntamentoId_prestazioneId: {
+                appuntamentoId: parentVisit.appuntamentoId,
+                prestazioneId: id
+            }
+        },
+        select
+    });
+    if (existingByCatalogPrestazione && !existingByCatalogPrestazione.deletedAt) {
+        return existingByCatalogPrestazione;
+    }
+    if (existingByCatalogPrestazione?.deletedAt) {
+        return prisma.appuntamentoPrestazione.update({
+            where: { id: existingByCatalogPrestazione.id },
+            data: { deletedAt: null },
+            select
+        });
+    }
+
+    const created = await AppuntamentoPrestazioneService.create({
+        appuntamentoId: parentVisit.appuntamentoId,
+        prestazioni: [{ prestazioneId: id, medicoRefertanteId: parentVisit.medicoId || undefined }],
+        tenantId
+    });
+
+    return Array.isArray(created) && created.length > 0
+        ? await prisma.appuntamentoPrestazione.findFirst({
+            where: { id: created[0].id, tenantId, deletedAt: null },
+            select
+        })
+        : null;
+}
 
 /**
  * POST /appuntamenti/:id/prestazioni/from-bundle
@@ -433,7 +603,7 @@ router.patch(
         try {
             const tenantId = getEffectiveTenantId(req);
             const { id } = req.params;
-            const { stato, note, dataEsecuzione } = req.body;
+            const { stato, note, dataEsecuzione, applyNormalPreset, visitaParentId } = req.body;
 
             if (!stato) {
                 return res.status(400).json({
@@ -442,19 +612,53 @@ router.patch(
                 });
             }
 
-            const updated = await AppuntamentoPrestazioneService.updateStato({
+            const appPrestazione = await resolveAppPrestazioneForAction({
                 id,
+                tenantId,
+                visitaParentId
+            });
+
+            if (!appPrestazione) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Prestazione appuntamento non trovata'
+                });
+            }
+
+            const updated = await AppuntamentoPrestazioneService.updateStato({
+                id: appPrestazione.id,
                 stato,
                 tenantId,
+                updatedBy: req.person?.id,
                 updates: { note, dataEsecuzione }
             });
 
+            let visitaSecondaria = null;
+            if (stato === 'ESEGUITA' && applyNormalPreset) {
+                try {
+                    visitaSecondaria = await ensureSecondaryVisitWithNormalPreset({
+                        appPrestazioneId: appPrestazione.id,
+                        visitaParentId,
+                        tenantId,
+                        personId: req.person?.id
+                    });
+                } catch (presetError) {
+                    logger.warn({
+                        component: 'appuntamentoPrestazioni.routes',
+                        action: 'apply-normal-preset',
+                        appPrestazioneId: id,
+                        error: presetError.message
+                    }, 'Preset normalità visita secondaria non applicato');
+                }
+            }
+
             // Genera movimenti contabili quando la prestazione viene refertata (non-MDL)
             if (stato === 'REFERTATA') {
+                const resolvedAppPrestazioneId = appPrestazione.id;
                 setImmediate(async () => {
                     try {
-                        const appPrestazione = await prisma.appuntamentoPrestazione.findFirst({
-                            where: { id, tenantId, deletedAt: null },
+                        const appPrestazioneForMovimento = await prisma.appuntamentoPrestazione.findFirst({
+                            where: { id: resolvedAppPrestazioneId, tenantId, deletedAt: null },
                             include: {
                                 appuntamento: {
                                     select: {
@@ -470,15 +674,15 @@ router.patch(
                                 },
                             },
                         });
-                        if (appPrestazione) {
+                        if (appPrestazioneForMovimento) {
                             const result = await MovimentoContabileGenerator.generaPerAppuntamentoPrestazione(
-                                appPrestazione, tenantId, req.person?.id
+                                appPrestazioneForMovimento, tenantId, req.person?.id
                             );
                             if (result.warnings.length > 0) {
                                 logger.warn({
                                     component: 'appuntamentoPrestazioni.routes',
                                     action: 'genera-movimento-prestazione',
-                                    appPrestazioneId: id,
+                                    appPrestazioneId: resolvedAppPrestazioneId,
                                     warnings: result.warnings,
                                 }, 'Warning nella generazione movimento contabile prestazione');
                             }
@@ -488,7 +692,7 @@ router.patch(
                             component: 'appuntamentoPrestazioni.routes',
                             action: 'genera-movimento-prestazione',
                             error: 'Operazione non riuscita',
-                            appPrestazioneId: id,
+                            appPrestazioneId: resolvedAppPrestazioneId,
                         }, 'Errore nella generazione movimento contabile prestazione');
                     }
                 });
@@ -496,7 +700,9 @@ router.patch(
 
             res.json({
                 success: true,
-                data: updated
+                data: visitaSecondaria?.id
+                    ? { ...updated, visitaSecondariaId: visitaSecondaria.id }
+                    : updated
             });
         } catch (error) {
             logger.error('Errore aggiornamento stato prestazione', {
@@ -616,10 +822,19 @@ router.post(
                         if (existingSecondaria) {
                             // Aggiorna il medico sulla visita secondaria esistente
                             if (existingSecondaria.medicoId !== medicoRefertanteId) {
-                                await prisma.visita.update({
+                                const visitaAggiornata = await prisma.visita.update({
                                     where: { id: existingSecondaria.id },
-                                    data: { medicoId: medicoRefertanteId, stato: 'IN_CORSO' }
+                                    data: {
+                                        medicoId: medicoRefertanteId,
+                                        medicoRefertanteId,
+                                        prestazioneId: appPrestazione.prestazioneId,
+                                        stato: 'IN_CORSO'
+                                    },
+                                    include: {
+                                        prestazione: { select: { id: true, nome: true } }
+                                    }
                                 });
+                                await VisitaSecondariaService.notifyMedicoVisitaSecondaria(visitaAggiornata, tenantId, req.person?.id).catch(() => null);
                                 logger.info({
                                     component: 'appuntamentoPrestazioni.routes',
                                     action: 'assignMedicoRefertante',
@@ -703,6 +918,78 @@ router.post(
             res.status(400).json({
                 success: false,
                 error: 'Assegnazione medico non riuscita'
+            });
+        }
+    }
+);
+
+/**
+ * POST /prestazioni/:id/visita-secondaria
+ * Crea o recupera la scheda accertamento collegata a una prestazione.
+ * Diversamente dall'assegnazione specialista automatica, qui la scheda viene
+ * creata anche se il medico refertante coincide con il medico principale: serve
+ * al modal compatto in visita per compilare ECG, spirometria, audiometria, ecc.
+ */
+router.post(
+    '/prestazioni/:id/visita-secondaria',
+    authenticate,
+    requirePermission('visite:write'),
+    async (req, res) => {
+        try {
+            const tenantId = getEffectiveTenantId(req);
+            const { id } = req.params;
+            const { visitaParentId } = req.body || {};
+
+            const appPrestazione = await resolveAppPrestazioneForAction({
+                id,
+                tenantId,
+                visitaParentId
+            });
+
+            if (!appPrestazione) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Prestazione appuntamento non trovata'
+                });
+            }
+
+            const medicoReferenteId = appPrestazione.medicoRefertanteId || appPrestazione.appuntamento?.medicoId;
+            if (!medicoReferenteId) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Medico refertante non disponibile'
+                });
+            }
+
+            const visitaSecondaria = await VisitaSecondariaService.creaVisitaSecondaria({
+                appPrestazioneId: appPrestazione.id,
+                prestazioneId: appPrestazione.prestazioneId,
+                medicoReferenteId,
+                appuntamentoId: appPrestazione.appuntamentoId,
+                visitaParentId: visitaParentId || null,
+                tenantId,
+                createdBy: req.person?.id,
+                forceCreateForSameMedico: true
+            });
+
+            res.json({
+                success: true,
+                data: {
+                    appPrestazioneId: appPrestazione.id,
+                    visitaSecondariaId: visitaSecondaria?.id || null,
+                    visita: visitaSecondaria
+                }
+            });
+        } catch (error) {
+            logger.error({
+                component: 'appuntamentoPrestazioni.routes',
+                action: 'ensure-visita-secondaria',
+                prestazioneId: req.params.id,
+                error: error.message
+            }, 'Errore creazione/apertura visita secondaria');
+            res.status(400).json({
+                success: false,
+                error: 'Errore nella creazione della scheda accertamento'
             });
         }
     }
@@ -803,28 +1090,28 @@ router.delete(
             await AppuntamentoPrestazioneService.delete(id, tenantId);
 
             // Annulla movimenti contabili collegati (BOZZA o DA_FATTURARE)
-            setImmediate(async () => {
-                try {
-                    const result = await MovimentoContabileGenerator.annullaPerAppuntamentoPrestazione(
-                        id, tenantId, req.person?.id
-                    );
-                    if (result.annullati > 0) {
-                        logger.info({
-                            component: 'appuntamentoPrestazioni.routes',
-                            action: 'annulla-movimenti-prestazione',
-                            appPrestazioneId: id,
-                            annullati: result.annullati,
-                        }, 'Movimenti contabili annullati per prestazione eliminata');
-                    }
-                } catch (err) {
-                    logger.error({
+            // Sincrono: attendiamo l'annullamento PRIMA di rispondere al client
+            // così la lista visite mostra subito il totale aggiornato
+            try {
+                const result = await MovimentoContabileGenerator.annullaPerAppuntamentoPrestazione(
+                    id, tenantId, req.person?.id
+                );
+                if (result.annullati > 0) {
+                    logger.info({
                         component: 'appuntamentoPrestazioni.routes',
                         action: 'annulla-movimenti-prestazione',
-                        error: 'Operazione non riuscita',
                         appPrestazioneId: id,
-                    }, 'Errore annullamento movimenti contabili prestazione eliminata');
+                        annullati: result.annullati,
+                    }, 'Movimenti contabili annullati per prestazione eliminata');
                 }
-            });
+            } catch (err) {
+                logger.error({
+                    component: 'appuntamentoPrestazioni.routes',
+                    action: 'annulla-movimenti-prestazione',
+                    error: 'Operazione non riuscita',
+                    appPrestazioneId: id,
+                }, 'Errore annullamento movimenti contabili prestazione eliminata');
+            }
 
             res.json({
                 success: true,

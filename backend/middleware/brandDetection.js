@@ -276,6 +276,10 @@ let brandTenantMappingCache = null;
 let brandTenantMappingTimestamp = 0;
 const PUBLIC_BRAND_MAPPING_KEY = 'publicBrandTenantMapping';
 
+// Cache per le impostazioni API key pubblica per tenant
+let publicApiKeySettingsCache = new Map(); // tenantId → { enabledWidgets, widgetSettings, timestamp }
+const API_KEY_CACHE_TTL = 5 * 60 * 1000; // 5 minuti
+
 /**
  * Carica tenant per contenuti pubblici
  */
@@ -340,6 +344,36 @@ async function loadBrandTenantMapping() {
 }
 
 /**
+ * Carica le impostazioni della prima API key attiva per un tenant.
+ * Usato per applicare i filtri widgetSettings alle route pubbliche.
+ */
+async function loadTenantApiKeySettings(tenantId) {
+  const now = Date.now();
+  const cached = publicApiKeySettingsCache.get(tenantId);
+  if (cached && (now - cached.timestamp) < API_KEY_CACHE_TTL) {
+    return cached;
+  }
+
+  try {
+    const apiKey = await prisma.publicApiKey.findFirst({
+      where: { tenantId, isActive: true, deletedAt: null },
+      select: { enabledWidgets: true, widgetSettings: true },
+      orderBy: { createdAt: 'asc' }
+    });
+    const settings = {
+      enabledWidgets: apiKey?.enabledWidgets || [],
+      widgetSettings: (apiKey?.widgetSettings || {}),
+      timestamp: now
+    };
+    publicApiKeySettingsCache.set(tenantId, settings);
+    return settings;
+  } catch (error) {
+    logger.error({ error: error.message }, 'Failed to load tenant API key settings');
+    return { enabledWidgets: [], widgetSettings: {}, timestamp: now };
+  }
+}
+
+/**
  * Middleware per route PUBBLICHE (CMS, corsi pubblici)
  * 
  * Questo middleware è DIVERSO da brandDetectionMiddleware:
@@ -387,6 +421,16 @@ async function publicContentMiddleware(req, res, next) {
 
   req.publicTenantId = resolvedTenantId;
 
+  // Carica impostazioni API key pubblica (widgetSettings) per il tenant
+  if (resolvedTenantId) {
+    const apiKeySettings = await loadTenantApiKeySettings(resolvedTenantId);
+    req.enabledPublicWidgets = apiKeySettings.enabledWidgets;
+    req.publicWidgetSettings = apiKeySettings.widgetSettings;
+  } else {
+    req.enabledPublicWidgets = [];
+    req.publicWidgetSettings = {};
+  }
+
   // Imposta anche branch config
   const brandConfig = BRAND_BRANCH_MAPPING[frontendId];
   req.frontendId = frontendId;
@@ -416,6 +460,7 @@ function invalidatePublicTenantCache() {
   publicCacheTimestamp = 0;
   brandTenantMappingCache = null;
   brandTenantMappingTimestamp = 0;
+  publicApiKeySettingsCache.clear();
   logger.info({ component: 'brandDetection' }, 'Public tenant cache invalidated');
 }
 

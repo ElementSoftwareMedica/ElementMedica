@@ -37,6 +37,89 @@ interface DayStats {
     convenzioniAttive: number
 }
 
+type DesktopSyncPayload = {
+    meta?: { counts?: Record<string, number>; tenantId?: string }
+    aziende?: Array<Record<string, unknown>>
+    medici?: Array<Record<string, unknown>>
+}
+
+const uniqueById = (items: Array<Record<string, unknown>>): Array<Record<string, unknown>> => {
+    const map = new Map<string, Record<string, unknown>>()
+    for (const item of items) {
+        const id = typeof item.id === 'string' ? item.id : ''
+        if (id && !map.has(id)) map.set(id, item)
+    }
+    return Array.from(map.values())
+}
+
+async function enrichFullDbFallback(
+    data: DesktopSyncPayload,
+    apiBase: string,
+    headers: Record<string, string>,
+    logInfo: (msg: string) => void
+): Promise<void> {
+    const medici = Array.isArray(data.medici) ? data.medici : []
+    const fallbackMedici: Array<Record<string, unknown>> = []
+    if (medici.length === 0) {
+        const medicoCalls = [
+            axios.get(`${apiBase}/api/v1/clinica/medici`, { params: { limit: 500 }, headers, timeout: 60000 }),
+            axios.get(`${apiBase}/api/v1/persons`, { params: { roleType: 'RSPP,ASPP,CONSULENTE_SICUREZZA,TECNICO_SICUREZZA,MEDICO_COMPETENTE,MEDICO', limit: 500 }, headers, timeout: 60000 })
+        ]
+        const results = await Promise.allSettled(medicoCalls)
+        for (const result of results) {
+            if (result.status !== 'fulfilled') continue
+            const payload = result.value.data
+            const rows = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : []
+            fallbackMedici.push(...rows)
+        }
+    }
+
+    const nomineRows: Array<Record<string, unknown>> = []
+    const nomineResponse = await axios.get(`${apiBase}/api/v1/clinica/nomine-ruolo`, {
+        params: { limit: 1000, stato: 'ATTIVA' },
+        headers,
+        timeout: 60000
+    }).catch(() => null)
+    const nominePayload = nomineResponse?.data
+    const remoteNomine = Array.isArray(nominePayload?.data) ? nominePayload.data : Array.isArray(nominePayload) ? nominePayload : []
+    nomineRows.push(...remoteNomine)
+
+    const professionistiDaNomina = nomineRows
+        .map(n => n.person)
+        .filter((person): person is Record<string, unknown> => !!person && typeof person === 'object')
+
+    data.medici = uniqueById([...medici, ...fallbackMedici, ...professionistiDaNomina])
+
+    if (Array.isArray(data.aziende) && nomineRows.length > 0) {
+        const byCompany = new Map<string, Array<Record<string, unknown>>>()
+        for (const nomina of nomineRows) {
+            const companyId = typeof nomina.companyTenantProfileId === 'string'
+                ? nomina.companyTenantProfileId
+                : typeof (nomina.site as Record<string, unknown> | undefined)?.companyTenantProfileId === 'string'
+                    ? String((nomina.site as Record<string, unknown>).companyTenantProfileId)
+                    : ''
+            if (!companyId) continue
+            const list = byCompany.get(companyId) || []
+            list.push(nomina)
+            byCompany.set(companyId, list)
+        }
+        data.aziende = data.aziende.map(azienda => {
+            const companyId = typeof azienda.id === 'string' ? azienda.id : ''
+            const existing = Array.isArray(azienda.nomine) ? azienda.nomine as Array<Record<string, unknown>> : []
+            const fallback = companyId ? byCompany.get(companyId) || [] : []
+            return { ...azienda, nomine: uniqueById([...existing, ...fallback]) }
+        })
+    }
+
+    data.meta = data.meta || {}
+    data.meta.counts = data.meta.counts || {}
+    data.meta.counts.medici = data.medici.length
+    if (nomineRows.length > 0) data.meta.counts.nomine = nomineRows.length
+    if (fallbackMedici.length > 0 || professionistiDaNomina.length > 0 || nomineRows.length > 0) {
+        logInfo(`Fallback sync professionisti/nomine: ${data.medici.length} medici, ${nomineRows.length} nomine`)
+    }
+}
+
 export function DashboardPage(): JSX.Element {
     const navigate = useNavigate()
     const { user, currentTenantId, accessToken } = useDesktopAuth()
@@ -121,7 +204,7 @@ export function DashboardPage(): JSX.Element {
 
         try {
             const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4001'
-            const token = accessToken
+            const token = accessToken || ''
 
             const response = await axios.get(`${API_BASE}/api/v1/desktop-sync/download-day`, {
                 params: { date },
@@ -134,7 +217,7 @@ export function DashboardPage(): JSX.Element {
             })
 
             const data = response.data
-            await window.desktopApi.sync.storeDayData({ data })
+            await window.desktopApi.sync.storeDayData({ data: data as unknown as Record<string, unknown[]> })
 
             const now = new Date().toISOString()
             setLastSyncAt(now)
@@ -194,20 +277,24 @@ export function DashboardPage(): JSX.Element {
             const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4001'
             const token = accessToken
 
-            logInfo(`GET ${API_BASE}/api/v1/desktop-sync/download-full-db`)
-            const response = await axios.get(`${API_BASE}/api/v1/desktop-sync/download-full-db`, {
-                headers: {
+            const incrementalSince = lastSyncAt || null
+            logInfo(`GET ${API_BASE}/api/v1/desktop-sync/download-full-db${incrementalSince ? `?lastSyncAt=${incrementalSince}` : ''}`)
+            const headers = {
                     Authorization: `Bearer ${token}`,
                     'X-Desktop-Client': 'true',
                     ...(currentTenantId ? { 'X-Tenant-ID': currentTenantId, 'X-Operate-Tenant-Id': currentTenantId } : {})
-                },
+                }
+            const response = await axios.get(`${API_BASE}/api/v1/desktop-sync/download-full-db`, {
+                params: incrementalSince ? { lastSyncAt: incrementalSince } : undefined,
+                headers,
                 timeout: 120000
             })
 
             logInfo(`Risposta ricevuta — status: ${response.status}`)
-            const data = response.data
+            const data = response.data as DesktopSyncPayload
+            await enrichFullDbFallback(data, API_BASE, headers, logInfo)
             logInfo(`Salvataggio dati in locale…`)
-            await window.desktopApi.sync.storeDayData({ data })
+            await window.desktopApi.sync.storeDayData({ data: data as unknown as Record<string, unknown[]> })
 
             const now = new Date().toISOString()
             setLastSyncAt(now)
@@ -221,12 +308,15 @@ export function DashboardPage(): JSX.Element {
                 counts.aziende ? `${counts.aziende} aziende` : null,
                 counts.mansioni ? `${counts.mansioni} mansioni` : null,
                 counts.prestazioni ? `${counts.prestazioni} prestazioni` : null,
+                counts.medici ? `${counts.medici} medici` : null,
                 counts.tariffari ? `${counts.tariffari} tariffari` : null,
                 counts.convenzioni ? `${counts.convenzioni} convenzioni` : null,
                 counts.giudizi ? `${counts.giudizi} giudizi` : null,
                 counts.movimenti ? `${counts.movimenti} movimenti` : null,
             ].filter(Boolean)
-            const summary = `Database completo scaricato: ${parts.join(', ')} (${totalItems} record totali)`
+            const summary = incrementalSince
+                ? `Database aggiornato: ${parts.join(', ') || 'nessuna modifica'} (${totalItems} record modificati)`
+                : `Database completo scaricato: ${parts.join(', ')} (${totalItems} record totali)`
             logInfo(summary)
             setDownloadMessage(summary)
 

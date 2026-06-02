@@ -41,7 +41,7 @@ export const updatePermissionInArray = (
     const existingPermission = existingIndex !== -1 ? newPermissions[existingIndex] : null;
     const permission: EntityPermission = {
       entity,
-      action: action as 'read' | 'create' | 'update' | 'delete',
+      action,
       scope,
       // IMPORTANTE: granted deve essere true per salvare il permesso
       granted: true,
@@ -202,7 +202,7 @@ export const applyBulkPermissions = (
     switch (operation) {
       case 'scope':
         // value deve essere uno scope valido per operation='scope'
-        const scopeValue = value as 'all' | 'tenant' | 'own' | 'none';
+        const scopeValue = value as PermissionScope | 'none';
         newPermissions = updatePermissionInArray(newPermissions, entity, action, scopeValue);
         break;
 

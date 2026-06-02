@@ -200,9 +200,8 @@ export const MediaLibrary: React.FC = () => {
         <div className="py-2">
           <button
             onClick={() => handleFolderSelect(undefined)}
-            className={`w-full px-4 py-2 text-left hover:bg-gray-100 transition-colors ${
-              !filters.folderId ? 'bg-gray-100 font-medium' : ''
-            }`}
+            className={`w-full px-4 py-2 text-left hover:bg-gray-100 transition-colors ${!filters.folderId ? 'bg-gray-100 font-medium' : ''
+              }`}
           >
             Tutti i media
           </button>
@@ -211,9 +210,8 @@ export const MediaLibrary: React.FC = () => {
             <button
               key={folder.id}
               onClick={() => handleFolderSelect(folder.id)}
-              className={`w-full px-4 py-2 text-left hover:bg-gray-100 transition-colors flex items-center justify-between ${
-                filters.folderId === folder.id ? 'bg-gray-100 font-medium' : ''
-              }`}
+              className={`w-full px-4 py-2 text-left hover:bg-gray-100 transition-colors flex items-center justify-between ${filters.folderId === folder.id ? 'bg-gray-100 font-medium' : ''
+                }`}
             >
               <span className="truncate">{folder.name}</span>
               {folder._count && folder._count.media > 0 && (
@@ -233,7 +231,7 @@ export const MediaLibrary: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-2xl font-bold text-gray-900">Media Library</h1>
 
-                        <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
               <Button
                 variant={viewMode === 'grid' ? 'primary' : 'outline'}
                 size="sm"
@@ -274,11 +272,10 @@ export const MediaLibrary: React.FC = () => {
         {/* Upload Area */}
         <div
           {...getRootProps()}
-          className={`mx-6 mt-4 border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
-            isDragActive
+          className={`mx-6 mt-4 border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${isDragActive
               ? 'border-primary-500 bg-primary-50'
               : 'border-gray-300 hover:border-gray-400'
-          } ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}
+            } ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}
         >
           <input {...getInputProps()} />
           <Upload className="w-12 h-12 mx-auto mb-4 text-gray-400" />
@@ -329,9 +326,8 @@ export const MediaLibrary: React.FC = () => {
                 <div
                   key={item.id}
                   onClick={() => setSelectedMedia(item)}
-                  className={`group relative border rounded-lg overflow-hidden hover:shadow-lg transition-shadow cursor-pointer ${
-                    viewMode === 'grid' ? 'aspect-square' : 'flex items-center p-3'
-                  }`}
+                  className={`group relative border rounded-lg overflow-hidden hover:shadow-lg transition-shadow cursor-pointer ${viewMode === 'grid' ? 'aspect-square' : 'flex items-center p-3'
+                    }`}
                 >
                   {/* Thumbnail */}
                   <div
@@ -353,9 +349,8 @@ export const MediaLibrary: React.FC = () => {
                     }
                   >
                     <p
-                      className={`truncate ${
-                        viewMode === 'grid' ? 'text-white text-sm' : 'font-medium'
-                      }`}
+                      className={`truncate ${viewMode === 'grid' ? 'text-white text-sm' : 'font-medium'
+                        }`}
                       title={item.title || item.originalName}
                     >
                       {item.title || item.originalName}
@@ -398,7 +393,7 @@ export const MediaLibrary: React.FC = () => {
           )}
 
           {/* Pagination */}
-          {pagination && pagination.pages > 1 && (
+          {pagination && pagination.totalPages > 1 && (
             <div className="flex items-center justify-center gap-2 mt-6">
               <Button
                 variant="outline"
@@ -411,12 +406,12 @@ export const MediaLibrary: React.FC = () => {
                 Precedente
               </Button>
               <span className="text-sm text-gray-600">
-                Pagina {pagination.page} di {pagination.pages}
+                Pagina {pagination.page} di {pagination.totalPages}
               </span>
               <Button
                 variant="outline"
                 size="sm"
-                disabled={pagination.page === pagination.pages}
+                disabled={pagination.page === pagination.totalPages}
                 onClick={() =>
                   setFilters((prev) => ({ ...prev, page: pagination.page + 1 }))
                 }

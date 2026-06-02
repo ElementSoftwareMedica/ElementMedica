@@ -111,6 +111,8 @@ export const refreshAccess = async (): Promise<string | null> => {
 
       if (!resp.ok) {
         if (import.meta.env.DEV) console.warn('refreshAccess: refresh failed with status', resp.status);
+        // Il token è scaduto o revocato: rimuovilo subito per evitare 401 a catena ad ogni reload
+        if (resp.status === 401) removeRefreshToken();
         return null;
       }
 
@@ -177,7 +179,7 @@ export const getUserPermissions = async (personId: string): Promise<UserPermissi
   } catch (error: unknown) {
     if (import.meta.env.DEV) {
       console.error('❌ getUserPermissions: Error fetching user permissions:', {
-        status: error.response?.status,
+        status: (error as any).response?.status,
         personId
       });
     }

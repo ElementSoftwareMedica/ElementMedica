@@ -63,11 +63,11 @@ export const useAuditTrail = (initialFilters?: AuditTrailFilters): UseAuditTrail
       // Backend returns { entries, total, limit, offset } directly
       if ('success' in data && data.success && data.data) {
         const { auditTrail: logs, total: totalCount } = data.data;
-        setAuditTrail(logs);
-        setTotal(totalCount);
+        setAuditTrail(Array.isArray(logs) ? logs : []);
+        setTotal(typeof totalCount === 'number' ? totalCount : 0);
       } else if ('entries' in data) {
-        setAuditTrail(data.entries);
-        setTotal(data.total);
+        setAuditTrail(Array.isArray(data.entries) ? data.entries : []);
+        setTotal(typeof data.total === 'number' ? data.total : 0);
       } else {
         throw new Error('Errore nel recupero del registro di audit');
       }
@@ -77,14 +77,11 @@ export const useAuditTrail = (initialFilters?: AuditTrailFilters): UseAuditTrail
         setFilters(newFilters);
       }
     } catch (err) {
-      // Non mostrare errori se l'endpoint non esiste o restituisce errore
-      const errorMessage = 'Errore nel recupero del registro di audit';
-      if (!errorMessage.includes('500') && !errorMessage.includes('404')) {
-        setError(errorMessage);
-      } else {
-        // Errore 500/404 = endpoint non funzionante, set array vuoto
-        setAuditTrail([]);
-        setTotal(0);
+      const status = (err as any)?.response?.status;
+      setAuditTrail([]);
+      setTotal(0);
+      if (status !== 404 && status !== 500) {
+        setError('Errore nel recupero del registro di audit');
       }
     } finally {
       setLoading(false);

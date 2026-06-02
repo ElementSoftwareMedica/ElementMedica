@@ -171,7 +171,7 @@ class CMSMediaService {
     search?: string;
     page?: number;
     limit?: number;
-  }): Promise<{ media: MediaFile[]; pagination?: MediaListResponse['pagination'] }> {
+  }): Promise<{ media: MediaFile[]; pagination?: MediaListResponse['data']['pagination'] }> {
     const queryParams = new URLSearchParams();
 
     if (params.folderId) queryParams.append('folderId', params.folderId);
@@ -194,7 +194,7 @@ class CMSMediaService {
         page: pag.page,
         limit: pag.limit,
         total: pag.total,
-        pages: pag.totalPages
+        totalPages: pag.totalPages
       } : undefined
     };
   }

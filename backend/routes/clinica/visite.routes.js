@@ -15,13 +15,115 @@ import { checkAdvancedPermission } from '../../middleware/advanced-permissions.j
 import { clinicalValidators } from '../../config/validation-clinical.js';
 import { VisitaService } from '../../services/clinical/VisitaService.js';
 import { VisitaRefertoService } from '../../services/clinical/VisitaRefertoService.js';
+import VisitaSecondariaService from '../../services/clinical/VisitaSecondariaService.js';
 import MovimentoContabileGenerator from '../../services/management/MovimentoContabileGenerator.js';
 import prisma from '../../config/prisma-optimization.js';
 import { getEffectiveTenantId } from '../../utils/tenantHelper.js';
 import { auditClinico } from './utils/clinica-utils.js';
+import { RBACService } from '../../services/RBACService.js';
+import { PERMISSIONS } from '../../constants/permissions.js';
 
 const router = express.Router();
 const { authenticate: authenticateToken } = middleware;
+const PRIVILEGED_CLINIC_ROLES = new Set(['ADMIN', 'SUPER_ADMIN', 'TENANT_ADMIN', 'COMPANY_ADMIN', 'CLINIC_ADMIN', 'SEGRETERIA_CLINICA']);
+
+function getRoleTypes(req) {
+    return (req.person?.roles || []).map(role => typeof role === 'string' ? role : role?.roleType).filter(Boolean);
+}
+
+function isBaseMedico(req) {
+    const roles = getRoleTypes(req);
+    return roles.includes('MEDICO') &&
+        !roles.includes('MEDICO_COMPETENTE') &&
+        !roles.some(role => PRIVILEGED_CLINIC_ROLES.has(role));
+}
+
+async function hasPermission(req, permission, tenantId) {
+    const perms = req.person?.permissions;
+    if (Array.isArray(perms) && perms.includes(permission)) return true;
+    if (perms && typeof perms === 'object' && perms[permission] === true) return true;
+    return RBACService.hasPermission(req.person.id, permission, null, tenantId);
+}
+
+function normalizeAccessRole(roleType) {
+    if (roleType === 'SEGRETERIA_CLINICA') return 'SEGRETERIA';
+    if (['ADMIN', 'SUPER_ADMIN', 'TENANT_ADMIN', 'CLINIC_ADMIN'].includes(roleType)) return 'ADMIN';
+    return roleType;
+}
+
+async function isAllowedByVisitAccessControl(req, tenantId, visita) {
+    const accessControl = visita?.accessControl || {};
+    const personId = req.person?.id;
+    if (!personId) return false;
+
+    if (Array.isArray(accessControl.denyPersonIds) && accessControl.denyPersonIds.includes(personId)) {
+        return false;
+    }
+    if (Array.isArray(accessControl.allowedPersonIds) && accessControl.allowedPersonIds.includes(personId)) {
+        return true;
+    }
+
+    const allowedRoles = Array.isArray(accessControl.allowedRoleTypes)
+        ? accessControl.allowedRoleTypes.map(normalizeAccessRole)
+        : [];
+    if (allowedRoles.length > 0) {
+        const personRoles = getRoleTypes(req).map(normalizeAccessRole);
+        if (personRoles.some(role => allowedRoles.includes(role))) return true;
+    }
+
+    const allowedSpecialties = Array.isArray(accessControl.allowedSpecialties)
+        ? accessControl.allowedSpecialties
+        : [];
+    if (allowedSpecialties.length > 0) {
+        const profile = await prisma.personTenantProfile.findFirst({
+            where: { personId, tenantId, deletedAt: null, isActive: true },
+            select: { specialties: true }
+        });
+        const specialties = profile?.specialties || [];
+        if (specialties.some(s => allowedSpecialties.includes(s))) return true;
+    }
+
+    return false;
+}
+
+async function assertCanOpenVisit(req, tenantId, visitaId, mode = 'read') {
+    if (!isBaseMedico(req)) return null;
+
+    const visita = await prisma.visita.findFirst({
+        where: { id: visitaId, tenantId, deletedAt: null },
+        select: {
+            id: true,
+            medicoId: true,
+            medicoRefertanteId: true,
+            createdBy: true,
+            accessControl: true,
+            appPrestazione: { select: { medicoRefertanteId: true } }
+        }
+    });
+    if (!visita) return null;
+
+    const personId = req.person.id;
+    const isAssigned = visita.medicoId === personId ||
+        visita.medicoRefertanteId === personId ||
+        visita.appPrestazione?.medicoRefertanteId === personId;
+
+    if (isAssigned) return visita;
+    if (mode === 'read' && await isAllowedByVisitAccessControl(req, tenantId, visita)) return visita;
+    if (mode === 'edit' && await hasPermission(req, PERMISSIONS.VISITE_EDIT_OTHERS, tenantId)) return visita;
+    if (mode === 'read' && await hasPermission(req, PERMISSIONS.VISITE_EDIT_OTHERS, tenantId)) return visita;
+
+    const error = new Error('Non autorizzato ad aprire questa visita');
+    error.statusCode = 403;
+    throw error;
+}
+
+function respondVisitError(res, error, fallbackError) {
+    const statusCode = error?.statusCode || 500;
+    res.status(statusCode).json({
+        success: false,
+        error: statusCode === 403 ? error.message : fallbackError
+    });
+}
 
 // ============================================
 // STATIC ROUTES (before :id params)
@@ -196,7 +298,8 @@ router.get('/by-appuntamento/:appuntamentoId',
         } catch (error) {
             logger.error('Failed to get/create visita by appuntamento', {
                 component: 'visite-routes',
-                error: 'Operazione non riuscita',
+                error: error.message,
+                code: error.code,
                 appuntamentoId: req.params.appuntamentoId,
                 tenantId: getEffectiveTenantId(req)
             });
@@ -236,6 +339,7 @@ router.get('/',
             const {
                 page = 1, limit = 20, search, stato, pazienteId, medicoId,
                 dataInizio, dataFine, soloSecundarieDaRefertare,
+                isVisitaSecundaria,
                 companyTenantProfileId, oraInizio, oraFine, fatturazione,
                 tenantIds, allTenants,
                 ambulatorioId, sedeId, poliambulatorioId
@@ -246,9 +350,13 @@ router.get('/',
             if (stato) filters.stato = stato;
             if (pazienteId) filters.pazienteId = pazienteId;
             if (medicoId) filters.medicoId = medicoId;
+            if (isBaseMedico(req) && !await hasPermission(req, PERMISSIONS.VISITE_EDIT_OTHERS, tenantId)) {
+                filters.medicoId = req.person.id;
+            }
             if (dataInizio) filters.dataInizio = dataInizio;
             if (dataFine) filters.dataFine = dataFine;
             if (soloSecundarieDaRefertare) filters.soloSecundarieDaRefertare = soloSecundarieDaRefertare;
+            if (isVisitaSecundaria !== undefined) filters.isVisitaSecundaria = isVisitaSecundaria;
             if (companyTenantProfileId) filters.companyTenantProfileId = companyTenantProfileId;
             if (oraInizio) filters.oraInizio = oraInizio;
             if (oraFine) filters.oraFine = oraFine;
@@ -356,6 +464,17 @@ router.get('/:id',
             const { id } = req.params;
             const tenantId = getEffectiveTenantId(req);
 
+            const accessVisita = await assertCanOpenVisit(req, tenantId, id, 'read');
+            if (isBaseMedico(req) && accessVisita && accessVisita.medicoId !== req.person.id && accessVisita.medicoRefertanteId !== req.person.id &&
+                await hasPermission(req, PERMISSIONS.VISITE_EDIT_OTHERS, tenantId) &&
+                await hasPermission(req, PERMISSIONS.VISITE_CHANGE_REFERTANTE, tenantId)) {
+                await VisitaService.updateMedicoRefertante(id, tenantId, req.person.id, {
+                    changedBy: req.person.id,
+                    changeReason: 'Apertura in modifica da medico autorizzato',
+                    ipAddress: req.ip,
+                    userAgent: req.headers['user-agent']
+                });
+            }
             const visita = await VisitaService.getById(id, tenantId);
 
             res.json({ success: true, data: visita });
@@ -374,10 +493,7 @@ router.get('/:id',
                 });
             }
 
-            res.status(500).json({
-                success: false,
-                error: 'Errore nel recupero della visita',
-            });
+            respondVisitError(res, error, 'Errore nel recupero della visita');
         }
     }
 );
@@ -403,6 +519,7 @@ router.put('/:id',
             const tenantId = getEffectiveTenantId(req);
             const updatedBy = req.person.id;
 
+            await assertCanOpenVisit(req, tenantId, id, 'edit');
             const visita = await VisitaService.update(id, tenantId, {
                 ...req.body,
                 updatedBy
@@ -435,10 +552,7 @@ router.put('/:id',
                 });
             }
 
-            res.status(500).json({
-                success: false,
-                error: 'Errore nell\'aggiornamento della visita',
-            });
+            respondVisitError(res, error, 'Errore nell\'aggiornamento della visita');
         }
     }
 );
@@ -526,6 +640,7 @@ router.put('/:id/status',
             const tenantId = getEffectiveTenantId(req);
             const updatedBy = req.person.id;
 
+            await assertCanOpenVisit(req, tenantId, id, 'edit');
             const visita = await VisitaService.changeStatus(id, tenantId, stato, updatedBy);
 
             res.json({
@@ -557,10 +672,7 @@ router.put('/:id/status',
                 });
             }
 
-            res.status(500).json({
-                success: false,
-                error: 'Errore nel cambio stato',
-            });
+            respondVisitError(res, error, 'Errore nel cambio stato');
         }
     }
 );
@@ -587,6 +699,7 @@ router.post('/:id/sign',
             const tenantId = getEffectiveTenantId(req);
             const medicoId = req.person.id;
 
+            await assertCanOpenVisit(req, tenantId, id, 'edit');
             const visita = await VisitaService.sign(id, tenantId, firmaMedico, medicoId);
 
             res.json({
@@ -623,10 +736,7 @@ router.post('/:id/sign',
                 });
             }
 
-            res.status(500).json({
-                success: false,
-                error: 'Errore nella firma della visita',
-            });
+            respondVisitError(res, error, 'Errore nella firma della visita');
         }
     }
 );
@@ -651,6 +761,7 @@ router.post('/:id/termina',
             const tenantId = getEffectiveTenantId(req);
             const updatedBy = req.person.id;
 
+            await assertCanOpenVisit(req, tenantId, id, 'edit');
             // 1. Cambia stato a COMPLETATA
             const visita = await VisitaService.changeStatus(id, tenantId, 'COMPLETATA', updatedBy);
 
@@ -673,7 +784,9 @@ router.post('/:id/termina',
                 });
 
                 if (visitaFull) {
-                    if (visitaFull.tipoVisitaMDL) {
+                    if (visitaFull.isVisitaSecundaria && visitaFull.appPrestazioneId) {
+                        await VisitaSecondariaService.completaVisitaSecondaria(visitaFull.id, tenantId, updatedBy);
+                    } else if (visitaFull.tipoVisitaMDL) {
                         // aggiornaPerVisitaMDL: invalida BOZZA da prenotazione → crea DA_FATTURARE → finalizza accertamenti
                         await MovimentoContabileGenerator.aggiornaPerVisitaMDL(visitaFull, tenantId, updatedBy);
                     } else {
@@ -715,7 +828,7 @@ router.post('/:id/termina',
             if (error.message?.includes('Cannot update visit in status')) {
                 return res.status(400).json({ success: false, error: 'Impossibile aggiornare la visita nello stato corrente' });
             }
-            res.status(500).json({ success: false, error: 'Errore nella terminazione della visita' });
+            respondVisitError(res, error, 'Errore nella terminazione della visita');
         }
     }
 );
@@ -740,6 +853,7 @@ router.post('/:id/pdf',
             const tenantId = getEffectiveTenantId(req);
             const userId = req.person.id;
 
+            await assertCanOpenVisit(req, tenantId, id, 'edit');
             const result = await VisitaRefertoService.generateRefertoPdf(id, tenantId, userId);
 
             res.json({ success: true, data: result });
@@ -754,7 +868,7 @@ router.post('/:id/pdf',
             if (error.message === 'Visita not found') {
                 return res.status(404).json({ success: false, error: 'Visita non trovata' });
             }
-            res.status(500).json({ success: false, error: 'Errore nella generazione del PDF' });
+            respondVisitError(res, error, 'Errore nella generazione del PDF');
         }
     }
 );
@@ -774,6 +888,7 @@ router.get('/:id/pdf',
             const { id } = req.params;
             const tenantId = getEffectiveTenantId(req);
 
+            await assertCanOpenVisit(req, tenantId, id, 'read');
             const documento = await VisitaRefertoService.getLatestReferto(id, tenantId);
 
             res.json({ success: true, data: documento || null });
@@ -784,7 +899,7 @@ router.get('/:id/pdf',
                 visitaId: req.params.id,
                 tenantId: getEffectiveTenantId(req)
             });
-            res.status(500).json({ success: false, error: 'Errore nel recupero del PDF' });
+            respondVisitError(res, error, 'Errore nel recupero del PDF');
         }
     }
 );
@@ -814,6 +929,7 @@ router.post('/:id/nuova-versione',
             const ipAddress = req.ip;
             const userAgent = req.headers['user-agent'];
 
+            await assertCanOpenVisit(req, tenantId, id, 'edit');
             // 1. Crea nuova versione (snapshot + riapertura)
             const visita = await VisitaService.creaNuovaVersione(
                 id, tenantId, changedBy, motivo, ipAddress, userAgent
@@ -849,7 +965,7 @@ router.post('/:id/nuova-versione',
             if (error.message === 'Only completed visits can have a new version created') {
                 return res.status(400).json({ success: false, error: 'Solo le visite completate possono essere revisionate' });
             }
-            res.status(500).json({ success: false, error: 'Errore nella creazione della nuova versione' });
+            respondVisitError(res, error, 'Errore nella creazione della nuova versione');
         }
     }
 );
@@ -874,6 +990,7 @@ router.post('/:id/annulla-modifiche',
             const tenantId = getEffectiveTenantId(req);
             const changedBy = req.person.id;
 
+            await assertCanOpenVisit(req, tenantId, id, 'edit');
             const visita = await VisitaService.annullaModifiche(id, tenantId, changedBy);
 
             res.json({
@@ -898,7 +1015,69 @@ router.post('/:id/annulla-modifiche',
             if (error.message?.includes('Nessuna revisione NEW_VERSION')) {
                 return res.status(400).json({ success: false, error: 'Nessuna revisione da annullare' });
             }
-            res.status(500).json({ success: false, error: 'Errore nell\'annullamento delle modifiche' });
+            respondVisitError(res, error, 'Errore nell\'annullamento delle modifiche');
+        }
+    }
+);
+
+router.get('/:id/visite-collegate',
+    authenticateToken,
+    checkAdvancedPermission('visite', 'read'),
+    clinicalValidators.params.id,
+    async (req, res) => {
+        try {
+            const { id } = req.params;
+            const tenantId = getEffectiveTenantId(req);
+            await assertCanOpenVisit(req, tenantId, id, 'read');
+            const data = await VisitaSecondariaService.getVisiteCollegate(id, tenantId);
+            res.json({ success: true, data });
+        } catch (error) {
+            res.status(error.statusCode || 500).json({ success: false, error: error.statusCode === 403 ? 'Non autorizzato' : 'Errore nel recupero delle visite collegate' });
+        }
+    }
+);
+
+router.get('/:id/visita-principale',
+    authenticateToken,
+    checkAdvancedPermission('visite', 'read'),
+    clinicalValidators.params.id,
+    async (req, res) => {
+        try {
+            const { id } = req.params;
+            const tenantId = getEffectiveTenantId(req);
+            await assertCanOpenVisit(req, tenantId, id, 'read');
+            const data = await VisitaSecondariaService.getVisitaPrincipale(id, tenantId);
+            res.json({ success: true, data });
+        } catch (error) {
+            res.status(error.statusCode || 500).json({ success: false, error: error.statusCode === 403 ? 'Non autorizzato' : 'Errore nel recupero della visita principale' });
+        }
+    }
+);
+
+router.put('/:id/medico-refertante',
+    authenticateToken,
+    checkAdvancedPermission('visite', 'update'),
+    clinicalValidators.params.id,
+    async (req, res) => {
+        try {
+            const { id } = req.params;
+            const tenantId = getEffectiveTenantId(req);
+            const medicoRefertanteId = req.body?.medicoRefertanteId || null;
+            await assertCanOpenVisit(req, tenantId, id, 'edit');
+            if (!(await hasPermission(req, PERMISSIONS.VISITE_CHANGE_REFERTANTE, tenantId))) {
+                const err = new Error('Non autorizzato a cambiare il medico refertante');
+                err.statusCode = 403;
+                throw err;
+            }
+            const data = await VisitaService.updateMedicoRefertante(id, tenantId, medicoRefertanteId, {
+                changedBy: req.person.id,
+                changeReason: 'Cambio medico refertante da Permessi Visite',
+                ipAddress: req.ip,
+                userAgent: req.headers['user-agent']
+            });
+            res.json({ success: true, data });
+        } catch (error) {
+            res.status(error.statusCode || 500).json({ success: false, error: error.statusCode === 403 ? 'Non autorizzato' : 'Errore aggiornamento medico refertante' });
         }
     }
 );

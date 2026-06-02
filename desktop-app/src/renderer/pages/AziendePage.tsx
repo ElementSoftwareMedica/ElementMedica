@@ -18,6 +18,7 @@ import { exportToCSV } from '../utils/exportCSV'
 import { usePersistentPageState } from '../hooks/usePersistentPageState'
 import { useDesktopAuth } from '../context/DesktopAuthContext'
 import { useDesktopPermission } from '../hooks/useDesktopPermission'
+import { ElegantSelect } from '../components/ElegantControls'
 
 interface Azienda {
   id: string
@@ -36,7 +37,6 @@ interface Azienda {
   status: string | null
   medicoCompetenteId?: string | null
   medicoCompetenteNome?: string | null
-  mediciCoordinati?: string | null
 }
 
 interface CompanySite {
@@ -44,9 +44,21 @@ interface CompanySite {
   medicoCompetenteId?: string | null
 }
 
+interface NominaRuolo {
+  id: string
+  companyTenantProfileId: string | null
+  personId: string | null
+  tipoRuolo: string | null
+  stato: string | null
+  nome?: string | null
+  firstName?: string | null
+  lastName?: string | null
+}
+
 export function AziendePage(): JSX.Element {
   const [aziende, setAziende] = useState<Azienda[]>([])
   const [sites, setSites] = useState<CompanySite[]>([])
+  const [nomine, setNomine] = useState<NominaRuolo[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = usePersistentPageState('aziende:searchTerm', '')
   const [viewMode, setViewMode] = usePersistentPageState<'cards' | 'table'>('aziende:viewMode', 'table')
@@ -64,7 +76,7 @@ export function AziendePage(): JSX.Element {
     setLoading(true)
     try {
       if (!window.desktopApi) return
-      const [rows, siteRows] = await Promise.all([
+      const [rows, siteRows, nomineRows] = await Promise.all([
         window.desktopApi.db.query({
           table: 'companies',
           where: { _isDeleted: 0 },
@@ -73,10 +85,15 @@ export function AziendePage(): JSX.Element {
         window.desktopApi.db.query({
           table: 'company_sites',
           where: { _isDeleted: 0 }
-        }).catch(() => []) as Promise<CompanySite[]>
+        }).catch(() => []) as Promise<CompanySite[]>,
+        window.desktopApi.db.query({
+          table: 'nomine_ruolo',
+          where: { _isDeleted: 0 }
+        }).catch(() => []) as Promise<NominaRuolo[]>
       ])
       setAziende(rows)
       setSites(siteRows)
+      setNomine(nomineRows)
     } catch {
       // DB not ready
     } finally {
@@ -90,27 +107,27 @@ export function AziendePage(): JSX.Element {
     if (!showSenzaMcTab && mcTab === 'senza_mc') setMcTab('con_mc')
   }, [mcTab, setMcTab, showSenzaMcTab])
 
+  const isActiveMcNomina = useCallback((n: NominaRuolo): boolean =>
+    n.stato !== 'CESSATA' && (n.tipoRuolo === 'MEDICO_COMPETENTE' || n.tipoRuolo === 'MEDICO_COMPETENTE_COORDINATO'),
+    []
+  )
+
   const hasCompanyMc = useCallback((a: Azienda): boolean => {
-    return !!(a.medicoCompetenteId || a.medicoCompetenteNome || sites.some(s => s.companyTenantProfileId === a.id && s.medicoCompetenteId))
-  }, [sites])
+    const hasDedicatedNomina = nomine.some(n => n.companyTenantProfileId === a.id && isActiveMcNomina(n))
+    return !!(a.medicoCompetenteId || a.medicoCompetenteNome || hasDedicatedNomina || sites.some(s => s.companyTenantProfileId === a.id && s.medicoCompetenteId))
+  }, [isActiveMcNomina, nomine, sites])
 
   const isCompanyAssignedToCurrentDoctor = useCallback((a: Azienda): boolean => {
     if (!user?.id) return false
     if (a.medicoCompetenteId === user.id) return true
     if (sites.some(s => s.companyTenantProfileId === a.id && s.medicoCompetenteId === user.id)) return true
     const doctorName = [user.firstName, user.lastName].filter(Boolean).join(' ').trim().toLowerCase()
-    try {
-      const raw = JSON.parse(a.mediciCoordinati || '[]') as Array<{ id?: string; personId?: string; medicoId?: string; nome?: string; firstName?: string; lastName?: string }>
-      return raw.some(m => {
-        const idMatch = [m.id, m.personId, m.medicoId].filter(Boolean).includes(user.id)
-        const name = (m.nome || [m.firstName, m.lastName].filter(Boolean).join(' ')).trim().toLowerCase()
-        return idMatch || (!!doctorName && name === doctorName)
-      })
-    } catch {
-      return (a.mediciCoordinati || '').toLowerCase().includes(user.id.toLowerCase()) ||
-        (!!doctorName && (a.mediciCoordinati || '').toLowerCase().includes(doctorName))
-    }
-  }, [sites, user?.firstName, user?.id, user?.lastName])
+    return nomine.some(n => {
+      if (n.companyTenantProfileId !== a.id || !isActiveMcNomina(n)) return false
+      const name = (n.nome || [n.firstName, n.lastName].filter(Boolean).join(' ')).trim().toLowerCase()
+      return n.personId === user.id || (!!doctorName && name === doctorName)
+    })
+  }, [isActiveMcNomina, nomine, sites, user?.firstName, user?.id, user?.lastName])
 
   const visibleByRole = aziende.filter(a => canSeeAllCompanies || isCompanyAssignedToCurrentDoctor(a))
 
@@ -209,18 +226,9 @@ export function AziendePage(): JSX.Element {
             className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
           />
         </div>
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-3 py-2 rounded-lg border border-gray-200 text-sm">
-          <option value="">Stato</option>
-          {statuses.map(s => <option key={s} value={s}>{s === 'ACTIVE' ? 'Attiva' : s}</option>)}
-        </select>
-        <select value={settoreFilter} onChange={e => setSettoreFilter(e.target.value)} className="px-3 py-2 rounded-lg border border-gray-200 text-sm">
-          <option value="">Settore</option>
-          {settori.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <select value={cityFilter} onChange={e => setCityFilter(e.target.value)} className="px-3 py-2 rounded-lg border border-gray-200 text-sm">
-          <option value="">Città</option>
-          {cities.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
+        <ElegantSelect value={statusFilter} onChange={setStatusFilter} options={[{ value: '', label: 'Stato' }, ...statuses.map(s => ({ value: s, label: s === 'ACTIVE' ? 'Attiva' : s }))]} />
+        <ElegantSelect value={settoreFilter} onChange={setSettoreFilter} options={[{ value: '', label: 'Settore' }, ...settori.map(s => ({ value: s, label: s }))]} />
+        <ElegantSelect value={cityFilter} onChange={setCityFilter} options={[{ value: '', label: 'Citta' }, ...cities.map(c => ({ value: c, label: c }))]} />
       </div>
 
       <p className="text-xs text-gray-500">{filtered.length} aziend{filtered.length === 1 ? 'a' : 'e'}</p>

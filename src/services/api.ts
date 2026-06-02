@@ -145,6 +145,11 @@ apiClient.interceptors.request.use(
     if (config._isApiGetCall) {
       // Per apiGet, fai solo le operazioni essenziali senza toccare nulla di Axios
 
+      // CRITICAL: Ensure X-Frontend-Id is set for apiGet calls
+      const brandId = import.meta.env.VITE_BRAND_ID || 'element-sicurezza';
+      if (!config.headers) config.headers = {};
+      (config.headers as Record<string, any>)['X-Frontend-Id'] = brandId;
+
       // Solo token e headers essenziali
       const token = getToken();
       const isAuthRefresh = config.url?.includes('/auth/refresh');
@@ -155,7 +160,7 @@ apiClient.interceptors.request.use(
         (config.headers as Record<string, any>)['Authorization'] = `Bearer ${token}`;
       } else if (!token && config.url?.includes('/auth/verify')) {
         // Expected for public users - no warning needed
-        if (process.env.NODE_ENV === 'development') {
+        if (import.meta.env.DEV) {
           console.debug('🔍 Auth verify without token (public user)');
         }
       }
@@ -264,9 +269,12 @@ apiClient.interceptors.request.use(
     const requestKey = getCacheKey(safeMethodForLogging, config.url || '', config.data);
 
     // Add auth token if available
+    // Exclude only unauthenticated auth endpoints (login, register, refresh, forgot/reset-password)
+    // Authenticated auth endpoints (me, me/password, me/profile, change-password, permissions, etc.) need the token
     const token = getToken();
-    const isAuthUrl = config.url?.includes('/auth/');
-    if (token && !isAuthUrl) {
+    const unauthenticatedAuthPaths = ['/auth/login', '/auth/register', '/auth/refresh', '/auth/forgot-password', '/auth/reset-password'];
+    const isUnauthenticatedAuthUrl = unauthenticatedAuthPaths.some(p => config.url?.includes(p));
+    if (token && !isUnauthenticatedAuthUrl) {
       (config.headers as Record<string, any>)['Authorization'] = `Bearer ${token}`;
     }
 
@@ -664,7 +672,7 @@ apiClient.interceptors.response.use(
     });
 
     // Nessun retry automatico, riduciamo il debug
-    if (process.env.NODE_ENV !== 'production' && error?.config?.url) {
+    if (import.meta.env.DEV && error?.config?.url) {
       console.debug(`API Error [${error.config?.url}]: ${error.code || error.name || 'Unknown error'}`);
     }
 
@@ -1048,7 +1056,10 @@ export const apiDeleteWithPayload = async <T>(url: string, data = {}, config?: {
     url,
     data,
     timeout: 30000, // Timeout esteso anche per DELETE with payload
-    ...(config?.headers ? { headers: config.headers } : {})
+    headers: {
+      'Content-Type': 'application/json',
+      ...(config?.headers || {})
+    }
   };
   const response = await apiClient(axiosConfig);
   return response.data as T;

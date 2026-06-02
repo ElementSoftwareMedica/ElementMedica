@@ -89,11 +89,16 @@ class MediaService {
 
       // Genera paths
       const filename = `${Date.now()}-${Math.random().toString(36).substring(7)}${path.extname(file.originalname)}`;
-      const folderPath = path.join(this.uploadDir, tenantId, folderId || 'uploads');
+      // Store directly under tenant dir when no folder is specified (avoids /uploads/.../uploads/... double path)
+      const folderPath = folderId
+        ? path.join(this.uploadDir, tenantId, folderId)
+        : path.join(this.uploadDir, tenantId);
       await fs.mkdir(folderPath, { recursive: true });
 
       const filePath = path.join(folderPath, filename);
-      const relativePath = path.join(tenantId, folderId || 'uploads', filename);
+      const relativePath = folderId
+        ? path.join(tenantId, folderId, filename)
+        : path.join(tenantId, filename);
 
       // Process con Sharp (solo per immagini)
       let variants = null;

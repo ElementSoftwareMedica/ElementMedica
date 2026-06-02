@@ -35,7 +35,7 @@ export class PersonDataShareConsentService {
             ) as PersonDataShareConsent;
             return response;
         } catch (error: unknown) {
-            if (error?.status === 404) {
+            if ((error as any)?.status === 404) {
                 return null;
             }
             throw error;

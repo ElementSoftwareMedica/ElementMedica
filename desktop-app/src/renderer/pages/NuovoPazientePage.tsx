@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, UserPlus, Save } from 'lucide-react'
 import { useDesktopAuth } from '../context/DesktopAuthContext'
+import { ElegantDateInput, ElegantSelect } from '../components/ElegantControls'
 
 export function NuovoPazientePage(): JSX.Element {
     const navigate = useNavigate()
@@ -162,24 +163,15 @@ export function NuovoPazientePage(): JSX.Element {
                 <div className="grid grid-cols-2 gap-4">
                     <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1.5">Data di Nascita</label>
-                        <input
-                            type="date"
-                            value={birthDate}
-                            onChange={(e) => setBirthDate(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-                        />
+                        <ElegantDateInput value={birthDate} onChange={setBirthDate} />
                     </div>
                     <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1.5">Sesso</label>
-                        <select
-                            value={gender}
-                            onChange={(e) => setGender(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
-                        >
-                            <option value="">Seleziona...</option>
-                            <option value="M">Maschio</option>
-                            <option value="F">Femmina</option>
-                        </select>
+                        <ElegantSelect value={gender} onChange={setGender} options={[
+                            { value: '', label: 'Seleziona...' },
+                            { value: 'M', label: 'Maschio' },
+                            { value: 'F', label: 'Femmina' },
+                        ]} />
                     </div>
                 </div>
 

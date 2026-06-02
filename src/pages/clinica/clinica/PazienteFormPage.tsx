@@ -10,10 +10,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Save, Loader2, User } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, User, CreditCard, Users, Search, UserPlus, X } from 'lucide-react';
 import { pazientiApi, type Paziente } from '../../../services/clinicaApi';
 import { DatePickerElegante } from '../../../components/ui/DatePickerElegante';
 import { useToast } from '../../../hooks/useToast';
+import { DEFAULT_ETHNICITY, ETHNICITY_OPTIONS } from '../../../constants/ethnicityOptions';
 
 interface FormData {
     firstName: string;
@@ -23,10 +24,21 @@ interface FormData {
     phone: string;
     birthDate: string;
     gender: string;
+    etnia: string;
     residenceAddress: string;
     residenceCity: string;
     postalCode: string;
     province: string;
+    numeroCi: string;
+    tipoCi: string;
+    altroDocumento: string;
+    isMinore: boolean;
+    isNonAutonomo: boolean;
+    tutelanteRelazione: string;
+    tutelanteNome: string;
+    tutelanteCognome: string;
+    tutelanteCF: string;
+    tutelanti: Array<{ id?: string; tutelanteId?: string; relazione: string; firstName: string; lastName: string; taxCode?: string; isExisting?: boolean }>;
 }
 
 interface FormErrors {
@@ -45,10 +57,21 @@ const getInitialFormData = (): FormData => ({
     phone: '',
     birthDate: '',
     gender: '',
+    etnia: DEFAULT_ETHNICITY,
     residenceAddress: '',
     residenceCity: '',
     postalCode: '',
     province: '',
+    numeroCi: '',
+    tipoCi: 'CI',
+    altroDocumento: '',
+    isMinore: false,
+    isNonAutonomo: false,
+    tutelanteRelazione: 'GENITORE',
+    tutelanteNome: '',
+    tutelanteCognome: '',
+    tutelanteCF: '',
+    tutelanti: [],
 });
 
 const PazienteFormPage: React.FC = () => {
@@ -59,6 +82,9 @@ const PazienteFormPage: React.FC = () => {
 
     const [formData, setFormData] = useState<FormData>(getInitialFormData());
     const [errors, setErrors] = useState<FormErrors>({});
+    const [guardianSearch, setGuardianSearch] = useState('');
+    const [guardianResults, setGuardianResults] = useState<Paziente[]>([]);
+    const [isSearchingGuardian, setIsSearchingGuardian] = useState(false);
 
     // Fetch paziente data
     const { data: paziente, isLoading } = useQuery({
@@ -78,12 +104,54 @@ const PazienteFormPage: React.FC = () => {
             phone: paziente.phone || paziente.telefono || '',
             birthDate: (paziente.birthDate || paziente.dataNascita || '').split('T')[0],
             gender: paziente.gender || paziente.sesso || '',
+            etnia: paziente.etnia || DEFAULT_ETHNICITY,
             residenceAddress: paziente.residenceAddress || paziente.indirizzo || '',
             residenceCity: paziente.residenceCity || paziente.comune || '',
             postalCode: paziente.postalCode || paziente.cap || '',
             province: paziente.province || paziente.provincia || '',
+            numeroCi: paziente.numeroCi || '',
+            tipoCi: paziente.tipoCi || 'CI',
+            altroDocumento: paziente.altroDocumento || '',
+            isMinore: !!paziente.isMinore,
+            isNonAutonomo: !!paziente.isNonAutonomo,
+            tutelanteRelazione: 'GENITORE',
+            tutelanteNome: '',
+            tutelanteCognome: '',
+            tutelanteCF: '',
+            tutelanti: (paziente.tutelanti || []).map((rel: any) => ({
+                id: rel.id,
+                tutelanteId: rel.tutelante?.id,
+                relazione: rel.relazione,
+                firstName: rel.tutelante?.firstName || '',
+                lastName: rel.tutelante?.lastName || '',
+                taxCode: rel.tutelante?.taxCode || '',
+                isExisting: true,
+            })),
         });
     }, [paziente]);
+
+    useEffect(() => {
+        const q = guardianSearch.trim();
+        if (q.length < 2) {
+            setGuardianResults([]);
+            return;
+        }
+        let cancelled = false;
+        setIsSearchingGuardian(true);
+        pazientiApi.search(q)
+            .then(results => {
+                if (!cancelled) setGuardianResults((results || []).filter(p => p.id !== id).slice(0, 6));
+            })
+            .catch(() => {
+                if (!cancelled) setGuardianResults([]);
+            })
+            .finally(() => {
+                if (!cancelled) setIsSearchingGuardian(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [guardianSearch, id]);
 
     const validate = useCallback((): boolean => {
         const e: FormErrors = {};
@@ -97,7 +165,22 @@ const PazienteFormPage: React.FC = () => {
     }, [formData]);
 
     const updateMutation = useMutation({
-        mutationFn: (data: Partial<Paziente>) => pazientiApi.update(id!, data),
+        mutationFn: async (data: Partial<Paziente>) => {
+            const updated = await pazientiApi.update(id!, data);
+            if (formData.isMinore || formData.isNonAutonomo) {
+                for (const tutelante of formData.tutelanti) {
+                    await pazientiApi.addTutelante(id!, {
+                        tutelanteId: tutelante.tutelanteId,
+                        firstName: tutelante.firstName,
+                        lastName: tutelante.lastName,
+                        taxCode: tutelante.taxCode,
+                        relazione: tutelante.relazione,
+                        isLegalGuardian: ['GENITORE', 'TUTORE_LEGALE', 'CURATORE'].includes(tutelante.relazione),
+                    });
+                }
+            }
+            return updated;
+        },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['paziente', id] });
             queryClient.invalidateQueries({ queryKey: ['pazienti'] });
@@ -113,7 +196,7 @@ const PazienteFormPage: React.FC = () => {
         e.preventDefault();
         if (!validate()) return;
 
-        const payload: Record<string, string | undefined> = {};
+        const payload: Record<string, unknown> = {};
         if (formData.firstName.trim()) payload.firstName = formData.firstName.trim();
         if (formData.lastName.trim()) payload.lastName = formData.lastName.trim();
         if (formData.taxCode.trim()) payload.taxCode = formData.taxCode.trim().toUpperCase();
@@ -121,19 +204,57 @@ const PazienteFormPage: React.FC = () => {
         if (formData.phone.trim()) payload.phone = formData.phone.trim();
         if (formData.birthDate) payload.birthDate = formData.birthDate;
         if (formData.gender) payload.gender = formData.gender;
+        if (formData.etnia.trim()) payload.etnia = formData.etnia.trim();
         if (formData.residenceAddress.trim()) payload.residenceAddress = formData.residenceAddress.trim();
         if (formData.residenceCity.trim()) payload.residenceCity = formData.residenceCity.trim();
         if (formData.postalCode.trim()) payload.postalCode = formData.postalCode.trim();
         if (formData.province.trim()) payload.province = formData.province.trim().toUpperCase();
+        if (formData.numeroCi.trim()) payload.numeroCi = formData.numeroCi.trim().toUpperCase();
+        if (formData.tipoCi) payload.tipoCi = formData.tipoCi;
+        if (formData.altroDocumento.trim()) payload.altroDocumento = formData.altroDocumento.trim();
+        payload.isMinore = formData.isMinore;
+        payload.isNonAutonomo = formData.isNonAutonomo;
 
         updateMutation.mutate(payload as Partial<Paziente>);
     };
 
     const handleChange = (field: keyof FormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-        setFormData(prev => ({ ...prev, [field]: e.target.value }));
+        const value = e.target instanceof HTMLInputElement && e.target.type === 'checkbox'
+            ? e.target.checked
+            : e.target.value;
+        setFormData(prev => ({ ...prev, [field]: value }));
         if (errors[field as keyof FormErrors]) {
             setErrors(prev => ({ ...prev, [field]: undefined }));
         }
+    };
+
+    const addGuardian = (guardian?: Paziente) => {
+        const firstName = guardian?.firstName || guardian?.nome || formData.tutelanteNome;
+        const lastName = guardian?.lastName || guardian?.cognome || formData.tutelanteCognome;
+        const taxCode = guardian?.taxCode || guardian?.codiceFiscale || formData.tutelanteCF;
+        if (!guardian?.id && (!firstName.trim() || !lastName.trim() || !taxCode.trim())) {
+            showToast({ message: 'Inserisci cognome, nome e codice fiscale del tutelante.', type: 'warning' });
+            return;
+        }
+        setFormData(prev => ({
+            ...prev,
+            tutelanti: [
+                ...prev.tutelanti,
+                {
+                    tutelanteId: guardian?.id,
+                    relazione: prev.tutelanteRelazione,
+                    firstName,
+                    lastName,
+                    taxCode: taxCode.toUpperCase(),
+                    isExisting: !!guardian?.id,
+                },
+            ],
+            tutelanteNome: '',
+            tutelanteCognome: '',
+            tutelanteCF: '',
+        }));
+        setGuardianSearch('');
+        setGuardianResults([]);
     };
 
     if (isLoading) {
@@ -249,6 +370,122 @@ const PazienteFormPage: React.FC = () => {
                                 <option value="FEMALE">Femmina</option>
                             </select>
                         </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Etnia</label>
+                            <select
+                                value={formData.etnia}
+                                onChange={handleChange('etnia')}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                            >
+                                {ETHNICITY_OPTIONS.map(option => (
+                                    <option key={option.value || 'empty'} value={option.value}>{option.label}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-xl border border-gray-200 p-6">
+                    <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                        <CreditCard className="h-5 w-5 text-teal-600" />
+                        Documento e Tutela
+                    </h2>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Tipo documento</label>
+                            <select
+                                value={formData.tipoCi}
+                                onChange={handleChange('tipoCi')}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
+                            >
+                                <option value="CI">Carta d'identità</option>
+                                <option value="PATENTE">Patente</option>
+                                <option value="PASSAPORTO">Passaporto</option>
+                                <option value="PERMESSO_SOGGIORNO">Permesso di soggiorno</option>
+                                <option value="ALTRO">Altro documento</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Numero documento</label>
+                            <input
+                                type="text"
+                                value={formData.numeroCi}
+                                onChange={handleChange('numeroCi')}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 uppercase"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Altro documento</label>
+                            <input
+                                type="text"
+                                value={formData.altroDocumento}
+                                onChange={handleChange('altroDocumento')}
+                                disabled={formData.tipoCi !== 'ALTRO'}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 disabled:bg-gray-50"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                        <div className="flex flex-wrap gap-5">
+                            <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                                <input type="checkbox" checked={formData.isMinore} onChange={handleChange('isMinore')} className="rounded border-gray-300 text-teal-600" />
+                                Minore
+                            </label>
+                            <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                                <input type="checkbox" checked={formData.isNonAutonomo} onChange={handleChange('isNonAutonomo')} className="rounded border-gray-300 text-teal-600" />
+                                Disabile / non autonomo
+                            </label>
+                        </div>
+                        {(formData.isMinore || formData.isNonAutonomo) && (
+                            <div className="mt-4 space-y-3">
+                                <div className="flex flex-wrap gap-2">
+                                    {formData.tutelanti.map((tutelante, idx) => (
+                                        <span key={`${tutelante.tutelanteId || tutelante.taxCode}-${idx}`} className="inline-flex items-center gap-1 rounded-full bg-white border border-amber-200 px-2 py-1 text-xs text-amber-800">
+                                            {tutelante.relazione.replace(/_/g, ' ')} · {tutelante.lastName} {tutelante.firstName}
+                                            <button type="button" onClick={() => setFormData(prev => ({ ...prev, tutelanti: prev.tutelanti.filter((_, i) => i !== idx) }))}>
+                                                <X className="h-3 w-3" />
+                                            </button>
+                                        </span>
+                                    ))}
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                                    <select value={formData.tutelanteRelazione} onChange={handleChange('tutelanteRelazione')} className="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                                        <option value="GENITORE">Genitore</option>
+                                        <option value="TUTORE_LEGALE">Tutore legale</option>
+                                        <option value="CURATORE">Curatore</option>
+                                        <option value="NONNO">Nonno/a</option>
+                                        <option value="ZIO">Zio/a</option>
+                                        <option value="PARENTE">Altro parente</option>
+                                        <option value="ALTRO">Altro</option>
+                                    </select>
+                                    <div className="md:col-span-3 relative">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                        <input value={guardianSearch} onChange={(e) => setGuardianSearch(e.target.value)} placeholder="Cerca tutelante tra i pazienti" className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                                        {(guardianResults.length > 0 || isSearchingGuardian) && (
+                                            <div className="absolute z-[1500] mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg overflow-hidden">
+                                                {isSearchingGuardian && <div className="px-3 py-2 text-xs text-gray-500">Ricerca...</div>}
+                                                {guardianResults.map(result => (
+                                                    <button key={result.id} type="button" onClick={() => addGuardian(result)} className="block w-full px-3 py-2 text-left text-sm hover:bg-amber-50">
+                                                        {result.lastName || result.cognome} {result.firstName || result.nome}
+                                                        <span className="ml-2 text-xs text-gray-500">{result.taxCode || result.codiceFiscale || ''}</span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    <input value={formData.tutelanteCognome} onChange={handleChange('tutelanteCognome')} placeholder="Cognome nuovo tutelante" className="px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                                    <input value={formData.tutelanteNome} onChange={handleChange('tutelanteNome')} placeholder="Nome" className="px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                                    <input value={formData.tutelanteCF} onChange={handleChange('tutelanteCF')} placeholder="Codice fiscale" maxLength={16} className="px-3 py-2 border border-gray-300 rounded-lg text-sm uppercase" />
+                                </div>
+                                <button type="button" onClick={() => addGuardian()} className="inline-flex items-center gap-2 rounded-lg border border-amber-300 px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100">
+                                    <UserPlus className="h-4 w-4" />
+                                    Aggiungi tutelante
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
 

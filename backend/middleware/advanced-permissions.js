@@ -33,7 +33,6 @@ const checkAdvancedPermission = (resource, action, options = {}) => {
             const requiredPermission = `${resource}:${action}`;
 
             // P52: First check req.person.permissions (already loaded by auth middleware)
-            // P65: Handle both array format (auth/middleware.js) and object format (middleware/auth.js)
             let hasPermission = false;
             if (person.permissions) {
                 if (Array.isArray(person.permissions)) {
@@ -232,6 +231,40 @@ const requireOwnCompany = () => {
             // For regular users, check if they belong to the target company
             if (person.companyTenantProfileId && person.companyTenantProfileId === targetCompanyTenantProfileId) {
                 return next();
+            }
+
+            // Medici competenti: accesso alle aziende per cui hanno una nomina attiva
+            if (roleTypes.some(r => ['MEDICO', 'MEDICO_COMPETENTE'].includes(r)) && targetCompanyTenantProfileId) {
+                const tenantId = person.tenantId;
+                const nomination = await prisma.nominaRuolo.findFirst({
+                    where: {
+                        personId: person.id,
+                        tenantId,
+                        deletedAt: null,
+                        stato: 'ATTIVA',
+                        tipoRuolo: { in: ['MEDICO_COMPETENTE', 'MEDICO_COMPETENTE_COORDINATO'] },
+                        OR: [
+                            { companyTenantProfileId: targetCompanyTenantProfileId },
+                            { companyTenantProfile: { companyId: targetCompanyTenantProfileId } }
+                        ]
+                    },
+                    select: { id: true }
+                });
+                if (nomination) {
+                    return next();
+                }
+            }
+
+            // TRAINER: allow access to companies enrolled in their schedules
+            const isTrainer = roleTypes.includes('TRAINER');
+            const hasElevated = roleTypes.some(r => ['ADMIN', 'TRAINING_ADMIN', 'HR_MANAGER', 'COMPANY_MANAGER', 'SITE_MANAGER'].includes(r));
+            if (isTrainer && !hasElevated && targetCompanyTenantProfileId) {
+                const { getTrainerCompanyProfileIds } = await import('../utils/trainerAccess.js');
+                const tenantId = person.tenantId;
+                const trainerCompanyIds = await getTrainerCompanyProfileIds(person.id, tenantId);
+                if (trainerCompanyIds.includes(targetCompanyTenantProfileId)) {
+                    return next();
+                }
             }
 
             return res.status(403).json({

@@ -52,6 +52,10 @@ const PermissionsSection: React.FC<PermissionsSectionProps> = ({
   onBulkScopeApply,
   onBulkTenantsApply
 }) => {
+  const availableActions = entity.actions?.length
+    ? PERMISSION_ACTIONS.filter(action => entity.actions?.includes(action.name))
+    : PERMISSION_ACTIONS;
+
   const getScopeIcon = (scope: string) => {
     switch (scope) {
       case 'all': return <Users className="w-4 h-4" />;
@@ -159,7 +163,7 @@ const PermissionsSection: React.FC<PermissionsSectionProps> = ({
       {/* Lista azioni */}
       <div className="flex-1 overflow-y-auto p-4">
         <div className="space-y-3">
-          {PERMISSION_ACTIONS.map((action) => {
+          {availableActions.map((action) => {
             const permission = getPermission(permissions, entity.name, action.name);
             const currentScope = permission?.scope || 'none';
             const isSelected = selectedActions.has(action.name);

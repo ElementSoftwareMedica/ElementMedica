@@ -57,7 +57,7 @@ const CourseDetailPage: React.FC = () => {
         setLoading(true);
         setError(null);
         // Tenta di caricare il corso dall'API pubblica
-        const response = await apiGet<Course>(`/api/public/courses/${slug}`, { _skipGdprCheck: true });
+        const response = await apiGet<Course>(`/api/v1/public/courses/${slug}`, { _skipGdprCheck: true });
         setCourse(response);
       } catch (err: unknown) {
         setError('Corso non trovato');

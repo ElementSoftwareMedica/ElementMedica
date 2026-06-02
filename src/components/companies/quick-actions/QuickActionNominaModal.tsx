@@ -26,8 +26,9 @@ import { useToast } from '../../../hooks/useToast';
 import Modal from '../../../design-system/molecules/Modal/Modal';
 import { apiGet } from '../../../services/api';
 import { DatePickerElegante } from '../../ui/DatePickerElegante';
+import ElegantSelect from '../../ui/ElegantSelect';
 
-export type NominaTipo = 'MC' | 'RSPP';
+export type NominaTipo = 'MC' | 'MC_COORDINATO' | 'RSPP';
 
 interface SuccessorOfNomina {
     id: string;
@@ -79,6 +80,13 @@ const NOMINA_CONFIG: Record<NominaTipo, {
         description: 'Art. 38-40 D.Lgs 81/08 - Sorveglianza sanitaria',
         color: 'blue',
         backendValue: 'MEDICO_COMPETENTE' as TipoNominaRuolo
+    },
+    MC_COORDINATO: {
+        label: 'Medico Competente Coordinato',
+        icon: <Stethoscope className="h-5 w-5" />,
+        description: 'Medico competente coordinato su azienda o singola sede',
+        color: 'teal',
+        backendValue: 'MEDICO_COMPETENTE_COORDINATO' as TipoNominaRuolo
     },
     RSPP: {
         label: 'RSPP',
@@ -214,7 +222,7 @@ export const QuickActionNominaModal: React.FC<QuickActionNominaModalProps> = ({
             // P59: Determina i roleType da filtrare
             // - MC: solo MEDICO_COMPETENTE e MEDICO
             // - RSPP: solo RSPP, CONSULENTE_SICUREZZA, TECNICO_SICUREZZA
-            const roleTypeFilter = tipo === 'MC'
+            const roleTypeFilter = tipo === 'MC' || tipo === 'MC_COORDINATO'
                 ? 'MEDICO_COMPETENTE'
                 : 'RSPP,CONSULENTE_SICUREZZA,TECNICO_SICUREZZA';
 
@@ -223,7 +231,7 @@ export const QuickActionNominaModal: React.FC<QuickActionNominaModalProps> = ({
                 limit: 30,
                 roleType: roleTypeFilter,
                 // Filtra MC per specialità "Medicina del Lavoro"
-                ...(tipo === 'MC' && { specialty: 'Medicina del Lavoro' }),
+                ...((tipo === 'MC' || tipo === 'MC_COORDINATO') && { specialty: 'Medicina del Lavoro' }),
                 // P59 Fix: Passa tenantId esplicitamente per filtrare correttamente
                 ...(tenantId && { tenantId })
             });
@@ -300,7 +308,7 @@ export const QuickActionNominaModal: React.FC<QuickActionNominaModalProps> = ({
         const newErrors: Record<string, string> = {};
 
         if (!formData.personId) {
-            newErrors.personId = `Seleziona un ${tipo === 'MC' ? 'medico' : 'professionista'}`;
+            newErrors.personId = `Seleziona un ${tipo === 'MC' || tipo === 'MC_COORDINATO' ? 'medico' : 'professionista'}`;
         }
         if (!formData.dataInizio) {
             newErrors.dataInizio = 'Data inizio obbligatoria';
@@ -368,7 +376,7 @@ export const QuickActionNominaModal: React.FC<QuickActionNominaModalProps> = ({
                 {/* Selezione persona - Dropdown con ricerca integrata */}
                 <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        {tipo === 'MC' ? 'Medico Competente' : 'Professionista'} *
+                        {tipo === 'MC' || tipo === 'MC_COORDINATO' ? 'Medico Competente' : 'Professionista'} *
                     </label>
                     <div className="relative" ref={dropdownRef}>
                         {/* Input che mostra la selezione o permette la ricerca */}
@@ -461,18 +469,18 @@ export const QuickActionNominaModal: React.FC<QuickActionNominaModalProps> = ({
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                             Sede Operativa
                         </label>
-                        <select
+                        <ElegantSelect
                             value={formData.siteId}
-                            onChange={(e) => handleChange('siteId', e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 dark:text-gray-100"
-                        >
-                            <option value="">Tutte le sedi</option>
-                            {sites.map((site) => (
-                                <option key={site.id} value={site.id}>
-                                    {site.siteName} {site.citta && `- ${site.citta}`}
-                                </option>
-                            ))}
-                        </select>
+                            onChange={(value) => handleChange('siteId', value)}
+                            placeholder="Tutte le sedi"
+                            options={[
+                                { value: '', label: 'Tutte le sedi' },
+                                ...sites.map((site) => ({
+                                    value: site.id,
+                                    label: `${site.siteName}${site.citta ? ` - ${site.citta}` : ''}`,
+                                })),
+                            ]}
+                        />
                         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                             Lascia vuoto per applicare a tutte le sedi
                         </p>
@@ -526,7 +534,7 @@ export const QuickActionNominaModal: React.FC<QuickActionNominaModalProps> = ({
                 <div className="flex items-start p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
                     <Info className="h-4 w-4 text-gray-400 dark:text-gray-500 mt-0.5 flex-shrink-0" />
                     <p className="ml-2 text-xs text-gray-500 dark:text-gray-400">
-                        {tipo === 'MC'
+                        {tipo === 'MC' || tipo === 'MC_COORDINATO'
                             ? 'Il Medico Competente è obbligatorio per le aziende con lavoratori esposti a rischi specifici (Art. 41 D.Lgs 81/08).'
                             : 'L\'RSPP è obbligatorio per tutte le aziende. Può essere il datore di lavoro stesso per aziende fino a 30 dipendenti (Art. 34 D.Lgs 81/08).'
                         }

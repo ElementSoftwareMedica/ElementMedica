@@ -7,7 +7,7 @@ import {
   ChevronRight,
   AlertCircle
 } from 'lucide-react'
-import { formatProtocolloPeriodicity, parseProtocolloPrestazioni } from '../utils/protocolloSanitario'
+import { formatProtocolloPeriodicity, normalizeProtocolloPrestazioni, type ProtocolloPrestazioneRow } from '../utils/protocolloSanitario'
 
 interface Protocollo {
   id: string
@@ -17,11 +17,11 @@ interface Protocollo {
   mansioneNome: string | null
   mansioneId: string | null
   isActive: number
-  prestazioni: string | null // JSON string of associated prestazioni
 }
 
 export function ProtocolliPage(): JSX.Element {
   const [protocolli, setProtocolli] = useState<Protocollo[]>([])
+  const [prestazioniByProtocollo, setPrestazioniByProtocollo] = useState<Map<string, ProtocolloPrestazioneRow[]>>(new Map())
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -35,7 +35,18 @@ export function ProtocolliPage(): JSX.Element {
         where: { _isDeleted: 0 },
         orderBy: { column: 'nome', direction: 'ASC' }
       }) as Protocollo[]
+      const prestazioniRows = await window.desktopApi.db.query({
+        table: 'protocollo_prestazioni',
+        where: { _isDeleted: 0 }
+      }).catch(() => []) as Array<ProtocolloPrestazioneRow & { protocolloId: string }>
+      const grouped = new Map<string, ProtocolloPrestazioneRow[]>()
+      for (const row of prestazioniRows) {
+        const list = grouped.get(row.protocolloId) || []
+        list.push(row)
+        grouped.set(row.protocolloId, list)
+      }
       setProtocolli(rows)
+      setPrestazioniByProtocollo(grouped)
     } catch {
       // DB not ready
     } finally {
@@ -99,7 +110,7 @@ export function ProtocolliPage(): JSX.Element {
       ) : (
         <div className="space-y-2">
           {filtered.map(p => {
-            const prestazioni = parseProtocolloPrestazioni(p.prestazioni)
+            const prestazioni = normalizeProtocolloPrestazioni(prestazioniByProtocollo.get(p.id) || [])
             const isExpanded = expandedId === p.id
 
             return (

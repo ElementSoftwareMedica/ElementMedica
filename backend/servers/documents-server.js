@@ -11,7 +11,6 @@ import { mkdirp } from 'mkdirp';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { initializeAuth, shutdownAuth } from '../auth/index.js';
-import authRoutes from '../auth/routes.js';
 import middleware from '../middleware/auth.js';
 import googleApiService from '../utils/googleApiService.js';
 import googleDocsRoutes from '../routes/google-docs-routes.js';
@@ -83,9 +82,6 @@ app.use(httpLogger);
 // Configurazione bodyParser
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '50mb' }));
-
-// Mount authentication routes
-app.use('/api', authRoutes);
 
 // Mount Google API routes
 app.use('/api/google-docs', googleDocsRoutes);

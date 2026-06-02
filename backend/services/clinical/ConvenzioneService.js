@@ -13,6 +13,39 @@ import { BRANCH_TYPES } from '../../utils/branchHelper.js';
 // Default branch for this entity
 const DEFAULT_BRANCH = BRANCH_TYPES.MEDICA;
 
+async function enrichConvenzioniWithCodiceSconto(convenzioni, tenantId) {
+    const rows = Array.isArray(convenzioni) ? convenzioni : [convenzioni].filter(Boolean);
+    const codici = [...new Set(rows
+        .map(c => c?.condizioni?.codiceSconto)
+        .filter(Boolean))];
+    if (!codici.length) return convenzioni;
+
+    const sconti = await prisma.codiceSconto.findMany({
+        where: {
+            tenantId,
+            codice: { in: codici },
+            attivo: true,
+            deletedAt: null,
+        },
+        select: { codice: true, tipoSconto: true, valore: true },
+    });
+    const byCodice = new Map(sconti.map(s => [s.codice, s]));
+    for (const convenzione of rows) {
+        const codice = convenzione?.condizioni?.codiceSconto;
+        if (!codice || convenzione.condizioni?.scontoInfo) continue;
+        const sconto = byCodice.get(codice);
+        if (!sconto) continue;
+        convenzione.condizioni = {
+            ...convenzione.condizioni,
+            scontoInfo: {
+                tipo: sconto.tipoSconto,
+                valore: Number(sconto.valore),
+            },
+        };
+    }
+    return convenzioni;
+}
+
 export class ConvenzioneService {
     /**
      * Create a new convenzione
@@ -96,7 +129,7 @@ export class ConvenzioneService {
                 branchType,
             });
 
-            return convenzione;
+            return await enrichConvenzioniWithCodiceSconto(convenzione, tenantId);
         } catch (error) {
             logger.error('Failed to create convenzione', {
                 component: 'convenzione-service',
@@ -173,7 +206,7 @@ export class ConvenzioneService {
                 }
             });
 
-            return convenzione;
+            return await enrichConvenzioniWithCodiceSconto(convenzione, tenantId);
         } catch (error) {
             logger.error('Failed to get convenzione', {
                 component: 'convenzione-service',
@@ -217,7 +250,7 @@ export class ConvenzioneService {
                 }
             });
 
-            return convenzione;
+            return await enrichConvenzioniWithCodiceSconto(convenzione, tenantId);
         } catch (error) {
             logger.error('Failed to get convenzione by code', {
                 component: 'convenzione-service',
@@ -342,8 +375,10 @@ export class ConvenzioneService {
                 take: pageSize
             });
 
+            const enrichedConvenzioni = await enrichConvenzioniWithCodiceSconto(convenzioni, tenantId);
+
             return {
-                data: convenzioni,
+                data: enrichedConvenzioni,
                 pagination: {
                     page,
                     pageSize,

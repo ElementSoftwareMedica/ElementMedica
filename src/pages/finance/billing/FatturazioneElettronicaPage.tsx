@@ -102,7 +102,7 @@ const FatturazioneElettronicaPage: React.FC = () => {
     const {
         fatture, stats, loading, loadingStats, error,
         pagination, fetchFatture, fetchStats,
-        emettiFattura, segnaPagata, creaNotaCredito, eliminaFattura
+        emettiFattura, segnaPagata, creaNotaCredito, stornaERifai, eliminaFattura
     } = useFatturazione();
 
     const [showNuovaFattura, setShowNuovaFattura] = useState(false);
@@ -203,6 +203,28 @@ const FatturazioneElettronicaPage: React.FC = () => {
             loadData();
         } catch (err: unknown) {
             showToast({ type: 'error', message: 'Errore creazione nota di credito' });
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    const handleStornaERifai = async (fattura: FatturaElettronica) => {
+        const ok = await confirm({
+            title: `Stornare e rifare ${fattura.numero}?`,
+            message: `La fattura verrà stornata con nota di credito e i movimenti torneranno disponibili per creare una nuova fattura corretta.`,
+            confirmLabel: 'Storna e rifai',
+            variant: 'warning',
+        });
+        if (!ok) return;
+
+        setActionLoading(fattura.id);
+        try {
+            await stornaERifai(fattura.id, 'Storno e rifacimento da pagina fatture');
+            showToast({ type: 'success', message: 'Fattura stornata. Puoi crearne una nuova corretta.' });
+            loadData();
+            fetchStats();
+        } catch (err: unknown) {
+            showToast({ type: 'error', message: 'Errore nello storno della fattura' });
         } finally {
             setActionLoading(null);
         }
@@ -469,6 +491,17 @@ const FatturazioneElettronicaPage: React.FC = () => {
                                                                     className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-800/50 disabled:opacity-50 transition-colors"
                                                                 >
                                                                     <RotateCcw className="h-3 w-3" />
+                                                                </button>
+                                                            )}
+                                                        {(fattura.stato === 'EMESSA' || fattura.stato === 'PAGATA') &&
+                                                            fattura.tipoDocumento !== 'NOTA_CREDITO' && (
+                                                                <button
+                                                                    onClick={() => handleStornaERifai(fattura)}
+                                                                    disabled={actionLoading === fattura.id}
+                                                                    title="Storna e rifai"
+                                                                    className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-800/50 disabled:opacity-50 transition-colors"
+                                                                >
+                                                                    <RefreshCw className="h-3 w-3" /> Rifai
                                                                 </button>
                                                             )}
                                                         {/* Elimina (solo BOZZA) */}

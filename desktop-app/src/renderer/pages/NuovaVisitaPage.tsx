@@ -12,6 +12,7 @@ import {
     Check
 } from 'lucide-react'
 import { useDesktopAuth } from '../context/DesktopAuthContext'
+import { ElegantSelect } from '../components/ElegantControls'
 
 interface Patient {
     id: string
@@ -415,16 +416,11 @@ export function NuovaVisitaPage(): JSX.Element {
                                 <MapPin className="w-3 h-3 inline mr-1" />
                                 Ambulatorio
                             </label>
-                            <select
+                            <ElegantSelect
                                 value={selectedAmbulatorioId}
-                                onChange={e => setSelectedAmbulatorioId(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-                            >
-                                <option value="">-- Nessuno --</option>
-                                {ambulatori.map(a => (
-                                    <option key={a.id} value={a.id}>{a.nome}</option>
-                                ))}
-                            </select>
+                                onChange={setSelectedAmbulatorioId}
+                                options={[{ value: '', label: '-- Nessuno --' }, ...ambulatori.map(a => ({ value: a.id, label: a.nome }))]}
+                            />
                         </div>
 
                         {/* Prestazione */}

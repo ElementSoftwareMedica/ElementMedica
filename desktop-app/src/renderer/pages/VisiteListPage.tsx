@@ -22,6 +22,7 @@ import {
   FileText
 } from 'lucide-react'
 import { usePersistentPageState } from '../hooks/usePersistentPageState'
+import { ElegantDateInput, ElegantSelect } from '../components/ElegantControls'
 
 interface Visita {
   id: string
@@ -166,16 +167,13 @@ export function VisiteListPage(): JSX.Element {
               className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
             />
           </div>
-          <select
-            value={filterStato}
-            onChange={(e) => setFilterStato(e.target.value)}
-            className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-          >
-            <option value="">Tutti gli stati</option>
-            {Object.entries(STATO_CONFIG).map(([key, { label }]) => (
-              <option key={key} value={key}>{label}</option>
-            ))}
-          </select>
+          <div className="w-48">
+            <ElegantSelect
+              value={filterStato}
+              onChange={setFilterStato}
+              options={[{ value: '', label: 'Tutti gli stati' }, ...Object.entries(STATO_CONFIG).map(([key, { label }]) => ({ value: key, label }))]}
+            />
+          </div>
           <button
             onClick={() => setShowFilters(p => !p)}
             className={`flex items-center gap-1.5 px-3 py-2 border rounded-lg text-sm transition-colors ${showFilters ? 'bg-teal-50 border-teal-300 text-teal-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
@@ -191,24 +189,11 @@ export function VisiteListPage(): JSX.Element {
             <div className="flex items-center gap-2 text-sm text-gray-600">
               <Calendar className="w-4 h-4 text-gray-400" />
               <span>Da:</span>
-              <input
-                type="date"
-                value={dateFrom}
-                max={dateTo || todayString()}
-                onChange={e => setDateFrom(e.target.value)}
-                className="px-2 py-1 border border-gray-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-              />
+              <div className="w-36"><ElegantDateInput value={dateFrom} onChange={setDateFrom} clearable /></div>
             </div>
             <div className="flex items-center gap-2 text-sm text-gray-600">
               <span>A:</span>
-              <input
-                type="date"
-                value={dateTo}
-                min={dateFrom}
-                max={todayString()}
-                onChange={e => setDateTo(e.target.value)}
-                className="px-2 py-1 border border-gray-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-              />
+              <div className="w-36"><ElegantDateInput value={dateTo} onChange={setDateTo} clearable /></div>
             </div>
             <button
               onClick={() => { setDateFrom(''); setDateTo('') }}

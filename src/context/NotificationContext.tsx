@@ -22,7 +22,7 @@ import React, {
   useRef,
   ReactNode
 } from 'react';
-import { io, Socket } from 'socket.io-client';
+import type { Socket } from 'socket.io-client';
 import { useAuth } from '@/hooks/auth/useAuth';
 import authService from '@/services/auth';
 import { apiGet, apiPut } from '@/services/api';
@@ -33,7 +33,7 @@ import { apiGet, apiPut } from '@/services/api';
 
 export type NotificationType = 'INFO' | 'SUCCESS' | 'WARNING' | 'ERROR' | 'CRITICAL' | 'REMINDER' | 'ACTION';
 export type NotificationPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT' | 'CRITICAL_P';
-export type NotificationCategory = 'SYSTEM' | 'APPOINTMENT' | 'DOCUMENT' | 'BILLING' | 'CLINICAL' | 'TRAINING' | 'SAFETY' | 'REMINDER' | 'MARKETING' | 'CUSTOM';
+export type NotificationCategory = 'SYSTEM' | 'APPOINTMENT' | 'VISIT' | 'DOCUMENT' | 'INVOICE' | 'TRAINING' | 'GDPR' | 'SECURITY' | 'MARKETING' | 'CUSTOM';
 
 export interface Notification {
   id: string;
@@ -115,6 +115,24 @@ const API_BASE = '/api/v1/notifications/advanced';
 // Development: connect directly to API server on :4001
 const WS_URL = import.meta.env.VITE_WS_URL || (import.meta.env.DEV ? 'http://localhost:4001' : window.location.origin);
 
+const decrementUnreadCount = (prev: UnreadCount, notification?: Notification): UnreadCount => ({
+  ...prev,
+  total: Math.max(0, prev.total - 1),
+  direct: Math.max(0, prev.direct - 1),
+  critical: notification?.priority === 'CRITICAL_P' || notification?.type === 'CRITICAL'
+    ? Math.max(0, prev.critical - 1)
+    : prev.critical
+});
+
+const incrementUnreadCount = (prev: UnreadCount, notification: Notification): UnreadCount => ({
+  ...prev,
+  total: prev.total + 1,
+  direct: prev.direct + 1,
+  critical: notification.priority === 'CRITICAL_P' || notification.type === 'CRITICAL'
+    ? prev.critical + 1
+    : prev.critical
+});
+
 export const NotificationProvider: React.FC<NotificationProviderProps> = ({ children }) => {
   const { isAuthenticated } = useAuth();
 
@@ -149,81 +167,91 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
       return;
     }
 
-    // Connect to WebSocket
-    const socket = io(WS_URL, {
-      path: '/ws/notifications',
-      auth: { token },
-      transports: ['websocket', 'polling'],
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000
-    });
+    let isMounted = true;
 
-    socketRef.current = socket;
+    // Dynamic import: socket.io-client only loads when user is authenticated
+    // This keeps engine.io-client out of the main bundle → faster public page LCP
+    import('socket.io-client').then(({ io }) => {
+      if (!isMounted) return;
 
-    // Connection events
-    socket.on('connect', () => {
-      setIsConnected(true);
-      setError(null);
-    });
+      const socket = io(WS_URL, {
+        path: '/ws/notifications',
+        auth: { token },
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000
+      });
 
-    socket.on('disconnect', (reason) => {
-      setIsConnected(false);
-    });
+      socketRef.current = socket;
 
-    socket.on('connect_error', (err) => {
-      setError('Errore di connessione');
-      setIsConnected(false);
-    });
+      // Connection events
+      socket.on('connect', () => {
+        setIsConnected(true);
+        setError(null);
+      });
 
-    // Notification events
-    socket.on('notification:new', (notification: Notification) => {
+      socket.on('disconnect', () => {
+        setIsConnected(false);
+      });
 
-      // Add to notifications list
-      setNotifications(prev => [notification, ...prev]);
+      socket.on('connect_error', () => {
+        setError('Errore di connessione');
+        setIsConnected(false);
+      });
 
-      // Add to popup queue if force popup or high priority
-      if (notification.forcePopup ||
-        notification.priority === 'URGENT' ||
-        notification.priority === 'CRITICAL_P') {
-        setPopupQueue(prev => [...prev, notification]);
-      }
-    });
+      // Notification events
+      socket.on('notification:new', (notification: Notification) => {
+        setNotifications(prev => [notification, ...prev]);
+        if (!notification.isRead && !notification.isDismissed) {
+          setUnreadCount(prev => incrementUnreadCount(prev, notification));
+        }
+        if (notification.forcePopup ||
+          notification.priority === 'URGENT' ||
+          notification.priority === 'CRITICAL_P') {
+          setPopupQueue(prev => [...prev, notification]);
+        }
+      });
 
-    socket.on('notification:unread-count', (count: UnreadCount) => {
-      setUnreadCount(count);
-    });
+      socket.on('notification:unread-count', (count: UnreadCount) => {
+        setUnreadCount(count);
+      });
 
-    socket.on('notification:critical', (criticals: Notification[]) => {
-      // Add critical notifications to popup queue
-      setPopupQueue(prev => [...prev, ...criticals]);
-    });
+      socket.on('notification:critical', (criticals: Notification[]) => {
+        setPopupQueue(prev => [...prev, ...criticals]);
+      });
 
-    socket.on('notification:read:ack', ({ notificationId, success }) => {
-      if (success) {
-        setNotifications(prev =>
-          prev.map(n => n.id === notificationId ? { ...n, isRead: true, readAt: new Date().toISOString() } : n)
-        );
-      }
-    });
+      socket.on('notification:read:ack', ({ notificationId, success }: { notificationId: string; success: boolean }) => {
+        if (success) {
+          setNotifications(prev =>
+            prev.map(n => n.id === notificationId ? { ...n, isRead: true, readAt: new Date().toISOString() } : n)
+          );
+          void refreshUnreadCount();
+        }
+      });
 
-    socket.on('notification:dismiss:ack', ({ notificationId, success }) => {
-      if (success) {
-        setNotifications(prev =>
-          prev.map(n => n.id === notificationId ? { ...n, isDismissed: true } : n)
-        );
-        setPopupQueue(prev => prev.filter(n => n.id !== notificationId));
-      }
+      socket.on('notification:dismiss:ack', ({ notificationId, success }: { notificationId: string; success: boolean }) => {
+        if (success) {
+          setNotifications(prev =>
+            prev.map(n => n.id === notificationId ? { ...n, isDismissed: true } : n)
+          );
+          setPopupQueue(prev => prev.filter(n => n.id !== notificationId));
+          void refreshUnreadCount();
+        }
+      });
     });
 
     // Cleanup
     return () => {
+      isMounted = false;
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
-      socket.disconnect();
-      socketRef.current = null;
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
     };
   }, [isAuthenticated, getToken]);
 
@@ -287,14 +315,14 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     if (!token) return;
 
     // Optimistic update
-    setNotifications(prev =>
-      prev.map(n => n.id === notificationId ? { ...n, isRead: true } : n)
-    );
-    setUnreadCount(prev => ({
-      ...prev,
-      total: Math.max(0, prev.total - 1),
-      direct: Math.max(0, prev.direct - 1)
-    }));
+    let unreadTarget: Notification | undefined;
+    setNotifications(prev => {
+      unreadTarget = prev.find(n => n.id === notificationId && !n.isRead && !n.isDismissed);
+      return prev.map(n => n.id === notificationId ? { ...n, isRead: true } : n);
+    });
+    if (unreadTarget) {
+      setUnreadCount(prev => decrementUnreadCount(prev, unreadTarget));
+    }
 
     // Use WebSocket if connected
     if (socketRef.current?.connected) {
@@ -305,6 +333,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     // Fallback to REST API
     try {
       await apiPut(`${API_BASE}/${notificationId}/read`);
+      await refreshUnreadCount();
     } catch (err) {
       // Revert optimistic update
       await fetchNotifications();
@@ -334,9 +363,14 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     if (!token) return;
 
     // Optimistic update
-    setNotifications(prev =>
-      prev.map(n => n.id === notificationId ? { ...n, isDismissed: true } : n)
-    );
+    let unreadTarget: Notification | undefined;
+    setNotifications(prev => {
+      unreadTarget = prev.find(n => n.id === notificationId && !n.isRead && !n.isDismissed);
+      return prev.map(n => n.id === notificationId ? { ...n, isDismissed: true } : n);
+    });
+    if (unreadTarget) {
+      setUnreadCount(prev => decrementUnreadCount(prev, unreadTarget));
+    }
     setPopupQueue(prev => prev.filter(n => n.id !== notificationId));
 
     // Use WebSocket if connected
@@ -348,9 +382,12 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     // Fallback to REST API
     try {
       await apiPut(`${API_BASE}/${notificationId}/dismiss`);
+      await refreshUnreadCount();
     } catch (err) {
+      await fetchNotifications();
+      await refreshUnreadCount();
     }
-  }, [getToken]);
+  }, [getToken, fetchNotifications, refreshUnreadCount]);
 
   const confirmReceipt = useCallback(async (notificationId: string) => {
     const token = getToken();

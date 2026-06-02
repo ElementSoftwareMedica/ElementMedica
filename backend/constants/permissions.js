@@ -201,6 +201,13 @@ export const PERMISSIONS = {
     INVOICES_DELETE: 'invoices:delete',
     INVOICES_MANAGE: 'invoices:manage',
 
+    MOVIMENTI_CONTABILI_READ: 'movimenti_contabili:read',
+    MOVIMENTI_CONTABILI_WRITE: 'movimenti_contabili:write',
+    MOVIMENTI_CONTABILI_CREATE: 'movimenti_contabili:create',
+    MOVIMENTI_CONTABILI_UPDATE: 'movimenti_contabili:update',
+    MOVIMENTI_CONTABILI_DELETE: 'movimenti_contabili:delete',
+    MOVIMENTI_CONTABILI_MANAGE: 'movimenti_contabili:manage',
+
     CODICI_SCONTO_READ: 'codici_sconto:read',
     CODICI_SCONTO_CREATE: 'codici_sconto:create',
     CODICI_SCONTO_UPDATE: 'codici_sconto:update',
@@ -312,6 +319,11 @@ export const PERMISSIONS = {
     APPUNTAMENTI_DELETE: 'clinica.appuntamenti:delete',
     APPUNTAMENTI_MANAGE: 'clinica.appuntamenti:manage',
     APPUNTAMENTI_VIEW_OTHERS: 'clinica.appuntamenti:view_others', // Permesso per vedere appuntamenti di altri medici
+    APPUNTAMENTI_VIEW_OTHERS_ALL: 'clinica.appuntamenti:view_others_all',
+    APPUNTAMENTI_VIEW_OTHERS_SAME_BRANCH: 'clinica.appuntamenti:view_others_same_branch',
+    APPUNTAMENTI_CREATE_SELF: 'clinica.appuntamenti:create_self',
+    APPUNTAMENTI_CREATE_OTHERS: 'clinica.appuntamenti:create_others',
+    APPUNTAMENTI_EDIT_OTHERS: 'clinica.appuntamenti:edit_others',
 
     VISITE_READ: 'clinica.visite:read',
     VISITE_CREATE: 'clinica.visite:create',
@@ -322,6 +334,7 @@ export const PERMISSIONS = {
     VISITE_CHANGE_REFERTANTE: 'clinica.visite:change_refertante',  // Cambiare medico refertante
     VISITE_VIEW_PRICES: 'clinica.visite:view_prices',              // Vedere importi prestazioni in visita
     VISITE_MANAGE_CONVENZIONI: 'clinica.visite:manage_convenzioni', // Gestire convenzioni/sconti in visita
+    VISITE_EDIT_OTHERS: 'clinica.visite:edit_others',
 
     REFERTI_READ: 'clinica.referti:read',
     REFERTI_CREATE: 'clinica.referti:create',

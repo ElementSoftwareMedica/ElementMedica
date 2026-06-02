@@ -959,6 +959,19 @@ class DocumentService {
           };
         }
 
+        // Co-formatore della sessione (se presente)
+        if (sessionData.coTrainer) {
+          const coTrainer = sessionData.coTrainer;
+          data.cotrainer = {
+            id: coTrainer.id,
+            fullName: `${coTrainer.firstName} ${coTrainer.lastName}`,
+            firstName: coTrainer.firstName,
+            lastName: coTrainer.lastName
+          };
+        } else {
+          data.cotrainer = null;
+        }
+
         // Prima azienda come company principale (se presente)
         // P49: ScheduleCompany ha companyTenantProfile.company, non company diretto
         const firstScheduleCompany = sessionData.schedule?.companies?.[0]?.companyTenantProfile;

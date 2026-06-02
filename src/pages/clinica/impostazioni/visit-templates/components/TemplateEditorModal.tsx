@@ -111,6 +111,9 @@ const SECTION_LABELS: Record<string, string> = {
     anamnesi: 'Anamnesi',
     vitali: 'Parametri Vitali',
     esame: 'Esame Obiettivo',
+    spalla: 'Spalla',
+    gomito: 'Gomito',
+    polso_mano: 'Polso / mano',
     diagnosi: 'Diagnosi',
     terapia: 'Terapia',
     followup: 'Conclusione e Follow-Up'
@@ -192,6 +195,14 @@ const TemplateEditorModal: React.FC<TemplateEditorModalProps> = ({
     const [isActive, setIsActive] = useState(template?.isActive ?? true);
     const [scope, setScope] = useState<TemplateScope>(template?.scope || 'PERSONAL');
 
+    useEffect(() => {
+        if (!isAdmin && scope !== 'PERSONAL') {
+            setScope('PERSONAL');
+            setMedicoId(currentUserId || '');
+            setSelectedMedicoIds(currentUserId ? [currentUserId] : []);
+        }
+    }, [isAdmin, scope, currentUserId]);
+
     // Scadenza default per prossimo controllo
     const [defaultScadenzaMesi, setDefaultScadenzaMesi] = useState<number | null>(
         template?.defaultScadenzaMesi || null
@@ -203,7 +214,7 @@ const TemplateEditorModal: React.FC<TemplateEditorModalProps> = ({
     );
 
     // Sidebar config — filter out dead sections (allegati/storia) from legacy DB data
-    const VALID_SIDEBAR_SECTIONS = ['anamnesi', 'vitali', 'esame', 'diagnosi', 'terapia', 'followup'];
+    const VALID_SIDEBAR_SECTIONS = ['anamnesi', 'vitali', 'esame', 'spalla', 'gomito', 'polso_mano', 'diagnosi', 'terapia', 'followup'];
     const [sidebarSections, setSidebarSections] = useState<VisitSidebarSection[]>(
         (template?.sidebarConfig?.sections || [...defaults.sidebarConfig.sections])
             .filter(s => VALID_SIDEBAR_SECTIONS.includes(s.id))
@@ -264,9 +275,15 @@ const TemplateEditorModal: React.FC<TemplateEditorModalProps> = ({
         if (!name.trim()) {
             newErrors.name = 'Il nome è obbligatorio';
         }
+        if (scope === 'PRESTAZIONE' && selectedPrestazioneIds.length === 0) {
+            newErrors.prestazioni = 'Seleziona almeno una prestazione per un template per prestazione';
+        }
+        if (scope === 'PERSONAL' && isAdmin && selectedMedicoIds.length === 0 && !medicoId) {
+            newErrors.medico = 'Seleziona almeno un medico per un template personale';
+        }
 
         // At least one visible field
-        const visibleFields = fields.filter(f => f.visible);
+        const visibleFields = fields.filter(f => f.visible !== false);
         if (visibleFields.length === 0) {
             newErrors.fields = 'Almeno un campo deve essere visibile';
         }
@@ -279,7 +296,7 @@ const TemplateEditorModal: React.FC<TemplateEditorModalProps> = ({
 
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
-    }, [name, fields, sidebarSections]);
+    }, [name, fields, sidebarSections, scope, selectedPrestazioneIds.length, isAdmin, selectedMedicoIds.length, medicoId]);
 
     // ============================================
     // HANDLERS
@@ -293,12 +310,11 @@ const TemplateEditorModal: React.FC<TemplateEditorModalProps> = ({
             description: description.trim() || undefined,
             scope, // GLOBAL, PRESTAZIONE, PERSONAL
             // medicoId logic:
-            // - GLOBAL: sempre undefined (condiviso per tutti)
-            // - PRESTAZIONE: opzionale (undefined = condiviso, con id = per medico specifico)
-            // - PERSONAL: obbligatorio (il medico specifico)
-            medicoId: scope === 'GLOBAL' ? undefined :
-                scope === 'PRESTAZIONE' ? (medicoId || undefined) :
-                    (medicoId || undefined),
+            // - GLOBAL/PRESTAZIONE: sempre condivisi, quindi nessun medico
+            // - PERSONAL: medico obbligatorio; può essere associato a una singola prestazione oppure valere per tutte
+            medicoId: scope === 'PERSONAL'
+                ? (!isAdmin ? (currentUserId || medicoId || undefined) : (medicoId || undefined))
+                : undefined,
             // Per admin multi-medico su PERSONAL: invia medicoIds per creare un template per medico
             medicoIds: scope === 'PERSONAL' && isAdmin && selectedMedicoIds.length > 0
                 ? selectedMedicoIds : undefined,
@@ -330,9 +346,9 @@ const TemplateEditorModal: React.FC<TemplateEditorModalProps> = ({
 
         onSave(isEditing ? data : data);
     }, [
-        validate, isEditing, name, description, scope, medicoId, selectedPrestazioneIds, bundleId,
+        validate, isEditing, name, description, scope, medicoId, selectedMedicoIds, selectedPrestazioneIds, bundleId,
         isDefault, isActive, defaultScadenzaMesi, fields, sidebarSections, sidebarDefaultTab,
-        sidebarCollapsible, sectionLayout, showTimer, printTemplateId, onSave
+        sidebarCollapsible, sectionLayout, showTimer, printTemplateId, onSave, isAdmin, currentUserId
     ]);
 
     const handleFieldChange = useCallback((index: number, updates: Partial<VisitField>) => {
@@ -492,10 +508,11 @@ const TemplateEditorModal: React.FC<TemplateEditorModalProps> = ({
     const fieldsBySection = useMemo(() => {
         const grouped: Record<string, VisitField[]> = {};
         fields.forEach(field => {
-            if (!grouped[field.section]) {
-                grouped[field.section] = [];
+            const section = field.section || 'anamnesi';
+            if (!grouped[section]) {
+                grouped[section] = [];
             }
-            grouped[field.section].push(field);
+            grouped[section].push(field);
         });
         return grouped;
     }, [fields]);
@@ -614,37 +631,49 @@ const TemplateEditorModal: React.FC<TemplateEditorModalProps> = ({
                                     <label className="block text-sm font-medium text-gray-700 mb-1">
                                         Tipo Template
                                     </label>
-                                    <div className="grid grid-cols-3 gap-3">
-                                        <button
-                                            type="button"
-                                            onClick={() => setScope('GLOBAL')}
-                                            className={`p-3 rounded-lg border-2 text-left transition-all ${scope === 'GLOBAL'
-                                                ? 'border-teal-500 bg-teal-50'
-                                                : 'border-gray-200 hover:border-gray-300'
-                                                }`}
-                                        >
-                                            <div className="font-medium text-sm">
-                                                🌐 Globale
-                                            </div>
-                                            <div className="text-xs text-gray-500 mt-1">
-                                                Default per tutte le visite
-                                            </div>
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setScope('PRESTAZIONE')}
-                                            className={`p-3 rounded-lg border-2 text-left transition-all ${scope === 'PRESTAZIONE'
-                                                ? 'border-teal-500 bg-teal-50'
-                                                : 'border-gray-200 hover:border-gray-300'
-                                                }`}
-                                        >
-                                            <div className="font-medium text-sm">
-                                                📋 Per Prestazione
-                                            </div>
-                                            <div className="text-xs text-gray-500 mt-1">
-                                                Default per questa prestazione
-                                            </div>
-                                        </button>
+                                    <div className={`grid ${isAdmin ? 'grid-cols-3' : 'grid-cols-1'} gap-3`}>
+                                        {isAdmin && (
+                                            <>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setScope('GLOBAL');
+                                                        setMedicoId('');
+                                                        setSelectedMedicoIds([]);
+                                                    }}
+                                                    className={`p-3 rounded-lg border-2 text-left transition-all ${scope === 'GLOBAL'
+                                                        ? 'border-teal-500 bg-teal-50'
+                                                        : 'border-gray-200 hover:border-gray-300'
+                                                        }`}
+                                                >
+                                                    <div className="font-medium text-sm">
+                                                        🌐 Globale
+                                                    </div>
+                                                    <div className="text-xs text-gray-500 mt-1">
+                                                        Default per tutte le visite
+                                                    </div>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setScope('PRESTAZIONE');
+                                                        setMedicoId('');
+                                                        setSelectedMedicoIds([]);
+                                                    }}
+                                                    className={`p-3 rounded-lg border-2 text-left transition-all ${scope === 'PRESTAZIONE'
+                                                        ? 'border-teal-500 bg-teal-50'
+                                                        : 'border-gray-200 hover:border-gray-300'
+                                                        }`}
+                                                >
+                                                    <div className="font-medium text-sm">
+                                                        📋 Per Prestazione
+                                                    </div>
+                                                    <div className="text-xs text-gray-500 mt-1">
+                                                        Default per questa prestazione
+                                                    </div>
+                                                </button>
+                                            </>
+                                        )}
                                         <button
                                             type="button"
                                             onClick={() => setScope('PERSONAL')}
@@ -663,15 +692,15 @@ const TemplateEditorModal: React.FC<TemplateEditorModalProps> = ({
                                     </div>
                                     <p className="mt-2 text-xs text-gray-500 flex items-center gap-1">
                                         <Info className="w-3 h-3" />
-                                        Priorità: Personale {'>'} Per Prestazione {'>'} Globale
+                                        {isAdmin ? 'Priorità: Personale > Per Prestazione > Globale' : 'Il template resta associato al tuo profilo medico e alle tue prestazioni abilitate'}
                                     </p>
                                 </div>
 
-                                {/* Medico selector - hidden for GLOBAL scope */}
-                                {scope !== 'GLOBAL' && (
+                                {/* Medico selector - solo per template personali */}
+                                {scope === 'PERSONAL' && (
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                                            {scope === 'PERSONAL' ? 'Medico *' : 'Medico (opzionale)'}
+                                            Medico *
                                         </label>
                                         {/* Admin + PERSONAL scope: multi-select checkboxes */}
                                         {isAdmin && scope === 'PERSONAL' && !isEditing ? (
@@ -720,7 +749,7 @@ const TemplateEditorModal: React.FC<TemplateEditorModalProps> = ({
                                                 className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500"
                                                 disabled={!isAdmin && scope === 'PERSONAL'}
                                             >
-                                                <option value="">{scope === 'PRESTAZIONE' ? 'Tutti i medici (condiviso)' : 'Seleziona medico...'}</option>
+                                                <option value="">Seleziona medico...</option>
                                                 {medici.map(m => (
                                                     <option key={m.id} value={m.id}>
                                                         {formatMedicoName(m)}
@@ -730,9 +759,7 @@ const TemplateEditorModal: React.FC<TemplateEditorModalProps> = ({
                                             </select>
                                         )}
                                         <p className="mt-1 text-xs text-gray-500">
-                                            {scope === 'PRESTAZIONE'
-                                                ? 'Lascia vuoto per un template condiviso tra tutti i medici'
-                                                : isAdmin && !isEditing
+                                            {isAdmin && !isEditing
                                                     ? 'Seleziona uno o più medici. Per ognuno verrà creato un template personale.'
                                                     : 'Il template è associato a questo medico'
                                             }
@@ -824,8 +851,8 @@ const TemplateEditorModal: React.FC<TemplateEditorModalProps> = ({
                                         <p className="font-medium">Priorità dei template</p>
                                         <p className="mt-1">
                                             Quando viene creata una visita, il sistema cerca il template
-                                            in questo ordine: prestazione specifica → bundle → template
-                                            default del medico → template di sistema.
+                                            in questo ordine: template personale del medico, template per prestazione
+                                            condiviso, template globale.
                                         </p>
                                     </div>
                                 </div>
@@ -938,14 +965,14 @@ const TemplateEditorModal: React.FC<TemplateEditorModalProps> = ({
                                                             <button
                                                                 onClick={() => handleFieldChange(
                                                                     fields.findIndex(f => f.id === field.id),
-                                                                    { visible: !field.visible }
+                                                                    { visible: field.visible === false }
                                                                 )}
-                                                                className={`p-1 rounded ${field.visible
+                                                                className={`p-1 rounded ${field.visible !== false
                                                                     ? 'text-teal-600 bg-teal-50'
                                                                     : 'text-gray-400 bg-gray-100'
                                                                     }`}
                                                             >
-                                                                {field.visible ? (
+                                                                {field.visible !== false ? (
                                                                     <Eye className="w-4 h-4" />
                                                                 ) : (
                                                                     <EyeOff className="w-4 h-4" />

@@ -133,7 +133,7 @@ export const elementSicurezzaBrand: BrandConfig = {
 
   // PNG WEB da archivio loghi ufficiale Element srl
   logo: '/assets/logos/element-sicurezza-logo.png',
-  logoWhite: '/assets/logos/element-sicurezza-logo-white.png',
+  logoWhite: '/assets/logos/element-sicurezza-logo-dark-bg.png',
   logoCompact: '/assets/logos/element-sicurezza-logo-compact.png',
   logoIcon: '/assets/logos/element-sicurezza-icon.png',
   logoAlt: 'Element Sicurezza Logo',
@@ -228,7 +228,7 @@ export const elementMedicaBrand: BrandConfig = {
   name: 'ElementMedica',
   displayName: 'Element Medica',
   tagline: 'Il Tuo Poliambulatorio di Fiducia',
-  description: 'Poliambulatorio specializzato in medicina del lavoro, visite specialistiche e diagnostica. Professionalità e tecnologie avanzate per la tua salute.',
+  description: 'Poliambulatorio specializzato in medicina del lavoro, visite specialistiche e diagnostica. Professionalità e tecnologie avanzate a tutela della tua salute.',
 
   // PNG WEB da archivio loghi ufficiale Element srl
   logo: '/assets/logos/element-medica-logo.png',

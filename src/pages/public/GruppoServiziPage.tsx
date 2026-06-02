@@ -39,7 +39,7 @@ import { generateParentOrganizationSchema } from '../../components/seo/MedicalSc
 interface ServiceItem {
     title: string;
     description: string;
-    icon: React.FC<{ className?: string }>;
+    icon: React.FC<{ className?: string; style?: React.CSSProperties }>;
     href: string;
     features: string[];
 }
@@ -120,16 +120,8 @@ const medicaServices: ServiceItem[] = [
 const GruppoServiziPage: React.FC = () => {
     const currentBrand = getCurrentBrand();
     const isSicurezza = currentBrand.id === 'element-sicurezza';
-
-    // Determine which brand is "ours" and which is the "other"
-    const otherBrand = getBrandById(isSicurezza ? 'element-medica' : 'element-sicurezza');
-    const otherDomain = otherBrand.contacts.website;
-
-    const currentServices = isSicurezza ? sicurezzaServices : medicaServices;
-    const otherServices = isSicurezza ? medicaServices : sicurezzaServices;
-
-    const currentBrandColor = isSicurezza ? 'amber' : 'teal';
-    const otherBrandColor = isSicurezza ? 'teal' : 'amber';
+    const sicurezzaBrand = getBrandById('element-sicurezza');
+    const medicaBrand = getBrandById('element-medica');
 
     return (
         <PublicLayout>
@@ -138,6 +130,7 @@ const GruppoServiziPage: React.FC = () => {
                 description="Scopri tutti i servizi del Gruppo Element: formazione sicurezza sul lavoro, medicina del lavoro, visite specialistiche, diagnostica strumentale a Selvazzano Dentro (Padova)."
                 keywords={['gruppo Element', 'sicurezza sul lavoro', 'medicina del lavoro', 'formazione', 'visite specialistiche', 'poliambulatorio', 'Padova', 'Selvazzano Dentro']}
                 canonicalUrl={`${currentBrand.contacts.website}/gruppo-servizi`}
+                siteName={currentBrand.displayName}
                 ogType="website"
                 structuredData={generateParentOrganizationSchema()}
             />
@@ -171,127 +164,121 @@ const GruppoServiziPage: React.FC = () => {
                 </div>
             </section>
 
-            {/* Current Brand Services */}
-            <section className="py-20 bg-white">
+            {/* Brands Side-by-Side */}
+            <section className="py-20 bg-gradient-to-b from-gray-50 to-white">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <ScrollReveal>
                         <div className="text-center mb-12">
-                            <span className="badge-premium mb-4 inline-flex">{currentBrand.displayName}</span>
-                            <h2 className="text-3xl font-bold text-gray-900 mb-4">
-                                {isSicurezza ? 'Formazione e Sicurezza sul Lavoro' : 'Poliambulatorio e Medicina del Lavoro'}
-                            </h2>
+                            <h2 className="text-3xl font-bold text-gray-900 mb-4">Due Brand, Una Squadra</h2>
                             <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-                                {currentBrand.description}
+                                Ogni area del gruppo Element è specializzata per offrirti il massimo in sicurezza e salute.
                             </p>
                         </div>
                     </ScrollReveal>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                        {currentServices.map((service, index) => (
-                            <ScrollReveal key={service.title} delay={index * 100}>
-                                <div className="card-premium p-6 h-full flex flex-col">
-                                    <div className="icon-container-gradient mb-4">
-                                        <service.icon className="w-6 h-6" />
-                                    </div>
-                                    <h3 className="text-lg font-semibold text-gray-900 mb-2">{service.title}</h3>
-                                    <p className="text-gray-600 text-sm mb-4 flex-grow">{service.description}</p>
-                                    <ul className="space-y-1 mb-4">
-                                        {service.features.slice(0, 3).map((f) => (
-                                            <li key={f} className="text-sm text-gray-500 flex items-center gap-2">
-                                                <ArrowRight className="w-3 h-3 text-primary-500 flex-shrink-0" />
-                                                {f}
-                                            </li>
-                                        ))}
-                                    </ul>
-                                    <PublicButton
-                                        variant="outline"
-                                        size="sm"
-                                        to={service.href}
-                                        onClick={() => trackCtaEvent({ resource: 'public', action: 'cta_click', details: { label: service.title, href: service.href, section: 'GruppoServizi-current' } })}
-                                    >
-                                        Scopri di più
-                                    </PublicButton>
+                    <div className="grid md:grid-cols-2 gap-8 items-stretch">
+                        {/* ElementSicurezza — LEFT */}
+                        <ScrollReveal className="h-full">
+                            <div className="rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow h-full flex flex-col" style={{ border: '1px solid rgba(233,186,73,0.35)' }}>
+                                {/* Brand header */}
+                                <div className="p-8 relative overflow-hidden" style={{ background: '#283646' }}>
+                                    <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full blur-2xl" style={{ background: 'rgba(233,186,73,0.20)' }} />
+                                    <img src={sicurezzaBrand.logoWhite} alt={sicurezzaBrand.logoAlt} className="h-10 mb-4 object-contain" />
+                                    <h2 className="text-2xl font-bold text-white">{sicurezzaBrand.displayName}</h2>
+                                    <p className="text-sm mt-1 font-medium" style={{ color: '#E9BA49' }}>{sicurezzaBrand.tagline}</p>
                                 </div>
-                            </ScrollReveal>
-                        ))}
-                    </div>
-                </div>
-            </section>
-
-            {/* Divider */}
-            <div className="divider-gradient" />
-
-            {/* Other Brand Services */}
-            <section className="py-20" style={{ backgroundImage: 'linear-gradient(to bottom, var(--color-accent-50), #ffffff)' }}>
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <ScrollReveal>
-                        <div className="text-center mb-12">
-                            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-accent-100 text-accent-700 text-sm font-medium mb-4">
-                                <ExternalLink className="w-4 h-4" />
-                                <span>{otherBrand.displayName}</span>
-                            </div>
-                            <h2 className="text-3xl font-bold text-gray-900 mb-4">
-                                {isSicurezza ? 'Poliambulatorio e Visite Specialistiche' : 'Formazione e Sicurezza sul Lavoro'}
-                            </h2>
-                            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-                                {otherBrand.description}
-                            </p>
-                        </div>
-                    </ScrollReveal>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        {otherServices.map((service, index) => (
-                            <ScrollReveal key={service.title} delay={index * 100}>
-                                <a
-                                    href={`${otherDomain}${service.href}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="block card-premium p-6 h-full group hover:shadow-xl transition-shadow"
-                                    onClick={() => trackCtaEvent({ resource: 'public', action: 'cross_brand_click', details: { label: service.title, href: `${otherDomain}${service.href}`, from: currentBrand.id, to: otherBrand.id } })}
-                                >
-                                    <div className="flex items-start gap-4">
-                                        <div className="icon-container-soft flex-shrink-0">
-                                            <service.icon className="w-5 h-5" />
-                                        </div>
-                                        <div className="flex-grow">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <h3 className="text-lg font-semibold text-gray-900 group-hover:text-primary-600 transition-colors">
+                                {/* Services */}
+                                <div className="bg-white p-5 space-y-2 flex-1">
+                                    {sicurezzaServices.map((service, i) => (
+                                        <a
+                                            key={i}
+                                            href={isSicurezza ? service.href : `${sicurezzaBrand.contacts.website}${service.href}`}
+                                            target={isSicurezza ? undefined : '_blank'}
+                                            rel={isSicurezza ? undefined : 'noopener noreferrer'}
+                                            className="flex items-start gap-3 p-3 rounded-xl hover:bg-amber-50 transition-colors group/item"
+                                            onClick={() => trackCtaEvent({ resource: 'public', action: isSicurezza ? 'cta_click' : 'cross_brand_click', details: { label: service.title, href: service.href, from: currentBrand.id, to: 'element-sicurezza' } })}
+                                        >
+                                            <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors" style={{ background: 'rgba(233,186,73,0.2)' }}>
+                                                <service.icon className="w-4 h-4" style={{ color: '#283646' }} />
+                                            </div>
+                                            <div className="min-w-0">
+                                                <div className="font-semibold text-gray-900 text-sm transition-colors flex items-center gap-1" style={{}} onMouseEnter={e => (e.currentTarget.style.color = '#c49910')} onMouseLeave={e => (e.currentTarget.style.color = '')}>
                                                     {service.title}
-                                                </h3>
-                                                <ExternalLink className="w-4 h-4 text-gray-400 group-hover:text-primary-500 transition-colors" />
+                                                    {!isSicurezza && <ExternalLink className="w-3 h-3 opacity-40 flex-shrink-0" />}
+                                                </div>
+                                                <p className="text-xs text-gray-500 mt-0.5 leading-relaxed line-clamp-2">{service.description}</p>
                                             </div>
-                                            <p className="text-gray-600 text-sm mb-3">{service.description}</p>
-                                            <div className="flex flex-wrap gap-2">
-                                                {service.features.slice(0, 3).map((f) => (
-                                                    <span
-                                                        key={f}
-                                                        className="inline-block px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full"
-                                                    >
-                                                        {f}
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </a>
-                            </ScrollReveal>
-                        ))}
-                    </div>
+                                        </a>
+                                    ))}
+                                </div>
+                                {/* CTA */}
+                                <div className="bg-white px-5 pb-5">
+                                    <a
+                                        href={isSicurezza ? '/contatti' : sicurezzaBrand.contacts.website}
+                                        target={isSicurezza ? undefined : '_blank'}
+                                        rel={isSicurezza ? undefined : 'noopener noreferrer'}
+                                        className="flex items-center justify-center gap-2 w-full py-3 rounded-xl font-semibold text-sm transition-all hover:opacity-90 active:scale-95"
+                                        style={{ background: '#E9BA49', color: '#283646' }}
+                                        onClick={() => trackCtaEvent({ resource: 'public', action: isSicurezza ? 'cta_click' : 'cross_brand_visit', details: { label: 'CTA sicurezza', from: currentBrand.id, to: 'element-sicurezza' } })}
+                                    >
+                                        {isSicurezza ? 'Richiedi Preventivo Gratuito' : 'Visita Element Sicurezza'}
+                                        {!isSicurezza ? <ExternalLink className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
+                                    </a>
+                                </div>
+                            </div>
+                        </ScrollReveal>
 
-                    <ScrollReveal delay={200}>
-                        <div className="text-center mt-10">
-                            <a
-                                href={otherDomain}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-accent-100 text-accent-700 hover:bg-accent-200 transition-colors font-medium"
-                                onClick={() => trackCtaEvent({ resource: 'public', action: 'cross_brand_visit', details: { from: currentBrand.id, to: otherBrand.id } })}
-                            >
-                                Visita {otherBrand.displayName}
-                                <ExternalLink className="w-4 h-4" />
-                            </a>
-                        </div>
-                    </ScrollReveal>
+                        {/* ElementMedica — RIGHT */}
+                        <ScrollReveal delay={150} className="h-full">
+                            <div className="rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow h-full flex flex-col" style={{ border: '1px solid rgba(160,200,193,0.5)' }}>
+                                {/* Brand header */}
+                                <div className="p-8 relative overflow-hidden" style={{ background: '#283646' }}>
+                                    <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full blur-2xl" style={{ background: 'rgba(160,200,193,0.15)' }} />
+                                    <img src={medicaBrand.logoWhite} alt={medicaBrand.logoAlt} className="h-10 mb-4 object-contain" />
+                                    <h2 className="text-2xl font-bold text-white">{medicaBrand.displayName}</h2>
+                                    <p className="text-sm mt-1" style={{ color: '#A0C8C1' }}>{medicaBrand.tagline}</p>
+                                </div>
+                                {/* Services */}
+                                <div className="bg-white p-5 space-y-2 flex-1">
+                                    {medicaServices.map((service, i) => (
+                                        <a
+                                            key={i}
+                                            href={!isSicurezza ? service.href : `${medicaBrand.contacts.website}${service.href}`}
+                                            target={!isSicurezza ? undefined : '_blank'}
+                                            rel={!isSicurezza ? undefined : 'noopener noreferrer'}
+                                            className="flex items-start gap-3 p-3 rounded-xl hover:bg-teal-50 transition-colors group/item"
+                                            onClick={() => trackCtaEvent({ resource: 'public', action: !isSicurezza ? 'cta_click' : 'cross_brand_click', details: { label: service.title, href: service.href, from: currentBrand.id, to: 'element-medica' } })}
+                                        >
+                                            <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors" style={{ background: 'rgba(160,200,193,0.3)' }}>
+                                                <service.icon className="w-4 h-4" style={{ color: '#283646' }} />
+                                            </div>
+                                            <div className="min-w-0">
+                                                <div className="font-semibold text-gray-900 text-sm group-hover/item:text-teal-700 transition-colors flex items-center gap-1">
+                                                    {service.title}
+                                                    {isSicurezza && <ExternalLink className="w-3 h-3 opacity-40 flex-shrink-0" />}
+                                                </div>
+                                                <p className="text-xs text-gray-500 mt-0.5 leading-relaxed line-clamp-2">{service.description}</p>
+                                            </div>
+                                        </a>
+                                    ))}
+                                </div>
+                                {/* CTA */}
+                                <div className="bg-white px-5 pb-5">
+                                    <a
+                                        href={!isSicurezza ? '/prenota' : medicaBrand.contacts.website}
+                                        target={!isSicurezza ? undefined : '_blank'}
+                                        rel={!isSicurezza ? undefined : 'noopener noreferrer'}
+                                        className="flex items-center justify-center gap-2 w-full py-3 rounded-xl font-semibold text-sm transition-all hover:opacity-90 active:scale-95"
+                                        style={{ background: '#A0C8C1', color: '#283646' }}
+                                        onClick={() => trackCtaEvent({ resource: 'public', action: !isSicurezza ? 'cta_click' : 'cross_brand_visit', details: { label: 'CTA medica', from: currentBrand.id, to: 'element-medica' } })}
+                                    >
+                                        {!isSicurezza ? 'Prenota Online' : 'Visita Element Medica'}
+                                        {isSicurezza ? <ExternalLink className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
+                                    </a>
+                                </div>
+                            </div>
+                        </ScrollReveal>
+                    </div>
                 </div>
             </section>
 
@@ -314,8 +301,8 @@ const GruppoServiziPage: React.FC = () => {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                         <ScrollReveal delay={0}>
                             <div className="text-center p-6">
-                                <div className="icon-container-gradient mx-auto mb-4">
-                                    <Building2 className="w-7 h-7" />
+                                <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: 'rgba(233,186,73,0.2)' }}>
+                                    <Building2 className="w-7 h-7" style={{ color: '#283646' }} />
                                 </div>
                                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Sede Unica</h3>
                                 <p className="text-gray-600 text-sm">
@@ -325,8 +312,8 @@ const GruppoServiziPage: React.FC = () => {
                         </ScrollReveal>
                         <ScrollReveal delay={100}>
                             <div className="text-center p-6">
-                                <div className="icon-container-gradient mx-auto mb-4">
-                                    <Users className="w-7 h-7" />
+                                <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: 'linear-gradient(135deg, rgba(233,186,73,0.25) 0%, rgba(160,200,193,0.35) 100%)' }}>
+                                    <Users className="w-7 h-7" style={{ color: '#283646' }} />
                                 </div>
                                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Team Integrato</h3>
                                 <p className="text-gray-600 text-sm">
@@ -336,8 +323,8 @@ const GruppoServiziPage: React.FC = () => {
                         </ScrollReveal>
                         <ScrollReveal delay={200}>
                             <div className="text-center p-6">
-                                <div className="icon-container-gradient mx-auto mb-4">
-                                    <Shield className="w-7 h-7" />
+                                <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: 'rgba(160,200,193,0.3)' }}>
+                                    <Shield className="w-7 h-7" style={{ color: '#283646' }} />
                                 </div>
                                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Conformità Totale</h3>
                                 <p className="text-gray-600 text-sm">
@@ -352,7 +339,7 @@ const GruppoServiziPage: React.FC = () => {
             {/* CTA Section */}
             <section
                 className="py-20 relative overflow-hidden"
-                style={{ backgroundImage: 'linear-gradient(135deg, var(--color-primary-800), var(--color-primary-700))' }}
+                style={{ backgroundImage: 'linear-gradient(135deg, #283646 0%, #1d2f3f 100%)' }}
             >
                 <div className="absolute top-10 left-10 w-64 h-64 bg-white/5 rounded-full blur-3xl animate-float" />
                 <div className="absolute bottom-10 right-10 w-48 h-48 bg-white/5 rounded-full blur-3xl animate-float" style={{ animationDelay: '2s' }} />

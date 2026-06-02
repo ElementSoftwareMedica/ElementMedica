@@ -212,7 +212,8 @@ export function useAppointmentForm(
             selectedPaziente!.id,
             targetDateISOForQuery!,
             {
-                giorni: 60,
+                giorniPre: 60,
+                giorniPost: 30,
                 ...(existingAppointment?.id && { excludeAppuntamentoId: existingAppointment.id }),
             }
         ),
@@ -310,7 +311,7 @@ export function useAppointmentForm(
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [prestazioniProtocollo.map(pp => pp.id).join(',')]);
 
-    // P72: Auto-selezione prestazioni da ScadenzaPrestazioneProtocollo in scadenza (±60 giorni).
+    // P72: Auto-selezione prestazioni da ScadenzaPrestazioneProtocollo in scadenza (-60/+30 giorni).
     // Priorità: scadenze (fonte dati reali) > protocollo obbligatorie (default).
     // Il ref evita di sovrascrivere le scelte manuali dell'utente dopo la prima auto-selezione.
     const autoSelezioneScadenzeKey = useRef<string | null>(null);
@@ -363,7 +364,7 @@ export function useAppointmentForm(
     );
 
     // Auto-selezione tipo visita MDL.
-    // Priorità: scadenze in ±60gg + hasPrevVisita → PERIODICA | scadenze + !hasPrevVisita → PREVENTIVA | nessuna scadenza → selezione manuale
+    // Priorità: scadenze in -60/+30gg + hasPrevVisita → PERIODICA | scadenze + !hasPrevVisita → PREVENTIVA | nessuna scadenza → STRAORDINARIA
     // Un ref traccia il valore auto-impostato per consentire l'override quando arrivano le scadenze.
     const autoSetTipoRef = useRef<TipoVisitaMDL | null>(null);
     useEffect(() => {
@@ -375,7 +376,7 @@ export function useAppointmentForm(
         const hasScadenzeLoaded = !isLoadingScadenze && !!targetDateISOForQuery;
 
         if (hasScadenzeLoaded && (scadenzeList as unknown[]).length > 0) {
-            // Ci sono scadenze in ±60gg → PREVENTIVA se è la prima volta, altrimenti PERIODICA
+            // Ci sono scadenze in -60/+30gg → PREVENTIVA se è la prima volta, altrimenti PERIODICA
             if (tipoVisitaMDL === null || tipoVisitaMDL === autoSetTipoRef.current) {
                 const tipo: TipoVisitaMDL = hasPrevVisita ? 'PERIODICA' : 'PREVENTIVA';
                 autoSetTipoRef.current = tipo;
@@ -384,11 +385,16 @@ export function useAppointmentForm(
             return;
         }
 
-        if (hasScadenzeLoaded && (scadenzeList as unknown[]).length === 0 && !isLoadingStorico && storicoMDLData !== undefined && !hasPrevVisita) {
-            // Nessuna scadenza in ±60gg → NON auto-impostare nessun tipo.
-            // Il tipo deve essere scelto manualmente dall'operatore (potrebbe essere PREVENTIVA,
-            // CAMBIO_MANSIONE, o altro — non è detto che sia una prima visita).
-            // hasPrevVisita=false + nessuna scadenza → selezione manuale obbligatoria come hasPrevVisita=true
+        if (hasScadenzeLoaded && (scadenzeList as unknown[]).length === 0 && !isLoadingStorico && storicoMDLData !== undefined && hasPrevVisita) {
+            if (tipoVisitaMDL === null || tipoVisitaMDL === autoSetTipoRef.current) {
+                autoSetTipoRef.current = 'STRAORDINARIA';
+                setTipoVisitaMDL('STRAORDINARIA');
+            }
+        } else if (hasScadenzeLoaded && (scadenzeList as unknown[]).length === 0 && !isLoadingStorico && storicoMDLData !== undefined && !hasPrevVisita) {
+            if (tipoVisitaMDL === null || tipoVisitaMDL === autoSetTipoRef.current) {
+                autoSetTipoRef.current = 'PREVENTIVA';
+                setTipoVisitaMDL('PREVENTIVA');
+            }
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isMDLVisit, isEditMode, selectedPaziente?.id, scadenzeInScadenzaData, isLoadingScadenze, targetDateISOForQuery, isLoadingStorico, storicoMDLData, hasPrevVisita, tipoVisitaMDL]);

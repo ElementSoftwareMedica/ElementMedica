@@ -166,7 +166,7 @@ class RequestThrottler {
       const isAuthEndpoint = url.includes('/auth/');
       const is401 = (error as any)?.response?.status === 401;
 
-      if (!(isAuthEndpoint && is401 && process.env.NODE_ENV !== 'development')) {
+      if (import.meta.env.DEV && !(isAuthEndpoint && is401)) {
         console.error(`❌ RequestThrottler: Failed ${url}:`, msg);
       }
 
@@ -300,7 +300,9 @@ class RequestThrottler {
     // Riduce temporaneamente il numero di richieste simultanee
     this.maxConcurrentRequests = Math.max(1, this.maxConcurrentRequests - 1);
 
-    console.warn(`⚠️ RequestThrottler: Resource error, reducing concurrent requests to ${this.maxConcurrentRequests}`);
+    if (import.meta.env.DEV) {
+      console.warn(`⚠️ RequestThrottler: Resource error, reducing concurrent requests to ${this.maxConcurrentRequests}`);
+    }
 
     // Ripristina dopo 10 secondi
     setTimeout(() => {

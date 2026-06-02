@@ -188,7 +188,7 @@ class PreventivoMDLService {
             includeOnlyObbligatorie = true
         } = params;
 
-        // 1. Recupera sedi con mansioni
+        // 1. Recupera sedi con mansioni + rischi + protocolli → prestazioni
         const sites = await prisma.companySite.findMany({
             where: {
                 id: { in: siteIds },
@@ -199,16 +199,16 @@ class PreventivoMDLService {
                 mansioni: {
                     where: { deletedAt: null },
                     include: {
-                        rischi: {
-                            where: { deletedAt: null },
+                        rischiAssociati: {
+                            where: { deletedAt: null }
+                        },
+                        protocolliMansione: {
                             include: {
-                                risk: {
+                                protocolloSanitario: {
                                     include: {
                                         prestazioni: {
                                             where: { deletedAt: null },
-                                            include: {
-                                                prestazione: true
-                                            }
+                                            include: { prestazione: true }
                                         }
                                     }
                                 }
@@ -217,7 +217,7 @@ class PreventivoMDLService {
                         lavoratori: {
                             where: {
                                 deletedAt: null,
-                                isActive: true
+                                isAttiva: true
                             },
                             select: { id: true }
                         }
@@ -239,19 +239,27 @@ class PreventivoMDLService {
 
             const dettaglioMansioni = [];
 
+            const PERIODICITA_MESI_MAP = { MESI_6: 6, MESI_12: 12, MESI_24: 24, MESI_36: 36, MESI_60: 60 };
+
             for (const mansione of site.mansioni) {
                 const numLav = numLavoratori || mansione.lavoratori.length;
 
-                for (const mansioneRischio of mansione.rischi) {
-                    const risk = mansioneRischio.risk;
+                // Raccogli prestazioni dai protocolli sanitari associati alla mansione
+                for (const pm of (mansione.protocolliMansione || [])) {
+                    const protocollo = pm.protocolloSanitario;
+                    if (!protocollo || !protocollo.isAttivo) continue;
 
-                    for (const riskPrestazione of risk.prestazioni) {
-                        const prestazione = riskPrestazione.prestazione;
+                    for (const pp of (protocollo.prestazioni || [])) {
+                        const prestazione = pp.prestazione;
+                        if (!prestazione) continue;
 
                         // Filtra solo obbligatorie se richiesto
-                        if (includeOnlyObbligatorie && !riskPrestazione.obbligatoria) {
-                            continue;
-                        }
+                        if (includeOnlyObbligatorie && !pp.isObbligatoria) continue;
+
+                        // Mappa TipoPeriodicita enum → mesi
+                        const periodicitaMesi = pp.periodicitaCustomMesi
+                            || PERIODICITA_MESI_MAP[pp.periodicita]
+                            || 12;
 
                         // Aggrega per prestazione ID
                         const key = prestazione.id;
@@ -260,12 +268,12 @@ class PreventivoMDLService {
                                 prestazioneId: prestazione.id,
                                 codice: prestazione.codice,
                                 descrizione: prestazione.nome,
-                                categoria: prestazione.categoria,
+                                categoria: prestazione.tipo,
                                 quantita: 0,
                                 prezzoUnitario: 0,
                                 prezzoTotale: 0,
-                                periodicita: riskPrestazione.periodicita || 12, // mesi
-                                obbligatoria: riskPrestazione.obbligatoria
+                                periodicita: periodicitaMesi,
+                                obbligatoria: pp.isObbligatoria
                             });
                         }
 
@@ -276,9 +284,9 @@ class PreventivoMDLService {
 
                 dettaglioMansioni.push({
                     mansioneId: mansione.id,
-                    nomeMansione: mansione.nome,
+                    nomeMansione: mansione.denominazione,
                     numLavoratori: numLav,
-                    rischiCount: mansione.rischi.length
+                    rischiCount: (mansione.rischiAssociati || []).length
                 });
             }
 
@@ -368,34 +376,35 @@ class PreventivoMDLService {
      */
     async _getTariffario(tenantId, companyTenantProfileId, tariffarioAziendaId) {
         if (tariffarioAziendaId) {
-            return prisma.tariffarioAzienda.findFirst({
+            return prisma.tariffarioAziendale.findFirst({
                 where: {
                     id: tariffarioAziendaId,
                     tenantId,
-                    companyTenantProfileId,
-                    deletedAt: null,
-                    isActive: true
+                    attivo: true,
+                    deletedAt: null
                 },
                 include: {
-                    voci: {
-                        where: { deletedAt: null }
-                    }
+                    voci: { where: { deletedAt: null } }
                 }
             });
         }
 
-        // Cerca tariffario attivo per l'azienda
-        return prisma.tariffarioAzienda.findFirst({
+        // Cerca tariffario attivo con associazione per l'azienda
+        return prisma.tariffarioAziendale.findFirst({
             where: {
                 tenantId,
-                companyTenantProfileId,
+                attivo: true,
                 deletedAt: null,
-                isActive: true
+                companyAssociations: {
+                    some: {
+                        companyTenantProfileId,
+                        attivo: true,
+                        deletedAt: null
+                    }
+                }
             },
             include: {
-                voci: {
-                    where: { deletedAt: null }
-                }
+                voci: { where: { deletedAt: null } }
             },
             orderBy: { createdAt: 'desc' }
         });
@@ -409,12 +418,12 @@ class PreventivoMDLService {
         if (tariffario?.voci) {
             const voce = tariffario.voci.find(v => v.prestazioneId === prestazioneId);
             if (voce) {
-                return voce.prezzo;
+                return Number(voce.prezzoBase);
             }
         }
 
-        // 2. Cerca in tariffario base del tenant
-        const voceBase = await prisma.tariffarioVoce.findFirst({
+        // 2. Cerca voce tariffario base per il tenant
+        const voceBase = await prisma.voceTariffario.findFirst({
             where: {
                 tenantId,
                 prestazioneId,
@@ -423,7 +432,7 @@ class PreventivoMDLService {
         });
 
         if (voceBase) {
-            return voceBase.prezzo;
+            return Number(voceBase.prezzoBase);
         }
 
         // 3. Prezzo dalla prestazione stessa
@@ -432,7 +441,7 @@ class PreventivoMDLService {
             select: { prezzoBase: true }
         });
 
-        return prestazione?.prezzoBase || 0;
+        return Number(prestazione?.prezzoBase || 0);
     }
 
     /**

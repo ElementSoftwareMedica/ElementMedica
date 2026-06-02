@@ -21,6 +21,20 @@ import {
 } from '../../../../services/clinicaApi';
 import { CRUDPrimaryButton } from '../../../../components/shared/CRUDButton';
 
+const EDITABLE_CATEGORIES: DeadlineCategory[] = [
+    'VISITA_MEDICA',
+    'FORMAZIONE',
+    'FARMACO',
+    'MANUTENZIONE',
+    'DOCUMENTO',
+    'PROTOCOLLO_MDL',
+    'SOPRALLUOGO',
+    'TARIFFARIO',
+    'ALTRO'
+];
+
+const EDITABLE_PRIORITIES: DeadlinePriority[] = ['LOW', 'NORMAL', 'HIGH', 'CRITICAL'];
+
 interface DeadlineEditorModalProps {
     deadline: DeadlineItem | null;
     onClose: () => void;
@@ -159,8 +173,8 @@ const DeadlineEditorModal: React.FC<DeadlineEditorModalProps> = ({
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                             required
                         >
-                            {Object.entries(categoryConfig).map(([key, config]) => (
-                                <option key={key} value={key}>{config.label}</option>
+                            {EDITABLE_CATEGORIES.map(key => (
+                                <option key={key} value={key}>{categoryConfig[key].label}</option>
                             ))}
                         </select>
                     </div>
@@ -212,8 +226,8 @@ const DeadlineEditorModal: React.FC<DeadlineEditorModalProps> = ({
                             onChange={(e) => setFormData(prev => ({ ...prev, priorita: e.target.value as DeadlinePriority }))}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                         >
-                            {Object.entries(priorityConfig).map(([key, config]) => (
-                                <option key={key} value={key}>{config.label}</option>
+                            {EDITABLE_PRIORITIES.map(key => (
+                                <option key={key} value={key}>{priorityConfig[key].label}</option>
                             ))}
                         </select>
                     </div>

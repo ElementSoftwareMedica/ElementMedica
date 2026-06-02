@@ -16,6 +16,7 @@ import {
 
 interface VoceTariffario {
     id: string
+    tariffarioAziendaleId: string
     tipo: string
     prestazioneId: string | null
     nome: string | null
@@ -35,6 +36,7 @@ interface VoceTariffario {
 
 interface CompanyAssociation {
     id: string
+    tariffarioId: string
     companyTenantProfileId: string
     validoDa: string | null
     validoA: string | null
@@ -49,8 +51,6 @@ interface Tariffario {
     attivo: number
     validoDa: string | null
     validoA: string | null
-    voci: string | null
-    companyAssociations: string | null
 }
 
 interface CompanyRow {
@@ -65,16 +65,6 @@ interface PrestazioneRow {
 }
 
 type ViewFilter = 'tutti' | 'aziendali' | 'globali'
-
-function parseVoci(json: string | null): VoceTariffario[] {
-    if (!json) return []
-    try { return JSON.parse(json) } catch { return [] }
-}
-
-function parseAssociations(json: string | null): CompanyAssociation[] {
-    if (!json) return []
-    try { return JSON.parse(json) } catch { return [] }
-}
 
 function formatEuro(val: number | undefined | null): string {
     if (val == null) return '—'
@@ -109,17 +99,44 @@ export function TariffariPage(): JSX.Element {
     const [expandedId, setExpandedId] = useState<string | null>(null)
     const [companyMap, setCompanyMap] = useState<Record<string, string>>({})
     const [prestazioneMap, setPrestazioneMap] = useState<Record<string, string>>({})
+    const [vociByTariffario, setVociByTariffario] = useState<Map<string, VoceTariffario[]>>(new Map())
+    const [associationsByTariffario, setAssociationsByTariffario] = useState<Map<string, CompanyAssociation[]>>(new Map())
 
     const loadData = useCallback(async () => {
         setLoading(true)
         try {
             if (!window.desktopApi) return
 
-            const rows = await window.desktopApi.db.query({
-                table: 'tariffari',
-                where: { _isDeleted: 0 }
-            }) as Tariffario[]
+            const [rows, vociRows, associationRows] = await Promise.all([
+                window.desktopApi.db.query({
+                    table: 'tariffari',
+                    where: { _isDeleted: 0 }
+                }) as Promise<Tariffario[]>,
+                window.desktopApi.db.query({
+                    table: 'tariffario_voci',
+                    where: { _isDeleted: 0 },
+                    orderBy: { column: 'ordine', direction: 'ASC' }
+                }).catch(() => []) as Promise<VoceTariffario[]>,
+                window.desktopApi.db.query({
+                    table: 'tariffario_company_associations',
+                    where: { _isDeleted: 0 }
+                }).catch(() => []) as Promise<CompanyAssociation[]>,
+            ])
             setTariffari(rows)
+            const vmap = new Map<string, VoceTariffario[]>()
+            for (const voce of vociRows) {
+                const key = (voce as VoceTariffario & { tariffarioAziendaleId?: string }).tariffarioAziendaleId
+                if (!key) continue
+                vmap.set(key, [...(vmap.get(key) || []), voce])
+            }
+            setVociByTariffario(vmap)
+            const amap = new Map<string, CompanyAssociation[]>()
+            for (const association of associationRows) {
+                const key = (association as CompanyAssociation & { tariffarioId?: string }).tariffarioId
+                if (!key) continue
+                amap.set(key, [...(amap.get(key) || []), association])
+            }
+            setAssociationsByTariffario(amap)
 
             // Build company map
             const companyRows = await window.desktopApi.db.query({
@@ -152,7 +169,7 @@ export function TariffariPage(): JSX.Element {
     useEffect(() => { loadData() }, [loadData])
 
     const filtered = tariffari.filter(t => {
-        const associations = parseAssociations(t.companyAssociations)
+        const associations = associationsByTariffario.get(t.id) || []
         if (viewFilter === 'aziendali' && associations.length === 0) return false
         if (viewFilter === 'globali' && associations.length > 0) return false
 
@@ -161,7 +178,7 @@ export function TariffariPage(): JSX.Element {
         return [t.nome, t.codice, t.descrizione].some(f => f?.toLowerCase().includes(term))
     })
 
-    const totalVoci = tariffari.reduce((sum, t) => sum + parseVoci(t.voci).length, 0)
+    const totalVoci = Array.from(vociByTariffario.values()).reduce((sum, rows) => sum + rows.length, 0)
     const activeCount = tariffari.filter(t => t.attivo === 1).length
 
     return (
@@ -241,8 +258,8 @@ export function TariffariPage(): JSX.Element {
             ) : (
                 <div className="space-y-2">
                     {filtered.map(tariffario => {
-                        const voci = parseVoci(tariffario.voci)
-                        const associations = parseAssociations(tariffario.companyAssociations)
+                        const voci = vociByTariffario.get(tariffario.id) || []
+                        const associations = associationsByTariffario.get(tariffario.id) || []
                         const isExpanded = expandedId === tariffario.id
                         const isActive = tariffario.attivo === 1
 

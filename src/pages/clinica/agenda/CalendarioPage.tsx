@@ -52,8 +52,10 @@ import {
     visiteApi
 } from '../../../services/clinicaApi';
 import { formatDate, toISODateString } from '../../../utils/dateUtils';
+import { apiGet } from '../../../services/api';
 import { useTenantFilter } from '../../../context/TenantFilterContext';
 import { useAuth } from '../../../context/AuthContext';
+import { useRoleGuard } from '../../../hooks/useRoleGuard';
 import { getDoctorTitle } from '../../../utils/codiceFiscale';
 import { useToast } from '../../../hooks/useToast';
 import { CRUDButton } from '../../../components/shared/CRUDButton';
@@ -265,7 +267,8 @@ export const CalendarioPage: React.FC = () => {
     // Mark today's access on mount (for daily reset tracking)
     useEffect(() => {
         dailyReset.markTodayAccess();
-    }, [dailyReset]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // Run only once on mount — daily access tracking is one-time per session
 
     // Save settings to localStorage when they change
     useEffect(() => {
@@ -316,6 +319,7 @@ export const CalendarioPage: React.FC = () => {
 
     // Accettazione paziente (check-in) modal
     const [accettazioneAppuntamento, setAccettazioneAppuntamento] = useState<CalendarEvent | null>(null);
+    const [accettazioneInitialTab, setAccettazioneInitialTab] = useState<'anagrafica' | 'residenza' | 'appuntamento' | 'fatturazione'>('anagrafica');
 
     // Conferma eliminazione appuntamento (P72_11: con warning movimenti DA_FATTURARE)
     const [appuntamentoDaEliminare, setAppuntamentoDaEliminare] = useState<{ id: string; isCompletato: boolean } | null>(null);
@@ -329,7 +333,18 @@ export const CalendarioPage: React.FC = () => {
     } | null>(null);
 
     // Get current user for doctor comparison
-    const { user } = useAuth();
+    const { user, hasPermission } = useAuth();
+    const { isMedico, isMedicoCompetente } = useRoleGuard();
+    const currentMedicoId = isMedico && !isMedicoCompetente ? user?.id : undefined;
+    const canViewOtherAppointments =
+        hasPermission('clinica.appuntamenti', 'view_others') ||
+        hasPermission('clinica.appuntamenti', 'view_others_same_branch') ||
+        hasPermission('clinica.appuntamenti', 'view_others_all') ||
+        hasPermission('clinica.appuntamenti', 'create_others') ||
+        hasPermission('clinica.appuntamenti', 'edit_others');
+    const canCreateForOtherMedici = hasPermission('clinica.appuntamenti', 'create_others');
+    const canEditOtherAppointments = hasPermission('clinica.appuntamenti', 'edit_others');
+    const restrictCalendarToCurrentMedico = !!currentMedicoId && !canViewOtherAppointments;
 
     // Auto-refresh: pause when any modal/dialog is open to avoid disrupting user interaction
     const isAnyModalOpen = !!(quickAddInfo || availabilityModalInfo || editingAppointment
@@ -363,6 +378,29 @@ export const CalendarioPage: React.FC = () => {
         },
         enabled: isReady
     });
+
+    const visibleMedici = useMemo(() => {
+        return mediciData?.data || [];
+    }, [mediciData]);
+
+    const ownMedici = useMemo(() => {
+        if (!currentMedicoId) return visibleMedici;
+        return visibleMedici.filter(m => m.id === currentMedicoId || m.personId === currentMedicoId);
+    }, [visibleMedici, currentMedicoId]);
+
+    const manageableMedici = useMemo(
+        () => currentMedicoId && !canCreateForOtherMedici && !canEditOtherAppointments ? ownMedici : visibleMedici,
+        [currentMedicoId, canCreateForOtherMedici, canEditOtherAppointments, ownMedici, visibleMedici]
+    );
+
+    const ownMedicoIds = useMemo(() => {
+        const ids = new Set<string>();
+        ownMedici.forEach(m => {
+            ids.add(m.id);
+            if (m.personId) ids.add(m.personId);
+        });
+        return ids;
+    }, [ownMedici]);
 
     // Query sedi con orari settimanali per filtro e visualizzazione grigio
     const { data: sediData } = useQuery({
@@ -401,21 +439,23 @@ export const CalendarioPage: React.FC = () => {
     // Also auto-add any newly-created medici not in filterMedici
     const [mediciInitialized, setMediciInitialized] = useState(savedSettings.filterMedici && savedSettings.filterMedici.length > 0);
     useEffect(() => {
-        if (!mediciData?.data || mediciData.data.length === 0) return;
+        if (visibleMedici.length === 0) return;
         if (!mediciInitialized) {
-            setFilterMedici(mediciData.data.map(m => m.id));
+            setFilterMedici(visibleMedici.map(m => m.id));
+            if (currentMedicoId && ownMedici[0]) setSelectedMedico(ownMedici[0].id);
             setMediciInitialized(true);
         } else {
             // Auto-include medici added after saved settings
             setFilterMedici(prev => {
-                const newIds = mediciData.data
+                const newIds = visibleMedici
                     .filter(m => !prev.includes(m.id))
                     .map(m => m.id);
-                if (newIds.length === 0) return prev;
-                return [...prev, ...newIds];
+                const allowedPrev = prev.filter(id => visibleMedici.some(m => m.id === id));
+                if (newIds.length === 0) return allowedPrev;
+                return [...allowedPrev, ...newIds];
             });
         }
-    }, [mediciData, mediciInitialized]);
+    }, [visibleMedici, ownMedici, mediciInitialized, currentMedicoId]);
 
     // Auto-select sede principale (or first sede) when data loads
     // This ensures closed hours/days are shown in calendar by default
@@ -454,17 +494,23 @@ export const CalendarioPage: React.FC = () => {
 
     // Query: Appointments
     const { data: appuntamentiData, isLoading: loadingAppuntamenti } = useQuery({
-        queryKey: ['appuntamenti-calendario', toISODateString(dateRange.start), toISODateString(dateRange.end), tenantFilterKey],
+        queryKey: ['appuntamenti-calendario', toISODateString(dateRange.start), toISODateString(dateRange.end), tenantFilterKey, restrictCalendarToCurrentMedico ? currentMedicoId : 'all-visible'],
         queryFn: async () => {
             const tenantParams = getTenantFilterParams();
+            const dataInizio = toISODateString(dateRange.start);
+            const dataFine = toISODateString(dateRange.end);
             return appuntamentiApi.getAll({
-                limit: 500,
+                limit: 1000,
+                dataInizio,
+                dataFine,
+                ...(restrictCalendarToCurrentMedico && { medicoId: currentMedicoId }),
                 // Multi-tenant params at top level
                 ...(tenantParams.tenantIds && { tenantIds: tenantParams.tenantIds.join(',') }),
                 ...(tenantParams.allTenants && { allTenants: 'true' }),
                 filters: {
-                    dataInizio: toISODateString(dateRange.start),
-                    dataFine: toISODateString(dateRange.end)
+                    dataInizio,
+                    dataFine,
+                    ...(restrictCalendarToCurrentMedico && { medicoId: currentMedicoId })
                 }
             });
         },
@@ -576,11 +622,11 @@ export const CalendarioPage: React.FC = () => {
     // Assign colors to medici
     const medicoColors = useMemo(() => {
         const map = new Map<string, typeof MEDICO_COLORS[0]>();
-        mediciData?.data?.forEach((medico, i) => {
+        visibleMedici.forEach((medico, i) => {
             map.set(medico.id, MEDICO_COLORS[i % MEDICO_COLORS.length]);
         });
         return map;
-    }, [mediciData]);
+    }, [visibleMedici]);
 
     // Assign colors to ambulatori
     const ambulatorioColors = useMemo(() => {
@@ -603,7 +649,9 @@ export const CalendarioPage: React.FC = () => {
     const events = useMemo(() => {
         const disponibilita: CalendarEvent[] = (slotsData?.data || []).flatMap(slot => {
             if (!slot.oraInizio || !slot.oraFine) {
-                console.error('[CalendarioPage] Slot with missing oraInizio/oraFine skipped:', slot?.id, slot?.data);
+                if (import.meta.env.DEV) {
+                    console.error('[CalendarioPage] Slot with missing oraInizio/oraFine skipped:', slot?.id, slot?.data);
+                }
                 return [];
             }
             const date = new Date(slot.data);
@@ -614,7 +662,7 @@ export const CalendarioPage: React.FC = () => {
             const end = new Date(date);
             end.setHours(endH, endM, 0, 0);
 
-            const medico = mediciData?.data?.find(m => m.id === slot.medicoId);
+            const medico = visibleMedici.find(m => m.id === slot.medicoId);
             const medicoFullName = medico
                 ? `${getDoctorTitle(medico.taxCode || null, medico.gender || null)} ${medico.lastName || ''} ${medico.firstName || ''}`.trim()
                 : 'Medico';
@@ -635,7 +683,7 @@ export const CalendarioPage: React.FC = () => {
         // Filter out ANNULLATO appointments - they should not appear on calendar
         const activeAppuntamenti = (appuntamentiData?.data || []).filter(app => app.stato !== 'ANNULLATO');
 
-        const appuntamenti: CalendarEvent[] = activeAppuntamenti.map(app => {
+        const appuntamenti: CalendarEvent[] = activeAppuntamenti.flatMap(app => {
             // Use actual visit times (oraInizio/oraFine) when available (completed visits),
             // otherwise fall back to booking time + duration
             const bookingStart = new Date(app.dataOra);
@@ -651,7 +699,8 @@ export const CalendarioPage: React.FC = () => {
                 : undefined;
 
             // Get medico name for tooltip
-            const appMedico = (mediciData?.data || []).find(m => m.id === app.medicoId);
+            if (restrictCalendarToCurrentMedico && app.medicoId !== currentMedicoId && (app as any).medico?.personId !== currentMedicoId) return [];
+            const appMedico = visibleMedici.find(m => m.id === app.medicoId);
             const appMedicoFullName = appMedico
                 ? `${getDoctorTitle(appMedico.taxCode || null, appMedico.gender || null)} ${appMedico.lastName || ''} ${appMedico.firstName || ''}`.trim()
                 : undefined;
@@ -678,19 +727,22 @@ export const CalendarioPage: React.FC = () => {
             //           3. prezzoBase standard (ultimo resort)
             const prezzoTotaleMovimenti = (rawApp as any)._prezzoTotaleMovimenti as number | undefined;
             const prezzoTariffarioPrestazione = (rawApp as any)._prezzoTariffarioPrestazione as number | undefined;
-            const prezzoPrincipale = prezzoTotaleMovimenti ?? prezzoTariffarioPrestazione ?? prezzoBase;
+            const prezzoPrestazioniBase = (rawApp as any)._prezzoPrestazioniBase as number | undefined;
+            const prezzoPrincipale = prezzoPrestazioniBase ?? prezzoTariffarioPrestazione ?? prezzoTotaleMovimenti ?? prezzoBase;
 
             // Calculate discounted price if convenzione exists
-            let prezzoScontato: number | undefined;
-            if (rawApp.convenzione?.condizioni && prezzoPrincipale) {
+            let prezzoScontato: number | undefined = (rawApp as any).prezzoScontato
+                ?? (((rawApp as any).prezzoFinale && prezzoPrincipale && (rawApp as any).prezzoFinale < prezzoPrincipale) ? (rawApp as any).prezzoFinale : undefined);
+            if (!prezzoScontato && rawApp.convenzione?.condizioni && prezzoPrincipale) {
                 const condizioni = rawApp.convenzione.condizioni;
 
                 // Priority: scontoInfo (from codiceSconto lookup) > percentualeSconto > scontoFisso
                 if (condizioni.scontoInfo) {
+                    const tipoSconto = String(condizioni.scontoInfo.tipo || '').toUpperCase();
                     // Sconto da codice sconto (arricchito dal backend)
-                    if (condizioni.scontoInfo.tipo === 'PERCENTUALE') {
+                    if (tipoSconto.includes('PERCENT')) {
                         prezzoScontato = prezzoPrincipale * (1 - condizioni.scontoInfo.valore / 100);
-                    } else {
+                    } else if (tipoSconto.includes('VALORE') || tipoSconto.includes('FISSO')) {
                         // VALORE_ASSOLUTO
                         prezzoScontato = Math.max(0, prezzoPrincipale - condizioni.scontoInfo.valore);
                     }
@@ -701,7 +753,7 @@ export const CalendarioPage: React.FC = () => {
                 }
             }
 
-            return {
+            return [{
                 id: app.id,
                 title: app.prestazione?.nome || 'Appuntamento',
                 start,
@@ -729,18 +781,28 @@ export const CalendarioPage: React.FC = () => {
                 displayNumberCoda: app.displayNumberCoda || undefined,
                 // P70: MDL e completezza anagrafica paziente
                 tipoVisitaMDL: (rawApp as any).tipoVisitaMDL || null,
+                consensiMdlValidi: !!(rawApp as any)._consensiMdlValidi,
                 pazienteAnagraficaCompleta: !!(
                     (rawApp as any).paziente?.residenceAddress &&
                     (rawApp as any).paziente?.residenceCity
                 ),
                 // ID della visita collegata (se completata/fatturata) - usato per "Visualizza Visita"
                 visitaId: app.visita?.id || undefined,
-                raw: app
-            };
+                raw: {
+                    ...app,
+                    prezzo: prezzoPrincipale ?? (app as any).prezzo,
+                    prezzoBase: prezzoPrincipale ?? prezzoBase,
+                    prezzoScontato,
+                    prezzoFinale: prezzoScontato ?? prezzoPrincipale ?? (app as any).prezzo,
+                    prezzoConvenzionato: prezzoScontato,
+                    _prezzoTariffarioPrestazione: prezzoPrincipale,
+                    convenzioneId: rawApp.convenzione?.id || (app as any).convenzioneId,
+                }
+            }];
         });
 
         return { disponibilita, appuntamenti };
-    }, [slotsData, appuntamentiData, mediciData]);
+    }, [slotsData, appuntamentiData, visibleMedici, currentMedicoId, restrictCalendarToCurrentMedico]);
 
     // Filter events by selected doctors (filterMedici)
     // When showAllSlotsGray is active, include ALL disponibilita but mark them as grayed
@@ -1042,6 +1104,10 @@ export const CalendarioPage: React.FC = () => {
 
     // Drag handlers
     const handleDragStart = useCallback((hour: number, ambulatorioId: string, date: Date) => {
+        if (currentMedicoId && ownMedici.length === 0) {
+            showToast({ message: 'Puoi creare disponibilità solo per il tuo profilo medico', type: 'warning' });
+            return;
+        }
         setDragState({
             isDragging: true,
             startHour: hour,
@@ -1049,7 +1115,7 @@ export const CalendarioPage: React.FC = () => {
             endHour: hour + 0.5,
             ambulatorioId
         });
-    }, []);
+    }, [currentMedicoId, ownMedici.length, showToast]);
 
     const handleDragMove = useCallback((hour: number) => {
         setDragState(prev => ({
@@ -1094,6 +1160,14 @@ export const CalendarioPage: React.FC = () => {
         setDraggingEvent(null);
 
         const event = item.event;
+        if (currentMedicoId && item.type === 'appuntamento' && !canEditOtherAppointments && (!event.medicoId || !ownMedicoIds.has(event.medicoId))) {
+            showToast({ message: 'Puoi spostare solo i tuoi appuntamenti', type: 'warning' });
+            return;
+        }
+        if (currentMedicoId && item.type === 'disponibilita' && (!event.medicoId || !ownMedicoIds.has(event.medicoId))) {
+            showToast({ message: 'Puoi spostare solo le tue disponibilità e i tuoi appuntamenti', type: 'warning' });
+            return;
+        }
         const duration = (event.end.getTime() - event.start.getTime()) / (60 * 1000); // duration in minutes
         const newDate = toISODateString(date);
         const newOraInizio = minutesToTime(hour * 60);
@@ -1145,7 +1219,7 @@ export const CalendarioPage: React.FC = () => {
                 }
             });
         }
-    }, [updateSlotMutation, updateAppuntamentoMutation, events.appuntamenti]);
+    }, [updateSlotMutation, updateAppuntamentoMutation, events.appuntamenti, currentMedicoId, ownMedicoIds, canEditOtherAppointments, showToast]);
 
     // Clear dragging on drag end (global)
     useEffect(() => {
@@ -1159,6 +1233,10 @@ export const CalendarioPage: React.FC = () => {
     // Event handlers
     const handleSlotClick = useCallback((hour: number, ambulatorioId: string, date: Date) => {
         if (dragState.isDragging) return;
+        if (currentMedicoId && !canCreateForOtherMedici) {
+            showToast({ message: 'Seleziona un tuo slot disponibilità per prenotare un appuntamento', type: 'info' });
+            return;
+        }
 
         // Check for existing appointments at this time slot (overbooking detection)
         // Exclude concluded/absent states: they no longer occupy the slot
@@ -1179,15 +1257,20 @@ export const CalendarioPage: React.FC = () => {
         const existingCount = existingAtTime.length;
 
         setQuickAddInfo({ date, hour, ambulatorioId, isOverbooking, existingCount });
-    }, [dragState.isDragging, events.appuntamenti]);
+    }, [dragState.isDragging, events.appuntamenti, currentMedicoId, canCreateForOtherMedici, showToast]);
 
     const handleEventClick = useCallback((event: CalendarEvent, clickedHour?: number) => {
         if (event.tipo === 'appuntamento') {
             // Always open AccettazionePazienteModal on appointment click.
             // It handles all states: PRENOTATO/CONFERMATO (accepts patient),
             // IN_ATTESA/IN_CORSO/COMPLETATO/FATTURATO (shows/edits existing accettazione).
+            setAccettazioneInitialTab('anagrafica');
             setAccettazioneAppuntamento(event);
         } else if (event.tipo === 'disponibilita') {
+            if (currentMedicoId && !canCreateForOtherMedici && (!event.medicoId || !ownMedicoIds.has(event.medicoId))) {
+                showToast({ message: 'Puoi prenotare appuntamenti solo sui tuoi slot disponibilità', type: 'warning' });
+                return;
+            }
             // Click on disponibilità - open appointment modal for that medico's slot
             const slotStart = event.start;
             // Use clicked hour if provided, otherwise fall back to slot start
@@ -1224,7 +1307,7 @@ export const CalendarioPage: React.FC = () => {
                 setSelectedMedico(event.medicoId);
             }
         }
-    }, [events.appuntamenti]);
+    }, [events.appuntamenti, currentMedicoId, ownMedicoIds, canCreateForOtherMedici, showToast]);
 
     const handleAppointmentStatusChange = useCallback((id: string, stato: StatoAppuntamento) => {
         updateAppuntamentoMutation.mutate({ id, data: { stato } }, {
@@ -1258,14 +1341,40 @@ export const CalendarioPage: React.FC = () => {
 
     // Handler per aprire il modal di accettazione paziente (check-in)
     const handleAccettazioneAppuntamento = useCallback((event: CalendarEvent) => {
+        setAccettazioneInitialTab('anagrafica');
+        setAccettazioneAppuntamento(event);
+    }, []);
+
+    const handleFatturaAppuntamento = useCallback((event: CalendarEvent) => {
+        setAccettazioneInitialTab('fatturazione');
         setAccettazioneAppuntamento(event);
     }, []);
 
     // P70: Handler "Accetta e Visita" — solo per MDL con anagrafica completa
-    // 1. Imposta stato IN_ATTESA (accetta paziente)
-    // 2. Naviga direttamente alla visita (creandola se necessario)
+    // 1. Verifica consensi (GDPR + sanitari + prestazione)
+    // 2. Se consensi OK → accetta e vai direttamente alla visita
+    // 3. Se consensi mancanti → apri modal di accettazione per completare l'iter
     const handleAccettaEVisitaAppuntamento = useCallback(async (event: CalendarEvent) => {
         try {
+            // Verifica stato consensi prima di procedere
+            try {
+                const status = await apiGet<{
+                    firmato: boolean;
+                    validConsensiPerPaziente?: Record<string, string>;
+                }>(`/api/v1/clinica/appuntamenti/${event.id}/consenso-status`);
+                const validKeys = Object.keys(status?.validConsensiPerPaziente ?? {});
+                const hasGdpr = validKeys.includes('gdpr') || status?.firmato;
+                const hasSanitari = validKeys.includes('sanitari') || status?.firmato;
+                if (!hasGdpr || !hasSanitari) {
+                    showToast({ message: 'Consensi non ancora acquisiti. Completa l\'accettazione.', type: 'warning' });
+                    setAccettazioneInitialTab('anagrafica');
+                    setAccettazioneAppuntamento(event);
+                    return;
+                }
+            } catch {
+                // Se il check fallisce, procedi comunque (non bloccare il workflow)
+            }
+
             // 1. Accetta il paziente (IN_ATTESA)
             await appuntamentiApi.changeStato(event.id, 'IN_ATTESA' as Appuntamento['stato']);
             showToast({ message: 'Paziente accettato. Apertura visita...', type: 'success' });
@@ -1387,8 +1496,13 @@ export const CalendarioPage: React.FC = () => {
     }, [visitaMedicoConfirm, navigate, showToast, queryClient]);
 
     const handleDeleteDisponibilita = useCallback((id: string, hasPattern?: boolean) => {
+        const event = events.disponibilita.find(d => d.id === id);
+        if (currentMedicoId && (!event?.medicoId || !ownMedicoIds.has(event.medicoId))) {
+            showToast({ message: 'Puoi eliminare solo le tue disponibilità', type: 'warning' });
+            return;
+        }
         setDeleteDisponibilitaInfo({ id, hasPattern: !!hasPattern });
-    }, []);
+    }, [events.disponibilita, currentMedicoId, ownMedicoIds, showToast]);
 
     const handleConfirmDeleteDisponibilita = useCallback((cascade: boolean = false) => {
         if (deleteDisponibilitaInfo) {
@@ -1403,13 +1517,21 @@ export const CalendarioPage: React.FC = () => {
 
     // Handle edit disponibilità - opens edit modal
     const handleEditDisponibilita = useCallback((slot: CalendarEvent) => {
+        if (currentMedicoId && (!slot.medicoId || !ownMedicoIds.has(slot.medicoId))) {
+            showToast({ message: 'Puoi modificare solo le tue disponibilità', type: 'warning' });
+            return;
+        }
         setEditingDisponibilita(slot);
-    }, []);
+    }, [currentMedicoId, ownMedicoIds, showToast]);
 
     // Handle open queue for slot - opens queue management modal
     const handleOpenQueueForSlot = useCallback((slot: CalendarEvent) => {
+        if (currentMedicoId && (!slot.medicoId || !ownMedicoIds.has(slot.medicoId))) {
+            showToast({ message: 'Puoi gestire la coda solo sui tuoi slot disponibilità', type: 'warning' });
+            return;
+        }
         setQueueSlot(slot);
-    }, []);
+    }, [currentMedicoId, ownMedicoIds, showToast]);
 
     // Handle move disponibilità confirmation - only availability
     const handleMoveDisponibilitaOnly = useCallback(() => {
@@ -1681,7 +1803,7 @@ export const CalendarioPage: React.FC = () => {
                             <>
                                 <span className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider mr-2">Medici:</span>
                                 {Array.from(medicoColors.entries()).slice(0, 4).map(([id, color]) => {
-                                    const medico = mediciData?.data?.find(m => m.id === id);
+                                    const medico = visibleMedici.find(m => m.id === id);
                                     return (
                                         <span key={id} className="inline-flex items-center gap-1 mr-3 text-xs">
                                             <div className={`w-2.5 h-2.5 rounded-full ${color.dot}`} />
@@ -1860,6 +1982,7 @@ export const CalendarioPage: React.FC = () => {
                                                     onOpenQueueForSlot={handleOpenQueueForSlot}
                                                     onDeleteAppuntamento={handleAppointmentDelete}
                                                     onAccettazioneAppuntamento={handleAccettazioneAppuntamento}
+                                                    onFatturaAppuntamento={handleFatturaAppuntamento}
                                                     onAccettaEVisitaAppuntamento={handleAccettaEVisitaAppuntamento}
                                                     onVisitaAppuntamento={handleVisitaAppuntamento}
                                                     onChiamaEVisitaAppuntamento={handleChiamaEVisitaAppuntamento}
@@ -1893,7 +2016,7 @@ export const CalendarioPage: React.FC = () => {
                 {showFilters && (
                     <FilterPanel
                         ambulatori={ambulatoriData?.data || []}
-                        medici={mediciData?.data || []}
+                        medici={visibleMedici}
                         selectedAmbulatori={selectedAmbulatori}
                         selectedMedico={selectedMedico}
                         filterMedici={filterMedici}
@@ -1953,7 +2076,7 @@ export const CalendarioPage: React.FC = () => {
                 isOpen={!!quickAddInfo}
                 onClose={() => setQuickAddInfo(null)}
                 slotInfo={quickAddInfo}
-                allMedici={mediciData?.data || []}
+                allMedici={manageableMedici}
                 medico={(() => {
                     if (!quickAddInfo) return null;
                     // Find disponibilità at this slot
@@ -1966,7 +2089,7 @@ export const CalendarioPage: React.FC = () => {
                             quickAddInfo.hour < endHour;
                     });
                     if (slotDisp?.medicoId) {
-                        return mediciData?.data?.find(m => m.id === slotDisp.medicoId) || null;
+                        return manageableMedici.find(m => m.id === slotDisp.medicoId) || null;
                     }
                     return null;
                 })()}
@@ -1981,7 +2104,7 @@ export const CalendarioPage: React.FC = () => {
                 isOpen={!!availabilityModalInfo}
                 onClose={() => setAvailabilityModalInfo(null)}
                 slotInfo={availabilityModalInfo}
-                medici={mediciData?.data || []}
+                medici={manageableMedici}
                 selectedMedicoId={selectedMedico}
                 medicoColors={medicoColors}
                 existingDisponibilita={events.disponibilita}
@@ -1996,7 +2119,7 @@ export const CalendarioPage: React.FC = () => {
                 isOpen={!!editingDisponibilita}
                 onClose={() => setEditingDisponibilita(null)}
                 slot={editingDisponibilita}
-                medici={mediciData?.data || []}
+                medici={manageableMedici}
                 ambulatori={ambulatoriData?.data || []}
                 medicoColors={medicoColors}
                 onSuccess={() => {
@@ -2036,8 +2159,8 @@ export const CalendarioPage: React.FC = () => {
                     hour: editingAppointment.start.getHours() + editingAppointment.start.getMinutes() / 60,
                     ambulatorioId: editingAppointment.ambulatorioId || ''
                 } : null}
-                allMedici={mediciData?.data || []}
-                medico={editingAppointment?.medicoId ? mediciData?.data?.find(m => m.id === editingAppointment.medicoId) || null : null}
+                allMedici={manageableMedici}
+                medico={editingAppointment?.medicoId ? manageableMedici.find(m => m.id === editingAppointment.medicoId) || null : null}
                 onSuccess={() => {
                     queryClient.invalidateQueries({ queryKey: ['appuntamenti'], refetchType: 'all' });
                     queryClient.invalidateQueries({ queryKey: ['appuntamenti-calendario'], refetchType: 'all' });
@@ -2052,7 +2175,11 @@ export const CalendarioPage: React.FC = () => {
                 <AccettazionePazienteModal
                     appuntamento={accettazioneAppuntamento.raw as Appuntamento}
                     isOpen={!!accettazioneAppuntamento}
-                    onClose={() => setAccettazioneAppuntamento(null)}
+                    initialTab={accettazioneInitialTab}
+                    onClose={() => {
+                        setAccettazioneAppuntamento(null);
+                        setAccettazioneInitialTab('anagrafica');
+                    }}
                     onConfirm={async (patientData) => {
                         try {
                             // Accetta l'appuntamento (usa lo stato selezionato dall'utente)
@@ -2100,6 +2227,28 @@ export const CalendarioPage: React.FC = () => {
                             queryClient.invalidateQueries({ queryKey: ['appuntamenti-calendario'], refetchType: 'all' });
                         } catch (error) {
                             showToast({ message: 'Errore durante l\'accettazione', type: 'error' });
+                        }
+                    }}
+                    onSaveAppointmentOnly={async (appointmentData) => {
+                        try {
+                            const app = accettazioneAppuntamento!.raw as Appuntamento;
+                            const updatePayload: Record<string, unknown> = {};
+                            if (appointmentData.dataOra) updatePayload.dataOra = appointmentData.dataOra;
+                            if (appointmentData.prestazioneId) updatePayload.prestazioneId = appointmentData.prestazioneId;
+                            if (appointmentData.pazienteId) updatePayload.pazienteId = appointmentData.pazienteId;
+                            if ('convenzioneId' in appointmentData) updatePayload.convenzioneId = appointmentData.convenzioneId || null;
+                            if (appointmentData.note !== undefined) updatePayload.note = appointmentData.note;
+                            if (appointmentData.noteInterne !== undefined) updatePayload.noteInterne = appointmentData.noteInterne;
+                            if (appointmentData.stato) updatePayload.stato = appointmentData.stato;
+                            if (Object.keys(updatePayload).length > 0) {
+                                await appuntamentiApi.update(app.id, updatePayload as Partial<Appuntamento>);
+                            }
+                            showToast({ message: 'Appuntamento aggiornato con successo', type: 'success' });
+                            setAccettazioneAppuntamento(null);
+                            queryClient.invalidateQueries({ queryKey: ['appuntamenti'], refetchType: 'all' });
+                            queryClient.invalidateQueries({ queryKey: ['appuntamenti-calendario'], refetchType: 'all' });
+                        } catch {
+                            showToast({ message: 'Errore nell\'aggiornamento dell\'appuntamento', type: 'error' });
                         }
                     }}
                 />

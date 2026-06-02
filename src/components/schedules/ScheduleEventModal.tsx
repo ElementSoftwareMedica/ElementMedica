@@ -174,11 +174,14 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
     return {
       ...base,
       name: base.title ?? base.name ?? '',
+      // Override duration with context-computed value (accounts for risk_level/course_type variant matching)
+      // This ensures save validation uses the same duration displayed in the UI
+      duration: courseDuration > 0 ? courseDuration : base.duration,
       // Ensure price field exists for preventivi pre-compilation
       price: extractedPrice,
       pricePerPerson: extractedPrice // Also set pricePerPerson for useFormState compatibility
     };
-  }, [selectedCourseDetails, selectedCourse]);
+  }, [selectedCourseDetails, selectedCourse, courseDuration]);
 
   // Handler locale per aggiornare singoli campi del form, allineato al context
   const handleFormDataChange = useCallback(<K extends keyof typeof state.formData>(field: K, value: typeof state.formData[K]) => {
@@ -481,7 +484,8 @@ function ScheduleEventModalContent(props: ScheduleEventModalProps): JSX.Element 
     selectedCourse: effectiveSelectedCourse,
     dynamicRiskOptions,
     dynamicCourseTypeOptions,
-    isEditing: !!existingEvent // Pass isEditing flag based on existingEvent
+    isEditing: !!existingEvent, // Pass isEditing flag based on existingEvent
+    courseDuration // Pass authoritative duration from context
   });
 
   const currentStep = state.currentStep;

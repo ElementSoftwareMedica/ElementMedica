@@ -10,7 +10,7 @@ import { Clock, AlertCircle, CheckCircle, Calendar } from 'lucide-react';
 type DateEntry = import('../types').ScheduleDateEntry;
 type Trainer = import('../types').Trainer;
 
-type OptionType = { value: string | number; label: string };
+type OptionType = { value: string; label: string };
 
 interface DateTimeManagerProps {
   dates: DateEntry[];

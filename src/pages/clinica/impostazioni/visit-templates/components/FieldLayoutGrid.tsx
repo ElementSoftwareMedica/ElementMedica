@@ -87,6 +87,9 @@ const SECTION_COLORS: Record<string, { bg: string; border: string; text: string 
     anamnesi: { bg: 'bg-blue-50', border: 'border-blue-300', text: 'text-blue-700' },
     vitali: { bg: 'bg-red-50', border: 'border-red-300', text: 'text-red-700' },
     esame: { bg: 'bg-green-50', border: 'border-green-300', text: 'text-green-700' },
+    spalla: { bg: 'bg-emerald-50', border: 'border-emerald-300', text: 'text-emerald-700' },
+    gomito: { bg: 'bg-cyan-50', border: 'border-cyan-300', text: 'text-cyan-700' },
+    polso_mano: { bg: 'bg-sky-50', border: 'border-sky-300', text: 'text-sky-700' },
     diagnosi: { bg: 'bg-purple-50', border: 'border-purple-300', text: 'text-purple-700' },
     terapia: { bg: 'bg-orange-50', border: 'border-orange-300', text: 'text-orange-700' },
     followup: { bg: 'bg-yellow-50', border: 'border-yellow-300', text: 'text-yellow-700' }
@@ -96,6 +99,9 @@ const SECTION_LABELS: Record<string, string> = {
     anamnesi: 'Anamnesi',
     vitali: 'Parametri Vitali',
     esame: 'Esame Obiettivo',
+    spalla: 'Spalla',
+    gomito: 'Gomito',
+    polso_mano: 'Polso / mano',
     diagnosi: 'Diagnosi',
     terapia: 'Terapia',
     followup: 'Conclusione e Follow-Up'
@@ -132,22 +138,26 @@ const FIELD_TYPE_LABELS: Record<VisitFieldType, string> = {
 };
 
 // Ordine delle sezioni/tab della visita
-const SECTION_ORDER = ['anamnesi', 'vitali', 'esame', 'diagnosi', 'terapia', 'followup'] as const;
+const SECTION_ORDER = ['anamnesi', 'vitali', 'esame', 'spalla', 'gomito', 'polso_mano', 'diagnosi', 'terapia', 'followup'] as const;
+const SPECIALIST_SECTION_ORDER = ['spalla', 'gomito', 'polso_mano'] as const;
 
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
 
 /**
- * Assegna posizioni automatiche ai campi che non ne hanno
- * I campi vengono disposti uno sotto l'altro (stile lista verticale)
- * per evitare sovrapposizioni e garantire un layout prevedibile
+ * Dispone i campi in modo compatto nella griglia del tab Layout.
+ * Anche i template legacy con posizioni sovrapposte vengono ricomposti
+ * in righe ordinate, senza perdere la sezione o la dimensione desiderata.
  */
 const assignDefaultPositions = (fields: VisitField[]): VisitField[] => {
     const fieldsWithPositions: VisitField[] = [];
 
     // Raggruppa per sezione per posizionarli in ordine
-    const sectionOrder = ['anamnesi', 'vitali', 'esame', 'diagnosi', 'terapia', 'followup'];
+    const sectionOrder = [
+        ...SECTION_ORDER,
+        ...Array.from(new Set(fields.map(f => f.section || 'anamnesi'))).filter(section => !SECTION_ORDER.includes(section as typeof SECTION_ORDER[number]))
+    ];
     const fieldsBySection = new Map<string, VisitField[]>();
 
     fields.forEach(f => {
@@ -160,28 +170,55 @@ const assignDefaultPositions = (fields: VisitField[]): VisitField[] => {
 
     sectionOrder.forEach(section => {
         const sectionFields = fieldsBySection.get(section) || [];
-        sectionFields.sort((a, b) => a.order - b.order);
+        sectionFields.sort((a, b) =>
+            (a.position?.row ?? 0) - (b.position?.row ?? 0)
+            || (a.position?.col ?? 0) - (b.position?.col ?? 0)
+            || (a.order ?? 0) - (b.order ?? 0)
+            || String(a.label || a.name).localeCompare(String(b.label || b.name))
+        );
 
-        // Per ogni sezione, disponi i campi dall'alto verso il basso
-        let currentRow = 0;
+        const occupied = new Set<string>();
+        const canPlace = (row: number, col: number, width: number, height: number) => {
+            if (col + width > GRID_COLS) return false;
+            for (let r = row; r < row + height; r += 1) {
+                for (let c = col; c < col + width; c += 1) {
+                    if (occupied.has(`${r}:${c}`)) return false;
+                }
+            }
+            return true;
+        };
+        const markOccupied = (row: number, col: number, width: number, height: number) => {
+            for (let r = row; r < row + height; r += 1) {
+                for (let c = col; c < col + width; c += 1) {
+                    occupied.add(`${r}:${c}`);
+                }
+            }
+        };
+        const findFirstFree = (width: number, height: number) => {
+            for (let row = 0; row < 80; row += 1) {
+                for (let col = 0; col <= GRID_COLS - width; col += 1) {
+                    if (canPlace(row, col, width, height)) return { row, col };
+                }
+            }
+            return { row: 0, col: 0 };
+        };
 
         sectionFields.forEach(field => {
-            const width = field.size?.width || getDefaultWidth(field.type);
-            const height = field.size?.height || 1;
+            const fieldType = field.type as VisitFieldType;
+            const fullWidthTypes = ['TEXTAREA', 'RICHTEXT', 'VITALS', 'FILE', 'STRUMENTARIO_IMPORT'];
+            const width = fullWidthTypes.includes(fieldType)
+                ? GRID_COLS
+                : Math.max(MIN_WIDTH, Math.min(field.size?.width || getDefaultWidth(fieldType), MAX_WIDTH));
+            const height = Math.max(MIN_HEIGHT, Math.min(field.size?.height || 1, MAX_HEIGHT));
 
-            // Usa posizione esistente se presente, altrimenti disponi in verticale
-            const position = field.position || { row: currentRow, col: 0 };
+            const position = findFirstFree(width, height);
+            markOccupied(position.row, position.col, width, height);
 
             fieldsWithPositions.push({
                 ...field,
                 position,
                 size: { width, height }
             });
-
-            // Incrementa la riga per il prossimo campo (se non ha posizione)
-            if (!field.position) {
-                currentRow += height;
-            }
         });
     });
 
@@ -246,7 +283,7 @@ const FieldCard: React.FC<FieldCardProps> = ({
     onToggleVisible,
     onOpenSettings
 }) => {
-    const colors = SECTION_COLORS[field.section] || SECTION_COLORS.anamnesi;
+    const colors = SECTION_COLORS[field.section] || SECTION_COLORS.esame;
     const width = field.size?.width || 4;
     const height = field.size?.height || 1;
 
@@ -292,7 +329,7 @@ const FieldCard: React.FC<FieldCardProps> = ({
                 transition-all duration-200
                 ${colors.bg} ${colors.border}
                 ${isDragging ? 'opacity-50 scale-95' : 'hover:shadow-md'}
-                ${!field.visible ? 'opacity-60' : ''}
+                ${field.visible === false ? 'opacity-60' : ''}
                 ${isSelected ? 'ring-2 ring-teal-500 ring-offset-2 shadow-xl border-teal-500' : ''}
             `}
             style={{
@@ -771,20 +808,33 @@ const FieldLayoutGrid: React.FC<FieldLayoutGridProps> = ({ fields, onFieldsChang
     // Sezioni presenti con ordine definito
     const sections = useMemo(() => {
         const presentSections = new Set(fields.map(f => f.section || 'anamnesi'));
-        return SECTION_ORDER.filter(s => presentSections.has(s) || s === activeTab);
-    }, [fields, activeTab]);
+        const onlySpecialistSections = presentSections.size > 0
+            && Array.from(presentSections).every(section => SPECIALIST_SECTION_ORDER.includes(section as typeof SPECIALIST_SECTION_ORDER[number]));
+        const baseOrder = onlySpecialistSections ? SPECIALIST_SECTION_ORDER : SECTION_ORDER;
+        const known = baseOrder.filter(s => presentSections.has(s));
+        const custom = Array.from(presentSections).filter(s => !SECTION_ORDER.includes(s as typeof SECTION_ORDER[number]));
+        return [...known, ...custom];
+    }, [fields]);
 
-    // Campi filtrati per tab attivo E visibili (SOLO visible === true esplicito)
-    // Nel tab Layout mostriamo solo i campi che l'utente ha selezionato come visibili nel tab Campi
+    React.useEffect(() => {
+        if (sections.length === 0) return;
+        const activeHasFields = fields.some(field => (field.section || 'anamnesi') === activeTab && field.visible !== false);
+        if (!sections.includes(activeTab) || !activeHasFields) {
+            setActiveTab(sections[0]);
+        }
+    }, [activeTab, fields, sections]);
+
+    // Campi filtrati per tab attivo e visibili. I template legacy senza flag visible
+    // vengono considerati visibili, altrimenti il layout risulta vuoto.
     const filteredFields = useMemo(() => {
-        return positionedFields.filter(f => f.section === activeTab && f.visible === true);
+        return positionedFields.filter(f => f.section === activeTab && f.visible !== false);
     }, [positionedFields, activeTab]);
 
     // Conta campi per sezione (solo visibili nel layout, visible === true)
     const fieldCountBySection = useMemo(() => {
         const counts: Record<string, number> = {};
         fields.forEach(f => {
-            if (f.visible === true) {
+            if (f.visible !== false) {
                 const section = f.section || 'anamnesi';
                 counts[section] = (counts[section] || 0) + 1;
             }
@@ -1058,7 +1108,11 @@ const FieldLayoutGrid: React.FC<FieldLayoutGridProps> = ({ fields, onFieldsChang
         // Ordina i campi per sezione, poi per ordine originale
         const fieldsToArrange = fields
             .filter(f => f.section === activeTab && f.visible !== false)
-            .sort((a, b) => a.order - b.order);
+            .sort((a, b) =>
+                (a.position?.row ?? 0) - (b.position?.row ?? 0)
+                || (a.position?.col ?? 0) - (b.position?.col ?? 0)
+                || (a.order ?? 0) - (b.order ?? 0)
+            );
 
         const updatedPositions: Map<string, { row: number; col: number }> = new Map();
 
@@ -1151,8 +1205,8 @@ const FieldLayoutGrid: React.FC<FieldLayoutGridProps> = ({ fields, onFieldsChang
             {/* Tab navigation per sezioni */}
             <div className="border-b border-gray-200">
                 <nav className="flex -mb-px gap-1 overflow-x-auto">
-                    {SECTION_ORDER.map(section => {
-                        const colors = SECTION_COLORS[section];
+                    {sections.map(section => {
+                        const colors = SECTION_COLORS[section] || SECTION_COLORS.esame;
                         const count = fieldCountBySection[section] || 0;
                         const isActive = activeTab === section;
 
@@ -1169,7 +1223,7 @@ const FieldLayoutGrid: React.FC<FieldLayoutGridProps> = ({ fields, onFieldsChang
                                     }
                                 `}
                             >
-                                {SECTION_LABELS[section]}
+                                {SECTION_LABELS[section] || section}
                                 <span className={`
                                     px-1.5 py-0.5 text-xs rounded-full
                                     ${isActive ? `${colors.bg} ${colors.text}` : 'bg-gray-100 text-gray-500'}
@@ -1187,7 +1241,7 @@ const FieldLayoutGrid: React.FC<FieldLayoutGridProps> = ({ fields, onFieldsChang
                 <div className="flex items-center gap-2">
                     <LayoutGrid className="w-5 h-5 text-gray-500" />
                     <span className="font-medium text-gray-900">
-                        Layout {SECTION_LABELS[activeTab]}
+                        Layout {SECTION_LABELS[activeTab] || activeTab}
                     </span>
                     <span className="text-sm text-gray-500">
                         ({filteredFields.length} campi)

@@ -15,7 +15,7 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-SERVER="elementmedica@178.104.44.177"
+SERVER="root@178.104.197.134"
 SSH_KEY="$HOME/.ssh/id_ed25519"
 SERVER_PATH="/var/www/elementmedica"
 CONTROL_SOCKET="/tmp/ssh-elementmedica-$$"

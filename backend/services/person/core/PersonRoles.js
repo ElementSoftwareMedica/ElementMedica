@@ -1,6 +1,7 @@
 import logger from '../../../utils/logger.js';
 import prisma from '../../../config/prisma-optimization.js';
 import PersonRoleMapping from '../utils/PersonRoleMapping.js';
+import { seedDefaultPermissions } from '../../enhancedRole/utils/PermissionSeeder.js';
 
 /**
  * Gestisce i ruoli delle persone
@@ -54,7 +55,7 @@ class PersonRoles {
       }
 
       // Altrimenti crea nuovo ruolo
-      return await prisma.personRole.create({
+      const newRole = await prisma.personRole.create({
         data: {
           personId,
           roleType: mappedRoleType,
@@ -68,6 +69,8 @@ class PersonRoles {
           tenant: true
         }
       });
+      await seedDefaultPermissions(newRole.id, mappedRoleType, prisma);
+      return newRole;
     } catch (error) {
       logger.error('Error adding role:', { error: error.message, personId, roleType });
       throw error;

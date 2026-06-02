@@ -3,7 +3,7 @@
  * API client per il modulo HR
  */
 
-import { apiGet, apiPost, apiPut, apiDelete } from '@/services/api';
+import { apiGet, apiPost, apiPut, apiDelete, apiDeleteWithPayload } from '@/services/api';
 
 // ============================================================================
 // TYPES
@@ -329,7 +329,7 @@ export const mansioniInterneApi = {
         apiPut<{ data: MansioneInterna }>(`/api/v1/hr/mansioni-interne/${id}`, data),
 
     delete: (id: string, deletionReason: string) =>
-        apiDelete(`/api/v1/hr/mansioni-interne/${id}?deletionReason=${encodeURIComponent(deletionReason)}`),
+        apiDeleteWithPayload(`/api/v1/hr/mansioni-interne/${id}`, { deletionReason }),
 };
 
 // ============================================================================
@@ -352,7 +352,7 @@ export const profiliHRApi = {
         apiPut<{ data: ProfiloHR }>(`/api/v1/hr/profili/${id}`, data),
 
     delete: (id: string, deletionReason: string) =>
-        apiDelete(`/api/v1/hr/profili/${id}?deletionReason=${encodeURIComponent(deletionReason)}`),
+        apiDeleteWithPayload(`/api/v1/hr/profili/${id}`, { deletionReason }),
 
     getSaldoFerie: (id: string) =>
         apiGet<{ data: { saldoFerie: number; saldoPermessi: number; saldoROL: number } }>(`/api/v1/hr/profili/${id}/saldo-ferie`),

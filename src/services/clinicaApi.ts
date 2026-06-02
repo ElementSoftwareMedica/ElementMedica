@@ -752,6 +752,7 @@ export type TipoGiudizioIdoneita =
     | 'IDONEO'
     | 'IDONEO_CON_PRESCRIZIONI'
     | 'IDONEO_CON_LIMITAZIONI'
+    | 'IDONEO_CON_LIMITAZIONI_PRESCRIZIONI'
     | 'NON_IDONEO_TEMPORANEO'
     | 'NON_IDONEO_PERMANENTE';
 
@@ -859,6 +860,60 @@ export interface LavoratoreMansione {
     deletedAt?: string;
     person?: PersonBasicInfo | PersonTenantProfile;
     mansione?: Mansione;
+}
+
+export interface StatoOccupazionaleStorico {
+    id: string;
+    personId: string;
+    tenantId: string;
+    personTenantProfileId?: string | null;
+    companyTenantProfileId?: string | null;
+    siteId?: string | null;
+    repartoId?: string | null;
+    mansioneId?: string | null;
+    protocolloSanitarioId?: string | null;
+    titolo?: string | null;
+    title?: string | null;
+    status?: string | null;
+    tipoContratto?: string | null;
+    tipoCollaboratore?: string | null;
+    oreSettimanali?: number | null;
+    dataInizio: string;
+    hiredDate?: string | null;
+    dataFine?: string | null;
+    endDate?: string | null;
+    isCorrente: boolean;
+    fonte?: string;
+    motivo?: string | null;
+    snapshot?: {
+        company?: { ragioneSociale?: string; piva?: string; codiceFiscale?: string } | null;
+        site?: { siteName?: string; citta?: string } | null;
+        reparto?: { nome?: string; codice?: string } | null;
+        protocolloSanitario?: { id?: string; codice?: string; denominazione?: string } | null;
+        title?: string | null;
+        hiredDate?: string | null;
+        endDate?: string | null;
+        tipoContratto?: string | null;
+        tipoCollaboratore?: string | null;
+        mansioni?: Array<{ id?: string; codice?: string; denominazione?: string; isPrimaria?: boolean }>;
+        rischi?: Array<{ codiceRischio?: string; livello?: string; categoria?: string; sourceMansioneId?: string | null }>;
+    } | null;
+    companyTenantProfile?: { id: string; company?: { ragioneSociale?: string; piva?: string } | null } | null;
+    site?: { id: string; siteName?: string; citta?: string } | null;
+    reparto?: { id: string; nome?: string; codice?: string } | null;
+    mansione?: { id: string; codice?: string; denominazione?: string } | null;
+    protocolloSanitario?: { id: string; codice?: string; denominazione?: string } | null;
+}
+
+export interface WorkerOccupationalProfile {
+    rischi: (MansioneRischio & { _isPersonalizzato?: boolean; _recordId?: string; _sourceMansioneId?: string | null })[];
+    hasPersonalizedRisks: boolean;
+    mansioni: Mansione[];
+    statoOccupazionale?: {
+        current?: StatoOccupazionaleStorico | null;
+        history?: StatoOccupazionaleStorico[];
+    };
+    syncResult?: { assigned?: number; skipped?: number };
 }
 
 export interface GiudizioIdoneitaMansione {
@@ -991,7 +1046,7 @@ export interface CalcoloPrezzoOutput {
 // =====================================================
 
 export type StatoNomina = 'ATTIVA' | 'SOSPESA' | 'REVOCATA' | 'SCADUTA';
-export type TipoNominaRuolo = 'MEDICO_COMPETENTE' | 'RSPP' | 'ASPP' | 'RLS' | 'PREPOSTO' | 'ADDETTO_PS' | 'ADDETTO_AI' | 'DIRIGENTE_SICUREZZA';
+export type TipoNominaRuolo = 'MEDICO_COMPETENTE' | 'MEDICO_COMPETENTE_COORDINATO' | 'RSPP' | 'ASPP' | 'RLS' | 'PREPOSTO' | 'ADDETTO_PS' | 'ADDETTO_AI' | 'DIRIGENTE_SICUREZZA';
 
 export interface ProtocolloSanitario {
     id: string;
@@ -1133,6 +1188,7 @@ export interface NominaRuoloCreateInput {
     dataProssimaFormazione?: string;
     formazioneRichiesta?: string;
     note?: string;
+    conflictResolution?: 'CEASE_PREVIOUS' | 'START_AFTER_PREVIOUS';
 }
 
 export interface NominaRuoloUpdateInput extends Partial<NominaRuoloCreateInput> {
@@ -1301,7 +1357,16 @@ export interface Allegato3B {
     totGiudiziConLimitazioni: number;
     totGiudiziConPrescrizioni: number;
     totInidoneita: number;
-    statistichePerRischio?: Record<string, { lavoratoriEsposti?: number; perLivello?: Record<string, number> }>;
+    statistichePerRischio?: Record<string, {
+        lavoratoriEsposti?: number;
+        perLivello?: Record<string, number>;
+        occupatiAl30Giugno?: number;
+        occupatiAl31Dicembre?: number;
+        lavoratoriSoggettiSorveglianza?: number;
+        lavoratoriVisitati?: number;
+        al30Giugno?: unknown;
+        al31Dicembre?: unknown;
+    }>;
     malattieProf?: { totale?: number; perPatologia?: Record<string, number> };
     lavoratoriPerGenere?: { maschi?: number; femmine?: number; altro?: number };
     lavoratoriPerFasciaEta?: Record<string, number>;
@@ -1336,6 +1401,14 @@ export interface Allegato3BStatistiche {
     totaleOccupati: number;
     totaleOccupatiMaschi: number;
     totaleOccupatiFemmine: number;
+    occupatiAl30Giugno?: number;
+    occupatiAl31Dicembre?: number;
+    occupatiDateRiferimento?: {
+        al30Giugno?: { count?: number; perGenere?: { maschi?: number; femmine?: number; altro?: number } };
+        al31Dicembre?: { count?: number; perGenere?: { maschi?: number; femmine?: number; altro?: number } };
+        fonte?: string;
+        logica?: string;
+    };
     totaleSorvegliatiSanitari: number;
 
     // Sezione B - Visite mediche
@@ -2210,6 +2283,7 @@ export interface SlotDisponibilita {
     tenantId: string;
     ambulatorioId: string;
     medicoId?: string;
+    prestazioneId?: string | null;
     disponibilitaMedicoId?: string; // P68: Reference to parent recurring pattern
     data: string;
     oraInizio: string;
@@ -2538,7 +2612,7 @@ export interface VisitField {
     defaultValue?: string;
     placeholder?: string;
     helpText?: string;
-    options?: (string | { value: string; label: string })[];
+    options?: (string | { value: string; label: string; description?: string })[];
     validation?: VisitFieldValidation;
     normalRange?: VisitFieldNormalRange;
     metadata?: Record<string, unknown>;
@@ -2755,6 +2829,7 @@ export interface Paziente {
     taxCode?: string;
     dataNascita?: string;
     birthDate?: string;
+    etnia?: string | null;
     email?: string;
     indirizzo?: string;
     createdAt: string;
@@ -2777,6 +2852,22 @@ export interface Paziente {
     cap?: string;
     province?: string;
     provincia?: string;
+    numeroCi?: string;
+    tipoCi?: 'CI' | 'PASSAPORTO' | 'PATENTE' | 'PERMESSO_SOGGIORNO' | 'ALTRO';
+    altroDocumento?: string;
+    isMinore?: boolean;
+    isNonAutonomo?: boolean;
+    tutelanti?: Array<{
+        id: string;
+        relazione: string;
+        isLegalGuardian: boolean;
+        tutelante: {
+            id: string;
+            firstName: string;
+            lastName: string;
+            taxCode?: string | null;
+        };
+    }>;
 }
 
 // Discount types
@@ -3021,8 +3112,8 @@ export const mediciApi = {
             .then(extractData),
 
     create: (data: Partial<Medico>) =>
-        apiPost<ApiResponse<Medico>>(`${CLINICA_BASE}/medici`, data)
-            .then(extractData),
+        apiPost<ApiResponse<Medico> & { credentials?: { username: string; temporaryPassword: string; note?: string } | null }>(`${CLINICA_BASE}/medici`, data),
+
 
     update: (id: string, data: Partial<Medico>) =>
         apiPut<ApiResponse<Medico>>(`${CLINICA_BASE}/medici/${id}`, data)
@@ -3060,9 +3151,22 @@ export const mediciApi = {
     // Enable existing person as medico
     enable: (data: {
         personId: string;
+        email?: string;
+        phone?: string;
+        pec?: string;
+        residenceAddress?: string;
+        residenceCity?: string;
+        province?: string;
+        postalCode?: string;
+        iban?: string;
+        notes?: string;
         specialties?: string[];
         registerCode?: string;
         registerCode2?: string;
+        shortDescription?: string;
+        fullDescription?: string;
+        alboRegione?: string;
+        prestazioniIds?: string[];
     }) =>
         apiPost<ApiResponse<Medico>>(`${CLINICA_BASE}/medici/enable`, data)
             .then(extractData),
@@ -3582,11 +3686,11 @@ export const appuntamentiApi = {
         apiPut<ApiResponse<Appuntamento>>(`${CLINICA_BASE}/appuntamenti/${id}`, data)
             .then(extractData),
 
-    delete: (id: string) =>
-        apiDelete<{ success: boolean }>(`${CLINICA_BASE}/appuntamenti/${id}`),
+    delete: (id: string, deletionReason = 'Eliminazione manuale appuntamento') =>
+        apiDeleteWithPayload<{ success: boolean }>(`${CLINICA_BASE}/appuntamenti/${id}`, { deletionReason }),
 
-    changeStato: (id: string, stato: Appuntamento['stato']) =>
-        apiPut<ApiResponse<Appuntamento>>(`${CLINICA_BASE}/appuntamenti/${id}/stato`, { stato })
+    changeStato: (id: string, stato: Appuntamento['stato'], data?: { motivo?: string; motivoAnnullamento?: string }) =>
+        apiPut<ApiResponse<Appuntamento>>(`${CLINICA_BASE}/appuntamenti/${id}/stato`, { stato, ...(data || {}) })
             .then(extractData),
 
     getTransitions: (id: string) =>
@@ -3796,7 +3900,7 @@ export const appuntamentoPrestazioniApi = {
     updateStato: (
         id: string,
         stato: StatoPrestazioneAppuntamento,
-        updates?: { note?: string; dataEsecuzione?: string }
+        updates?: { note?: string; dataEsecuzione?: string; applyNormalPreset?: boolean; visitaParentId?: string }
     ) =>
         apiPatch<ApiResponse<AppuntamentoPrestazione>>(
             `${CLINICA_BASE}/prestazioni/${id}/stato`,
@@ -3823,6 +3927,17 @@ export const appuntamentoPrestazioniApi = {
         apiPost<ApiResponse<AppuntamentoPrestazione>>(
             `${CLINICA_BASE}/prestazioni/${id}/medico-refertante`,
             { medicoRefertanteId }
+        ).then(extractData),
+
+    /**
+     * Crea/recupera la visita secondaria collegata a una prestazione appuntamento.
+     * Usato dalla card Prestazioni per aprire la scheda compatta dell'accertamento
+     * anche quando il medico refertante coincide con il medico della visita principale.
+     */
+    ensureVisitaSecondaria: (id: string, visitaParentId?: string) =>
+        apiPost<ApiResponse<{ appPrestazioneId?: string; visitaSecondariaId: string; visita?: { id: string } }>>(
+            `${CLINICA_BASE}/prestazioni/${id}/visita-secondaria`,
+            { visitaParentId }
         ).then(extractData),
 
     /**
@@ -4170,6 +4285,24 @@ export const pazientiApi = {
         apiPut<ApiResponse<Paziente>>(`${CLINICA_BASE}/pazienti/${id}`, data)
             .then(extractData),
 
+    addTutelante: (id: string, data: {
+        tutelanteId?: string;
+        guardianId?: string;
+        firstName?: string;
+        lastName?: string;
+        nome?: string;
+        cognome?: string;
+        taxCode?: string;
+        codiceFiscale?: string;
+        relazione?: string;
+        tutelareTipo?: string;
+        isLegalGuardian?: boolean;
+        phone?: string;
+        email?: string;
+    }) =>
+        apiPost<ApiResponse<unknown>>(`${CLINICA_BASE}/pazienti/${id}/tutelanti`, data)
+            .then(extractData),
+
     delete: (id: string) =>
         apiDelete<{ success: boolean }>(`${CLINICA_BASE}/pazienti/${id}`),
 
@@ -4249,12 +4382,18 @@ export const pazientiApi = {
         gender?: 'MALE' | 'FEMALE';
         birthPlace?: string;
         birthProvince?: string;
+        etnia?: string | null;
         email?: string;
         phone?: string;
         residenceAddress?: string;
         residenceCity?: string;
         postalCode?: string;
         province?: string;
+        numeroCi?: string;
+        tipoCi?: 'CI' | 'PASSAPORTO' | 'PATENTE' | 'PERMESSO_SOGGIORNO' | 'ALTRO';
+        altroDocumento?: string;
+        isMinore?: boolean;
+        isNonAutonomo?: boolean;
     }) =>
         apiPost<{
             success: boolean;
@@ -4395,6 +4534,7 @@ export interface DocumentoTemplate {
     contenutoHtml?: string;
     contenutoPdf?: string;
     campi?: CampoTemplate[];
+    consensoCodici?: string[];
     branchTypes: string[];
     richiedeFirma: boolean;
     richiedeFirmaMedico: boolean;
@@ -4452,6 +4592,7 @@ export interface DocumentoTemplateInput {
     fase?: FaseDocumento;
     contenutoHtml?: string;
     campi?: CampoTemplate[];
+    consensoCodici?: string[];
     branchTypes?: string[];
     richiedeFirma?: boolean;
     richiedeFirmaMedico?: boolean;
@@ -4872,6 +5013,9 @@ export interface ProfiloDiSalute {
     droghe?: string | null;
     attivitaFisica?: string | null;
     oreAttivitaSettimana?: number | null;
+    peso?: number | null;
+    altezza?: number | null;
+    bmi?: number | null;
     alimentazione?: string | null;
     porzioniFruttaVerdure?: number | null;
     // Sonno
@@ -5068,7 +5212,42 @@ export const mansioniApi = {
         apiDelete<{ success: boolean }>(`${CLINICA_BASE}/mansioni/assignment/${assignmentId}`),
 
     getWorkerRisks: (personId: string) =>
-        apiGet<ApiResponse<{ rischi: MansioneRischio[]; mansioni: Mansione[] }>>(`${CLINICA_BASE}/mansioni/worker/${personId}/risks`)
+        apiGet<ApiResponse<WorkerOccupationalProfile>>(`${CLINICA_BASE}/mansioni/worker/${personId}/risks`)
+            .then(extractData),
+
+    getWorkerOccupationalProfile: (personId: string) =>
+        apiGet<ApiResponse<WorkerOccupationalProfile>>(`${CLINICA_BASE}/mansioni/worker/${personId}/occupational-profile`)
+            .then(extractData),
+
+    updateWorkerOccupationalProfile: (personId: string, data: {
+        protocolloSanitarioId?: string | null;
+        title?: string | null;
+        hiredDate?: string | null;
+        endDate?: string | null;
+        tipoContratto?: string | null;
+        tipoCollaboratore?: string | null;
+        oreSettimanali?: number | null;
+        companyTenantProfileId?: string | null;
+        siteId?: string | null;
+        repartoId?: string | null;
+    }) =>
+        apiPut<ApiResponse<WorkerOccupationalProfile>>(`${CLINICA_BASE}/mansioni/worker/${personId}/occupational-profile`, data)
+            .then(extractData),
+
+    // Per-worker additional risks (non condivisi con altri sulla stessa mansione)
+    addWorkerRischio: (personId: string, data: { codiceRischio: CodiceRischio; livello?: LivelloRischio; categoria: CategoriaRischio; note?: string }) =>
+        apiPost<ApiResponse<MansioneRischio>>(`${CLINICA_BASE}/mansioni/worker/${personId}/rischio-aggiuntivo`, data)
+            .then(extractData),
+
+    updateWorkerRischio: (id: string, data: { livello?: LivelloRischio; note?: string }) =>
+        apiPut<ApiResponse<MansioneRischio>>(`${CLINICA_BASE}/mansioni/worker-rischio-aggiuntivo/${id}`, data)
+            .then(extractData),
+
+    removeWorkerRischio: (id: string) =>
+        apiDelete<{ success: boolean }>(`${CLINICA_BASE}/mansioni/worker-rischio-aggiuntivo/${id}`),
+
+    initializeWorkerRisks: (personId: string) =>
+        apiPost<ApiResponse<{ initialized: boolean }>>(`${CLINICA_BASE}/mansioni/worker/${personId}/initialize-risks`, {})
             .then(extractData),
 
     // By site
@@ -5575,12 +5754,14 @@ export const scadenzeMDLApi = {
      * Restituisce le ScadenzaPrestazioneProtocollo aperte di un lavoratore entro ±giorni dalla dataRiferimento.
      * Usato dal modal prenotazione MDL per auto-selezionare le prestazioni in scadenza.
      */
-    getScadenzeInScadenza: (personId: string, dataRiferimento: string, options?: { giorni?: number; excludeAppuntamentoId?: string }) =>
+    getScadenzeInScadenza: (personId: string, dataRiferimento: string, options?: { giorni?: number; giorniPre?: number; giorniPost?: number; excludeAppuntamentoId?: string }) =>
         apiGet<ApiResponse<ScadenzaPrestazioneInScadenza[]>>(
             `${CLINICA_BASE}/scadenze-mdl/persona/${personId}/in-scadenza`,
             {
                 dataRiferimento,
                 ...(options?.giorni != null && { giorni: options.giorni.toString() }),
+                ...(options?.giorniPre != null && { giorniPre: options.giorniPre.toString() }),
+                ...(options?.giorniPost != null && { giorniPost: options.giorniPost.toString() }),
                 ...(options?.excludeAppuntamentoId && { excludeAppuntamentoId: options.excludeAppuntamentoId }),
             }
         ).then(extractData),
@@ -5679,6 +5860,10 @@ export const pecConfigApi = {
 
 // Types for Scadenze
 export type DeadlineCategory =
+    | 'VISITA_MEDICA'
+    | 'FORMAZIONE'
+    | 'PROTOCOLLO_MDL'
+    | 'SOPRALLUOGO'
     | 'VISITA'
     | 'PROTOCOLLO_SANITARIO'
     | 'TARIFFARIO'
@@ -5689,7 +5874,7 @@ export type DeadlineCategory =
     | 'CONTRATTO'
     | 'ALTRO';
 
-export type DeadlinePriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
+export type DeadlinePriority = 'LOW' | 'NORMAL' | 'HIGH' | 'CRITICAL' | 'URGENT';
 
 export type DeadlineStatus = 'ATTIVA' | 'IN_PREAVVISO' | 'SCADUTA' | 'COMPLETATA' | 'ANNULLATA';
 
@@ -5724,7 +5909,7 @@ export interface DeadlineItem {
     responsabileId?: string;
     responsabile?: { id: string; nome: string; cognome: string; };
     personId?: string;
-    person?: { id: string; nome: string; cognome: string; };
+    person?: { id: string; nome: string; cognome: string; email?: string | null; phone?: string | null; telefono?: string | null; };
     companyId?: string;
     company?: { id: string; ragioneSociale: string; };
     companySiteId?: string;
@@ -5809,8 +5994,8 @@ export const scadenzeApi = {
         apiGet<PaginatedResponse<DeadlineItem>>('/api/v1/scadenze', filters as Record<string, string>),
 
     // Statistiche dashboard
-    getStats: () =>
-        apiGet<DeadlineStats>('/api/v1/scadenze/stats'),
+    getStats: (filters?: DeadlineFilters) =>
+        apiGet<DeadlineStats>('/api/v1/scadenze/stats', filters as Record<string, string>),
 
     // Dettaglio scadenza
     getById: (id: string) =>
@@ -5827,6 +6012,9 @@ export const scadenzeApi = {
     // Completa scadenza
     complete: (id: string, noteCompletamento?: string) =>
         apiPost<DeadlineItem>(`/api/v1/scadenze/${id}/complete`, { noteCompletamento }),
+
+    resolveDerived: (data: { entityType: string; entityId: string; newDate?: string; note?: string }) =>
+        apiPost<{ success: boolean; data: unknown }>('/api/v1/scadenze/resolve-derived', data),
 
     // Elimina scadenza
     delete: (id: string, deletionReason: string) =>
@@ -5891,6 +6079,10 @@ export interface FarmacoFilters {
     ambulatorioId?: string;
     ubicazione?: string;
     formaFarmaceutica?: FormaFarmaceutica;
+    dataInizio?: string;
+    dataFine?: string;
+    dataScadenzaDa?: string;
+    dataScadenzaA?: string;
     inScadenza?: boolean;
     sottoScorta?: boolean;
     search?: string;

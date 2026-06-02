@@ -29,6 +29,12 @@ import {
     Receipt,
     Loader2,
     ExternalLink,
+    TrendingUp,
+    TrendingDown,
+    Tag,
+    Hash,
+    Info,
+    Banknote,
 } from 'lucide-react';
 import { Button } from '../../../design-system/atoms/Button';
 import { CRUDPrimaryButton } from '../../../components/shared/CRUDButton';
@@ -48,29 +54,27 @@ import type { StatoMovimento, DirezioneMovimento } from '../../../services/movim
 // HELPERS
 // ============================================
 
-const getStatoBadgeColor = (stato: StatoMovimento): 'default' | 'success' | 'warning' | 'destructive' | 'secondary' => {
-    const colors: Record<StatoMovimento, 'default' | 'success' | 'warning' | 'destructive' | 'secondary'> = {
-        BOZZA: 'secondary',
-        CONFERMATO: 'default',
-        FATTURATO: 'warning',
-        PAGATO: 'success',
-        SCADUTO: 'destructive',
-        ANNULLATO: 'destructive',
-    };
-    return colors[stato] || 'default';
+const STATO_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode; badgeClass: string }> = {
+    BOZZA: { label: 'Bozza', color: 'gray', icon: <Clock className="w-4 h-4" />, badgeClass: 'bg-gray-100 text-gray-700 border border-gray-200' },
+    DA_FATTURARE: { label: 'Da Fatturare', color: 'blue', icon: <FileText className="w-4 h-4" />, badgeClass: 'bg-blue-100 text-blue-700 border border-blue-200' },
+    CONFERMATO: { label: 'Confermato', color: 'indigo', icon: <CheckCircle className="w-4 h-4" />, badgeClass: 'bg-indigo-100 text-indigo-700 border border-indigo-200' },
+    FATTURATO: { label: 'Fatturato', color: 'purple', icon: <Receipt className="w-4 h-4" />, badgeClass: 'bg-purple-100 text-purple-700 border border-purple-200' },
+    PAGATO: { label: 'Pagato', color: 'green', icon: <CheckCircle className="w-4 h-4" />, badgeClass: 'bg-green-100 text-green-700 border border-green-200' },
+    SCADUTO: { label: 'Scaduto', color: 'red', icon: <AlertTriangle className="w-4 h-4" />, badgeClass: 'bg-red-100 text-red-700 border border-red-200' },
+    ANNULLATO: { label: 'Annullato', color: 'gray', icon: <XCircle className="w-4 h-4" />, badgeClass: 'bg-gray-200 text-gray-600 border border-gray-300' },
+    STORNATO: { label: 'Stornato', color: 'orange', icon: <XCircle className="w-4 h-4" />, badgeClass: 'bg-orange-100 text-orange-700 border border-orange-200' },
 };
 
-const getStatoIcon = (stato: StatoMovimento) => {
-    const icons: Record<StatoMovimento, React.ReactNode> = {
-        BOZZA: <Clock className="w-4 h-4" />,
-        CONFERMATO: <CheckCircle className="w-4 h-4" />,
-        FATTURATO: <Receipt className="w-4 h-4" />,
-        PAGATO: <CheckCircle className="w-4 h-4 text-green-500" />,
-        SCADUTO: <AlertTriangle className="w-4 h-4 text-red-500" />,
-        ANNULLATO: <XCircle className="w-4 h-4" />,
+const getStatoBadgeColor = (stato: StatoMovimento): 'default' | 'success' | 'warning' | 'destructive' | 'secondary' => {
+    const map: Record<string, 'default' | 'success' | 'warning' | 'destructive' | 'secondary'> = {
+        BOZZA: 'secondary', DA_FATTURARE: 'default', CONFERMATO: 'default',
+        FATTURATO: 'warning', PAGATO: 'success', SCADUTO: 'destructive',
+        ANNULLATO: 'destructive', STORNATO: 'destructive',
     };
-    return icons[stato];
+    return map[stato] || 'default';
 };
+
+const getStatoIcon = (stato: StatoMovimento) => STATO_CONFIG[stato]?.icon ?? <Info className="w-4 h-4" />;
 
 const getDirezioneLabel = (direzione: DirezioneMovimento) => {
     return direzione === 'ENTRATA' ? 'Ricavo' : 'Costo';
@@ -82,19 +86,30 @@ const getDirezioneBadgeColor = (direzione: DirezioneMovimento): 'success' | 'des
 
 const TIPO_LABELS: Record<string, string> = {
     VISITA_MEDICA: 'Visita Medica',
-    VISITA_SPECIALISTICA: 'Visita Specialistica',
-    ESAME_DIAGNOSTICO: 'Esame Diagnostico',
+    PRESTAZIONE_CLINICA: 'Prestazione Clinica',
+    REFERTO: 'Referto',
+    VISITA_MDL: 'Visita Medicina del Lavoro',
+    SOPRALLUOGO_MC: 'Sopralluogo (MC)',
+    SOPRALLUOGO_RSPP: 'Sopralluogo (RSPP)',
+    DVR_STESURA: 'DVR - Stesura',
+    DVR_AGGIORNAMENTO: 'DVR - Aggiornamento',
+    DVR_NUOVO: 'DVR - Nuovo',
+    DVR_AGGIORNAMENTO_CON_MODIFICHE: 'DVR Aggiornamento (con modifiche)',
+    DVR_AGGIORNAMENTO_SENZA_MODIFICHE: 'DVR Aggiornamento (senza modifiche)',
+    NOMINA_MC: 'Nomina Medico Competente',
+    NOMINA_RSPP: 'Nomina RSPP',
     GIUDIZIO_IDONEITA: 'Giudizio Idoneità',
     ALLEGATO_3B: 'Allegato 3B',
-    DVR: 'DVR',
-    SOPRALLUOGO: 'Sopralluogo',
-    NOMINA_RUOLO: 'Nomina Ruolo',
-    CORSO_FORMAZIONE: 'Corso Formazione',
-    CORSO_AGGIORNAMENTO: 'Corso Aggiornamento',
-    BUNDLE_PACCHETTO: 'Bundle/Pacchetto',
-    PREVENTIVO: 'Preventivo',
+    CORSO_FORMAZIONE: 'Corso di Formazione',
+    DOCENZA: 'Docenza',
+    ATTESTATO: 'Attestato',
+    BUNDLE: 'Bundle/Pacchetto',
+    CONVENZIONE: 'Convenzione',
     CONSULENZA: 'Consulenza',
-    ALTRO: 'Altro',
+    SPESA_FISSA: 'Spesa Fissa',
+    SPESA_RICORRENTE: 'Spesa Ricorrente',
+    RIMBORSO: 'Rimborso',
+    COMPENSO_FORMATORE: 'Compenso Formatore',
 };
 
 const TIPO_SOGGETTO_LABELS: Record<string, string> = {
@@ -107,11 +122,13 @@ const TIPO_SOGGETTO_LABELS: Record<string, string> = {
 
 const STATO_LABELS: Record<string, string> = {
     BOZZA: 'Bozza',
+    DA_FATTURARE: 'Da Fatturare',
     CONFERMATO: 'Confermato',
     FATTURATO: 'Fatturato',
     PAGATO: 'Pagato',
     SCADUTO: 'Scaduto',
     ANNULLATO: 'Annullato',
+    STORNATO: 'Stornato',
 };
 
 // ============================================
@@ -212,56 +229,90 @@ const MovimentoContabileDetails: React.FC = () => {
         movimento.stato !== 'ANNULLATO' &&
         movimento.stato !== 'SCADUTO';
 
+    const isEntrata = movimento.direzione === 'ENTRATA';
+    const statoConf = STATO_CONFIG[movimento.stato];
+
     return (
         <div className="space-y-6">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-4">
-                    <Button variant="ghost" onClick={() => navigate('/management/movimenti-contabili')}>
-                        <ArrowLeft className="w-4 h-4 mr-2" />
-                        Indietro
-                    </Button>
-                    <div>
-                        <div className="flex items-center space-x-3">
-                            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                                Movimento #{movimento.id.substring(0, 8)}
-                            </h1>
-                            <Badge variant={getStatoBadgeColor(movimento.stato)}>
-                                {getStatoIcon(movimento.stato)}
-                                <span className="ml-1">{STATO_LABELS[movimento.stato]}</span>
-                            </Badge>
+            {/* Breadcrumb + back */}
+            <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" onClick={() => navigate('/management/movimenti-contabili')}>
+                    <ArrowLeft className="w-4 h-4 mr-1" />
+                    Movimenti Contabili
+                </Button>
+                <span className="text-gray-400">/</span>
+                <span className="text-sm text-gray-500 font-mono">{movimento.id.substring(0, 8).toUpperCase()}</span>
+            </div>
+
+            {/* Hero Header Card */}
+            <div className={`rounded-2xl p-6 text-white shadow-lg ${isEntrata
+                ? 'bg-gradient-to-br from-emerald-500 to-teal-600'
+                : 'bg-gradient-to-br from-rose-500 to-pink-600'
+                }`}>
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div className="flex items-start gap-4">
+                        <div className="w-14 h-14 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+                            {isEntrata
+                                ? <TrendingUp className="w-7 h-7" />
+                                : <TrendingDown className="w-7 h-7" />
+                            }
                         </div>
-                        <p className="text-gray-500 dark:text-gray-400">
-                            {TIPO_LABELS[movimento.tipo] || movimento.tipo} •
-                            {movimento.branch_type === 'MEDICA' ? ' Clinica' : ' Formazione'}
+                        <div>
+                            <div className="flex items-center gap-2 mb-1">
+                                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${statoConf?.badgeClass ?? 'bg-white/20 text-white'}`}>
+                                    {getStatoIcon(movimento.stato)}
+                                    {STATO_LABELS[movimento.stato] || movimento.stato}
+                                </span>
+                                <span className="text-white/70 text-xs">
+                                    {movimento.branch_type === 'MEDICA' ? '🏥 Clinica' : '📚 Formazione'}
+                                </span>
+                            </div>
+                            <h1 className="text-2xl font-bold">
+                                {TIPO_LABELS[movimento.tipo] || movimento.tipo}
+                            </h1>
+                            {movimento.descrizione && (
+                                <p className="text-white/80 text-sm mt-1">{movimento.descrizione}</p>
+                            )}
+                        </div>
+                    </div>
+                    <div className="text-right">
+                        <p className="text-white/70 text-sm">{isEntrata ? 'Ricavo' : 'Costo'}</p>
+                        <p className="text-4xl font-black">
+                            {isEntrata ? '+' : '-'}{formatCurrency(movimento.importoLordo)}
+                        </p>
+                        <p className="text-white/70 text-sm mt-1">
+                            Imponibile {formatCurrency(movimento.importoNetto)} · IVA {movimento.aliquotaIva}%
                         </p>
                     </div>
                 </div>
 
-                {/* Actions */}
-                <div className="flex items-center space-x-2">
+                {/* Action bar */}
+                <div className="flex flex-wrap gap-2 mt-5 pt-5 border-t border-white/20">
                     {canRecordPayment && (
-                        <Button
-                            variant="outline"
+                        <button
                             onClick={handleRecordPayment}
                             disabled={paymentMutation.isPending}
+                            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white text-gray-800 text-sm font-medium hover:bg-white/90 disabled:opacity-60 transition"
                         >
-                            <CreditCard className="w-4 h-4 mr-2" />
+                            <CreditCard className="w-4 h-4" />
                             Registra Pagamento
-                        </Button>
+                        </button>
                     )}
-                    <Button variant="outline" onClick={handleEdit}>
-                        <Edit className="w-4 h-4 mr-2" />
+                    <button
+                        onClick={handleEdit}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white/20 text-white text-sm font-medium hover:bg-white/30 transition"
+                    >
+                        <Edit className="w-4 h-4" />
                         Modifica
-                    </Button>
-                    <Button
-                        variant="destructive"
+                    </button>
+                    <button
                         onClick={handleDelete}
                         disabled={deleteMutation.isPending}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white/10 text-white text-sm font-medium hover:bg-white/20 disabled:opacity-60 transition"
                     >
-                        <Trash2 className="w-4 h-4 mr-2" />
+                        <Trash2 className="w-4 h-4" />
                         Elimina
-                    </Button>
+                    </button>
                 </div>
             </div>
 
@@ -419,25 +470,45 @@ const MovimentoContabileDetails: React.FC = () => {
                             Soggetto Collegato
                         </CardTitle>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="space-y-3">
                         {movimento.personId && (
                             <Link
-                                to={`/pazienti/${movimento.personId}`}
-                                className="flex items-center text-teal-600 hover:text-teal-700"
+                                to={`/poliambulatorio/pazienti/${movimento.personId}`}
+                                className="flex items-center gap-3 p-3 rounded-xl border border-violet-100 bg-violet-50 hover:bg-violet-100 transition"
                             >
-                                <User className="w-4 h-4 mr-2" />
-                                Visualizza Paziente
-                                <ExternalLink className="w-3 h-3 ml-1" />
+                                <div className="w-9 h-9 rounded-full bg-violet-200 flex items-center justify-center">
+                                    <User className="w-4 h-4 text-violet-700" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="font-medium text-violet-800 text-sm">
+                                        {movimento.person
+                                            ? `${movimento.person.firstName} ${movimento.person.lastName}`
+                                            : 'Visualizza Paziente'
+                                        }
+                                    </p>
+                                    <p className="text-xs text-violet-600">{TIPO_SOGGETTO_LABELS[movimento.tipoSoggetto]}</p>
+                                </div>
+                                <ExternalLink className="w-4 h-4 text-violet-500 flex-shrink-0" />
                             </Link>
                         )}
                         {movimento.companyTenantProfileId && (
                             <Link
                                 to={`/aziende/${movimento.companyTenantProfileId}`}
-                                className="flex items-center text-teal-600 hover:text-teal-700"
+                                className="flex items-center gap-3 p-3 rounded-xl border border-violet-100 bg-violet-50 hover:bg-violet-100 transition"
                             >
-                                <Building2 className="w-4 h-4 mr-2" />
-                                Visualizza Azienda
-                                <ExternalLink className="w-3 h-3 ml-1" />
+                                <div className="w-9 h-9 rounded-full bg-violet-200 flex items-center justify-center">
+                                    <Building2 className="w-4 h-4 text-violet-700" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="font-medium text-violet-800 text-sm">
+                                        {(movimento as any).companyTenantProfile?.company?.ragioneSociale
+                                            || (movimento as any).controparteCollegata?.companyTenantProfile?.company?.ragioneSociale
+                                            || 'Visualizza Azienda'
+                                        }
+                                    </p>
+                                    <p className="text-xs text-violet-600">{TIPO_SOGGETTO_LABELS[movimento.tipoSoggetto]}</p>
+                                </div>
+                                <ExternalLink className="w-4 h-4 text-violet-500 flex-shrink-0" />
                             </Link>
                         )}
                     </CardContent>
@@ -457,7 +528,7 @@ const MovimentoContabileDetails: React.FC = () => {
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <p className="text-sm text-gray-500 dark:text-gray-400">Tipo Compenso</p>
-                                <p className="font-medium">{movimento.compensoTipo.replace(/_/g, ' ')}</p>
+                                <p className="font-medium">{({ 'PERCENTUALE_VISITA': 'Percentuale per Visita', 'FISSO_VISITA': 'Fisso per Visita', 'FISSO_MENSILE': 'Fisso Mensile', 'PERCENTUALE_FATTURATO': 'Percentuale Fatturato' } as Record<string, string>)[movimento.compensoTipo!] || movimento.compensoTipo!.replace(/_/g, ' ')}</p>
                             </div>
                             <div>
                                 <p className="text-sm text-gray-500 dark:text-gray-400">Valore</p>

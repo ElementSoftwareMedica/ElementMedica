@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import DatePickerElegante from '@/components/ui/DatePickerElegante'
 import { useDesktopPermission } from '../hooks/useDesktopPermission'
 import { usePersistentPageState } from '../hooks/usePersistentPageState'
+import { ElegantSelect } from '../components/ElegantControls'
 import {
   Calendar,
   Clock,
@@ -317,16 +318,13 @@ export function AgendaPage(): JSX.Element {
             className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
           />
         </div>
-        <select
+        <div className="w-48">
+        <ElegantSelect
           value={filterStato}
-          onChange={(e) => setFilterStato(e.target.value)}
-          className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-        >
-          <option value="">Tutti gli stati</option>
-          {Object.entries(STATO_CONFIG).map(([key, { label }]) => (
-            <option key={key} value={key}>{label}</option>
-          ))}
-        </select>
+          onChange={setFilterStato}
+          options={[{ value: '', label: 'Tutti gli stati' }, ...Object.entries(STATO_CONFIG).map(([key, { label }]) => ({ value: key, label }))]}
+        />
+        </div>
       </div>
 
       {/* Summary badges */}

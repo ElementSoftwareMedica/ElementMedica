@@ -54,9 +54,10 @@ router.get('/',
                 tenantIds
             } = req.query;
 
+            const safePageSize = Math.min(Math.max(parseInt(pageSize) || 20, 10), 200);
             const result = await PazienteService.listPazienti({
                 page: parseInt(page),
-                pageSize: parseInt(pageSize),
+                pageSize: safePageSize,
                 search: search || '',
                 sortBy,
                 sortOrder,
@@ -68,7 +69,8 @@ router.get('/',
             res.json({
                 success: true,
                 data: result.data,
-                pagination: result.pagination
+                pagination: result.pagination,
+                stats: result.stats
             });
         } catch (error) {
             logger.error('Failed to list pazienti', {
@@ -129,6 +131,40 @@ router.get('/search',
             res.status(500).json({
                 success: false,
                 error: 'Errore nella ricerca pazienti'
+            });
+        }
+    }
+);
+
+router.get(['/by-tax-code/:taxCode', '/cerca-cf/:taxCode'],
+    authenticate,
+    checkAdvancedPermission('pazienti', 'read'),
+    async (req, res) => {
+        try {
+            const tenantId = getEffectiveTenantId(req);
+            const { taxCode } = req.params;
+            const paziente = await PazienteService.findByTaxCode(taxCode, tenantId);
+
+            res.json({
+                success: true,
+                data: paziente,
+                found: !!paziente,
+                isPazienteInTenant: !!paziente?.isPazienteInTenant,
+                person: paziente ? {
+                    ...paziente,
+                    isFromOtherTenant: !paziente.isPazienteInTenant,
+                    roles: (paziente.personRoles || []).map(role => role.roleType),
+                } : null,
+            });
+        } catch (error) {
+            logger.error('Failed to find paziente by tax code', {
+                component: 'pazienti-routes',
+                error: 'Operazione non riuscita',
+                tenantId: getEffectiveTenantId(req)
+            });
+            res.status(500).json({
+                success: false,
+                error: 'Errore nella ricerca paziente'
             });
         }
     }
@@ -440,6 +476,73 @@ router.get('/by-tax-code/:taxCode',
     }
 );
 
+// Alias mantenuto per i client frontend storici.
+router.get('/cerca-cf/:taxCode',
+    authenticate,
+    checkAdvancedPermission('pazienti', 'read'),
+    async (req, res) => {
+        try {
+            const tenantId = getEffectiveTenantId(req);
+            const { taxCode } = req.params;
+            const paziente = await PazienteService.findByTaxCode(taxCode, tenantId);
+
+            res.json({
+                success: true,
+                found: !!paziente,
+                isPazienteInTenant: !!paziente?.isPazienteInTenant,
+                person: paziente ? {
+                    ...paziente,
+                    isFromOtherTenant: !paziente.isPazienteInTenant,
+                    roles: (paziente.personRoles || []).map(role => role.roleType),
+                } : null,
+            });
+        } catch (error) {
+            logger.error('Failed to find paziente by tax code alias', {
+                component: 'pazienti-routes',
+                error: 'Operazione non riuscita',
+                tenantId: getEffectiveTenantId(req)
+            });
+            res.status(500).json({
+                success: false,
+                error: 'Errore nella ricerca paziente'
+            });
+        }
+    }
+);
+
+router.post('/:id/tutelanti',
+    authenticate,
+    checkAdvancedPermission('pazienti', 'update'),
+    auditClinico('upsert_tutelante_paziente'),
+    async (req, res) => {
+        try {
+            const tenantId = getEffectiveTenantId(req);
+            const createdBy = req.person?.id;
+            const relation = await PazienteService.addOrUpdateGuardian(req.params.id, req.body, tenantId, createdBy);
+            res.json({ success: true, data: relation });
+        } catch (error) {
+            logger.error('Failed to upsert patient guardian', {
+                component: 'pazienti-routes',
+                error: 'Operazione non riuscita',
+                pazienteId: req.params.id,
+                tenantId: getEffectiveTenantId(req)
+            });
+            const status = ['Paziente non trovato', 'Tutelante non valido', 'Il tutelante non può coincidere con il paziente'].includes(error.message)
+                ? 400
+                : 500;
+            const safeMessages = new Set([
+                'Paziente non trovato',
+                'Tutelante non valido',
+                'Il tutelante non può coincidere con il paziente'
+            ]);
+            res.status(status).json({
+                success: false,
+                error: safeMessages.has(error.message) ? error.message : 'Errore nel salvataggio del tutelante'
+            });
+        }
+    }
+);
+
 // ============================================
 // STORICO PAZIENTE (Session #13)
 // ============================================
@@ -507,6 +610,42 @@ router.get('/:id/consensi-firmati',
             const tenantId = getEffectiveTenantId(req);
             const personId = req.params.id;
 
+            const DEFAULT_VALIDITA_GIORNI = {
+                gdpr: 365,
+                sanitari: 365,
+                marketing: 3650,
+                comunicazioni: 3650,
+                fse_alimentazione: 3650,
+                fse_consultazione: 3650,
+                fse_pregresso: 3650,
+                mdl_sorveglianza: 365,
+            };
+
+            const moduli = await prisma.consensoModulo.findMany({
+                where: { tenantId, deletedAt: null, attivo: true },
+                select: { codice: true, validitaGiorni: true },
+            });
+            const validitaByCodice = new Map(moduli.map(m => [m.codice, m.validitaGiorni]));
+
+            const buildValiditaDocumenti = (token) => {
+                const codes = Array.from(new Set([
+                    ...(token.documentiDaMostrare || []),
+                    ...(token.firmatoConsensi || []),
+                ]));
+                return Object.fromEntries(codes.map((codice) => {
+                    const custom = validitaByCodice.has(codice) ? validitaByCodice.get(codice) : undefined;
+                    const giorni = custom !== undefined ? custom : (DEFAULT_VALIDITA_GIORNI[codice] ?? null);
+                    const validUntil = Number.isFinite(giorni) && giorni > 0 && token.firmatoAt
+                        ? new Date(new Date(token.firmatoAt).getTime() + giorni * 24 * 60 * 60 * 1000)
+                        : null;
+                    return [codice, {
+                        firmatoAt: token.firmatoAt,
+                        validitaGiorni: giorni,
+                        validUntil,
+                    }];
+                }));
+            };
+
             // Trova tutti i token consenso firmati per gli appuntamenti del paziente
             const tokens = await prisma.consensoFirmaToken.findMany({
                 where: {
@@ -542,7 +681,13 @@ router.get('/:id/consensi-firmati',
                 }
             });
 
-            return res.json({ success: true, data: tokens });
+            return res.json({
+                success: true,
+                data: tokens.map(token => ({
+                    ...token,
+                    validitaDocumenti: buildValiditaDocumenti(token),
+                })),
+            });
         } catch (error) {
             logger.error({ error: 'Operazione non riuscita', id: req.params.id }, 'Errore GET pazienti/:id/consensi-firmati');
             return res.status(500).json({ success: false, error: 'Errore nel recupero consensi firmati' });

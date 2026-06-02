@@ -40,6 +40,8 @@ import {
     StatoAppuntamento
 } from '../../../services/clinicaApi';
 import { formatDate, formatTime } from '../../../utils/dateUtils';
+import { useAuth } from '../../../context/AuthContext';
+import { useRoleGuard } from '../../../hooks/useRoleGuard';
 
 // ============================================
 // TYPES
@@ -53,6 +55,12 @@ interface Notifica {
     dataOra: Date;
     letto: boolean;
 }
+
+type MaybeListResponse<T> =
+    | T[]
+    | { data?: T[] | { data?: T[]; items?: T[] }; items?: T[]; results?: T[]; records?: T[] }
+    | null
+    | undefined;
 
 // ============================================
 // CONSTANTS
@@ -68,6 +76,24 @@ const STATO_COLORS: Record<StatoAppuntamento, { bg: string; text: string; dot: s
     'ANNULLATO': { bg: 'bg-gray-100', text: 'text-gray-700', dot: 'bg-gray-500' },
     'NO_SHOW': { bg: 'bg-red-100', text: 'text-red-700', dot: 'bg-red-500' },
     'RINVIATO': { bg: 'bg-yellow-100', text: 'text-yellow-700', dot: 'bg-yellow-500' }
+};
+
+const asList = <T,>(value: MaybeListResponse<T>): T[] => {
+    if (Array.isArray(value)) return value;
+    if (!value || typeof value !== 'object') return [];
+
+    const data = value.data;
+    if (Array.isArray(data)) return data;
+    if (data && typeof data === 'object') {
+        if (Array.isArray(data.data)) return data.data;
+        if (Array.isArray(data.items)) return data.items;
+    }
+
+    if (Array.isArray(value.items)) return value.items;
+    if (Array.isArray(value.results)) return value.results;
+    if (Array.isArray(value.records)) return value.records;
+
+    return [];
 };
 
 // ============================================
@@ -386,6 +412,9 @@ const QuickStats: React.FC<{
 
 export const MedicoDashboard: React.FC = () => {
     const navigate = useNavigate();
+    const { user } = useAuth();
+    const { isMedico, isMedicoCompetente } = useRoleGuard();
+    const currentMedicoPersonId = isMedico && !isMedicoCompetente ? user?.id : undefined;
 
     // Queries
     const { data: appuntamentiData, isLoading: loadingApp, refetch: refetchApp } = useQuery({
@@ -405,9 +434,28 @@ export const MedicoDashboard: React.FC = () => {
     });
 
     // Data
-    const appuntamenti = appuntamentiData || [];
-    const visite = visiteData || [];
-    const referti = refertiData || [];
+    const belongsToCurrentDoctor = (item: Record<string, any>) => {
+        if (!currentMedicoPersonId) return true;
+        const ids = [
+            item.medicoId,
+            item.medico?.id,
+            item.medico?.personId,
+            item.medicoRefertanteId,
+            item.refertanteId,
+            item.visita?.medicoId,
+            item.visita?.medico?.id,
+            item.visita?.medico?.personId,
+            item.visita?.medicoRefertanteId,
+            item.appuntamento?.medicoId,
+            item.appuntamento?.medico?.id,
+            item.appuntamento?.medico?.personId
+        ];
+        return ids.includes(currentMedicoPersonId);
+    };
+
+    const appuntamenti = asList<Appuntamento>(appuntamentiData).filter(a => belongsToCurrentDoctor(a as unknown as Record<string, any>));
+    const visite = asList<Visita>(visiteData).filter(v => belongsToCurrentDoctor(v as unknown as Record<string, any>));
+    const referti = asList<Referto>(refertiData).filter(r => belongsToCurrentDoctor(r as unknown as Record<string, any>));
 
     // Stats
     const stats = useMemo(() => ({

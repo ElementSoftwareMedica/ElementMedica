@@ -514,7 +514,7 @@ export const PackagesSection: React.FC<{ content: any }> = ({ content }) => {
 /**
  * Live Specialties Section
  * 
- * Fetches real prestazioni from /api/public/booking/prestazioni,
+ * Fetches real prestazioni from /api/v1/public/booking/prestazioni,
  * groups by brancheSpecialistiche, and displays dynamic cards
  * with real doctors, prices, and "Prenota" buttons.
  * Activated by content.liveSpecialties key.
@@ -562,7 +562,7 @@ export const LiveSpecialtiesSection: React.FC<{ content: any }> = ({ content }) 
     if (!hasLiveSpecialties) return;
     let cancelled = false;
     const brandId = import.meta.env.VITE_BRAND_ID || 'element-sicurezza';
-    fetch('/api/public/booking/prestazioni', { headers: { 'X-Frontend-Id': brandId } })
+    fetch('/api/v1/public/booking/prestazioni', { headers: { 'X-Frontend-Id': brandId } })
       .then(res => res.ok ? res.json() : Promise.reject())
       .then(data => { if (!cancelled) setPrestazioni(data.data || data); })
       .catch(() => { })

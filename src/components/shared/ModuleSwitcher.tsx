@@ -19,6 +19,8 @@ import {
   ChevronRight,
   Shield
 } from 'lucide-react';
+import { useTenantAccess } from '../../hooks/useTenantAccess';
+import { useRoleGuard } from '../../hooks/useRoleGuard';
 
 interface Module {
   id: string;
@@ -33,6 +35,7 @@ interface Module {
   color: string;
   bgColor: string;
   hoverBgColor: string;
+  feature?: string;      // Feature key richiesta per accedere al modulo
 }
 
 const modules: Module[] = [
@@ -48,7 +51,8 @@ const modules: Module[] = [
     prodDomain: 'www.elementsicurezza.com',
     color: 'text-blue-600',
     bgColor: 'bg-blue-50',
-    hoverBgColor: 'hover:bg-blue-50'
+    hoverBgColor: 'hover:bg-blue-50',
+    feature: 'BRANCH_FORMAZIONE'
   },
   {
     id: 'poliambulatorio',
@@ -62,7 +66,8 @@ const modules: Module[] = [
     prodDomain: 'www.elementmedica.com',
     color: 'text-teal-600',
     bgColor: 'bg-teal-50',
-    hoverBgColor: 'hover:bg-teal-50'
+    hoverBgColor: 'hover:bg-teal-50',
+    feature: 'BRANCH_MEDICA'
   },
   {
     id: 'management',
@@ -147,9 +152,30 @@ export const ModuleSwitcher: React.FC<ModuleSwitcherProps> = ({
 }) => {
   const location = useLocation();
   const currentPort = getCurrentPort();
+  const { hasFeature } = useTenantAccess();
+  const { isTrainerOnly, isPazienteOnly, isMedico } = useRoleGuard();
 
-  // Filter out the current module from the list
-  const availableModules = modules.filter(m => m.id !== currentModule);
+  // Modules not accessible to restricted roles
+  const roleRestrictedModules = new Set<string>();
+  if (isTrainerOnly) {
+    roleRestrictedModules.add('poliambulatorio');
+    roleRestrictedModules.add('management');
+  }
+  if (isPazienteOnly) {
+    roleRestrictedModules.add('formazione');
+    roleRestrictedModules.add('management');
+  }
+  if (isMedico) {
+    roleRestrictedModules.add('formazione');
+    roleRestrictedModules.add('management');
+  }
+
+  // Filter out current module, unlocked features, and role-restricted modules
+  const availableModules = modules.filter(m =>
+    m.id !== currentModule &&
+    (!m.feature || hasFeature(m.feature)) &&
+    !roleRestrictedModules.has(m.id)
+  );
 
   const handleModuleClick = (module: Module, e: React.MouseEvent) => {
     // For cross-domain navigation, we need to use window.location

@@ -10,6 +10,7 @@
 
 import express from 'express';
 import logger from '../../utils/logger.js';
+import prisma from '../../config/prisma-optimization.js';
 import middleware from '../../middleware/auth.js';
 import { checkAdvancedPermission } from '../../middleware/advanced-permissions.js';
 import { CLINICAL_ENUMS, clinicalValidators } from '../../config/validation-clinical.js';
@@ -34,10 +35,6 @@ router.get('/stats',
     checkAdvancedPermission('prestazioni', 'read'),
     auditClinico('stats_prestazioni'),
     async (req, res) => {
-        const prisma = (await import('@prisma/client')).PrismaClient ?
-            new (await import('@prisma/client')).PrismaClient() :
-            (await import('../../config/prisma.js')).default;
-
         try {
             const tenantId = getEffectiveTenantId(req);
 
@@ -129,7 +126,7 @@ router.get('/',
     async (req, res) => {
         try {
             const tenantId = getEffectiveTenantId(req);
-            const { page = 1, limit = 20, search, tipo, attivo } = req.query;
+            const { page = 1, limit = 20, search, tipo, attivo, tenantIds } = req.query;
 
             const options = {
                 page: parseInt(page),
@@ -139,6 +136,11 @@ router.get('/',
             if (tipo) options.tipo = tipo;
             if (attivo !== undefined) {
                 options.attivo = typeof attivo === 'boolean' ? attivo : attivo === 'true';
+            }
+
+            // Handle tenantIds array parameter for multi-tenant filtering
+            if (tenantIds) {
+                options.tenantIds = Array.isArray(tenantIds) ? tenantIds : tenantIds.split(',').map(id => id.trim()).filter(Boolean);
             }
 
             const prestazioni = await PrestazioneService.getAll(tenantId, options, getBranchType(req));

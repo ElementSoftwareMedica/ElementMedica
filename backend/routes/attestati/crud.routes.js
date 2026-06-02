@@ -19,8 +19,55 @@ import {
   isEmployeeOnlyAccess
 } from './common.js';
 import { getEffectiveTenantId } from '../../utils/tenantHelper.js';
+import { isTrainerOnlyAccess, getTrainerScheduleIds } from '../../utils/trainerAccess.js';
 
 const router = express.Router();
+
+const isSignedAttestato = (attestato) => Boolean(
+  attestato.firmaFormatore ||
+  attestato.firmaFormatoreAt ||
+  attestato.firmaPartecipante ||
+  attestato.firmaPartecipanteAt
+);
+
+async function auditAttestatoDelete(req, attestato, tenantId, deletionReason, db = prisma) {
+  if (isSignedAttestato(attestato)) {
+    await db.gdprAuditLog.create({
+      data: {
+        tenantId,
+        personId: req.person.id,
+        resourceType: 'Attestato',
+        resourceId: attestato.id,
+        action: 'DELETE',
+        dataAccessed: {
+          operation: 'SOFT_DELETE',
+          deletionReason,
+          signedDocument: true,
+          personId: attestato.personId,
+          scheduledCourseId: attestato.scheduledCourseId
+        },
+        ipAddress: req.ip || null,
+        userAgent: req.get?.('user-agent') || null
+      }
+    });
+    return;
+  }
+
+  await db.activityLog.create({
+    data: {
+      personId: req.person.id,
+      tenantId,
+      action: 'ATTESTATO_DELETE',
+      category: 'DOCUMENTS',
+      resource: 'Attestato',
+      resourceId: attestato.id,
+      details: deletionReason,
+      metadata: { signedDocument: false, scheduledCourseId: attestato.scheduledCourseId },
+      ipAddress: req.ip || null,
+      userAgent: req.get?.('user-agent') || null
+    }
+  });
+}
 
 /**
  * GET /api/v1/attestati
@@ -47,6 +94,14 @@ router.get('/', authenticateToken, requirePermission('documents:read'), async (r
     if (scheduleId) where.scheduledCourseId = scheduleId;
     if (personId) where.personId = personId;
     if (year) where.annoProgressivo = parseInt(year);
+
+    // TRAINER-only: limita agli attestati dei propri corsi programmati
+    const isTrainerOnly = await isTrainerOnlyAccess(person.id, tenantId);
+    if (isTrainerOnly) {
+      const scheduleIds = await getTrainerScheduleIds(person.id, tenantId);
+      if (scheduleIds.length === 0) return res.json([]);
+      where.scheduledCourseId = { in: scheduleIds };
+    }
 
     const attestati = await prisma.attestato.findMany({
       where,
@@ -200,9 +255,14 @@ router.delete('/:id', authenticateToken, requirePermission('documents:delete'), 
       return res.status(404).json({ error: 'Certificato non trovato' });
     }
 
-    await prisma.attestato.update({
-      where: { id },
-      data: { deletedAt: new Date() }
+    const deletionReason = req.body?.deletionReason || 'Eliminazione attestato formazione';
+
+    await prisma.$transaction(async (tx) => {
+      await tx.attestato.update({
+        where: { id },
+        data: { deletedAt: new Date() }
+      });
+      await auditAttestatoDelete(req, attestato, tenantId, deletionReason, tx);
     });
 
     logger.info('Certificate deleted', {
@@ -251,13 +311,17 @@ router.post('/delete-batch', authenticateToken, requirePermission('documents:del
       return res.status(404).json({ error: 'Nessun certificato trovato' });
     }
 
-    // Soft delete all found certificates
-    await prisma.attestato.updateMany({
-      where: {
-        id: { in: attestati.map(a => a.id) },
-        tenantId
-      },
-      data: { deletedAt: new Date() }
+    const deletionReason = req.body?.deletionReason || 'Eliminazione multipla attestati formazione';
+
+    await prisma.$transaction(async (tx) => {
+      await tx.attestato.updateMany({
+        where: {
+          id: { in: attestati.map(a => a.id) },
+          tenantId
+        },
+        data: { deletedAt: new Date() }
+      });
+      await Promise.all(attestati.map(attestato => auditAttestatoDelete(req, attestato, tenantId, deletionReason, tx)));
     });
 
     logger.info('Batch certificates deleted', {

@@ -34,6 +34,8 @@ export interface BridgeExamResult {
     note?: string
     rawGdt?: string
     pdfPath?: string
+    pdfBase64?: string
+    pdfFilename?: string
     deviceName?: string
     completedAt: string
 }
@@ -44,8 +46,8 @@ function readBody(req: IncomingMessage): Promise<string> {
     return new Promise((resolve, reject) => {
         let body = ''
         req.on('data', (chunk: Buffer) => {
-            // Limit body size to 1 MB to prevent abuse
-            if (body.length + chunk.length > 1_048_576) {
+            // Limit body size to 50 MB: exam PDFs are sent as base64 in this callback.
+            if (body.length + chunk.length > 50 * 1024 * 1024) {
                 req.destroy()  // Close the socket — stops further data from arriving
                 reject(new Error('body_too_large'))
                 return
@@ -55,6 +57,71 @@ function readBody(req: IncomingMessage): Promise<string> {
         req.on('end', () => resolve(body))
         req.on('error', reject)
     })
+}
+
+function normalizeBridgePayload(raw: unknown): BridgeExamResult {
+    const payload = raw as {
+        sessionId?: string
+        visitaId?: string
+        tipo?: string
+        risultato?: string
+        valori?: Record<string, string>
+        note?: string
+        rawGdt?: string
+        pdfPath?: string
+        pdfBase64?: string
+        pdfFilename?: string
+        deviceName?: string
+        completedAt?: string
+        result?: {
+            bridgeSessionId?: string
+            resultId?: string
+            visitaId?: string
+            examType?: string
+            deviceType?: string
+            examDate?: string
+            testResults?: Array<{ testName?: string; testId?: string; value?: string; unit?: string }>
+            findings?: string[]
+            gdtData?: { raw?: string }
+            pdfBase64?: string
+            pdfFilename?: string
+            status?: string
+        }
+    }
+
+    if (!payload.result) {
+        if (!payload.sessionId || !payload.tipo || !payload.completedAt) throw new Error('invalid_payload')
+        return payload as BridgeExamResult
+    }
+
+    const result = payload.result
+    const valori = Object.fromEntries((result.testResults || []).map(item => {
+        const key = item.testName || item.testId || 'Valore'
+        const value = [item.value, item.unit].filter(Boolean).join(' ')
+        return [key, value]
+    }))
+    const note = (result.findings || []).join('\n')
+
+    const tipoMap: Record<string, string> = {
+        ecg: 'ECG',
+        spirometry: 'SPIROMETRIA',
+        audiometry: 'AUDIOMETRIA',
+        drugtest: 'DRUG_TEST',
+    }
+
+    return {
+        sessionId: result.bridgeSessionId || result.resultId || '',
+        visitaId: result.visitaId,
+        tipo: tipoMap[String(result.examType || '').toLowerCase()] || String(result.examType || '').toUpperCase(),
+        risultato: result.status === 'error' ? 'ERRORE' : 'COMPLETATO',
+        valori,
+        note,
+        rawGdt: result.gdtData?.raw,
+        pdfBase64: result.pdfBase64,
+        pdfFilename: result.pdfFilename,
+        deviceName: result.deviceType,
+        completedAt: result.examDate || new Date().toISOString(),
+    }
 }
 
 function handleRequest(req: IncomingMessage, res: ServerResponse): void {
@@ -76,7 +143,7 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
         }
         readBody(req)
             .then((raw) => {
-                const data: BridgeExamResult = JSON.parse(raw)
+                const data = normalizeBridgePayload(JSON.parse(raw))
                 // Validate required fields minimally
                 if (!data.sessionId || !data.tipo || !data.completedAt) {
                     throw new Error('invalid_payload')

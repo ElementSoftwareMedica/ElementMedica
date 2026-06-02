@@ -64,7 +64,13 @@ const ENTITY_MAP: Record<string, string> = {
     appointment_prestazioni: 'appuntamentoPrestazione',
     protocolli: 'protocolloSanitario',
     allegati: 'allegatoVisita',
-    questionari_compilati: 'documentoCompilato',
+    documenti_compilati: 'documentoCompilato',
+    questionari_medici_config: 'questionarioMedicoConfig',
+    questionari_risposte: 'questionarioRisposta',
+    profili_salute: 'profiloDiSalutePersona',
+    documenti_clinici: 'documentoClinico',
+    referti: 'referto',
+    firme_digitali: 'firmaDigitale',
     // Alias keys (Prisma model names used directly in enqueue calls)
     visita: 'visita',
     appuntamento: 'appuntamento',
@@ -81,15 +87,36 @@ const ENTITY_MAP: Record<string, string> = {
     allegatoVisita: 'allegatoVisita',
     allegato: 'allegatoVisita',
     documentoCompilato: 'documentoCompilato',
-    questionarioCompilato: 'documentoCompilato',
+    questionarioMedicoConfig: 'questionarioMedicoConfig',
+    questionarioRisposta: 'questionarioRisposta',
+    profiloDiSalutePersona: 'profiloDiSalutePersona',
+    documentoClinico: 'documentoClinico',
+    referto: 'referto',
+    firmaDigitale: 'firmaDigitale',
     // Rischi aggiuntivi lavoratore
     lavoratore_rischi_aggiuntivi: 'lavoratoreRischioAggiuntivo',
     lavoratoreRischioAggiuntivo: 'lavoratoreRischioAggiuntivo',
+    mansione_rischi: 'mansioneRischio',
+    mansioneRischio: 'mansioneRischio',
+    protocollo_prestazioni: 'protocolloPrestazione',
+    protocolloPrestazione: 'protocolloPrestazione',
     // DeadlineItem alias (for scadenze created offline)
     deadlineItem: 'deadlineItem',
     // ScadenzaPrestazioneProtocollo (MDL protocol deadlines)
     scadenze_prestazioni_protocollo: 'scadenzaPrestazioneProtocollo',
-    scadenzaPrestazioneProtocollo: 'scadenzaPrestazioneProtocollo'
+    scadenzaPrestazioneProtocollo: 'scadenzaPrestazioneProtocollo',
+    nominaRuolo: 'nominaRuolo',
+    nomine_ruolo: 'nominaRuolo',
+    tariffario_company_associations: 'tariffarioCompanyAssociation',
+    tariffarioCompanyAssociation: 'tariffarioCompanyAssociation',
+    sopralluoghi: 'sopralluogo',
+    sopralluogo: 'sopralluogo',
+    dvr: 'dVR',
+    dVR: 'dVR',
+    consulenze_mdl: 'consulenzaMDL',
+    consulenzaMDL: 'consulenzaMDL',
+    allegati_3b: 'allegato3B',
+    allegato3B: 'allegato3B'
 }
 
 const ACTION_MAP: Record<string, string> = {
@@ -111,6 +138,14 @@ const ENTITY_PRIORITY: Record<string, number> = {
     companySite: 1,
     protocolli: 1,
     protocolloSanitario: 1,
+    protocollo_prestazioni: 1,
+    protocolloPrestazione: 1,
+    mansione_rischi: 1,
+    mansioneRischio: 1,
+    nominaRuolo: 1,
+    nomine_ruolo: 1,
+    tariffario_company_associations: 2,
+    tariffarioCompanyAssociation: 2,
     visits: 2,
     visita: 2,
     appointments: 2,
@@ -136,9 +171,28 @@ const ENTITY_PRIORITY: Record<string, number> = {
     allegati: 4,
     allegatoVisita: 4,
     allegato: 4,
-    questionari_compilati: 4,
+    documenti_compilati: 4,
+    questionari_medici_config: 4,
+    questionari_risposte: 5,
+    profili_salute: 3,
+    documenti_clinici: 5,
+    referti: 5,
+    firme_digitali: 6,
     documentoCompilato: 4,
-    questionarioCompilato: 4
+    questionarioMedicoConfig: 4,
+    questionarioRisposta: 5,
+    profiloDiSalutePersona: 3,
+    documentoClinico: 5,
+    referto: 5,
+    firmaDigitale: 6,
+    sopralluoghi: 4,
+    sopralluogo: 4,
+    dvr: 4,
+    dVR: 4,
+    consulenze_mdl: 4,
+    consulenzaMDL: 4,
+    allegati_3b: 4,
+    allegato3B: 4
 }
 
 /**
@@ -170,7 +224,12 @@ const BATCH_SIZE = 500
 
 // === Main Upload Sync ===
 
-export async function executeUploadSync(callbacks: SyncCallbacks): Promise<void> {
+interface UploadSyncOptions {
+    notify?: boolean
+}
+
+export async function executeUploadSync(callbacks: SyncCallbacks, options: UploadSyncOptions = {}): Promise<void> {
+    const shouldNotify = options.notify !== false
     callbacks.onStart()
 
     try {
@@ -312,6 +371,7 @@ export async function executeUploadSync(callbacks: SyncCallbacks): Promise<void>
 
         // Native notification on sync completion
         try {
+            if (!shouldNotify) return
             if (window.desktopApi?.app?.showNotification) {
                 if (totalConflict > 0) {
                     await window.desktopApi.app.showNotification({
@@ -389,11 +449,14 @@ async function performWipeRemoto(): Promise<void> {
     try {
         // Clear all SQLite tables with patient data
         const TABLES_TO_WIPE = [
-            'visits', 'appointments', 'patients', 'companies', 'company_sites',
-            'mansioni', 'lavoratore_mansioni', 'protocolli', 'scadenze',
+            'visits', 'appointments', 'patients', 'companies', 'company_sites', 'nomine_ruolo',
+            'mansioni', 'mansione_rischi', 'lavoratore_mansioni', 'protocolli', 'protocollo_prestazioni', 'scadenze',
             'giudizi_idoneita', 'movimenti_contabili', 'prestazioni', 'tariffari',
-            'convenzioni', 'ambulatori', 'medici', 'visit_templates', 'document_templates', 'esami_strumentali',
-            'allegati', 'questionari_compilati', 'lavoratore_rischi_aggiuntivi',
+            'convenzioni', 'ambulatori', 'slot_disponibilita', 'medici', 'visit_templates', 'document_templates', 'questionari_medici_config', 'esami_strumentali',
+            'allegati', 'documenti_compilati', 'questionari_risposte',
+            'profili_salute', 'documenti_clinici', 'person_documents', 'referti', 'visit_revisions',
+            'visit_access_logs', 'firme_digitali', 'lavoratore_rischi_aggiuntivi',
+            'tariffario_voci', 'tariffario_company_associations', 'sopralluoghi', 'dvr', 'consulenze_mdl', 'allegati_3b',
             'operations_queue', 'sync_log'
         ]
         for (const table of TABLES_TO_WIPE) {
@@ -476,6 +539,7 @@ export async function getConflictOperations(): Promise<PendingOperation[]> {
 interface PendingAllegato {
     id: string
     visitaId: string | null
+    serverVisitaId?: string | null
     nome: string
     tipo: string | null
     dimensione: number | null
@@ -518,7 +582,7 @@ export async function syncAttachments(token: string, tenantId: string): Promise<
                 const formData = new FormData()
                 formData.append('file', blob, allegato.nome)
                 formData.append('allegatoLocalId', allegato.id)
-                formData.append('visitaId', allegato.visitaId || '')
+                formData.append('visitaId', allegato.serverVisitaId || allegato.visitaId || '')
                 formData.append('nome', allegato.nome)
                 formData.append('tipo', allegato.tipo || 'bin')
                 formData.append('dimensione', String(allegato.dimensione || fileData.size))
@@ -544,9 +608,13 @@ export async function syncAttachments(token: string, tenantId: string): Promise<
                     )
                 } catch (error) {
                     if (!axios.isAxiosError(error) || error.response?.status !== 404) throw error
+                    const routeMissing = typeof error.response?.data === 'string'
+                        ? error.response.data.toLowerCase().includes('cannot post')
+                        : String(error.response?.data?.error || error.response?.data?.message || '').toLowerCase().includes('endpoint')
+                    if (!routeMissing) throw error
                     const fallbackForm = new FormData()
                     fallbackForm.append('file', blob, allegato.nome)
-                    fallbackForm.append('visitaId', allegato.visitaId || '')
+                    fallbackForm.append('visitaId', allegato.serverVisitaId || allegato.visitaId || '')
                     fallbackForm.append('tipo', mimeType.startsWith('image/') ? 'image' : 'document')
                     fallbackForm.append('descrizione', allegato.nome)
                     response = await axios.post(

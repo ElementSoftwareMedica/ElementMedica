@@ -207,7 +207,7 @@ export const useDocumentGeneration = ({
     } catch (error: unknown) {
 
       // Handle 409 Conflict error (existing attestati)
-      if (error.response?.status === 409) {
+      if ((error as any).response?.status === 409) {
         showToast({
           message: "Alcuni partecipanti hanno già un attestato. Usa il modal per rigenerarli o seleziona solo chi non ce l'ha.",
           type: 'warning',

@@ -433,10 +433,12 @@ router.post('/pages/:id/duplicate', authenticate, requirePermissions('cms.pages:
 // EXISTING ROUTES (courses, media, etc.)
 // ============================================
 
-// Configurazione multer per upload immagini
+// Configurazione multer per upload immagini — file salvati in uploads/cms/{tenantId}/ per evitare
+// percorsi duplicati e garantire l'isolamento multi-tenant.
 const storage = multer.diskStorage({
   destination: async (req, file, cb) => {
-    const uploadDir = path.join(process.cwd(), 'uploads', 'cms');
+    const tenantId = getEffectiveTenantId(req);
+    const uploadDir = path.join(process.cwd(), 'uploads', 'cms', tenantId);
     try {
       await fs.mkdir(uploadDir, { recursive: true });
       cb(null, uploadDir);
@@ -779,13 +781,14 @@ router.post('/upload/image', authenticate, requirePermissions('cms.media:manage'
     const file = req.file;
 
     // Salva le informazioni del file nel database
+    // URL include tenantId per corrispondere al percorso filesystem uploads/cms/{tenantId}/{filename}
     const mediaRecord = await prisma.cMSMedia.create({
       data: {
         filename: file.filename,
         originalName: file.originalname,
         mimeType: file.mimetype,
         size: file.size,
-        url: `/uploads/cms/${file.filename}`,
+        url: `/uploads/cms/${tenantId}/${file.filename}`,
         alt: req.body.alt || '',
         tenantId,
         uploadedBy: userId

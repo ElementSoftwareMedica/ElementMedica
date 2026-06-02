@@ -13,6 +13,22 @@ import './styles/scrollbar.css'
 const brandId = import.meta.env.VITE_BRAND_ID || 'element-sicurezza';
 document.documentElement.setAttribute('data-brand', brandId);
 
+// Global fallback for broken CMS/uploads images — silently swap to transparent placeholder
+// so the browser never shows a broken-image icon. Handles orphaned DB references.
+document.addEventListener('error', (e) => {
+  const target = e.target as Element
+  if (
+    target instanceof HTMLImageElement &&
+    (target.src.includes('/uploads/cms/') || target.src.includes('/uploads/')) &&
+    !target.dataset.fallbackApplied
+  ) {
+    target.dataset.fallbackApplied = '1'
+    // 1×1 transparent GIF — works without any additional asset
+    target.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
+    target.style.opacity = '0'
+  }
+}, true)
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AppProviders>

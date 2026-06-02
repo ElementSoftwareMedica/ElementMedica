@@ -31,7 +31,10 @@ import {
     UserCheck,
     Briefcase,
     User,
-    Link2
+    Link2,
+    Circle,
+    CircleDot,
+    BarChart3
 } from 'lucide-react';
 import { CATEGORIA_VISITA_LABELS } from '../../../../services/tariffarioAziendaleApi';
 import { getMedicoTitle } from '../../../../utils/textFormatters';
@@ -78,6 +81,13 @@ export interface PrestazioneItem {
      * Presente quando medicoRefertanteId != medicoId dell'appuntamento.
      */
     visitaSecondariaId?: string;
+    statoAppPrestazione?: 'DA_ESEGUIRE' | 'IN_CORSO' | 'ESEGUITA' | 'IN_ATTESA_REFERTO' | 'REFERTATA' | 'ANNULLATA';
+    refertoId?: string | null;
+    dataEsecuzione?: string | null;
+    statoQuestionario?: string;
+    esecuzioneStatus?: 'NON_ESEGUITA' | 'ESEGUITA' | 'IN_ATTESA_REFERTO';
+    /** True when the appointment prestation was inserted from inside the visit, not pre-booked. */
+    createdDuringVisit?: boolean;
 }
 
 export interface MedicoOption {
@@ -92,6 +102,8 @@ export interface ConvenzioneItem {
     nome: string;
     tipo: string;
     scontoPercentuale?: number;
+    scontoFisso?: number;
+    codiceSconto?: string;
 }
 
 export interface CodiceSconto {
@@ -107,6 +119,15 @@ export interface VoceTariffarioItem {
     prezzoBase: number | string;
 }
 
+export interface PrestazioneEsameStrumentale {
+    id: string;
+    tipoEsame?: string;
+    stato?: string;
+    dataEsame?: string;
+    risultati?: Array<{ testId?: string; testName?: string; value?: string | number; unit?: string; status?: string }>;
+    findings?: string[];
+    metadata?: Record<string, unknown>;
+}
 
 
 interface PrestazioniCardProps {
@@ -168,7 +189,21 @@ interface PrestazioniCardProps {
     onChangeTipoVisita?: (tipo: string) => void;
     /** Voci tariffario per la prestazione principale (filtrare per categoriaVisita) */
     vociTariffarioPrincipale?: VoceTariffarioItem[];
+    /** Esami importati da strumentario collegati alla visita */
+    esamiStrumentali?: PrestazioneEsameStrumentale[];
+    /** Apre il dettaglio dei dati strumentali importati */
+    onOpenEsameStrumentale?: (esame: PrestazioneEsameStrumentale) => void;
+    /** Apre o crea la scheda accertamento/visita secondaria in modal */
+    onOpenVisitaSecondaria?: (prestazione: PrestazioneItem) => void;
 }
+
+const isMedicinaLavoroPrestazione = (prestazione?: Pick<PrestazioneItem, 'tipo' | 'nome'> | null) => {
+    const tipo = String(prestazione?.tipo || '').toUpperCase();
+    const nome = String(prestazione?.nome || '').toLowerCase();
+    return tipo === 'VISITA_MEDICINA_LAVORO'
+        || tipo.includes('MEDICINA_LAVORO')
+        || nome.includes('medicina del lavoro');
+};
 
 export const PrestazioniCard: React.FC<PrestazioniCardProps> = ({
     prestazionePrincipale,
@@ -198,6 +233,9 @@ export const PrestazioniCard: React.FC<PrestazioniCardProps> = ({
     tipoVisitaMDL,
     onChangeTipoVisita,
     vociTariffarioPrincipale = [],
+    esamiStrumentali = [],
+    onOpenEsameStrumentale,
+    onOpenVisitaSecondaria,
 }) => {
     const [isExpanded, setIsExpanded] = useState(true);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -252,16 +290,13 @@ export const PrestazioniCard: React.FC<PrestazioniCardProps> = ({
     }, [convenzioniDisponibili, convenzioneSearchQuery]);
 
     const handleAddPrestazione = useCallback((prestazione: PrestazioneItem) => {
-        // Attribuire a carico azienda se:
-        // - la visita è MDL (isMDL = true, impostato dall'appuntamento.tipoVisitaMDL)
-        // - OPPURE la prestazione principale ha tipo VISITA_MEDICINA_LAVORO (check esplicito)
-        // - OPPURE una delle prestazioni aggiuntive già aggiunte è VMdL (edge case)
         const hasVMdL = isMDL
-            || prestazionePrincipale?.tipo === 'VISITA_MEDICINA_LAVORO'
-            || prestazioniAggiuntive.some(p => p.tipo === 'VISITA_MEDICINA_LAVORO');
-        const prestazioneWithDefaults = hasVMdL
-            ? { ...prestazione, aCaricoTipo: 'azienda' as const }
-            : prestazione;
+            || isMedicinaLavoroPrestazione(prestazionePrincipale)
+            || prestazioniAggiuntive.some(isMedicinaLavoroPrestazione);
+        const prestazioneWithDefaults = {
+            ...prestazione,
+            aCaricoTipo: hasVMdL ? 'azienda' as const : 'paziente' as const
+        };
         onAddPrestazione?.(prestazioneWithDefaults);
         setSearchQuery('');
         setIsSearchOpen(false);
@@ -323,9 +358,17 @@ export const PrestazioniCard: React.FC<PrestazioniCardProps> = ({
         if (convenzioneAssociata?.scontoPercentuale) {
             prezzo = prezzo * (1 - convenzioneAssociata.scontoPercentuale / 100);
         }
+        if (convenzioneAssociata?.scontoFisso) {
+            prezzo = Math.max(0, prezzo - convenzioneAssociata.scontoFisso);
+        }
 
-        // Apply codici sconto
-        codiciScontoApplicati.forEach(cs => {
+        const conventionCode = String(convenzioneAssociata?.codiceSconto || '').trim().toUpperCase();
+        const codiciEffettivi = conventionCode
+            ? codiciScontoApplicati.filter(cs => String(cs.codice || '').trim().toUpperCase() !== conventionCode)
+            : codiciScontoApplicati;
+
+        // Apply codici sconto, skipping the code already embedded in the selected convenzione.
+        codiciEffettivi.forEach(cs => {
             if (cs.scontoPercentuale) {
                 prezzo = prezzo * (1 - cs.scontoPercentuale / 100);
             }
@@ -339,6 +382,78 @@ export const PrestazioniCard: React.FC<PrestazioniCardProps> = ({
 
     const totalCount = 1 + prestazioniAggiuntive.length;
 
+    const getExecutionState = (p: PrestazioneItem, isPrimary: boolean) => {
+        if (isPrimary) {
+            return {
+                key: 'ESEGUITA' as const,
+                label: 'Visita principale',
+                hint: 'Prestazione principale della visita',
+                dot: 'bg-indigo-500',
+                badge: 'bg-indigo-50 text-indigo-700 border-indigo-200'
+            };
+        }
+
+        if (p.esecuzioneStatus === 'ESEGUITA') {
+            return { key: 'ESEGUITA' as const, label: 'Eseguita', hint: 'Prestazione eseguita', dot: 'bg-emerald-500', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+        }
+        if (p.esecuzioneStatus === 'IN_ATTESA_REFERTO') {
+            return { key: 'IN_ATTESA_REFERTO' as const, label: 'In attesa referto', hint: 'Prestazione eseguita, referto da completare', dot: 'bg-amber-400', badge: 'bg-amber-50 text-amber-700 border-amber-200' };
+        }
+        if (p.esecuzioneStatus === 'NON_ESEGUITA') {
+            return { key: 'NON_ESEGUITA' as const, label: 'Non eseguita', hint: 'Prestazione non eseguita, movimenti da annullare', dot: 'bg-red-500', badge: 'bg-red-50 text-red-700 border-red-200' };
+        }
+
+        if (p.isQuestionario) {
+            const stato = p.statoQuestionario;
+            const completed = ['COMPLETATO', 'FIRMATO_MEDICO', 'FIRMATO_PAZIENTE'].includes(stato || '');
+            const pending = ['BOZZA', 'DA_FIRMARE'].includes(stato || '');
+            if (completed) return { key: 'ESEGUITA' as const, label: 'Questionario compilato', hint: 'Questionario completato', dot: 'bg-emerald-500', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+            if (pending) return { key: 'IN_ATTESA_REFERTO' as const, label: 'Questionario da completare', hint: 'Questionario iniziato ma non concluso', dot: 'bg-amber-400', badge: 'bg-amber-50 text-amber-700 border-amber-200' };
+        }
+
+        const stato = p.statoAppPrestazione;
+        if (stato === 'REFERTATA' || (stato === 'ESEGUITA' && !(p.medicoRefertanteId && medicoId && p.medicoRefertanteId !== medicoId))) {
+            return { key: 'ESEGUITA' as const, label: 'Eseguita', hint: 'Prestazione eseguita', dot: 'bg-emerald-500', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+        }
+        if (stato === 'IN_ATTESA_REFERTO' || (stato === 'ESEGUITA' && p.medicoRefertanteId && medicoId && p.medicoRefertanteId !== medicoId)) {
+            return { key: 'IN_ATTESA_REFERTO' as const, label: 'In attesa referto', hint: 'Prestazione eseguita, referto da completare', dot: 'bg-amber-400', badge: 'bg-amber-50 text-amber-700 border-amber-200' };
+        }
+        return { key: 'NON_ESEGUITA' as const, label: 'Non eseguita', hint: 'Prestazione non eseguita, movimenti da annullare', dot: 'bg-red-500', badge: 'bg-red-50 text-red-700 border-red-200' };
+    };
+
+    const getNextExecutionUpdate = (p: PrestazioneItem, isPrimary: boolean): Partial<PrestazioneItem> | null => {
+        if (isPrimary || p.isQuestionario || !p.appPrestazioneId || !canModify) return null;
+        const current = getExecutionState(p, false).key;
+        const next = current === 'ESEGUITA'
+            ? 'IN_ATTESA_REFERTO'
+            : current === 'IN_ATTESA_REFERTO'
+                ? 'NON_ESEGUITA'
+                : 'ESEGUITA';
+        return {
+            esecuzioneStatus: next,
+            statoAppPrestazione: next === 'NON_ESEGUITA'
+                ? 'ANNULLATA'
+                : next === 'IN_ATTESA_REFERTO'
+                    ? 'IN_ATTESA_REFERTO'
+                    : 'ESEGUITA'
+        };
+    };
+
+    const findMatchingEsame = (p: PrestazioneItem) => {
+        const search = `${p.codice || ''} ${p.nome || ''}`.toLowerCase();
+        const expected = search.includes('spiro')
+            ? ['spirometria', 'spirometry']
+            : search.includes('audio')
+                ? ['audiometria', 'audiometry']
+                : search.includes('visio') || search.includes('vista')
+                    ? ['visiotest', 'vision']
+                    : search.includes('ecg') || search.includes('elettro')
+                        ? ['ecg']
+                        : [];
+        if (!expected.length) return undefined;
+        return esamiStrumentali.find(e => expected.includes((e.tipoEsame || '').toLowerCase()));
+    };
+
     // Has prima visita / controllo pricing?
     const hasPrimaControlloVariant = !!(
         prestazionePrincipale?.prezzoPrimaVisita != null ||
@@ -351,17 +466,34 @@ export const PrestazioniCard: React.FC<PrestazioniCardProps> = ({
         const bgHeaderClass = isPrimary ? 'bg-indigo-50/70' : 'bg-purple-50/70';
         const indicatorClass = isPrimary ? 'bg-indigo-500' : 'bg-purple-500';
         const displayPrice = isPrimary ? effectivePrimaryPrice : (p.prezzo || 0);
+        const execution = getExecutionState(p, isPrimary);
 
         // Lookup medico corretto per onorifico gender-aware
         const currentMedicoId = !isPrimary ? (p.medicoRefertanteId || medicoId || '') : '';
         const medicoObj = mediciDisponibili.find(m => m.id === currentMedicoId);
         /** Onorifico gender-aware: usa getMedicoTitle (Dott. per maschi/default, Dott.ssa per femmine) */
         const getHonorific = (m: MedicoOption) => getMedicoTitle(m.gender as 'MALE' | 'FEMALE' | 'OTHER' | 'NOT_SPECIFIED' | null);
-        const showSubRow = !isPrimary && (canModify || !!p.medicoRefertanteId || !!p.medicoRefertanteNome);
+        const matchingEsame = !isPrimary ? findMatchingEsame(p) : undefined;
+        const canOpenSecondaryVisit = !isPrimary && !p.isQuestionario && !!p.appPrestazioneId;
+        const showAccertamentoAction = !isPrimary && (canOpenSecondaryVisit || !!matchingEsame);
+        const showSubRow = !isPrimary && (canModify || !!p.medicoRefertanteId || !!p.medicoRefertanteNome || showAccertamentoAction);
+        const hasVMdLInVisit = isMDL
+            || isMedicinaLavoroPrestazione(prestazionePrincipale)
+            || prestazioniAggiuntive.some(isMedicinaLavoroPrestazione);
+        const effectiveACaricoTipo: 'paziente' | 'azienda' = p.aCaricoTipo || (hasVMdLInVisit ? 'azienda' : 'paziente');
+        const secondaryOrDataTitle = canOpenSecondaryVisit
+            ? (p.visitaSecondariaId ? 'Apri scheda accertamento' : 'Crea e apri scheda accertamento')
+            : matchingEsame
+                ? 'Apri dati importati dal dispositivo'
+                : '';
+        const nextExecutionUpdate = getNextExecutionUpdate(p, isPrimary);
+        const executionButtonTitle = nextExecutionUpdate
+            ? `${execution.hint}. Clicca per cambiare stato.`
+            : execution.hint;
 
         return (
-            <div key={p.id} className={`rounded-lg border overflow-hidden ${borderClass}`}>
-                <div className={`relative flex items-center gap-2 p-2 ${bgHeaderClass}`}>
+            <div key={p.appPrestazioneId || p.id} className={`rounded-lg border overflow-hidden ${borderClass}`}>
+                <div className={`relative flex items-start gap-2 p-2 ${bgHeaderClass}`}>
                     {/* Primary indicator - star in top right corner */}
                     {isPrimary && (
                         <div
@@ -373,40 +505,58 @@ export const PrestazioniCard: React.FC<PrestazioniCardProps> = ({
                     )}
 
                     {/* Selection indicator */}
-                    <div className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${indicatorClass}`}>
-                        <Check className="w-3 h-3 text-white" />
-                    </div>
+                    <button
+                        type="button"
+                        disabled={!nextExecutionUpdate}
+                        onClick={() => nextExecutionUpdate && onUpdatePrestazione?.(p.id, nextExecutionUpdate)}
+                        className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center transition-transform ${isPrimary ? indicatorClass : execution.dot} ${nextExecutionUpdate ? 'hover:scale-110 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-purple-300' : 'cursor-default'}`}
+                        title={executionButtonTitle}
+                    >
+                        {execution.key === 'NON_ESEGUITA'
+                            ? <Circle className="w-3 h-3 text-white" />
+                            : execution.key === 'IN_ATTESA_REFERTO'
+                                ? <CircleDot className="w-3 h-3 text-white" />
+                                : <Check className="w-3 h-3 text-white" />
+                        }
+                    </button>
 
                     {/* Prestazione info */}
                     <div className="flex-1 min-w-0">
                         <div className="font-medium text-gray-900 text-sm leading-tight">
                             {p.nome}
                         </div>
-                        <div className="text-xs text-gray-500 flex items-center gap-1.5">
-                            <span>{p.codice}</span>
+                        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 pr-1 text-xs text-gray-500">
+                            {p.codice && <span className="shrink-0">{p.codice}</span>}
                             {/* A carico di badge */}
-                            {(isMDL || (!isPrimary && p.aCaricoTipo)) && (
-                                <span className={`inline-flex items-center gap-0.5 px-1 py-0 rounded text-[10px] font-medium ${(isMDL || p.aCaricoTipo === 'azienda')
+                            {!isPrimary && (
+                                <button
+                                    type="button"
+                                    disabled={!canModify}
+                                    onClick={(event) => {
+                                        event.stopPropagation();
+                                        if (!canModify) return;
+                                        onUpdatePrestazione?.(p.id, {
+                                            aCaricoTipo: effectiveACaricoTipo === 'azienda' ? 'paziente' : 'azienda'
+                                        });
+                                    }}
+                                    className={`inline-flex shrink-0 items-center gap-0.5 px-1 py-0 rounded text-[10px] font-medium transition-colors ${effectiveACaricoTipo === 'azienda'
                                     ? 'bg-blue-100 text-blue-700'
                                     : 'bg-gray-100 text-gray-600'
-                                    }`}>
-                                    {(isMDL || p.aCaricoTipo === 'azienda')
+                                    } ${canModify ? 'hover:bg-blue-200 cursor-pointer' : 'cursor-default'}`}
+                                    title={canModify ? 'Cambia: a carico paziente / azienda' : 'A carico'}
+                                >
+                                    {effectiveACaricoTipo === 'azienda'
                                         ? <><Briefcase className="h-2.5 w-2.5" /> Azienda</>
                                         : <><User className="h-2.5 w-2.5" /> Paziente</>
                                     }
-                                </span>
-                            )}
-                            {/* P73: Visita secondaria creata per specialista */}
-                            {!isPrimary && p.visitaSecondariaId && (
-                                <span className="inline-flex items-center gap-0.5 px-1 py-0 rounded text-[10px] font-medium bg-teal-100 text-teal-700" title="Visita specialistica generata">
-                                    <Link2 className="h-2.5 w-2.5" /> Specialista
-                                </span>
+                                </button>
                             )}
                         </div>
                     </div>
 
                     {/* Duration & Price */}
-                    <div className="flex flex-col items-end text-xs flex-shrink-0">
+                    <div className="flex flex-shrink-0 items-start gap-1">
+                        <div className="flex flex-col items-end text-xs">
                         {canViewPrices && displayPrice > 0 && (
                             <span className="font-semibold text-gray-700">
                                 €{displayPrice.toFixed(0)}
@@ -418,13 +568,14 @@ export const PrestazioniCard: React.FC<PrestazioniCardProps> = ({
                                 {p.durata}&apos;
                             </span>
                         )}
+                        </div>
                     </div>
 
                     {/* Remove button (only for additional prestazioni when can modify) */}
                     {!isPrimary && canModify && (
                         <button
                             type="button"
-                            onClick={() => handleRemovePrestazione(p.id)}
+                            onClick={() => handleRemovePrestazione(p.appPrestazioneId || p.id)}
                             className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
                             title="Rimuovi"
                         >
@@ -477,59 +628,75 @@ export const PrestazioniCard: React.FC<PrestazioniCardProps> = ({
                     <div className="flex items-center gap-2 px-2 py-1.5 bg-purple-50/30 border-t border-purple-100">
                         {canModify ? (
                             <>
-                                {mediciDisponibili.length > 0 && (
-                                    <div className="flex items-center gap-1 flex-1 min-w-0">
-                                        <UserCheck className="h-3 w-3 text-violet-500 flex-shrink-0" />
-                                        <select
-                                            value={currentMedicoId}
-                                            onChange={(e) => {
-                                                const sel = mediciDisponibili.find(m => m.id === e.target.value);
-                                                onUpdatePrestazione?.(p.id, {
-                                                    medicoRefertanteId: e.target.value || undefined,
-                                                    medicoRefertanteNome: sel ? `${sel.lastName} ${sel.firstName}` : undefined
-                                                });
-                                            }}
-                                            className="flex-1 min-w-0 border border-gray-200 rounded px-1.5 py-0.5 text-xs bg-white
-                                                     focus:border-violet-300 focus:ring-1 focus:ring-violet-100 outline-none"
-                                            title="Medico refertante"
-                                        >
-                                            {mediciDisponibili.map(m => (
-                                                <option key={m.id} value={m.id}>
-                                                    {getHonorific(m)} {m.lastName} {m.firstName}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                )}
-                                {!isMDL && (
-                                    <div className="flex-shrink-0">
-                                        <button
-                                            type="button"
-                                            onClick={() => onUpdatePrestazione?.(p.id, {
-                                                aCaricoTipo: p.aCaricoTipo === 'azienda' ? 'paziente' : 'azienda'
-                                            })}
-                                            className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${p.aCaricoTipo === 'azienda'
-                                                ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                                }`}
-                                            title="Cambia: a carico paziente / azienda"
-                                        >
-                                            <RefreshCw className="h-2.5 w-2.5" />
-                                            {p.aCaricoTipo === 'azienda' ? 'Azienda' : 'Paziente'}
-                                        </button>
-                                    </div>
+                                <div className="flex items-center gap-1 flex-1 min-w-0">
+                                    <UserCheck className="h-3 w-3 text-violet-500 flex-shrink-0" />
+                                    {mediciDisponibili.length > 0 ? (
+                                            <select
+                                                value={currentMedicoId}
+                                                onChange={(e) => {
+                                                    const sel = mediciDisponibili.find(m => m.id === e.target.value);
+                                                    onUpdatePrestazione?.(p.id, {
+                                                        medicoRefertanteId: e.target.value || undefined,
+                                                        medicoRefertanteNome: sel ? `${sel.lastName} ${sel.firstName}` : undefined
+                                                    });
+                                                }}
+                                                className="flex-1 min-w-0 border border-gray-200 rounded px-1.5 py-0.5 text-xs bg-white
+                                                         focus:border-violet-300 focus:ring-1 focus:ring-violet-100 outline-none"
+                                                title="Medico refertante"
+                                            >
+                                                {mediciDisponibili.map(m => (
+                                                    <option key={m.id} value={m.id}>
+                                                        {getHonorific(m)} {m.lastName} {m.firstName}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                    ) : (
+                                        <span className="truncate text-xs text-violet-700">
+                                            {p.medicoRefertanteNome || 'Medico refertante non assegnato'}
+                                        </span>
+                                    )}
+                                </div>
+                                {showAccertamentoAction && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            if (canOpenSecondaryVisit) onOpenVisitaSecondaria?.(p);
+                                            else if (matchingEsame) onOpenEsameStrumentale?.(matchingEsame);
+                                        }}
+                                        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-violet-200/80 bg-white text-violet-700 shadow-sm hover:bg-violet-50"
+                                        title={secondaryOrDataTitle}
+                                    >
+                                        {canOpenSecondaryVisit ? <Link2 className="h-3.5 w-3.5" /> : <BarChart3 className="h-3.5 w-3.5" />}
+                                    </button>
                                 )}
                             </>
                         ) : (
                             /* Readonly: mostra refertante con onorifico corretto (Dott./Dott.ssa) */
-                            <div className="flex items-center gap-1 text-xs text-violet-700">
-                                <UserCheck className="h-3 w-3 flex-shrink-0" />
-                                {medicoObj ? (
-                                    <span>Refertata da: {getHonorific(medicoObj)} {medicoObj.lastName} {medicoObj.firstName}</span>
-                                ) : p.medicoRefertanteNome ? (
-                                    <span>Refertata da: {p.medicoRefertanteNome}</span>
-                                ) : null}
-                            </div>
+                            <>
+                                <div className="flex min-w-0 flex-1 items-center gap-1 text-xs text-violet-700">
+                                    <UserCheck className="h-3 w-3 flex-shrink-0" />
+                                    {medicoObj ? (
+                                        <span className="truncate">Refertata da: {getHonorific(medicoObj)} {medicoObj.lastName} {medicoObj.firstName}</span>
+                                    ) : p.medicoRefertanteNome ? (
+                                        <span className="truncate">Refertata da: {p.medicoRefertanteNome}</span>
+                                    ) : (
+                                        <span className="truncate">Medico refertante non assegnato</span>
+                                    )}
+                                </div>
+                                {showAccertamentoAction && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            if (canOpenSecondaryVisit) onOpenVisitaSecondaria?.(p);
+                                            else if (matchingEsame) onOpenEsameStrumentale?.(matchingEsame);
+                                        }}
+                                        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-violet-200/80 bg-white text-violet-700 shadow-sm hover:bg-violet-50"
+                                        title={secondaryOrDataTitle}
+                                    >
+                                        {canOpenSecondaryVisit ? <Link2 className="h-3.5 w-3.5" /> : <BarChart3 className="h-3.5 w-3.5" />}
+                                    </button>
+                                )}
+                            </>
                         )}
                     </div>
                 )}

@@ -52,6 +52,14 @@ const LoginMedica: React.FC = () => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!identifier.trim()) {
+            setError('Inserisci email o username');
+            return;
+        }
+        if (!password) {
+            setError('Inserisci la password');
+            return;
+        }
         setIsLoading(true);
         setError('');
 
@@ -183,7 +191,7 @@ const LoginMedica: React.FC = () => {
                             </div>
                         )}
 
-                        <form onSubmit={handleSubmit} className="space-y-5">
+                        <form onSubmit={handleSubmit} noValidate className="space-y-5">
                             <div>
                                 <label htmlFor="identifier" className="block text-sm font-medium text-gray-700 mb-2">
                                     Email o Username
@@ -198,7 +206,8 @@ const LoginMedica: React.FC = () => {
                                         type="text"
                                         autoComplete="username"
                                         required
-                                        className="input-clinica pl-12"
+                                        className="input-clinica"
+                                        style={{ paddingLeft: '3rem' }}
                                         placeholder="email@esempio.com"
                                         value={identifier}
                                         onChange={(e) => setIdentifier(e.target.value)}
@@ -220,7 +229,8 @@ const LoginMedica: React.FC = () => {
                                         type={showPassword ? 'text' : 'password'}
                                         autoComplete="current-password"
                                         required
-                                        className="input-clinica pl-12 pr-12"
+                                        className="input-clinica"
+                                        style={{ paddingLeft: '3rem', paddingRight: '3rem' }}
                                         placeholder="••••••••"
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}

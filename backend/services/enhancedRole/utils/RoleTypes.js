@@ -82,10 +82,12 @@ const CLINICA_FULL_CRUD = [
   // Prestazioni
   'clinica.prestazioni:read', 'clinica.prestazioni:create', 'clinica.prestazioni:update', 'clinica.prestazioni:delete', 'clinica.prestazioni:manage',
   // Appuntamenti
-  'clinica.appuntamenti:read', 'clinica.appuntamenti:create', 'clinica.appuntamenti:update', 'clinica.appuntamenti:delete', 'clinica.appuntamenti:manage', 'clinica.appuntamenti:view_others',
+  'clinica.appuntamenti:read', 'clinica.appuntamenti:create', 'clinica.appuntamenti:update', 'clinica.appuntamenti:delete', 'clinica.appuntamenti:manage',
+  'clinica.appuntamenti:view_others', 'clinica.appuntamenti:view_others_all', 'clinica.appuntamenti:view_others_same_branch',
+  'clinica.appuntamenti:create_self', 'clinica.appuntamenti:create_others', 'clinica.appuntamenti:edit_others',
   // Visite
   'clinica.visite:read', 'clinica.visite:create', 'clinica.visite:update', 'clinica.visite:delete', 'clinica.visite:manage',
-  'clinica.visite:change_refertante', 'clinica.visite:view_prices', 'clinica.visite:manage_convenzioni',
+  'clinica.visite:change_refertante', 'clinica.visite:view_prices', 'clinica.visite:manage_convenzioni', 'clinica.visite:edit_others',
   // Referti
   'clinica.referti:read', 'clinica.referti:create', 'clinica.referti:update', 'clinica.referti:delete', 'clinica.referti:manage',
   // Signatures
@@ -186,6 +188,7 @@ export function getDefaultPermissions(roleType) {
       // Finanza
       'preventivi:read', 'preventivi:create', 'preventivi:update', 'preventivi:delete', 'preventivi:manage', 'preventivi:send', 'preventivi:generate_pdf',
       'invoices:read', 'invoices:create', 'invoices:update', 'invoices:delete', 'invoices:manage',
+      'movimenti_contabili:read', 'movimenti_contabili:write', 'movimenti_contabili:manage',
       'codici_sconto:read', 'codici_sconto:create', 'codici_sconto:update', 'codici_sconto:delete', 'codici_sconto:manage',
       // Notifiche & Impostazioni
       'notifications:read', 'notifications:create', 'notifications:update', 'notifications:delete', 'notifications:manage', 'notifications:send',
@@ -212,6 +215,7 @@ export function getDefaultPermissions(roleType) {
       'patients:read', 'patients:write', 'patients:create', 'patients:update', 'patients:delete', 'patients:manage',
       'modulistica:read', 'modulistica:write', 'modulistica:create', 'modulistica:update', 'modulistica:delete', 'modulistica:manage',
       'contabilita:read', 'contabilita:write', 'contabilita:manage',
+      'movimenti_contabili:read', 'movimenti_contabili:write', 'movimenti_contabili:manage',
       'email-templates:read', 'email-templates:write', 'email-templates:create', 'email-templates:update', 'email-templates:delete', 'email-templates:manage',
       'internal-documents:read', 'internal-documents:write', 'internal-documents:create', 'internal-documents:manage',
       'notifications:analytics',
@@ -255,6 +259,7 @@ export function getDefaultPermissions(roleType) {
       'seo:read', 'seo:update', 'seo:manage', 'seo:sitemap_generate',
       'reports:read', 'reports:create', 'reports:update', 'reports:delete', 'reports:manage', 'reports:export',
       'hierarchy:read', 'hierarchy:create', 'hierarchy:update', 'hierarchy:delete', 'hierarchy:manage',
+      'system:read',
       'imports:create', 'imports:read', 'imports:manage',
       ...CLINICA_FULL_CRUD,
       // Permessi clinica aggiuntivi (usati da requirePermission in routes clinica)
@@ -591,6 +596,8 @@ export function getDefaultPermissions(roleType) {
       // Convenzioni e tariffari (sola lettura)
       'clinica.convenzioni:read',
       'clinica.tariffari:read',
+      // Compensi personali generati dai movimenti contabili
+      'movimenti_contabili:read',
       // Ferie (richiesta propria)
       'clinica.ferie:read', 'clinica.ferie:create',
       // Documenti
@@ -662,6 +669,7 @@ export function getDefaultPermissions(roleType) {
       'persons:read', 'persons:create', 'persons:update',
       'employees:read',
       'companies:read',
+      'movimenti_contabili:read', 'movimenti_contabili:write',
       // Documenti
       'documents:read', 'documents:create',
       // Calendario e schedules

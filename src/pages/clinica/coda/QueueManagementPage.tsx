@@ -39,6 +39,8 @@ import {
 } from 'lucide-react';
 import { toISODateString } from '@/utils/dateUtils';
 import { useToast } from '@/hooks/useToast';
+import { useAuth } from '@/context/AuthContext';
+import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { getMedicoTitle } from '@/utils/textFormatters';
 import { useDateFilter } from '@/hooks/useDateFilter';
 import { CRUDButton, CRUDPrimaryButton } from '@/components/shared/CRUDButton';
@@ -328,6 +330,9 @@ const QueueManagementPage: React.FC = () => {
     const urlSessionId = searchParams.get('sessionId');
     const urlDate = searchParams.get('date');
     const { showToast } = useToast();
+    const { user } = useAuth();
+    const { isMedico, isMedicoCompetente } = useRoleGuard();
+    const currentMedicoId = isMedico && !isMedicoCompetente ? user?.id : undefined;
 
     // Date filter — use URL date if provided, otherwise default to today
     const dateFilter = useDateFilter({
@@ -380,6 +385,13 @@ const QueueManagementPage: React.FC = () => {
             refetchInterval: isToday ? 30000 : undefined
         });
 
+    const visibleSessions = useMemo(() => {
+        if (!currentMedicoId) return sessions;
+        return sessions.filter(session =>
+            (session.medici || []).some(sm => sm.medicoId === currentMedicoId || sm.medico?.personId === currentMedicoId)
+        );
+    }, [sessions, currentMedicoId]);
+
     // Queue caller for selected session (uses first selected)
     const caller = useQueueCaller({
         sessionId: selectedSession?.id || '',
@@ -396,14 +408,14 @@ const QueueManagementPage: React.FC = () => {
 
     // Auto-select from URL or first session
     useEffect(() => {
-        if (sessions.length > 0 && selectedSessions.length === 0) {
+        if (visibleSessions.length > 0 && selectedSessions.length === 0) {
             if (urlSessionId) {
-                const fromUrl = sessions.find(s => s.id === urlSessionId);
+                const fromUrl = visibleSessions.find(s => s.id === urlSessionId);
                 if (fromUrl) { setSelectedSessions([fromUrl]); return; }
             }
-            setSelectedSessions([sessions[0]]);
+            setSelectedSessions([visibleSessions[0]]);
         }
-    }, [sessions, selectedSessions.length, urlSessionId]);
+    }, [visibleSessions, selectedSessions.length, urlSessionId]);
 
     // Filtered entries
     const filteredEntries = useMemo(() => {
@@ -496,6 +508,10 @@ const QueueManagementPage: React.FC = () => {
     }, [selectedSession]);
 
     const handleGenerateBulkDay = useCallback(async () => {
+        if (currentMedicoId) {
+            showToast({ message: 'Puoi creare solo sessioni coda collegate ai tuoi slot disponibilità', type: 'info' });
+            return;
+        }
         try {
             const dateStr = toISODateString(selectedDate);
             const result = await mutations.generateBulkDay.mutate({ date: dateStr });
@@ -507,7 +523,7 @@ const QueueManagementPage: React.FC = () => {
         } catch {
             showToast({ message: 'Errore nella generazione delle sessioni', type: 'error' });
         }
-    }, [mutations.generateBulkDay, selectedDate, refetchSessions, showToast]);
+    }, [mutations.generateBulkDay, selectedDate, refetchSessions, showToast, currentMedicoId]);
 
     const handleDownloadSessionPdf = useCallback(async () => {
         if (!selectedSession) return;
@@ -604,7 +620,7 @@ const QueueManagementPage: React.FC = () => {
                         </button>
                         <CRUDButton
                             onClick={handleGenerateBulkDay}
-                            disabled={mutations.generateBulkDay.isLoading}
+                            disabled={mutations.generateBulkDay.isLoading || !!currentMedicoId}
                             className="flex items-center gap-1.5"
                             title="Genera automaticamente tutte le sessioni coda per la giornata selezionata"
                         >
@@ -627,7 +643,7 @@ const QueueManagementPage: React.FC = () => {
                             <div key={i} className="animate-pulse bg-gray-200 h-32 rounded-xl" />
                         ))}
                     </div>
-                ) : sessions.length === 0 ? (
+                ) : visibleSessions.length === 0 ? (
                     <div className="bg-white rounded-xl shadow-sm p-10 text-center">
                         <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                         <h3 className="text-lg font-medium text-gray-900 mb-2">Nessuna sessione attiva</h3>
@@ -641,7 +657,7 @@ const QueueManagementPage: React.FC = () => {
                     </div>
                 ) : (
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                        {sessions.map(session => (
+                        {visibleSessions.map(session => (
                             <SessionCard
                                 key={session.id}
                                 session={session}

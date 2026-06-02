@@ -23,14 +23,22 @@ import { useValidatedParams } from '../../hooks/routing/useValidatedParams';
 import EntitySchedulesSection from '../../components/shared/EntitySchedulesSection';
 import { Button } from '../../design-system/atoms/Button';
 import { getRiskLevelLabel } from '../../utils/courseLabels';
+import { useAuth } from '../../context/AuthContext';
 
 const CourseDetails: React.FC = () => {
   const { id, isValidating, isValid, errorMessage } = useValidatedParams();
   const { showToast } = useToast();
+  const { user } = useAuth();
   const [course, setCourse] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
+
+  const isTrainerOnly =
+    user?.roleType === 'TRAINER' &&
+    !['ADMIN', 'TRAINING_ADMIN', 'HR_MANAGER', 'COMPANY_MANAGER', 'SITE_MANAGER'].some(r =>
+      user?.roles?.includes(r)
+    );
 
   // TODO: In futuro questi dati verranno caricati da API reali
   // Per ora mostriamo placeholder per non avere dati hardcoded fittizi
@@ -255,15 +263,17 @@ const CourseDetails: React.FC = () => {
           <div>
             <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3">Dettagli Commerciali</h2>
             <ul className="space-y-2">
-              <li className="flex items-start">
-                <Euro className="h-4 w-4 text-gray-400 dark:text-gray-500 mt-0.5" />
-                <div className="ml-2">
-                  <span className="block text-xs font-medium text-gray-800 dark:text-gray-200">Prezzo per Persona</span>
-                  <span className="block text-sm text-gray-600 dark:text-gray-400">
-                    {course.pricePerPerson ? `€ ${Number(course.pricePerPerson).toFixed(2)}` : 'N/D'}
-                  </span>
-                </div>
-              </li>
+              {!isTrainerOnly && (
+                <li className="flex items-start">
+                  <Euro className="h-4 w-4 text-gray-400 dark:text-gray-500 mt-0.5" />
+                  <div className="ml-2">
+                    <span className="block text-xs font-medium text-gray-800 dark:text-gray-200">Prezzo per Persona</span>
+                    <span className="block text-sm text-gray-600 dark:text-gray-400">
+                      {course.pricePerPerson ? `€ ${Number(course.pricePerPerson).toFixed(2)}` : 'N/D'}
+                    </span>
+                  </div>
+                </li>
+              )}
               <li className="flex items-start">
                 <Award className="h-4 w-4 text-gray-400 dark:text-gray-500 mt-0.5" />
                 <div className="ml-2">

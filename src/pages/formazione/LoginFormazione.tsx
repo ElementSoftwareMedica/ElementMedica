@@ -44,6 +44,14 @@ const LoginFormazione: React.FC = () => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!identifier.trim()) {
+            setError('Inserisci email o username');
+            return;
+        }
+        if (!password) {
+            setError('Inserisci la password');
+            return;
+        }
         setIsLoading(true);
         setError('');
 
@@ -188,7 +196,7 @@ const LoginFormazione: React.FC = () => {
                             </div>
                         )}
 
-                        <form onSubmit={handleSubmit} className="space-y-5">
+                        <form onSubmit={handleSubmit} noValidate className="space-y-5">
                             <div>
                                 <label htmlFor="identifier" className="block text-sm font-medium text-gray-700 mb-2">
                                     Email o Username

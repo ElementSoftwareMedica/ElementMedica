@@ -104,6 +104,23 @@ export async function creaFatturaBozza(input, tenantId, createdBy) {
   });
   if (!ente) throw new Error('Ente emittente non trovato');
 
+  // Risolvi clienteAziendaId: deve essere un CompanyTenantProfile.id, non un global Company.id
+  let clienteAziendaId = input.clienteAziendaId || null;
+  if (clienteAziendaId) {
+    const ctpDirect = await prisma.companyTenantProfile.findFirst({
+      where: { id: clienteAziendaId, tenantId, deletedAt: null },
+      select: { id: true }
+    });
+    if (!ctpDirect) {
+      // Potrebbe essere un global Company.id — risolvi al CTP del tenant
+      const ctpFromCompany = await prisma.companyTenantProfile.findFirst({
+        where: { companyId: clienteAziendaId, tenantId, deletedAt: null },
+        select: { id: true }
+      });
+      clienteAziendaId = ctpFromCompany?.id || null;
+    }
+  }
+
   // Recupera dati cessionario
   const cessionario = await resolveCessionario(input, tenantId);
 
@@ -163,7 +180,7 @@ export async function creaFatturaBozza(input, tenantId, createdBy) {
       // Cessionario
       clienteType: input.clienteType,
       clientePersonaId: input.clientePersonaId || null,
-      clienteAziendaId: input.clienteAziendaId || null,
+      clienteAziendaId: clienteAziendaId,
       terzoPaganteTipo: input.terzoPaganteTipo || null,
       terzoPersonaId: input.terzoPersonaId || null,
       terzoAziendaId: input.terzoAziendaId || null,
@@ -608,8 +625,11 @@ function validaFatturaPreEmissione(fattura) {
   if (!fattura.cedentePIVA && !fattura.cedenteCF) {
     mancanti.push('Ente emittente: P.IVA o Codice Fiscale mancante');
   }
-  if (fattura.cedenteCF && fattura.cedenteCF.length < 11) {
-    mancanti.push(`Ente emittente: Codice Fiscale troppo corto (${fattura.cedenteCF.length} caratteri, minimo 11)`);
+  // Valida lunghezza CF solo quando la P.IVA non è presente o non è valida (≥11 cifre).
+  // Per le imprese la P.IVA (11 cifre) è sufficiente come identificativo SDI.
+  const pivaValida = fattura.cedentePIVA && fattura.cedentePIVA.replace(/\s/g, '').length >= 11;
+  if (fattura.cedenteCF && fattura.cedenteCF.length < 11 && !pivaValida) {
+    mancanti.push(`Ente emittente: Codice Fiscale troppo corto (${fattura.cedenteCF.length} caratteri, minimo 11). Aggiornare il Codice Fiscale o la Partita IVA dell'ente emittente.`);
   }
   if (!fattura.cedenteDenominazione) {
     mancanti.push('Ente emittente: Denominazione mancante');

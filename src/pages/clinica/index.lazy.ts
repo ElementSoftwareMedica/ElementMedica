@@ -326,6 +326,16 @@ export const ConsensiPageLazy = lazy(() =>
     import('./impostazioni/ConsensiPage').then(module => ({ default: module.default }))
 );
 
+// Impostazioni Notifiche Page
+export const ImpostazioniNotifichePageLazy = lazy(() =>
+    import('./impostazioni/ImpostazioniNotifichePage').then(module => ({ default: module.default }))
+);
+
+// Impostazioni Privacy e GDPR Page
+export const ImpostazioniPrivacyPageLazy = lazy(() =>
+    import('./impostazioni/ImpostazioniPrivacyPage').then(module => ({ default: module.default }))
+);
+
 // ============================================
 // CODA MODULE (P53 - Queue Calling System)
 // ============================================

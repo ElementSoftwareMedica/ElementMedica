@@ -176,6 +176,21 @@ const ScheduleDetailPage: React.FC = () => {
   const { getOperateHeaders } = useTenantMode();
   const operateHeaders = getOperateHeaders();
   const { user } = useAuth();
+
+  // Role-based access control for schedule detail view
+  const _roles = user?.roles || [];
+  const isAdminOrStaff = _roles.some(r =>
+    ['ADMIN', 'SUPER_ADMIN', 'TENANT_ADMIN', 'TRAINING_ADMIN', 'OPERATOR', 'COORDINATOR', 'SUPERVISOR', 'SEGRETERIA_CLINICA'].includes(r)
+  ) || user?.role === 'Admin' || user?.role === 'Administrator';
+  const isTrainer = !isAdminOrStaff &&
+    _roles.some(r => ['TRAINER', 'SENIOR_TRAINER', 'EXTERNAL_TRAINER', 'TRAINER_COORDINATOR'].includes(r));
+  const isCompanyAdmin = !isAdminOrStaff && !isTrainer &&
+    _roles.some(r => ['COMPANY_ADMIN', 'COMPANY_MANAGER'].includes(r));
+  const isEmployee = !isAdminOrStaff && !isTrainer && !isCompanyAdmin && _roles.includes('EMPLOYEE');
+  // Derived permissions
+  const canEditSchedule = isAdminOrStaff;
+  const canGenerateDocs = isAdminOrStaff;
+  const canSeeLettereSec = isAdminOrStaff || isTrainer; // Lettere incarico: nascoste per company admin
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [schedule, setSchedule] = useState<Schedule | null>(null);
@@ -345,10 +360,14 @@ const ScheduleDetailPage: React.FC = () => {
       ]);
 
       // Backend returns { success, data: { preventivi: [...], ... } } for preventivi
-      const preventiviData = (preventiviRes as any)?.data?.preventivi || (preventiviRes as any)?.data || [];
+      const preventiviRaw = (preventiviRes as any)?.data?.preventivi || (preventiviRes as any)?.data || [];
+      // Exclude COMPENSO_FORMATORE — trainer compensation is tracked in MovimentoContabile
+      const preventiviData = Array.isArray(preventiviRaw)
+        ? preventiviRaw.filter((p: any) => p.tipoServizio !== 'COMPENSO_FORMATORE')
+        : [];
 
       setDocuments({
-        preventivi: Array.isArray(preventiviData) ? preventiviData : [],
+        preventivi: preventiviData,
         attestati: Array.isArray(attestatiRes) ? attestatiRes : [],
         registri: Array.isArray(registriRes) ? registriRes : [],
         lettere: Array.isArray(lettereRes) ? lettereRes : []
@@ -525,11 +544,11 @@ const ScheduleDetailPage: React.FC = () => {
     } catch (err: unknown) {
       if (import.meta.env.DEV) console.error('[ScheduleDetailPage] ❌ Error updating status:', {
         error: err,
-        message: err?.message,
-        response: err?.response?.data,
-        status: err?.response?.status
+        message: (err as any)?.message,
+        response: (err as any)?.response?.data,
+        status: (err as any)?.response?.status
       });
-      const errorMsg = err?.response?.data?.message || err?.response?.data?.error || 'Errore durante l\'aggiornamento dello stato';
+      const errorMsg = (err as any)?.response?.data?.message || (err as any)?.response?.data?.error || 'Errore durante l\'aggiornamento dello stato';
       showToast({ message: errorMsg, type: 'error' });
     } finally {
       setIsUpdatingStatus(false);
@@ -639,6 +658,95 @@ const ScheduleDetailPage: React.FC = () => {
     ? Array.from(companyNamesSet).join(', ')
     : 'Nessuna azienda';
 
+  // Employee: accesso negato — non deve poter aprire questo dettaglio
+  if (isEmployee) {
+    return (
+      <div className="flex items-center justify-center h-80">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold text-red-600 dark:text-red-400">Accesso non autorizzato</h2>
+          <p className="text-gray-600 dark:text-gray-400 mt-2">Non hai i permessi per visualizzare questa sezione.</p>
+          <Link to="/dashboard" className="mt-4 inline-block text-blue-600 hover:text-blue-800">
+            Torna alla Dashboard
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // Trainer: mostra solo le sessioni in cui è docente (principale o co-docente)
+  const displayedSessions = isTrainer
+    ? (schedule.sessions || []).filter(s =>
+      s.trainer?.id === user?.id || s.coTrainer?.id === user?.id
+    )
+    : (schedule.sessions || []);
+
+  // ── Filtraggio documenti per ruolo ──────────────────────────────────────────
+  // COMPANY_ADMIN: vede solo partecipanti/documenti della propria azienda
+  // TRAINER: vede solo registri e lettere dove è il formatore, no preventivi
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  // Person IDs dei partecipanti della stessa azienda del company admin corrente
+  const myCompanyPersonIds: Set<string> | null = isCompanyAdmin && user?.companyTenantProfileId
+    ? new Set(
+      (schedule.enrollments || [])
+        .filter(e => {
+          const ctpId = e.person?.tenantProfiles?.[0]?.companyTenantProfileId;
+          return ctpId === user.companyTenantProfileId;
+        })
+        .map(e => e.person.id)
+    )
+    : null;
+
+  // Iscrizioni visibili per ruolo
+  const displayedEnrollments = isCompanyAdmin && myCompanyPersonIds
+    ? (schedule.enrollments || []).filter(e => myCompanyPersonIds!.has(e.person.id))
+    : isTrainer
+      ? (() => {
+        // Il trainer vede solo gli iscritti delle sue sessioni
+        const trainerParticipantIds = new Set<string>();
+        displayedSessions.forEach(s => {
+          const sessionDate = s.date.split('T')[0];
+          const attendanceForSession = schedule.attendance?.find(a =>
+            a.sessionIndex !== undefined
+              ? a.sessionIndex === (schedule.sessions || []).indexOf(s)
+              : a.date && a.date.split('T')[0] === sessionDate
+          );
+          if (attendanceForSession?.employee_ids) {
+            attendanceForSession.employee_ids.forEach(id => trainerParticipantIds.add(String(id)));
+          }
+        });
+        // Se non c'è attendance data, mostra tutti gli iscritti
+        return trainerParticipantIds.size === 0
+          ? (schedule.enrollments || [])
+          : (schedule.enrollments || []).filter(e => trainerParticipantIds.has(String(e.person.id)));
+      })()
+      : (schedule.enrollments || []);
+
+  // Documenti filtrati per visualizzazione
+  const displayedPreventivi = isCompanyAdmin
+    ? documents.preventivi.filter(d =>
+      // Filtra per companyTenantProfile matching
+      d.companyTenantProfile?.id === user?.companyTenantProfileId ||
+      // Fallback: se il preventivo ha un personId che è tra i dipendenti dell'azienda
+      (myCompanyPersonIds && d.personId && myCompanyPersonIds.has(d.personId))
+    )
+    : isTrainer
+      ? [] // I trainer non vedono i preventivi commerciali
+      : documents.preventivi;
+
+  const displayedAttestati = isCompanyAdmin && myCompanyPersonIds
+    ? documents.attestati.filter(d => myCompanyPersonIds!.has(d.person?.id || d.personId))
+    : documents.attestati;
+
+  const displayedRegistri = isTrainer
+    ? documents.registri.filter(d => d.formatoreId === user?.id)
+    : documents.registri;
+
+  // lettere: il filtraggio per trainer è fatto a livello UI (canSeeLettereSec)
+  const displayedLettere = isTrainer
+    ? documents.lettere.filter(d => d.trainerId === user?.id)
+    : documents.lettere;
+
   return (
     <div className="space-y-6">
       {/* Back link */}
@@ -668,7 +776,7 @@ const ScheduleDetailPage: React.FC = () => {
                 <select
                   value={schedule.status || 'PREVENTIVO'}
                   onChange={(e) => handleStatusChange(e.target.value)}
-                  disabled={isUpdatingStatus}
+                  disabled={isUpdatingStatus || !canEditSchedule}
                   className={`
                     px-3 py-1.5 rounded-full text-sm font-medium cursor-pointer transition-all
                     focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500
@@ -694,25 +802,27 @@ const ScheduleDetailPage: React.FC = () => {
             </div>
           </div>
           <div className="mt-4 md:mt-0 flex gap-2">
-            <button
-              onClick={handleOpenEditModal}
-              disabled={modalDataLoading}
-              className="btn-primary flex items-center rounded-full"
-            >
-              {modalDataLoading ? (
-                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-              ) : (
-                <Edit className="h-4 w-4 mr-1" />
-              )}
-              Modifica
-            </button>
-            <button
-              onClick={handleDelete}
-              className="btn-danger flex items-center rounded-full"
-            >
-              <Trash2 className="h-4 w-4 mr-1" />
-              Elimina
-            </button>
+            {canEditSchedule && (<>
+              <button
+                onClick={handleOpenEditModal}
+                disabled={modalDataLoading}
+                className="btn-primary flex items-center rounded-full"
+              >
+                {modalDataLoading ? (
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                ) : (
+                  <Edit className="h-4 w-4 mr-1" />
+                )}
+                Modifica
+              </button>
+              <button
+                onClick={handleDelete}
+                className="btn-danger flex items-center rounded-full"
+              >
+                <Trash2 className="h-4 w-4 mr-1" />
+                Elimina
+              </button>
+            </>)}
           </div>
         </div>
       </div>
@@ -820,13 +930,13 @@ const ScheduleDetailPage: React.FC = () => {
             <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
               <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-50 flex items-center">
                 <Clock className="h-5 w-5 mr-2" />
-                Sessioni ({schedule.sessions?.length || 0})
+                Sessioni ({displayedSessions.length})
               </h2>
             </div>
             <div className="p-6">
-              {schedule.sessions && schedule.sessions.length > 0 ? (
+              {displayedSessions.length > 0 ? (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {schedule.sessions.map((session, index) => {
+                  {displayedSessions.map((session, index) => {
                     // P48 FIX: Usa sessionIndex prima, poi fallback a date matching
                     // Questo gestisce correttamente più sessioni nella stessa data
                     const sessionDate = session.date.split('T')[0];
@@ -845,7 +955,11 @@ const ScheduleDetailPage: React.FC = () => {
                     const hasAttendanceData = schedule.attendance && schedule.attendance.length > 0 && attendanceForSession;
 
                     // Filtra e ordina alfabeticamente per cognome
-                    const allParticipants = (schedule.enrollments || [])
+                    // Applica anche il filtro per ruolo (company admin vede solo la propria azienda)
+                    const enrollmentPool = isCompanyAdmin && myCompanyPersonIds
+                      ? (schedule.enrollments || []).filter(e => myCompanyPersonIds!.has(e.person.id))
+                      : (schedule.enrollments || []);
+                    const allParticipants = enrollmentPool
                       .filter(enrollment =>
                         hasAttendanceData
                           ? sessionParticipantIds.includes(String(enrollment.person.id))
@@ -963,9 +1077,9 @@ const ScheduleDetailPage: React.FC = () => {
             <div className="p-6">
               {(() => {
                 // P48/P49: Extract UNIQUE companies from enrollments' tenantProfiles
-                // schedule.companies may be empty - the real company data is in enrollments
+                // Usa displayedEnrollments per rispettare il filtraggio per ruolo
                 const enrollmentCompaniesMap = new Map<string, { id: string; ragioneSociale: string }>();
-                schedule.enrollments?.forEach(e => {
+                displayedEnrollments.forEach(e => {
                   const profile = e.person?.tenantProfiles?.[0];
                   const company = profile?.companyTenantProfile?.company;
                   if (company?.id && !enrollmentCompaniesMap.has(company.id)) {
@@ -1020,20 +1134,22 @@ const ScheduleDetailPage: React.FC = () => {
                       <FileText className="h-4 w-4 mr-2 text-violet-600 dark:text-violet-400" />
                       <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Preventivi</span>
                       <span className="ml-2 px-2 py-0.5 text-xs font-semibold rounded-full bg-violet-100 text-violet-800">
-                        {documents.preventivi.length}
+                        {displayedPreventivi.length}
                       </span>
                     </div>
-                    <button
-                      onClick={() => setShowPreventiviModal(true)}
-                      className="p-1 text-violet-600 hover:bg-violet-50 rounded transition"
-                      title="Genera Preventivo"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </button>
+                    {canGenerateDocs && (
+                      <button
+                        onClick={() => setShowPreventiviModal(true)}
+                        className="p-1 text-violet-600 hover:bg-violet-50 rounded transition"
+                        title="Genera Preventivo"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
-                  {documents.preventivi.length > 0 ? (
+                  {displayedPreventivi.length > 0 ? (
                     <div className="space-y-1 ml-6">
-                      {documents.preventivi.map((doc: any) => {
+                      {displayedPreventivi.map((doc: any) => {
                         // Format filename like modal: yyyy.mm.gg - Nome azienda
                         const date = new Date(doc.dataEmissione);
                         const formattedDate = `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`;
@@ -1100,11 +1216,11 @@ const ScheduleDetailPage: React.FC = () => {
                       <Award className="h-4 w-4 mr-2 text-green-600 dark:text-green-400" />
                       <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Attestati</span>
                       <span className="ml-2 px-2 py-0.5 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                        {documents.attestati.length}
+                        {displayedAttestati.length}
                       </span>
                     </div>
                     <div className="flex items-center gap-1">
-                      {documents.attestati.length > 1 && (
+                      {displayedAttestati.length > 1 && (
                         <button
                           onClick={handleDownloadZipAttestati}
                           className="p-1 text-green-600 hover:bg-green-50 rounded transition"
@@ -1113,10 +1229,10 @@ const ScheduleDetailPage: React.FC = () => {
                           <FolderArchive className="h-4 w-4" />
                         </button>
                       )}
-                      {documents.attestati.some((d: any) => !d.firmaFormatore) && (
+                      {displayedAttestati.some((d: any) => !d.firmaFormatore) && (
                         <button
                           onClick={() => openSignAllModal(
-                            documents.attestati.filter((d: any) => !d.firmaFormatore).map((d: any) => d.id),
+                            displayedAttestati.filter((d: any) => !d.firmaFormatore).map((d: any) => d.id),
                             'Attestato',
                             'tutti gli attestati non firmati',
                             'attestato'
@@ -1127,18 +1243,20 @@ const ScheduleDetailPage: React.FC = () => {
                           <PenLine className="h-4 w-4" />
                         </button>
                       )}
-                      <button
-                        onClick={() => setShowGenerateAttestatiDialog(true)}
-                        className="p-1 text-green-600 hover:bg-green-50 rounded transition"
-                        title="Genera Attestati"
-                      >
-                        <Plus className="h-4 w-4" />
-                      </button>
+                      {canGenerateDocs && (
+                        <button
+                          onClick={() => setShowGenerateAttestatiDialog(true)}
+                          className="p-1 text-green-600 hover:bg-green-50 rounded transition"
+                          title="Genera Attestati"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
-                  {documents.attestati.length > 0 ? (
+                  {displayedAttestati.length > 0 ? (
                     <div className="space-y-1 ml-6">
-                      {documents.attestati.map((doc: any) => (
+                      {displayedAttestati.map((doc: any) => (
                         <div key={doc.id} className="flex items-center justify-between p-2 border border-gray-200 dark:border-gray-700 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 group">
                           <div className="flex-1 min-w-0">
                             <p className="text-xs text-gray-900 dark:text-gray-50 truncate">
@@ -1208,11 +1326,11 @@ const ScheduleDetailPage: React.FC = () => {
                       <ClipboardList className="h-4 w-4 mr-2 text-yellow-600 dark:text-yellow-400" />
                       <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Registri</span>
                       <span className="ml-2 px-2 py-0.5 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                        {documents.registri.length}
+                        {displayedRegistri.length}
                       </span>
                     </div>
                     <div className="flex items-center gap-1">
-                      {documents.registri.length > 1 && (
+                      {displayedRegistri.length > 1 && (
                         <button
                           onClick={handleDownloadZipRegistri}
                           className="p-1 text-yellow-600 hover:bg-yellow-50 rounded transition"
@@ -1221,10 +1339,10 @@ const ScheduleDetailPage: React.FC = () => {
                           <FolderArchive className="h-4 w-4" />
                         </button>
                       )}
-                      {documents.registri.some((d: any) => !d.firmaFormatore) && (
+                      {displayedRegistri.some((d: any) => !d.firmaFormatore) && (
                         <button
                           onClick={() => openSignAllModal(
-                            documents.registri.filter((d: any) => !d.firmaFormatore).map((d: any) => d.id),
+                            displayedRegistri.filter((d: any) => !d.firmaFormatore).map((d: any) => d.id),
                             'Registro Presenze',
                             'tutti i registri non firmati',
                             'registro'
@@ -1235,18 +1353,20 @@ const ScheduleDetailPage: React.FC = () => {
                           <PenLine className="h-4 w-4" />
                         </button>
                       )}
-                      <button
-                        onClick={() => setShowGenerateRegistriModal(true)}
-                        className="p-1 text-yellow-600 hover:bg-yellow-50 rounded transition"
-                        title="Genera Registro Presenze"
-                      >
-                        <Plus className="h-4 w-4" />
-                      </button>
+                      {canGenerateDocs && (
+                        <button
+                          onClick={() => setShowGenerateRegistriModal(true)}
+                          className="p-1 text-yellow-600 hover:bg-yellow-50 rounded transition"
+                          title="Genera Registro Presenze"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
-                  {documents.registri.length > 0 ? (
+                  {displayedRegistri.length > 0 ? (
                     <div className="space-y-1 ml-6">
-                      {documents.registri.map((doc: any) => (
+                      {displayedRegistri.map((doc: any) => (
                         <div key={doc.id} className="flex items-center justify-between p-2 border border-gray-200 dark:border-gray-700 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 group">
                           <div className="flex-1 min-w-0">
                             <p className="text-xs text-gray-900 dark:text-gray-50 truncate">
@@ -1302,18 +1422,18 @@ const ScheduleDetailPage: React.FC = () => {
                   )}
                 </div>
 
-                {/* Lettere */}
-                <div>
+                {/* Lettere: nascoste per company admin — permesse solo ad admin e trainer */}
+                {canSeeLettereSec && <div>
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center">
                       <File className="h-4 w-4 mr-2 text-blue-600 dark:text-blue-400" />
                       <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Lettere</span>
                       <span className="ml-2 px-2 py-0.5 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
-                        {documents.lettere.length}
+                        {displayedLettere.length}
                       </span>
                     </div>
                     <div className="flex items-center gap-1">
-                      {documents.lettere.length > 1 && (
+                      {displayedLettere.length > 1 && (
                         <button
                           onClick={handleDownloadZipLettere}
                           className="p-1 text-blue-600 hover:bg-blue-50 rounded transition"
@@ -1322,10 +1442,10 @@ const ScheduleDetailPage: React.FC = () => {
                           <FolderArchive className="h-4 w-4" />
                         </button>
                       )}
-                      {documents.lettere.some((d: any) => !d.firmaFormatore) && (
+                      {displayedLettere.some((d: any) => !d.firmaFormatore) && (
                         <button
                           onClick={() => openSignAllModal(
-                            documents.lettere.filter((d: any) => !d.firmaFormatore).map((d: any) => d.id),
+                            displayedLettere.filter((d: any) => !d.firmaFormatore).map((d: any) => d.id),
                             'Lettera di Incarico',
                             'tutte le lettere non firmate',
                             'lettera'
@@ -1336,18 +1456,20 @@ const ScheduleDetailPage: React.FC = () => {
                           <PenLine className="h-4 w-4" />
                         </button>
                       )}
-                      <button
-                        onClick={() => setShowGenerateLettereModal(true)}
-                        className="p-1 text-blue-600 hover:bg-blue-50 rounded transition"
-                        title="Genera Lettere di Incarico"
-                      >
-                        <Plus className="h-4 w-4" />
-                      </button>
+                      {canGenerateDocs && (
+                        <button
+                          onClick={() => setShowGenerateLettereModal(true)}
+                          className="p-1 text-blue-600 hover:bg-blue-50 rounded transition"
+                          title="Genera Lettere di Incarico"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
-                  {documents.lettere.length > 0 ? (
+                  {displayedLettere.length > 0 ? (
                     <div className="space-y-1 ml-6">
-                      {documents.lettere.map((doc: any) => (
+                      {displayedLettere.map((doc: any) => (
                         <div key={doc.id} className="flex items-center justify-between p-2 border border-gray-200 dark:border-gray-700 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 group">
                           <div className="flex-1 min-w-0">
                             <p className="text-xs text-gray-900 dark:text-gray-50 truncate">
@@ -1401,7 +1523,7 @@ const ScheduleDetailPage: React.FC = () => {
                   ) : (
                     <p className="text-xs text-gray-400 dark:text-gray-500 ml-6">Nessuna lettera generata</p>
                   )}
-                </div>
+                </div>}
               </div>
             </div>
           </div>
@@ -1635,30 +1757,29 @@ const ScheduleDetailPage: React.FC = () => {
               duration: 0 // verrà calcolato nel modal
             }))}
             attendance={registriAttendance}
-            // P48/P49: Person.companyId doesn't exist - derive from schedule.companies if single company
+            // P48/P49: Derive per-person company from tenantProfiles (included in schedule detail)
             persons={(() => {
-              const defaultCompanyData = schedule.companies?.length === 1
-                ? (() => {
-                  const c = schedule.companies[0];
-                  const company = c.companyTenantProfile?.company || c.company;
-                  return {
-                    companyId: company?.id || c.companyTenantProfileId,
-                    company: company ? {
-                      id: company.id,
-                      ragioneSociale: company.ragioneSociale,
-                      name: company.name
-                    } : undefined
-                  };
-                })()
-                : { companyId: undefined, company: undefined };
-
-              return (schedule.enrollments || []).map(e => ({
-                id: e.person.id,
-                firstName: e.person.firstName,
-                lastName: e.person.lastName,
-                companyId: defaultCompanyData.companyId,
-                company: defaultCompanyData.company
-              }));
+              return (schedule.enrollments || []).map(e => {
+                // Primary: company from tenantProfiles (P48 pattern, included by backend)
+                const profile = e.person.tenantProfiles?.[0];
+                const company = profile?.companyTenantProfile?.company;
+                // Fallback: single schedule company
+                const fallbackCompany = schedule.companies?.length === 1
+                  ? (schedule.companies[0].companyTenantProfile?.company || (schedule.companies[0] as any).company)
+                  : undefined;
+                const resolvedCompany = company || fallbackCompany;
+                return {
+                  id: e.person.id,
+                  firstName: e.person.firstName,
+                  lastName: e.person.lastName,
+                  companyId: resolvedCompany?.id,
+                  company: resolvedCompany ? {
+                    id: resolvedCompany.id,
+                    ragioneSociale: resolvedCompany.ragioneSociale,
+                    name: resolvedCompany.name
+                  } : undefined
+                };
+              });
             })()}
             companies={(schedule.companies || []).map(c => {
               // P49: companies -> companyTenantProfile -> company

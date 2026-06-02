@@ -88,20 +88,35 @@ function getFeatureDescription(featureId) {
 
 /**
  * GET /api/v1/person-tenant-access
- * Ottiene tutti gli accessi tenant (admin only)
+ * Ottiene tutti gli accessi tenant.
+ * Global admin: vede tutti (con filtri opzionali).
+ * TENANT_ADMIN: vede solo gli accessi del proprio tenant.
  */
 router.get('/',
   authMiddleware,
-  requirePermission('users:manage'),
   async (req, res) => {
     try {
+      const person = req.person;
+      const isGlobalAdmin = person.roles?.includes('ADMIN') || person.roles?.includes('SUPER_ADMIN') ||
+        person.globalRole === 'ADMIN' || person.globalRole === 'SUPER_ADMIN';
+      const isTenantAdmin = person.roles?.includes('TENANT_ADMIN') || person.globalRole === 'TENANT_ADMIN';
+
+      if (!isGlobalAdmin && !isTenantAdmin) {
+        return res.status(403).json({ success: false, error: 'Permessi insufficienti' });
+      }
+
       const { tenantId, personId, page = 1, limit = 100 } = req.query;
 
       const where = {
         deletedAt: null
       };
 
-      if (tenantId) where.tenantId = tenantId;
+      // TENANT_ADMIN: filtra sempre per il proprio tenant
+      if (!isGlobalAdmin && isTenantAdmin) {
+        where.tenantId = person.tenantId;
+      } else {
+        if (tenantId) where.tenantId = tenantId;
+      }
       if (personId) where.personId = personId;
 
       const [accesses, total] = await Promise.all([
@@ -318,13 +333,22 @@ router.get('/persons/:personId/tenants',
 
 /**
  * POST /api/v1/person-tenant-access/persons/:personId/tenants
- * Concede accesso a un tenant per un utente
+ * Concede accesso a un tenant per un utente.
+ * TENANT_ADMIN: può concedere accesso solo per il proprio tenant.
  */
 router.post('/persons/:personId/tenants',
   authMiddleware,
-  requirePermission('tenants:manage'),
   async (req, res) => {
     try {
+      const person = req.person;
+      const isGlobalAdmin = person.roles?.includes('ADMIN') || person.roles?.includes('SUPER_ADMIN') ||
+        person.globalRole === 'ADMIN' || person.globalRole === 'SUPER_ADMIN';
+      const isTenantAdmin = person.roles?.includes('TENANT_ADMIN') || person.globalRole === 'TENANT_ADMIN';
+
+      if (!isGlobalAdmin && !isTenantAdmin) {
+        return res.status(403).json({ success: false, error: 'Permessi insufficienti' });
+      }
+
       const { personId } = req.params;
       const {
         tenantId,
@@ -340,6 +364,11 @@ router.post('/persons/:personId/tenants',
           success: false,
           error: 'tenantId è obbligatorio'
         });
+      }
+
+      // TENANT_ADMIN: può gestire solo il proprio tenant
+      if (isTenantAdmin && !isGlobalAdmin && tenantId !== person.tenantId) {
+        return res.status(403).json({ success: false, error: 'Non puoi gestire accessi per altri tenant' });
       }
 
       // Valida accessLevel
@@ -395,14 +424,29 @@ router.post('/persons/:personId/tenants',
 
 /**
  * PUT /api/v1/person-tenant-access/persons/:personId/tenants/:tenantId
- * Aggiorna l'accesso a un tenant per un utente
+ * Aggiorna l'accesso a un tenant per un utente.
+ * TENANT_ADMIN: può aggiornare solo accessi del proprio tenant.
  */
 router.put('/persons/:personId/tenants/:tenantId',
   authMiddleware,
-  requirePermission('tenants:manage'),
   async (req, res) => {
     try {
+      const person = req.person;
+      const isGlobalAdmin = person.roles?.includes('ADMIN') || person.roles?.includes('SUPER_ADMIN') ||
+        person.globalRole === 'ADMIN' || person.globalRole === 'SUPER_ADMIN';
+      const isTenantAdmin = person.roles?.includes('TENANT_ADMIN') || person.globalRole === 'TENANT_ADMIN';
+
+      if (!isGlobalAdmin && !isTenantAdmin) {
+        return res.status(403).json({ success: false, error: 'Permessi insufficienti' });
+      }
+
       const { personId, tenantId } = req.params;
+
+      // TENANT_ADMIN: può gestire solo il proprio tenant
+      if (isTenantAdmin && !isGlobalAdmin && tenantId !== person.tenantId) {
+        return res.status(403).json({ success: false, error: 'Non puoi gestire accessi per altri tenant' });
+      }
+
       const {
         accessLevel,
         enabledFeatures,
@@ -459,14 +503,28 @@ router.put('/persons/:personId/tenants/:tenantId',
 
 /**
  * DELETE /api/v1/person-tenant-access/persons/:personId/tenants/:tenantId
- * Revoca l'accesso a un tenant per un utente
+ * Revoca l'accesso a un tenant per un utente.
+ * TENANT_ADMIN: può revocare solo accessi del proprio tenant.
  */
 router.delete('/persons/:personId/tenants/:tenantId',
   authMiddleware,
-  requirePermission('tenants:manage'),
   async (req, res) => {
     try {
+      const person = req.person;
+      const isGlobalAdmin = person.roles?.includes('ADMIN') || person.roles?.includes('SUPER_ADMIN') ||
+        person.globalRole === 'ADMIN' || person.globalRole === 'SUPER_ADMIN';
+      const isTenantAdmin = person.roles?.includes('TENANT_ADMIN') || person.globalRole === 'TENANT_ADMIN';
+
+      if (!isGlobalAdmin && !isTenantAdmin) {
+        return res.status(403).json({ success: false, error: 'Permessi insufficienti' });
+      }
+
       const { personId, tenantId } = req.params;
+
+      // TENANT_ADMIN: può gestire solo il proprio tenant
+      if (isTenantAdmin && !isGlobalAdmin && tenantId !== person.tenantId) {
+        return res.status(403).json({ success: false, error: 'Non puoi gestire accessi per altri tenant' });
+      }
 
       const access = await personTenantAccessService.revokeTenantAccess(
         personId,
@@ -546,14 +604,29 @@ router.put('/persons/:personId/primary-tenant',
 
 /**
  * GET /api/v1/person-tenant-access/tenants/:tenantId/persons
- * Ottiene tutte le persone con accesso a un tenant
+ * Ottiene tutte le persone con accesso a un tenant.
+ * TENANT_ADMIN: può vedere solo le persone del proprio tenant.
  */
 router.get('/tenants/:tenantId/persons',
   authMiddleware,
-  requirePermission('users:manage'),
   async (req, res) => {
     try {
+      const person = req.person;
+      const isGlobalAdmin = person.roles?.includes('ADMIN') || person.roles?.includes('SUPER_ADMIN') ||
+        person.globalRole === 'ADMIN' || person.globalRole === 'SUPER_ADMIN';
+      const isTenantAdmin = person.roles?.includes('TENANT_ADMIN') || person.globalRole === 'TENANT_ADMIN';
+
+      if (!isGlobalAdmin && !isTenantAdmin) {
+        return res.status(403).json({ success: false, error: 'Permessi insufficienti' });
+      }
+
       const { tenantId } = req.params;
+
+      // TENANT_ADMIN: può accedere solo al proprio tenant
+      if (isTenantAdmin && !isGlobalAdmin && tenantId !== person.tenantId) {
+        return res.status(403).json({ success: false, error: 'Non puoi vedere i dati di altri tenant' });
+      }
+
       const { accessLevel, feature, isActive } = req.query;
 
       const persons = await personTenantAccessService.getPersonsWithTenantAccess(tenantId, {

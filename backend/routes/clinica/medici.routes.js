@@ -20,6 +20,7 @@ import medicoDocumentsRouter from './medici-documents.routes.js';
 
 const router = express.Router();
 const { authenticate: authenticateToken } = middleware;
+const MEDICO_ROLE_TYPES = ['MEDICO', 'MEDICO_COMPETENTE'];
 
 // Mount documents sub-router
 router.use('/:id/documents', medicoDocumentsRouter);
@@ -52,7 +53,7 @@ router.get('/',
                 },
                 personRoles: {
                     some: {
-                        roleType: 'MEDICO',
+                        roleType: { in: MEDICO_ROLE_TYPES },
                         isActive: true,
                         deletedAt: null,
                         tenantId
@@ -155,14 +156,14 @@ router.get('/stats',
                     where: {
                         deletedAt: null,
                         tenantProfiles: { some: { tenantId, deletedAt: null } },
-                        personRoles: { some: { roleType: 'MEDICO', deletedAt: null, tenantId } }
+                        personRoles: { some: { roleType: { in: MEDICO_ROLE_TYPES }, deletedAt: null, tenantId } }
                     }
                 }),
                 prisma.person.count({
                     where: {
                         deletedAt: null,
                         tenantProfiles: { some: { tenantId, deletedAt: null, status: 'ACTIVE' } },
-                        personRoles: { some: { roleType: 'MEDICO', isActive: true, deletedAt: null, tenantId } }
+                        personRoles: { some: { roleType: { in: MEDICO_ROLE_TYPES }, isActive: true, deletedAt: null, tenantId } }
                     }
                 }),
                 prisma.person.count({
@@ -171,7 +172,7 @@ router.get('/stats',
                         tenantProfiles: { some: { tenantId, deletedAt: null } },
                         OR: [
                             { tenantProfiles: { some: { tenantId, deletedAt: null, status: 'INACTIVE' } } },
-                            { personRoles: { some: { roleType: 'MEDICO', isActive: false, deletedAt: null, tenantId } } }
+                            { personRoles: { some: { roleType: { in: MEDICO_ROLE_TYPES }, isActive: false, deletedAt: null, tenantId } } }
                         ]
                     }
                 })
@@ -220,7 +221,7 @@ router.get('/:id',
                     id,
                     deletedAt: null,
                     tenantProfiles: { some: { tenantId, deletedAt: null } },
-                    personRoles: { some: { roleType: 'MEDICO', deletedAt: null, tenantId } }
+                    personRoles: { some: { roleType: { in: MEDICO_ROLE_TYPES }, deletedAt: null, tenantId } }
                 },
                 include: {
                     personRoles: { where: { deletedAt: null } },
@@ -337,47 +338,26 @@ router.post('/',
                     r => r.roleType === 'MEDICO' && r.isActive && r.tenantId === tenantId
                 );
 
+                // Persona già abilitata come medico in questo tenant
                 if (hasMedicoRoleThisTenant) {
                     return res.status(409).json({
                         success: false,
                         error: 'Questo medico è già registrato per questa organizzazione',
-                        existingPersonId: existingPerson.id
+                        existingPersonId: existingPerson.id,
+                        existingPersonName: `${existingPerson.firstName} ${existingPerson.lastName}`,
+                        canEnable: false
                     });
                 }
 
-                // Enable as medico for this tenant
-                await prisma.personRole.create({
-                    data: {
-                        personId: existingPerson.id,
-                        roleType: 'MEDICO',
-                        isActive: true,
-                        isPrimary: false,
-                        tenantId
-                    }
-                });
-
-                const updatedMedico = await prisma.person.findUnique({
-                    where: { id: existingPerson.id },
-                    include: { personRoles: { where: { deletedAt: null } } }
-                });
-
-                await prisma.gdprAuditLog.create({
-                    data: {
-                        personId: req.person?.id || existingPerson.id,
-                        action: 'CREATE',
-                        resourceType: 'PERSON_ROLE_MEDICO',
-                        resourceId: existingPerson.id,
-                        dataAccessed: { roleType: 'MEDICO', tenantId, crossTenantEnable: true },
-                        ipAddress: req.ip || req.connection?.remoteAddress,
-                        tenantId
-                    }
-                });
-
-                return res.status(201).json({
-                    success: true,
-                    data: updatedMedico,
-                    message: `${existingPerson.firstName} ${existingPerson.lastName} è stato abilitato come medico`,
-                    crossTenantEnabled: true
+                // Persona esiste ma non ha il ruolo MEDICO in questo tenant:
+                // Chiedi conferma prima di aggiungere il ruolo
+                const existingRoles = existingPerson.personRoles.map(r => r.roleType);
+                return res.status(409).json({
+                    success: false,
+                    error: `La persona ${existingPerson.firstName} ${existingPerson.lastName} esiste già nel sistema con i ruoli: ${existingRoles.join(', ') || 'nessuno'}. Vuoi abilitarla come medico?`,
+                    existingPersonId: existingPerson.id,
+                    existingPersonName: `${existingPerson.firstName} ${existingPerson.lastName}`,
+                    canEnable: true
                 });
             }
 
@@ -519,7 +499,16 @@ router.post('/enable',
     async (req, res) => {
         try {
             const tenantId = getEffectiveTenantId(req);
-            const { personId, specialties, registerCode, registerCode2 } = req.body;
+            const {
+                personId,
+                email, phone, pec,
+                residenceAddress, residenceCity, province, postalCode,
+                iban, notes,
+                specialties, registerCode, registerCode2,
+                shortDescription, fullDescription,
+                alboRegione,
+                prestazioniIds
+            } = req.body;
 
             if (!personId) {
                 return res.status(400).json({
@@ -530,7 +519,7 @@ router.post('/enable',
 
             const person = await prisma.person.findFirst({
                 where: { id: personId, deletedAt: null },
-                include: { personRoles: { where: { deletedAt: null } } }
+                include: { personRoles: true } // include soft-deleted to handle upsert
             });
 
             if (!person) {
@@ -540,38 +529,117 @@ router.post('/enable',
                 });
             }
 
-            const existingMedicoRole = person.personRoles.find(
-                r => r.roleType === 'MEDICO' && r.tenantId === tenantId && r.isActive
+            // Trova il ruolo MEDICO (anche se soft-deleted) per upsert sicuro
+            const anyMedicoRole = person.personRoles.find(
+                r => r.roleType === 'MEDICO' && r.tenantId === tenantId
             );
 
-            if (existingMedicoRole) {
+            if (anyMedicoRole && anyMedicoRole.isActive && !anyMedicoRole.deletedAt) {
                 return res.status(409).json({
                     success: false,
                     error: 'Questa persona è già abilitata come medico'
                 });
             }
 
-            await prisma.personRole.create({
-                data: {
-                    personId: person.id,
-                    roleType: 'MEDICO',
-                    isActive: true,
-                    isPrimary: false,
-                    tenantId
-                }
+            // Upsert PersonRole: riattiva se soft-deleted, altrimenti crea
+            if (anyMedicoRole) {
+                await prisma.personRole.update({
+                    where: { id: anyMedicoRole.id },
+                    data: { isActive: true, deletedAt: null }
+                });
+            } else {
+                await prisma.personRole.create({
+                    data: {
+                        personId: person.id,
+                        roleType: 'MEDICO',
+                        isActive: true,
+                        isPrimary: false,
+                        tenantId
+                    }
+                });
+            }
+
+            // Costruisci i dati profilo da aggiornare/creare
+            const profileData = {};
+            if (email !== undefined) profileData.email = email || null;
+            if (phone !== undefined) profileData.phone = phone || null;
+            if (pec !== undefined) profileData.pec = pec || null;
+            if (residenceAddress !== undefined) profileData.residenceAddress = residenceAddress || null;
+            if (residenceCity !== undefined) profileData.residenceCity = residenceCity || null;
+            if (province !== undefined) profileData.province = province || null;
+            if (postalCode !== undefined) profileData.postalCode = postalCode || null;
+            if (iban !== undefined) profileData.iban = iban ? iban.toUpperCase() : null;
+            if (notes !== undefined) profileData.notes = notes || '';
+            if (specialties?.length > 0) profileData.specialties = specialties;
+            if (registerCode !== undefined) profileData.registerCode = registerCode || null;
+            if (registerCode2 !== undefined) profileData.registerCode2 = registerCode2 || null;
+            if (shortDescription !== undefined) profileData.shortDescription = shortDescription || null;
+            if (fullDescription !== undefined) profileData.fullDescription = fullDescription || null;
+            if (alboRegione) profileData.preferences = { alboRegione };
+
+            // Upsert PersonTenantProfile per questo tenant
+            const existingProfile = await prisma.personTenantProfile.findFirst({
+                where: { personId: person.id, tenantId, deletedAt: null }
             });
 
-            // P48: specialties/registerCode sono su PersonTenantProfile
-            const updateData = {};
-            if (specialties?.length > 0) updateData.specialties = specialties;
-            if (registerCode) updateData.registerCode = registerCode;
-            if (registerCode2) updateData.registerCode2 = registerCode2;
-
-            if (Object.keys(updateData).length > 0) {
-                await prisma.personTenantProfile.updateMany({
-                    where: { personId: person.id, tenantId, deletedAt: null },
-                    data: updateData
+            let isCrossTenant = false;
+            if (existingProfile) {
+                if (Object.keys(profileData).length > 0) {
+                    await prisma.personTenantProfile.update({
+                        where: { id: existingProfile.id },
+                        data: { ...profileData, isActive: true, updatedAt: new Date() }
+                    });
+                }
+            } else {
+                // Cross-tenant: crea nuovo profilo per questo tenant
+                isCrossTenant = true;
+                await prisma.personTenantProfile.create({
+                    data: {
+                        personId: person.id,
+                        tenantId,
+                        ...profileData,
+                        status: 'ACTIVE',
+                        isActive: true,
+                        isPrimary: false
+                    }
                 });
+
+                // Crea PersonDataShareConsent (PENDING) per tracciare il dato cross-tenant
+                const originalProfile = await prisma.personTenantProfile.findFirst({
+                    where: { personId: person.id, deletedAt: null, tenantId: { not: tenantId } },
+                    orderBy: { createdAt: 'asc' }
+                });
+
+                if (originalProfile) {
+                    // Evita duplicati: @@unique([personId, sourceTenantId, targetTenantId])
+                    await prisma.personDataShareConsent.upsert({
+                        where: {
+                            personId_sourceTenantId_targetTenantId: {
+                                personId: person.id,
+                                sourceTenantId: originalProfile.tenantId,
+                                targetTenantId: tenantId
+                            }
+                        },
+                        update: {
+                            approvalStatus: 'PENDING',
+                            isRevoked: false,
+                            requestedBy: req.person?.id || null,
+                            requestedAt: new Date()
+                        },
+                        create: {
+                            personId: person.id,
+                            sourceTenantId: originalProfile.tenantId,
+                            targetTenantId: tenantId,
+                            sharedDataTypes: ['PROFILE', 'ROLES'],
+                            excludedFields: [],
+                            consentGiven: false,
+                            approvalStatus: 'PENDING',
+                            requestedBy: req.person?.id || null,
+                            requestedAt: new Date(),
+                            requestNotes: 'Abilitazione ruolo MEDICO - richiesta automatica'
+                        }
+                    });
+                }
             }
 
             await prisma.gdprAuditLog.create({
@@ -580,15 +648,32 @@ router.post('/enable',
                     action: 'CREATE',
                     resourceType: 'PERSON_ROLE_MEDICO',
                     resourceId: person.id,
-                    dataAccessed: { roleType: 'MEDICO', tenantId },
+                    dataAccessed: { roleType: 'MEDICO', tenantId, isCrossTenant },
                     ipAddress: req.ip || req.connection?.remoteAddress,
                     tenantId
                 }
             });
 
+            // Crea abilitazioni se fornite
+            if (prestazioniIds && prestazioniIds.length > 0) {
+                await prisma.medicoAbilitato.createMany({
+                    data: prestazioniIds.map(prestazioneId => ({
+                        medicoId: person.id,
+                        prestazioneId,
+                        tenantId,
+                        attivo: true,
+                        dataAbilitazione: new Date()
+                    })),
+                    skipDuplicates: true
+                });
+            }
+
             const updatedPerson = await prisma.person.findUnique({
                 where: { id: person.id },
-                include: { personRoles: { where: { deletedAt: null } } }
+                include: {
+                    personRoles: { where: { deletedAt: null } },
+                    tenantProfiles: { where: { tenantId, deletedAt: null }, take: 1 }
+                }
             });
 
             res.status(201).json({
@@ -654,6 +739,43 @@ router.put('/:id',
                     success: false,
                     error: 'Medico non trovato'
                 });
+            }
+
+            // Verifica conflitto CF se il taxCode viene cambiato
+            if (taxCode && taxCode.toUpperCase() !== existing.taxCode) {
+                const conflicting = await prisma.person.findFirst({
+                    where: { taxCode: taxCode.toUpperCase(), id: { not: id } },
+                    include: { personRoles: { where: { deletedAt: null } } }
+                });
+                if (conflicting) {
+                    if (!conflicting.deletedAt) {
+                        // Persona attiva con lo stesso CF
+                        const conflictRoles = conflicting.personRoles?.map(r => r.roleType) || [];
+                        return res.status(409).json({
+                            success: false,
+                            error: `Il codice fiscale è già associato a ${conflicting.firstName} ${conflicting.lastName}${conflictRoles.length ? ` (${conflictRoles.join(', ')})` : ''}`,
+                            existingPersonId: conflicting.id,
+                            existingPersonName: `${conflicting.firstName} ${conflicting.lastName}`
+                        });
+                    } else {
+                        // Persona soft-deleted: anonimizza il CF per rilasciare il vincolo unique
+                        await prisma.person.update({
+                            where: { id: conflicting.id },
+                            data: { taxCode: `ANON_${conflicting.id.substring(0, 8)}` }
+                        });
+                        await prisma.gdprAuditLog.create({
+                            data: {
+                                personId: req.person?.id,
+                                action: 'ANONYMIZE',
+                                resourceType: 'PERSON_TAXCODE',
+                                resourceId: conflicting.id,
+                                dataAccessed: { reason: 'CF riutilizzato durante aggiornamento medico', replacedBy: id },
+                                ipAddress: req.ip || req.connection?.remoteAddress,
+                                tenantId
+                            }
+                        });
+                    }
+                }
             }
 
             // P48: Person global fields

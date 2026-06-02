@@ -5,8 +5,134 @@ import enhancedRoleService from '../services/enhancedRoleService.js';
 import authMiddleware from '../middleware/auth.js';
 const { authenticate } = authMiddleware;
 import { tenantMiddleware } from '../middleware/tenant.js';
+import { PERMISSIONS } from '../constants/permissions.js';
 
 const router = express.Router();
+
+const SUPPLEMENTAL_PERMISSIONS = [
+  'clinica.agenda:read', 'clinica.agenda:create', 'clinica.agenda:update', 'clinica.agenda:delete', 'clinica.agenda:manage',
+  'clinica.medici:read', 'clinica.medici:create', 'clinica.medici:update', 'clinica.medici:delete', 'clinica.medici:manage',
+  'clinica.listini:read', 'clinica.listini:create', 'clinica.listini:update', 'clinica.listini:delete', 'clinica.listini:manage',
+  'clinica.poliambulatorio:read', 'clinica.poliambulatorio:create', 'clinica.poliambulatorio:update', 'clinica.poliambulatorio:delete', 'clinica.poliambulatorio:write', 'clinica.poliambulatorio:manage'
+];
+
+const RESOURCE_LABELS = {
+  admin: 'Accesso Amministrazione',
+  system: 'Sistema',
+  tenants: 'Tenant',
+  users: 'Utenti',
+  persons: 'Persone',
+  employees: 'Dipendenti',
+  trainers: 'Formatori',
+  roles: 'Ruoli e Permessi',
+  companies: 'Aziende',
+  courses: 'Corsi',
+  schedules: 'Edizioni',
+  enrollments: 'Iscrizioni',
+  documents: 'Documenti',
+  templates: 'Template',
+  attestati: 'Attestati',
+  cms: 'CMS',
+  'cms.pages': 'Pagine CMS',
+  'cms.media': 'Media CMS',
+  'cms.navigation': 'Navigazione CMS',
+  forms: 'Moduli',
+  submissions: 'Risposte Moduli',
+  preventivi: 'Preventivi',
+  invoices: 'Fatture',
+  movimenti_contabili: 'Movimenti Contabili',
+  codici_sconto: 'Codici Sconto',
+  notifications: 'Notifiche',
+  settings: 'Impostazioni',
+  gdpr: 'GDPR',
+  consents: 'Consensi',
+  audit: 'Audit',
+  seo: 'SEO',
+  api_keys: 'API Key',
+  reports: 'Report',
+  dashboard: 'Dashboard',
+  hierarchy: 'Gerarchia',
+  imports: 'Importazioni',
+  clinica: 'Clinica',
+  'clinica.poliambulatori': 'Poliambulatori',
+  'clinica.poliambulatorio': 'Poliambulatorio e Sedi',
+  'clinica.ambulatori': 'Ambulatori',
+  'clinica.prestazioni': 'Prestazioni',
+  'clinica.appuntamenti': 'Appuntamenti',
+  'clinica.agenda': 'Agenda e Slot',
+  'clinica.visite': 'Visite',
+  'clinica.referti': 'Referti',
+  'clinica.medici': 'Medici',
+  'clinica.signatures': 'Firme',
+  'clinica.strumenti': 'Strumenti',
+  'clinica.manutenzioni': 'Manutenzioni',
+  'clinica.ferie': 'Ferie',
+  'clinica.convenzioni': 'Convenzioni',
+  'clinica.tariffari': 'Tariffari',
+  'clinica.listini': 'Listini',
+  'clinica.cartella_paziente': 'Cartella Paziente',
+  'clinica.offerte_bundle': 'Offerte Bundle',
+  'clinica.sconti': 'Sconti',
+  'clinica.pazienti': 'Pazienti',
+  'clinica.giudizi': 'Giudizi',
+  'clinica.fatture': 'Fatture Sanitarie',
+  'clinica.billing': 'Billing',
+  'clinica.contabilita': 'Contabilita',
+  'clinica.impostazioni': 'Impostazioni Clinica',
+  'clinica.email_templates': 'Template Email',
+  scadenze: 'Scadenzario',
+  farmaci: 'Farmaci',
+  calendar: 'Calendario',
+  public_content: 'Contenuti Pubblici',
+  hr: 'HR',
+  'hr.turni': 'Turni',
+  'hr.timbrature': 'Timbrature',
+  'hr.assenze': 'Assenze',
+  'hr.mansioni': 'Mansioni',
+  'hr.cartellino': 'Cartellino',
+  'hr.report': 'Report HR',
+  cross_tenant: 'Cross Tenant',
+  internal_documents: 'Documenti Interni'
+};
+
+function formatResourceName(resource) {
+  return RESOURCE_LABELS[resource] || resource
+    .replace(/^clinica\./, '')
+    .replace(/[._]/g, ' ')
+    .replace(/\b\w/g, letter => letter.toUpperCase());
+}
+
+function buildSupportedPermissionRegistry() {
+  const byResource = new Map();
+  const permissions = [...Object.values(PERMISSIONS), ...SUPPLEMENTAL_PERMISSIONS]
+    .filter(permission => typeof permission === 'string' && permission.includes(':'));
+
+  for (const permission of permissions) {
+    const [resource, action] = permission.split(':');
+    if (!resource || !action) continue;
+
+    if (!byResource.has(resource)) {
+      byResource.set(resource, new Set());
+    }
+    byResource.get(resource).add(action);
+  }
+
+  return Array.from(byResource.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([resource, actions]) => ({
+      id: resource,
+      name: resource,
+      displayName: formatResourceName(resource),
+      description: `Permessi attivi per ${formatResourceName(resource)}`,
+      actions: Array.from(actions).sort(),
+      fields: [
+        { id: 'id', name: 'id', displayName: 'ID', type: 'string', sensitive: false },
+        { id: 'tenantId', name: 'tenantId', displayName: 'Tenant', type: 'string', sensitive: false },
+        { id: 'createdAt', name: 'createdAt', displayName: 'Creato il', type: 'date', sensitive: false },
+        { id: 'updatedAt', name: 'updatedAt', displayName: 'Aggiornato il', type: 'date', sensitive: false }
+      ]
+    }));
+}
 
 // Applica solo il middleware del tenant globalmente
 // Il middleware di autenticazione sarà applicato solo alle route che ne hanno bisogno
@@ -23,6 +149,11 @@ router.get('/entities',
   enhancedRoleService.requirePermission('roles:manage'), // Re-enabled (Phase 1 Security)
   async (req, res) => {
     try {
+      return res.json({
+        success: true,
+        entities: buildSupportedPermissionRegistry()
+      });
+
       const entities = [
         {
           id: 'persons',
@@ -119,6 +250,49 @@ router.get('/entities',
             { id: 'isActive', name: 'isActive', displayName: 'Attivo', type: 'boolean', sensitive: false },
             { id: 'createdAt', name: 'createdAt', displayName: 'Data Creazione', type: 'datetime', sensitive: false },
             { id: 'updatedAt', name: 'updatedAt', displayName: 'Ultimo Aggiornamento', type: 'datetime', sensitive: false }
+          ]
+        },
+        {
+          id: 'clinica.appuntamenti',
+          name: 'clinica.appuntamenti',
+          displayName: 'Appuntamenti e Calendario',
+          description: 'Permessi granulari su calendario, appuntamenti e slot medici',
+          fields: [
+            { id: 'dataOra', name: 'dataOra', displayName: 'Data e Ora', type: 'date', sensitive: false },
+            { id: 'durata', name: 'durata', displayName: 'Durata', type: 'number', sensitive: false },
+            { id: 'stato', name: 'stato', displayName: 'Stato', type: 'string', sensitive: false },
+            { id: 'pazienteId', name: 'pazienteId', displayName: 'Paziente', type: 'string', sensitive: true },
+            { id: 'medicoId', name: 'medicoId', displayName: 'Medico', type: 'string', sensitive: false },
+            { id: 'ambulatorioId', name: 'ambulatorioId', displayName: 'Ambulatorio', type: 'string', sensitive: false }
+          ]
+        },
+        {
+          id: 'clinica.visite',
+          name: 'clinica.visite',
+          displayName: 'Visite e Referti',
+          description: 'Permessi granulari su visite, refertazione, prezzi e convenzioni',
+          fields: [
+            { id: 'data', name: 'data', displayName: 'Data Visita', type: 'date', sensitive: false },
+            { id: 'tipo', name: 'tipo', displayName: 'Tipo Visita', type: 'string', sensitive: false },
+            { id: 'stato', name: 'stato', displayName: 'Stato', type: 'string', sensitive: false },
+            { id: 'pazienteId', name: 'pazienteId', displayName: 'Paziente', type: 'string', sensitive: true },
+            { id: 'medicoId', name: 'medicoId', displayName: 'Medico', type: 'string', sensitive: false },
+            { id: 'medicoRefertanteId', name: 'medicoRefertanteId', displayName: 'Medico Refertante', type: 'string', sensitive: false }
+          ]
+        },
+        {
+          id: 'movimenti_contabili',
+          name: 'movimenti_contabili',
+          displayName: 'Movimenti Contabili',
+          description: 'Permessi su compensi, fatturazione e movimenti economici',
+          fields: [
+            { id: 'direzione', name: 'direzione', displayName: 'Direzione', type: 'string', sensitive: false },
+            { id: 'tipo', name: 'tipo', displayName: 'Tipo', type: 'string', sensitive: false },
+            { id: 'stato', name: 'stato', displayName: 'Stato', type: 'string', sensitive: false },
+            { id: 'importoNetto', name: 'importoNetto', displayName: 'Importo Netto', type: 'number', sensitive: true },
+            { id: 'dataEsecuzione', name: 'dataEsecuzione', displayName: 'Data Esecuzione', type: 'date', sensitive: false },
+            { id: 'personId', name: 'personId', displayName: 'Persona', type: 'string', sensitive: false },
+            { id: 'companyTenantProfileId', name: 'companyTenantProfileId', displayName: 'Azienda', type: 'string', sensitive: false }
           ]
         },
         {
@@ -660,49 +834,18 @@ router.get('/entities',
  * @access Admin
  */
 router.get('/resources',
+  authenticate,
   enhancedRoleService.requirePermission('roles:read'),
   async (req, res) => {
     try {
-      const resources = {
-        person: {
-          name: 'Persone',
-          actions: ['read', 'create', 'update', 'delete'],
-          fields: [
-            'id', 'firstName', 'lastName', 'email', 'username',
-            'phone', 'address', 'city', 'province', 'cap',
-            'fiscalCode', 'birthDate', 'birthPlace', 'nationality',
-            'isActive', 'lastLogin', 'createdAt', 'updatedAt'
-          ]
-        },
-        company: {
-          name: 'Aziende',
-          actions: ['read', 'create', 'update', 'delete'],
-          fields: [
-            'id', 'ragioneSociale', 'partitaIva', 'codiceFiscale',
-            'indirizzo', 'citta', 'provincia', 'cap', 'telefono',
-            'email', 'pec', 'sito_web', 'settore', 'dipendenti_count',
-            'isActive', 'createdAt', 'updatedAt'
-          ]
-        },
-        course: {
-          name: 'Corsi',
-          actions: ['read', 'create', 'update', 'delete', 'assign'],
-          fields: [
-            'id', 'title', 'description', 'duration', 'category',
-            'level', 'price', 'maxParticipants', 'isActive',
-            'createdAt', 'updatedAt'
-          ]
-        },
-        training: {
-          name: 'Formazioni',
-          actions: ['read', 'create', 'update', 'delete', 'conduct'],
-          fields: [
-            'id', 'title', 'description', 'startDate', 'endDate',
-            'location', 'status', 'participantsCount', 'maxParticipants',
-            'createdAt', 'updatedAt'
-          ]
+      const resources = Object.fromEntries(buildSupportedPermissionRegistry().map(resource => [
+        resource.name,
+        {
+          name: resource.displayName,
+          actions: resource.actions,
+          fields: resource.fields.map(field => field.name)
         }
-      };
+      ]));
 
       res.json({
         success: true,
@@ -729,25 +872,25 @@ router.get('/scopes',
   async (req, res) => {
     try {
       const scopes = {
-        global: {
-          name: 'Globale',
-          description: 'Accesso completo a tutte le risorse del sistema'
+        none: {
+          name: 'Nessuno',
+          description: 'Permesso esplicitamente disabilitato'
+        },
+        all: {
+          name: 'Tutti',
+          description: 'Permesso globale, da usare solo per amministratori con accesso multi-tenant'
         },
         tenant: {
           name: 'Tenant',
           description: 'Accesso limitato alle risorse del tenant corrente'
         },
-        company: {
-          name: 'Azienda',
-          description: 'Accesso limitato alle risorse della propria azienda'
+        own: {
+          name: 'Propri',
+          description: 'Usato solo dove la route applica un filtro esplicito sul proprietario'
         },
-        department: {
-          name: 'Dipartimento',
-          description: 'Accesso limitato alle risorse del proprio dipartimento'
-        },
-        self: {
-          name: 'Personale',
-          description: 'Accesso limitato alle proprie risorse'
+        relational: {
+          name: 'Relazionale',
+          description: 'Usato solo con relation definition configurate e risolte dal backend'
         }
       };
 
@@ -776,25 +919,10 @@ router.get('/conditions',
   async (req, res) => {
     try {
       const conditions = {
-        ownedBy: {
-          name: 'Proprietario',
-          description: 'Può accedere solo alle risorse di cui è proprietario',
-          values: ['self']
-        },
-        companyId: {
-          name: 'Azienda',
-          description: 'Può accedere solo alle risorse della stessa azienda',
-          values: ['same', 'any']
-        },
-        departmentId: {
-          name: 'Dipartimento',
-          description: 'Può accedere solo alle risorse dello stesso dipartimento',
-          values: ['same', 'any']
-        },
-        status: {
-          name: 'Stato',
-          description: 'Può accedere solo alle risorse con uno stato specifico',
-          values: ['active', 'inactive', 'pending', 'completed']
+        granted: {
+          name: 'Concesso',
+          description: 'Override personale: true concede, false revoca il permesso ereditato',
+          values: [true, false]
         }
       };
 
@@ -826,19 +954,20 @@ router.post('/validate',
       const errors = [];
 
       // Validazione risorsa
-      const validResources = ['person', 'company', 'course', 'training'];
+      const validResources = buildSupportedPermissionRegistry().map(resource => resource.name);
       if (!resource || !validResources.includes(resource)) {
         errors.push('Resource must be one of: ' + validResources.join(', '));
       }
 
       // Validazione azione
-      const validActions = ['read', 'create', 'update', 'delete', 'assign', 'conduct'];
+      const resourceDefinition = buildSupportedPermissionRegistry().find(item => item.name === resource);
+      const validActions = resourceDefinition?.actions || [];
       if (!action || !validActions.includes(action)) {
         errors.push('Action must be one of: ' + validActions.join(', '));
       }
 
       // Validazione scope
-      const validScopes = ['global', 'tenant', 'company', 'department', 'self'];
+      const validScopes = ['none', 'all', 'tenant', 'own', 'relational'];
       if (!scope || !validScopes.includes(scope)) {
         errors.push('Scope must be one of: ' + validScopes.join(', '));
       }

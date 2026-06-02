@@ -44,7 +44,7 @@ export interface DiagnosticResult {
 // CONSTANTS
 // ============================================
 
-export const BRIDGE_PORT = 3000;
+export const BRIDGE_PORT = 4050;
 
 export const SUPPORTED_DEVICES: DeviceConfig[] = [
     {

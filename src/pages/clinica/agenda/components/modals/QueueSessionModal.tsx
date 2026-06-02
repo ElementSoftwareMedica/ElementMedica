@@ -59,7 +59,8 @@ import queueApi, {
     getStatoColor,
     getPrioritaColor,
     CreateSessionInput,
-    AvailableMedico
+    AvailableMedico,
+    SameDaySession
 } from '@/services/queueApi';
 import { prestazioniApi, modulisticaTemplatesApi, convenzioniApi, type Prestazione, type DocumentoTemplate, type Convenzione } from '@/services/clinicaApi';
 import { generateQRCodeDataUrl, downloadQRCode } from '@/services/qrCodeService';
@@ -260,6 +261,10 @@ export const QueueSessionModal: React.FC<QueueSessionModalProps> = ({
     const [isAddingMedico, setIsAddingMedico] = useState<string | null>(null); // personId being added
     const [isRemovingMedico, setIsRemovingMedico] = useState<string | null>(null); // profileId being removed
     const [medicoSearchQuery, setMedicoSearchQuery] = useState('');
+
+    // Same-day session linking state
+    const [sameDaySessions, setSameDaySessions] = useState<SameDaySession[]>([]);
+    const [isLinkingToSession, setIsLinkingToSession] = useState<string | null>(null);
 
     // Audio hook for TTS
     const audio = useQueueAudio({ enabled: !isMuted, volume: 1 });
@@ -521,7 +526,7 @@ export const QueueSessionModal: React.FC<QueueSessionModalProps> = ({
                     ambulatorioId,
                     mode: 'DISPLAY',
                     slotDisponibilitaId: slot.id,
-                    medicoPersonId: slot.medicoId
+                    medicoPersonId: slot.medicoId || ''
                 });
 
                 if (!result.exists) {
@@ -531,7 +536,7 @@ export const QueueSessionModal: React.FC<QueueSessionModalProps> = ({
                         ambulatorioId,
                         mode: 'MOBILE',
                         slotDisponibilitaId: slot.id,
-                        medicoPersonId: slot.medicoId
+                        medicoPersonId: slot.medicoId || ''
                     });
                 }
 
@@ -542,6 +547,7 @@ export const QueueSessionModal: React.FC<QueueSessionModalProps> = ({
                     const sessionData = await queueApi.getSession(result.session.id);
                     if (isCancelled) return;
                     setSession(sessionData);
+                    setSameDaySessions([]);
 
                     // Load entries
                     const entriesData = await queueApi.getEntries({ sessionId: result.session.id });
@@ -550,6 +556,20 @@ export const QueueSessionModal: React.FC<QueueSessionModalProps> = ({
                 } else {
                     setSession(null);
                     setEntries([]);
+
+                    // Check for same-day sessions from the same medico (e.g., morning session for afternoon slot)
+                    try {
+                        const sdSessions = await queueApi.findSameDaySessions({
+                            date: dateStr,
+                            medicoPersonId: slot.medicoId || '',
+                            excludeSlotId: slot.id
+                        });
+                        if (!isCancelled) {
+                            setSameDaySessions(sdSessions || []);
+                        }
+                    } catch {
+                        if (!isCancelled) setSameDaySessions([]);
+                    }
                 }
             } catch (err) {
                 if (isCancelled) return;
@@ -633,6 +653,25 @@ export const QueueSessionModal: React.FC<QueueSessionModalProps> = ({
             showToast({ type: 'error', message: 'Errore download QR code' });
         }
     }, [shareUrl, showToast]);
+
+    // Link current slot to an existing same-day session
+    const handleLinkToExistingSession = useCallback(async (existingSessionId: string) => {
+        setIsLinkingToSession(existingSessionId);
+        try {
+            await queueApi.linkSlotToSession(existingSessionId, slot.id);
+            // Load the linked session
+            const sessionData = await queueApi.getSession(existingSessionId);
+            setSession(sessionData);
+            setSameDaySessions([]);
+            const entriesData = await queueApi.getEntries({ sessionId: existingSessionId });
+            setEntries(entriesData);
+            showToast({ type: 'success', message: 'Slot collegato alla sessione esistente' });
+        } catch (err) {
+            showToast({ type: 'error', message: 'Errore nel collegamento alla sessione' });
+        } finally {
+            setIsLinkingToSession(null);
+        }
+    }, [slot.id, showToast]);
 
     // Create new session
     const handleCreateSession = useCallback(async () => {
@@ -836,10 +875,59 @@ export const QueueSessionModal: React.FC<QueueSessionModalProps> = ({
                     ) : !session ? (
                         /* No session - Create new */
                         <div className="space-y-6">
+                            {/* Same-day session available banner */}
+                            {sameDaySessions.length > 0 && (
+                                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <Link2 className="w-4 h-4 text-amber-600" />
+                                        <span className="text-sm font-medium text-amber-800">
+                                            Sessione esistente nella stessa giornata
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-amber-700 mb-3">
+                                        È già presente una sessione coda per questo medico nella stessa giornata.
+                                        Puoi collegare questo slot alla sessione esistente (stesso link) oppure creare una sessione separata.
+                                    </p>
+                                    <div className="space-y-2">
+                                        {sameDaySessions.map(sd => (
+                                            <button
+                                                key={sd.id}
+                                                onClick={() => handleLinkToExistingSession(sd.id)}
+                                                disabled={isLinkingToSession === sd.id}
+                                                className="w-full flex items-center justify-between p-3 bg-white border border-amber-300 rounded-lg hover:bg-amber-50 transition-colors text-left"
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    {isLinkingToSession === sd.id ? (
+                                                        <Loader2 className="w-5 h-5 animate-spin text-amber-600" />
+                                                    ) : (
+                                                        <Link2 className="w-5 h-5 text-amber-600" />
+                                                    )}
+                                                    <div>
+                                                        <span className="text-sm font-medium text-gray-900 block">
+                                                            Usa sessione {sd.slotDisponibilita ? `${sd.slotDisponibilita.oraInizio}-${sd.slotDisponibilita.oraFine}` : 'esistente'}
+                                                        </span>
+                                                        <span className="text-xs text-gray-500">
+                                                            {sd.mode} • {sd.entriesCount} pazienti in coda
+                                                            {sd.ambulatorio ? ` • ${sd.ambulatorio.nome}` : ''}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <ChevronDown className="w-4 h-4 text-gray-400 -rotate-90" />
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div className="mt-3 pt-3 border-t border-amber-200">
+                                        <p className="text-xs text-amber-600 text-center">
+                                            Oppure scorri in basso per creare una sessione separata
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="text-center py-4">
                                 <Users className="w-10 h-10 text-gray-300 mx-auto mb-2" />
                                 <h3 className="text-lg font-medium text-gray-900">
-                                    Nuova Sessione Coda
+                                    {sameDaySessions.length > 0 ? 'Nuova Sessione Separata' : 'Nuova Sessione Coda'}
                                 </h3>
                                 <p className="text-sm text-gray-500 mt-1">
                                     Configura e avvia una sessione per gestire i pazienti
@@ -1851,12 +1939,12 @@ export const QueueSessionModal: React.FC<QueueSessionModalProps> = ({
                                                                 </div>
                                                                 {session.medici!.length > 1 && (
                                                                     <button
-                                                                        onClick={() => handleRemoveMedico(sm.medico.personId || sm.medico.personId)}
-                                                                        disabled={isRemovingMedico === (sm.medico.personId || sm.medico.personId)}
+                                                                        onClick={() => handleRemoveMedico(sm.medicoId)}
+                                                                        disabled={isRemovingMedico === sm.medicoId}
                                                                         className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
                                                                         title="Rimuovi medico"
                                                                     >
-                                                                        {isRemovingMedico === (sm.medico.personId) ? (
+                                                                        {isRemovingMedico === sm.medicoId ? (
                                                                             <Loader2 className="w-3 h-3 animate-spin" />
                                                                         ) : (
                                                                             <Trash2 className="w-3 h-3" />
@@ -1894,35 +1982,53 @@ export const QueueSessionModal: React.FC<QueueSessionModalProps> = ({
                                                                 : 'Nessun medico trovato per la ricerca'}
                                                         </p>
                                                     ) : (
-                                                        <div className="max-h-32 overflow-y-auto space-y-1 border border-gray-100 rounded-lg p-1">
+                                                        <div className="max-h-40 overflow-y-auto space-y-2 border border-gray-100 rounded-lg p-1.5">
                                                             {filteredAvailableMedici.map((m) => (
-                                                                <button
-                                                                    key={m.personId}
-                                                                    onClick={() => handleAddMedico(m.personId)}
-                                                                    disabled={isAddingMedico === m.personId}
-                                                                    className="flex items-center justify-between w-full px-2.5 py-1.5 rounded-md hover:bg-teal-50 text-left transition-colors group disabled:opacity-50"
-                                                                >
-                                                                    <div className="flex-1 min-w-0">
-                                                                        <div className="text-xs font-medium text-gray-700 group-hover:text-teal-700 truncate">
+                                                                <div key={m.personId} className="border border-gray-200 rounded-lg overflow-hidden">
+                                                                    <div className="flex items-center gap-2 px-2.5 py-1.5 bg-gray-50">
+                                                                        <Stethoscope className="w-3.5 h-3.5 text-gray-500" />
+                                                                        <span className="text-xs font-medium text-gray-700">
                                                                             {formatMedicoName({
                                                                                 firstName: m.firstName,
                                                                                 lastName: m.lastName,
                                                                                 gender: m.gender as any
                                                                             })}
-                                                                        </div>
-                                                                        <div className="text-[10px] text-gray-400">
-                                                                            {m.slots.length} slot · {m.slots[0]?.oraInizio}–{m.slots[m.slots.length - 1]?.oraFine}
-                                                                            {m.ambulatori.length > 0 && ` · ${m.ambulatori.map(a => a.nome).join(', ')}`}
-                                                                        </div>
-                                                                    </div>
-                                                                    <div className="flex-shrink-0 ml-2">
-                                                                        {isAddingMedico === m.personId ? (
-                                                                            <Loader2 className="w-3.5 h-3.5 animate-spin text-teal-500" />
-                                                                        ) : (
-                                                                            <Plus className="w-3.5 h-3.5 text-gray-400 group-hover:text-teal-600" />
+                                                                        </span>
+                                                                        {m.slots.length > 1 && (
+                                                                            <span className="ml-auto text-[10px] text-gray-400">{m.slots.length} slot</span>
                                                                         )}
                                                                     </div>
-                                                                </button>
+                                                                    <div className="divide-y divide-gray-100">
+                                                                        {m.slots.map((slotItem, idx) => {
+                                                                            const amb = m.ambulatori.find(a => a.id === slotItem.ambulatorioId);
+                                                                            return (
+                                                                                <button
+                                                                                    key={slotItem.id || idx}
+                                                                                    onClick={() => handleAddMedico(m.personId)}
+                                                                                    disabled={isAddingMedico === m.personId}
+                                                                                    className="flex items-center justify-between w-full px-2.5 py-1.5 hover:bg-teal-50 text-left transition-colors group disabled:opacity-50"
+                                                                                >
+                                                                                    <div className="flex items-center gap-2">
+                                                                                        <Clock className="w-3 h-3 text-gray-400" />
+                                                                                        <span className="text-xs text-gray-700 group-hover:text-teal-700 font-medium">
+                                                                                            {slotItem.oraInizio}–{slotItem.oraFine}
+                                                                                        </span>
+                                                                                        {amb && (
+                                                                                            <span className="text-[10px] text-gray-400">{amb.nome}</span>
+                                                                                        )}
+                                                                                    </div>
+                                                                                    <div className="flex-shrink-0 ml-2">
+                                                                                        {isAddingMedico === m.personId ? (
+                                                                                            <Loader2 className="w-3.5 h-3.5 animate-spin text-teal-500" />
+                                                                                        ) : (
+                                                                                            <Plus className="w-3.5 h-3.5 text-gray-400 group-hover:text-teal-600" />
+                                                                                        )}
+                                                                                    </div>
+                                                                                </button>
+                                                                            );
+                                                                        })}
+                                                                    </div>
+                                                                </div>
                                                             ))}
                                                         </div>
                                                     )}

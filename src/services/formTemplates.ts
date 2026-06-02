@@ -246,11 +246,11 @@ class FormTemplatesService {
   }
 
   async submitPublicForm(templateId: string, formData: Record<string, any>, visitedSectionIds?: string[]): Promise<void> {
-    await apiPost(`/api/public/forms/${templateId}/submit`, { formData, visitedSectionIds });
+    await apiPost(`/api/v1/public/forms/${templateId}/submit`, { formData, visitedSectionIds });
   }
 
   async getPublicForm(id: string): Promise<FormTemplate> {
-    const response = await apiGet<{ success: boolean; data: BackendFormTemplate }>(`/api/public/forms/${id}`);
+    const response = await apiGet<{ success: boolean; data: BackendFormTemplate }>(`/api/v1/public/forms/${id}`);
     return transformFormTemplate(response.data);
   }
 

@@ -313,11 +313,9 @@ const TemplateSubmissionsPage: React.FC = () => {
 
       // Carica submissions con tenant params
       const data = await getContactSubmissions({
-        templateId,
+        templateName: tmpl.name,  // Filtra per nome template (campo presente su ContactSubmission)
         page: 1,
         limit: 100,
-        ...(tenantParams.tenantIds && { tenantIds: tenantParams.tenantIds.join(',') }),
-        ...(tenantParams.allTenants && { allTenants: 'true' })
       });
       const fetchedSubmissions = data.submissions || [];
       setSubmissions(fetchedSubmissions);

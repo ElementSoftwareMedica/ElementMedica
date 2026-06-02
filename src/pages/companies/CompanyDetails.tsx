@@ -32,6 +32,7 @@ import CompanyMansioniSection from '../../components/companies/CompanyMansioniSe
 import CompanyProtocolliSanitariSection from '../../components/companies/CompanyProtocolliSanitariSection';
 import CompanySorveglianzaSection from '../../components/companies/CompanySorveglianzaSection';
 import MDLServicesCard from '../../components/companies/MDLServicesCard';
+import CompanyDocumentsSummaryCard from '../../components/companies/CompanyDocumentsSummaryCard';
 import Allegato3BCard from '../../components/companies/Allegato3BCard';
 import OT23Card from '../../components/companies/OT23Card';
 import RisultatiAnonimiCard from '../../components/companies/RisultatiAnonimiCard';
@@ -43,6 +44,7 @@ import CompanyBillingCard from '../../components/companies/CompanyBillingCard';
 import FatturaModal, { FatturabileBillingItem } from '../../components/companies/FatturaModal';
 import { useBillingAccess } from '../../hooks/useBillingAccess';
 import { useToast } from '../../hooks/useToast';
+import { useAuth } from '../../context/AuthContext';
 
 interface CompanySite {
   id: string;
@@ -78,7 +80,7 @@ interface CompanySite {
 // P58: Interfaccia per nomine
 interface NominaInfo {
   id: string;
-  tipoRuolo: 'MEDICO_COMPETENTE' | 'RSPP' | 'ASPP' | 'RLS' | 'PREPOSTO' | 'ADDETTO_PS' | 'ADDETTO_AI' | 'DIRIGENTE_SICUREZZA';
+  tipoRuolo: 'MEDICO_COMPETENTE' | 'MEDICO_COMPETENTE_COORDINATO' | 'RSPP' | 'ASPP' | 'RLS' | 'PREPOSTO' | 'ADDETTO_PS' | 'ADDETTO_AI' | 'DIRIGENTE_SICUREZZA';
   stato: string;
   dataInizio?: string;
   dataFine?: string;
@@ -87,6 +89,10 @@ interface NominaInfo {
     id: string;
     fullName: string;
   };
+  site?: {
+    id: string;
+    siteName?: string;
+  } | null;
 }
 
 // P59: Interfaccia per DVR
@@ -107,6 +113,16 @@ interface DVRInfo {
     citta?: string;
     indirizzo?: string;
   };
+}
+
+interface CompanyMdlDocumentFile {
+  filename: string;
+  originalName: string;
+  url: string;
+  createdAt?: string;
+  signedOnline?: boolean;
+  note?: string | null;
+  documentType?: string;
 }
 
 // P59: Interfaccia per Sopralluogo
@@ -307,13 +323,15 @@ const CompanyDetails: React.FC = () => {
   const [tariffario, setTariffario] = useState<TariffarioInfo | null>(null);
   const [successoreTariffario, setSuccessoreTariffario] = useState<TariffarioInfo | null>(null);
   const [storicoTariffari, setStoricoTariffari] = useState<TariffarioInfo[]>([]);
+  const [mdlDocuments, setMdlDocuments] = useState<CompanyMdlDocumentFile[]>([]);
   // P59: Trigger per forzare refresh delle sezioni dopo quick actions
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   // P59 Sprint 11.2: Stato per modal associazione tariffario
   const [showTariffarioModal, setShowTariffarioModal] = useState(false);
-  // Tab attivo: operativo | sicurezza | fatturazione — persisted in URL (?tab=...)
-  const activeTab = (searchParams.get('tab') as 'operativo' | 'sicurezza' | 'fatturazione') || 'operativo';
-  const setActiveTab = (tab: 'operativo' | 'sicurezza' | 'fatturazione') => {
+  // Tab attivo: operativo | sicurezza | fatturazione | documenti — persisted in URL (?tab=...)
+  type CompanyTab = 'operativo' | 'sicurezza' | 'fatturazione' | 'documenti';
+  const activeTab = (searchParams.get('tab') as CompanyTab) || 'operativo';
+  const setActiveTab = (tab: CompanyTab) => {
     setSearchParams(prev => { prev.set('tab', tab); return prev; }, { replace: true });
   };
   // Fattura modal
@@ -321,14 +339,23 @@ const CompanyDetails: React.FC = () => {
   const [billingItemsForModal, setBillingItemsForModal] = useState<FatturabileBillingItem[]>([]);
   const [loadingFatturaModal, setLoadingFatturaModal] = useState(false);
   const { hasBillingAccess } = useBillingAccess();
+  const { user } = useAuth();
+  const userRoles = Array.isArray((user as any)?.roles)
+    ? (user as any).roles
+    : [(user as any)?.roleType].filter(Boolean);
+  const isOnlyMedico = userRoles.length === 1 && userRoles[0] === 'MEDICO';
+  const canSeeBillingTab = hasBillingAccess && !isOnlyMedico;
 
   const { showToast } = useToast();
 
   useEffect(() => {
-    if (!hasBillingAccess && activeTab === 'fatturazione') {
+    if (!canSeeBillingTab && activeTab === 'fatturazione') {
       setActiveTab('operativo');
     }
-  }, [activeTab, hasBillingAccess]);
+    if (isOnlyMedico && activeTab === 'documenti') {
+      setActiveTab('operativo');
+    }
+  }, [activeTab, canSeeBillingTab, isOnlyMedico]);
 
   // Alerts summary query (scadenze + movimenti da fatturare)
   const { data: alertsSummary, refetch: refetchAlerts } = useQuery<AlertsSummary>({
@@ -347,7 +374,6 @@ const CompanyDetails: React.FC = () => {
     try {
       // Fetch principale dati azienda
       const companyData = await apiGet<CompanyData>(`/api/v1/companies/${id}`);
-      setCompany(companyData);
 
       // P59: Prepara header X-Operate-Tenant-Id se la company ha un tenantId diverso dall'utente
       const operateTenantHeaders: Record<string, string> = companyData.tenantId
@@ -355,11 +381,13 @@ const CompanyDetails: React.FC = () => {
         : {};
 
       // P59: Fetch parallelo per DVR, Sopralluoghi, Tariffari e Nomine
-      const [dvrsResponse, sopralluoghiResponse, tariffariResponse, nomineResponse] = await Promise.allSettled([
+      const [dvrsResponse, sopralluoghiResponse, tariffariResponse, nomineResponse, nomineDocsResponse, tariffarioDocsResponse] = await Promise.allSettled([
         apiGet<{ dvrs: DVRInfo[] }>(`/api/v1/dvr/company/${id}`, {}, { headers: operateTenantHeaders }),
         apiGet<{ sopralluoghi: SopralluogoInfo[] }>(`/api/v1/sopralluogo/company/${id}`, {}, { headers: operateTenantHeaders }),
         apiGet<{ success: boolean; data: TariffarioInfo[] }>(`/api/v1/companies/${id}/tariffari`),
-        apiGet<NominaInfo[]>(`/api/v1/clinica/nomine-ruolo/by-company/${companyData.companyTenantProfileId}`, {}, { headers: operateTenantHeaders })
+        apiGet<NominaInfo[]>(`/api/v1/clinica/nomine-ruolo/by-company/${companyData.companyTenantProfileId}`, {}, { headers: operateTenantHeaders }),
+        apiGet<{ success: boolean; data: CompanyMdlDocumentFile[] }>(`/api/v1/companies/${id}/mdl-documents/nomine/files`, {}, { headers: operateTenantHeaders }),
+        apiGet<{ success: boolean; data: CompanyMdlDocumentFile[] }>(`/api/v1/companies/${id}/mdl-documents/tariffario/files`, {}, { headers: operateTenantHeaders })
       ]);
 
       // Gestisci Nomine — API returns `person`, MDLServicesCard expects `persona`
@@ -386,6 +414,12 @@ const CompanyDetails: React.FC = () => {
       } else {
         setSopralluoghi([]);
       }
+
+      const loadedMdlDocs = [
+        ...(nomineDocsResponse.status === 'fulfilled' ? (nomineDocsResponse.value?.data || []).map(doc => ({ ...doc, documentType: 'nomine' })) : []),
+        ...(tariffarioDocsResponse.status === 'fulfilled' ? (tariffarioDocsResponse.value?.data || []).map(doc => ({ ...doc, documentType: 'tariffario' })) : []),
+      ];
+      setMdlDocuments(loadedMdlDocs);
 
       // P59 Sprint 11.2: Gestisci Tariffari - separa attivo da storico
       if (tariffariResponse.status === 'fulfilled' && tariffariResponse.value?.data?.length > 0) {
@@ -452,9 +486,11 @@ const CompanyDetails: React.FC = () => {
         setSuccessoreTariffario(null);
         setStoricoTariffari([]);
       }
+      setCompany({ ...companyData });
     } catch (err) {
       setError(getLoadingErrorMessage('companies', err));
       setCompany(null);
+      setMdlDocuments([]);
     } finally {
       setLoading(false);
     }
@@ -830,7 +866,7 @@ const CompanyDetails: React.FC = () => {
           </button>
 
           {/* Tab Fatturazione */}
-          {hasBillingAccess && (
+          {canSeeBillingTab && (
             <button
               onClick={() => setActiveTab('fatturazione')}
               className={cn(
@@ -849,6 +885,26 @@ const CompanyDetails: React.FC = () => {
               )}
             </button>
           )}
+
+          {!isOnlyMedico && (
+            <button
+              onClick={() => setActiveTab('documenti')}
+              className={cn(
+                'flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors flex-1 justify-center',
+                activeTab === 'documenti'
+                  ? 'border-teal-600 text-teal-600 dark:text-teal-400 bg-teal-50/50 dark:bg-teal-900/10'
+                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
+              )}
+            >
+              <FileText className="h-4 w-4" />
+              Documenti
+              {(dvrs.length + sopralluoghi.length + (company.nomine?.length ?? 0) + (tariffario ? 1 : 0) + mdlDocuments.length) > 0 && (
+                <span className="min-w-[18px] h-[18px] rounded-full text-xs font-bold bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300 flex items-center justify-center px-1">
+                  {dvrs.length + sopralluoghi.length + (company.nomine?.length ?? 0) + (tariffario ? 1 : 0) + mdlDocuments.length}
+                </span>
+              )}
+            </button>
+          )}
         </nav>
       </div>
 
@@ -857,20 +913,22 @@ const CompanyDetails: React.FC = () => {
       {/* Tab 1: Operativo */}
       {activeTab === 'operativo' && (
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-          <div className="xl:col-span-3 space-y-6">
+          <div className={`${isOnlyMedico ? 'xl:col-span-4' : 'xl:col-span-3'} space-y-6`}>
             {/* Company Sites Section */}
             <CompanySites
               companyId={id!}
+              nomine={company.nomine}
               selectedSiteId={selectedSiteId}
               onSiteFilterChange={setSelectedSiteId}
             />
             {/* Dipendenti Section */}
             <EmployeesSection companyId={company.companyTenantProfileId} />
-            {/* Formazione - Corsi in Scadenza */}
-            <CompanyTrainingRequirements
-              companyId={id!}
-              companyName={company.ragioneSociale}
-            />
+            {!isOnlyMedico && (
+              <CompanyTrainingRequirements
+                companyId={id!}
+                companyName={company.ragioneSociale}
+              />
+            )}
             {/* P58: Sezione Mansioni e Rischi */}
             <CompanyMansioniSection
               companyId={id!}
@@ -884,67 +942,72 @@ const CompanyDetails: React.FC = () => {
             />
           </div>
           {/* Quick Actions sidebar */}
-          <div className="xl:col-span-1">
-            <QuickActionsIntegrated
-              companyId={id!}
-              companyName={company.ragioneSociale}
-              nomine={company.nomine}
-              sites={company.sites}
-              hasTariffari={hasTariffariConfigured}
-              hasMDLServices={hasMDLServices(company)}
-              employeeCount={company._count?.personProfiles ?? 0}
-              courseCount={company._count?.courseSchedules ?? 0}
-              siteCount={company._count?.sites ?? 0}
-              onActionComplete={handleActionComplete}
-            />
-          </div>
+          {!isOnlyMedico && (
+            <div className="xl:col-span-1">
+              <QuickActionsIntegrated
+                companyId={id!}
+                companyName={company.ragioneSociale}
+                nomine={company.nomine}
+                sites={company.sites}
+                hasTariffari={hasTariffariConfigured}
+                hasMDLServices={hasMDLServices(company)}
+                employeeCount={company._count?.personProfiles ?? 0}
+                courseCount={company._count?.courseSchedules ?? 0}
+                siteCount={company._count?.sites ?? 0}
+                onActionComplete={handleActionComplete}
+              />
+            </div>
+          )}
         </div>
       )}
 
       {/* Tab 2: Sicurezza */}
       {activeTab === 'sicurezza' && (
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-          <div className="xl:col-span-3 space-y-6">
+          <div className={`${isOnlyMedico ? 'xl:col-span-4' : 'xl:col-span-3'} space-y-6`}>
             {/* P59: Card Unificata Servizi MDL */}
-            {(hasMDLServices(company) || (company.nomine && company.nomine.length > 0) || dvrs.length > 0 || hasTariffariConfigured) ? (
-              <MDLServicesCard
-                companyId={id!}
-                companyTenantProfileId={company.companyTenantProfileId}
-                companyName={company.ragioneSociale}
-                tenantId={company.tenantId}
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                nomine={company.nomine as any}
-                sites={company.sites}
-                dvrs={dvrs}
-                sopralluoghi={sopralluoghi}
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                tariffario={tariffario as any}
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                successoreTariffario={successoreTariffario as any}
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                storicoTariffari={storicoTariffari as any}
-                onActionComplete={handleActionComplete}
-              />
-            ) : (
-              <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-10 text-center">
-                <ShieldCheck className="h-10 w-10 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Nessun servizio di sicurezza configurato per questa azienda.
-                </p>
-                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                  Aggiungere nomine, DVR o sopralluoghi tramite il pannello Quick Actions.
-                </p>
-              </div>
+            {!isOnlyMedico && (
+              (hasMDLServices(company) || (company.nomine && company.nomine.length > 0) || dvrs.length > 0 || hasTariffariConfigured) ? (
+                <MDLServicesCard
+                  companyId={id!}
+                  companyTenantProfileId={company.companyTenantProfileId}
+                  companyName={company.ragioneSociale}
+                  tenantId={company.tenantId}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  nomine={company.nomine as any}
+                  sites={company.sites}
+                  dvrs={dvrs}
+                  sopralluoghi={sopralluoghi}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  tariffario={tariffario as any}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  successoreTariffario={successoreTariffario as any}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  storicoTariffari={storicoTariffari as any}
+                  onActionComplete={handleActionComplete}
+                />
+              ) : (
+                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-10 text-center">
+                  <ShieldCheck className="h-10 w-10 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Nessun servizio di sicurezza configurato per questa azienda.
+                  </p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                    Aggiungere nomine, DVR o sopralluoghi tramite il pannello Quick Actions.
+                  </p>
+                </div>
+              )
             )}
 
             {/* Sorveglianza Sanitaria - Art. 41 D.Lgs 81/08 */}
             <CompanySorveglianzaSection
-              companyId={id!}
+              companyId={company.companyTenantProfileId || id!}
+              companySites={company.sites}
               isCrossTenant={company.crossTenant?.isOwner === false}
             />
 
             {/* P60: Card Allegato 3B */}
-            {hasMDLServices(company) && company.companyTenantProfileId && (
+            {!isOnlyMedico && hasMDLServices(company) && company.companyTenantProfileId && (
               <Allegato3BCard
                 companyTenantProfileId={company.companyTenantProfileId}
                 companyName={company.ragioneSociale}
@@ -953,7 +1016,7 @@ const CompanyDetails: React.FC = () => {
             )}
 
             {/* P44: Card OT23 */}
-            {hasMDLServices(company) && company.companyTenantProfileId && (
+            {!isOnlyMedico && hasMDLServices(company) && company.companyTenantProfileId && (
               <OT23Card
                 companyTenantProfileId={company.companyTenantProfileId}
                 companyName={company.ragioneSociale}
@@ -963,7 +1026,7 @@ const CompanyDetails: React.FC = () => {
             )}
 
             {/* R17: Risultati Anonimi Collettivi — Art. 40 c.1 D.Lgs 81/08 */}
-            {hasMDLServices(company) && company.companyTenantProfileId && (
+            {!isOnlyMedico && hasMDLServices(company) && company.companyTenantProfileId && (
               <RisultatiAnonimiCard
                 companyTenantProfileId={company.companyTenantProfileId}
                 companyName={company.ragioneSociale}
@@ -972,7 +1035,7 @@ const CompanyDetails: React.FC = () => {
             )}
 
             {/* Verbale Riunione Periodica — Art. 35 D.Lgs 81/08 */}
-            {hasMDLServices(company) && company.companyTenantProfileId && (
+            {!isOnlyMedico && hasMDLServices(company) && company.companyTenantProfileId && (
               <RiunionePeriodicaCard
                 companyTenantProfileId={company.companyTenantProfileId}
                 companyName={company.ragioneSociale}
@@ -981,25 +1044,27 @@ const CompanyDetails: React.FC = () => {
             )}
           </div>
           {/* Quick Actions sidebar */}
-          <div className="xl:col-span-1">
-            <QuickActionsIntegrated
-              companyId={id!}
-              companyName={company.ragioneSociale}
-              nomine={company.nomine}
-              sites={company.sites}
-              hasTariffari={hasTariffariConfigured}
-              hasMDLServices={hasMDLServices(company)}
-              employeeCount={company._count?.personProfiles ?? 0}
-              courseCount={company._count?.courseSchedules ?? 0}
-              siteCount={company._count?.sites ?? 0}
-              onActionComplete={handleActionComplete}
-            />
-          </div>
+          {!isOnlyMedico && (
+            <div className="xl:col-span-1">
+              <QuickActionsIntegrated
+                companyId={id!}
+                companyName={company.ragioneSociale}
+                nomine={company.nomine}
+                sites={company.sites}
+                hasTariffari={hasTariffariConfigured}
+                hasMDLServices={hasMDLServices(company)}
+                employeeCount={company._count?.personProfiles ?? 0}
+                courseCount={company._count?.courseSchedules ?? 0}
+                siteCount={company._count?.sites ?? 0}
+                onActionComplete={handleActionComplete}
+              />
+            </div>
+          )}
         </div>
       )}
 
       {/* Tab 3: Fatturazione */}
-      {hasBillingAccess && activeTab === 'fatturazione' && (
+      {canSeeBillingTab && activeTab === 'fatturazione' && (
         <div className="space-y-4">
           {/* Header Fatturazione con azione Emetti Fattura */}
           <div className="flex items-center justify-between">
@@ -1034,6 +1099,18 @@ const CompanyDetails: React.FC = () => {
           <CompanyBillingCard
             companyId={id!}
             companyName={company.ragioneSociale}
+          />
+        </div>
+      )}
+
+      {!isOnlyMedico && activeTab === 'documenti' && (
+        <div className="space-y-4">
+          <CompanyDocumentsSummaryCard
+            dvrs={dvrs}
+            sopralluoghi={sopralluoghi}
+            tariffario={tariffario}
+            nomine={company.nomine}
+            mdlDocuments={mdlDocuments}
           />
         </div>
       )}

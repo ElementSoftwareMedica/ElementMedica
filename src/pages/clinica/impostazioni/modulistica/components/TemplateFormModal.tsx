@@ -110,6 +110,7 @@ const TemplateFormModal: React.FC<TemplateFormModalProps> = ({
                 ordine: template.ordine || 0,
                 contenutoHtml: template.contenutoHtml || '',
                 campi: template.campi || [],
+                consensoCodici: template.consensoCodici || [],
                 prestazioniIds: template.prestazioni?.map(p => p.prestazioneId) || [],
                 mediciIds: template.medici?.map(m => m.medicoId) || [],
                 haScoring: template.questionarioConfig?.haScoring || false,
@@ -162,6 +163,15 @@ const TemplateFormModal: React.FC<TemplateFormModalProps> = ({
             mediciIds: prev.mediciIds.includes(id)
                 ? prev.mediciIds.filter(m => m !== id)
                 : [...prev.mediciIds, id]
+        }));
+    }, []);
+
+    const toggleConsensoCodice = useCallback((codice: string) => {
+        setFormData(prev => ({
+            ...prev,
+            consensoCodici: prev.consensoCodici.includes(codice)
+                ? prev.consensoCodici.filter(c => c !== codice)
+                : [...prev.consensoCodici, codice]
         }));
     }, []);
 
@@ -224,6 +234,7 @@ const TemplateFormModal: React.FC<TemplateFormModalProps> = ({
             ordine: formData.ordine,
             contenutoHtml: formData.contenutoHtml || undefined,
             campi: formData.campi.length > 0 ? formData.campi : undefined,
+            consensoCodici: formData.consensoCodici,
             prestazioniIds: formData.prestazioniIds.length > 0 ? formData.prestazioniIds : undefined,
             mediciIds: formData.mediciIds.length > 0 ? formData.mediciIds : undefined,
             // QuestionarioMedicoConfig: inviato se scoring attivo o tipo MDL
@@ -333,10 +344,12 @@ const TemplateFormModal: React.FC<TemplateFormModalProps> = ({
                         <TabAssociazioni
                             prestazioniIds={formData.prestazioniIds}
                             mediciIds={formData.mediciIds}
+                            consensoCodici={formData.consensoCodici}
                             prestazioni={prestazioni}
                             medici={medici as { id: string; firstName: string; lastName: string; gender?: string }[]}
                             onTogglePrestazione={togglePrestazione}
                             onToggleMedico={toggleMedico}
+                            onToggleConsensoCodice={toggleConsensoCodice}
                         />
                     )}
                 </div>

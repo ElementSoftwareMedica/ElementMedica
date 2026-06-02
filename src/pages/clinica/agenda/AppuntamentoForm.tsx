@@ -25,7 +25,6 @@ import {
     Building2,
     Search,
     X,
-    ChevronDown,
     CheckCircle,
     Play,
     Ban,
@@ -33,24 +32,32 @@ import {
     RotateCcw,
     UserCheck,
     AlertCircle,
-    Pencil
+    Pencil,
+    ChevronLeft,
+    ChevronRight
 } from 'lucide-react';
 
 import {
     appuntamentiApi,
+    visiteApi,
     pazientiApi,
     prestazioniApi,
     ambulatoriApi,
     mediciApi,
+    slotsApi,
     convenzioniApi,
     Appuntamento,
-    Paziente
+    Paziente,
+    SlotDisponibilita
 } from '../../../services/clinicaApi';
 import { DatePickerElegante } from '../../../components/ui/DatePickerElegante';
+import { TimePickerElegante } from '../../../components/ui/TimePickerElegante';
 import { ComuneAutocomplete } from '../../../components/ui/ComuneAutocomplete';
+import ElegantSelect from '../../../components/ui/ElegantSelect';
 import { CRUDButton, CRUDPrimaryButton } from '../../../components/shared/CRUDButton';
 import { useBillingAccess } from '../../../hooks/useBillingAccess';
 import { useToast } from '../../../hooks/useToast';
+import { useSmartBack } from '../../../hooks/useSmartBack';
 import QuickFatturazioneTab from '../../finance/billing/components/QuickFatturazioneTab';
 import {
     extractGenderFromTaxCode,
@@ -59,6 +66,8 @@ import {
 } from '../../../utils/codiceFiscale';
 import { getCapByProvincia } from '../../../data/comuniItaliani';
 import type { ComuneItaliano } from '../../../data/comuniItaliani';
+import AvailabilitySlotTimeline from './components/AvailabilitySlotTimeline';
+import { DEFAULT_ETHNICITY, ETHNICITY_OPTIONS } from '../../../constants/ethnicityOptions';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -83,6 +92,7 @@ interface AppFormData {
     codiceFiscale: string;
     sesso: 'MALE' | 'FEMALE' | '';
     dataNascita: string;
+    etnia: string;
     comuneNascita: string;
     provinciaNascita: string;
     indirizzo: string;
@@ -110,6 +120,7 @@ const INITIAL_FORM: AppFormData = {
     codiceFiscale: '',
     sesso: '',
     dataNascita: '',
+    etnia: DEFAULT_ETHNICITY,
     comuneNascita: '',
     provinciaNascita: '',
     indirizzo: '',
@@ -119,6 +130,65 @@ const INITIAL_FORM: AppFormData = {
     telefono: '',
     email: ''
 };
+
+const toLocalDateString = (date: Date) =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
+const startOfWeek = (date: Date) => {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    const day = d.getDay() || 7;
+    d.setDate(d.getDate() - day + 1);
+    return d;
+};
+
+const getTimeFromDateTime = (value?: string | Date | null) => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+};
+
+const timeToMinutes = (time?: string | null) => {
+    if (!time) return 0;
+    const [hours = 0, minutes = 0] = time.split(':').map(Number);
+    return (hours * 60) + minutes;
+};
+
+const minutesToTime = (minutes: number) =>
+    `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+
+const rangesOverlap = (startA: number, endA: number, startB: number, endB: number) =>
+    startA < endB && startB < endA;
+
+const getSlotTimeOptions = (slot: SlotDisponibilita, occupied: Appuntamento[], durationMinutes: number) => {
+    const start = timeToMinutes(slot.oraInizio);
+    const end = Math.max(timeToMinutes(slot.oraFine), start + durationMinutes);
+    const latestStart = Math.max(start, end - durationMinutes);
+    const step = 15;
+    const times: number[] = [];
+
+    for (let current = start; current <= latestStart; current += step) {
+        times.push(current);
+    }
+    if (!times.length) times.push(start);
+
+    return times.map(minutes => {
+        const appointment = occupied.find(app => {
+            if (app.medicoId !== slot.medicoId) return false;
+            const appStart = timeToMinutes(getTimeFromDateTime(app.dataOra));
+            const appEnd = appStart + (app.durataMinuti || durationMinutes || 30);
+            return rangesOverlap(minutes, minutes + durationMinutes, appStart, appEnd);
+        });
+        return {
+            time: minutesToTime(minutes),
+            occupied: Boolean(appointment),
+            appointment
+        };
+    });
+};
+
+const ACTIVE_APPOINTMENT_STATES = 'PRENOTATO,CONFERMATO,IN_ATTESA,IN_CORSO';
 
 // ─── Stato config ─────────────────────────────────────────────────────────────
 
@@ -181,19 +251,12 @@ const SelectField: React.FC<{
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             {label}{required && <span className="text-red-500 ml-0.5">*</span>}
         </label>
-        <div className="relative">
-            <select
-                value={value}
-                onChange={e => onChange(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 appearance-none pr-8"
-            >
-                <option value="">{placeholder}</option>
-                {options.map(o => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-            </select>
-            <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-        </div>
+        <ElegantSelect
+            value={value}
+            onChange={onChange}
+            placeholder={placeholder}
+            options={[{ value: '', label: placeholder }, ...options]}
+        />
     </div>
 );
 
@@ -202,18 +265,21 @@ const SelectField: React.FC<{
 export const AppuntamentoForm: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
+    const goBack = useSmartBack('/poliambulatorio/appuntamenti');
     const queryClient = useQueryClient();
     const [searchParams] = useSearchParams();
     const { showToast } = useToast();
 
     const isEditing = !!id;
+    const shouldCreateDirectVisit = searchParams.get('directVisit') === '1';
     const [activeTab, setActiveTab] = useState<TabId>('appuntamento');
     const { hasBillingFeature } = useBillingAccess();
     const [form, setForm] = useState<AppFormData>({
         ...INITIAL_FORM,
         data: searchParams.get('data') || '',
         oraInizio: searchParams.get('ora') || '',
-        medicoId: searchParams.get('medicoId') || ''
+        medicoId: searchParams.get('medicoId') || '',
+        pazienteId: searchParams.get('pazienteId') || searchParams.get('paziente') || ''
     });
 
     // CF validation state
@@ -227,6 +293,7 @@ export const AppuntamentoForm: React.FC = () => {
     // Patient search UI
     const [pazSearch, setPazSearch] = useState('');
     const [showPazSearch, setShowPazSearch] = useState(false);
+    const [slotWeekStart, setSlotWeekStart] = useState(() => startOfWeek(searchParams.get('data') ? new Date(`${searchParams.get('data')}T00:00:00`) : new Date()));
 
     // ── Queries ──────────────────────────────────────────────────────────────
 
@@ -234,6 +301,13 @@ export const AppuntamentoForm: React.FC = () => {
         queryKey: ['appuntamento', id],
         queryFn: () => appuntamentiApi.getById(id!),
         enabled: isEditing
+    });
+
+    const preselectedPazienteId = searchParams.get('pazienteId') || searchParams.get('paziente') || '';
+    const { data: preselectedPaziente } = useQuery({
+        queryKey: ['paziente', preselectedPazienteId],
+        queryFn: () => pazientiApi.getById(preselectedPazienteId),
+        enabled: !isEditing && !!preselectedPazienteId,
     });
 
     const { data: prestazioniData } = useQuery({
@@ -251,6 +325,47 @@ export const AppuntamentoForm: React.FC = () => {
         queryFn: () => mediciApi.getAll({ limit: 100 })
     });
 
+    const slotRange = useMemo(() => {
+        const start = new Date(slotWeekStart);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(start);
+        end.setDate(start.getDate() + 6);
+        return { start, end };
+    }, [slotWeekStart]);
+
+    const { data: availableSlotsResponse, isFetching: loadingAvailableSlots } = useQuery({
+        queryKey: ['appointment-form-slots', form.medicoId, form.prestazioneId, slotRange.start.toISOString()],
+        queryFn: () => slotsApi.getAll({
+            filters: {
+                dataInizio: toLocalDateString(slotRange.start),
+                dataFine: toLocalDateString(slotRange.end),
+                disponibile: true,
+                ...(form.medicoId && { medicoId: form.medicoId }),
+                ...(form.prestazioneId && { prestazioneId: form.prestazioneId }),
+            },
+            limit: 200,
+        }),
+        enabled: !isEditing && (!!form.medicoId || !!form.prestazioneId),
+        staleTime: 30_000,
+    });
+    const availableSlots = availableSlotsResponse?.data || [];
+
+    const { data: occupiedAppointmentsResponse, isFetching: loadingOccupiedSlots } = useQuery({
+        queryKey: ['appointment-form-occupied-slots', form.medicoId, form.prestazioneId, slotRange.start.toISOString()],
+        queryFn: () => appuntamentiApi.getAll({
+            page: 1,
+            limit: 500,
+            filters: {
+                dataInizio: toLocalDateString(slotRange.start),
+                dataFine: toLocalDateString(slotRange.end),
+                stato: ACTIVE_APPOINTMENT_STATES,
+                ...(form.medicoId && { medicoId: form.medicoId }),
+            },
+        }),
+        enabled: !isEditing && (!!form.medicoId || !!form.prestazioneId),
+        staleTime: 15_000,
+    });
+
     const { data: convenzioniData } = useQuery({
         queryKey: ['convenzioni', 'active'],
         queryFn: () => convenzioniApi.getAll({ limit: 100 })
@@ -264,20 +379,26 @@ export const AppuntamentoForm: React.FC = () => {
 
     // ── Options ───────────────────────────────────────────────────────────────
 
-    const prestazioniOptions = useMemo(() =>
-        (prestazioniData?.data || []).map(p => ({ value: p.id, label: `${p.nome}${p.codice ? ` (${p.codice})` : ''}` }))
-        , [prestazioniData]);
+    const prestazioniOptions = useMemo(() => {
+        const slotPrestazioneIds = new Set(availableSlots.map((slot: SlotDisponibilita) => slot.prestazioneId).filter(Boolean));
+        const shouldFilter = !isEditing && form.medicoId && slotPrestazioneIds.size > 0;
+        return (prestazioniData?.data || [])
+            .filter(p => !shouldFilter || slotPrestazioneIds.has(p.id))
+            .map(p => ({ value: p.id, label: `${p.nome}${p.codice ? ` (${p.codice})` : ''}` }));
+    }, [availableSlots, form.medicoId, isEditing, prestazioniData]);
 
     const ambulatoriOptions = useMemo(() =>
         (ambulatoriData?.data || []).map(a => ({ value: a.id, label: a.nome }))
         , [ambulatoriData]);
 
-    const mediciOptions = useMemo(() =>
-        (mediciData?.data || []).map(m => ({
+    const mediciOptions = useMemo(() => {
+        const slotMedicoIds = new Set(availableSlots.map((slot: SlotDisponibilita) => slot.medicoId).filter(Boolean));
+        const shouldFilter = !isEditing && form.prestazioneId && slotMedicoIds.size > 0;
+        return (mediciData?.data || []).filter(m => !shouldFilter || slotMedicoIds.has(m.id)).map(m => ({
             value: m.id,
             label: `${m.cognome || m.lastName || ''} ${m.nome || m.firstName || ''}`.trim()
-        }))
-        , [mediciData]);
+        }));
+    }, [availableSlots, form.prestazioneId, isEditing, mediciData]);
 
     const convenzioniOptions = useMemo(() =>
         (convenzioniData?.data || [])
@@ -288,6 +409,49 @@ export const AppuntamentoForm: React.FC = () => {
     const selectedPrestazione = useMemo(() =>
         (prestazioniData?.data || []).find(p => p.id === form.prestazioneId)
         , [prestazioniData, form.prestazioneId]);
+
+    const selectedAmbulatorio = useMemo(() =>
+        ambulatoriOptions.find(a => a.value === form.ambulatorioId)
+        , [ambulatoriOptions, form.ambulatorioId]);
+
+    const slotsByDay = useMemo(() => {
+        const slotMedicoIds = new Set(availableSlots.map((slot: SlotDisponibilita) => slot.medicoId).filter(Boolean));
+        const occupiedAppointments = (occupiedAppointmentsResponse?.data || []).filter(app => {
+            if (form.medicoId) return app.medicoId === form.medicoId;
+            if (slotMedicoIds.size > 0) return !!app.medicoId && slotMedicoIds.has(app.medicoId);
+            return true;
+        });
+        const days = Array.from({ length: 7 }, (_, index) => {
+            const day = new Date(slotRange.start);
+            day.setDate(slotRange.start.getDate() + index);
+            const key = toLocalDateString(day);
+            return { key, date: day, slots: [] as SlotDisponibilita[], occupied: [] as Appuntamento[] };
+        });
+        for (const slot of availableSlots) {
+            const key = String(slot.data).split('T')[0];
+            const day = days.find(item => item.key === key);
+            if (day) day.slots.push(slot);
+        }
+        for (const appointment of occupiedAppointments) {
+            const key = String(appointment.dataOra).split('T')[0];
+            const day = days.find(item => item.key === key);
+            if (day) day.occupied.push(appointment);
+        }
+        return days;
+    }, [availableSlots, form.medicoId, occupiedAppointmentsResponse?.data, slotRange.start]);
+    const selectedSlotWindow = useMemo(() => {
+        if (!form.data) return null;
+        const day = slotsByDay.find(item => item.key === form.data);
+        if (!day) return null;
+        const selectedTime = timeToMinutes(form.oraInizio);
+        return day.slots.find(slot => {
+            if (form.medicoId && slot.medicoId !== form.medicoId) return false;
+            if (form.ambulatorioId && slot.ambulatorioId !== form.ambulatorioId) return false;
+            const start = timeToMinutes(slot.oraInizio);
+            const end = timeToMinutes(slot.oraFine);
+            return selectedTime >= start && selectedTime <= end;
+        }) || day.slots.find(slot => !form.medicoId || slot.medicoId === form.medicoId) || null;
+    }, [form.ambulatorioId, form.data, form.medicoId, form.oraInizio, slotsByDay]);
 
     // ── Init from existing ────────────────────────────────────────────────────
 
@@ -321,6 +485,7 @@ export const AppuntamentoForm: React.FC = () => {
             codiceFiscale: paziente?.codiceFiscale || paziente?.taxCode || '',
             sesso: (paziente?.gender || paziente?.sesso || '') as 'MALE' | 'FEMALE' | '',
             dataNascita: formatBirthDate(paziente?.dataNascita || paziente?.birthDate),
+            etnia: paziente?.etnia || DEFAULT_ETHNICITY,
             comuneNascita: paziente?.birthPlace || paziente?.comuneNascita || '',
             provinciaNascita: paziente?.birthProvince || paziente?.provinciaNascita || '',
             indirizzo: paziente?.residenceAddress || paziente?.indirizzo || '',
@@ -396,6 +561,7 @@ export const AppuntamentoForm: React.FC = () => {
             codiceFiscale: paz.codiceFiscale || paz.taxCode || '',
             sesso: (paz.gender || paz.sesso || '') as 'MALE' | 'FEMALE' | '',
             dataNascita: fmt(paz.dataNascita || paz.birthDate),
+            etnia: paz.etnia || DEFAULT_ETHNICITY,
             comuneNascita: paz.birthPlace || paz.comuneNascita || '',
             provinciaNascita: paz.birthProvince || paz.provinciaNascita || '',
             indirizzo: paz.residenceAddress || paz.indirizzo || '',
@@ -411,11 +577,44 @@ export const AppuntamentoForm: React.FC = () => {
         setPazSearch('');
     }, []);
 
+    const handleSelectSlot = useCallback((slot: SlotDisponibilita, time = slot.oraInizio) => {
+        setForm(prev => ({
+            ...prev,
+            data: String(slot.data).split('T')[0],
+            oraInizio: time,
+            ambulatorioId: slot.ambulatorioId,
+            medicoId: slot.medicoId || prev.medicoId,
+            prestazioneId: slot.prestazioneId || prev.prestazioneId,
+        }));
+    }, []);
+
+    const shiftSlotWeek = useCallback((days: number) => {
+        setSlotWeekStart(prev => {
+            const next = new Date(prev);
+            next.setDate(prev.getDate() + days);
+            return startOfWeek(next);
+        });
+    }, []);
+
+    const handleDateChange = useCallback((date: Date | null) => {
+        const value = date ? toLocalDateString(date) : '';
+        set('data', value);
+        if (date) setSlotWeekStart(startOfWeek(date));
+    }, [set]);
+
+    useEffect(() => {
+        if (isEditing || !preselectedPaziente) return;
+        handleSelectPaziente(preselectedPaziente);
+        setShowPazSearch(false);
+    }, [handleSelectPaziente, isEditing, preselectedPaziente]);
+
     // ── Mutations ─────────────────────────────────────────────────────────────
 
     const saveMutation = useMutation({
         mutationFn: async () => {
             if (!form.data || !form.oraInizio) throw new Error('Data e ora obbligatori');
+            if (!form.medicoId) throw new Error('Medico obbligatorio');
+            if (!form.ambulatorioId) throw new Error(isEditing ? 'Ambulatorio obbligatorio' : 'Seleziona uno slot disponibilità');
             const dataOra = `${form.data}T${form.oraInizio}:00`;
 
             // 1. Save / update patient data if name is provided
@@ -427,6 +626,7 @@ export const AppuntamentoForm: React.FC = () => {
                     taxCode: form.codiceFiscale || '',
                     gender: form.sesso || undefined,
                     birthDate: form.dataNascita || undefined,
+                    etnia: form.etnia || DEFAULT_ETHNICITY,
                     birthPlace: form.comuneNascita || undefined,
                     birthProvince: form.provinciaNascita || undefined,
                     email: form.email || undefined,
@@ -458,17 +658,29 @@ export const AppuntamentoForm: React.FC = () => {
                 return appuntamentiApi.create(payload);
             }
         },
-        onSuccess: (result) => {
+        onSuccess: async (result) => {
             queryClient.invalidateQueries({ queryKey: ['appuntamenti'] });
             if (isEditing) {
                 queryClient.invalidateQueries({ queryKey: ['appuntamento', id] });
             }
             showToast({ message: isEditing ? 'Appuntamento aggiornato' : 'Appuntamento creato', type: 'success' });
             const newId = isEditing ? id : (result as Appuntamento)?.id;
-            navigate(newId ? `/clinica/agenda/appuntamenti/${newId}` : '/clinica/agenda/appuntamenti');
+            if (!isEditing && shouldCreateDirectVisit && newId) {
+                try {
+                    const response = await visiteApi.getOrCreateByAppuntamento(newId);
+                    const visitaId = response?.data?.id;
+                    if (visitaId) {
+                        navigate(`/poliambulatorio/visite/${visitaId}`);
+                        return;
+                    }
+                } catch {
+                    showToast({ message: 'Appuntamento creato, ma apertura visita non riuscita', type: 'warning' });
+                }
+            }
+            navigate(newId ? `/poliambulatorio/agenda/appuntamenti/${newId}` : '/poliambulatorio/agenda/appuntamenti');
         },
-        onError: () => {
-            showToast({ message: 'Errore durante il salvataggio', type: 'error' });
+        onError: (error: unknown) => {
+            showToast({ message: error instanceof Error ? error.message : 'Errore durante il salvataggio', type: 'error' });
         }
     });
 
@@ -515,10 +727,10 @@ export const AppuntamentoForm: React.FC = () => {
 
             {/* Sticky header */}
             <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-20 shadow-sm">
-                <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+                <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3 min-w-0">
                         <button
-                            onClick={() => navigate(-1)}
+                            onClick={goBack}
                             className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 flex-shrink-0"
                         >
                             <ArrowLeft className="h-5 w-5" />
@@ -546,7 +758,7 @@ export const AppuntamentoForm: React.FC = () => {
                 </div>
 
                 {/* Tab bar */}
-                <div className="max-w-4xl mx-auto px-4 flex gap-0 border-t border-gray-100 dark:border-gray-700">
+                <div className="max-w-7xl mx-auto px-4 flex gap-0 border-t border-gray-100 dark:border-gray-700">
                     {tabs.map(tab => (
                         <button
                             key={tab.id}
@@ -564,54 +776,13 @@ export const AppuntamentoForm: React.FC = () => {
             </div>
 
             {/* Content */}
-            <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
+            <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
 
                 {/* TAB: APPUNTAMENTO */}
                 {activeTab === 'appuntamento' && (
                     <div className="space-y-6">
 
-                        {/* Data / Ora / Durata */}
-                        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
-                            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-                                <Clock className="h-4 w-4" />
-                                Data e Orario
-                            </h2>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                        Data <span className="text-red-500">*</span>
-                                    </label>
-                                    <DatePickerElegante
-                                        value={form.data}
-                                        onChange={v => set('data', v ? v.toISOString().split('T')[0] : '')}
-                                        placeholder="Seleziona data"
-                                    />
-                                </div>
-                                <InputField
-                                    label="Ora inizio"
-                                    value={form.oraInizio}
-                                    onChange={v => set('oraInizio', v)}
-                                    type="time"
-                                    required
-                                />
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                        Durata (min)
-                                    </label>
-                                    <input
-                                        type="number"
-                                        min={5}
-                                        max={480}
-                                        step={5}
-                                        value={form.durataMinuti}
-                                        onChange={e => set('durataMinuti', Number(e.target.value) || 30)}
-                                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 dark:bg-gray-700 dark:text-gray-100"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Medico / Prestazione / Ambulatorio / Convenzione */}
+                        {/* Medico / Prestazione / Convenzione */}
                         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
                             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2">
                                 <Stethoscope className="h-4 w-4" />
@@ -634,20 +805,164 @@ export const AppuntamentoForm: React.FC = () => {
                                     placeholder="Seleziona prestazione..."
                                 />
                                 <SelectField
-                                    label="Ambulatorio"
-                                    value={form.ambulatorioId}
-                                    onChange={v => set('ambulatorioId', v)}
-                                    options={ambulatoriOptions}
-                                    required
-                                    placeholder="Seleziona ambulatorio..."
-                                />
-                                <SelectField
                                     label="Convenzione"
                                     value={form.convenzioneId}
                                     onChange={v => set('convenzioneId', v)}
                                     options={convenzioniOptions}
                                     placeholder="Nessuna convenzione"
                                 />
+                                {isEditing ? (
+                                    <SelectField
+                                        label="Ambulatorio"
+                                        value={form.ambulatorioId}
+                                        onChange={v => set('ambulatorioId', v)}
+                                        options={ambulatoriOptions}
+                                        required
+                                        placeholder="Seleziona ambulatorio..."
+                                    />
+                                ) : (
+                                    <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900/30">
+                                        <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Ambulatorio</p>
+                                        <p className="mt-1 font-medium text-gray-700 dark:text-gray-200">
+                                            {selectedAmbulatorio?.label || 'Seleziona uno slot disponibilità'}
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                            {!isEditing && (
+                                <p className="mt-3 text-xs text-gray-500">
+                                    Medico e prestazione si filtrano in base agli slot disponibili. L'ambulatorio viene compilato automaticamente dallo slot.
+                                </p>
+                            )}
+                        </div>
+
+                        {/* Data / Ora / Durata */}
+                        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+                            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                                <Clock className="h-4 w-4" />
+                                Data e Orario
+                            </h2>
+                            {!isEditing && (
+                                <div className="mb-5">
+                                    <div className="mb-3 flex items-center justify-between gap-3">
+                                        <div>
+                                            <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Slot disponibilità</p>
+                                            <p className="text-xs text-gray-500">Scegli uno slot del medico selezionato e controlla gli orari già occupati.</p>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => shiftSlotWeek(-7)}
+                                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:border-teal-300 hover:text-teal-700 dark:border-gray-700 dark:bg-gray-800"
+                                                title="Settimana precedente"
+                                            >
+                                                <ChevronLeft className="h-4 w-4" />
+                                            </button>
+                                            <span className="hidden text-xs font-semibold text-gray-500 sm:inline">
+                                                {slotRange.start.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })}
+                                                {' - '}
+                                                {slotRange.end.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={() => shiftSlotWeek(7)}
+                                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:border-teal-300 hover:text-teal-700 dark:border-gray-700 dark:bg-gray-800"
+                                                title="Settimana successiva"
+                                            >
+                                                <ChevronRight className="h-4 w-4" />
+                                            </button>
+                                            {(loadingAvailableSlots || loadingOccupiedSlots) && <Loader2 className="h-4 w-4 animate-spin text-teal-600" />}
+                                        </div>
+                                    </div>
+                                    {form.medicoId || form.prestazioneId ? (
+                                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-7">
+                                            {slotsByDay.map(day => (
+                                                <div key={day.key} className="min-h-[160px] min-w-0 rounded-xl border border-gray-200 bg-gray-50 p-2 dark:border-gray-700 dark:bg-gray-900/30">
+                                                    <div className="mb-2">
+                                                        <p className="text-[11px] font-semibold uppercase text-gray-400">
+                                                            {day.date.toLocaleDateString('it-IT', { weekday: 'short' })}
+                                                        </p>
+                                                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                                                            {day.date.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })}
+                                                        </p>
+                                                    </div>
+                                                    <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+                                                        {day.slots.length === 0 ? (
+                                                            <p className="rounded-lg bg-white px-2 py-2 text-center text-[11px] text-gray-400 dark:bg-gray-800">Nessuno slot</p>
+                                                        ) : (
+                                                            <>
+                                                                {day.slots.map(slot => {
+                                                                    const ambulatorio = ambulatoriOptions.find(a => a.value === slot.ambulatorioId)?.label;
+                                                                    const doctorName = mediciOptions.find(m => m.value === slot.medicoId)?.label;
+                                                                    return (
+                                                                        <AvailabilitySlotTimeline
+                                                                            key={slot.id}
+                                                                            slot={slot}
+                                                                            appointments={day.occupied}
+                                                                            durationMinutes={form.durataMinuti || 30}
+                                                                            selectedDate={form.data}
+                                                                            selectedTime={form.oraInizio}
+                                                                            selectedMedicoId={form.medicoId}
+                                                                            selectedAmbulatorioId={form.ambulatorioId}
+                                                                            dayKey={day.key}
+                                                                            label={ambulatorio}
+                                                                            meta="clicca nello slot"
+                                                                            doctorLabel={doctorName}
+                                                                            onSelect={handleSelectSlot}
+                                                                        />
+                                                                    );
+                                                                })}
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-4 text-sm text-gray-500 dark:border-gray-700 dark:bg-gray-900/30">
+                                            Seleziona un medico o una prestazione per vedere gli slot disponibili.
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        Data <span className="text-red-500">*</span>
+                                    </label>
+                                    <DatePickerElegante
+                                        value={form.data}
+                                        onChange={handleDateChange}
+                                        placeholder="Seleziona data"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        Ora inizio <span className="text-red-500">*</span>
+                                    </label>
+                                        <TimePickerElegante
+                                            value={form.oraInizio}
+                                            onChange={v => set('oraInizio', v)}
+                                            minuteStep={5}
+                                            minTime={selectedSlotWindow?.oraInizio}
+                                            maxTime={selectedSlotWindow?.oraFine}
+                                            placeholder="Seleziona ora"
+                                        />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        Durata (min)
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min={5}
+                                        max={480}
+                                        step={5}
+                                        value={form.durataMinuti}
+                                        onChange={e => set('durataMinuti', Number(e.target.value) || 30)}
+                                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 dark:bg-gray-700 dark:text-gray-100"
+                                    />
+                                </div>
                             </div>
                         </div>
 
@@ -881,6 +1196,16 @@ export const AppuntamentoForm: React.FC = () => {
                                     onChange={v => set('provinciaNascita', v.toUpperCase())}
                                     placeholder="es. MI"
                                 />
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        Etnia
+                                    </label>
+                                    <ElegantSelect
+                                        value={form.etnia}
+                                        onChange={value => set('etnia', value)}
+                                        options={ETHNICITY_OPTIONS}
+                                    />
+                                </div>
                             </div>
                         </div>
 

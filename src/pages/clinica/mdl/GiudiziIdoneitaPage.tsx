@@ -69,14 +69,19 @@ const JUDGMENT_TYPES: Record<TipoGiudizioIdoneita, { label: string; color: strin
         icon: <CheckCircle2 className="h-4 w-4" />
     },
     IDONEO_CON_PRESCRIZIONI: {
-        label: 'Idoneo con prescrizioni',
+        label: 'Idoneo parziale con prescrizioni',
         color: 'bg-yellow-100 text-yellow-700',
         icon: <AlertTriangle className="h-4 w-4" />
     },
     IDONEO_CON_LIMITAZIONI: {
-        label: 'Idoneo con limitazioni',
+        label: 'Idoneo parziale con limitazioni',
         color: 'bg-orange-100 text-orange-700',
         icon: <AlertOctagon className="h-4 w-4" />
+    },
+    IDONEO_CON_LIMITAZIONI_PRESCRIZIONI: {
+        label: 'Idoneo parziale con limitazioni e prescrizioni',
+        color: 'bg-amber-100 text-amber-700',
+        icon: <AlertTriangle className="h-4 w-4" />
     },
     NON_IDONEO_TEMPORANEO: {
         label: 'Temp. non idoneo',
@@ -92,11 +97,12 @@ const JUDGMENT_TYPES: Record<TipoGiudizioIdoneita, { label: string; color: strin
 
 // Status labels and colors
 const STATUS_LABELS: Record<StatoGiudizio, { label: string; color: string }> = {
+    BOZZA: { label: 'Bozza', color: 'bg-gray-100 text-gray-600' },
     VALIDO: { label: 'Valido', color: 'bg-green-100 text-green-700' },
     SCADUTO: { label: 'Scaduto', color: 'bg-red-100 text-red-700' },
-    SOSPESO: { label: 'Sospeso', color: 'bg-yellow-100 text-yellow-700' },
-    REVOCATO: { label: 'Revocato', color: 'bg-gray-100 text-gray-700' },
-    IN_RICORSO: { label: 'In ricorso', color: 'bg-purple-100 text-purple-700' }
+    SOSTITUITO: { label: 'Sostituito', color: 'bg-gray-100 text-gray-700' },
+    RICORRIBILE: { label: 'Ricorribile', color: 'bg-yellow-100 text-yellow-700' },
+    RICORSO_IN_CORSO: { label: 'Ricorso in corso', color: 'bg-purple-100 text-purple-700' }
 };
 
 const GiudiziIdoneitaPage: React.FC = () => {
@@ -614,7 +620,7 @@ const GiudiziIdoneitaPage: React.FC = () => {
                             </div>
                             <div>
                                 <p className="text-2xl font-bold text-gray-900">
-                                    {giudizi.filter(g => g.stato === 'IN_RICORSO').length}
+                                    {giudizi.filter(g => g.stato === 'RICORSO_IN_CORSO').length}
                                 </p>
                                 <p className="text-sm text-gray-500">In ricorso</p>
                             </div>
@@ -765,9 +771,9 @@ const GiudiziIdoneitaPage: React.FC = () => {
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                            <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full ${tipoInfo.color}`}>
-                                                {tipoInfo.icon}
-                                                {tipoInfo.label}
+                                            <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full ${tipoInfo?.color || 'bg-gray-100 text-gray-700'}`}>
+                                                {tipoInfo?.icon}
+                                                {tipoInfo?.label || giudizio.tipoGiudizio}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -790,8 +796,8 @@ const GiudiziIdoneitaPage: React.FC = () => {
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${statoInfo.color}`}>
-                                                {statoInfo.label}
+                                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${statoInfo?.color || 'bg-gray-100 text-gray-700'}`}>
+                                                {statoInfo?.label || giudizio.stato}
                                             </span>
                                         </td>
                                         {/* Documenti PDF (Art. 41 c.7) */}
@@ -988,7 +994,7 @@ const GiudiziIdoneitaPage: React.FC = () => {
                                 <strong>Lavoratore:</strong> {giudizioForPec.person?.firstName} {giudizioForPec.person?.lastName}
                             </p>
                             <p className="text-sm text-gray-600 mt-1">
-                                <strong>Giudizio:</strong> {JUDGMENT_TYPES[giudizioForPec.tipoGiudizio].label}
+                                <strong>Giudizio:</strong> {JUDGMENT_TYPES[giudizioForPec.tipoGiudizio]?.label || giudizioForPec.tipoGiudizio}
                             </p>
                         </div>
                     )}

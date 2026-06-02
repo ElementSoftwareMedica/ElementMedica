@@ -15,11 +15,26 @@ import { formatMedicoName } from '../../../../../utils/textFormatters';
 interface TabAssociazioniProps {
     prestazioniIds: string[];
     mediciIds: string[];
+    consensoCodici: string[];
     prestazioni: Array<{ id: string; nome: string; codice?: string }>;
     medici: Array<{ id: string; firstName: string; lastName: string; gender?: string }>;
     onTogglePrestazione: (id: string) => void;
     onToggleMedico: (id: string) => void;
+    onToggleConsensoCodice: (codice: string) => void;
 }
+
+const CONSENSO_TYPES = [
+    { codice: 'gdpr', label: 'Trattamento dati personali (GDPR)' },
+    { codice: 'sanitari', label: 'Trattamento dati sanitari' },
+    { codice: 'prestazione', label: 'Consenso alla prestazione sanitaria' },
+    { codice: 'chirurgico', label: 'Consenso atto chirurgico/invasivo' },
+    { codice: 'marketing', label: 'Marketing' },
+    { codice: 'comunicazioni', label: 'Comunicazioni di servizio' },
+    { codice: 'fse_alimentazione', label: 'FSE - alimentazione documenti' },
+    { codice: 'fse_consultazione', label: 'FSE - consultazione' },
+    { codice: 'fse_pregresso', label: 'FSE - dati pregressi' },
+    { codice: 'mdl_sorveglianza', label: 'Medicina del Lavoro - sorveglianza sanitaria' },
+];
 
 // ============================================
 // COMPONENT
@@ -28,10 +43,12 @@ interface TabAssociazioniProps {
 const TabAssociazioni: React.FC<TabAssociazioniProps> = ({
     prestazioniIds,
     mediciIds,
+    consensoCodici,
     prestazioni,
     medici,
     onTogglePrestazione,
-    onToggleMedico
+    onToggleMedico,
+    onToggleConsensoCodice
 }) => {
     const [searchPrestazioni, setSearchPrestazioni] = React.useState('');
     const [searchMedici, setSearchMedici] = React.useState('');
@@ -55,6 +72,32 @@ const TabAssociazioni: React.FC<TabAssociazioniProps> = ({
                         Se non selezioni prestazioni o medici, il template sarà disponibile per tutti.
                         Selezionando associazioni specifiche, il template sarà visibile solo per quei casi.
                     </p>
+                </div>
+            </div>
+
+            {/* Tipologie consenso */}
+            <div>
+                <h3 className="font-medium text-gray-900 mb-3">
+                    Tipologie consenso associate ({consensoCodici.length})
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {CONSENSO_TYPES.map(consenso => (
+                        <label
+                            key={consenso.codice}
+                            className="flex items-start gap-3 rounded-lg border border-gray-200 p-3 hover:bg-gray-50 cursor-pointer"
+                        >
+                            <input
+                                type="checkbox"
+                                checked={consensoCodici.includes(consenso.codice)}
+                                onChange={() => onToggleConsensoCodice(consenso.codice)}
+                                className="mt-0.5 rounded text-teal-600 focus:ring-teal-500"
+                            />
+                            <div>
+                                <p className="text-sm font-medium text-gray-900">{consenso.label}</p>
+                                <p className="text-xs text-gray-500 font-mono">{consenso.codice}</p>
+                            </div>
+                        </label>
+                    ))}
                 </div>
             </div>
 

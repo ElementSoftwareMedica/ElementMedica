@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import logger from '../utils/logger.js';
 import middleware from '../middleware/auth.js';
 import { checkAdvancedPermission, filterDataByPermissions } from '../middleware/advanced-permissions.js';
+import { requireFeature } from '../middleware/featureFlags.js';
 import prisma from '../config/prisma-optimization.js';
 import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 import { createSingleUpload, multerErrorHandler } from '../config/multer.js';
@@ -19,6 +20,85 @@ const PROJECT_ROOT = path.resolve(BACKEND_ROOT, '..');
 const router = express.Router();
 const { authenticate: authenticateToken } = middleware;
 router.param('id', validateParamId);
+
+// Quicklook DVR: deve restare disponibile dalla scheda azienda anche quando
+// l'utente non ha il ramo consulenza attivo ma ha accesso al tenant/azienda.
+router.get('/:id/documento', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const tenantId = getEffectiveTenantId(req);
+
+    const dvr = await prisma.dVR.findFirst({
+      where: {
+        id,
+        deletedAt: null,
+        OR: [
+          { tenantId },
+          { site: { tenantId, deletedAt: null } },
+          { site: { companyTenantProfile: { tenantId, deletedAt: null } } }
+        ]
+      },
+      select: { documentoUrl: true, documentoNome: true }
+    });
+
+    if (!dvr) {
+      return res.status(404).json({ error: 'DVR non trovato per questo tenant' });
+    }
+    if (!dvr.documentoUrl) {
+      return res.status(404).json({ error: 'Documento non ancora generato per questo DVR' });
+    }
+    if (dvr.documentoUrl.includes('..')) {
+      return res.status(403).json({ error: 'Accesso al file non consentito' });
+    }
+
+    const allowedUploadRoots = [
+      path.resolve(BACKEND_ROOT, 'uploads'),
+      path.resolve(BACKEND_ROOT, 'servers', 'uploads'),
+      path.resolve(PROJECT_ROOT, 'uploads'),
+    ];
+    const isAllowed = (p) => allowedUploadRoots.some(root => p.startsWith(root + path.sep) || p === root);
+    const candidates = [
+      path.resolve(dvr.documentoUrl),
+      ...allowedUploadRoots.map(root => path.normalize(path.join(root, dvr.documentoUrl.replace(/^.*[/\\]uploads[/\\]/, '')))),
+      ...allowedUploadRoots.map(root => path.normalize(path.join(root, path.basename(dvr.documentoUrl)))),
+    ];
+
+    const filePath = candidates.find(candidate => {
+      try {
+        const real = fs.realpathSync(candidate);
+        return isAllowed(real);
+      } catch {
+        return false;
+      }
+    });
+
+    if (!filePath) {
+      logger.warn('DVR document file not found on disk', {
+        component: 'dvr-routes',
+        action: 'getDocumentoPublicBranchSafe',
+        dvrId: id,
+        storedPath: dvr.documentoUrl
+      });
+      return res.status(404).json({ error: 'File non trovato sul disco' });
+    }
+
+    const filename = (dvr.documentoNome || 'documento.pdf').replace(/[\r\n"]/g, '').replace(/[^\w.\-]/g, '_').substring(0, 100);
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    res.setHeader('Content-Type', 'application/pdf');
+    fs.createReadStream(filePath).pipe(res);
+  } catch (error) {
+    logger.error('Failed to serve DVR document before feature gate', {
+      component: 'dvr-routes',
+      action: 'getDocumentoPublicBranchSafe',
+      error: error.message,
+      dvrId: req.params?.id
+    });
+    res.status(500).json({ error: 'Errore nel recupero del documento' });
+  }
+});
+
+// Feature gate: DVR richiede BRANCH_CONSULENZA
+router.use(authenticateToken, requireFeature('BRANCH_CONSULENZA'));
 
 // Get DVRs by esecutore (persona) - DVR uses firma fields, not esecutoreId
 router.get('/by-esecutore',
@@ -216,15 +296,6 @@ router.get('/company/:companyId',
 // Download/serve DVR document (MUST be before /:id to avoid param capture)
 router.get('/:id/documento',
   authenticateToken,
-  checkAdvancedPermission('companies', 'read', {
-    getSiteId: async (req) => {
-      const dvr = await prisma.dVR.findFirst({
-        where: { id: req.params.id, tenantId: getEffectiveTenantId(req), deletedAt: null },
-        select: { siteId: true }
-      });
-      return dvr?.siteId;
-    }
-  }),
   async (req, res) => {
     try {
       const { id } = req.params;

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Briefcase, Shield, FileText, ChevronDown, ChevronRight, Plus, Trash2, X } from 'lucide-react'
 import { v4 as uuidv4 } from 'uuid'
+import { ElegantSelect } from '../ElegantControls'
+import { normalizeProtocolloPrestazioni, type ProtocolloPrestazioneRow } from '../../utils/protocolloSanitario'
 
 // ============================================================
 // Types
@@ -10,8 +12,6 @@ interface Mansione {
   id: string
   nome: string
   codice: string | null
-  rischi: string // JSON array
-  rischiAssociati?: string | null
   companyName: string | null
 }
 
@@ -19,7 +19,6 @@ interface Protocollo {
   id: string
   nome: string
   mansioneId: string | null
-  prestazioni: string // JSON array
   mansioneNome: string | null
 }
 
@@ -28,6 +27,14 @@ interface Rischio {
   nome: string
   livello: string
   categoria?: string
+}
+
+interface MansioneRischioRow {
+  id?: string
+  mansioneId: string
+  codiceRischio: string
+  livello: string | null
+  categoria?: string | null
 }
 
 interface RischioPersonalizzato {
@@ -124,25 +131,13 @@ interface Props {
   isReadOnly: boolean
 }
 
-function normalizeRischio(raw: unknown): Rischio | null {
-  if (!raw || typeof raw !== 'object') return null
-  const r = raw as Record<string, unknown>
-  const code = String(r.codiceRischio || r.codice || r.code || '')
-  const nome = String(r.nome || r.label || r.descrizione || r.rischioNome || getLabelForCode(code) || '').trim()
-  if (!nome) return null
-  return {
-    id: r.id ? String(r.id) : undefined,
-    nome,
-    livello: String(r.livello || r.riskLevel || 'MEDIO'),
-    categoria: r.categoria ? String(r.categoria) : undefined,
-  }
-}
-
 export function MDLInfoCardOffline({ personId, tenantId, isReadOnly }: Props): JSX.Element {
   const [mansioni, setMansioni] = useState<Mansione[]>([])
   const [allMansioni, setAllMansioni] = useState<Mansione[]>([])
   const [protocolli, setProtocolli] = useState<Protocollo[]>([])
   const [allProtocolli, setAllProtocolli] = useState<Protocollo[]>([])
+  const [rischiByMansione, setRischiByMansione] = useState<Map<string, Rischio[]>>(new Map())
+  const [prestazioniByProtocollo, setPrestazioniByProtocollo] = useState<Map<string, ProtocolloPrestazioneRow[]>>(new Map())
   const [patientProtocolloId, setPatientProtocolloId] = useState('')
   const [rischiPersonalizzati, setRischiPersonalizzati] = useState<RischioPersonalizzato[]>([])
   const [loading, setLoading] = useState(true)
@@ -190,6 +185,23 @@ export function MDLInfoCardOffline({ personId, tenantId, isReadOnly }: Props): J
         const filtered = allMansioni.filter(m => mansioneIds.includes(m.id))
         setAllMansioni(allMansioni)
         setMansioni(filtered)
+        const mansioneRischiRows = await window.desktopApi.db.query({
+          table: 'mansione_rischi',
+          where: { _isDeleted: 0 }
+        }).catch(() => []) as MansioneRischioRow[]
+        const rischiMap = new Map<string, Rischio[]>()
+        for (const row of mansioneRischiRows) {
+          if (!mansioneIds.includes(row.mansioneId)) continue
+          const rows = rischiMap.get(row.mansioneId) || []
+          rows.push({
+            id: row.id,
+            nome: RISCHIO_ENUM_LABELS[row.codiceRischio] || row.codiceRischio,
+            livello: row.livello || 'MEDIO',
+            categoria: row.categoria || undefined,
+          })
+          rischiMap.set(row.mansioneId, rows)
+        }
+        setRischiByMansione(rischiMap)
 
         // 3. Load protocolli for these mansioni
         const allProtocolli = await window.desktopApi.db.query({
@@ -202,6 +214,19 @@ export function MDLInfoCardOffline({ personId, tenantId, isReadOnly }: Props): J
           p.id === patientRows[0]?.protocolloSanitarioId || (p.mansioneId && mansioneIds.includes(p.mansioneId))
         )
         setProtocolli(filteredP)
+        const protocolloPrestazioniRows = await window.desktopApi.db.query({
+          table: 'protocollo_prestazioni',
+          where: { _isDeleted: 0 }
+        }).catch(() => []) as Array<ProtocolloPrestazioneRow & { protocolloId: string }>
+        const protocolloIds = new Set(filteredP.map(p => p.id))
+        const prestazioniMap = new Map<string, ProtocolloPrestazioneRow[]>()
+        for (const row of protocolloPrestazioniRows) {
+          if (!protocolloIds.has(row.protocolloId)) continue
+          const rows = prestazioniMap.get(row.protocolloId) || []
+          rows.push(row)
+          prestazioniMap.set(row.protocolloId, rows)
+        }
+        setPrestazioniByProtocollo(prestazioniMap)
 
         // 4. Load per-worker personalized risks
         await loadRischiPersonalizzati()
@@ -241,13 +266,51 @@ export function MDLInfoCardOffline({ personId, tenantId, isReadOnly }: Props): J
 
   async function reloadAll() {
     const assignments = await window.desktopApi.db.query({ table: 'lavoratore_mansioni', where: { personId, _isDeleted: 0 } }) as Array<{ mansioneId: string }>
+    const patientRows = await window.desktopApi.db.query({
+      table: 'patients',
+      where: { id: personId, _isDeleted: 0 },
+      limit: 1
+    }) as Array<{ protocolloSanitarioId: string | null }>
+    const currentProtocolloId = patientRows[0]?.protocolloSanitarioId || ''
+    setPatientProtocolloId(currentProtocolloId)
     const ids = assignments.map(a => a.mansioneId)
     const mRows = await window.desktopApi.db.query({ table: 'mansioni', where: { _isDeleted: 0 }, orderBy: { column: 'nome', direction: 'ASC' } }) as Mansione[]
     const pRows = await window.desktopApi.db.query({ table: 'protocolli', where: { _isDeleted: 0 }, orderBy: { column: 'nome', direction: 'ASC' } }) as Protocollo[]
+    const riskRows = await window.desktopApi.db.query({ table: 'mansione_rischi', where: { _isDeleted: 0 } }).catch(() => []) as MansioneRischioRow[]
+    const protocolRows = await window.desktopApi.db.query({ table: 'protocollo_prestazioni', where: { _isDeleted: 0 } }).catch(() => []) as Array<ProtocolloPrestazioneRow & { protocolloId: string }>
     setAllMansioni(mRows)
     setAllProtocolli(pRows)
-    setMansioni(mRows.filter(m => ids.includes(m.id)))
-    setProtocolli(pRows.filter(p => p.id === patientProtocolloId || (p.mansioneId && ids.includes(p.mansioneId))))
+    const filteredMansioni = mRows.filter(m => ids.includes(m.id))
+    const filteredProtocolli = pRows.filter(p => p.id === currentProtocolloId || (p.mansioneId && ids.includes(p.mansioneId)))
+    setMansionsAndDedicatedData(filteredMansioni, filteredProtocolli, riskRows, protocolRows, ids)
+  }
+
+  function setMansionsAndDedicatedData(
+    filteredMansioni: Mansione[],
+    filteredProtocolli: Protocollo[],
+    riskRows: MansioneRischioRow[],
+    protocolRows: Array<ProtocolloPrestazioneRow & { protocolloId: string }>,
+    mansioneIds: string[]
+  ) {
+    setMansioni(filteredMansioni)
+    setProtocolli(filteredProtocolli)
+    const riskMap = new Map<string, Rischio[]>()
+    for (const row of riskRows) {
+      if (!mansioneIds.includes(row.mansioneId)) continue
+      const rows = riskMap.get(row.mansioneId) || []
+      rows.push({ id: row.id, nome: RISCHIO_ENUM_LABELS[row.codiceRischio] || row.codiceRischio, livello: row.livello || 'MEDIO', categoria: row.categoria || undefined })
+      riskMap.set(row.mansioneId, rows)
+    }
+    setRischiByMansione(riskMap)
+    const protocolloIds = new Set(filteredProtocolli.map(p => p.id))
+    const prestazioniMap = new Map<string, ProtocolloPrestazioneRow[]>()
+    for (const row of protocolRows) {
+      if (!protocolloIds.has(row.protocolloId)) continue
+      const rows = prestazioniMap.get(row.protocolloId) || []
+      rows.push(row)
+      prestazioniMap.set(row.protocolloId, rows)
+    }
+    setPrestazioniByProtocollo(prestazioniMap)
   }
 
   async function handleSaveMansione() {
@@ -267,8 +330,6 @@ export function MDLInfoCardOffline({ personId, tenantId, isReadOnly }: Props): J
             nome: mansioneForm.nome.trim(),
             descrizione: null,
             codice,
-            rischi: '[]',
-            rischiAssociati: '[]',
             isActive: 1,
             createdAt: now,
             updatedAt: now,
@@ -317,16 +378,16 @@ export function MDLInfoCardOffline({ personId, tenantId, isReadOnly }: Props): J
     await window.desktopApi.db.update({ table: 'patients', id: personId, data: { protocolloSanitarioId: protocolloId || null } })
     await window.desktopApi.sync.enqueue({ type: 'UPDATE', entity: 'patients', entityId: personId, payload: { protocolloSanitarioId: protocolloId || null } })
     setPatientProtocolloId(protocolloId)
+    const selected = allProtocolli.find(p => p.id === protocolloId)
+    setProtocolli(prev => {
+      if (!selected) return prev.filter(p => p.id !== patientProtocolloId)
+      return [selected, ...prev.filter(p => p.id !== selected.id)]
+    })
   }
 
   // Aggregate all risks from all mansioni
   const allRischi: Rischio[] = mansioni.flatMap(m => {
-    try {
-      const combined = [...(JSON.parse(m.rischi || '[]') as unknown[]), ...(JSON.parse(m.rischiAssociati || '[]') as unknown[])]
-      return combined.map(normalizeRischio).filter(Boolean) as Rischio[]
-    } catch {
-      return []
-    }
+    return rischiByMansione.get(m.id) || []
   })
 
   // Deduplicate by nome
@@ -349,11 +410,11 @@ export function MDLInfoCardOffline({ personId, tenantId, isReadOnly }: Props): J
 
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-card divide-y divide-gray-100">
-      {/* Mansioni */}
+      {/* Medicina del Lavoro */}
       <div className="p-4">
         <h3 className="text-xs font-semibold text-gray-900 uppercase tracking-wider flex items-center gap-1.5 mb-2">
           <Briefcase className="w-3.5 h-3.5 text-teal-600" />
-          Mansioni ({mansioni.length})
+          Medicina del Lavoro
         </h3>
         {!isReadOnly && (
           <button onClick={() => setShowMansioneForm(prev => !prev)} className="mb-2 inline-flex items-center gap-1 rounded-lg border border-teal-200 px-2 py-1 text-[11px] font-medium text-teal-700 hover:bg-teal-50">
@@ -363,17 +424,11 @@ export function MDLInfoCardOffline({ personId, tenantId, isReadOnly }: Props): J
         )}
         {showMansioneForm && (
           <div className="mb-3 space-y-2 rounded-xl border border-teal-100 bg-teal-50 p-3">
-            <select value={mansioneForm.mansioneId} onChange={e => setMansioneForm(f => ({ ...f, mansioneId: e.target.value, nome: '' }))} className="w-full rounded-lg border border-teal-200 bg-white px-2 py-1.5 text-xs">
-              <option value="">Nuova mansione o seleziona dal catalogo...</option>
-              {allMansioni.filter(m => !mansioni.some(x => x.id === m.id)).map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
-            </select>
+            <ElegantSelect value={mansioneForm.mansioneId} onChange={mansioneId => setMansioneForm(f => ({ ...f, mansioneId, nome: '' }))} options={[{ value: '', label: 'Nuova mansione o seleziona dal catalogo...' }, ...allMansioni.filter(m => !mansioni.some(x => x.id === m.id)).map(m => ({ value: m.id, label: m.nome }))]} />
             {!mansioneForm.mansioneId && (
               <input value={mansioneForm.nome} onChange={e => setMansioneForm(f => ({ ...f, nome: e.target.value }))} placeholder="Nome nuova mansione" className="w-full rounded-lg border border-teal-200 bg-white px-2 py-1.5 text-xs" />
             )}
-            <select value={mansioneForm.protocolloId} onChange={e => setMansioneForm(f => ({ ...f, protocolloId: e.target.value }))} className="w-full rounded-lg border border-teal-200 bg-white px-2 py-1.5 text-xs">
-              <option value="">Protocollo sanitario opzionale...</option>
-              {allProtocolli.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
-            </select>
+            <ElegantSelect value={mansioneForm.protocolloId} onChange={protocolloId => setMansioneForm(f => ({ ...f, protocolloId }))} options={[{ value: '', label: 'Protocollo sanitario opzionale...' }, ...allProtocolli.map(p => ({ value: p.id, label: p.nome }))]} />
             <button onClick={handleSaveMansione} disabled={isSaving || (!mansioneForm.mansioneId && !mansioneForm.nome.trim())} className="w-full rounded-lg bg-teal-600 px-2 py-1.5 text-xs font-medium text-white disabled:opacity-50">
               {isSaving ? 'Salvataggio...' : 'Salva mansione'}
             </button>
@@ -386,11 +441,9 @@ export function MDLInfoCardOffline({ personId, tenantId, isReadOnly }: Props): J
             {mansioni.map(m => {
               const isExpanded = expandedMansione === m.id
               const rischi: Rischio[] = (() => {
-                try {
-                  const combined = [...(JSON.parse(m.rischi || '[]') as unknown[]), ...(JSON.parse(m.rischiAssociati || '[]') as unknown[])]
-                  return combined.map(normalizeRischio).filter(Boolean) as Rischio[]
-                } catch { return [] }
+                return rischiByMansione.get(m.id) || []
               })()
+              const mansioneProtocollo = protocolli.find(p => p.mansioneId === m.id) || allProtocolli.find(p => p.id === patientProtocolloId) || null
 
               return (
                 <div key={m.id}>
@@ -410,6 +463,9 @@ export function MDLInfoCardOffline({ personId, tenantId, isReadOnly }: Props): J
                         className="w-full rounded border border-transparent bg-transparent px-1 text-xs font-medium text-gray-900 outline-none focus:border-teal-200 focus:bg-white"
                       />
                       {m.codice && <p className="text-[10px] text-gray-400">{m.codice}</p>}
+                      <p className="text-[10px] text-teal-700">
+                        Protocollo: {mansioneProtocollo?.nome || 'Non associato'}
+                      </p>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       {rischi.length > 0 && (
@@ -451,9 +507,7 @@ export function MDLInfoCardOffline({ personId, tenantId, isReadOnly }: Props): J
           </h3>
           <div className="space-y-1.5">
             {protocolli.map(p => {
-              const prestazioni: Array<{ prestazioneNome?: string; periodicitaMesi?: number }> = (() => {
-                try { return JSON.parse(p.prestazioni || '[]') } catch { return [] }
-              })()
+              const prestazioni: Array<{ prestazioneNome?: string; periodicitaMesi?: number | null }> = normalizeProtocolloPrestazioni(prestazioniByProtocollo.get(p.id) || [])
 
               return (
                 <div key={p.id} className="px-2 py-1.5 rounded-lg bg-gray-50">
@@ -476,10 +530,7 @@ export function MDLInfoCardOffline({ personId, tenantId, isReadOnly }: Props): J
         <div className="p-4">
           <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700">
             Protocollo sanitario associato
-            <select value={patientProtocolloId} onChange={e => { void handleChangeProtocollo(e.target.value) }} className="mt-2 w-full rounded-lg border border-gray-200 px-2 py-1.5 text-xs font-normal normal-case">
-              <option value="">Nessun protocollo diretto</option>
-              {allProtocolli.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
-            </select>
+            <ElegantSelect value={patientProtocolloId} onChange={value => { void handleChangeProtocollo(value) }} options={[{ value: '', label: 'Nessun protocollo diretto' }, ...allProtocolli.map(p => ({ value: p.id, label: p.nome }))]} className="mt-2 normal-case" />
           </label>
         </div>
       )}
@@ -544,33 +595,24 @@ export function MDLInfoCardOffline({ personId, tenantId, isReadOnly }: Props): J
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
-            <select
+            <ElegantSelect
               value={addForm.codiceRischio}
-              onChange={e => {
-                const cat = ALL_RISCHI.find(r => r.code === e.target.value)?.categoria || 'FISICI'
-                setAddForm(f => ({ ...f, codiceRischio: e.target.value, categoria: cat }))
+              onChange={value => {
+                const cat = ALL_RISCHI.find(r => r.code === value)?.categoria || 'FISICI'
+                setAddForm(f => ({ ...f, codiceRischio: value, categoria: cat }))
               }}
-              className="w-full text-xs border border-violet-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-violet-400"
-            >
-              <option value="">Seleziona rischio...</option>
-              {Object.entries(CATEGORIE_RISCHIO).map(([cat, items]) => (
-                <optgroup key={cat} label={cat}>
-                  {items.map(r => (
-                    <option key={r.code} value={r.code}>{r.label}</option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-            <select
+              options={[{ value: '', label: 'Seleziona rischio...' }, ...Object.entries(CATEGORIE_RISCHIO).flatMap(([cat, items]) => items.map(r => ({ value: r.code, label: `${cat} - ${r.label}` })))]}
+            />
+            <ElegantSelect
               value={addForm.livello}
-              onChange={e => setAddForm(f => ({ ...f, livello: e.target.value }))}
-              className="w-full text-xs border border-violet-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-violet-400"
-            >
-              <option value="BASSO">Basso</option>
-              <option value="MEDIO">Medio</option>
-              <option value="ALTO">Alto</option>
-              <option value="MOLTO_ALTO">Molto Alto</option>
-            </select>
+              onChange={livello => setAddForm(f => ({ ...f, livello }))}
+              options={[
+                { value: 'BASSO', label: 'Basso' },
+                { value: 'MEDIO', label: 'Medio' },
+                { value: 'ALTO', label: 'Alto' },
+                { value: 'MOLTO_ALTO', label: 'Molto Alto' },
+              ]}
+            />
             <button
               onClick={handleAddRischio}
               disabled={!addForm.codiceRischio || isSaving}

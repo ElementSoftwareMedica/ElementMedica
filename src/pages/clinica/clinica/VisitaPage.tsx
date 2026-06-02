@@ -18,7 +18,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import {
     AlertCircle,
@@ -31,14 +31,20 @@ import {
     Heart,
     Mail
 } from 'lucide-react';
-import { visiteApi, appuntamentiApi, pazientiApi, mediciApi, convenzioniApi, scontiApi, prestazioniApi, documentiCliniciApi, mansioniApi, protocolliSanitariApi, profiloDiSaluteApi, scadenzeMDLApi, giudiziIdoneitaApi, appuntamentoPrestazioniApi, type VisitAccessControl, type Convenzione, type ScadenzaProtocolloGruppo } from '../../../services/clinicaApi';
+import { visiteApi, appuntamentiApi, pazientiApi, mediciApi, convenzioniApi, scontiApi, prestazioniApi, documentiCliniciApi, mansioniApi, protocolliSanitariApi, profiloDiSaluteApi, scadenzeMDLApi, giudiziIdoneitaApi, appuntamentoPrestazioniApi, type VisitAccessControl, type Convenzione, type ScadenzaProtocolloGruppo, type GiudizioIdoneita } from '../../../services/clinicaApi';
 import type { SorveglianzaStats } from './components/VisitaScadenzaCard';
 import * as queueApi from '../../../services/queueApi';
 import questionariService from '../../../services/questionariService';
 import { apiGet, apiPost } from '../../../services/api';
+import { strumentiBridgeApi, type EsameStrumentale } from '../../../services/bridgeApi';
 import { useToast } from '../../../hooks/useToast';
+import { useSmartBack } from '../../../hooks/useSmartBack';
+import { DatePickerElegante } from '../../../components/ui/DatePickerElegante';
+import { ElegantSelect } from '../../../components/ui/ElegantSelect';
+import { DEFAULT_ETHNICITY, ETHNICITY_OPTIONS } from '../../../constants/ethnicityOptions';
 import { useAutoCollapseSidebar, useSidebar } from '../../../contexts/SidebarContext';
 import { useAuth } from '../../../context/AuthContext';
+import { getToken } from '../../../services/auth';
 
 // Hooks
 import { useVisitaData, useVisitaTimer, useVisitaForm, useVisitaSidebar } from './hooks';
@@ -66,19 +72,54 @@ import type { AccessControlConfig, PrestazioneItem, VisitaRiepilogo, AllegatoRie
 // Types
 import type { SectionFields } from './types';
 
+const prestazioneItemKey = (item: PrestazioneItem) =>
+    item.appPrestazioneId || `${item.isQuestionario ? 'questionario' : 'prestazione'}:${item.id}`;
+
+const mergePrestazioneItems = (current: PrestazioneItem[], incoming: PrestazioneItem[]) => {
+    const byKey = new Map(current.map(item => [prestazioneItemKey(item), item]));
+    incoming.forEach(item => {
+        const key = prestazioneItemKey(item);
+        byKey.set(key, { ...(byKey.get(key) || {}), ...item });
+    });
+    return Array.from(byKey.values());
+};
+
+const extractConvenzioneDiscount = (condizioni?: Record<string, unknown> | null) => {
+    const scontoInfo = condizioni?.scontoInfo as { tipo?: string; valore?: number } | undefined;
+    const percentuale = Number(
+        condizioni?.scontoPercentuale
+        ?? condizioni?.percentualeSconto
+        ?? (scontoInfo?.tipo === 'PERCENTUALE' ? scontoInfo.valore : 0)
+        ?? 0
+    );
+    const fisso = Number(
+        condizioni?.scontoFisso
+        ?? (scontoInfo?.tipo === 'VALORE_ASSOLUTO' ? scontoInfo.valore : 0)
+        ?? 0
+    );
+    return {
+        scontoPercentuale: Number.isFinite(percentuale) && percentuale > 0 ? percentuale : undefined,
+        scontoFisso: Number.isFinite(fisso) && fisso > 0 ? fisso : undefined,
+    };
+};
+
 // ============================================
 // MAIN COMPONENT
 // ============================================
 
 export const VisitaPage: React.FC = () => {
     const navigate = useNavigate();
+    const location = useLocation();
+    const goBack = useSmartBack('/poliambulatorio/visite');
     const { showToast } = useToast();
     const queryClient = useQueryClient();
     const { hasPermission, user } = useAuth();
+    const isEmbeddedVisit = useMemo(() => new URLSearchParams(location.search).get('embedded') === '1', [location.search]);
 
     // Permission checks for granular PrestazioniCard features
     const canViewPrices = hasPermission('clinica.visite', 'view_prices');
     const canManageConvenzioni = hasPermission('clinica.visite', 'manage_convenzioni');
+    const canChangeRefertante = hasPermission('clinica.visite', 'change_refertante');
 
     // Auto-collapse main sidebar when entering visit page; expose expand() for completion
     useAutoCollapseSidebar();
@@ -147,8 +188,93 @@ export const VisitaPage: React.FC = () => {
         enabled: isMDLVisit && !!paziente?.id,
         staleTime: 5 * 60 * 1000,
     });
-    // getWorkerRisks uses extractData → workerRisksData is already { rischi, mansioni }
-    const primaryMansioneId = workerRisksData?.mansioni?.[0]?.id ?? null;
+    // getWorkerRisks uses extractData -> workerRisksData is already { rischi, mansioni }.
+    // Prefer the occupational snapshot/current assignment so protocol scheduling follows
+    // the employee's actual active mansione, not every mansione linked to the protocol.
+    const primaryMansioneId = (
+        workerRisksData?.statoOccupazionale?.current?.mansioneId ||
+        workerRisksData?.mansioni?.find((m: any) => m._isPrimaria)?.id ||
+        workerRisksData?.mansioni?.[0]?.id ||
+        null
+    );
+    const formatRischioLabel = (rischio: any) => {
+        const labels: Record<string, string> = {
+            RUM: 'Rumore',
+            VIB_MB: 'Vibrazioni mano-braccio',
+            VIB_WBV: 'Vibrazioni corpo intero',
+            RAD_ION: 'Radiazioni ionizzanti',
+            RAD_NIR: 'Radiazioni non ionizzanti',
+            CEM: 'Campi elettromagnetici',
+            MIC: 'Microclima',
+            CHI: 'Chimico',
+            CAN: 'Cancerogeni',
+            AMI: 'Amianto',
+            PIO: 'Piombo',
+            BIO: 'Biologico',
+            MMC: 'Movimentazione manuale carichi',
+            MOV_RIP: 'Movimenti ripetitivi',
+            POS: 'Posture incongrue',
+            NOT: 'Lavoro notturno',
+            VDT: 'Videoterminale',
+            SLC: 'Stress lavoro-correlato',
+            QUO: 'Lavoro in quota',
+            SPA_CON: 'Spazi confinati',
+            GUI_MEZ: 'Guida mezzi',
+            CAR_ELE: 'Carrelli elevatori',
+            ELE: 'Elettrico',
+            INC: 'Incendio',
+            ISO: 'Isolamento',
+            IPE: 'Iperbarico',
+            POL: 'Polveri',
+            ALC: 'Alcol'
+        };
+        const code = rischio?.codiceRischio || rischio?.codice || rischio?.codice_rischio;
+        const level = rischio?.livello || rischio?.livelloRischio;
+        const base = rischio?.descrizione || rischio?.nome || rischio?.label || labels[code] || code;
+        return [base, level ? `Liv. ${String(level).toLowerCase()}` : null].filter(Boolean).join(' - ');
+    };
+
+    const occupationalSummary = useMemo(() => {
+        const current = workerRisksData?.statoOccupazionale?.current;
+        if (!current) return null;
+        const snapshot = current.snapshot || {};
+        const mansione = current.mansione?.denominazione
+            || snapshot?.mansioni?.find((m: { isPrimaria?: boolean }) => m.isPrimaria)?.denominazione
+            || snapshot?.mansioni?.[0]?.denominazione
+            || current.titolo
+            || null;
+        const mansioni = [
+            ...(Array.isArray(snapshot?.mansioni) ? snapshot.mansioni.map((m: any) => m.denominazione || m.nome || m.label).filter(Boolean) : []),
+            ...(Array.isArray(workerRisksData?.mansioni) ? workerRisksData.mansioni.map((m: any) => m.denominazione || m.nome || m.label).filter(Boolean) : []),
+            current.mansione?.denominazione,
+        ].filter(Boolean);
+        return {
+            mansione,
+            mansioni: Array.from(new Set(mansioni)),
+            azienda: current.companyTenantProfile?.company?.ragioneSociale || snapshot?.company?.ragioneSociale || null,
+            sede: current.site?.siteName || snapshot?.site?.siteName || null,
+            protocollo: current.protocolloSanitario?.denominazione || snapshot?.protocolloSanitario?.denominazione || null,
+            reparto: (current as any).department || current.reparto || (snapshot as any)?.department || snapshot?.reparto || null,
+            title: current.title || current.titolo || snapshot?.title || null,
+            hiredDate: current.hiredDate || snapshot?.hiredDate || null,
+            endDate: current.endDate || snapshot?.endDate || null,
+            tipoContratto: current.tipoContratto || snapshot?.tipoContratto || null,
+            tipoCollaboratore: current.tipoCollaboratore || snapshot?.tipoCollaboratore || null,
+            rischi: Array.isArray(workerRisksData?.rischi)
+                ? workerRisksData.rischi.map(formatRischioLabel).filter(Boolean)
+                : [],
+            periodo: [current.dataInizio || (current as any).startDate, current.dataFine || (current as any).endDate]
+                .filter(Boolean)
+                .map((d: string | Date) => new Date(d).toLocaleDateString('it-IT'))
+                .join(' - ') || null,
+            historyCount: Array.isArray(workerRisksData?.statoOccupazionale?.history)
+                ? workerRisksData.statoOccupazionale.history.length
+                : 0,
+            rischiCount: Array.isArray(workerRisksData?.rischi)
+                ? workerRisksData.rischi.length
+                : 0,
+        };
+    }, [workerRisksData?.rischi, workerRisksData?.statoOccupazionale]);
 
     const { data: protocolliMansione } = useQuery({
         queryKey: ['protocolli-mansione', primaryMansioneId],
@@ -196,8 +322,12 @@ export const VisitaPage: React.FC = () => {
     // ============================================
     const { data: medicoDetails } = useQuery({
         queryKey: ['medico-dettaglio', appuntamento?.medicoId],
-        queryFn: () => mediciApi.getById(appuntamento!.medicoId),
-        enabled: !!appuntamento?.medicoId
+        queryFn: async () => {
+            const medici = await mediciApi.getAll({ pageSize: 500 });
+            return medici.data.find(medico => medico.id === appuntamento!.medicoId) || null;
+        },
+        enabled: !!appuntamento?.medicoId,
+        retry: 1
     });
 
     // ============================================
@@ -264,14 +394,16 @@ export const VisitaPage: React.FC = () => {
     // Transform convenzioni to ConvenzioneItem array
     const convenzioniDisponibili = useMemo(() => {
         if (!convenzioniData?.data) return [];
-        return convenzioniData.data.map((c: Convenzione) => ({
-            id: c.id,
-            nome: c.nome,
-            tipo: c.tipo || 'convenzione',
-            scontoPercentuale: typeof c.condizioni?.scontoPercentuale === 'number'
-                ? c.condizioni.scontoPercentuale
-                : undefined
-        }));
+        return convenzioniData.data.map((c: Convenzione) => {
+            const discount = extractConvenzioneDiscount(c.condizioni as Record<string, unknown> | null);
+            return {
+                id: c.id,
+                nome: c.nome,
+                tipo: c.tipo || 'convenzione',
+                codiceSconto: typeof (c.condizioni as any)?.codiceSconto === 'string' ? (c.condizioni as any).codiceSconto : undefined,
+                ...discount,
+            };
+        });
     }, [convenzioniData?.data]);
 
     // Get current convenzione details
@@ -280,12 +412,15 @@ export const VisitaPage: React.FC = () => {
 
         // First check from appuntamento
         if (appuntamento?.convenzione?.id === selectedConvenzioneId) {
-            const sconto = appuntamento.convenzione.condizioni?.scontoPercentuale;
+            const discount = extractConvenzioneDiscount(appuntamento.convenzione.condizioni as Record<string, unknown> | null);
             return {
                 id: appuntamento.convenzione.id,
                 nome: appuntamento.convenzione.nome,
                 tipo: 'convenzione',
-                scontoPercentuale: typeof sconto === 'number' ? sconto : undefined
+                codiceSconto: typeof (appuntamento.convenzione.condizioni as any)?.codiceSconto === 'string'
+                    ? (appuntamento.convenzione.condizioni as any).codiceSconto
+                    : undefined,
+                ...discount,
             };
         }
 
@@ -354,6 +489,7 @@ export const VisitaPage: React.FC = () => {
             prezzoBase: number | string;
             categoriaVisita: string | null;
         }> | undefined;
+        const tipoVisitaAttuale = visita?.tipoVisitaMDL || appuntamento?.tipoVisitaMDL || null;
 
         // Only filter when MDL + tariffario available + "show all" toggle is OFF
         if (!isMDLVisit || !voci?.length || showAllPrestazioni) {
@@ -368,7 +504,11 @@ export const VisitaPage: React.FC = () => {
         const seen = new Set<string>();
         return filtered
             .map(p => {
-                const voce = voci.find(v => v.prestazioneId === p.id);
+                const voce = (p.id === (appuntamento?.prestazioneId || visita?.prestazioneId) && tipoVisitaAttuale
+                    ? voci.find(v => v.prestazioneId === p.id && v.categoriaVisita === tipoVisitaAttuale)
+                    : null)
+                    ?? voci.find(v => v.prestazioneId === p.id && !v.categoriaVisita)
+                    ?? voci.find(v => v.prestazioneId === p.id);
                 return voce ? { ...p, prezzo: Number(voce.prezzoBase) || p.prezzo } : p;
             })
             .filter(p => {
@@ -376,7 +516,7 @@ export const VisitaPage: React.FC = () => {
                 seen.add(p.id);
                 return true;
             });
-    }, [isMDLVisit, appuntamento, prestazioniMedico, showAllPrestazioni]);
+    }, [isMDLVisit, appuntamento, visita?.prestazioneId, visita?.tipoVisitaMDL, prestazioniMedico, showAllPrestazioni]);
 
     // Transform storico data for inline panels
     const storicoVisite = useMemo((): VisitaRiepilogo[] => {
@@ -389,7 +529,9 @@ export const VisitaPage: React.FC = () => {
                 dataOra: v.dataOra || '',
                 prestazione: v.prestazione ? { nome: v.prestazione.nome } : undefined,
                 medico: v.medico ? { firstName: v.medico.firstName || '', lastName: v.medico.lastName || '' } : undefined,
-                stato: v.stato
+                stato: v.stato,
+                isVisitaSecundaria: (v as any).isVisitaSecundaria,
+                visitaParentId: (v as any).visitaParentId || null
             }));
     }, [storicoData?.visite, visitaId]);
 
@@ -702,12 +844,27 @@ export const VisitaPage: React.FC = () => {
     // P72_21 FIX: Dichiarato qui (prima di completeAndScheduleMDL) per evitare TDZ nella dependency array.
     // L'inizializzazione avviene nel useEffect dedicato più in basso.
     const [prestazioniAggiuntive, setPrestazioniAggiuntive] = useState<PrestazioneItem[]>([]);
+    const prestazioniNonEseguite = useMemo(() => {
+        return prestazioniAggiuntive.filter(p => {
+            if (p.isPrimary || p.isQuestionario) return false;
+            if (p.esecuzioneStatus === 'NON_ESEGUITA' || p.statoAppPrestazione === 'ANNULLATA') return true;
+            if (p.esecuzioneStatus === 'ESEGUITA' || p.esecuzioneStatus === 'IN_ATTESA_REFERTO') return false;
+            const stato = p.statoAppPrestazione || '';
+            return !stato || ['DA_ESEGUIRE', 'IN_CORSO'].includes(stato);
+        });
+    }, [prestazioniAggiuntive]);
+    const [isNonEseguiteWarningOpen, setIsNonEseguiteWarningOpen] = useState(false);
+    const bypassNonEseguiteWarningRef = useRef(false);
 
     // FLAG: segnala che questa sessione ha appena completato la visita → useEffect espande la sidebar
     // Dichiarato prima di completeAndScheduleMDL per evitare TDZ nella closure.
     const [visitaCompletataThisSession, setVisitaCompletataThisSession] = useState(false);
     // Giudizio idoneità modal — aperto automaticamente al completamento di una visita MDL
     const [isGiudizioModalOpen, setIsGiudizioModalOpen] = useState(false);
+    // Existing giudizio for modal edit mode (nuova versione: update instead of create)
+    const [existingGiudizioForModal, setExistingGiudizioForModal] = useState<GiudizioIdoneita | null>(null);
+    const mdlVisitTypeForScheduling = visita?.tipoVisitaMDL || appuntamento?.tipoVisitaMDL || null;
+    const shouldAdvanceMDLPlan = !!mdlVisitTypeForScheduling && ['PERIODICA', 'PREVENTIVA', 'PREVENTIVA_PREASSUNTIVA'].includes(String(mdlVisitTypeForScheduling));
 
     /**
      * Helper: chiama handleComplete e poi, se è una visita MDL, schedula le prossime scadenze.
@@ -716,8 +873,12 @@ export const VisitaPage: React.FC = () => {
     const completeAndScheduleMDL = useCallback(async () => {
         await handleComplete();
 
+        // Forza il refetch della visita per aggiornare lo stato a COMPLETATA nel UI
+        // (invalidateQueries in onSuccess del mutation è asincrono e potrebbe non essere ancora completato)
+        await queryClient.refetchQueries({ queryKey: ['visita', visitaId] });
+
         // MDL scheduling: marca scadenze come eseguite e crea le successive
-        if (isMDLVisit && !isNew && visitaId && primaryMansioneId && paziente?.id) {
+        if (isMDLVisit && shouldAdvanceMDLPlan && !isNew && visitaId && primaryMansioneId && paziente?.id) {
             try {
                 await scadenzeMDLApi.programmaPrestazioni({
                     personId: paziente.id,
@@ -738,28 +899,75 @@ export const VisitaPage: React.FC = () => {
                 });
             } catch (err) {
                 // Non bloccare il flusso ma avvisa l'utente
-                console.error('Errore schedulazione scadenze MDL:', err);
+                if (import.meta.env.DEV) {
+                    console.error('Errore schedulazione scadenze MDL:', err);
+                }
                 showToast({ message: 'Attenzione: la programmazione delle prossime scadenze non è riuscita. Riprovare dalla scheda sorveglianza.', type: 'warning' });
             }
         }
 
         // Segnala che la visita è stata completata in questa sessione (usato per espandere la sidebar nelle visite secondarie)
         setVisitaCompletataThisSession(true);
-        // Apri modal giudizio idoneità per visita MDL completata
-        // SOLO se il campo "Giudizio di Idoneità alla Mansione" nel template non è stato compilato
-        if (isMDLVisit) {
-            const giudizioFieldValue = values?.giudizio_idoneita;
-            if (!giudizioFieldValue || String(giudizioFieldValue).trim() === '') {
+        // Giudizio idoneità per visita MDL completata:
+        // 1. Se esiste già un giudizio per questa visita → aggiorna automaticamente (NO modal)
+        // 2. Se non esiste e il campo è compilato → crea automaticamente (NO modal)
+        // 3. Se non esiste e il campo è vuoto → apri modal per compilazione manuale
+        if (isMDLVisit && paziente?.id && visitaId) {
+            const giudizioFieldValue = values?.giudizioIdoneitaMdl;
+
+            // SEMPRE: cerca un giudizio esistente per questa visita (indipendentemente da nuova versione)
+            let existingGiudizio: GiudizioIdoneita | null = null;
+            try {
+                const giudiziResult = await giudiziIdoneitaApi.getAll({ personId: paziente.id, limit: 100 } as Parameters<typeof giudiziIdoneitaApi.getAll>[0]);
+                const giudizi = (giudiziResult as any)?.data ?? giudiziResult ?? [];
+                existingGiudizio = Array.isArray(giudizi)
+                    ? giudizi.find((g: GiudizioIdoneita) => g.visitaId === visitaId) ?? null
+                    : null;
+            } catch { /* non bloccare il flusso */ }
+
+            const GIUDIZIO_MAP: Record<string, string> = {
+                'idoneo': 'IDONEO',
+                'idoneo_prescrizioni': 'IDONEO_CON_PRESCRIZIONI',
+                'idoneo_limitazioni': 'IDONEO_CON_LIMITAZIONI',
+                'idoneo_limitazioni_prescrizioni': 'IDONEO_CON_LIMITAZIONI_PRESCRIZIONI',
+                'temporaneamente_non_idoneo': 'NON_IDONEO_TEMPORANEO',
+                'non_idoneo': 'NON_IDONEO_PERMANENTE',
+            };
+            const prescrizioniGiudizio = Array.isArray(values?.prescrizioniNormativaMdl)
+                ? values.prescrizioniNormativaMdl.join('\n')
+                : values?.prescrizioniNormativaMdl ? String(values.prescrizioniNormativaMdl) : undefined;
+            const limitazioniGiudizio = Array.isArray(values?.limitazioniMansioneMdl)
+                ? values.limitazioniMansioneMdl.join('\n')
+                : values?.limitazioniMansioneMdl ? String(values.limitazioniMansioneMdl) : undefined;
+            const tempisticaGiudizio = values?.tempisticaGiudizioIdoneitaMdl ? String(values.tempisticaGiudizioIdoneitaMdl) : undefined;
+
+            if (existingGiudizio?.id) {
+                // Giudizio già esistente → aggiorna automaticamente senza aprire il modal
+                const tipoGiudizio = giudizioFieldValue
+                    ? (GIUDIZIO_MAP[String(giudizioFieldValue)] || existingGiudizio.tipoGiudizio)
+                    : existingGiudizio.tipoGiudizio;
+                try {
+                    await giudiziIdoneitaApi.update(existingGiudizio.id, {
+                        tipoGiudizio,
+                        prescrizioniIdoneita: prescrizioniGiudizio,
+                        limitazioni: limitazioniGiudizio,
+                        motivazioni: tempisticaGiudizio,
+                        dataScadenza: prossimoControllo ? new Date(prossimoControllo).toISOString() : undefined,
+                        stato: 'VALIDO',
+                    } as Partial<GiudizioIdoneita>);
+                    await giudiziIdoneitaApi.generateDocuments(existingGiudizio.id);
+                    if (existingGiudizio.dataNotificaLavoratore || existingGiudizio.dataNotificaDatoreLavoro) {
+                        showToast({ type: 'warning', message: 'Giudizio già inviato: verifica se reinviarlo a lavoratore e azienda.' });
+                    }
+                    showToast({ type: 'success', message: 'Giudizio di idoneità aggiornato automaticamente (Art. 41 c.7)' });
+                } catch {
+                    showToast({ type: 'warning', message: 'Attenzione: giudizio di idoneità non aggiornato. Aggiornalo manualmente.' });
+                }
+            } else if (!giudizioFieldValue || String(giudizioFieldValue).trim() === '') {
+                // Nessun giudizio esistente + campo vuoto → apri modal per compilazione manuale
                 setIsGiudizioModalOpen(true);
-            } else if (paziente?.id && visitaId) {
-                // Campo compilato → auto-genera giudizio senza aprire il modal
-                const GIUDIZIO_MAP: Record<string, string> = {
-                    'IDONEO alla mansione specifica': 'IDONEO',
-                    'IDONEO CON PRESCRIZIONI alla mansione specifica': 'IDONEO_CON_PRESCRIZIONI',
-                    'IDONEO CON LIMITAZIONI alla mansione specifica': 'IDONEO_CON_LIMITAZIONI',
-                    'TEMPORANEAMENTE NON IDONEO alla mansione specifica': 'NON_IDONEO_TEMPORANEO',
-                    'NON IDONEO alla mansione specifica': 'NON_IDONEO_PERMANENTE',
-                };
+            } else {
+                // Nessun giudizio esistente + campo compilato → crea automaticamente
                 const tipoGiudizio = GIUDIZIO_MAP[String(giudizioFieldValue)] || 'IDONEO';
                 try {
                     const giudizio = await giudiziIdoneitaApi.create({
@@ -767,9 +975,11 @@ export const VisitaPage: React.FC = () => {
                         medicoCompetenteId: visita?.medicoId ?? undefined,
                         tipoGiudizio,
                         visitaId,
-                        mansioneIds: primaryMansioneId ? [primaryMansioneId] : [],
-                        prescrizioniIdoneita: values?.prescrizioni ? String(values.prescrizioni) : undefined,
-                        limitazioni: values?.limitazioni ? String(values.limitazioni) : undefined,
+                        mansioneIds: workerRisksData?.mansioni?.map((m: { id: string }) => m.id) ?? [],
+                        prescrizioniIdoneita: prescrizioniGiudizio,
+                        limitazioni: limitazioniGiudizio,
+                        motivazioni: tempisticaGiudizio,
+                        dataScadenza: prossimoControllo ? new Date(prossimoControllo).toISOString() : undefined,
                     } as Parameters<typeof giudiziIdoneitaApi.create>[0]);
                     if (giudizio?.id) {
                         await giudiziIdoneitaApi.generateDocuments(giudizio.id);
@@ -780,9 +990,15 @@ export const VisitaPage: React.FC = () => {
                 }
             }
         }
-    }, [handleComplete, isMDLVisit, isNew, visitaId, primaryMansioneId, paziente?.id, prossimoControllo, appuntamento?.dataOra, prestazioniNonProgrammare, pianoDateOverrides, prestazioniAggiuntive, values, visita?.medicoId, showToast]);
+    }, [handleComplete, queryClient, isMDLVisit, shouldAdvanceMDLPlan, isNew, visitaId, primaryMansioneId, paziente?.id, prossimoControllo, appuntamento?.dataOra, prestazioniNonProgrammare, pianoDateOverrides, prestazioniAggiuntive, values, visita?.medicoId, showToast]);
 
     const handleCompleteWithFirmaCheck = useCallback(async () => {
+        if (prestazioniNonEseguite.length > 0 && !bypassNonEseguiteWarningRef.current) {
+            setIsNonEseguiteWarningOpen(true);
+            return;
+        }
+        bypassNonEseguiteWarningRef.current = false;
+
         if (!questionariCompilati || questionariCompilati.length === 0) {
             // No compilati — proceed directly
             await completeAndScheduleMDL();
@@ -841,7 +1057,7 @@ export const VisitaPage: React.FC = () => {
             hasSavedFirmaMedico: hasSavedMed
         });
         setIsFirmaWarningOpen(true);
-    }, [questionariCompilati, completeAndScheduleMDL, paziente?.id, user?.id]);
+    }, [prestazioniNonEseguite.length, questionariCompilati, completeAndScheduleMDL, paziente?.id, user?.id]);
 
     /**
      * Handle firma warning dialog action
@@ -1040,11 +1256,37 @@ export const VisitaPage: React.FC = () => {
     // Espande la sidebar principale (ClinicaLayout) quando si completa la visita
     useEffect(() => {
         if (visitaCompletataThisSession) {
-            setMainSidebarCollapsed(false);
+            if (isEmbeddedVisit) {
+                window.parent?.postMessage({
+                    type: 'elementmedica:secondary-visit-completed',
+                    visitaId
+                }, window.location.origin);
+            } else {
+                setMainSidebarCollapsed(false);
+            }
             setVisitaCompletataThisSession(false);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [visitaCompletataThisSession]);
+    }, [visitaCompletataThisSession, isEmbeddedVisit, visitaId]);
+
+    const handleEmbeddedCancel = useCallback(() => {
+        if (!isEmbeddedVisit) return;
+        window.parent?.postMessage({
+            type: 'elementmedica:secondary-visit-cancelled',
+            visitaId
+        }, window.location.origin);
+    }, [isEmbeddedVisit, visitaId]);
+
+    useEffect(() => {
+        if (!isEmbeddedVisit) return;
+        const handleCancelMessage = (event: MessageEvent) => {
+            if (event.origin !== window.location.origin) return;
+            if (event.data?.type !== 'elementmedica:secondary-visit-cancel') return;
+            handleEmbeddedCancel();
+        };
+        window.addEventListener('message', handleCancelMessage);
+        return () => window.removeEventListener('message', handleCancelMessage);
+    }, [handleEmbeddedCancel, isEmbeddedVisit]);
 
     // Access Control state
     const [accessControl, setAccessControl] = useState<AccessControlConfig>(() => {
@@ -1223,17 +1465,182 @@ export const VisitaPage: React.FC = () => {
     // ============================================
     const [isVisitaViewModalOpen, setIsVisitaViewModalOpen] = useState(false);
     const [selectedVisitaIdForView, setSelectedVisitaIdForView] = useState<string | null>(null);
+    const [selectedSecondaryVisitId, setSelectedSecondaryVisitId] = useState<string | null>(null);
+    const secondaryVisitFrameRef = useRef<HTMLIFrameElement | null>(null);
+    const [selectedEsameStrumentale, setSelectedEsameStrumentale] = useState<EsameStrumentale | null>(null);
     const [isRevisionDiffModalOpen, setIsRevisionDiffModalOpen] = useState(false);
     const [selectedRevisionId, setSelectedRevisionId] = useState<string | null>(null);
+
+    useEffect(() => {
+        const handleSecondaryVisitMessage = (event: MessageEvent) => {
+            if (event.origin !== window.location.origin) return;
+            if (!['elementmedica:secondary-visit-completed', 'elementmedica:secondary-visit-cancelled'].includes(event.data?.type)) return;
+
+            const completedVisitId = event.data.visitaId as string | undefined;
+            setSelectedSecondaryVisitId(null);
+            if (event.data?.type === 'elementmedica:secondary-visit-completed' && completedVisitId) {
+                setPrestazioniAggiuntive(prev => {
+                    const updated = prev.map(p => p.visitaSecondariaId === completedVisitId
+                        ? { ...p, esecuzioneStatus: 'ESEGUITA' as const, statoAppPrestazione: 'ESEGUITA' as const }
+                        : p
+                    );
+                    handleFieldChange('_prestazioniAggiuntive', updated);
+                    return updated;
+                });
+            }
+            queryClient.invalidateQueries({ queryKey: ['appuntamento', appuntamento?.id] });
+            queryClient.invalidateQueries({ queryKey: ['visite'] });
+            queryClient.invalidateQueries({ queryKey: ['visite-count'] });
+            queryClient.invalidateQueries({ queryKey: ['prestazioni-da-refertare-list'] });
+            queryClient.invalidateQueries({ queryKey: ['prestazioni-da-refertare-count'] });
+        };
+
+        window.addEventListener('message', handleSecondaryVisitMessage);
+        return () => window.removeEventListener('message', handleSecondaryVisitMessage);
+    }, [appuntamento?.id, handleFieldChange, queryClient]);
+
+    const handleCloseSecondaryVisitModal = useCallback(() => {
+        secondaryVisitFrameRef.current?.contentWindow?.postMessage({
+            type: 'elementmedica:secondary-visit-cancel'
+        }, window.location.origin);
+        window.setTimeout(() => setSelectedSecondaryVisitId(null), 120);
+    }, []);
+
+    const { data: esamiStrumentali = [] } = useQuery<EsameStrumentale[]>({
+        queryKey: ['esami-strumentali', visitaId],
+        queryFn: () => strumentiBridgeApi.getEsamiVisita(visitaId!),
+        enabled: !!visitaId,
+        staleTime: 30_000,
+    });
 
     // ============================================
     // P61: QUEUE MANAGEMENT STATE
     // ============================================
     const [isQueueLoading, setIsQueueLoading] = useState(false);
     const [isQueueModalOpen, setIsQueueModalOpen] = useState(false);
+    const [embeddedEditSession, setEmbeddedEditSession] = useState(false);
+    const [embeddedActiveSection, setEmbeddedActiveSection] = useState<string | null>(null);
 
     // Profilo di Salute — modal scheda completa
     const [profiloSaluteModalOpen, setProfiloSaluteModalOpen] = useState(false);
+    const [patientEditModalOpen, setPatientEditModalOpen] = useState(false);
+    const [occupationalEditModalOpen, setOccupationalEditModalOpen] = useState(false);
+    const [patientEditForm, setPatientEditForm] = useState({
+        firstName: '',
+        lastName: '',
+        taxCode: '',
+        birthDate: '',
+        birthPlace: '',
+        birthProvince: '',
+        gender: '',
+        etnia: DEFAULT_ETHNICITY,
+        residenceAddress: '',
+        residenceCity: '',
+        postalCode: '',
+        province: '',
+        phone: '',
+        email: ''
+    });
+
+    useEffect(() => {
+        if (!paziente) return;
+        setPatientEditForm({
+            firstName: paziente.firstName || paziente.nome || '',
+            lastName: paziente.lastName || paziente.cognome || '',
+            taxCode: paziente.taxCode || paziente.codiceFiscale || '',
+            birthDate: paziente.birthDate || paziente.dataNascita ? String(paziente.birthDate || paziente.dataNascita).split('T')[0] : '',
+            birthPlace: paziente.birthPlace || (paziente as any).comuneNascita || '',
+            birthProvince: paziente.birthProvince || (paziente as any).provinciaNascita || '',
+            gender: paziente.gender || paziente.sesso || '',
+            etnia: (paziente as any).etnia || DEFAULT_ETHNICITY,
+            residenceAddress: paziente.residenceAddress || (paziente as any).indirizzo || '',
+            residenceCity: paziente.residenceCity || (paziente as any).comune || '',
+            postalCode: paziente.postalCode || (paziente as any).cap || '',
+            province: paziente.province || (paziente as any).provincia || '',
+            phone: paziente.phone || paziente.telefono || '',
+            email: paziente.email || ''
+        });
+    }, [paziente]);
+
+    const updatePatientMutation = useMutation({
+        mutationFn: () => pazientiApi.update(paziente!.id, {
+            firstName: patientEditForm.firstName.trim(),
+            lastName: patientEditForm.lastName.trim(),
+            taxCode: patientEditForm.taxCode.trim(),
+            birthDate: patientEditForm.birthDate || null,
+            birthPlace: patientEditForm.birthPlace.trim() || null,
+            birthProvince: patientEditForm.birthProvince.trim() || null,
+            gender: patientEditForm.gender || null,
+            etnia: patientEditForm.etnia || null,
+            residenceAddress: patientEditForm.residenceAddress.trim() || null,
+            residenceCity: patientEditForm.residenceCity.trim() || null,
+            postalCode: patientEditForm.postalCode.trim() || null,
+            province: patientEditForm.province.trim() || null,
+            phone: patientEditForm.phone.trim() || null,
+            email: patientEditForm.email.trim() || null,
+        } as any),
+        onSuccess: async () => {
+            showToast({ message: 'Anagrafica paziente aggiornata', type: 'success' });
+            setPatientEditModalOpen(false);
+            await Promise.all([
+                queryClient.invalidateQueries({ queryKey: ['visita-data'] }),
+                queryClient.invalidateQueries({ queryKey: ['paziente', paziente?.id] }),
+                queryClient.invalidateQueries({ queryKey: ['paziente-storico', paziente?.id] }),
+            ]);
+            refetch();
+        },
+        onError: () => showToast({ message: 'Errore durante il salvataggio dell’anagrafica', type: 'error' })
+    });
+
+    const { data: allProtocolliData } = useQuery({
+        queryKey: ['protocolli-sanitari-visita-occupational-edit'],
+        queryFn: () => protocolliSanitariApi.getAll({ isAttivo: true, limit: 200 }),
+        enabled: occupationalEditModalOpen,
+        staleTime: 5 * 60 * 1000,
+    });
+
+    const [occupationalEditForm, setOccupationalEditForm] = useState({
+        title: '',
+        hiredDate: '',
+        endDate: '',
+        tipoContratto: '',
+        tipoCollaboratore: '',
+        protocolloSanitarioId: '',
+    });
+
+    useEffect(() => {
+        const current = workerRisksData?.statoOccupazionale?.current;
+        const snapshot = current?.snapshot || {};
+        if (!current) return;
+        setOccupationalEditForm({
+            title: current.titolo || current.title || snapshot.title || '',
+            hiredDate: (current.dataInizio || current.hiredDate || snapshot.hiredDate || '') ? String(current.dataInizio || current.hiredDate || snapshot.hiredDate).split('T')[0] : '',
+            endDate: (current.dataFine || current.endDate || snapshot.endDate || '') ? String(current.dataFine || current.endDate || snapshot.endDate).split('T')[0] : '',
+            tipoContratto: current.tipoContratto || snapshot.tipoContratto || '',
+            tipoCollaboratore: current.tipoCollaboratore || snapshot.tipoCollaboratore || '',
+            protocolloSanitarioId: current.protocolloSanitarioId || current.protocolloSanitario?.id || snapshot.protocolloSanitario?.id || '',
+        });
+    }, [workerRisksData?.statoOccupazionale?.current]);
+
+    const updateOccupationalMutation = useMutation({
+        mutationFn: () => mansioniApi.updateWorkerOccupationalProfile(paziente!.id, {
+            title: occupationalEditForm.title || null,
+            hiredDate: occupationalEditForm.hiredDate || null,
+            endDate: occupationalEditForm.endDate || null,
+            tipoContratto: occupationalEditForm.tipoContratto || null,
+            tipoCollaboratore: occupationalEditForm.tipoCollaboratore || null,
+            protocolloSanitarioId: occupationalEditForm.protocolloSanitarioId || null,
+        }),
+        onSuccess: async () => {
+            showToast({ message: 'Stato occupazionale aggiornato', type: 'success' });
+            setOccupationalEditModalOpen(false);
+            await Promise.all([
+                queryClient.invalidateQueries({ queryKey: ['worker-risks', paziente?.id] }),
+                queryClient.invalidateQueries({ queryKey: ['profilo-salute', paziente?.id] }),
+            ]);
+        },
+        onError: () => showToast({ message: 'Errore nel salvataggio dello stato occupazionale', type: 'error' }),
+    });
 
     // P73: Visite collegate (secondarie o principale) modal
     const [isVisiteCollegateOpen, setIsVisiteCollegateOpen] = useState(false);
@@ -1334,7 +1741,7 @@ export const VisitaPage: React.FC = () => {
         // If visit is already completed or cancelled, navigate directly to the list
         // (use specific path instead of navigate(-1) — the history blocker may have added extra entries)
         if (visita?.stato === 'COMPLETATA' || visita?.stato === 'ANNULLATA') {
-            navigate('/poliambulatorio/visite');
+            goBack();
             return;
         }
 
@@ -1342,7 +1749,7 @@ export const VisitaPage: React.FC = () => {
         // Show the exit dialog to let user decide what to do
         setPendingNavigationPath(-1);
         setIsExitDialogOpen(true);
-    }, [visita?.stato, navigate]);
+    }, [visita?.stato, goBack]);
 
     // Handle exit dialog actions
     const handleExitAction = useCallback(async (action: ExitVisitAction, deletionReason?: string) => {
@@ -1413,24 +1820,26 @@ export const VisitaPage: React.FC = () => {
 
             // Invalidate queries to refresh data
             queryClient.invalidateQueries({ queryKey: ['visite'] });
+            queryClient.invalidateQueries({ queryKey: ['visite-count'] });
             queryClient.invalidateQueries({ queryKey: ['appuntamenti'] });
+            queryClient.invalidateQueries({ queryKey: ['prestazioni-da-refertare-list'] });
+            queryClient.invalidateQueries({ queryKey: ['prestazioni-da-refertare-count'] });
             // Invalidate specific appuntamento so AppuntamentoDetailPage reflects changes
             if (appuntamento?.id) {
                 queryClient.invalidateQueries({ queryKey: ['appuntamento', appuntamento.id] });
             }
+            await queryClient.refetchQueries({ queryKey: ['visite'] });
 
             // Mark that we're navigating to prevent popstate handler from blocking
             isNavigatingRef.current = true;
 
-            // Navigate away after action completes.
-            // NOTE: navigate(-1) is unreliable here because the history blocker adds extra
-            // pushState entries. Using a specific path avoids navigating to a stale duplicate entry.
+            // Navigate back to the exact originating page/tab when available.
             if (pendingNavigationPath === -1 || pendingNavigationPath === null) {
-                navigate('/poliambulatorio/visite');
+                goBack();
             } else if (typeof pendingNavigationPath === 'string') {
                 navigate(pendingNavigationPath);
             } else {
-                navigate('/poliambulatorio/visite');
+                goBack();
             }
         } catch (error) {
             showToast({
@@ -1441,7 +1850,7 @@ export const VisitaPage: React.FC = () => {
         } finally {
             setIsExitActionLoading(false);
         }
-    }, [handleSave, handleCompleteWithFirmaCheck, visitaId, isNew, visita?.stato, visita?.revisions, appuntamento?.id, appuntamento?.oraArrivo, queryClient, pendingNavigationPath, navigate, showToast]);
+    }, [handleSave, handleCompleteWithFirmaCheck, visitaId, isNew, visita?.stato, visita?.revisions, appuntamento?.id, appuntamento?.oraArrivo, queryClient, pendingNavigationPath, navigate, goBack, showToast]);
 
     // ============================================
     // NOTE INTERNE (medico-segreteria communication)
@@ -1504,18 +1913,40 @@ export const VisitaPage: React.FC = () => {
             const dati = visita.datiStrutturati as { _prestazioniAggiuntive?: PrestazioneItem[] };
             const saved = dati._prestazioniAggiuntive;
             if (saved && saved.length > 0) {
-                setPrestazioniAggiuntive(saved);
-                return;
+                const tipoMDL = visita?.tipoVisitaMDL || appuntamento?.tipoVisitaMDL;
+                const shouldUseProtocolPrestazioni = tipoMDL === 'PREVENTIVA'
+                    || tipoMDL === 'PREVENTIVA_PREASSUNTIVA';
+                if (isMDLVisit && tipoMDL && !shouldUseProtocolPrestazioni) {
+                    const appointmentPrestazioneIds = new Set(
+                        (((appuntamento as any)?.prestazioni || []) as Array<{ prestazione?: { id?: string } }>)
+                            .map(ap => ap.prestazione?.id)
+                            .filter(Boolean) as string[]
+                    );
+                    const protocolPrestazioneIds = new Set(
+                        (scadenzePersona || [])
+                            .map(g => g.prestazioneId)
+                            .filter(Boolean) as string[]
+                    );
+                    const explicitOnly = saved.filter(p => appointmentPrestazioneIds.has(p.id) || !protocolPrestazioneIds.has(p.id));
+                    setPrestazioniAggiuntive(prev => mergePrestazioneItems(prev, explicitOnly));
+                } else {
+                    setPrestazioniAggiuntive(prev => mergePrestazioneItems(prev, saved));
+                }
             }
         }
         // Priority 2: AppuntamentoPrestazione records created when booking the appointment
         const appPrestazioni = (appuntamento as any)?.prestazioni as Array<{
+            id?: string;
+            stato?: PrestazioneItem['statoAppPrestazione'];
+            dataEsecuzione?: string | null;
+            refertoId?: string | null;
+            medicoRefertanteId?: string | null;
+            visitaSecondariaId?: string | null;
             prestazione?: { id: string; nome: string; codice?: string; prezzoBase?: number | string | null; durataPrevista?: number | null };
             movimentiContabili?: Array<{ id: string; importoNetto: number | string | null; importoLordo: number | string | null; stato: string }>;
         }> | undefined;
         if (appPrestazioni && appPrestazioni.length > 0) {
-            setPrestazioniAggiuntive(
-                appPrestazioni
+            const mappedAppPrestazioni = appPrestazioni
                     // Exclude the main prestazione to avoid duplicates.
                     // Compare with both appuntamento.prestazioneId AND visita.prestazioneId
                     // (appuntamento.prestazioneId may be null for legacy data pre-backfill)
@@ -1539,11 +1970,17 @@ export const VisitaPage: React.FC = () => {
                             prezzo,
                             durata: ap.prestazione!.durataPrevista || undefined,
                             aCaricoTipo: 'azienda' as const, // Sorveglianza sanitaria MDL → sempre a carico azienda
+                            appPrestazioneId: ap.id,
+                            statoAppPrestazione: ap.stato,
+                            dataEsecuzione: ap.dataEsecuzione ?? null,
+                            refertoId: ap.refertoId ?? null,
+                            medicoRefertanteId: ap.medicoRefertanteId ?? undefined,
+                            visitaSecondariaId: ap.visitaSecondariaId ?? undefined,
                         };
-                    })
-            );
+                    });
+            setPrestazioniAggiuntive(prev => mergePrestazioneItems(prev, mappedAppPrestazioni));
         }
-    }, [visita?.datiStrutturati, appuntamento]);
+    }, [visita?.datiStrutturati, visita?.tipoVisitaMDL, appuntamento, isMDLVisit, scadenzePersona]);
 
     // P72_FIX: Auto-merge prestazioni from protocollo scadenze into prestazioniAggiuntive
     // When an MDL visit has scadenze but the booking didn't include all prestazioni as AppuntamentoPrestazione,
@@ -1551,6 +1988,13 @@ export const VisitaPage: React.FC = () => {
     const scadenzeAutoMergeRef = useRef(false);
     useEffect(() => {
         if (!isMDLVisit || !scadenzePersona?.length || scadenzeAutoMergeRef.current) return;
+        const tipoMDL = visita?.tipoVisitaMDL || appuntamento?.tipoVisitaMDL;
+        const shouldMergeProtocolPrestazioni = tipoMDL === 'PREVENTIVA'
+            || tipoMDL === 'PREVENTIVA_PREASSUNTIVA';
+        if (!shouldMergeProtocolPrestazioni) {
+            scadenzeAutoMergeRef.current = true;
+            return;
+        }
         // Wait until initial prestazioni are loaded (either from datiStrutturati or appuntamento)
         if (visita?.id === undefined && !appuntamento) return;
 
@@ -1561,14 +2005,30 @@ export const VisitaPage: React.FC = () => {
         ]);
 
         // Find scadenze with prestazioneId not already displayed (exclude questionari)
+        // Lookup appuntamento prestazioni for prices when auto-merging
+        const appPrest = (appuntamento as any)?.prestazioni as Array<{
+            prestazione?: { id: string; prezzoBase?: number | string | null };
+            movimentiContabili?: Array<{ importoNetto?: number | string | null; importoLordo?: number | string | null }>;
+        }> | undefined;
         const missing = scadenzePersona
             .filter(g => g.prestazioneId && !existingIds.has(g.prestazioneId) && g.prestazioneTipo !== 'QUESTIONARIO')
-            .map(g => ({
-                id: g.prestazioneId!,
-                codice: g.prestazioneCodice || '',
-                nome: g.prestazioneName || '',
-                aCaricoTipo: 'azienda' as const,
-            }));
+            .map(g => {
+                // Try to get price from appuntamento prestazioni (movimenti > prezzoBase)
+                const matchedAp = appPrest?.find(ap => ap.prestazione?.id === g.prestazioneId);
+                let prezzo: number | undefined;
+                if (matchedAp) {
+                    const mov = matchedAp.movimentiContabili?.[0];
+                    const movPrice = mov ? (mov.importoNetto ?? mov.importoLordo) : null;
+                    prezzo = movPrice != null ? Number(movPrice) : (matchedAp.prestazione?.prezzoBase ? Number(matchedAp.prestazione.prezzoBase) : undefined);
+                }
+                return {
+                    id: g.prestazioneId!,
+                    codice: g.prestazioneCodice || '',
+                    nome: g.prestazioneName || '',
+                    prezzo,
+                    aCaricoTipo: 'azienda' as const,
+                };
+            });
 
         if (missing.length > 0) {
             scadenzeAutoMergeRef.current = true;
@@ -1583,7 +2043,7 @@ export const VisitaPage: React.FC = () => {
         } else {
             scadenzeAutoMergeRef.current = true;
         }
-    }, [isMDLVisit, scadenzePersona, prestazioniAggiuntive, visita?.id, appuntamento, handleFieldChange]);
+    }, [isMDLVisit, scadenzePersona, prestazioniAggiuntive, visita?.id, visita?.tipoVisitaMDL, appuntamento, handleFieldChange]);
 
     // Convert prestazione to PrestazioneItem
     // Note: _prezzoTariffario is enriched on appuntamento.prestazione (via AppuntamentoService.getById),
@@ -1591,8 +2051,20 @@ export const VisitaPage: React.FC = () => {
     // Use appuntamento.prestazione._prezzoTariffario as primary source of company tariffario price.
     const prestazionePrincipale = useMemo((): PrestazioneItem | null => {
         if (!prestazione) return null;
+        const tipoVisitaAttuale = visita?.tipoVisitaMDL || appuntamento?.tipoVisitaMDL || null;
+        const mainPrestazioneId = appuntamento?.prestazioneId || visita?.prestazioneId || prestazione.id;
+        const voci = (appuntamento as any)?._vociTariffario as Array<{
+            prestazioneId: string;
+            prezzoBase: number | string;
+            categoriaVisita: string | null;
+        }> | undefined;
+        const voceTariffario =
+            (tipoVisitaAttuale && voci?.find(v => v.prestazioneId === mainPrestazioneId && v.categoriaVisita === tipoVisitaAttuale))
+            ?? voci?.find(v => v.prestazioneId === mainPrestazioneId && !v.categoriaVisita)
+            ?? voci?.find(v => v.prestazioneId === mainPrestazioneId);
         const appPrestazione = (appuntamento as any)?.prestazione as { _prezzoTariffario?: number } | undefined;
-        const prezzoTariffario = appPrestazione?._prezzoTariffario
+        const prezzoTariffario = (voceTariffario ? Number(voceTariffario.prezzoBase) : undefined)
+            ?? appPrestazione?._prezzoTariffario
             ?? (prestazione as any)._prezzoTariffario as number | undefined;
         return {
             id: prestazione.id,
@@ -1605,7 +2077,7 @@ export const VisitaPage: React.FC = () => {
             durata: prestazione.durataPrevista || undefined,
             isPrimary: true
         };
-    }, [prestazione, appuntamento]);
+    }, [prestazione, appuntamento, visita?.prestazioneId, visita?.tipoVisitaMDL]);
 
     // Voci tariffario per la prestazione principale (MDL) — usate nel selettore tipo visita
     // Fallback a visita.prestazioneId per appuntamenti legacy con prestazioneId null
@@ -1651,7 +2123,7 @@ export const VisitaPage: React.FC = () => {
         // P72_15 Task 5: Sincronizza prossimoControllo → dataScadenza della ScadenzaPrestazioneProtocollo
         // per la VMdL (o per la prima scadenza aperta trovata), in modo che il piano di sorveglianza
         // rifletta la data impostata dal MC.
-        if (prossimoControllo && scadenzePersona?.length) {
+        if (shouldAdvanceMDLPlan && prossimoControllo && scadenzePersona?.length) {
             try {
                 const vmlGroup = scadenzePersona.find(g => g.prestazioneTipo === 'VISITA_MEDICINA_LAVORO')
                     ?? scadenzePersona[0]; // fallback: prima prestazione
@@ -1676,32 +2148,38 @@ export const VisitaPage: React.FC = () => {
         } catch {
             // Non bloccare il flusso
         }
-    }, [handleSave, isMDLVisit, isNew, visitaId, prossimoControllo, scadenzePersona, showToast, paziente?.id]);
+    }, [handleSave, isMDLVisit, isNew, visitaId, shouldAdvanceMDLPlan, prossimoControllo, scadenzePersona, showToast, paziente?.id]);
 
     // Handler per aggiungere prestazione aggiuntiva
     const handleAddPrestazione = useCallback((item: PrestazioneItem) => {
-        setPrestazioniAggiuntive(prev => [...prev, item]);
-        // Save to datiStrutturati via handleFieldChange
-        const newPrestazioni = [...prestazioniAggiuntive, item];
-        handleFieldChange('_prestazioniAggiuntive', newPrestazioni);
+        const itemToAdd: PrestazioneItem = {
+            ...item,
+            createdDuringVisit: item.createdDuringVisit ?? (!item.isQuestionario && !item.isPrimary)
+        };
+
+        setPrestazioniAggiuntive(prev => {
+            const updated = mergePrestazioneItems(prev, [itemToAdd]);
+            handleFieldChange('_prestazioniAggiuntive', updated);
+            return updated;
+        });
 
         // P72_15: Crea AppuntamentoPrestazione per generare movimenti contabili (ENTRATA + USCITA).
         // Condizioni: visita non nuova, appuntamento noto, prestazioneId è un UUID valido (non temp).
         // P72_19+: skip per questionari compilati — billing già gestito da QuestionarioMedicoService
         const appId = appuntamento?.id;
-        const isRealUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.id);
-        if (!isNew && appId && isRealUuid && !item.appPrestazioneId && !item.isQuestionario) {
+        const isRealUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(itemToAdd.id);
+        if (!isNew && appId && isRealUuid && !itemToAdd.appPrestazioneId && !itemToAdd.isQuestionario) {
             appuntamentoPrestazioniApi.create(appId, [{
-                prestazioneId: item.id,
-                medicoRefertanteId: item.medicoRefertanteId || appuntamento?.medicoId || undefined,
+                prestazioneId: itemToAdd.id,
+                medicoRefertanteId: itemToAdd.medicoRefertanteId || appuntamento?.medicoId || undefined,
             }], visitaId ?? undefined).then(created => {
                 const createdItem = created?.[0];
                 const appPrestId = createdItem?.id;
                 if (appPrestId) {
                     setPrestazioniAggiuntive(prev => {
                         const updated = prev.map(p =>
-                            p.id === item.id
-                                ? { ...p, appPrestazioneId: appPrestId, visitaSecondariaId: createdItem.visitaSecondariaId ?? undefined }
+                            p.id === itemToAdd.id
+                                ? { ...p, appPrestazioneId: appPrestId, visitaSecondariaId: createdItem.visitaSecondariaId ?? undefined, createdDuringVisit: true }
                                 : p
                         );
                         // P72_17: Persist appPrestazioneId in datiStrutturati so removal works after reload
@@ -1711,7 +2189,7 @@ export const VisitaPage: React.FC = () => {
                 }
             }).catch(() => { /* Non bloccare il flusso */ });
         }
-    }, [prestazioniAggiuntive, handleFieldChange, isNew, appuntamento?.id, appuntamento?.medicoId]);
+    }, [handleFieldChange, isNew, appuntamento?.id, appuntamento?.medicoId, visitaId]);
 
     // R17: Auto-add from tariffario is handled exclusively via onPrestazioneSuggerita callback
     // in QuestionariModal (compile + firma paths). This avoids duplicates on re-renders.
@@ -1720,7 +2198,7 @@ export const VisitaPage: React.FC = () => {
     const handleRemovePrestazione = useCallback((prestazioneId: string) => {
         // P72_15: Se la prestazione ha un AppuntamentoPrestazioni associato, eliminalo
         // (il backend annullerà anche i movimenti contabili collegati)
-        const itemToRemove = prestazioniAggiuntive.find(p => p.id === prestazioneId);
+        const itemToRemove = prestazioniAggiuntive.find(p => p.id === prestazioneId || p.appPrestazioneId === prestazioneId);
         if (itemToRemove?.appPrestazioneId) {
             appuntamentoPrestazioniApi.delete(itemToRemove.appPrestazioneId)
                 .catch(() => { /* Non bloccare il flusso */ });
@@ -1731,10 +2209,11 @@ export const VisitaPage: React.FC = () => {
                 .catch(() => { /* Non bloccare il flusso */ });
         }
 
-        setPrestazioniAggiuntive(prev => prev.filter(p => p.id !== prestazioneId));
-        // Save to datiStrutturati
-        const newPrestazioni = prestazioniAggiuntive.filter(p => p.id !== prestazioneId);
-        handleFieldChange('_prestazioniAggiuntive', newPrestazioni);
+        setPrestazioniAggiuntive(prev => {
+            const updated = prev.filter(p => p.id !== prestazioneId && p.appPrestazioneId !== prestazioneId);
+            handleFieldChange('_prestazioniAggiuntive', updated);
+            return updated;
+        });
     }, [prestazioniAggiuntive, handleFieldChange]);
 
     // ============================================
@@ -1784,14 +2263,23 @@ export const VisitaPage: React.FC = () => {
                         id: convenzioneId,
                         nome: appuntamento.convenzione.nome,
                         tipo: 'convenzione',
-                        scontoPercentuale: appuntamento.convenzione.condizioni?.scontoPercentuale
+                        codiceSconto: typeof (appuntamento.convenzione.condizioni as any)?.codiceSconto === 'string'
+                            ? (appuntamento.convenzione.condizioni as any).codiceSconto
+                            : undefined,
+                        ...extractConvenzioneDiscount(appuntamento.convenzione.condizioni as Record<string, unknown> | null)
                     } : null);
 
                 // Try to fetch full convenzione details for codice sconto
                 try {
                     const convDetails = await convenzioniApi.getById(convenzioneId);
                     const condizioni = convDetails?.condizioni || {};
-                    if (condizioni.codiceSconto && typeof condizioni.codiceSconto === 'string') {
+                    const convenzioneDiscount = extractConvenzioneDiscount(condizioni as Record<string, unknown> | null);
+                    if (
+                        condizioni.codiceSconto
+                        && typeof condizioni.codiceSconto === 'string'
+                        && !convenzioneDiscount.scontoPercentuale
+                        && !convenzioneDiscount.scontoFisso
+                    ) {
                         // Auto-apply the convenzione's codice sconto if not already applied
                         const codice = condizioni.codiceSconto;
                         if (!codiciScontoApplicati.some(cs => cs.codice === codice)) {
@@ -1822,8 +2310,7 @@ export const VisitaPage: React.FC = () => {
                                 const newSconto = {
                                     codice,
                                     descrizione: `Sconto ${conv?.nome || 'convenzione'}`,
-                                    scontoPercentuale: typeof condizioni.scontoPercentuale === 'number' ? condizioni.scontoPercentuale : undefined,
-                                    scontoFisso: typeof condizioni.scontoFisso === 'number' ? condizioni.scontoFisso : undefined
+                                    ...extractConvenzioneDiscount(condizioni as Record<string, unknown> | null)
                                 };
                                 if (newSconto.scontoPercentuale || newSconto.scontoFisso) {
                                     const newList = [...codiciScontoApplicati, newSconto];
@@ -1839,6 +2326,18 @@ export const VisitaPage: React.FC = () => {
             } else {
                 // Convenzione removed — clear auto-applied sconti from convenzione
                 // (keep manually-added ones)
+                const condizioniConvenzioneCorrente = appuntamento?.convenzione?.condizioni as any;
+                const codiceConvenzione = typeof condizioniConvenzioneCorrente?.codiceSconto === 'string'
+                    ? String(condizioniConvenzioneCorrente.codiceSconto).toUpperCase()
+                    : '';
+                const filtered = codiciScontoApplicati.filter(sconto =>
+                    String(sconto.codice || '').toUpperCase() !== codiceConvenzione
+                    && !/convenzione/i.test(`${sconto.descrizione || ''} ${sconto.codice || ''}`)
+                );
+                if (filtered.length !== codiciScontoApplicati.length) {
+                    setCodiciScontoApplicati(filtered);
+                    handleFieldChange('_codiciSconto', filtered);
+                }
             }
 
             showToast({
@@ -1896,6 +2395,35 @@ export const VisitaPage: React.FC = () => {
                     .catch(() => { /* Non bloccare il flusso */ });
             }
         }
+        if (updates.statoAppPrestazione !== undefined || updates.esecuzioneStatus !== undefined) {
+            const existing = prestazioniAggiuntive.find(p => p.id === prestazioneId);
+            const targetStato = updates.statoAppPrestazione
+                ?? (updates.esecuzioneStatus === 'NON_ESEGUITA'
+                    ? 'ANNULLATA'
+                    : updates.esecuzioneStatus === 'IN_ATTESA_REFERTO'
+                        ? 'IN_ATTESA_REFERTO'
+                        : updates.esecuzioneStatus === 'ESEGUITA'
+                            ? 'ESEGUITA'
+                            : undefined);
+            const appPrestazioneActionId = existing?.appPrestazioneId || existing?.id;
+            if (appPrestazioneActionId && targetStato) {
+                appuntamentoPrestazioniApi.updateStato(appPrestazioneActionId, targetStato, {
+                    applyNormalPreset: targetStato === 'ESEGUITA',
+                    visitaParentId: visitaId ?? undefined
+                })
+                    .then(() => {
+                        queryClient.invalidateQueries({ queryKey: ['appuntamento', appuntamento?.id] });
+                        queryClient.invalidateQueries({ queryKey: ['prestazioni-da-refertare-list'] });
+                        queryClient.invalidateQueries({ queryKey: ['prestazioni-da-refertare-count'] });
+                        queryClient.invalidateQueries({ queryKey: ['visite'] });
+                        queryClient.invalidateQueries({ queryKey: ['visite-count'] });
+                    })
+                    .catch(() => {
+                        setPrestazioniAggiuntive(prev => prev.map(p => p.id === prestazioneId ? existing : p));
+                        showToast({ type: 'error', message: 'Errore aggiornamento stato prestazione' });
+                    });
+            }
+        }
         setPrestazioniAggiuntive(prev => {
             const updated = prev.map(p =>
                 p.id === prestazioneId ? { ...p, ...updates } : p
@@ -1903,7 +2431,44 @@ export const VisitaPage: React.FC = () => {
             handleFieldChange('_prestazioniAggiuntive', updated);
             return updated;
         });
-    }, [handleFieldChange, prestazioniAggiuntive]);
+    }, [handleFieldChange, prestazioniAggiuntive, queryClient, appuntamento?.id, showToast]);
+
+    const handleOpenVisitaSecondaria = useCallback(async (prestazioneItem: PrestazioneItem) => {
+        if (prestazioneItem.visitaSecondariaId) {
+            setSelectedSecondaryVisitId(prestazioneItem.visitaSecondariaId);
+            return;
+        }
+        try {
+            const appPrestazioneActionId = prestazioneItem.appPrestazioneId || prestazioneItem.id;
+            const result = await appuntamentoPrestazioniApi.ensureVisitaSecondaria(
+                appPrestazioneActionId,
+                visitaId ?? undefined
+            );
+            const secondaryId = result?.visitaSecondariaId || result?.visita?.id;
+            if (!secondaryId) {
+                throw new Error('Visita secondaria non restituita');
+            }
+
+            setPrestazioniAggiuntive(prev => {
+                const updated = prev.map(p =>
+                    p.appPrestazioneId === prestazioneItem.appPrestazioneId || p.id === prestazioneItem.id
+                        ? { ...p, appPrestazioneId: result?.appPrestazioneId || appPrestazioneActionId, visitaSecondariaId: secondaryId }
+                        : p
+                );
+                handleFieldChange('_prestazioniAggiuntive', updated);
+                return updated;
+            });
+
+            queryClient.invalidateQueries({ queryKey: ['appuntamento', appuntamento?.id] });
+            queryClient.invalidateQueries({ queryKey: ['visita', visitaId] });
+            setSelectedSecondaryVisitId(secondaryId);
+        } catch {
+            showToast({
+                type: 'error',
+                message: 'Non riesco ad aprire la scheda accertamento'
+            });
+        }
+    }, [appuntamento?.id, handleFieldChange, queryClient, showToast, visitaId]);
 
     const handleAddCodiceSconto = useCallback(async (codice: string) => {
         // Check if already applied
@@ -1978,6 +2543,78 @@ export const VisitaPage: React.FC = () => {
             return newSet;
         });
     }, []);
+
+    const embeddedSections = useMemo(() => {
+        if (!isEmbeddedVisit) return sections;
+        const fullWidthTypes = new Set(['TEXTAREA', 'RICHTEXT', 'RICH_TEXT', 'DOCUMENT_UPLOAD', 'STRUMENTARIO_IMPORT', 'CHART', 'MULTI_CHOICE']);
+        return sections.map(section => {
+            let row = 0;
+            let col = 0;
+            return {
+                ...section,
+                fields: section.fields.map(field => {
+                    const width = fullWidthTypes.has(String(field.type)) ? 12 : 6;
+                    if (width === 12 && col !== 0) {
+                        row += 1;
+                        col = 0;
+                    }
+                    const position = { ...(field.position || {}), row, col };
+                    const size = { ...(field.size || {}), width, height: field.size?.height || 1 };
+                    if (width === 12) {
+                        row += 1;
+                        col = 0;
+                    } else {
+                        col = col === 0 ? 6 : 0;
+                        if (col === 0) row += 1;
+                    }
+                    return { ...field, position, size };
+                })
+            };
+        });
+    }, [isEmbeddedVisit, sections]);
+
+    const embeddedUsesTabs = isEmbeddedVisit
+        && template?.sidebarConfig?.sectionLayout === 'tabs'
+        && embeddedSections.length > 1;
+
+    useEffect(() => {
+        if (!isEmbeddedVisit || embeddedSections.length === 0) return;
+        const currentStillVisible = embeddedActiveSection
+            && embeddedSections.some(section => section.section === embeddedActiveSection);
+        if (!currentStillVisible) {
+            const defaultTab = template?.sidebarConfig?.defaultTab;
+            const defaultSection = embeddedSections.find(section => section.section === defaultTab);
+            setEmbeddedActiveSection(defaultSection?.section || embeddedSections[0].section);
+        }
+    }, [embeddedActiveSection, embeddedSections, isEmbeddedVisit, template?.sidebarConfig?.defaultTab]);
+
+    const embeddedVisibleSections = useMemo(() => {
+        if (!embeddedUsesTabs) return embeddedSections;
+        return embeddedSections.filter(section => section.section === embeddedActiveSection);
+    }, [embeddedActiveSection, embeddedSections, embeddedUsesTabs]);
+
+    const embeddedNormalPresetEntries = useMemo(() => {
+        const entries: Array<readonly [string, unknown]> = [];
+        embeddedSections.forEach(section => {
+            section.fields.forEach(field => {
+                const metadata = field.metadata as { normalPreset?: unknown } | undefined;
+                if (metadata?.normalPreset !== undefined) {
+                    entries.push([field.name, metadata.normalPreset] as const);
+                }
+            });
+        });
+        return entries;
+    }, [embeddedSections]);
+
+    const handleApplyEmbeddedNormality = useCallback(() => {
+        embeddedNormalPresetEntries.forEach(([fieldName, normalValue]) => {
+            handleFieldChange(fieldName, normalValue);
+        });
+        showToast({
+            type: 'success',
+            message: 'Valori di normalità applicati'
+        });
+    }, [embeddedNormalPresetEntries, handleFieldChange, showToast]);
 
     // ============================================
     // CREATE NEW VISIT
@@ -2145,6 +2782,51 @@ export const VisitaPage: React.FC = () => {
         }
     }, [visitaId, showToast]);
 
+    // Handler: apri PDF Giudizio di Idoneità (per lavoratore)
+    const handleOpenGiudizioPdf = useCallback(async () => {
+        if (!visitaId || !paziente?.id) {
+            showToast({ message: 'Dati visita non disponibili', type: 'error' });
+            return;
+        }
+        try {
+            const giudiziResult = await giudiziIdoneitaApi.getAll({ personId: paziente.id, limit: 100 } as Parameters<typeof giudiziIdoneitaApi.getAll>[0]);
+            const giudizi = (giudiziResult as any)?.data ?? giudiziResult ?? [];
+            const giudizio = Array.isArray(giudizi)
+                ? giudizi.find((g: GiudizioIdoneita) => g.visitaId === visitaId)
+                : null;
+            if (!giudizio?.id) {
+                showToast({ message: 'Nessun giudizio di idoneità trovato per questa visita', type: 'warning' });
+                return;
+            }
+            // P73: Fetch PDF con auth token via blob (window.open non invia Authorization header)
+            const pdfUrl = giudiziIdoneitaApi.getPdfUrl(giudizio.id, 'lavoratore');
+            const token = getToken();
+            if (!token) {
+                showToast({ message: 'Sessione scaduta, effettua nuovamente il login', type: 'error' });
+                return;
+            }
+            const response = await fetch(pdfUrl, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'X-Frontend-Id': import.meta.env.VITE_BRAND_ID || 'element-medica',
+                    ...(localStorage.getItem('tenantMode.operateTenantId')
+                        ? { 'X-Operate-Tenant-Id': localStorage.getItem('tenantMode.operateTenantId')! }
+                        : {}),
+                },
+            });
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            const blob = await response.blob();
+            const blobUrl = window.URL.createObjectURL(blob);
+            window.open(blobUrl, '_blank');
+            setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60000);
+        } catch {
+            showToast({ message: 'Errore nel recupero del PDF giudizio', type: 'error' });
+        }
+    }, [visitaId, paziente?.id, showToast]);
+
     // ============================================
     // LOADING STATE
     // ============================================
@@ -2170,7 +2852,7 @@ export const VisitaPage: React.FC = () => {
                     <h2 className="text-xl font-bold text-gray-900 mb-2">Errore</h2>
                     <p className="text-gray-600 mb-6">Si è verificato un errore nel caricamento della visita. Riprova o contatta il supporto.</p>
                     <button
-                        onClick={() => navigate(-1)}
+                        onClick={goBack}
                         className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
                     >
                         Torna indietro
@@ -2193,7 +2875,7 @@ export const VisitaPage: React.FC = () => {
                         Non è stato possibile recuperare i dati del paziente.
                     </p>
                     <button
-                        onClick={() => navigate(-1)}
+                            onClick={goBack}
                         className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
                     >
                         Torna indietro
@@ -2208,6 +2890,122 @@ export const VisitaPage: React.FC = () => {
     // - 'sections': sidebar with sections + ALL sections rendered continuously with headers
     // - 'continuous': ALL sections rendered continuously WITHOUT headers
     const sectionLayout = template?.sidebarConfig?.sectionLayout || 'tabs';
+
+    if (isEmbeddedVisit) {
+        const prestazioneNome = prestazione?.nome || visita?.prestazione?.nome || 'Accertamento';
+        const isCompletedSecondary = visita?.stato === 'COMPLETATA';
+        const isEditingSecondary = embeddedEditSession || (!isReadonly && !isCompletedSecondary);
+        return (
+            <div className="min-h-full bg-slate-50">
+                <div className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-3 py-2 shadow-sm backdrop-blur">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-slate-900">{prestazioneNome}</p>
+                            <p className="text-xs text-slate-500">
+                                Scheda compatta. Usa "Compila normalità" per inserire rapidamente i valori nella norma.
+                            </p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                            {isEditingSecondary && embeddedNormalPresetEntries.length > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={handleApplyEmbeddedNormality}
+                                    disabled={!!completionPhase}
+                                    className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                                >
+                                    Compila Normalità
+                                </button>
+                            )}
+                            {!isEditingSecondary ? (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setEmbeddedEditSession(true);
+                                        void handleNuovaVersioneClick();
+                                    }}
+                                    className="rounded-lg border border-teal-200 bg-white px-3 py-1.5 text-xs font-semibold text-teal-700 hover:bg-teal-50"
+                                >
+                                    Modifica
+                                </button>
+                            ) : (
+                                <>
+                                    <button
+	                                        type="button"
+	                                        onClick={handleEmbeddedCancel}
+	                                        disabled={!!completionPhase}
+	                                        className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+	                                    >
+                                        Annulla
+                                    </button>
+                                    <button
+	                                        type="button"
+	                                        onClick={() => void handleCompleteWithFirmaCheck()}
+	                                        disabled={!!completionPhase}
+	                                        className="rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-teal-700 disabled:opacity-50"
+	                                    >
+                                        Salva e completa
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                </div>
+                <main className="mx-auto max-w-none space-y-2 p-2">
+                    {isLoadingTemplate ? (
+                        <div className="rounded-xl border border-slate-200 bg-white p-8 text-center">
+                            <Loader2 className="mx-auto mb-3 h-7 w-7 animate-spin text-teal-600" />
+                            <p className="text-sm text-slate-500">Caricamento template...</p>
+                        </div>
+                    ) : embeddedSections.length === 0 ? (
+                        <div className="rounded-xl border border-amber-200 bg-white p-8 text-center">
+                            <AlertCircle className="mx-auto mb-3 h-8 w-8 text-amber-500" />
+                            <p className="text-sm font-semibold text-slate-900">Template non configurato</p>
+                            <p className="mt-1 text-xs text-slate-500">Non ci sono campi disponibili per questa prestazione.</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-2">
+                            {embeddedUsesTabs && (
+                                <div className="inline-flex max-w-full flex-wrap gap-1 rounded-2xl border border-teal-100 bg-white/90 p-1.5 shadow-sm shadow-teal-900/5 ring-1 ring-slate-100">
+                                    {embeddedSections.map(section => (
+                                        <button
+                                            key={section.section}
+                                            type="button"
+                                            onClick={() => setEmbeddedActiveSection(section.section)}
+                                            className={`rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-all ${embeddedActiveSection === section.section
+                                                ? 'bg-teal-600 text-white shadow-sm shadow-teal-600/20'
+                                                : 'text-slate-600 hover:bg-teal-50 hover:text-teal-700'
+                                                }`}
+                                        >
+                                            {section.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                            {embeddedVisibleSections.map(section => (
+                                <div key={section.section} className="rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
+                                    <FormSection
+                                        section={section}
+                                        values={values}
+                                        errors={validation.errors}
+                                        onChange={handleFieldChange}
+                                        isExpanded={true}
+                                        onToggleExpand={() => { }}
+                                        layout="continuous"
+                                        compact
+                                        showNormalPresetButton={false}
+                                        disabled={!isEditingSecondary}
+                                        pazienteId={paziente?.id}
+                                        onOpenFullChart={handleOpenFullChart}
+                                        visitaId={visitaId ?? undefined}
+                                    />
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </main>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -2224,6 +3022,55 @@ export const VisitaPage: React.FC = () => {
                 isLoading={isExitActionLoading}
                 isNuovaVersione={visita?.revisions?.some((r: { changeType?: string }) => r.changeType === 'NEW_VERSION')}
             />
+
+            {isNonEseguiteWarningOpen && (
+                <div className="fixed inset-0 z-[1500] flex items-center justify-center bg-slate-900/50 p-4">
+                    <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
+                        <div className="flex items-start gap-3 border-b border-red-100 bg-red-50 px-5 py-4">
+                            <div className="mt-0.5 rounded-full bg-red-100 p-2 text-red-600">
+                                <AlertCircle className="h-5 w-5" />
+                            </div>
+                            <div className="min-w-0">
+                                <h3 className="text-base font-semibold text-slate-900">Accertamenti non eseguiti</h3>
+                                <p className="mt-1 text-sm text-slate-600">
+                                    Ci sono prestazioni segnate come non eseguite o ancora da completare. Completando la visita, i relativi movimenti contabili verranno trattati come non eseguibili.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="space-y-2 px-5 py-4">
+                            {prestazioniNonEseguite.slice(0, 6).map(p => (
+                                <div key={p.appPrestazioneId || p.id} className="flex items-center justify-between rounded-lg border border-red-100 bg-red-50/60 px-3 py-2 text-sm">
+                                    <span className="font-medium text-slate-800">{p.nome}</span>
+                                    <span className="text-xs font-semibold text-red-600">Da verificare</span>
+                                </div>
+                            ))}
+                            {prestazioniNonEseguite.length > 6 && (
+                                <p className="text-xs text-slate-500">+{prestazioniNonEseguite.length - 6} altre prestazioni</p>
+                            )}
+                        </div>
+                        <div className="flex flex-col-reverse gap-2 border-t border-slate-100 px-5 py-4 sm:flex-row sm:justify-end">
+                            <button
+                                type="button"
+                                onClick={() => setIsNonEseguiteWarningOpen(false)}
+                                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                            >
+                                Rivedi prestazioni
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    bypassNonEseguiteWarningRef.current = true;
+                                    setIsNonEseguiteWarningOpen(false);
+                                    void handleCompleteWithFirmaCheck();
+                                }}
+                                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+                            >
+                                Completa comunque
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* ========== MODULISTICA MODAL (Session #13, #53 inline compilation) ========== */}
             <ModulisticaModal
@@ -2278,6 +3125,8 @@ export const VisitaPage: React.FC = () => {
                                 prezzo: data.prezzoBase || 0,
                                 aCaricoTipo: 'azienda' as const,
                                 isQuestionario: true,
+                                esecuzioneStatus: 'ESEGUITA',
+                                statoQuestionario: 'COMPLETATO',
                                 // P72_23: salva per creare ScadenzaPrestazioneProtocollo dopo la visita
                                 documentoTemplateId: data.documentoTemplateId,
                                 periodicitaMesi: data.periodicitaMesi ?? 0
@@ -2322,6 +3171,88 @@ export const VisitaPage: React.FC = () => {
                         setSelectedVisitaIdForView(null);
                     }}
                 />
+            )}
+
+            {selectedSecondaryVisitId && (
+                <div className="fixed inset-0 z-[1400] flex items-center justify-center bg-slate-900/50 p-4">
+                    <div className="flex h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+                        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+                            <div>
+                                <p className="text-sm font-semibold text-slate-800">Visita secondaria</p>
+                                <p className="text-xs text-slate-500">Compilazione della prestazione collegata senza uscire dalla visita principale</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={handleCloseSecondaryVisitModal}
+                                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                                title="Chiudi"
+                            >
+                                <X className="h-4 w-4" />
+                            </button>
+                        </div>
+                        <iframe
+                            ref={secondaryVisitFrameRef}
+                            src={`/poliambulatorio/visite-embedded/${selectedSecondaryVisitId}?embedded=1`}
+                            className="min-h-0 flex-1 border-0"
+                            title="Visita secondaria"
+                        />
+                    </div>
+                </div>
+            )}
+
+            {selectedEsameStrumentale && (
+                <div className="fixed inset-0 z-[1400] flex items-center justify-center bg-slate-900/50 p-4">
+                    <div className="w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+                        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+                            <div>
+                                <p className="text-sm font-semibold text-slate-800">Dati importati dal dispositivo</p>
+                                <p className="text-xs text-slate-500">
+                                    {selectedEsameStrumentale.tipoEsame || 'Esame strumentale'}
+                                    {selectedEsameStrumentale.dataEsame ? ` · ${new Date(selectedEsameStrumentale.dataEsame).toLocaleDateString('it-IT')}` : ''}
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setSelectedEsameStrumentale(null)}
+                                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                                title="Chiudi"
+                            >
+                                <X className="h-4 w-4" />
+                            </button>
+                        </div>
+                        <div className="max-h-[70vh] overflow-y-auto p-4">
+                            {selectedEsameStrumentale.risultati?.length ? (
+                                <div className="space-y-2">
+                                    {selectedEsameStrumentale.risultati.map((r, idx) => (
+                                        <div key={r.testId || `${r.testName}-${idx}`} className="grid grid-cols-[1fr_auto] gap-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm">
+                                            <span className="font-medium text-slate-700">{r.testName || r.testId}</span>
+                                            <span className="font-semibold text-slate-900">{r.value}{r.unit ? ` ${r.unit}` : ''}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-sm text-slate-500">Nessun valore numerico importato.</p>
+                            )}
+                            {selectedEsameStrumentale.findings?.length ? (
+                                <div className="mt-4 rounded-lg border border-teal-100 bg-teal-50 p-3 text-sm text-teal-800">
+                                    {selectedEsameStrumentale.findings.join(' - ')}
+                                </div>
+                            ) : null}
+                            {typeof selectedEsameStrumentale.metadata?.allegatoVisitaId === 'string' && (
+                                <div className="mt-4 flex justify-end">
+                                    <a
+                                        href={`/api/v1/clinica/documenti/visita/download/${selectedEsameStrumentale.metadata.allegatoVisitaId}`}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="rounded-lg border border-teal-200 bg-white px-3 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-50"
+                                    >
+                                        Apri PDF importato
+                                    </a>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
             )}
 
             {/* ========== REVISION DIFF MODAL (Session #16) ========== */}
@@ -2379,13 +3310,11 @@ export const VisitaPage: React.FC = () => {
                 onComplete={handleCompleteWithFirmaCheck}
                 onNuovaVersione={() => handleNuovaVersioneClick()}
                 onAnnullaModifiche={async () => {
-                    // Dopo annullaModifiche, naviga direttamente alla lista
-                    // (la visita torna COMPLETATA — non serve ExitDialog)
-                    isNavigatingRef.current = true;
                     await handleAnnullaModifiche();
-                    navigate('/poliambulatorio/visite');
+                    await refetch();
                 }}
                 onCreateReferto={handleOpenReferto}
+                onOpenGiudizioPdf={handleOpenGiudizioPdf}
                 // P61: Queue actions
                 onChiamaPaziente={handleChiamaPaziente}
                 onRichiamaPaziente={handleRichiamaPaziente}
@@ -2395,11 +3324,14 @@ export const VisitaPage: React.FC = () => {
                 // ProfiloSalute espandibile nella barra superiore
                 personId={paziente.id}
                 onEditProfiloSalute={() => setProfiloSaluteModalOpen(true)}
+                onEditPatient={() => setPatientEditModalOpen(true)}
                 // P74: invio referto via email nel menu Salva e Completa
                 invioRefertoMail={invioRefertoMail}
                 onInvioRefertoMailChange={(v) => saveInvioRefertoMailMutation.mutate(v)}
                 isMDLVisit={isMDLVisit}
                 saveInvioMailPending={saveInvioRefertoMailMutation.isPending}
+                occupationalSummary={occupationalSummary}
+                onEditOccupationalSummary={() => setOccupationalEditModalOpen(true)}
             />
 
             {/* ========== MAIN CONTENT ========== */}
@@ -2443,6 +3375,9 @@ export const VisitaPage: React.FC = () => {
                                     onViewEsamiMicrobio={handleViewEsamiMicrobio}
                                     onViewModulistica={handleViewModulistica}
                                     onViewQuestionari={handleViewQuestionari}
+                                    showQuestionari={!(visita as any)?.isVisitaSecundaria}
+                                    visitaPrincipaleId={(visita as any)?.isVisitaSecundaria ? (visita as any)?.visitaParentId : undefined}
+                                    onViewVisitaPrincipale={() => (visita as any)?.visitaParentId && window.open('/poliambulatorio/visite/' + (visita as any).visitaParentId, '_blank', 'noopener,noreferrer')}
                                     questionariCount={questionariCount}
                                     questionariCompilati={questionariRiepilogo}
                                     onApplicaFirme={handleApplicaFirme}
@@ -2530,7 +3465,7 @@ export const VisitaPage: React.FC = () => {
                                         onAddCodiceSconto={handleAddCodiceSconto}
                                         onRemoveCodiceSconto={handleRemoveCodiceSconto}
                                         isFatturata={!!visita?.fatture?.length}
-                                        disabled={isReadonly}
+                                        disabled={isReadonly || !canChangeRefertante}
                                         isPrimaVisita={visita?.isPrimaVisita}
                                         onTogglePrimaVisita={handleTogglePrimaVisita}
                                         canViewPrices={canViewPrices}
@@ -2541,10 +3476,13 @@ export const VisitaPage: React.FC = () => {
                                         tipoVisitaMDL={visita?.tipoVisitaMDL || appuntamento?.tipoVisitaMDL || undefined}
                                         onChangeTipoVisita={handleChangeTipoVisita}
                                         vociTariffarioPrincipale={vociTariffarioPrincipale}
+                                        esamiStrumentali={esamiStrumentali}
+                                        onOpenEsameStrumentale={(esame) => setSelectedEsameStrumentale(esame as EsameStrumentale)}
+                                        onOpenVisitaSecondaria={handleOpenVisitaSecondaria}
                                         className="mt-4"
                                     />
                                     {/* P73: Visite collegate */}
-                                    {((visita as any)?.isVisitaSecundaria || prestazioniAggiuntive.some(p => p.visitaSecondariaId)) && (
+                                    {(!(visita as any)?.isVisitaSecundaria && prestazioniAggiuntive.some(p => p.visitaSecondariaId)) && (
                                         <button
                                             type="button"
                                             onClick={() => setIsVisiteCollegateOpen(true)}
@@ -2578,20 +3516,23 @@ export const VisitaPage: React.FC = () => {
                                         medicoRefertanteId={visita?.medicoRefertanteId}
                                         medicoRefertante={visita?.medicoRefertante}
                                         medicoVisita={visita?.medico}
-                                        disabled={isReadonly}
+                                        disabled={isReadonly || !canChangeRefertante}
                                         className="mt-4"
                                     />
 
                                     {/* MDL Info Card — mansioni, protocollo, rischi */}
                                     {isMDLVisit && paziente?.id && workerRisksData && (
-                                        <MDLInfoCard
-                                            mansioni={workerRisksData.mansioni ?? []}
-                                            protocolli={protocolliMansione ?? null}
-                                            rischi={workerRisksData.rischi ?? []}
-                                            pazienteId={paziente.id}
-                                            isReadonly={isReadonly}
-                                            className="mt-4"
-                                        />
+                                        <>
+                                            <MDLInfoCard
+                                                mansioni={workerRisksData.mansioni ?? []}
+                                                protocolli={protocolliMansione ?? null}
+                                                rischi={workerRisksData.rischi ?? []}
+                                                hasPersonalizedRisks={workerRisksData.hasPersonalizedRisks}
+                                                pazienteId={paziente.id}
+                                                isReadonly={isReadonly}
+                                                className="mt-4"
+                                            />
+                                        </>
                                     )}
 
                                     {/* Prossimo Controllo / Scadenza */}
@@ -2715,6 +3656,9 @@ export const VisitaPage: React.FC = () => {
                                     onViewEsamiMicrobio={handleViewEsamiMicrobio}
                                     onViewModulistica={handleViewModulistica}
                                     onViewQuestionari={handleViewQuestionari}
+                                    showQuestionari={!(visita as any)?.isVisitaSecundaria}
+                                    visitaPrincipaleId={(visita as any)?.isVisitaSecundaria ? (visita as any)?.visitaParentId : undefined}
+                                    onViewVisitaPrincipale={() => (visita as any)?.visitaParentId && window.open('/poliambulatorio/visite/' + (visita as any).visitaParentId, '_blank', 'noopener,noreferrer')}
                                     questionariCount={questionariCount}
                                     questionariCompilati={questionariRiepilogo}
                                     onApplicaFirme={handleApplicaFirme}
@@ -2801,7 +3745,7 @@ export const VisitaPage: React.FC = () => {
                                         onAddCodiceSconto={handleAddCodiceSconto}
                                         onRemoveCodiceSconto={handleRemoveCodiceSconto}
                                         isFatturata={!!visita?.fatture?.length}
-                                        disabled={isReadonly}
+                                        disabled={isReadonly || !canChangeRefertante}
                                         isPrimaVisita={visita?.isPrimaVisita}
                                         onTogglePrimaVisita={handleTogglePrimaVisita}
                                         canViewPrices={canViewPrices}
@@ -2812,10 +3756,13 @@ export const VisitaPage: React.FC = () => {
                                         tipoVisitaMDL={visita?.tipoVisitaMDL || appuntamento?.tipoVisitaMDL || undefined}
                                         onChangeTipoVisita={handleChangeTipoVisita}
                                         vociTariffarioPrincipale={vociTariffarioPrincipale}
+                                        esamiStrumentali={esamiStrumentali}
+                                        onOpenEsameStrumentale={(esame) => setSelectedEsameStrumentale(esame as EsameStrumentale)}
+                                        onOpenVisitaSecondaria={handleOpenVisitaSecondaria}
                                         className="mt-4"
                                     />
                                     {/* P73: Visite collegate */}
-                                    {((visita as any)?.isVisitaSecundaria || prestazioniAggiuntive.some(p => p.visitaSecondariaId)) && (
+                                    {(!(visita as any)?.isVisitaSecundaria && prestazioniAggiuntive.some(p => p.visitaSecondariaId)) && (
                                         <button
                                             type="button"
                                             onClick={() => setIsVisiteCollegateOpen(true)}
@@ -2849,20 +3796,23 @@ export const VisitaPage: React.FC = () => {
                                         medicoRefertanteId={visita?.medicoRefertanteId}
                                         medicoRefertante={visita?.medicoRefertante}
                                         medicoVisita={visita?.medico}
-                                        disabled={isReadonly}
+                                        disabled={isReadonly || !canChangeRefertante}
                                         className="mt-4"
                                     />
 
                                     {/* MDL Info Card — mansioni, protocollo, rischi */}
                                     {isMDLVisit && paziente?.id && workerRisksData && (
-                                        <MDLInfoCard
-                                            mansioni={workerRisksData.mansioni ?? []}
-                                            protocolli={protocolliMansione ?? null}
-                                            rischi={workerRisksData.rischi ?? []}
-                                            pazienteId={paziente.id}
-                                            isReadonly={isReadonly}
-                                            className="mt-4"
-                                        />
+                                        <>
+                                            <MDLInfoCard
+                                                mansioni={workerRisksData.mansioni ?? []}
+                                                protocolli={protocolliMansione ?? null}
+                                                rischi={workerRisksData.rischi ?? []}
+                                                hasPersonalizedRisks={workerRisksData.hasPersonalizedRisks}
+                                                pazienteId={paziente.id}
+                                                isReadonly={isReadonly}
+                                                className="mt-4"
+                                            />
+                                        </>
                                     )}
 
                                     {/* Prossimo Controllo / Scadenza */}
@@ -2992,6 +3942,9 @@ export const VisitaPage: React.FC = () => {
                                         onViewEsamiMicrobio={handleViewEsamiMicrobio}
                                         onViewModulistica={handleViewModulistica}
                                         onViewQuestionari={handleViewQuestionari}
+                                        showQuestionari={!(visita as any)?.isVisitaSecundaria}
+                                        visitaPrincipaleId={(visita as any)?.isVisitaSecundaria ? (visita as any)?.visitaParentId : undefined}
+                                        onViewVisitaPrincipale={() => (visita as any)?.visitaParentId && window.open('/poliambulatorio/visite/' + (visita as any).visitaParentId, '_blank', 'noopener,noreferrer')}
                                         questionariCount={questionariCount}
                                         questionariCompilati={questionariRiepilogo}
                                         onApplicaFirme={handleApplicaFirme}
@@ -3047,7 +4000,7 @@ export const VisitaPage: React.FC = () => {
                                         onAddCodiceSconto={handleAddCodiceSconto}
                                         onRemoveCodiceSconto={handleRemoveCodiceSconto}
                                         isFatturata={!!visita?.fatture?.length}
-                                        disabled={isReadonly}
+                                        disabled={isReadonly || !canChangeRefertante}
                                         isPrimaVisita={visita?.isPrimaVisita}
                                         onTogglePrimaVisita={handleTogglePrimaVisita}
                                         canViewPrices={canViewPrices}
@@ -3058,9 +4011,12 @@ export const VisitaPage: React.FC = () => {
                                         tipoVisitaMDL={visita?.tipoVisitaMDL || appuntamento?.tipoVisitaMDL || undefined}
                                         onChangeTipoVisita={handleChangeTipoVisita}
                                         vociTariffarioPrincipale={vociTariffarioPrincipale}
+                                        esamiStrumentali={esamiStrumentali}
+                                        onOpenEsameStrumentale={(esame) => setSelectedEsameStrumentale(esame as EsameStrumentale)}
+                                        onOpenVisitaSecondaria={handleOpenVisitaSecondaria}
                                     />
                                     {/* P73: Visite collegate */}
-                                    {((visita as any)?.isVisitaSecundaria || prestazioniAggiuntive.some(p => p.visitaSecondariaId)) && (
+                                    {(!(visita as any)?.isVisitaSecundaria && prestazioniAggiuntive.some(p => p.visitaSecondariaId)) && (
                                         <button
                                             type="button"
                                             onClick={() => setIsVisiteCollegateOpen(true)}
@@ -3093,18 +4049,21 @@ export const VisitaPage: React.FC = () => {
                                         medicoRefertanteId={visita?.medicoRefertanteId}
                                         medicoRefertante={visita?.medicoRefertante}
                                         medicoVisita={visita?.medico}
-                                        disabled={isReadonly}
+                                        disabled={isReadonly || !canChangeRefertante}
                                     />
 
                                     {/* MDL Info Card — mansioni, protocollo, rischi */}
                                     {isMDLVisit && paziente?.id && workerRisksData && (
-                                        <MDLInfoCard
-                                            mansioni={workerRisksData.mansioni ?? []}
-                                            protocolli={protocolliMansione ?? null}
-                                            rischi={workerRisksData.rischi ?? []}
-                                            pazienteId={paziente.id}
-                                            isReadonly={isReadonly}
-                                        />
+                                        <>
+                                            <MDLInfoCard
+                                                mansioni={workerRisksData.mansioni ?? []}
+                                                protocolli={protocolliMansione ?? null}
+                                                rischi={workerRisksData.rischi ?? []}
+                                                hasPersonalizedRisks={workerRisksData.hasPersonalizedRisks}
+                                                pazienteId={paziente.id}
+                                                isReadonly={isReadonly}
+                                            />
+                                        </>
                                     )}
 
                                     {/* Prossimo Controllo / Scadenza */}
@@ -3222,7 +4181,306 @@ export const VisitaPage: React.FC = () => {
                         </div>
                         <div className="p-6">
                             {/* isReadonly={false}: il profilo di salute è dati anagrafici del paziente, sempre modificabili */}
-                            <ProfiloSaluteCard personId={paziente.id} isReadonly={false} tabLayout autoEdit />
+                            <ProfiloSaluteCard personId={paziente.id} isReadonly={false} tabLayout autoEdit hideHeader />
+                        </div>
+                    </div>
+                </div>
+            )}
+            {occupationalEditModalOpen && paziente?.id && (
+                <div className="fixed inset-0 z-[210] flex items-start justify-center overflow-y-auto bg-black/60 p-4">
+                    <div className="my-4 w-full max-w-4xl rounded-xl bg-white shadow-2xl">
+                        <div className="sticky top-0 z-10 flex items-center justify-between rounded-t-xl border-b border-gray-200 bg-white px-6 py-4">
+                            <div>
+                                <h2 className="text-lg font-semibold text-gray-900">Modifica stato occupazionale</h2>
+                                <p className="text-xs text-gray-500">Azienda, mansioni e rischi collegati al lavoratore in visita</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setOccupationalEditModalOpen(false)}
+                                className="rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                        <div className="grid grid-cols-1 gap-4 p-6 sm:grid-cols-2">
+                            <label className="text-sm font-medium text-gray-700">
+                                Qualifica / Titolo
+                                <input
+                                    value={occupationalEditForm.title}
+                                    onChange={event => setOccupationalEditForm(prev => ({ ...prev, title: event.target.value }))}
+                                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:ring-2 focus:ring-teal-500"
+                                />
+                            </label>
+                            <label className="text-sm font-medium text-gray-700">
+                                Protocollo sanitario
+                                <ElegantSelect
+                                    value={occupationalEditForm.protocolloSanitarioId}
+                                    onChange={value => setOccupationalEditForm(prev => ({ ...prev, protocolloSanitarioId: value }))}
+                                    className="mt-1"
+                                    placeholder="Non assegnato"
+                                    options={[
+                                        { value: '', label: 'Non assegnato' },
+                                        ...(((allProtocolliData as any)?.data ?? allProtocolliData ?? []) as any[]).map(protocollo => ({
+                                            value: protocollo.id,
+                                            label: protocollo.denominazione || protocollo.codice || 'Protocollo senza nome',
+                                        })),
+                                    ]}
+                                />
+                            </label>
+                            <label className="text-sm font-medium text-gray-700">
+                                Data assunzione
+                                <DatePickerElegante
+                                    value={occupationalEditForm.hiredDate || null}
+                                    onChange={date => setOccupationalEditForm(prev => ({ ...prev, hiredDate: date ? date.toISOString().split('T')[0] : '' }))}
+                                    theme="teal"
+                                    size="sm"
+                                    clearable
+                                />
+                            </label>
+                            <label className="text-sm font-medium text-gray-700">
+                                Fine rapporto
+                                <DatePickerElegante
+                                    value={occupationalEditForm.endDate || null}
+                                    onChange={date => setOccupationalEditForm(prev => ({ ...prev, endDate: date ? date.toISOString().split('T')[0] : '' }))}
+                                    theme="teal"
+                                    size="sm"
+                                    clearable
+                                />
+                            </label>
+                            <label className="text-sm font-medium text-gray-700">
+                                Tipo contratto
+                                <ElegantSelect
+                                    value={occupationalEditForm.tipoContratto}
+                                    onChange={value => setOccupationalEditForm(prev => ({ ...prev, tipoContratto: value }))}
+                                    className="mt-1"
+                                    placeholder="Non indicato"
+                                    options={[
+                                        { value: '', label: 'Non indicato' },
+                                        { value: 'DIPENDENTE_INDETERMINATO', label: 'Dipendente indeterminato' },
+                                        { value: 'DIPENDENTE_DETERMINATO', label: 'Dipendente determinato' },
+                                        { value: 'LIBERA_PROFESSIONE', label: 'Libera professione' },
+                                        { value: 'COCOCO', label: 'Co.co.co.' },
+                                        { value: 'PRESTAZIONE_OCCASIONALE', label: 'Prestazione occasionale' },
+                                        { value: 'STAGE_TIROCINIO', label: 'Stage / tirocinio' },
+                                        { value: 'APPRENDISTATO', label: 'Apprendistato' },
+                                        { value: 'SOMMINISTRAZIONE', label: 'Somministrazione' },
+                                    ]}
+                                />
+                            </label>
+                            <label className="text-sm font-medium text-gray-700">
+                                Tipo collaboratore
+                                <ElegantSelect
+                                    value={occupationalEditForm.tipoCollaboratore}
+                                    onChange={value => setOccupationalEditForm(prev => ({ ...prev, tipoCollaboratore: value }))}
+                                    className="mt-1"
+                                    placeholder="Non indicato"
+                                    options={[
+                                        { value: '', label: 'Non indicato' },
+                                        { value: 'AMMINISTRATIVO', label: 'Amministrativo' },
+                                        { value: 'MEDICO', label: 'Medico' },
+                                        { value: 'INFERMIERE', label: 'Infermiere' },
+                                        { value: 'FORMATORE', label: 'Formatore' },
+                                        { value: 'RSPP', label: 'RSPP' },
+                                        { value: 'TECNICO', label: 'Tecnico' },
+                                        { value: 'RECEPTIONIST', label: 'Receptionist' },
+                                        { value: 'DIREZIONE', label: 'Direzione' },
+                                        { value: 'ALTRO', label: 'Altro' },
+                                    ]}
+                                />
+                            </label>
+                            <div className="sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                                <p className="text-xs font-semibold uppercase text-slate-500">Contesto attuale</p>
+                                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                                    {[
+                                        ['Azienda', occupationalSummary?.azienda],
+                                        ['Sede', occupationalSummary?.sede],
+                                        ['Reparto', occupationalSummary?.reparto],
+                                        ['Mansioni', occupationalSummary?.mansioni?.join(', ')],
+                                        ['Rischi', occupationalSummary?.rischi?.join(', ')],
+                                    ].filter(([, value]) => value).map(([label, value]) => (
+                                        <div key={label} className="rounded-lg bg-white px-3 py-2">
+                                            <p className="text-[10px] font-semibold uppercase text-slate-400">{label}</p>
+                                            <p className="text-sm text-slate-700">{value}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                                <p className="mt-3 text-xs text-slate-500">
+                                    Mansioni e rischi restano gestiti dalla card Medicina del Lavoro della visita, così il dettaglio personalizzato del dipendente rimane tracciato correttamente.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-3 border-t border-gray-100 px-6 py-4">
+                            <button type="button" onClick={() => setOccupationalEditModalOpen(false)} className="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100">
+                                Annulla
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => updateOccupationalMutation.mutate()}
+                                disabled={updateOccupationalMutation.isPending}
+                                className="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-60"
+                            >
+                                {updateOccupationalMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                                Salva stato occupazionale
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {patientEditModalOpen && paziente?.id && (
+                <div className="fixed inset-0 z-[210] flex items-start justify-center overflow-y-auto bg-black/60 p-4">
+                    <div className="my-4 w-full max-w-4xl rounded-xl bg-white shadow-2xl">
+                        <div className="sticky top-0 z-10 flex items-center justify-between rounded-t-xl border-b border-gray-200 bg-white px-6 py-4">
+                            <h2 className="text-lg font-semibold text-gray-900">Modifica anagrafica paziente</h2>
+                            <button
+                                type="button"
+                                onClick={() => setPatientEditModalOpen(false)}
+                                className="rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                        <div className="grid grid-cols-1 gap-4 p-6 sm:grid-cols-2">
+                            <label className="text-sm font-medium text-gray-700">
+                                Nome
+                                <input
+                                    value={patientEditForm.firstName}
+                                    onChange={event => setPatientEditForm(prev => ({ ...prev, firstName: event.target.value }))}
+                                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:ring-2 focus:ring-teal-500"
+                                />
+                            </label>
+                            <label className="text-sm font-medium text-gray-700">
+                                Cognome
+                                <input
+                                    value={patientEditForm.lastName}
+                                    onChange={event => setPatientEditForm(prev => ({ ...prev, lastName: event.target.value }))}
+                                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:ring-2 focus:ring-teal-500"
+                                />
+                            </label>
+                            <label className="text-sm font-medium text-gray-700">
+                                Codice fiscale
+                                <input
+                                    value={patientEditForm.taxCode}
+                                    onChange={event => setPatientEditForm(prev => ({ ...prev, taxCode: event.target.value.toUpperCase() }))}
+                                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm uppercase focus:border-teal-500 focus:ring-2 focus:ring-teal-500"
+                                />
+                            </label>
+                            <label className="text-sm font-medium text-gray-700">
+                                Data nascita
+                                <DatePickerElegante
+                                    value={patientEditForm.birthDate || null}
+                                    onChange={date => setPatientEditForm(prev => ({ ...prev, birthDate: date ? date.toISOString().split('T')[0] : '' }))}
+                                    placeholder="Seleziona data"
+                                    theme="teal"
+                                    size="sm"
+                                    clearable
+                                />
+                            </label>
+                            <label className="text-sm font-medium text-gray-700">
+                                Luogo nascita
+                                <input
+                                    value={patientEditForm.birthPlace}
+                                    onChange={event => setPatientEditForm(prev => ({ ...prev, birthPlace: event.target.value }))}
+                                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:ring-2 focus:ring-teal-500"
+                                />
+                            </label>
+                            <label className="text-sm font-medium text-gray-700">
+                                Provincia nascita
+                                <input
+                                    value={patientEditForm.birthProvince}
+                                    onChange={event => setPatientEditForm(prev => ({ ...prev, birthProvince: event.target.value.toUpperCase().slice(0, 2) }))}
+                                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm uppercase focus:border-teal-500 focus:ring-2 focus:ring-teal-500"
+                                />
+                            </label>
+                            <label className="text-sm font-medium text-gray-700">
+                                Sesso
+                                <ElegantSelect
+                                    value={patientEditForm.gender}
+                                    onChange={value => setPatientEditForm(prev => ({ ...prev, gender: value }))}
+                                    className="mt-1"
+                                    placeholder="Non indicato"
+                                    options={[
+                                        { value: '', label: 'Non indicato' },
+                                        { value: 'MALE', label: 'Maschio' },
+                                        { value: 'FEMALE', label: 'Femmina' },
+                                    ]}
+                                />
+                            </label>
+                            <label className="text-sm font-medium text-gray-700">
+                                Etnia
+                                <ElegantSelect
+                                    value={patientEditForm.etnia}
+                                    onChange={value => setPatientEditForm(prev => ({ ...prev, etnia: value }))}
+                                    className="mt-1"
+                                    options={ETHNICITY_OPTIONS.map(option => ({ value: option.value, label: option.label }))}
+                                />
+                            </label>
+                            <label className="text-sm font-medium text-gray-700">
+                                Telefono
+                                <input
+                                    value={patientEditForm.phone}
+                                    onChange={event => setPatientEditForm(prev => ({ ...prev, phone: event.target.value }))}
+                                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:ring-2 focus:ring-teal-500"
+                                />
+                            </label>
+                            <label className="text-sm font-medium text-gray-700">
+                                Email
+                                <input
+                                    type="email"
+                                    value={patientEditForm.email}
+                                    onChange={event => setPatientEditForm(prev => ({ ...prev, email: event.target.value }))}
+                                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:ring-2 focus:ring-teal-500"
+                                />
+                            </label>
+                            <label className="text-sm font-medium text-gray-700 sm:col-span-2">
+                                Indirizzo residenza
+                                <input
+                                    value={patientEditForm.residenceAddress}
+                                    onChange={event => setPatientEditForm(prev => ({ ...prev, residenceAddress: event.target.value }))}
+                                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:ring-2 focus:ring-teal-500"
+                                />
+                            </label>
+                            <label className="text-sm font-medium text-gray-700">
+                                Comune residenza
+                                <input
+                                    value={patientEditForm.residenceCity}
+                                    onChange={event => setPatientEditForm(prev => ({ ...prev, residenceCity: event.target.value }))}
+                                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:ring-2 focus:ring-teal-500"
+                                />
+                            </label>
+                            <label className="text-sm font-medium text-gray-700">
+                                CAP
+                                <input
+                                    value={patientEditForm.postalCode}
+                                    onChange={event => setPatientEditForm(prev => ({ ...prev, postalCode: event.target.value }))}
+                                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:ring-2 focus:ring-teal-500"
+                                />
+                            </label>
+                            <label className="text-sm font-medium text-gray-700">
+                                Provincia residenza
+                                <input
+                                    value={patientEditForm.province}
+                                    onChange={event => setPatientEditForm(prev => ({ ...prev, province: event.target.value.toUpperCase().slice(0, 2) }))}
+                                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm uppercase focus:border-teal-500 focus:ring-2 focus:ring-teal-500"
+                                />
+                            </label>
+                        </div>
+                        <div className="flex justify-end gap-3 border-t border-gray-100 px-6 py-4">
+                            <button
+                                type="button"
+                                onClick={() => setPatientEditModalOpen(false)}
+                                className="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100"
+                            >
+                                Annulla
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => updatePatientMutation.mutate()}
+                                disabled={updatePatientMutation.isPending}
+                                className="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-60"
+                            >
+                                {updatePatientMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                                Salva anagrafica
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -3231,25 +4489,34 @@ export const VisitaPage: React.FC = () => {
             {isGiudizioModalOpen && isMDLVisit && (
                 <GiudizioFormModal
                     isOpen={isGiudizioModalOpen}
-                    mode="create"
+                    mode={existingGiudizioForModal ? 'edit' : 'create'}
+                    giudizio={existingGiudizioForModal}
                     prefillData={{
                         personId: paziente?.id,
                         visitaId: visitaId ?? undefined,
                         medicoCompetenteId: visita?.medicoId ?? undefined,
-                        mansioneIds: primaryMansioneId ? [primaryMansioneId] : [],
+                        mansioneIds: workerRisksData?.mansioni?.map((m: { id: string }) => m.id) ?? [],
                     }}
                     onSuccess={async (giudizio) => {
                         setIsGiudizioModalOpen(false);
+                        setExistingGiudizioForModal(null);
                         if (giudizio?.id) {
                             try {
                                 await giudiziIdoneitaApi.generateDocuments(giudizio.id);
-                                showToast({ type: 'success', message: 'Giudizio di idoneità e documenti Art. 41 c.7 generati' });
+                                showToast({
+                                    type: 'success', message: existingGiudizioForModal
+                                        ? 'Giudizio di idoneità aggiornato e documenti Art. 41 c.7 rigenerati'
+                                        : 'Giudizio di idoneità e documenti Art. 41 c.7 generati'
+                                });
                             } catch {
                                 // Non bloccare il flusso
                             }
                         }
                     }}
-                    onClose={() => setIsGiudizioModalOpen(false)}
+                    onClose={() => {
+                        setIsGiudizioModalOpen(false);
+                        setExistingGiudizioForModal(null);
+                    }}
                 />
             )}
 

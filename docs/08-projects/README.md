@@ -59,6 +59,7 @@ Questa cartella contiene la documentazione di tutti i progetti (P42-P97) e le re
 | [P74](./P74_DOCUMENT_MANAGEMENT.md) | Document Management | ✅ |
 | [P75](./P75_PUBLIC_API.md) | Public API & Embed | 🔄 |
 | [P97](./P97_FATTURAZIONE.md) | Fatturazione Elettronica SDI | ✅ |
+| [P98](./P98_MDL_DESKTOP_OFFLINE.md) | **MDL Desktop App Offline-First** | 📋 Pianificazione |
 
 ### Revisioni (R20-R33)
 

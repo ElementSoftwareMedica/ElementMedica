@@ -11,9 +11,7 @@
 import axios from 'axios';
 import prisma from '../../config/prisma-optimization.js';
 import logger from '../../utils/logger.js';
-import { getMasterAcubeToken } from './AcubeApiService.js';
-
-const ACUBE_BASE_URL = 'https://api.acubeapi.com';
+import { getMasterAcubeToken, ACUBE_BASE_URL } from './AcubeApiService.js';
 
 // ============================================================================
 // SISTEMA TS HTTP CLIENT

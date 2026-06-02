@@ -58,7 +58,7 @@ export function useVisitaSidebar(template: VisitTemplate | null): UseVisitaSideb
         const fieldsBySection: Record<string, VisitField[]> = {};
 
         template.fields.forEach((field: VisitField) => {
-            if (!field.visible) return;
+            if (field.visible === false) return;
 
             const section = field.section || 'altro';
             if (!fieldsBySection[section]) {

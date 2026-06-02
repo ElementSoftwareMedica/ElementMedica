@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 import EmployeeForm from '../../components/employees/EmployeeForm';
 import { useToast } from '../../hooks/useToast';
@@ -10,6 +10,7 @@ const MAX_RETRY_ATTEMPTS = 3;
 
 const EmployeeCreate: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { showToast } = useToast();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,6 +76,18 @@ const EmployeeCreate: React.FC = () => {
     navigate('/employees');
   };
 
+  const queryCompanyId = searchParams.get('companyId') || '';
+  const selectedCompany = queryCompanyId
+    ? companies.find(company =>
+      company.id === queryCompanyId ||
+      company.companyTenantProfileId === queryCompanyId
+    )
+    : null;
+  const initialValues = {
+    companyId: selectedCompany?.companyTenantProfileId || selectedCompany?.id || queryCompanyId,
+    status: 'ACTIVE'
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-full p-8">
@@ -103,6 +116,7 @@ const EmployeeCreate: React.FC = () => {
         onSuccess={handleSuccess}
         onClose={handleClose}
         roleType="EMPLOYEE"
+        initialValues={initialValues}
       />
     </div>
   );

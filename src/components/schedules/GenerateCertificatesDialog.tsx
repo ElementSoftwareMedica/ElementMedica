@@ -147,6 +147,11 @@ export function GenerateCertificatesDialog({
         }
       });
       setExistingCertificates(existingMap);
+      // Auto-select participants without existing certificates
+      const availableIds = allParticipants
+        .filter((p) => !existingMap.has(p.id))
+        .map((p) => p.id);
+      setSelectedPersonIds(new Set(availableIds));
     } catch (err) {
     } finally {
       setLoadingExisting(false);
@@ -191,7 +196,7 @@ export function GenerateCertificatesDialog({
       const params = {
         scheduleId: schedule.id,
         personIds,
-        templateId: selectedTemplateId,
+        templateId: selectedTemplateId || undefined,
         sendEmail,
         validityYears: validityYears ? parseInt(validityYears, 10) : undefined,
       };

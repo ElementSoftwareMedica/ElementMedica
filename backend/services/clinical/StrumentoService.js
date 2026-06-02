@@ -607,8 +607,8 @@ export class StrumentoService {
                         {
                             prossimaManutenzione: { lte: futureDate }
                         },
-                        { stato: 'MANUTENZIONE' },
-                        { stato: 'GUASTO' }
+                        { stato: 'IN_MANUTENZIONE' },
+                        { stato: 'FUORI_SERVIZIO' }
                     ]
                 },
                 include: {
@@ -645,13 +645,13 @@ export class StrumentoService {
      * @returns {string} Urgency level (critical, high, medium, low)
      */
     static calculateMaintenanceUrgency(strumento) {
-        if (strumento.stato === 'GUASTO') return 'critical';
-        if (strumento.stato === 'MANUTENZIONE') return 'high';
+        if (strumento.stato === 'FUORI_SERVIZIO') return 'critical';
+        if (strumento.stato === 'IN_MANUTENZIONE') return 'high';
 
-        if (!strumento.dataProssimaManutenz) return 'low';
+        if (!strumento.prossimaManutenzione) return 'low';
 
         const today = new Date();
-        const nextMaint = new Date(strumento.dataProssimaManutenz);
+        const nextMaint = new Date(strumento.prossimaManutenzione);
         const daysUntilMaint = Math.floor((nextMaint - today) / (1000 * 60 * 60 * 24));
 
         if (daysUntilMaint < 0) return 'critical';

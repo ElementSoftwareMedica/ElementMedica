@@ -88,7 +88,7 @@ const VerifyAttestato: React.FC = () => {
 
                 // Chiamata API pubblica per verifica - usa path relativo che viene gestito da Nginx proxy
                 const response = await fetch(
-                    `/api/public/verify-attestato/${encodeURIComponent(decodedNumber)}`
+                    `/api/v1/public/verify-attestato/${encodeURIComponent(decodedNumber)}`
                 );
 
                 if (!response.ok) {

@@ -28,6 +28,10 @@ class FarmacoService {
             ambulatorioId,
             ubicazione,
             formaFarmaceutica,
+            dataScadenzaDa,
+            dataScadenzaA,
+            dataInizio,
+            dataFine,
             inScadenza, // boolean: mostra solo quelli in scadenza entro 30gg
             sottoScorta, // boolean: mostra solo quelli sotto quantità minima
             search,
@@ -47,11 +51,28 @@ class FarmacoService {
         if (ubicazione) where.ubicazione = { contains: ubicazione, mode: 'insensitive' };
         if (formaFarmaceutica) where.formaFarmaceutica = formaFarmaceutica;
 
+        const fromDate = dataScadenzaDa || dataInizio;
+        const toDate = dataScadenzaA || dataFine;
+        if (fromDate || toDate) {
+            where.dataScadenza = {};
+            if (fromDate) where.dataScadenza.gte = new Date(fromDate);
+            if (toDate) {
+                const endDate = new Date(toDate);
+                endDate.setHours(23, 59, 59, 999);
+                where.dataScadenza.lte = endDate;
+            }
+        }
+
         // In scadenza (entro 30gg)
         if (inScadenza) {
             const tra30gg = new Date();
             tra30gg.setDate(tra30gg.getDate() + 30);
-            where.dataScadenza = { lte: tra30gg };
+            where.dataScadenza = {
+                ...(where.dataScadenza || {}),
+                lte: where.dataScadenza?.lte && where.dataScadenza.lte < tra30gg
+                    ? where.dataScadenza.lte
+                    : tra30gg
+            };
         }
 
         // Sotto scorta
@@ -97,6 +118,7 @@ class FarmacoService {
         }));
 
         return {
+            data: itemsWithFlags,
             items: itemsWithFlags,
             pagination: {
                 page,

@@ -343,31 +343,54 @@ router.get('/usage/stats', async (req, res) => {
  * GET /api/v1/management/api-keys/widget-options
  * Ritorna le opzioni disponibili per i filtri widget:
  * - prestazioni (id + nome + branca)
- * - corsi (id + titolo)
+ * - corsi (id + titolo) — tutti i corsi non eliminati
+ * - schedules (id + titolo corso + data inizio) — edizioni corso pubbliche
  * - medici (id + nome)
  * - branche (lista distinta)
+ * - sedi (id + nome + città) — sedi poliambulatorio
+ * - ambulatori (id + nome + sede) — ambulatori attivi
  */
 router.get('/widget-options', async (req, res) => {
     try {
         const tenantId = getEffectiveTenantId(req);
 
-        const [prestazioni, courses, medici, forms] = await Promise.all([
+        const [prestazioni, courses, schedules, medici, forms, sedi, ambulatori] = await Promise.all([
             // Prestazioni attive
             prisma.prestazione.findMany({
                 where: { tenantId, deletedAt: null, attivo: true },
                 select: { id: true, nome: true, brancheSpecialistiche: true, tipo: true },
                 orderBy: { nome: 'asc' },
             }),
-            // Corsi attivi
+            // Tutti i corsi non eliminati (admin può scegliere quali mostrare)
             prisma.course.findMany({
-                where: { tenantId, deletedAt: null, status: 'PUBLISHED' },
-                select: { id: true, title: true, category: true },
+                where: { tenantId, deletedAt: null },
+                select: { id: true, title: true, category: true, status: true, isPublic: true },
                 orderBy: { title: 'asc' },
             }),
-            // Medici con profilo attivo
+            // Edizioni corso (CourseSchedule) con data futura o recente
+            prisma.courseSchedule.findMany({
+                where: {
+                    tenantId,
+                    deletedAt: null,
+                    startDate: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }, // ultimi 30gg + futuri
+                },
+                select: {
+                    id: true,
+                    startDate: true,
+                    endDate: true,
+                    location: true,
+                    isPublic: true,
+                    status: true,
+                    course: { select: { id: true, title: true, category: true } },
+                },
+                orderBy: { startDate: 'asc' },
+                take: 200,
+            }),
+            // Medici con profilo attivo (esclusi i profili GDPR-anonimizzati)
             prisma.person.findMany({
                 where: {
                     deletedAt: null,
+                    NOT: { firstName: 'ANON', lastName: 'ANON' },
                     tenantProfiles: { some: { tenantId, deletedAt: null, isActive: true } },
                     personRoles: { some: { tenantId, deletedAt: null, roleType: { in: ['MEDICO', 'MEDICO_COMPETENTE'] } } },
                 },
@@ -388,6 +411,21 @@ router.get('/widget-options', async (req, res) => {
                 where: { tenantId, deletedAt: null, isActive: true, isPublic: true },
                 select: { id: true, name: true, description: true, type: true },
                 orderBy: { name: 'asc' },
+            }),
+            // Sedi poliambulatorio attive
+            prisma.sedePoliambulatorio.findMany({
+                where: { tenantId, deletedAt: null, isAttiva: true },
+                select: { id: true, nome: true, citta: true, indirizzo: true },
+                orderBy: { nome: 'asc' },
+            }),
+            // Ambulatori attivi (non esterni)
+            prisma.ambulatorio.findMany({
+                where: { tenantId, deletedAt: null, stato: 'ATTIVO' },
+                select: {
+                    id: true, nome: true, specializzazione: true, isEsterno: true,
+                    sede: { select: { id: true, nome: true } },
+                },
+                orderBy: { nome: 'asc' },
             }),
         ]);
 
@@ -412,6 +450,18 @@ router.get('/widget-options', async (req, res) => {
                     id: c.id,
                     title: c.title,
                     category: c.category,
+                    status: c.status,
+                    isPublic: c.isPublic,
+                })),
+                schedules: schedules.map(s => ({
+                    id: s.id,
+                    title: s.course?.title || '—',
+                    category: s.course?.category || '',
+                    startDate: s.startDate,
+                    endDate: s.endDate,
+                    location: s.location || '',
+                    isPublic: s.isPublic ?? false,
+                    status: s.status,
                 })),
                 medici: medici.map(m => ({
                     id: m.id,
@@ -424,6 +474,21 @@ router.get('/widget-options', async (req, res) => {
                     name: f.name,
                     description: f.description || null,
                     type: f.type,
+                })),
+                sedi: sedi.map(s => ({
+                    id: s.id,
+                    nome: s.nome,
+                    citta: s.citta,
+                    label: `${s.nome} — ${s.citta}`,
+                })),
+                ambulatori: ambulatori.map(a => ({
+                    id: a.id,
+                    nome: a.nome,
+                    specializzazione: a.specializzazione || '',
+                    isEsterno: a.isEsterno,
+                    sedeId: a.sede?.id || null,
+                    sedeNome: a.sede?.nome || null,
+                    label: a.sede ? `${a.nome} (${a.sede.nome})` : a.nome,
                 })),
             },
         });

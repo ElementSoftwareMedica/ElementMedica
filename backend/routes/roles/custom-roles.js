@@ -526,11 +526,7 @@ router.get('/',
       const customRoles = await prisma.customRole.findMany({
         where: whereClause,
         include: {
-          permissions: {
-            include: {
-              permission: true
-            }
-          },
+          permissions: true,
           _count: {
             select: {
               personRoles: {

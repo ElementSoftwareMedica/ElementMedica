@@ -40,6 +40,7 @@ class PublicCoursesController {
         isPublic: true,
         deletedAt: null,
         // P57: Filtra per publicTenantId (determinato da brand/domain)
+        // Se publicTenantId è null, non filtrare per tenant (mostra tutti i corsi pubblici)
         ...(req.publicTenantId && { tenantId: req.publicTenantId }),
       };
 
@@ -359,6 +360,8 @@ class PublicCoursesController {
         where: {
           isPublic: true,
           deletedAt: null,
+          // Se publicTenantId è null, non filtrare per tenant (mostra tutti i corsi pubblici)
+          ...(req.publicTenantId && { tenantId: req.publicTenantId }),
           title: { equals: courseTitle, mode: 'insensitive' }
         },
         select: {
@@ -421,6 +424,7 @@ class PublicCoursesController {
             where: {
               isPublic: true,
               deletedAt: null,
+              ...(req.publicTenantId && { tenantId: req.publicTenantId }),
               title: { equals: normalizedApos, mode: 'insensitive' }
             },
             select: {
@@ -472,6 +476,7 @@ class PublicCoursesController {
           where: {
             isPublic: true,
             deletedAt: null,
+            ...(req.publicTenantId && { tenantId: req.publicTenantId }),
             title: { contains: courseTitle, mode: 'insensitive' }
           },
           select: {
@@ -535,6 +540,7 @@ class PublicCoursesController {
             where: {
               isPublic: true,
               deletedAt: null,
+              ...(req.publicTenantId && { tenantId: req.publicTenantId }),
               title: { contains: normalizedApos, mode: 'insensitive' }
             },
             select: {
@@ -583,7 +589,7 @@ class PublicCoursesController {
       // 3) Fallback: matching a token su tutti i corsi pubblici
       if (courses.length === 0) {
         const allPublic = await prisma.course.findMany({
-          where: { isPublic: true, deletedAt: null },
+          where: { isPublic: true, deletedAt: null, ...(req.publicTenantId && { tenantId: req.publicTenantId }) },
           select: {
             id: true,
             title: true,
@@ -652,15 +658,55 @@ class PublicCoursesController {
         });
       }
 
-      // Prendi il primo corso come base per le informazioni comuni
-      const baseCourse = courses[0];
+      // Logica intelligente per selezionare la variante per descrizione e immagini
+      // Priorità: 1) Variante con campi compilati (fullDescription, image1Url, image2Url)
+      //           2) Variante più costosa (pricePerPerson più alto)
+      const selectBestVariant = (courses) => {
+        // Cerca varianti con tutti i campi compilati
+        const withCompleteFields = courses.filter(c =>
+          c.fullDescription && c.image1Url && c.image2Url
+        );
+
+        if (withCompleteFields.length > 0) {
+          // Tra quelle complete, prendi la più costosa
+          return withCompleteFields.sort((a, b) => {
+            const priceA = parseFloat(a.pricePerPerson) || 0;
+            const priceB = parseFloat(b.pricePerPerson) || 0;
+            return priceB - priceA;
+          })[0];
+        }
+
+        // Se nessuna ha tutti i campi, cerca almeno con fullDescription
+        const withDescription = courses.filter(c => c.fullDescription);
+        if (withDescription.length > 0) {
+          return withDescription.sort((a, b) => {
+            const priceA = parseFloat(a.pricePerPerson) || 0;
+            const priceB = parseFloat(b.pricePerPerson) || 0;
+            return priceB - priceA;
+          })[0];
+        }
+
+        // Fallback: prendi la variante più costosa
+        return courses.sort((a, b) => {
+          const priceA = parseFloat(a.pricePerPerson) || 0;
+          const priceB = parseFloat(b.pricePerPerson) || 0;
+          return priceB - priceA;
+        })[0];
+      };
+
+      const bestVariant = selectBestVariant(courses);
+      const baseCourse = courses[0]; // Usa il primo per i campi comuni
 
       // Crea la struttura UnifiedCourse che si aspetta il frontend
       const unifiedCourse = {
         baseTitle: baseCourse.title,
         category: baseCourse.category,
         subcategory: baseCourse.subcategory,
-        image1Url: baseCourse.image1Url,
+        // Usa la variante migliore per immagini e descrizione
+        image1Url: bestVariant.image1Url,
+        image2Url: bestVariant.image2Url,
+        fullDescription: bestVariant.fullDescription,
+        shortDescription: bestVariant.shortDescription,
 
         // Informazioni comuni (dal primo corso o aggregate)
         commonObjectives: [], // Non disponibile nel modello Course
@@ -682,6 +728,7 @@ class PublicCoursesController {
           maxParticipants: course.maxPeople, // Corretto da maxParticipants a maxPeople
           price: course.pricePerPerson,
           image1Url: course.image1Url,
+          image2Url: course.image2Url,
           slug: course.slug,
           objectives: [], // Non disponibile nel modello Course
           program: [], // Non disponibile nel modello Course

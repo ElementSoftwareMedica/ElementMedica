@@ -277,7 +277,13 @@ class NotificationService {
      */
     static async broadcast(notification, tenantId) {
         try {
-            // Crea notifica senza recipientId (broadcast)
+            const targetType = notification.targetType || 'ALL_TENANT';
+            const targetRoles = Array.isArray(notification.targetRoles) && notification.targetRoles.length > 0
+                ? notification.targetRoles : null;
+            const targetCompanyId = notification.targetCompanyTenantProfileId || null;
+            const scheduledAt = notification.scheduledAt ? new Date(notification.scheduledAt) : null;
+
+            // Crea la notifica broadcast (recipientId null = per tutti)
             const broadcastNotification = await prisma.notification.create({
                 data: {
                     tenantId,
@@ -291,27 +297,47 @@ class NotificationService {
                     icon: notification.icon,
                     iconColor: notification.iconColor,
                     isDismissable: notification.isDismissable !== false,
+                    forcePopup: notification.priority === 'URGENT' || notification.priority === 'CRITICAL_P'
+                        ? true
+                        : (notification.forcePopup || false),
+                    requiresConfirmation: notification.type === 'CRITICAL'
+                        ? true
+                        : (notification.requiresConfirmation || false),
+                    scheduledAt,
                     triggeredBy: notification.triggeredBy,
-                    metadata: notification.metadata
+                    metadata: {
+                        ...(notification.metadata || {}),
+                        targetType,
+                        ...(targetRoles && { targetRoles }),
+                        ...(targetCompanyId && { targetCompanyId })
+                    }
                 }
             });
 
-            // P48: Ottieni tutti gli utenti attivi del tenant tramite tenantProfiles
+            // P48: Costruisci filtro destinatari
+            const personWhere = {
+                deletedAt: null,
+                tenantProfiles: {
+                    some: { tenantId, status: 'ACTIVE', deletedAt: null }
+                }
+            };
+
+            if (targetType === 'ROLES' && targetRoles) {
+                personWhere.personRoles = {
+                    some: { tenantId, roleType: { in: targetRoles }, isActive: true, deletedAt: null }
+                };
+            } else if (targetType === 'COMPANY_EMPLOYEES' && targetCompanyId) {
+                personWhere.personRoles = {
+                    some: { tenantId, companyTenantProfileId: targetCompanyId, isActive: true, deletedAt: null }
+                };
+            }
+
             const tenantUsers = await prisma.person.findMany({
-                where: {
-                    deletedAt: null,
-                    tenantProfiles: {
-                        some: {
-                            tenantId,
-                            status: 'ACTIVE',
-                            deletedAt: null
-                        }
-                    }
-                },
+                where: personWhere,
                 select: { id: true }
             });
 
-            // Crea log per ogni utente
+            // Crea log per ogni destinatario
             const logPromises = tenantUsers.map(user =>
                 this._createNotificationLog(broadcastNotification.id, user.id, notification.channels || ['IN_APP'])
             );
@@ -322,8 +348,15 @@ class NotificationService {
                 action: 'broadcast',
                 notificationId: broadcastNotification.id,
                 tenantId,
-                recipientCount: tenantUsers.length
+                recipientCount: tenantUsers.length,
+                targetType,
+                scheduled: !!scheduledAt
             });
+
+            // Invia via WebSocket solo se non schedulata
+            if (!scheduledAt) {
+                await this._deliverBroadcast(broadcastNotification, tenantUsers.map(u => u.id), tenantId);
+            }
 
             return broadcastNotification;
 
@@ -336,6 +369,36 @@ class NotificationService {
             });
             throw error;
         }
+    }
+
+    /**
+     * Invia notifiche individuali a una lista di persone
+     * (usato per targetType INDIVIDUAL)
+     *
+     * @param {Object} notification - Dati notifica
+     * @param {string[]} personIds - ID destinatari
+     * @param {string} tenantId - Tenant ID
+     * @returns {Promise<Object[]>} Notifiche create
+     */
+    static async createForPersons(notification, personIds, tenantId) {
+        const results = await Promise.all(
+            personIds.map(personId =>
+                this.create({
+                    ...notification,
+                    recipientId: personId,
+                    tenantId
+                }).catch(err => {
+                    logger.error('Failed to create notification for person', {
+                        component: 'NotificationService',
+                        action: 'createForPersons',
+                        personId,
+                        error: err.message
+                    });
+                    return null;
+                })
+            )
+        );
+        return results.filter(Boolean);
     }
 
     // ==========================================
@@ -403,7 +466,13 @@ class NotificationService {
                 OR: [
                     { recipientId: personId },
                     { recipientId: null } // Broadcast
-                ]
+                ],
+                logs: {
+                    none: {
+                        recipientId: personId,
+                        dismissedAt: { not: null }
+                    }
+                }
             };
 
             // Filtri opzionali
@@ -428,7 +497,10 @@ class NotificationService {
                 where.logs = {
                     none: {
                         recipientId: personId,
-                        readAt: { not: null }
+                        OR: [
+                            { readAt: { not: null } },
+                            { dismissedAt: { not: null } }
+                        ]
                     }
                 };
             }
@@ -461,9 +533,9 @@ class NotificationService {
             // Arricchisci con stato lettura
             const enrichedNotifications = notifications.map(n => ({
                 ...n,
-                isRead: n.logs?.[0]?.readAt !== null,
-                isDismissed: n.logs?.[0]?.dismissedAt !== null,
-                actionTaken: n.logs?.[0]?.actionTakenAt !== null
+                isRead: n.logs?.[0]?.readAt != null,
+                isDismissed: n.logs?.[0]?.dismissedAt != null,
+                actionTaken: n.logs?.[0]?.actionTakenAt != null
             }));
 
             return {
@@ -536,7 +608,10 @@ class NotificationService {
                     logs: {
                         none: {
                             recipientId: personId,
-                            readAt: { not: null }
+                            OR: [
+                                { readAt: { not: null } },
+                                { dismissedAt: { not: null } }
+                            ]
                         }
                     }
                 }
@@ -551,7 +626,10 @@ class NotificationService {
                     logs: {
                         none: {
                             recipientId: personId,
-                            readAt: { not: null }
+                            OR: [
+                                { readAt: { not: null } },
+                                { dismissedAt: { not: null } }
+                            ]
                         }
                     }
                 }
@@ -570,7 +648,10 @@ class NotificationService {
                     logs: {
                         none: {
                             recipientId: personId,
-                            readAt: { not: null }
+                            OR: [
+                                { readAt: { not: null } },
+                                { dismissedAt: { not: null } }
+                            ]
                         }
                     }
                 }
@@ -688,8 +769,8 @@ class NotificationService {
 
             return {
                 ...notification,
-                isRead: notification.logs?.[0]?.readAt !== null,
-                isDismissed: notification.logs?.[0]?.dismissedAt !== null
+                isRead: notification.logs?.[0]?.readAt != null,
+                isDismissed: notification.logs?.[0]?.dismissedAt != null
             };
 
         } catch (error) {
@@ -759,6 +840,7 @@ class NotificationService {
 
             // Invalidate cache
             await NotificationCacheService.decrementUnreadCount(personId, notification.tenantId);
+            await NotificationCacheService.invalidateUnreadCount(personId, notification.tenantId);
             await NotificationCacheService.invalidateRecentNotifications(personId, notification.tenantId);
 
             logger.info('Notification marked as read', {
@@ -840,6 +922,8 @@ class NotificationService {
             );
 
             await Promise.all(updatePromises);
+            await NotificationCacheService.invalidateUnreadCount(personId, tenantId);
+            await NotificationCacheService.invalidateRecentNotifications(personId, tenantId);
 
             logger.info('All notifications marked as read', {
                 component: 'NotificationService',
@@ -917,6 +1001,8 @@ class NotificationService {
                     sentAt: new Date()
                 }
             });
+            await NotificationCacheService.invalidateUnreadCount(personId, notification.tenantId);
+            await NotificationCacheService.invalidateRecentNotifications(personId, notification.tenantId);
 
             logger.info('Notification dismissed', {
                 component: 'NotificationService',
@@ -1240,6 +1326,33 @@ class NotificationService {
                 error: error.message
             });
             // Non rilanciamo l'errore per non bloccare il flusso
+        }
+    }
+
+    /**
+     * Delivery broadcast via WebSocket a lista di destinatari
+     * @private
+     */
+    static async _deliverBroadcast(notification, personIds, tenantId) {
+        try {
+            const { default: NotificationSocketService } = await import('../../websocket/NotificationSocketService.js');
+            await Promise.allSettled(
+                personIds.map(personId =>
+                    NotificationSocketService.sendToUser(personId, 'notification:new', notification)
+                )
+            );
+            await Promise.allSettled(
+                personIds.map(personId =>
+                    NotificationCacheService.incrementUnreadCount(personId, tenantId)
+                )
+            );
+        } catch (error) {
+            logger.error('Failed to deliver broadcast via WebSocket', {
+                component: 'NotificationService',
+                action: '_deliverBroadcast',
+                notificationId: notification.id,
+                error: error.message
+            });
         }
     }
 

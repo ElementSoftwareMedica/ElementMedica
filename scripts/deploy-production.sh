@@ -3,7 +3,7 @@
 # =============================================================================
 # Deploy Script per PRODUCTION - ElementMedica Multi-Domain
 # =============================================================================
-# Deploy su Hetzner VPS: 178.104.44.177
+# Deploy su Hetzner VPS: 178.104.197.134
 # - elementsicurezza.com (CRM)
 # - elementmedica.com (Frontend Pubblico)
 # =============================================================================
@@ -19,7 +19,7 @@ PURPLE='\033[0;35m'
 NC='\033[0m' # No Color
 
 # Configurazione Hetzner
-SERVER_IP="178.104.44.177"
+SERVER_IP="178.104.197.134"
 SERVER_USER="elementmedica"
 SERVER_PATH="/var/www/elementmedica"
 SSH_KEY="$HOME/.ssh/id_ed25519"
@@ -183,8 +183,10 @@ if [[ "$UPDATE_BACKEND" =~ ^[Yy]$ ]]; then
         rsync -avz --delete \
             --exclude 'node_modules' \
             --exclude '.git' \
+            --exclude '.env' \
             --exclude 'logs/*' \
             --exclude '*.log' \
+            --exclude 'uploads/' \
             -e "ssh -S $CONTROL_SOCKET" \
             backend/ \
             $SERVER_USER@$SERVER_IP:$SERVER_PATH/backend/
@@ -192,8 +194,10 @@ if [[ "$UPDATE_BACKEND" =~ ^[Yy]$ ]]; then
         rsync -avz --delete \
             --exclude 'node_modules' \
             --exclude '.git' \
+            --exclude '.env' \
             --exclude 'logs/*' \
             --exclude '*.log' \
+            --exclude 'uploads/' \
             -e "ssh -i $SSH_KEY" \
             backend/ \
             $SERVER_USER@$SERVER_IP:$SERVER_PATH/backend/
@@ -276,7 +280,7 @@ if curl -sf --max-time 10 http://elementmedica.com > /dev/null 2>&1; then
 elif curl -sf --max-time 10 https://elementmedica.com > /dev/null 2>&1; then
     log_success "elementmedica.com (HTTPS): OK"
 else
-    log_warning "elementmedica.com: DNS not yet configured (178.104.44.177)"
+    log_warning "elementmedica.com: DNS not yet configured (178.104.197.134)"
 fi
 
 # =============================================================================

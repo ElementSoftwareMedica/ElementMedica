@@ -216,7 +216,7 @@ const VisitTemplateDetailPage: React.FC = () => {
     // ============================================
 
     const visibleFields = useMemo(() => {
-        return (template?.fields || []).filter(f => f.visible);
+        return (template?.fields || []).filter(f => f.visible !== false);
     }, [template?.fields]);
 
     const visibleSections = useMemo(() => {
@@ -226,10 +226,11 @@ const VisitTemplateDetailPage: React.FC = () => {
     const fieldsBySection = useMemo(() => {
         const grouped: Record<string, VisitField[]> = {};
         visibleFields.forEach(field => {
-            if (!grouped[field.section]) {
-                grouped[field.section] = [];
+            const section = field.section || 'anamnesi';
+            if (!grouped[section]) {
+                grouped[section] = [];
             }
-            grouped[field.section].push(field);
+            grouped[section].push(field);
         });
         return grouped;
     }, [visibleFields]);

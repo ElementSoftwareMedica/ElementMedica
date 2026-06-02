@@ -7,7 +7,7 @@
  * @project P74 - Document Management & Email Templates
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
     Mail,
@@ -27,6 +27,8 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/useToast';
 import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
+import { useAuth } from '@/context/AuthContext';
+import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { CRUDButton, CRUDPrimaryButton } from '@/components/shared/CRUDButton';
 import { ActionButton } from '@/components/ui';
 import type { DropdownAction } from '@/design-system/molecules/Dropdown/Dropdown';
@@ -77,11 +79,23 @@ function buildPriorityBadge(tpl: EmailTemplate): { label: string; className: str
 
 interface EmailTemplateFormProps {
     existing?: EmailTemplate | null;
+    medici: Medico[];
+    prestazioni: Prestazione[];
+    isBaseMedico: boolean;
+    currentMedicoId?: string;
     onClose: () => void;
     onSuccess: () => void;
 }
 
-const EmailTemplateForm: React.FC<EmailTemplateFormProps> = ({ existing, onClose, onSuccess }) => {
+const EmailTemplateForm: React.FC<EmailTemplateFormProps> = ({
+    existing,
+    medici,
+    prestazioni,
+    isBaseMedico,
+    currentMedicoId,
+    onClose,
+    onSuccess
+}) => {
     const { showToast } = useToast();
 
     const [nome, setNome] = useState(existing?.nome || '');
@@ -98,24 +112,10 @@ const EmailTemplateForm: React.FC<EmailTemplateFormProps> = ({ existing, onClose
     const [allegatiIds, setAllegatiIds] = useState<string[]>(existing?.allegatiIds || []);
     const [isDefault, setIsDefault] = useState(existing?.isDefault || false);
     const [isActive, setIsActive] = useState(existing ? (existing.isActive !== false) : true);
-    const [medicoId, setMedicoId] = useState(existing?.medicoId || '');
+    const [medicoId, setMedicoId] = useState(existing?.medicoId || (isBaseMedico ? currentMedicoId || '' : ''));
     const [prestazioneId, setPrestazioneId] = useState(existing?.prestazioneId || '');
     const [showVars, setShowVars] = useState(false);
-
-    // Medici & prestazioni for scope selectors
-    const { data: mediciResult } = useQuery({
-        queryKey: ['medici-list-email-tpl'],
-        queryFn: () => mediciApi.getAll({ limit: 200 }),
-        staleTime: 60_000
-    });
-    const medici: Medico[] = (mediciResult as any)?.data || (Array.isArray(mediciResult) ? mediciResult : []);
-
-    const { data: prestazioniResult } = useQuery({
-        queryKey: ['prestazioni-list-email-tpl'],
-        queryFn: () => prestazioniApi.getAll({ limit: 200 }),
-        staleTime: 60_000
-    });
-    const prestazioni: Prestazione[] = (prestazioniResult as any)?.data || (Array.isArray(prestazioniResult) ? prestazioniResult : []);
+    const allowedPrestazioneIds = useMemo(() => new Set(prestazioni.map(p => p.id)), [prestazioni]);
 
     // Load marketing docs for allegati
     const { data: marketingDocs } = useQuery({
@@ -144,11 +144,18 @@ const EmailTemplateForm: React.FC<EmailTemplateFormProps> = ({ existing, onClose
         if (!subject.trim()) { showToast({ message: "L'oggetto email è obbligatorio", type: 'error' }); return; }
         if (!bodyHtml.trim()) { showToast({ message: 'Il corpo email è obbligatorio', type: 'error' }); return; }
 
+        const effectiveMedicoId = isBaseMedico ? currentMedicoId : medicoId || undefined;
+        const effectivePrestazioneId = prestazioneId || undefined;
+        if (isBaseMedico && effectivePrestazioneId && !allowedPrestazioneIds.has(effectivePrestazioneId)) {
+            showToast({ message: 'Puoi usare solo le prestazioni abilitate per il tuo profilo', type: 'warning' });
+            return;
+        }
+
         mutation.mutate({
             nome: nome.trim(),
-            branca: branca || undefined,
-            medicoId: medicoId || undefined,
-            prestazioneId: prestazioneId || undefined,
+            branca: isBaseMedico ? undefined : branca || undefined,
+            medicoId: effectiveMedicoId,
+            prestazioneId: effectivePrestazioneId,
             subject: subject.trim(),
             bodyHtml,
             allegatiIds,
@@ -202,6 +209,7 @@ const EmailTemplateForm: React.FC<EmailTemplateFormProps> = ({ existing, onClose
                             <select
                                 value={branca}
                                 onChange={e => setBranca(e.target.value)}
+                                disabled={isBaseMedico}
                                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 bg-white"
                             >
                                 {BRANCHE.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
@@ -217,9 +225,10 @@ const EmailTemplateForm: React.FC<EmailTemplateFormProps> = ({ existing, onClose
                             <select
                                 value={medicoId}
                                 onChange={e => setMedicoId(e.target.value)}
+                                disabled={isBaseMedico}
                                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 bg-white"
                             >
-                                <option value="">— Tutti i medici —</option>
+                                {!isBaseMedico && <option value="">— Tutti i medici —</option>}
                                 {medici.map(m => (
                                     <option key={m.id} value={m.id}>
                                         {formatMedicoName(m)}
@@ -239,7 +248,7 @@ const EmailTemplateForm: React.FC<EmailTemplateFormProps> = ({ existing, onClose
                                 onChange={e => setPrestazioneId(e.target.value)}
                                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 bg-white"
                             >
-                                <option value="">— Tutte le prestazioni —</option>
+                                {!isBaseMedico && <option value="">— Tutte le prestazioni —</option>}
                                 {prestazioni.map(p => (
                                     <option key={p.id} value={p.id}>
                                         {p.codice} — {p.nome}
@@ -380,17 +389,48 @@ const EmailTemplateForm: React.FC<EmailTemplateFormProps> = ({ existing, onClose
 const EmailTemplateSettingsPage: React.FC = () => {
     const navigate = useNavigate();
     const { showToast } = useToast();
+    const { user, hasPermission } = useAuth();
+    const { isMedico, isMedicoCompetente } = useRoleGuard();
     const queryClient = useQueryClient();
     const { confirmDelete } = useConfirmDialog();
 
     const [formModal, setFormModal] = useState<{ open: boolean; template?: EmailTemplate | null }>({ open: false });
+    const isBaseMedico = !!(isMedico && !isMedicoCompetente);
+    const canWriteEmailTemplates = hasPermission('email-templates', 'write') || hasPermission('email-templates:write');
+
+    const { data: mediciResult } = useQuery({
+        queryKey: ['medici-list-email-tpl', isBaseMedico, user?.id],
+        queryFn: () => isBaseMedico && user?.id
+            ? mediciApi.getById(user.id).then(m => ({ data: [m] }))
+            : mediciApi.getAll({ limit: 200 }),
+        staleTime: 60_000,
+        enabled: !isBaseMedico || !!user?.id
+    });
+    const medici: Medico[] = (mediciResult as any)?.data || (Array.isArray(mediciResult) ? mediciResult : []);
+    const ownMedico = medici[0];
+
+    const { data: prestazioniResult } = useQuery({
+        queryKey: ['prestazioni-list-email-tpl', isBaseMedico, user?.id],
+        queryFn: () => prestazioniApi.getAll({ limit: 200 }),
+        staleTime: 60_000
+    });
+    const allPrestazioni: Prestazione[] = (prestazioniResult as any)?.data || (Array.isArray(prestazioniResult) ? prestazioniResult : []);
+    const prestazioni = useMemo(() => {
+        if (!isBaseMedico) return allPrestazioni;
+        return (ownMedico?.abilitazioni || [])
+            .filter(a => a.attivo && a.prestazione)
+            .map(a => a.prestazione as Prestazione);
+    }, [isBaseMedico, allPrestazioni, ownMedico?.abilitazioni]);
 
     const { data: result, isLoading } = useQuery({
-        queryKey: ['email-templates'],
-        queryFn: () => emailTemplatesApi.getAll()
+        queryKey: ['email-templates', isBaseMedico, user?.id],
+        queryFn: () => emailTemplatesApi.getAll(isBaseMedico && user?.id ? { medicoId: user.id } : undefined)
     });
 
     const templates = result?.data || [];
+    const visibleTemplates = isBaseMedico && user?.id
+        ? templates.filter(tpl => tpl.medicoId === user.id)
+        : templates;
 
     const deleteMutation = useMutation({
         mutationFn: emailTemplatesApi.delete,
@@ -409,10 +449,14 @@ const EmailTemplateSettingsPage: React.FC = () => {
     });
 
     const handleDelete = useCallback(async (tpl: EmailTemplate) => {
+        if (!canWriteEmailTemplates || (isBaseMedico && tpl.medicoId !== user?.id)) {
+            showToast({ message: 'Non puoi modificare template email di altri medici', type: 'warning' });
+            return;
+        }
         if (await confirmDelete(tpl.nome)) {
             deleteMutation.mutate(tpl.id);
         }
-    }, [deleteMutation, confirmDelete]);
+    }, [deleteMutation, confirmDelete, canWriteEmailTemplates, isBaseMedico, user?.id, showToast]);
 
     return (
         <div className="p-6 max-w-4xl mx-auto">
@@ -435,10 +479,12 @@ const EmailTemplateSettingsPage: React.FC = () => {
                             </p>
                         </div>
                     </div>
-                    <CRUDPrimaryButton onClick={() => setFormModal({ open: true })}>
-                        <Plus className="h-4 w-4" />
-                        Nuovo template
-                    </CRUDPrimaryButton>
+                    {canWriteEmailTemplates && (
+                        <CRUDPrimaryButton onClick={() => setFormModal({ open: true })}>
+                            <Plus className="h-4 w-4" />
+                            Nuovo template
+                        </CRUDPrimaryButton>
+                    )}
                 </div>
             </div>
 
@@ -465,22 +511,25 @@ const EmailTemplateSettingsPage: React.FC = () => {
                 <div className="flex justify-center py-12">
                     <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
                 </div>
-            ) : templates.length === 0 ? (
+            ) : visibleTemplates.length === 0 ? (
                 <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center">
                     <Mail className="h-16 w-16 text-gray-300 mx-auto mb-4" />
                     <h3 className="text-lg font-medium text-gray-500 mb-2">Nessun template configurato</h3>
                     <p className="text-sm text-gray-400 mb-6">
                         Crea il primo template per personalizzare le email di invio referto.
                     </p>
-                    <CRUDPrimaryButton onClick={() => setFormModal({ open: true })}>
-                        <Plus className="h-4 w-4" />
-                        Crea primo template
-                    </CRUDPrimaryButton>
+                    {canWriteEmailTemplates && (
+                        <CRUDPrimaryButton onClick={() => setFormModal({ open: true })}>
+                            <Plus className="h-4 w-4" />
+                            Crea primo template
+                        </CRUDPrimaryButton>
+                    )}
                 </div>
             ) : (
                 <div className="space-y-3">
-                    {templates.map(tpl => {
+                    {visibleTemplates.map(tpl => {
                         const badge = buildPriorityBadge(tpl);
+                        const canManageTemplate = canWriteEmailTemplates && (!isBaseMedico || tpl.medicoId === user?.id);
                         return (
                             <div
                                 key={tpl.id}
@@ -523,29 +572,31 @@ const EmailTemplateSettingsPage: React.FC = () => {
                                 </div>
 
                                 {/* Actions */}
-                                <div className="flex-shrink-0" onClick={e => e.stopPropagation()}>
-                                    <ActionButton
-                                        theme="teal"
-                                        actions={[
-                                            {
-                                                label: tpl.isActive ? 'Disattiva' : 'Attiva',
-                                                icon: tpl.isActive ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />,
-                                                onClick: () => toggleActiveMutation.mutate({ id: tpl.id, isActive: !tpl.isActive })
-                                            },
-                                            {
-                                                label: 'Modifica',
-                                                icon: <Edit className="h-4 w-4" />,
-                                                onClick: () => setFormModal({ open: true, template: tpl })
-                                            },
-                                            {
-                                                label: 'Elimina',
-                                                icon: <Trash2 className="h-4 w-4" />,
-                                                onClick: () => handleDelete(tpl),
-                                                variant: 'danger' as const
-                                            }
-                                        ] satisfies DropdownAction[]}
-                                    />
-                                </div>
+                                {canManageTemplate && (
+                                    <div className="flex-shrink-0" onClick={e => e.stopPropagation()}>
+                                        <ActionButton
+                                            theme="teal"
+                                            actions={[
+                                                {
+                                                    label: tpl.isActive ? 'Disattiva' : 'Attiva',
+                                                    icon: tpl.isActive ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />,
+                                                    onClick: () => toggleActiveMutation.mutate({ id: tpl.id, isActive: !tpl.isActive })
+                                                },
+                                                {
+                                                    label: 'Modifica',
+                                                    icon: <Edit className="h-4 w-4" />,
+                                                    onClick: () => setFormModal({ open: true, template: tpl })
+                                                },
+                                                {
+                                                    label: 'Elimina',
+                                                    icon: <Trash2 className="h-4 w-4" />,
+                                                    onClick: () => handleDelete(tpl),
+                                                    variant: 'danger' as const
+                                                }
+                                            ] satisfies DropdownAction[]}
+                                        />
+                                    </div>
+                                )}
                             </div>
                         );
                     })}
@@ -556,6 +607,10 @@ const EmailTemplateSettingsPage: React.FC = () => {
             {formModal.open && (
                 <EmailTemplateForm
                     existing={formModal.template}
+                    medici={medici}
+                    prestazioni={prestazioni}
+                    isBaseMedico={isBaseMedico}
+                    currentMedicoId={user?.id}
                     onClose={() => setFormModal({ open: false })}
                     onSuccess={() => queryClient.invalidateQueries({ queryKey: ['email-templates'] })}
                 />

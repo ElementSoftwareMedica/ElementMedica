@@ -4,9 +4,66 @@ import authMiddleware from '../../middleware/auth.js';
 import { requirePermission } from '../../middleware/rbac.js';
 import { getEffectiveTenantId } from '../../utils/tenantHelper.js';
 import logger from '../../utils/logger.js';
+import { PERMISSIONS } from '../../constants/permissions.js';
 
 const { authenticate } = authMiddleware;
 const router = express.Router();
+
+const SUPPLEMENTAL_RESOURCE_ACTION_PERMISSIONS = [
+  'clinica.agenda:read',
+  'clinica.agenda:create',
+  'clinica.agenda:update',
+  'clinica.agenda:delete',
+  'clinica.agenda:manage',
+  'clinica.medici:read',
+  'clinica.medici:create',
+  'clinica.medici:update',
+  'clinica.medici:delete',
+  'clinica.medici:manage',
+  'clinica.listini:read',
+  'clinica.listini:create',
+  'clinica.listini:update',
+  'clinica.listini:delete',
+  'clinica.listini:manage',
+  'clinica.poliambulatorio:read',
+  'clinica.poliambulatorio:create',
+  'clinica.poliambulatorio:update',
+  'clinica.poliambulatorio:delete',
+  'clinica.poliambulatorio:write',
+  'clinica.poliambulatorio:manage',
+];
+
+const VALID_ADVANCED_SCOPES = new Set(['none', 'all', 'tenant', 'own', 'relational']);
+
+function buildPermissionRegistry() {
+  const registry = new Map();
+  for (const permission of [...Object.values(PERMISSIONS), ...SUPPLEMENTAL_RESOURCE_ACTION_PERMISSIONS]) {
+    if (typeof permission !== 'string' || !permission.includes(':')) continue;
+    const [resource, action] = permission.split(':');
+    if (!resource || !action) continue;
+    if (!registry.has(resource)) registry.set(resource, new Set());
+    registry.get(resource).add(action);
+  }
+  return registry;
+}
+
+const PERMISSION_REGISTRY = buildPermissionRegistry();
+
+function validateResourceActionPermission(resource, action, scope) {
+  if (!resource || !action) {
+    return 'Risorsa e azione sono obbligatori';
+  }
+  if (!PERMISSION_REGISTRY.has(resource)) {
+    return 'Risorsa permesso non supportata';
+  }
+  if (!PERMISSION_REGISTRY.get(resource).has(action)) {
+    return 'Azione non supportata per questa risorsa';
+  }
+  if (scope && !VALID_ADVANCED_SCOPES.has(scope)) {
+    return 'Ambito permesso non supportato';
+  }
+  return null;
+}
 
 /**
  * @route GET /api/v1/users
@@ -297,7 +354,7 @@ router.get('/permissions/person/:personId', authenticate, requirePermission(['sy
       resource: p.resource,
       action: p.action,
       scope: p.scope,
-      granted: true,
+      granted: p.conditions?.granted !== false,
       reason: p.conditions ? JSON.stringify(p.conditions) : undefined,
       createdAt: p.createdAt.toISOString(),
     }));
@@ -324,6 +381,11 @@ router.post('/permissions/person/:personId', authenticate, requirePermission(['s
       return res.status(400).json({ error: 'Risorsa e azione sono obbligatori' });
     }
 
+    const validationError = validateResourceActionPermission(resource, action, scope || 'tenant');
+    if (validationError) {
+      return res.status(400).json({ error: validationError });
+    }
+
     // Find or get first PersonRole for this person + tenant
     let personRole = await prisma.personRole.findFirst({
       where: { personId, tenantId }
@@ -340,7 +402,7 @@ router.post('/permissions/person/:personId', authenticate, requirePermission(['s
         resource,
         action,
         scope: scope || 'tenant',
-        conditions: reason ? { reason } : undefined,
+        conditions: { ...(reason ? { reason } : {}), granted: granted !== false },
       }
     });
 

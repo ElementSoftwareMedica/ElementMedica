@@ -62,7 +62,7 @@ interface FormProps {
     onSaved: () => void;
 }
 
-const CODICI_DEFAULT = ['gdpr', 'sanitari', 'prestazione', 'chirurgico'];
+const CODICI_DEFAULT = ['gdpr', 'sanitari', 'prestazione', 'chirurgico', 'marketing', 'comunicazioni', 'fse_alimentazione', 'fse_consultazione', 'fse_pregresso', 'mdl_sorveglianza'];
 
 const ModuloForm: React.FC<FormProps> = ({ modulo, onClose, onSaved }) => {
     const { showToast } = useToast();

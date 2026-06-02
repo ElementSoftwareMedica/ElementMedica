@@ -70,7 +70,9 @@ export const CATALOGO_PRESTAZIONI_MDL = {
 
     // ERGONOMIA
     RACH_CLI: { nome: 'Valutazione Clinica Rachide', tipo: 'VISITA_SPECIALISTICA', prezzoBase: 30.00, durata: 15, descrizione: 'Esame obiettivo rachide per MMC/posture', brancheSpecialistiche: ['Medicina del Lavoro', 'Ortopedia'] },
+    RACH_FUN: { nome: 'Valutazione funzionale del rachide', tipo: 'VISITA_SPECIALISTICA', prezzoBase: 35.00, durata: 20, descrizione: 'Valutazione funzionale del rachide per MMC, posture incongrue e vibrazioni corpo intero', brancheSpecialistiche: ['Medicina del Lavoro', 'Ortopedia', 'Fisiatria'] },
     OCRA: { nome: 'Valutazione OCRA Check-list', tipo: 'VISITA_SPECIALISTICA', prezzoBase: 35.00, durata: 20, descrizione: 'Valutazione movimenti ripetitivi arti superiori', brancheSpecialistiche: ['Medicina del Lavoro', 'Ergonomia'] },
+    ARTI_SUP_FUN: { nome: 'Valutazione funzionale arti superiori', tipo: 'VISITA_SPECIALISTICA', prezzoBase: 35.00, durata: 20, descrizione: 'Valutazione funzionale di spalla, gomito, polso e mano per movimenti ripetitivi e vibrazioni mano-braccio', brancheSpecialistiche: ['Medicina del Lavoro', 'Ortopedia', 'Fisiatria'] },
 
     // VESTIBOLOGIA
     VEST: { nome: 'Esame Vestibolare', tipo: 'ESAME_STRUMENTALE', prezzoBase: 50.00, durata: 20, descrizione: 'Esame funzione vestibolare per lavori in quota', brancheSpecialistiche: ['Medicina del Lavoro', 'Otorinolaringoiatria'] },
@@ -95,11 +97,13 @@ export const DEFAULT_RISCHIO_PRESTAZIONI = {
     ],
     VIB_MB: [
         { codice: 'VIS_MDL', periodicita: 'MESI_12', obbligatoria: true, riferimentoNormativo: 'D.Lgs 81/08 Art. 204' },
+        { codice: 'ARTI_SUP_FUN', periodicita: 'MESI_12', obbligatoria: true, riferimentoNormativo: 'D.Lgs 81/08 Art. 204' },
         { codice: 'EMG', periodicita: 'MESI_24', obbligatoria: true, riferimentoNormativo: 'D.Lgs 81/08 Art. 204' },
         { codice: 'ECO_ART', periodicita: 'MESI_24', obbligatoria: false, riferimentoNormativo: 'D.Lgs 81/08 Art. 204' }
     ],
     VIB_WBV: [
         { codice: 'VIS_MDL', periodicita: 'MESI_12', obbligatoria: true, riferimentoNormativo: 'D.Lgs 81/08 Art. 204' },
+        { codice: 'RACH_FUN', periodicita: 'MESI_12', obbligatoria: true, riferimentoNormativo: 'D.Lgs 81/08 Art. 204' },
         { codice: 'RX_RACH', periodicita: 'MESI_36', obbligatoria: true, riferimentoNormativo: 'D.Lgs 81/08 Art. 204' }
     ],
     RAD_ION: [
@@ -161,16 +165,19 @@ export const DEFAULT_RISCHIO_PRESTAZIONI = {
     MMC: [
         { codice: 'VIS_MDL', periodicita: 'MESI_12', obbligatoria: true, riferimentoNormativo: 'D.Lgs 81/08 Art. 168' },
         { codice: 'RACH_CLI', periodicita: 'MESI_12', obbligatoria: true, riferimentoNormativo: 'D.Lgs 81/08 Art. 168' },
+        { codice: 'RACH_FUN', periodicita: 'MESI_12', obbligatoria: true, riferimentoNormativo: 'D.Lgs 81/08 Art. 168' },
         { codice: 'RX_RACH', periodicita: 'MESI_36', obbligatoria: false, riferimentoNormativo: 'D.Lgs 81/08 Art. 168' }
     ],
     MOV_RIP: [
         { codice: 'VIS_MDL', periodicita: 'MESI_12', obbligatoria: true, riferimentoNormativo: 'D.Lgs 81/08 Art. 168' },
         { codice: 'OCRA', periodicita: 'MESI_12', obbligatoria: true, riferimentoNormativo: 'D.Lgs 81/08 Art. 168' },
+        { codice: 'ARTI_SUP_FUN', periodicita: 'MESI_12', obbligatoria: true, riferimentoNormativo: 'D.Lgs 81/08 Art. 168' },
         { codice: 'EMG', periodicita: 'MESI_24', obbligatoria: false, riferimentoNormativo: 'D.Lgs 81/08 Art. 168' }
     ],
     POS: [
         { codice: 'VIS_MDL', periodicita: 'MESI_12', obbligatoria: true, riferimentoNormativo: 'D.Lgs 81/08 Art. 168' },
-        { codice: 'RACH_CLI', periodicita: 'MESI_12', obbligatoria: true, riferimentoNormativo: 'D.Lgs 81/08 Art. 168' }
+        { codice: 'RACH_CLI', periodicita: 'MESI_12', obbligatoria: true, riferimentoNormativo: 'D.Lgs 81/08 Art. 168' },
+        { codice: 'RACH_FUN', periodicita: 'MESI_12', obbligatoria: true, riferimentoNormativo: 'D.Lgs 81/08 Art. 168' }
     ],
 
     // RISCHI ORGANIZZATIVI

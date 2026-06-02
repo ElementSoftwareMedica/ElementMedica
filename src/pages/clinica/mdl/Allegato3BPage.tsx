@@ -222,6 +222,17 @@ const Allegato3BPage: React.FC = () => {
         );
     }, [companiesResponse, companySearch]);
 
+    const selectedCreateCompany = useMemo(() => {
+        const list = (companiesResponse || []) as Array<{
+            id: string;
+            ragioneSociale?: string;
+            piva?: string;
+            codiceFiscale?: string;
+            companyTenantProfileId?: string;
+        }>;
+        return list.find(company => (company.companyTenantProfileId || company.id) === newCompanyId) || null;
+    }, [companiesResponse, newCompanyId]);
+
     // Fetch list of Allegato 3B records
     const { data: recordsResponse, isLoading: recordsLoading, refetch: refetchRecords } = useQuery({
         queryKey: ['allegato3b-list', selectedYear, selectedCompanyId, statusFilter, tenantFilterKey],
@@ -904,6 +915,31 @@ const Allegato3BPage: React.FC = () => {
         const medicoName = medicoCompetenteNomina?.person
             ? `${medicoCompetenteNomina.person.lastName} ${medicoCompetenteNomina.person.firstName}`
             : null;
+        const hasFiscalData = Boolean(selectedCreateCompany?.piva || selectedCreateCompany?.codiceFiscale);
+        const checks = [
+            {
+                label: 'Azienda',
+                ok: Boolean(newCompanyId),
+                detail: selectedCreateCompany?.ragioneSociale || companySearch || 'Da selezionare'
+            },
+            {
+                label: 'Identificativi fiscali',
+                ok: hasFiscalData,
+                detail: hasFiscalData
+                    ? [selectedCreateCompany?.piva && `P.IVA ${selectedCreateCompany.piva}`, selectedCreateCompany?.codiceFiscale && `CF ${selectedCreateCompany.codiceFiscale}`].filter(Boolean).join(' • ')
+                    : 'P.IVA o codice fiscale assenti'
+            },
+            {
+                label: 'Medico competente',
+                ok: Boolean(newMedicoId && medicoName),
+                detail: medicoName || 'Nessuna nomina attiva trovata'
+            },
+            {
+                label: 'Anno comunicazione',
+                ok: Boolean(newAnno),
+                detail: String(newAnno)
+            }
+        ];
 
         return (
             <Modal
@@ -1027,6 +1063,33 @@ const Allegato3BPage: React.FC = () => {
                                     </div>
                                 </div>
                             )}
+                        </div>
+                    )}
+
+                    {newCompanyId && (
+                        <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                            <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+                                <p className="text-sm font-medium text-gray-900 dark:text-gray-50">
+                                    Controlli prima della compilazione
+                                </p>
+                            </div>
+                            <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                                {checks.map(check => (
+                                    <div key={check.label} className="flex items-start gap-3 px-3 py-2.5">
+                                        {check.ok ? (
+                                            <CheckCircle2 className="h-4 w-4 text-teal-600 dark:text-teal-400 mt-0.5 shrink-0" />
+                                        ) : (
+                                            <AlertCircle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+                                        )}
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-medium text-gray-900 dark:text-gray-50">{check.label}</p>
+                                            <p className={`text-xs ${check.ok ? 'text-gray-500 dark:text-gray-400' : 'text-amber-700 dark:text-amber-300'}`}>
+                                                {check.detail}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     )}
 

@@ -86,6 +86,7 @@ interface PianoRowData {
     periodicitaMesi: number;
     openScadenzaId: string | null;
     currentDate: string | null;
+    lastExecutedDate: string | null;
     /**
      * Date calcolata:  se la scadenza è legata all'appuntamento corrente → visitaDate + periodicità
      *                  altrimenti → ultima esecuzione + periodicità
@@ -99,6 +100,7 @@ function computePianoRows(
     gruppi: ScadenzaProtocolloGruppo[],
     visitDate: Date,
     appuntamentoId: string | null,
+    scheduleFromCurrentVisit: boolean,
 ): PianoRowData[] {
     return gruppi.map(gruppo => {
         const aperte = gruppo.scadenze.filter(s => !s.eseguita);
@@ -120,7 +122,7 @@ function computePianoRows(
         let suggestedDate: string | null = null;
         if (firstOpen) {
             if (appuntamentoId && (firstOpen as any).appuntamento?.id === appuntamentoId) {
-                suggestedDate = toInputDate(addMonths(visitDate, gruppo.periodicitaMesi));
+                suggestedDate = scheduleFromCurrentVisit ? toInputDate(addMonths(visitDate, gruppo.periodicitaMesi)) : firstOpen.dataScadenza ?? null;
             } else if (lastExecuted) {
                 const baseDate = lastExecuted.dataEsecuzione ?? (lastExecuted as any).visita?.dataOra ?? null;
                 if (baseDate) {
@@ -135,6 +137,13 @@ function computePianoRows(
             if (baseDate) {
                 suggestedDate = toInputDate(addMonths(toLocalMidnight(baseDate), gruppo.periodicitaMesi));
             }
+        }
+
+        // P73: Fallback finale — se esiste una scadenza aperta ma non abbiamo né link all'appuntamento
+        // corrente né storico esecuzioni (es. scadenze generate da generaIniziali per prima visita),
+        // calcola la data suggerita dalla data della visita corrente + periodicità.
+        if (scheduleFromCurrentVisit && !suggestedDate && firstOpen && gruppo.periodicitaMesi > 0) {
+            suggestedDate = toInputDate(addMonths(visitDate, gruppo.periodicitaMesi));
         }
 
         let statusKind: PianoRowData['statusKind'] = 'nessuna';
@@ -168,6 +177,7 @@ function computePianoRows(
             periodicitaMesi: gruppo.periodicitaMesi,
             openScadenzaId: firstOpen?.id ?? null,
             currentDate: firstOpen?.dataScadenza ?? null,
+            lastExecutedDate: lastExecuted?.dataEsecuzione ?? (lastExecuted as any)?.visita?.dataOra ?? null,
             suggestedDate,
             statusKind,
             statusDays,
@@ -182,16 +192,18 @@ function computePianoRows(
  *  null = nessun follow-up standard (visita una-tantum o a discrezione MC). */
 const MDL_DEFAULT_FOLLOWUP_MESI: Record<string, number | null> = {
     PREVENTIVA: 12,         // prima dell'assunzione / prima visita nuovo lavoratore → avvia ciclo annuale
-    CAMBIO_MANSIONE: 12,      // nuova mansione → rivalutazione annuale
-    RIENTRO_MATERNITA: 12,    // rientro → verifica idoneità annuale
-    PRECEDENTE_ASSENZA: 12,   // rientro lunga assenza → verifica annuale
-    VERIFICA_IDONEITA: 12,    // verifica → follow-up annuale
-    STRAORDINARIA: 12,        // a discrezione MC — sugg. annuale
-    SU_RICHIESTA_LAVORATORE: 12, // su richiesta → follow-up a discrezione MC
-    PREVENTIVA_PREASSUNTIVA: null, // pre-assunzione: una-tantum
+    CAMBIO_MANSIONE: null,
+    RIENTRO_MATERNITA: null,
+    PRECEDENTE_ASSENZA: null,
+    VERIFICA_IDONEITA: null,
+    STRAORDINARIA: null,
+    SU_RICHIESTA_LAVORATORE: null,
+    PREVENTIVA_PREASSUNTIVA: 12,
     CESSAZIONE_RAPPORTO: null,   // fine rapporto: nessun follow-up
     PERIODICA: 12,      // periodicità standard; il MC può ridurla/aumentarla per rischio
 };
+
+const MDL_VISIT_TYPES_THAT_ADVANCE_PLAN = new Set(['PERIODICA', 'PREVENTIVA', 'PREVENTIVA_PREASSUNTIVA']);
 
 /** Etichette contestuali per il tipo visita MDL nel riquadro di contesto */
 const MDL_FOLLOWUP_NOTE: Record<string, string> = {
@@ -335,14 +347,38 @@ export default function VisitaScadenzaCard({
     }, [visita]);
 
     const appuntamentoId = (visita as any)?.appuntamentoId ?? null;
+    const scheduleFromCurrentVisit = isMDL && !!tipoVisitaMDL && MDL_VISIT_TYPES_THAT_ADVANCE_PLAN.has(tipoVisitaMDL);
 
     // ── Piano rows ────────────────────────────────────────────────────────────
     const pianoRows = useMemo(
         () => (personaScadenze && personaScadenze.length > 0
-            ? computePianoRows(personaScadenze, visitDate, appuntamentoId)
+            ? computePianoRows(personaScadenze, visitDate, appuntamentoId, scheduleFromCurrentVisit)
             : []),
-        [personaScadenze, visitDate, appuntamentoId],
+        [personaScadenze, visitDate, appuntamentoId, scheduleFromCurrentVisit],
     );
+
+    // P73: Auto-apply suggestedDate a editDates per tutte le righe con scadenze aperte.
+    // Lo fa solo al primo caricamento (quando editDates è vuoto e non ci sono initialEditDates)
+    // per evitare di sovrascrivere le scelte manuali dell'utente.
+    const didAutoApplyPiano = useRef(false);
+    useEffect(() => {
+        if (didAutoApplyPiano.current || isReadonly || pianoRows.length === 0 || !scheduleFromCurrentVisit) return;
+        // Se ci sono già editDates (da initialEditDates o da precedente sessione), non sovrascrivere
+        if (Object.keys(editDates).length > 0) {
+            didAutoApplyPiano.current = true;
+            return;
+        }
+        const autoApplied: Record<string, string> = {};
+        for (const row of pianoRows) {
+            if (row.suggestedDate && row.openScadenzaId && !nonProgrammareIds.includes(row.itemId)) {
+                autoApplied[row.itemId] = row.suggestedDate;
+            }
+        }
+        if (Object.keys(autoApplied).length > 0) {
+            didAutoApplyPiano.current = true;
+            setEditDates(autoApplied);
+        }
+    }, [pianoRows, isReadonly, editDates, nonProgrammareIds, scheduleFromCurrentVisit]);
 
     // ── Reconcile detection ───────────────────────────────────────────────────
     // P72_19+: mostra il pulsante se esiste un CLUSTER di date consecutive entro ±60 giorni.
@@ -405,7 +441,7 @@ export default function VisitaScadenzaCard({
             const mesi = (prestazione as any).scadenzaDefaultMesi as number;
             return { date: addMonths(visitDate, mesi), mesi, source: 'prestazione', label: (prestazione as any)?.nome || 'Prestazione' };
         }
-        if (isMDL && sorveglianzaStats?.periodicitaMesi) {
+        if (isMDL && scheduleFromCurrentVisit && sorveglianzaStats?.periodicitaMesi) {
             return { date: addMonths(visitDate, sorveglianzaStats.periodicitaMesi), mesi: sorveglianzaStats.periodicitaMesi, source: 'sorveglianza' as const, label: sorveglianzaStats.denominazione || 'Protocollo sanitario' };
         }
         if (isMDL && tipoVisitaMDL) {
@@ -413,7 +449,7 @@ export default function VisitaScadenzaCard({
             if (mdlMesi !== null) return { date: addMonths(visitDate, mdlMesi), mesi: mdlMesi, source: 'mdl_tipo' as const, label: tipoVisitaMDL };
         }
         return null;
-    }, [visitDate, template, prestazione, isMDL, tipoVisitaMDL, sorveglianzaStats]);
+    }, [visitDate, template, prestazione, isMDL, tipoVisitaMDL, sorveglianzaStats, scheduleFromCurrentVisit]);
 
     // Auto-apply suggestion when no value is set yet (on first load only)
     const didAutoApply = useRef(false);
@@ -502,7 +538,7 @@ export default function VisitaScadenzaCard({
                     }
                     <span className="text-sm font-semibold text-gray-800 flex-1">{headerTitle}</span>
                     {/* P72_23: count badge + expand/collapse moved from inner piano header */}
-                    {isMDL && pianoRows.length > 0 && (
+                    {isMDL && (pianoRows.length + prestazioniAggiuntiveExtra.length) > 0 && (
                         <button
                             type="button"
                             onClick={() => setPianoExpanded(v => !v)}
@@ -624,7 +660,7 @@ export default function VisitaScadenzaCard({
 
                 {/* ── Piano di sorveglianza sanitaria ──────────────────────────────────── */}
                 {/* P72_23: header interno rimosso — count/expand/reconcile spostati nel header esterno */}
-                {isMDL && pianoRows.length > 0 && (
+                {isMDL && (pianoRows.length + prestazioniAggiuntiveExtra.length) > 0 && (
                     <div className="-mx-4 border-t border-b border-gray-100 mb-4">
                         {/* Reconcile panel */}
                         {reconcileMode && !isReadonly && (
@@ -650,7 +686,7 @@ export default function VisitaScadenzaCard({
                                     ))}
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    {[{ label: '1 anno', mesi: 12 }, { label: '2 anni', mesi: 24 }, { label: '3 anni', mesi: 36 }].map(({ label, mesi }) => {
+                                    {[{ label: '3 mesi', mesi: 3 }, { label: '6 mesi', mesi: 6 }, { label: '1 anno', mesi: 12 }, { label: '2 anni', mesi: 24 }].map(({ label, mesi }) => {
                                         const preset = toInputDate(addMonths(visitDate, mesi));
                                         return (
                                             <button key={mesi} type="button" onClick={() => setReconcileTarget(preset)}
@@ -695,6 +731,7 @@ export default function VisitaScadenzaCard({
                                 {pianoRows.map(row => {
                                     const isEditing = editingId === row.itemId;
                                     const hasSuggestionDiff = row.suggestedDate && row.currentDate && diffDays(row.suggestedDate, row.currentDate) > 3;
+                                    const hasHistoryDate = !!row.lastExecutedDate;
 
                                     const badge = (() => {
                                         switch (row.statusKind) {
@@ -725,6 +762,11 @@ export default function VisitaScadenzaCard({
                                                     {row.periodicitaMesi > 0 && (
                                                         <span className="text-[10px] text-gray-400">ogni {row.periodicitaMesi} mesi</span>
                                                     )}
+                                                    {hasHistoryDate && (
+                                                        <span className="ml-2 text-[10px] text-slate-500">
+                                                            ultima esecuzione {formatDateShort(row.lastExecutedDate!)}
+                                                        </span>
+                                                    )}
                                                 </div>
                                                 {badge && (
                                                     <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full border text-[10px] font-medium whitespace-nowrap flex-shrink-0 ${badge.bg}`}>
@@ -745,8 +787,15 @@ export default function VisitaScadenzaCard({
                                                 <div className="flex items-center gap-2">
                                                     <div className="flex-1 flex items-center gap-1.5 flex-wrap">
                                                         {editDates[row.itemId] ? (
-                                                            // P72_23: mostra il valore salvato localmente subito dopo il save, prima del refetch
-                                                            <span className="text-xs text-gray-700 font-medium">{formatDateShort(editDates[row.itemId])}</span>
+                                                            // P73: se la data auto-applicata coincide con suggestedDate, mostra con stile "calcolata"
+                                                            editDates[row.itemId] === row.suggestedDate ? (
+                                                                <span className="text-xs text-teal-600 font-medium" title={`Calcolata: data visita + ${row.periodicitaMesi} mesi`}>
+                                                                    {formatDateShort(editDates[row.itemId])}
+                                                                    <span className="ml-1 text-[9px] text-teal-400">calcolata</span>
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-xs text-gray-700 font-medium">{formatDateShort(editDates[row.itemId])}</span>
+                                                            )
                                                         ) : row.currentDate ? (
                                                             <span className="text-xs text-gray-700 font-medium">{formatDateShort(row.currentDate)}</span>
                                                         ) : row.suggestedDate ? (
@@ -760,7 +809,12 @@ export default function VisitaScadenzaCard({
                                                         )}
                                                         {hasSuggestionDiff && row.suggestedDate && (
                                                             <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full whitespace-nowrap">
-                                                                → calcolata: {formatDateShort(row.suggestedDate)}
+                                                                → {scheduleFromCurrentVisit ? 'calcolata' : 'da storico'}: {formatDateShort(row.suggestedDate)}
+                                                            </span>
+                                                        )}
+                                                        {!scheduleFromCurrentVisit && row.suggestedDate && !row.currentDate && (
+                                                            <span className="text-[10px] text-slate-500 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                                                                prossima da storico: {formatDateShort(row.suggestedDate)}
                                                             </span>
                                                         )}
                                                     </div>
@@ -777,7 +831,7 @@ export default function VisitaScadenzaCard({
                                                                         ...prev,
                                                                         [row.itemId]: row.suggestedDate
                                                                             ?? (row.currentDate ? toInputDate(toLocalMidnight(row.currentDate)) : null)
-                                                                            ?? toInputDate(addMonths(visitDate, row.periodicitaMesi)),
+                                                                            ?? (scheduleFromCurrentVisit ? toInputDate(addMonths(visitDate, row.periodicitaMesi)) : toInputDate(new Date())),
                                                                     };
                                                                 });
                                                             }}
@@ -802,6 +856,7 @@ export default function VisitaScadenzaCard({
                                                         placeholder="Seleziona data…"
                                                         className="flex-1"
                                                         quickPresets={[
+                                                            { label: '3 mesi', date: addMonths(visitDate, 3) },
                                                             { label: '6 mesi', date: addMonths(visitDate, 6) },
                                                             { label: '1 anno', date: addMonths(visitDate, 12) },
                                                             { label: '2 anni', date: addMonths(visitDate, 24) },
@@ -944,7 +999,7 @@ export default function VisitaScadenzaCard({
                 )}
 
                 {/* Date picker — nascosto per MDL quando il piano di sorveglianza è disponibile */}
-                {!(isMDL && pianoRows.length > 0) && (
+                {!(isMDL && (pianoRows.length + prestazioniAggiuntiveExtra.length) > 0) && (
                     <div>
                         <label className="block text-xs font-medium text-gray-600 mb-1.5">
                             Data prossima visita
@@ -1042,4 +1097,3 @@ export default function VisitaScadenzaCard({
         </div>
     );
 }
-

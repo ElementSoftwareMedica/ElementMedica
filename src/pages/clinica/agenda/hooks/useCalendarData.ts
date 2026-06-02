@@ -29,8 +29,8 @@ import { formatDateISO } from '../utils/dateUtils';
 type SlotFromAPI = SlotDisponibilita & {
     medico?: {
         id: string;
-        nome: string;
-        cognome: string;
+        firstName?: string;
+        lastName?: string;
     };
     ambulatorio?: {
         id: string;
@@ -165,8 +165,8 @@ export const useCalendarData = ({
         queryFn: async () => {
             const params = getTenantFilterParams();
             const result = await appuntamentiApi.getAll({
-                startDate: dateRange.startDate,
-                endDate: dateRange.endDate,
+                dataInizio: dateRange.startDate,
+                dataFine: dateRange.endDate,
                 limit: 500,
                 ...params
             });
@@ -194,13 +194,13 @@ export const useCalendarData = ({
 
             return {
                 id: slot.id,
-                title: slot.medico?.cognome || 'Medico',
+                title: slot.medico?.lastName || 'Medico',
                 start,
                 end,
                 tipo: 'disponibilita',
                 medicoId: slot.medicoId,
                 medicoNome: slot.medico
-                    ? `${slot.medico.cognome} ${slot.medico.nome}`
+                    ? `${slot.medico.lastName || ''} ${slot.medico.firstName || ''}`.trim() || 'Medico'
                     : 'Medico',
                 ambulatorioId: slot.ambulatorioId,
                 ambulatorioNome: slot.ambulatorio?.nome || 'Ambulatorio',
@@ -217,31 +217,49 @@ export const useCalendarData = ({
             const start = new Date(app.dataOra);
             const durationMinutes = app.durataMinuti || 30;
             const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
+            const prezzoBase = Number(
+                (app as any)._prezzoPrestazioniBase
+                ?? (app as any)._prezzoTariffarioPrestazione
+                ?? (app as any)._prezzoTotaleMovimenti
+                ?? (app as any).prezzoBase
+                ?? app.prestazione?.prezzoBase
+                ?? 0
+            );
+            const condizioni = app.convenzione?.condizioni as any;
+            let prezzoScontato = Number((app as any).prezzoScontato ?? ((app as any).prezzoFinale < prezzoBase ? (app as any).prezzoFinale : 0) ?? 0) || undefined;
+            if (!prezzoScontato && condizioni && prezzoBase > 0) {
+                const scontoInfo = condizioni.scontoInfo;
+                const tipoSconto = String(scontoInfo?.tipo || '').toUpperCase();
+                if (tipoSconto.includes('PERCENT')) prezzoScontato = prezzoBase * (1 - Number(scontoInfo.valore || 0) / 100);
+                else if (tipoSconto.includes('VALORE') || tipoSconto.includes('FISSO')) prezzoScontato = Math.max(0, prezzoBase - Number(scontoInfo.valore || 0));
+                else if (condizioni.percentualeSconto || condizioni.scontoPercentuale) prezzoScontato = prezzoBase * (1 - Number(condizioni.percentualeSconto ?? condizioni.scontoPercentuale) / 100);
+                else if (condizioni.scontoFisso) prezzoScontato = Math.max(0, prezzoBase - Number(condizioni.scontoFisso));
+            }
 
             return {
                 id: app.id,
                 title: app.paziente
-                    ? `${app.paziente.cognome} ${app.paziente.nome}`
+                    ? `${app.paziente.lastName || app.paziente.cognome || ''} ${app.paziente.firstName || app.paziente.nome || ''}`.trim() || 'Paziente'
                     : 'Paziente',
                 start,
                 end,
                 tipo: 'appuntamento',
                 stato: app.stato,
                 paziente: app.paziente
-                    ? `${app.paziente.cognome} ${app.paziente.nome}`
+                    ? `${app.paziente.lastName || app.paziente.cognome || ''} ${app.paziente.firstName || app.paziente.nome || ''}`.trim() || undefined
                     : undefined,
-                pazienteTelefono: app.paziente?.telefono,
+                pazienteTelefono: app.paziente?.phone || app.paziente?.telefono,
                 medicoId: app.medicoId,
                 medicoNome: app.medico
-                    ? `${app.medico.cognome} ${app.medico.nome}`
+                    ? `${app.medico.lastName || ''} ${app.medico.firstName || ''}`.trim() || undefined
                     : undefined,
                 ambulatorioId: app.ambulatorioId,
                 ambulatorioNome: app.ambulatorio?.nome,
                 prestazione: app.prestazione?.nome,
-                prezzo: app.prezzo,
+                prezzo: prezzoBase || app.prezzo,
                 convenzione: app.convenzione?.nome,
                 convenzioneId: app.convenzioneId || undefined,
-                prezzoScontato: app.prezzoScontato || undefined,
+                prezzoScontato,
                 // P61: Note pubbliche e interne
                 note: app.note || undefined,
                 noteInterne: app.noteInterne || undefined,
@@ -251,7 +269,15 @@ export const useCalendarData = ({
                 numeroCoda: app.numeroCoda || undefined,
                 displayNumberCoda: app.displayNumberCoda || undefined,
                 visitaId: (app as any).visita?.id || undefined,
-                raw: app as Appuntamento
+                raw: {
+                    ...app,
+                    prezzo: prezzoBase || app.prezzo,
+                    prezzoBase: prezzoBase || app.prezzo,
+                    prezzoScontato,
+                    prezzoFinale: prezzoScontato ?? prezzoBase ?? app.prezzo,
+                    prezzoConvenzionato: prezzoScontato,
+                    _prezzoTariffarioPrestazione: prezzoBase || undefined,
+                } as Appuntamento
             };
         });
     }, [appuntamentiData]);

@@ -185,7 +185,7 @@ function promptRuntimeDeviceSetupIfNeeded(port: number, hasDevices: boolean): vo
 
 async function isBridgeAlreadyRunningOnPort(port: number): Promise<boolean> {
     try {
-        const response = await fetch(`http://localhost:${port}/health`, {
+        const response = await fetch(`http://127.0.0.1:${port}/health`, {
             signal: AbortSignal.timeout(1500),
         });
 
@@ -322,7 +322,11 @@ async function main() {
      */
     function tryListen(port: number): Promise<import('http').Server | null> {
         return new Promise((resolve) => {
-            const srv = app.listen(port, () => resolve(srv));
+            // Bind explicitly to 127.0.0.1 (IPv4) so that Electron's health checks
+            // via http://127.0.0.1:<port>/health always reach this server.
+            // On macOS, app.listen(port) without a host binds to :: (IPv6 only),
+            // which causes IPv4 clients to time out instead of getting refused.
+            const srv = app.listen(port, '127.0.0.1', () => resolve(srv));
             srv.once('error', () => resolve(null));
         });
     }
@@ -337,9 +341,8 @@ async function main() {
     });
 
     // CORS: The bridge is a local-only server (binds to localhost).
-    // Allow any https:// origin so the production webapp at https://www.elementmedica.com
-    // can reach the bridge running on the same machine — the browser's CORS check requires
-    // this even though the remote Internet cannot reach localhost:3000 at all.
+    // Allow ElementMedica origins and local dev only; do not expose device launch endpoints
+    // to arbitrary HTTPS sites.
     app.use(cors({
         origin: (origin, callback) => {
             if (!origin) return callback(null, true); // same-origin / non-browser callers
@@ -351,7 +354,12 @@ async function main() {
                 'http://127.0.0.1:5174',
                 'http://127.0.0.1:4001',
             ];
-            if (localhostOrigins.includes(origin) || origin.startsWith('https://')) {
+            const trustedWebOrigins = [
+                'https://www.elementmedica.com',
+                'https://elementmedica.com',
+                'https://app.elementmedica.com',
+            ];
+            if (localhostOrigins.includes(origin) || trustedWebOrigins.includes(origin)) {
                 return callback(null, true);
             }
             return callback(new Error('CORS: origin not allowed'));
@@ -365,8 +373,11 @@ async function main() {
     // Mount API routes
     app.use('/', createRoutes(watcher));
 
-    // 5. Start server — try configured port then up to 2 fallbacks (3001, 3002)
-    const PORT_CANDIDATES = [config.port, config.port + 1, config.port + 2];
+    // 5. Start server — try configured port then up to 2 fallbacks
+    // Skip port+1 (4051 when default 4050) as it is reserved for the Electron callback server.
+    const reservedPort = config.port + 1;
+    const PORT_CANDIDATES = [config.port, config.port + 2, config.port + 3]
+        .filter(p => p !== reservedPort);
     let server: import('http').Server | null = null;
     let activePort = config.port;
 

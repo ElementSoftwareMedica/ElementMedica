@@ -83,6 +83,9 @@ class ProfiloDiSaluteService {
             droghe: str(data.droghe),
             attivitaFisica: str(data.attivitaFisica),
             oreAttivitaSettimana: float(data.oreAttivitaSettimana),
+            peso: float(data.peso),
+            altezza: float(data.altezza),
+            bmi: float(data.bmi),
             alimentazione: str(data.alimentazione),
             porzioniFruttaVerdure: int(data.porzioniFruttaVerdure),
 

@@ -269,7 +269,8 @@ router.post('/:id/verify',
  * @param {string} firmatarioId - ID del firmatario
  */
 router.get('/saved/:firmatarioId',
-    requirePermission('signatures:read'),
+    // No RBAC permission required: handler enforces ownership (own signature only)
+    // Any authenticated user can fetch their own saved signature for form pre-fill
     async (req, res) => {
         try {
             const tenantId = getEffectiveTenantId(req);

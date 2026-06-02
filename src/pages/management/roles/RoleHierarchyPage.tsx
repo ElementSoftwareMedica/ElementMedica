@@ -132,6 +132,13 @@ interface DragState {
 const RoleHierarchyPage: React.FC = () => {
     const { user: currentUser, userRole } = useAuth();
     const navigate = useNavigate();
+
+    // Guard: solo ADMIN/SUPER_ADMIN possono gestire la gerarchia
+    // TENANT_ADMIN deve usare /management/permissions?tab=person per la gestione per persona
+    const isGlobalAdmin = currentUser?.globalRole === 'ADMIN' || currentUser?.globalRole === 'SUPER_ADMIN' ||
+        (currentUser?.roles as string[] | undefined)?.includes('ADMIN') ||
+        (currentUser?.roles as string[] | undefined)?.includes('SUPER_ADMIN');
+
     const [roles, setRoles] = useState<RoleNode[]>([]);
     const [allRolesFlat, setAllRolesFlat] = useState<RoleNode[]>([]);
     const [tenants, setTenants] = useState<Tenant[]>([]);
@@ -146,7 +153,14 @@ const RoleHierarchyPage: React.FC = () => {
     const [showMoveModal, setShowMoveModal] = useState(false);
 
     // P69: Solo ADMIN/SUPER_ADMIN possono modificare la gerarchia
-    const canEditHierarchy = userRole === 'ADMIN' || userRole === 'SUPER_ADMIN';
+    const canEditHierarchy = isGlobalAdmin;
+
+    // Redirect TENANT_ADMIN to the Permessi page (Per Persona tab)
+    useEffect(() => {
+        if (currentUser && !isGlobalAdmin) {
+            navigate('/management/permissions?tab=person', { replace: true });
+        }
+    }, [currentUser, isGlobalAdmin, navigate]);
 
     // Drag & drop state
     const [dragState, setDragState] = useState<DragState>({

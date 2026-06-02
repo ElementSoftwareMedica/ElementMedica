@@ -18,9 +18,66 @@ import { getEffectiveTenantId } from '../../utils/tenantHelper.js';
 import { getMDLTemplatesForTenant } from '../../utils/mdlNormativaTemplates.js';
 import { validateParamId } from '../../middleware/validateUUID.js';
 import { omitSystemFields } from '../../utils/sanitizeBody.js';
+import { TESTI_CONSENSI_DEFAULT } from './consenso-moduli.routes.js';
 
 const router = express.Router();
 router.param('id', validateParamId);
+
+const DOCUMENTO_CONSENSO_META = {
+    gdpr: { codice: 'CONSENSO-GDPR', tipo: 'PRIVACY', fase: 'REGISTRAZIONE' },
+    sanitari: { codice: 'CONSENSO-DATI-SANITARI', tipo: 'PRIVACY', fase: 'REGISTRAZIONE' },
+    comunicazioni: { codice: 'CONSENSO-COMUNICAZIONI', tipo: 'PRIVACY', fase: 'REGISTRAZIONE' },
+    marketing: { codice: 'CONSENSO-MARKETING', tipo: 'PRIVACY', fase: 'REGISTRAZIONE' },
+    fse_alimentazione: { codice: 'CONSENSO-FSE-ALIMENTAZIONE', tipo: 'PRIVACY', fase: 'REGISTRAZIONE' },
+    fse_consultazione: { codice: 'CONSENSO-FSE-CONSULTAZIONE', tipo: 'PRIVACY', fase: 'REGISTRAZIONE' },
+    fse_pregresso: { codice: 'CONSENSO-FSE-PREGRESSO', tipo: 'PRIVACY', fase: 'REGISTRAZIONE' },
+    mdl_sorveglianza: { codice: 'CONSENSO-MDL-SORVEGLIANZA', tipo: 'CONSENSO_INFORMATO', fase: 'PRE_VISITA' },
+    prestazione: { codice: 'CONSENSO-PRESTAZIONE', tipo: 'CONSENSO_INFORMATO', fase: 'PRE_VISITA' },
+    chirurgico: { codice: 'CONSENSO-CHIRURGICO', tipo: 'CONSENSO_INFORMATO', fase: 'PRE_VISITA' },
+};
+
+const getPatientConsentTemplatesForTenant = (tenantId) => Object.entries(TESTI_CONSENSI_DEFAULT)
+    .filter(([codice]) => DOCUMENTO_CONSENSO_META[codice])
+    .map(([codice, consenso]) => {
+        const meta = DOCUMENTO_CONSENSO_META[codice];
+        return {
+            tenantId,
+            nome: consenso.titolo,
+            codice: meta.codice,
+            tipo: meta.tipo,
+            fase: meta.fase,
+            descrizione: consenso.sottotitolo || consenso.titolo,
+            obbligatorio: consenso.obbligatorio,
+            richiedeFirma: true,
+            richiedeFirmaMedico: false,
+            branchTypes: ['MEDICA'],
+            validitaGiorni: consenso.validitaGiorni,
+            ordine: consenso.ordine,
+            contenutoHtml: `<h2>${consenso.titolo}</h2><p>${String(consenso.testo || '').replace(/\n+/g, '</p><p>')}</p>`,
+            consensoCodici: [codice],
+            campi: [{
+                name: 'testo_consenso',
+                label: 'Testo del consenso',
+                type: 'textarea',
+                required: false,
+            }],
+        };
+    });
+
+const ensurePatientConsentTemplates = async (tenantId, personId, ipAddress) => {
+    const defaults = getPatientConsentTemplatesForTenant(tenantId);
+    const existing = await DocumentoTemplateService.getAll({ tenantId, limit: 500 });
+    const existingCodici = new Set((existing.data || []).filter(t => t.codice).map(t => t.codice));
+    let created = 0;
+
+    for (const templateData of defaults) {
+        if (existingCodici.has(templateData.codice)) continue;
+        await DocumentoTemplateService.create(templateData, personId, ipAddress);
+        created++;
+    }
+
+    return created;
+};
 
 // All routes require authentication
 router.use(authenticate);
@@ -37,6 +94,13 @@ router.get('/templates', async (req, res) => {
     try {
         const tenantId = getEffectiveTenantId(req);
         const { tipo, fase, isActive, search, page, limit } = req.query;
+        await ensurePatientConsentTemplates(
+            tenantId,
+            req.person?.id || null,
+            req.ip || req.connection?.remoteAddress || 'unknown'
+        ).catch((err) => {
+            logger.warn({ error: err.message, tenantId }, 'Patient consent template auto-init skipped');
+        });
 
         const result = await DocumentoTemplateService.getAll({
             tenantId,
@@ -137,7 +201,10 @@ router.post('/templates/init-da-normativa', requirePermission('templates:create'
         const { id: personId } = req.person;
         const ipAddress = req.ip || req.connection?.remoteAddress || 'unknown';
 
-        const normativaTemplates = getMDLTemplatesForTenant(tenantId);
+        const normativaTemplates = [
+            ...getPatientConsentTemplatesForTenant(tenantId),
+            ...getMDLTemplatesForTenant(tenantId),
+        ];
 
         // Recupera i codici già esistenti per questo tenant
         const existing = await DocumentoTemplateService.getAll({

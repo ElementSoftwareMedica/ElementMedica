@@ -58,14 +58,14 @@ const PrenotaPage: React.FC = () => {
             icon: Stethoscope,
             title: 'Visite Specialistiche',
             description: 'Cardiologia, ortopedia, dermatologia e altre specialità con medici qualificati.',
-            href: '/visite-specialistiche',
+            href: '#booking',
             badge: 'Per Privati',
         },
         {
             icon: Activity,
             title: 'Diagnostica Strumentale',
             description: 'ECG, ecografia, spirometria, audiometria e altri esami diagnostici.',
-            href: '/diagnostica',
+            href: '#booking',
             badge: 'Esami',
         },
     ];
@@ -129,6 +129,10 @@ const PrenotaPage: React.FC = () => {
                             <ScrollReveal key={index} delay={index * 100}>
                                 <a
                                     href={option.href}
+                                    onClick={option.href === '#booking' ? (e) => {
+                                        e.preventDefault();
+                                        document.getElementById('booking')?.scrollIntoView({ behavior: 'smooth' });
+                                    } : undefined}
                                     className="card-premium p-8 block group hover:scale-[1.02] transition-transform duration-300"
                                 >
                                     <div className="flex items-center justify-between mb-4">

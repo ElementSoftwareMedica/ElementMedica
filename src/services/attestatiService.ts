@@ -213,7 +213,7 @@ class AttestatiService {
           failedCount: 0
         };
       } catch (batchError: unknown) {
-        if (batchError.response?.status === 404) {
+        if ((batchError as any).response?.status === 404) {
           // Fallback: sequential delete with delay to avoid rate limiting
           const results: Array<{ status: 'fulfilled' | 'rejected' }> = [];
           for (const id of ids) {

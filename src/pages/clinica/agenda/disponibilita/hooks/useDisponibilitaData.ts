@@ -17,12 +17,17 @@ import {
 } from '../../../../../services/clinicaApi';
 import { useTenantFilter } from '../../../../../context/TenantFilterContext';
 import { useToast } from '../../../../../hooks/useToast';
+import { useAuth } from '../../../../../context/AuthContext';
+import { useRoleGuard } from '../../../../../hooks/useRoleGuard';
 import type { MedicoWithStats, SlotForm, SingleSlotForm, FerieForm } from '../types';
 
 export const useDisponibilitaData = () => {
     const queryClient = useQueryClient();
     const { showToast } = useToast();
     const { getTenantFilterParams, isReady, tenantFilterKey } = useTenantFilter();
+    const { user } = useAuth();
+    const { isMedico, isMedicoCompetente } = useRoleGuard();
+    const currentMedicoPersonId = isMedico && !isMedicoCompetente ? user?.id : undefined;
 
     // Build tenant params
     const getTenantParams = useCallback(() => {
@@ -39,10 +44,23 @@ export const useDisponibilitaData = () => {
 
     // Fetch all medici
     const { data: mediciData, isLoading: loadingMedici } = useQuery({
-        queryKey: ['medici-disponibilita', tenantFilterKey],
-        queryFn: () => mediciApi.getAll({ limit: 200, ...getTenantParams() }),
+        queryKey: ['medici-disponibilita', tenantFilterKey, currentMedicoPersonId],
+        queryFn: () => mediciApi.getAll({ limit: 200, ...getTenantParams(), ...(currentMedicoPersonId && { medicoId: currentMedicoPersonId }) }),
         enabled: isReady
     });
+
+    const visibleMedici = useMemo(() => {
+        const medici = mediciData?.data || [];
+        if (!currentMedicoPersonId) return medici;
+        return medici.filter(m => m.id === currentMedicoPersonId || m.personId === currentMedicoPersonId);
+    }, [mediciData, currentMedicoPersonId]);
+    const visibleMedicoIds = useMemo(() => new Set(visibleMedici.map(m => m.id)), [visibleMedici]);
+    const assertCanManageMedico = useCallback((medicoId?: string | null) => {
+        if (!currentMedicoPersonId) return;
+        if (!medicoId || !visibleMedicoIds.has(medicoId)) {
+            throw new Error('Puoi gestire solo le tue disponibilità');
+        }
+    }, [currentMedicoPersonId, visibleMedicoIds]);
 
     // Fetch all ambulatori
     const { data: ambulatoriData, isLoading: loadingAmbulatori } = useQuery({
@@ -53,23 +71,23 @@ export const useDisponibilitaData = () => {
 
     // Fetch all disponibilità settimanali
     const { data: disponibilitaData, isLoading: loadingDisponibilita } = useQuery({
-        queryKey: ['disponibilita-all', tenantFilterKey],
-        queryFn: () => disponibilitaApi.getAll({ limit: 1000, ...getTenantParams() }).then(r => r.data),
+        queryKey: ['disponibilita-all', tenantFilterKey, currentMedicoPersonId],
+        queryFn: () => disponibilitaApi.getAll({ limit: 1000, ...getTenantParams(), ...(currentMedicoPersonId && { medicoId: currentMedicoPersonId }) }).then(r => r.data),
         enabled: isReady
     });
 
     // Fetch all slots singoli
     // IMPORTANT: includePast=true per vedere TUTTI gli slot, non solo quelli liberi e futuri
     const { data: slotsData, isLoading: loadingSlots } = useQuery({
-        queryKey: ['slots-all', tenantFilterKey],
-        queryFn: () => slotsApi.getAll({ limit: 1000, includePast: 'true', ...getTenantParams() }),
+        queryKey: ['slots-all', tenantFilterKey, currentMedicoPersonId],
+        queryFn: () => slotsApi.getAll({ limit: 1000, includePast: 'true', ...getTenantParams(), ...(currentMedicoPersonId && { medicoId: currentMedicoPersonId }) }),
         enabled: isReady
     });
 
     // Fetch all ferie
     const { data: ferieData, isLoading: loadingFerie } = useQuery({
-        queryKey: ['ferie-all', tenantFilterKey],
-        queryFn: () => ferieApi.getAll({ limit: 1000, ...getTenantParams() }).then(r => r.data),
+        queryKey: ['ferie-all', tenantFilterKey, currentMedicoPersonId],
+        queryFn: () => ferieApi.getAll({ limit: 1000, ...getTenantParams(), ...(currentMedicoPersonId && { medicoId: currentMedicoPersonId }) }).then(r => r.data),
         enabled: isReady
     });
 
@@ -79,7 +97,7 @@ export const useDisponibilitaData = () => {
 
     // Calculate medici with stats
     const mediciWithStats: MedicoWithStats[] = useMemo(() => {
-        if (!mediciData?.data) return [];
+        if (!visibleMedici.length) return [];
 
         const disponibilita = disponibilitaData || [];
         const slots = slotsData?.data || [];
@@ -87,7 +105,7 @@ export const useDisponibilitaData = () => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        return mediciData.data.map(medico => {
+        return visibleMedici.map(medico => {
             // Count weekly slots
             const medicoDisponibilita = disponibilita.filter(d => d.medicoId === medico.id);
 
@@ -117,10 +135,13 @@ export const useDisponibilitaData = () => {
                 slotsCount: medicoDisponibilita.length,
                 nextSlot,
                 hasActiveVacation,
-                weeklyHours: Math.round(weeklyMinutes / 60 * 10) / 10
+                weeklyHours: Math.round(weeklyMinutes / 60 * 10) / 10,
+                weeklySchedule: medicoDisponibilita
+                    .map(d => ({ giorno: d.giorno, oraInizio: d.oraInizio, oraFine: d.oraFine }))
+                    .sort((a, b) => (a.giorno || 7) - (b.giorno || 7) || a.oraInizio.localeCompare(b.oraInizio))
             };
         });
-    }, [mediciData, disponibilitaData, slotsData, ferieData]);
+    }, [visibleMedici, disponibilitaData, slotsData, ferieData]);
 
     // Get disponibilità by medico
     const getDisponibilitaByMedico = useCallback((medicoId: string): DisponibilitaMedico[] => {
@@ -146,7 +167,10 @@ export const useDisponibilitaData = () => {
 
     // Create orario settimanale
     const createSlotMutation = useMutation({
-        mutationFn: (data: Partial<DisponibilitaMedico>) => disponibilitaApi.create(data),
+        mutationFn: (data: Partial<DisponibilitaMedico>) => {
+            assertCanManageMedico(data.medicoId);
+            return disponibilitaApi.create(data);
+        },
         onSuccess: (result) => {
             queryClient.invalidateQueries({ queryKey: ['disponibilita-all'] });
             queryClient.invalidateQueries({ queryKey: ['disponibilita'] });
@@ -163,7 +187,11 @@ export const useDisponibilitaData = () => {
 
     // Delete orario settimanale
     const deleteSlotMutation = useMutation({
-        mutationFn: (id: string) => disponibilitaApi.delete(id),
+        mutationFn: (id: string) => {
+            const item = (disponibilitaData || []).find(d => d.id === id);
+            assertCanManageMedico(item?.medicoId);
+            return disponibilitaApi.delete(id);
+        },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['disponibilita-all'] });
             queryClient.invalidateQueries({ queryKey: ['disponibilita'] });
@@ -176,7 +204,11 @@ export const useDisponibilitaData = () => {
 
     // Update orario settimanale
     const updateSlotMutation = useMutation({
-        mutationFn: ({ id, data }: { id: string; data: Partial<DisponibilitaMedico> }) => disponibilitaApi.update(id, data),
+        mutationFn: ({ id, data }: { id: string; data: Partial<DisponibilitaMedico> }) => {
+            const item = (disponibilitaData || []).find(d => d.id === id);
+            assertCanManageMedico(data.medicoId || item?.medicoId);
+            return disponibilitaApi.update(id, data);
+        },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['disponibilita-all'] });
             queryClient.invalidateQueries({ queryKey: ['disponibilita'] });
@@ -191,7 +223,10 @@ export const useDisponibilitaData = () => {
 
     // Create slot singolo
     const createSingleSlotMutation = useMutation({
-        mutationFn: (data: Partial<SlotDisponibilita>) => slotsApi.create(data),
+        mutationFn: (data: Partial<SlotDisponibilita>) => {
+            assertCanManageMedico(data.medicoId);
+            return slotsApi.create(data);
+        },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['slots-all'] });
             queryClient.invalidateQueries({ queryKey: ['slots-singoli'] });
@@ -206,7 +241,11 @@ export const useDisponibilitaData = () => {
 
     // Delete slot singolo
     const deleteSingleSlotMutation = useMutation({
-        mutationFn: (id: string) => slotsApi.delete(id),
+        mutationFn: (id: string) => {
+            const item = (slotsData?.data || []).find(s => s.id === id);
+            assertCanManageMedico(item?.medicoId);
+            return slotsApi.delete(id);
+        },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['slots-all'] });
             queryClient.invalidateQueries({ queryKey: ['slots-singoli'] });
@@ -219,7 +258,10 @@ export const useDisponibilitaData = () => {
 
     // Create ferie
     const createFerieMutation = useMutation({
-        mutationFn: (data: Partial<FerieAssenza>) => ferieApi.create(data),
+        mutationFn: (data: Partial<FerieAssenza>) => {
+            assertCanManageMedico(data.medicoId);
+            return ferieApi.create(data);
+        },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['ferie-all'] });
             queryClient.invalidateQueries({ queryKey: ['ferie'] });
@@ -232,7 +274,11 @@ export const useDisponibilitaData = () => {
 
     // Delete ferie
     const deleteFerieMutation = useMutation({
-        mutationFn: (id: string) => ferieApi.delete(id),
+        mutationFn: (id: string) => {
+            const item = (ferieData || []).find(f => f.id === id);
+            assertCanManageMedico(item?.medicoId);
+            return ferieApi.delete(id);
+        },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['ferie-all'] });
             queryClient.invalidateQueries({ queryKey: ['ferie'] });
@@ -246,6 +292,8 @@ export const useDisponibilitaData = () => {
     // Copy pattern
     const copyPatternMutation = useMutation({
         mutationFn: async ({ sourceId, targetId }: { sourceId: string; targetId: string }) => {
+            assertCanManageMedico(sourceId);
+            assertCanManageMedico(targetId);
             const sourceDisponibilita = getDisponibilitaByMedico(sourceId);
             const promises = sourceDisponibilita.map(d =>
                 disponibilitaApi.create({
@@ -270,7 +318,7 @@ export const useDisponibilitaData = () => {
 
     return {
         // Data
-        medici: mediciData?.data || [],
+        medici: visibleMedici,
         mediciWithStats,
         ambulatori: ambulatoriData?.data || [],
         disponibilita: disponibilitaData || [],

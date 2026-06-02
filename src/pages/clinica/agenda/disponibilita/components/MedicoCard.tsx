@@ -3,7 +3,7 @@
  * @module pages/clinica/agenda/disponibilita/components/MedicoCard
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { User, Clock, Calendar, AlertTriangle, ChevronRight } from 'lucide-react';
 import { getDoctorTitle } from '../../../../../utils/codiceFiscale';
 import type { MedicoWithStats } from '../types';
@@ -19,6 +19,28 @@ export const MedicoCard: React.FC<MedicoCardProps> = ({ medico, onClick, isSelec
     const firstName = medico.firstName || medico.nome || '';
     const lastName = medico.lastName || medico.cognome || '';
     const title = getDoctorTitle(medico.taxCode, medico.gender);
+
+    // Group schedule by day, merge contiguous time ranges per day
+    const scheduleByDay = useMemo(() => {
+        if (!medico.weeklySchedule || medico.weeklySchedule.length === 0) return [];
+
+        const grouped = new Map<number, { oraInizio: string; oraFine: string }[]>();
+        for (const entry of medico.weeklySchedule) {
+            if (!grouped.has(entry.giorno)) grouped.set(entry.giorno, []);
+            grouped.get(entry.giorno)!.push({ oraInizio: entry.oraInizio, oraFine: entry.oraFine });
+        }
+
+        return Array.from(grouped.entries())
+            .sort(([a], [b]) => (a || 7) - (b || 7))
+            .map(([giorno, times]) => {
+                const dayInfo = GIORNI_SETTIMANA.find(g => g.value === giorno);
+                const timeRanges = times
+                    .sort((a, b) => a.oraInizio.localeCompare(b.oraInizio))
+                    .map(t => `${t.oraInizio}-${t.oraFine}`)
+                    .join(', ');
+                return { day: dayInfo?.short || `G${giorno}`, timeRanges };
+            });
+    }, [medico.weeklySchedule]);
 
     return (
         <div
@@ -62,37 +84,36 @@ export const MedicoCard: React.FC<MedicoCardProps> = ({ medico, onClick, isSelec
                 <ChevronRight className="h-5 w-5 text-gray-400 flex-shrink-0" />
             </div>
 
-            {/* Stats Grid */}
-            <div className="grid grid-cols-2 gap-3">
-                {/* Weekly Hours */}
-                <div className="px-3 py-2 bg-gray-50 rounded-lg">
-                    <div className="flex items-center gap-1.5 text-gray-500 text-xs mb-1">
-                        <Clock className="h-3.5 w-3.5" />
-                        <span>Ore/settimana</span>
-                    </div>
-                    <p className="text-lg font-semibold text-gray-900">
-                        {medico.weeklyHours}h
-                    </p>
+            {/* Stats Row */}
+            <div className="flex items-center gap-3 mb-3">
+                <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                    <Clock className="h-3.5 w-3.5" />
+                    <span className="font-semibold text-gray-900">{medico.weeklyHours}h</span>/sett.
                 </div>
-
-                {/* Slots Count */}
-                <div className="px-3 py-2 bg-gray-50 rounded-lg">
-                    <div className="flex items-center gap-1.5 text-gray-500 text-xs mb-1">
-                        <Calendar className="h-3.5 w-3.5" />
-                        <span>Fasce orarie</span>
-                    </div>
-                    <p className="text-lg font-semibold text-gray-900">
-                        {medico.slotsCount}
-                    </p>
+                <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                    <Calendar className="h-3.5 w-3.5" />
+                    <span className="font-semibold text-gray-900">{medico.slotsCount}</span> fasce
                 </div>
             </div>
 
+            {/* Weekly Schedule */}
+            {scheduleByDay.length > 0 && (
+                <div className="space-y-1 mb-3">
+                    {scheduleByDay.map(({ day, timeRanges }) => (
+                        <div key={day} className="flex items-center gap-2 text-xs">
+                            <span className="w-8 font-semibold text-teal-700">{day}</span>
+                            <span className="text-gray-600">{timeRanges}</span>
+                        </div>
+                    ))}
+                </div>
+            )}
+
             {/* Next Slot Preview */}
             {medico.nextSlot && (
-                <div className="mt-3 pt-3 border-t border-gray-100">
-                    <p className="text-xs text-gray-500 mb-1">Prossima disponibilità</p>
+                <div className="pt-2 border-t border-gray-100">
+                    <p className="text-xs text-gray-500 mb-0.5">Prossima disponibilità</p>
                     <p className="text-sm font-medium text-teal-600">
-                        {new Date(medico.nextSlot.data).toLocaleDateString('it-IT', {
+                        {new Date(String(medico.nextSlot.data).split('T')[0] + 'T12:00:00').toLocaleDateString('it-IT', {
                             weekday: 'short',
                             day: 'numeric',
                             month: 'short'

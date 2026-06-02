@@ -44,7 +44,7 @@ router.use(requireAuth);
 router.get('/', requirePermission('visite:read'), async (req, res) => {
     try {
         const tenantId = getEffectiveTenantId(req);
-        const {
+        let {
             companyTenantProfileId,
             siteId,
             categoria,
@@ -53,6 +53,21 @@ router.get('/', requirePermission('visite:read'), async (req, res) => {
             limit = 100,
             includePrenotate
         } = req.query;
+
+        if (companyTenantProfileId) {
+            const profile = await prisma.companyTenantProfile.findFirst({
+                where: {
+                    tenantId,
+                    deletedAt: null,
+                    OR: [
+                        { id: companyTenantProfileId },
+                        { companyId: companyTenantProfileId }
+                    ]
+                },
+                select: { id: true }
+            });
+            companyTenantProfileId = profile?.id || companyTenantProfileId;
+        }
 
         const dataFine = new Date();
         dataFine.setDate(dataFine.getDate() + parseInt(giorni));
@@ -82,7 +97,7 @@ router.get('/', requirePermission('visite:read'), async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Errore nel recupero delle scadenze MDL',
-            
+
         });
     }
 });
@@ -112,7 +127,7 @@ router.get('/statistiche', requirePermission('visite:read'), async (req, res) =>
         res.status(500).json({
             success: false,
             message: 'Errore nel recupero delle statistiche',
-            
+
         });
     }
 });
@@ -149,7 +164,7 @@ router.get('/notifiche', requirePermission('visite:read'), async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Errore nel recupero delle notifiche',
-            
+
         });
     }
 });
@@ -186,7 +201,7 @@ router.get('/azienda/:companyTenantProfileId', requirePermission('visite:read'),
         res.status(500).json({
             success: false,
             message: 'Errore nel recupero del riepilogo azienda',
-            
+
         });
     }
 });
@@ -227,7 +242,7 @@ router.get('/sede/:siteId', requirePermission('visite:read'), async (req, res) =
         res.status(500).json({
             success: false,
             message: 'Errore nel recupero delle scadenze sede',
-            
+
         });
     }
 });
@@ -286,7 +301,7 @@ router.get('/calendario', requirePermission('visite:read'), async (req, res) => 
         res.status(500).json({
             success: false,
             message: 'Errore nel recupero del calendario scadenze',
-            
+
         });
     }
 });
@@ -349,7 +364,7 @@ router.get('/export', requirePermission('visite:read'), async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Errore nell\'export delle scadenze',
-            
+
         });
     }
 });
@@ -399,19 +414,21 @@ router.post('/programma-prestazioni', requirePermission('visite:write'), async (
 
 /**
  * GET /api/v1/clinica/scadenze-mdl/persona/:personId/in-scadenza
- * Restituisce le ScadenzaPrestazioneProtocollo aperte del lavoratore entro ±giorni dalla dataRiferimento.
+ * Restituisce le ScadenzaPrestazioneProtocollo aperte del lavoratore entro -60/+30 giorni dalla dataRiferimento.
  * Usato dal modal di prenotazione appuntamento MDL per auto-selezionare le prestazioni in scadenza.
  *
  * Query params:
  * - dataRiferimento: ISO date, data di riferimento (data appuntamento)
- * - giorni: numero giorni di tolleranza (default 60)
+ * - giorniPre: giorni precedenti inclusi (default 60)
+ * - giorniPost: giorni successivi inclusi (default 30)
+ * - giorni: legacy, numero simmetrico di tolleranza
  * - excludeAppuntamentoId: escludi scadenze già collegate a questo appuntamento specifico (in edit mode)
  */
 router.get('/persona/:personId/in-scadenza', requirePermission('visite:read'), async (req, res) => {
     try {
         const tenantId = getEffectiveTenantId(req);
         const { personId } = req.params;
-        const { dataRiferimento, giorni = '60', excludeAppuntamentoId } = req.query;
+        const { dataRiferimento, giorni, giorniPre = '60', giorniPost = '30', excludeAppuntamentoId } = req.query;
 
         if (!personId) {
             return res.status(400).json({ success: false, message: 'personId obbligatorio' });
@@ -425,11 +442,14 @@ router.get('/persona/:personId/in-scadenza', requirePermission('visite:read'), a
             return res.status(400).json({ success: false, message: 'dataRiferimento non valida' });
         }
 
-        const giorniNum = parseInt(giorni, 10) || 60;
+        // Finestra asimmetrica: -60 giorni (scaduti recenti) / +30 giorni (prossimi)
+        // Il parametro legacy "giorni" sovrascrive entrambi per backward compatibility
+        const preNum = giorni ? parseInt(giorni, 10) : (parseInt(giorniPre, 10) || 60);
+        const postNum = giorni ? parseInt(giorni, 10) : (parseInt(giorniPost, 10) || 30);
         const dataMin = new Date(refDate);
-        dataMin.setDate(dataMin.getDate() - giorniNum);
+        dataMin.setDate(dataMin.getDate() - preNum);
         const dataMax = new Date(refDate);
-        dataMax.setDate(dataMax.getDate() + giorniNum);
+        dataMax.setDate(dataMax.getDate() + postNum);
 
         // Recupera scadenze aperte (non eseguite) nel range di date
         // - appuntamentoId null: scadenza non ancora prenotata → da auto-selezionare
@@ -485,7 +505,7 @@ router.get('/persona/:personId/in-scadenza', requirePermission('visite:read'), a
         }));
 
         logger.info(
-            { tenantId, personId, dataRiferimento, giorniNum, found: result.length },
+            { tenantId, personId, dataRiferimento, giorniPre: preNum, giorniPost: postNum, found: result.length },
             'GET /scadenze-mdl/persona/:personId/in-scadenza'
         );
 

@@ -54,6 +54,8 @@ export interface DayColumnProps {
     onChiamaEVisitaAppuntamento?: (event: CalendarEvent) => void;
     /** Handler visualizza visita refertata (COMPLETATO/FATTURATO) */
     onViewVisitaAppuntamento?: (event: CalendarEvent) => void;
+    /** Handler apertura fatturazione da appuntamento refertato */
+    onFatturaAppuntamento?: (event: CalendarEvent) => void;
     /** Handler modifica appuntamento (naviga alla pagina modifica) */
     onModificaAppuntamento?: (event: CalendarEvent) => void;
     /** Handler cambio stato appuntamento (dalla tooltip) */
@@ -127,6 +129,7 @@ export const DayColumn: React.FC<DayColumnProps> = ({
     onVisitaAppuntamento,
     onChiamaEVisitaAppuntamento,
     onViewVisitaAppuntamento,
+    onFatturaAppuntamento,
     onModificaAppuntamento,
     onUpdateStato,
     onDragStart,
@@ -405,6 +408,7 @@ export const DayColumn: React.FC<DayColumnProps> = ({
                         onVisita={onVisitaAppuntamento ? () => onVisitaAppuntamento(event) : undefined}
                         onChiamaEVisita={onChiamaEVisitaAppuntamento ? () => onChiamaEVisitaAppuntamento(event) : undefined}
                         onViewVisita={onViewVisitaAppuntamento ? () => onViewVisitaAppuntamento(event) : undefined}
+                        onFattura={onFatturaAppuntamento ? () => onFatturaAppuntamento(event) : undefined}
                         onModifica={onModificaAppuntamento ? () => onModificaAppuntamento(event) : undefined}
                         onUpdateStato={onUpdateStato}
                         onDragStart={onItemDragStart}

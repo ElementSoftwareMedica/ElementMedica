@@ -1645,6 +1645,46 @@
           {
             "answer": "Utilizziamo un sistema informatizzato che garantisce la riservatezza dei dati sanitari, la tracciabilità degli accessi e la conservazione per i 10 anni previsti dalla legge (40 anni per cancerogeni).",
             "question": "Come gestite le cartelle sanitarie?"
+          },
+          {
+            "question": "Cosa rischia il datore di lavoro che non effettua la sorveglianza sanitaria?",
+            "answer": "Le sanzioni vanno dall'arresto da 2 a 4 mesi o ammenda da €1.644,89 a €6.658,28 per omessa sorveglianza sanitaria. In caso di infortuni o malattia professionale derivante dall'omissione, scatta anche la responsabilità penale e civile."
+          },
+          {
+            "question": "Chi può svolgere il ruolo di medico competente?",
+            "answer": "L'art. 38 D.Lgs 81/08 stabilisce che possono svolgere la funzione: specialisti in medicina del lavoro, medicina preventiva dei lavoratori, igiene e medicina preventiva, o medici con autorizzazione regionale ante D.Lgs 626/1994, iscritti nell'elenco del Ministero della Salute."
+          },
+          {
+            "question": "Cosa deve contenere il protocollo sanitario?",
+            "answer": "Il protocollo sanitario, redatto dal medico competente su indicazione del datore di lavoro e del DVR, deve elencare: tipi di visita per ogni mansione, accertamenti integrativi (audiometria, spirometria, esami ematici, ecc.), periodicità per ogni rischio e criteri di idoneità."
+          },
+          {
+            "question": "Il lavoratore può rifiutare la visita medica?",
+            "answer": "No. Il lavoratore ha l'obbligo di sottoporsi ai controlli sanitari previsti (art. 20 D.Lgs 81/08). Il rifiuto ingiustificato è passibile di provvedimento disciplinare. Il lavoratore ha però diritto di conoscere le ragioni della visita e il protocollo sanitario applicato."
+          },
+          {
+            "question": "Il medico competente è obbligato al segreto professionale?",
+            "answer": "Sì. Il medico competente è tenuto al segreto professionale. Comunica al datore di lavoro solo il giudizio di idoneità (non la diagnosi). I dati sanitari sono coperti dal GDPR e non possono essere divulgati senza consenso del lavoratore, tranne in casi previsti dalla legge."
+          },
+          {
+            "question": "Cosa differenzia la visita preventiva dalla visita periodica?",
+            "answer": "La visita preventiva (pre-assuntiva o pre-assegnazione) valuta l'idoneità prima di esporre il lavoratore al rischio. La visita periodica monitora nel tempo lo stato di salute in relazione alla mansione. Entrambe generano un giudizio di idoneità ma hanno finalità diverse."
+          },
+          {
+            "question": "Come funziona la riunione periodica annuale?",
+            "answer": "Nelle aziende con più di 15 lavoratori il datore di lavoro deve indire almeno una riunione periodica annuale (art. 35 D.Lgs 81/08) con RSPP, MC e RLS, per esaminare DVR, andamento infortuni, programmi di formazione e aggiornamenti sanitari."
+          },
+          {
+            "question": "È possibile delegare la sorveglianza sanitaria a una struttura esterna?",
+            "answer": "Sì. Il medico competente può operare in forma autonoma o nell'ambito di strutture sanitarie (poliambulatori, enti accreditati, UOPSAL). Tuttavia la responsabilità della nomina e dell'attuazione rimane sempre in capo al datore di lavoro."
+          },
+          {
+            "question": "Quando scade il giudizio di idoneità?",
+            "answer": "Il giudizio di idoneità è valido fino alla successiva visita prevista dal protocollo sanitario. Non ha una scadenza automatica, ma si presuppone che il lavoratore mantenga l'idoneità fino alla rivalutazione programmata, salvo sopraggiunte condizioni di salute."
+          },
+          {
+            "question": "Come si gestisce la sorveglianza per i lavoratori in smart working?",
+            "answer": "I lavoratori in smart working full-remote che utilizzano VDT almeno 20 ore/settimana rimangono soggetti a sorveglianza sanitaria. Le visite possono avvenire presso lo studio del medico competente o tramite telemedicina ove consentito dalla normativa regionale."
           }
         ],
         "sectionTitle": "Domande Frequenti sulla Medicina del Lavoro",
@@ -1659,12 +1699,12 @@
           {
             "icon": "Building2",
             "label": "Aziende Servite",
-            "number": "300+"
+            "number": "350+"
           },
           {
             "icon": "Stethoscope",
             "label": "Visite/Anno",
-            "number": "8.000+"
+            "number": "10.000+"
           },
           {
             "icon": "Clock",
@@ -1675,6 +1715,16 @@
             "icon": "Shield",
             "label": "Conformità",
             "number": "100%"
+          },
+          {
+            "icon": "Award",
+            "label": "Medici Specializzati",
+            "number": "15+"
+          },
+          {
+            "icon": "Star",
+            "label": "Anni Esperienza",
+            "number": "20+"
           }
         ],
         "title": "Medicina del Lavoro",
@@ -1750,8 +1800,8 @@
       "metadata": {
         "theme": "formazione",
         "layout": "full-width",
-        "version": "2.0",
-        "lastUpdate": "2025-11-29T08:06:16.848Z"
+        "version": "3.0",
+        "lastUpdate": "2026-04-09T16:19:37.686622Z"
       },
       "services": {
         "items": [
@@ -1897,6 +1947,30 @@
             "link": "#",
             "title": "Obblighi Datore",
             "description": "Obblighi del datore di lavoro in materia di sorveglianza"
+          },
+          {
+            "code": "Art. 39",
+            "link": "#",
+            "title": "Svolgimento attività MC",
+            "description": "Modalità di svolgimento e rapporto con il datore di lavoro"
+          },
+          {
+            "code": "Art. 40",
+            "link": "#",
+            "title": "Rapporti con SSN",
+            "description": "Trasmissione dati aggregati anonimi al servizio di prevenzione"
+          },
+          {
+            "code": "Art. 42",
+            "link": "#",
+            "title": "Provvedimenti post-visita",
+            "description": "Obblighi del datore di lavoro a seguito di giudizio di non idoneità"
+          },
+          {
+            "code": "Art. 229",
+            "link": "#",
+            "title": "Cancerogeni - Registro esposti",
+            "description": "Obbligo registro lavoratori esposti ad agenti cancerogeni e mutageni"
           }
         ],
         "sectionTitle": "Riferimenti Normativi",
@@ -1933,6 +2007,21 @@
             "icon": "Banknote",
             "title": "Prezzi Trasparenti",
             "description": "Tariffe chiare senza costi nascosti"
+          },
+          {
+            "icon": "Smartphone",
+            "title": "App per i Lavoratori",
+            "description": "Accesso digitale ai propri certificati e giudizi di idoneità"
+          },
+          {
+            "icon": "BarChart3",
+            "title": "Dashboard HR",
+            "description": "Statistiche sullo stato della sorveglianza per tutto il personale"
+          },
+          {
+            "icon": "Globe",
+            "title": "Multisite",
+            "description": "Gestione centralizzata per aziende con più sedi operative"
           }
         ],
         "sectionTitle": "Vantaggi del Nostro Servizio",
@@ -2052,6 +2141,329 @@
         "description": "La sorveglianza sanitaria è obbligatoria quando i lavoratori sono esposti a specifici fattori di rischio:",
         "sectionTitle": "Quando è Obbligatoria la Sorveglianza Sanitaria?",
         "backgroundVariant": "light-pattern"
+      },
+      "statistics": {
+        "sectionTitle": "La Salute sul Lavoro in Numeri",
+        "sectionSubtitle": "Dati INAIL 2023-2024 - perché la sorveglianza sanitaria è essenziale",
+        "backgroundVariant": "gradient-subtle",
+        "stats": [
+          {
+            "icon": "TrendingDown",
+            "value": "585.356",
+            "label": "Infortuni denunciati INAIL 2023",
+            "detail": "con 1.041 casi mortali",
+            "color": "red"
+          },
+          {
+            "icon": "Activity",
+            "value": "51.645",
+            "label": "Malattie professionali denunciate 2023",
+            "detail": "sistema muscoloscheletrico: 60% dei casi",
+            "color": "orange"
+          },
+          {
+            "icon": "Euro",
+            "value": "€58 mld",
+            "label": "Costo sociale infortuni annuo in Italia",
+            "detail": "fonte: Fondazione INAIL",
+            "color": "yellow"
+          },
+          {
+            "icon": "CheckCircle",
+            "value": "-23%",
+            "label": "Riduzione infortuni aziende con sorveglianza attiva",
+            "detail": "rispetto alla media di settore",
+            "color": "green"
+          }
+        ],
+        "highlightBox": {
+          "title": "Il Costo della Non Conformità",
+          "items": [
+            "Ammenda fino a €6.658 per omessa sorveglianza sanitaria",
+            "Arresto da 2 a 4 mesi per i reati più gravi",
+            "Aumento del tasso INAIL fino al 100% in caso di violazioni reiterate",
+            "Responsabilità civile illimitata per danni alla salute dei lavoratori",
+            "Sospensione attività imprenditoriale in caso di gravi violazioni"
+          ]
+        }
+      },
+      "pricing": {
+        "sectionTitle": "Costi e Tariffe della Medicina del Lavoro",
+        "backgroundVariant": "white",
+        "disclaimer": "Tariffe indicative. Il preventivo definitivo è gratuito e personalizzato in base al numero di lavoratori, rischi specifici e protocollo sanitario richiesto.",
+        "packages": [
+          {
+            "name": "Starter",
+            "target": "Piccole imprese 1-10 dipendenti",
+            "price": "Da €120",
+            "unit": "per dipendente/anno",
+            "highlight": false,
+            "includes": [
+              "Nomina medico competente",
+              "Visita medica periodica",
+              "Giudizio di idoneità",
+              "Cartella sanitaria digitale",
+              "Consulenza telefonica"
+            ]
+          },
+          {
+            "name": "Business",
+            "target": "Aziende 11-50 dipendenti",
+            "price": "Da €90",
+            "unit": "per dipendente/anno",
+            "highlight": true,
+            "tag": "Più Scelto",
+            "includes": [
+              "Tutto di Starter",
+              "Sopralluogo in azienda incluso",
+              "Protocollo sanitario personalizzato",
+              "Promemoria scadenze automatici",
+              "Referente dedicato",
+              "Riunione periodica annuale"
+            ]
+          },
+          {
+            "name": "Enterprise",
+            "target": "Grandi aziende 50+ dipendenti",
+            "price": "Su misura",
+            "unit": "preventivo personalizzato",
+            "highlight": false,
+            "includes": [
+              "Tutto di Business",
+              "Medico ambulatorio in-house",
+              "Analisi di laboratorio incluse",
+              "SLA dedicato 4 ore",
+              "Report periodici HR",
+              "Integrazione sistemi gestionali"
+            ]
+          }
+        ],
+        "extraServices": [
+          {
+            "service": "Audiometria",
+            "price": "€25-40"
+          },
+          {
+            "service": "Spirometria",
+            "price": "€30-50"
+          },
+          {
+            "service": "ECG",
+            "price": "€35-55"
+          },
+          {
+            "service": "Esami ematici standard",
+            "price": "€45-80"
+          },
+          {
+            "service": "Test psicofisici (guida/lavoro notturno)",
+            "price": "€60-90"
+          },
+          {
+            "service": "Visita oculistica VDT",
+            "price": "€50-70"
+          },
+          {
+            "service": "Visita per lavoro in quota/sbraccio",
+            "price": "€80-120"
+          }
+        ]
+      },
+      "testimonials": {
+        "sectionTitle": "Cosa Dicono i Nostri Clienti",
+        "backgroundVariant": "gradient-subtle",
+        "items": [
+          {
+            "name": "Marco Ferretti",
+            "role": "Responsabile HR",
+            "company": "Logistica Express SPA (120 dipendenti)",
+            "rating": 5,
+            "text": "Gestivamo la sorveglianza sanitaria con tre fornitori diversi. Con Element abbiamo centralizzato tutto: un unico medico competente, cartelle digitali, promemoria automatici. Le visite si svolgono direttamente nei nostri magazzini. Zero burocrazia."
+          },
+          {
+            "name": "Ing. Laura Conti",
+            "role": "RSPP",
+            "company": "Metalmeccanica Conti SRL (45 dipendenti)",
+            "rating": 5,
+            "text": "Operando nel comparto metalmeccanico abbiamo rischi multipli: rumore, vibrazioni, agenti chimici. Element ha strutturato un protocollo sanitario molto preciso. L'ultima ispezione UOPSAL è andata benissimo, tutta la documentazione era ineccepibile."
+          },
+          {
+            "name": "Dott.ssa Giorgia Neri",
+            "role": "Titolare",
+            "company": "Studio Dentistico Neri (8 dipendenti)",
+            "rating": 5,
+            "text": "Ambiente sanitario, esposizione a agenti biologici. Avevo bisogno di un medico competente che conoscesse il settore. Element ha risposto in 24 ore, il servizio è partito in una settimana. Professionalità al top."
+          },
+          {
+            "name": "Roberto Salamone",
+            "role": "Direttore Operativo",
+            "company": "GDO Distribuzione (300+ dipendenti)",
+            "rating": 5,
+            "text": "Con 7 punti vendita distribuiti sul territorio avevo bisogno di un partner capace di coordinare visite su sedi diverse. Element ha predisposto un calendario centralizzato. Sistema di gestione documentale eccellente."
+          }
+        ]
+      },
+      "documentazione": {
+        "sectionTitle": "Documentazione Obbligatoria in Materia Sanitaria",
+        "backgroundVariant": "light",
+        "description": "Il medico competente è responsabile della produzione e conservazione di questi documenti obbligatori. Con ElementMedica tutto è digitale e accessibile.",
+        "documents": [
+          {
+            "icon": "FileText",
+            "title": "Cartella Sanitaria e di Rischio",
+            "law": "Art. 25, c.1, lett. c) D.Lgs 81/08",
+            "description": "Documento personale del lavoratore con anamnesi, esiti delle visite e giudizi di idoneità.",
+            "conservazione": "10 anni (40 anni cancerogeni)"
+          },
+          {
+            "icon": "FileCheck",
+            "title": "Giudizio di Idoneità",
+            "law": "Art. 41, c.6 D.Lgs 81/08",
+            "description": "Documento rilasciato al lavoratore e al datore di lavoro al termine di ogni visita medica.",
+            "conservazione": "Come da cartella sanitaria"
+          },
+          {
+            "icon": "ClipboardList",
+            "title": "Protocollo Sanitario",
+            "law": "Art. 25, c.1, lett. b) D.Lgs 81/08",
+            "description": "Elenco per ogni mansione e rischio del tipo di visita, accertamenti integrativi e periodicità. Parte integrante del DVR.",
+            "conservazione": "Aggiornamento annuale"
+          },
+          {
+            "icon": "BookOpen",
+            "title": "Registro Infortuni",
+            "law": "Art. 53 D.Lgs 81/08",
+            "description": "Registro cronologico di tutti gli infortuni che comportano assenza dal lavoro per almeno un giorno.",
+            "conservazione": "4 anni"
+          },
+          {
+            "icon": "AlertOctagon",
+            "title": "Registro Esposti a Cancerogeni",
+            "law": "Art. 243 D.Lgs 81/08",
+            "description": "Registro dei lavoratori esposti ad agenti cancerogeni con indicazione mansione, livello e durata esposizione.",
+            "conservazione": "40 anni"
+          },
+          {
+            "icon": "Activity",
+            "title": "Relazione Sanitaria Annuale",
+            "law": "Art. 40, c.1 D.Lgs 81/08",
+            "description": "Relazione del medico competente sullo stato di salute aggregato della forza lavoro, inviata in forma anonima.",
+            "conservazione": "Invio entro 31 marzo"
+          }
+        ]
+      },
+      "rischiProtocolli": {
+        "sectionTitle": "Rischi Specifici e Protocolli Sanitari",
+        "backgroundVariant": "white",
+        "description": "Per ogni tipologia di rischio il medico competente definisce accertamenti mirati.",
+        "protocols": [
+          {
+            "risk": "Rumore",
+            "icon": "Volume2",
+            "color": "orange",
+            "legalRef": "Titolo VIII, Capo II D.Lgs 81/08",
+            "threshold": "LEX,8h > 80 dB(A)",
+            "exams": [
+              "Visita medica",
+              "Audiometria tonale",
+              "Questionario abitudini uditive"
+            ],
+            "frequency": "Annuale se LEX >85dB / Biennale se LEX 80-85dB"
+          },
+          {
+            "risk": "Videoterminali (VDT)",
+            "icon": "Monitor",
+            "color": "blue",
+            "legalRef": "Titolo VII D.Lgs 81/08",
+            "threshold": "Almeno 20 ore/settimana",
+            "exams": [
+              "Visita medica",
+              "Esame oculistico",
+              "Visita osteoarticolare"
+            ],
+            "frequency": "Quinquennale (biennale >50 anni o con prescrizioni)"
+          },
+          {
+            "risk": "Agenti Chimici",
+            "icon": "FlaskConical",
+            "color": "yellow",
+            "legalRef": "Titolo IX, Capo I D.Lgs 81/08",
+            "threshold": "Rischio non irrilevante per la salute",
+            "exams": [
+              "Visita medica",
+              "Esami ematochimici mirati",
+              "Biomonitoraggio se disponibile"
+            ],
+            "frequency": "Annuale per rischio elevato / biennale per rischio moderato"
+          },
+          {
+            "risk": "Movimentazione Manuale Carichi",
+            "icon": "Dumbbell",
+            "color": "red",
+            "legalRef": "Titolo VI D.Lgs 81/08",
+            "threshold": "Indice NIOSH > 1 o OCRA > 2.2",
+            "exams": [
+              "Visita medica",
+              "Visita osteoarticolare/ortopedica",
+              "Rx colonna se indicato"
+            ],
+            "frequency": "Annuale per rischio elevato / biennale per rischio moderato"
+          },
+          {
+            "risk": "Vibrazioni Mano-Braccio",
+            "icon": "Vibrate",
+            "color": "purple",
+            "legalRef": "Titolo VIII, Capo III D.Lgs 81/08",
+            "threshold": "A(8) > 2.5 m/s²",
+            "exams": [
+              "Visita medica",
+              "Esame neurologico arti superiori",
+              "Test di Allen"
+            ],
+            "frequency": "Annuale"
+          },
+          {
+            "risk": "Agenti Biologici",
+            "icon": "Bug",
+            "color": "green",
+            "legalRef": "Titolo X D.Lgs 81/08",
+            "threshold": "Esposizione a Gruppo 2, 3 o 4",
+            "exams": [
+              "Visita medica",
+              "Sierologie specifiche",
+              "Vaccinazioni obbligatorie"
+            ],
+            "frequency": "Annuale + monitoraggio post-esposizione"
+          },
+          {
+            "risk": "Lavoro Notturno",
+            "icon": "Moon",
+            "color": "indigo",
+            "legalRef": "D.Lgs 66/2003 + art. 41 D.Lgs 81/08",
+            "threshold": "Almeno 3 ore/notte per 80 giorni/anno",
+            "exams": [
+              "Visita medica",
+              "ECG",
+              "Esami ematici",
+              "Scheda neuropsicodinamica"
+            ],
+            "frequency": "Annuale"
+          },
+          {
+            "risk": "Lavoro in Quota",
+            "icon": "MountainSnow",
+            "color": "teal",
+            "legalRef": "D.Lgs 81/08 + autorizzazioni specifiche",
+            "threshold": "Altezza 2 metri o superiore",
+            "exams": [
+              "Visita medica approfondita",
+              "Test vestibolari",
+              "ECG",
+              "Visita oftalmica"
+            ],
+            "frequency": "Annuale"
+          }
+        ]
       }
     }
   },
@@ -2239,6 +2651,46 @@
           {
             "answer": "RSPP: Responsabile Servizio Prevenzione Protezione (figura obbligatoria per legge). ASPP: Addetto SPP (collabora con RSPP, non obbligatorio). HSE Manager: ruolo aziendale evoluto che gestisce Health, Safety, Environment (tipico grandi aziende). Il termine RSPP è l'unico previsto dalla normativa italiana.",
             "question": "Differenza tra RSPP, ASPP e HSE Manager?"
+          },
+          {
+            "question": "Il datore di lavoro può nominare se stesso come RSPP?",
+            "answer": "Sì, ma solo se in possesso dei requisiti dell'art. 34 D.Lgs 81/08: ha frequentato il corso specifico (16-48 ore secondo macrosettore) e gli aggiornamenti ogni 5 anni. Nelle aziende a rischio alto (macrosettori B3, B4) la legge non consente la nomina autonoma del datore di lavoro."
+          },
+          {
+            "question": "Cosa succede se il RSPP si dimette o cessa il contratto?",
+            "answer": "Il datore di lavoro deve procedere immediatamente a nuova nomina. Il periodo di vacanza configura una violazione dell'art. 31 D.Lgs 81/08. Con un RSPP esterno la continuità del servizio è garantita contrattualmente, anche in caso di sostituzione del referente."
+          },
+          {
+            "question": "Il RSPP ha responsabilità penali?",
+            "answer": "Il RSPP non è titolare di posizione di garanzia (Cass. Pen. SS.UU. 38343/2014). Risponde penalmente solo se con dolo o colpa grave ha fornito indicazioni errate o non ha segnalato situazioni di pericolo. La responsabilità principale rimane del datore di lavoro."
+          },
+          {
+            "question": "Cos'è il DVR e chi lo firma?",
+            "answer": "Il Documento di Valutazione dei Rischi (DVR) è firmato dal datore di lavoro (obbligo non delegabile), elaborato in collaborazione con RSPP, MC e previa consultazione dell'RLS. Va aggiornato in occasione di modifiche del processo produttivo, dell'organizzazione del lavoro o a seguito di incidenti significativi."
+          },
+          {
+            "question": "Qual è la differenza tra RSPP, ASPP e RLS?",
+            "answer": "RSPP: coordina l'intero sistema di prevenzione, uno per azienda. ASPP: affianca l'RSPP nelle aziende complesse. RLS: eletto dai lavoratori, ha diritto di consultazione sul DVR e sulle misure di prevenzione ma non è un tecnico della sicurezza. Tutti e tre sono figure obbligatorie."
+          },
+          {
+            "question": "Con quale frequenza l'RSPP deve fare i sopralluoghi?",
+            "answer": "Non esiste una frequenza minima di legge, ma devono essere periodici e documentati. In pratica: da mensile per attività ad alto rischio a trimestrale/semestrale per quelle a basso rischio. Ogni sopralluogo va verbalizzato con descrizione delle verifiche effettuate."
+          },
+          {
+            "question": "Cosa comprende la riunione periodica annuale?",
+            "answer": "L'art. 35 D.Lgs 81/08 prevede almeno una riunione annuale (aziende >15 dip.) con RSPP, MC e RLS. Oggetto: DVR, piano di miglioramento, andamento infortuni, malattie professionali, sostanze pericolose, DPI, formazione. Il verbale è obbligatorio."
+          },
+          {
+            "question": "Come si riduce il tasso INAIL?",
+            "answer": "Tramite Modello OT23 (riduzione fino al 28% per aziende <10 dip.) presentando prove di interventi migliorativi. Un RSPP attivo che implementa misure preventive certificate è spesso la condizione principale per ottenere la riduzione del premio assicurativo."
+          },
+          {
+            "question": "Cosa deve fare l'RSPP in caso di infortunio?",
+            "answer": "Il RSPP deve: raccogliere le informazioni sull'evento, partecipare all'analisi delle cause, proporre misure correttive, aggiornare il DVR se necessario. Gli infortuni gravi vanno denunciati INAIL online entro 2 giorni. In caso di infortuni gravi o mortali interviene l'ispezione ASL/INAIL."
+          },
+          {
+            "question": "Quali documenti deve produrre l'RSPP?",
+            "answer": "I principali: DVR (con tutti gli allegati), DUVRI per attività di appalto, piano di emergenza ed evacuazione, registro infortuni, nomine formali (RSPP, MC, addetti primo soccorso ed emergenza), verbali sopralluoghi, verbali riunioni, attestati formativi. Con ElementSicurezza tutto è in cloud e sempre aggiornato."
           }
         ],
         "title": "Domande Frequenti su RSPP e Sicurezza",
@@ -2249,12 +2701,12 @@
           {
             "icon": "🏢",
             "label": "Aziende Clienti",
-            "number": "300+"
+            "number": "350+"
           },
           {
             "icon": "🎓",
             "label": "Lavoratori Formati/Anno",
-            "number": "5.000+"
+            "number": "6.000+"
           },
           {
             "icon": "⭐",
@@ -2265,6 +2717,16 @@
             "icon": "✓",
             "label": "Accreditamento",
             "number": "100%"
+          },
+          {
+            "icon": "📋",
+            "label": "DVR Redatti",
+            "number": "500+"
+          },
+          {
+            "icon": "🛡",
+            "label": "Zero Violazioni Ispezioni",
+            "number": "98%"
           }
         ],
         "title": "RSPP e Formazione Sicurezza",
@@ -2435,7 +2897,9 @@
           "macrosettori": "section-pattern",
           "testimonials": "section-testimonials",
           "trainingCourses": "bg-white"
-        }
+        },
+        "lastUpdate": "2026-04-09T16:19:37.686796Z",
+        "version": "3.0"
       },
       "services": [
         {
@@ -2605,6 +3069,28 @@
             "solution": "RSPP Esterno dedicato + Coordinatore Sicurezza: template POS standardizzati, formazione fast-track neoassunti (8h in 2 giorni), sopralluoghi cantiere bisettimanali, piattaforma gestione documenti.",
             "challenge": "Cantieri multipli simultanei, alta rotazione personale, necessità POS per ogni cantiere, coordinamento sicurezza complesso.",
             "investment": "€3.500/anno RSPP + €150/POS"
+          },
+          {
+            "sector": "GDO e Logistica - Macrosettore B2 - Rischio Medio",
+            "company": "Catena Distribuzione Alimentare (5 punti vendita, 180 dipendenti)",
+            "results": [
+              "DVR unificato multisite approvato ASL in 6 settimane",
+              "Piano formazione 180 lavoratori completato in 90 giorni",
+              "Riduzione tasso INAIL -18% via OT23",
+              "Implementazione sistema comunicazione emergenze"
+            ],
+            "roi": "Risparmio premi INAIL: €7.200/anno - ROI in 12 mesi"
+          },
+          {
+            "sector": "Settore Scolastico - Ente Pubblico",
+            "company": "Istituto Comprensivo (450 studenti, 80 tra docenti e ATA)",
+            "results": [
+              "Piano di emergenza e procedure evacuazione aggiornati",
+              "Formazione antincendio e primo soccorso per tutto il personale",
+              "Reportistica MIUR e enti locali sempre corretta",
+              "Documentazione DVR revisionata post-Covid"
+            ],
+            "roi": "Conformità normativa completa - Zero contestazioni ispezioni"
           }
         ],
         "title": "Casi di Studio - RSPP Implementato",
@@ -2718,6 +3204,27 @@
           "text": "Nel settore edile la sicurezza è fondamentale. Il supporto di Element per POS e coordinamento è stato determinante. Sopralluoghi puntuali, consulenza sempre pertinente. Partner affidabile.",
           "rating": 5,
           "company": "Ferrari Costruzioni"
+        },
+        {
+          "name": "Ing. Carla Moretti",
+          "role": "Direttore di Produzione",
+          "company": "Farmaceutica Moretti SPA (200 dipendenti)",
+          "rating": 5,
+          "text": "Settore farmaceutico con normative stringenti (GMP, ISO), rischi chimici e biologici, ambienti classificati. Element ha dimostrato una conoscenza profonda delle specificità del settore. DVR impeccabile, zero rilievi dall'autorità sanitaria."
+        },
+        {
+          "name": "Geom. Luca Santini",
+          "role": "Titolare",
+          "company": "Impresa Edile Santini (12 dipendenti)",
+          "rating": 5,
+          "text": "Il cantiere è un ambiente dinamico. Con Element il POS viene aggiornato in tempo reale, i lavoratori ricevono la formazione direttamente in cantiere. Non ho mai saltato un adempimento. Il costo del servizio RSPP esterno è ampiamente ripagato dalla tranquillità operativa."
+        },
+        {
+          "name": "Dott. Andrea Ferrara",
+          "role": "Amministratore",
+          "company": "Autofficina Ferrara SAS (8 dipendenti)",
+          "rating": 5,
+          "text": "Piccola officina, ma i rischi ci sono: oli, solventi, posture, rumore. Non sapevo da dove iniziare. Element ha fatto tutto: DVR, nomina RSPP, formazione lavoratori, piano emergenze. Ora sono a posto con la legge e dormo sereno."
         }
       ],
       "rsppComparison": {
@@ -2981,6 +3488,245 @@
         ],
         "title": "Come Implementiamo il Servizio RSPP",
         "description": "Un processo strutturato in 5 fasi per garantire conformità e efficacia"
+      },
+      "normativa": {
+        "sectionTitle": "Quadro Normativo di Riferimento",
+        "backgroundVariant": "gradient-subtle",
+        "description": "La sicurezza sul lavoro è regolata da un corpus normativo complesso. Ecco i principali riferimenti:",
+        "articles": [
+          {
+            "code": "D.Lgs 81/08",
+            "title": "Testo Unico Sicurezza",
+            "description": "La legge fondamentale sulla salute e sicurezza nei luoghi di lavoro. 306 articoli e 51 allegati. Sanzioni dettagliate dall'art. 55 in poi."
+          },
+          {
+            "code": "Art. 17",
+            "title": "Obblighi non delegabili del Datore di Lavoro",
+            "description": "La nomina dell'RSPP e la valutazione dei rischi (DVR) non possono essere delegate ad altri soggetti aziendali."
+          },
+          {
+            "code": "Art. 28-29",
+            "title": "DVR - Valutazione dei Rischi",
+            "description": "Obbligo di valutare tutti i rischi presenti nel luogo di lavoro, inclusi stress lavoro-correlato, differenze di genere, età, provenienza."
+          },
+          {
+            "code": "Art. 31-32-33",
+            "title": "Servizio Prevenzione e Protezione",
+            "description": "Struttura, composizione, requisiti e compiti del Servizio di Prevenzione e Protezione (SPP)."
+          },
+          {
+            "code": "Art. 37",
+            "title": "Formazione dei Lavoratori",
+            "description": "Obbligo di formazione generale (4-8 ore) e specifica (4-12 ore secondo rischio) per tutti. Aggiornamenti obbligatori ogni 5 anni."
+          },
+          {
+            "code": "Accordo Stato-Regioni 21/12/2011",
+            "title": "Formazione Lavoratori",
+            "description": "Disciplina durata, contenuti e modalità della formazione obbligatoria. Definisce i 3 livelli di rischio e le ore di formazione specifica."
+          },
+          {
+            "code": "Art. 26 e All. XVII",
+            "title": "DUVRI - Contratti di Appalto",
+            "description": "Obbligo di redazione del Documento Unico di Valutazione Rischi Interferenziali quando si affidano lavori in appalto."
+          },
+          {
+            "code": "D.Lgs 231/01",
+            "title": "Responsabilità Amministrativa Enti",
+            "description": "Le violazioni gravi della sicurezza possono determinare responsabilità amministrativa dell'ente con sanzioni fino a €1.548.000."
+          }
+        ]
+      },
+      "sanzioni": {
+        "sectionTitle": "Sanzioni per Violazioni della Sicurezza",
+        "backgroundVariant": "light",
+        "description": "Le violazioni del D.Lgs 81/08 sono penalmente e amministrativamente rilevanti.",
+        "note": "Importi aggiornati con D.Lgs 106/2009 e successive modificazioni. In caso di recidiva le sanzioni sono raddoppiate.",
+        "violations": [
+          {
+            "norm": "Art. 17 - Mancata valutazione rischi",
+            "sanction": "Arresto 3-6 mesi o ammenda €2.457 - €6.144",
+            "severity": "alto",
+            "responsabile": "Datore di lavoro (non delegabile)"
+          },
+          {
+            "norm": "Art. 18 - Mancata nomina RSPP",
+            "sanction": "Arresto 3-6 mesi o ammenda €3.071 - €7.862",
+            "severity": "alto",
+            "responsabile": "Datore di lavoro"
+          },
+          {
+            "norm": "Art. 29 - DVR non aggiornato",
+            "sanction": "Ammenda €1.462 - €4.386",
+            "severity": "medio",
+            "responsabile": "Datore di lavoro + RSPP"
+          },
+          {
+            "norm": "Art. 36 - Mancata informazione lavoratori",
+            "sanction": "Ammenda €1.096 - €4.384",
+            "severity": "medio",
+            "responsabile": "Datore di lavoro"
+          },
+          {
+            "norm": "Art. 37 - Mancata formazione obbligatoria",
+            "sanction": "Arresto 2-4 mesi o ammenda €1.315 - €5.699",
+            "severity": "alto",
+            "responsabile": "Datore di lavoro"
+          },
+          {
+            "norm": "Art. 71 - Mancata manutenzione attrezzature",
+            "sanction": "Arresto 3-6 mesi o ammenda €3.071 - €7.862",
+            "severity": "alto",
+            "responsabile": "Datore di lavoro"
+          },
+          {
+            "norm": "Art. 20 - Mancata cooperazione lavoratore",
+            "sanction": "Ammenda €153,68",
+            "severity": "basso",
+            "responsabile": "Lavoratore"
+          }
+        ]
+      },
+      "checklistConformita": {
+        "sectionTitle": "Checklist Conformità Aziendale",
+        "backgroundVariant": "white",
+        "description": "Verifica in 5 minuti se la tua azienda è in regola. Ogni NO è un potenziale rischio sanzionabile.",
+        "categories": [
+          {
+            "category": "Nomine Obbligatorie",
+            "icon": "UserCheck",
+            "items": [
+              "RSPP nominato formalmente con atto scritto",
+              "Medico competente nominato (se obbligatorio per i rischi presenti)",
+              "Addetti primo soccorso nominati e formati",
+              "Addetti prevenzione incendi nominati e formati",
+              "RLS/RLST consultato per DVR"
+            ]
+          },
+          {
+            "category": "Documenti Obbligatori",
+            "icon": "FileCheck",
+            "items": [
+              "DVR redatto, firmato e aggiornato",
+              "DUVRI per contratti di appalto attivi",
+              "Piano di emergenza ed evacuazione",
+              "Registro infortuni (anche se vuoto)",
+              "Cartelle sanitarie lavoratori (se sorveglianza attiva)"
+            ]
+          },
+          {
+            "category": "Formazione Obbligatoria",
+            "icon": "GraduationCap",
+            "items": [
+              "Formazione generale 4-8 ore per tutti i lavoratori",
+              "Formazione specifica per rischio basso/medio/alto",
+              "Formazione dirigenti e preposti",
+              "Corso primo soccorso (D.M. 388/2003) per addetti",
+              "Corso antincendio per addetti emergenza"
+            ]
+          },
+          {
+            "category": "Attrezzature e DPI",
+            "icon": "HardHat",
+            "items": [
+              "DPI idonei distribuiti e registrati",
+              "Registro manutenzioni attrezzature",
+              "Verifiche periodiche impianti (elettrico, ascensori ecc.)",
+              "Estintori verificati con cartellino aggiornato",
+              "Segnaletica di sicurezza conforme"
+            ]
+          }
+        ]
+      },
+      "ruoliSicurezza": {
+        "sectionTitle": "I Ruoli nel Sistema di Prevenzione",
+        "backgroundVariant": "gradient-subtle",
+        "description": "La sicurezza aziendale richiede una squadra: ecco chi fa cosa nel Sistema di Prevenzione e Protezione.",
+        "roles": [
+          {
+            "icon": "Crown",
+            "acronym": "DL",
+            "title": "Datore di Lavoro",
+            "color": "red",
+            "mandatory": true,
+            "description": "Responsabile principale. Non può delegare la nomina RSPP e la valutazione rischi. Risponde penalmente per le violazioni.",
+            "duties": [
+              "Nomina RSPP e MC",
+              "Redazione DVR",
+              "Fornitura DPI sicuri",
+              "Organizzazione formazione"
+            ]
+          },
+          {
+            "icon": "Shield",
+            "acronym": "RSPP",
+            "title": "Responsabile SPP",
+            "color": "blue",
+            "mandatory": true,
+            "description": "Coordinatore del sistema prevenzione. Può essere interno o esterno. Deve possedere titoli specifici e formazione adeguata.",
+            "duties": [
+              "Analisi e valutazione rischi",
+              "Elaborazione misure preventive",
+              "Sopralluoghi periodici",
+              "Coordinamento emergenze"
+            ]
+          },
+          {
+            "icon": "Stethoscope",
+            "acronym": "MC",
+            "title": "Medico Competente",
+            "color": "teal",
+            "mandatory": false,
+            "description": "Obbligatorio quando dalla valutazione rischi emergono esposizioni che richiedono sorveglianza sanitaria. Specialista in medicina del lavoro.",
+            "duties": [
+              "Visite mediche periodiche",
+              "Giudizi di idoneità",
+              "Protocollo sanitario",
+              "Riunione periodica"
+            ]
+          },
+          {
+            "icon": "Users",
+            "acronym": "RLS",
+            "title": "Rappresentante Lavoratori",
+            "color": "green",
+            "mandatory": true,
+            "description": "Eletto dai lavoratori. Ha diritto di consultazione per DVR e misure di prevenzione. Riceve formazione specifica (32 ore).",
+            "duties": [
+              "Consultazione DVR",
+              "Ispezione ambienti lavoro",
+              "Segnalazione pericoli",
+              "Accesso cartelle sanitarie anonime"
+            ]
+          },
+          {
+            "icon": "Flame",
+            "acronym": "ADD.INC.",
+            "title": "Addetto Antincendio",
+            "color": "orange",
+            "mandatory": true,
+            "description": "Almeno un addetto per turno. Formazione 4, 8 o 16 ore secondo rischio incendio basso/medio/alto.",
+            "duties": [
+              "Gestione emergenza incendio",
+              "Uso estintori",
+              "Evacuazione",
+              "Coordinamento VVF"
+            ]
+          },
+          {
+            "icon": "HeartPulse",
+            "acronym": "ADD.PS",
+            "title": "Addetto Primo Soccorso",
+            "color": "red",
+            "mandatory": true,
+            "description": "Numero dipende dalla classe A/B/C e dal numero di lavoratori. Formazione D.M. 388/2003: 12h (B/C) o 16h (A).",
+            "duties": [
+              "Intervento primo soccorso",
+              "Gestione cassetta PS",
+              "Chiamata 118",
+              "Registro interventi"
+            ]
+          }
+        ]
       }
     }
   },

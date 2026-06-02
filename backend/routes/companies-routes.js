@@ -1,4 +1,7 @@
 import express from 'express';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import logger from '../utils/logger.js';
 import middleware from '../middleware/auth.js';
 import { checkAdvancedPermission, filterDataByPermissions, requireOwnCompany } from '../middleware/advanced-permissions.js';
@@ -6,14 +9,284 @@ import { roleDataFilter, filterResponseFields } from '../middleware/role-data-fi
 import TariffarioAziendaleService from '../services/management/TariffarioAziendaleService.js';
 import RisultatiAnonimiService from '../services/clinical/RisultatiAnonimiService.js';
 import RiunioniPeriodicheService from '../services/clinical/RiunioniPeriodicheService.js';
+import pdfService from '../services/pdfService.js';
+import { createSingleUpload, multerErrorHandler } from '../config/multer.js';
 import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 import { personTenantAccessService } from '../services/PersonTenantAccessService.js';
+import { isTrainerOnlyAccess, getTrainerCompanyProfileIds } from '../utils/trainerAccess.js';
+import { PDFDocument } from 'pdf-lib';
 
 const router = express.Router();
 import prisma from '../config/prisma-optimization.js';
 import { randomUUID } from 'crypto';
 
 const { authenticate: authenticateToken } = middleware;
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const BACKEND_ROOT = path.resolve(__dirname, '..');
+const COMPANY_MDL_UPLOAD_ROOT = path.resolve(BACKEND_ROOT, 'uploads', 'company-mdl-documents');
+const MDL_DOCUMENT_TYPES = new Set(['nomine', 'tariffario']);
+
+function escapeHtml(value = '') {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+async function resolveCompanyTenantProfile(id, tenantId) {
+  return prisma.companyTenantProfile.findFirst({
+    where: {
+      tenantId,
+      deletedAt: null,
+      OR: [
+        { id },
+        { companyId: id }
+      ]
+    },
+    include: {
+      company: true,
+      tenant: { select: { name: true, settings: true } },
+      sites: { where: { deletedAt: null }, orderBy: { siteName: 'asc' } }
+    }
+  });
+}
+
+function safeDocumentType(value) {
+  const type = String(value || '').toLowerCase();
+  return MDL_DOCUMENT_TYPES.has(type) ? type : null;
+}
+
+function ensureMdlDocumentDir(tenantId, profileId, documentType) {
+  const dir = path.resolve(COMPANY_MDL_UPLOAD_ROOT, tenantId, profileId, documentType);
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+function sanitizeStoredFilename(filename = '') {
+  return path.basename(String(filename)).replace(/[^a-zA-Z0-9._-]/g, '_');
+}
+
+function listMdlDocumentFiles(tenantId, profileId, documentType) {
+  const dir = ensureMdlDocumentDir(tenantId, profileId, documentType);
+  return fs.readdirSync(dir)
+    .filter(name => !name.endsWith('.json'))
+    .map(name => {
+      const filePath = path.join(dir, name);
+      const stat = fs.statSync(filePath);
+      let metadata = {};
+      try {
+        metadata = JSON.parse(fs.readFileSync(`${filePath}.json`, 'utf8'));
+      } catch {
+        metadata = {};
+      }
+      return {
+        filename: name,
+        originalName: metadata.originalName || name,
+        note: metadata.note || null,
+        signedOnline: metadata.signedOnline === true,
+        createdAt: metadata.createdAt || stat.birthtime.toISOString(),
+        uploadedBy: metadata.uploadedBy || null,
+        size: stat.size,
+        url: `/api/v1/companies/${profileId}/mdl-documents/${documentType}/files/${encodeURIComponent(name)}`
+      };
+    })
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+}
+
+function resolveTenantLogo(profile) {
+  const settings = profile?.tenant?.settings || {};
+  return settings?.branches?.MEDICA?.logo || settings?.branches?.MDL?.logo || settings?.logoUrl || settings?.logo || '';
+}
+
+function logoPathToDataUrl(rawPath) {
+  if (!rawPath) return '';
+  if (String(rawPath).startsWith('data:image/')) return rawPath;
+
+  let effectivePath = String(rawPath);
+  if (/^https?:\/\//i.test(effectivePath)) {
+    try {
+      const url = new URL(effectivePath);
+      const isOwnHost = ['localhost', '127.0.0.1', '0.0.0.0', 'www.elementmedica.com', 'elementmedica.com', 'www.elementsicurezza.com', 'elementsicurezza.com'].includes(url.hostname);
+      if (!isOwnHost) return effectivePath;
+      effectivePath = url.pathname;
+    } catch {
+      return effectivePath;
+    }
+  }
+
+  const cleanPath = effectivePath.startsWith('/') ? effectivePath.slice(1) : effectivePath;
+  const projectRoot = path.resolve(BACKEND_ROOT, '..');
+  const candidates = [
+    path.join(BACKEND_ROOT, cleanPath),
+    path.join(BACKEND_ROOT, 'public', cleanPath),
+    path.join(projectRoot, 'public', cleanPath),
+    path.join(projectRoot, cleanPath),
+    path.join(BACKEND_ROOT, 'uploads', path.basename(cleanPath)),
+    path.join(projectRoot, 'uploads', path.basename(cleanPath))
+  ];
+
+  for (const candidate of candidates) {
+    const resolved = path.resolve(candidate);
+    if (!resolved.startsWith(BACKEND_ROOT) && !resolved.startsWith(projectRoot)) continue;
+    if (!fs.existsSync(resolved)) continue;
+    const ext = path.extname(resolved).toLowerCase();
+    const mime = ext === '.svg'
+      ? 'image/svg+xml'
+      : ext === '.jpg' || ext === '.jpeg'
+        ? 'image/jpeg'
+        : ext === '.webp'
+          ? 'image/webp'
+          : 'image/png';
+    return `data:${mime};base64,${fs.readFileSync(resolved).toString('base64')}`;
+  }
+
+  logger.warn('Logo tenant non risolto per PDF nomine', { logoPath: rawPath });
+  return '';
+}
+
+function decodeSignatureImage(signatureBase64) {
+  const raw = String(signatureBase64 || '');
+  if (!raw) return null;
+  const base64 = raw.startsWith('data:') ? raw.split(',')[1] : raw;
+  return Buffer.from(base64, 'base64');
+}
+
+async function stampSignatureOnPdf(pdfBuffer, signatureImage, placement = {}) {
+  const signatureBuffer = decodeSignatureImage(signatureImage);
+  if (!signatureBuffer) return pdfBuffer;
+
+  const pdfDoc = await PDFDocument.load(pdfBuffer);
+  const pages = pdfDoc.getPages();
+  const targetPageIndex = placement?.page
+    ? Math.min(Math.max(Number(placement.page) - 1, 0), pages.length - 1)
+    : pages.length - 1;
+  const page = pages[targetPageIndex];
+  const { width, height } = page.getSize();
+  const xRatio = Number.isFinite(Number(placement?.xRatio)) ? Number(placement.xRatio) : 0.58;
+  const yRatio = Number.isFinite(Number(placement?.yRatio)) ? Number(placement.yRatio) : 0.82;
+  const widthRatio = Number.isFinite(Number(placement?.widthRatio)) ? Number(placement.widthRatio) : 0.32;
+  const heightRatio = Number.isFinite(Number(placement?.heightRatio)) ? Number(placement.heightRatio) : 0.09;
+  const image = String(signatureImage).includes('image/jpeg') || String(signatureImage).includes('image/jpg')
+    ? await pdfDoc.embedJpg(signatureBuffer)
+    : await pdfDoc.embedPng(signatureBuffer);
+
+  page.drawImage(image, {
+    x: xRatio * width,
+    y: height - (yRatio * height) - (heightRatio * height),
+    width: widthRatio * width,
+    height: heightRatio * height
+  });
+
+  return Buffer.from(await pdfDoc.save());
+}
+
+async function generateNominePdfBuffer(profile) {
+  const tenantName = profile.tenant?.name || 'Element';
+  const tenantLogo = logoPathToDataUrl(resolveTenantLogo(profile));
+  const nomine = await prisma.nominaRuolo.findMany({
+    where: {
+      companyTenantProfileId: profile.id,
+      tenantId: profile.tenantId,
+      deletedAt: null,
+      tipoRuolo: { in: ['MEDICO_COMPETENTE', 'MEDICO_COMPETENTE_COORDINATO', 'RSPP'] },
+      stato: 'ATTIVA'
+    },
+    include: {
+      person: {
+        select: { firstName: true, lastName: true, taxCode: true, birthDate: true, birthPlace: true }
+      },
+      site: { select: { siteName: true, indirizzo: true, citta: true, provincia: true } }
+    },
+    orderBy: [{ tipoRuolo: 'asc' }, { dataInizio: 'asc' }]
+  });
+
+  const roleLabel = {
+    MEDICO_COMPETENTE: 'Medico Competente',
+    MEDICO_COMPETENTE_COORDINATO: 'Medico Competente Coordinato',
+    RSPP: 'RSPP'
+  };
+  const formatDate = (value) => value ? new Date(value).toLocaleDateString('it-IT') : '-';
+  const companyName = profile.company?.ragioneSociale || '-';
+  const companyAddress = [profile.company?.sedeLegaleIndirizzo, profile.company?.sedeLegaleCitta, profile.company?.sedeLegaleProvincia].filter(Boolean).join(', ') || '-';
+  const rows = nomine.map(nomina => `
+    <tr>
+      <td>${escapeHtml(roleLabel[nomina.tipoRuolo] || nomina.tipoRuolo)}</td>
+      <td>${escapeHtml(`${nomina.person?.lastName || ''} ${nomina.person?.firstName || ''}`.trim() || '-')}</td>
+      <td>${escapeHtml(nomina.person?.taxCode || '-')}</td>
+      <td>${escapeHtml(nomina.site?.siteName || 'Tutta azienda')}</td>
+      <td>${formatDate(nomina.dataInizio)}</td>
+      <td>${formatDate(nomina.dataScadenza || nomina.dataFine)}</td>
+    </tr>
+  `).join('');
+
+  const html = `
+    <!doctype html>
+    <html lang="it">
+    <head>
+      <meta charset="utf-8" />
+      <style>
+        body { font-family: Arial, sans-serif; color: #172033; margin: 0; padding: 32px; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #0f766e; padding-bottom: 16px; margin-bottom: 24px; }
+        .logo { max-width: 170px; max-height: 68px; object-fit: contain; }
+        .tenant { text-align: right; font-size: 11px; color: #667085; }
+        h1 { font-size: 24px; margin: 0 0 6px; color: #0f766e; letter-spacing: .01em; }
+        h2 { font-size: 14px; margin: 22px 0 10px; color: #1f2937; text-transform: uppercase; letter-spacing: .04em; }
+        p { font-size: 12px; line-height: 1.55; margin: 6px 0; }
+        table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 11px; }
+        th { background: #0f766e; color: white; text-align: left; }
+        th, td { border: 1px solid #d7dee8; padding: 8px; vertical-align: top; }
+        tr:nth-child(even) td { background: #f8fafc; }
+        .muted { color: #667085; }
+        .box { border: 1px solid #d7dee8; border-radius: 10px; padding: 14px; margin-top: 14px; background: #f8fafc; }
+        .clause { border-left: 4px solid #0f766e; padding: 12px 14px; background: #f0fdfa; border-radius: 8px; margin-top: 16px; }
+        .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 56px; }
+        .signature-line { border-top: 1px solid #344054; padding-top: 7px; font-size: 11px; color: #4b5563; min-height: 34px; }
+        .footer { margin-top: 34px; padding-top: 10px; border-top: 1px solid #e5e7eb; font-size: 9px; color: #98a2b3; text-align: center; }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <div>${tenantLogo ? `<img class="logo" src="${escapeHtml(tenantLogo)}" alt="${escapeHtml(tenantName)}">` : `<h1>${escapeHtml(tenantName)}</h1>`}</div>
+        <div class="tenant">
+          <strong>${escapeHtml(tenantName)}</strong><br>
+          Documento generato il ${formatDate(new Date())}
+        </div>
+      </div>
+      <h1>Nomine figure della sicurezza e medicina del lavoro</h1>
+      <p class="muted">Documento riepilogativo delle nomine attive per l'azienda, comprensivo di medico competente, eventuali medici competenti coordinati e RSPP.</p>
+      <div class="box">
+        <p><strong>Azienda:</strong> ${escapeHtml(companyName)}</p>
+        <p><strong>P.IVA / CF:</strong> ${escapeHtml(profile.company?.piva || profile.company?.codiceFiscale || '-')}</p>
+        <p><strong>Sede legale:</strong> ${escapeHtml(companyAddress)}</p>
+      </div>
+      <h2>Nomine attive</h2>
+      <table>
+        <thead>
+          <tr><th>Ruolo</th><th>Nominativo</th><th>Codice fiscale</th><th>Ambito/Sede</th><th>Decorrenza</th><th>Scadenza</th></tr>
+        </thead>
+        <tbody>${rows || '<tr><td colspan="6">Nessuna nomina attiva presente.</td></tr>'}</tbody>
+      </table>
+      <div class="clause">
+        <p>Le parti prendono atto che le nomine indicate decorrono dalle date riportate e restano valide fino a revoca, sostituzione o scadenza indicata. In assenza di comunicazione scritta di disdetta almeno 30 giorni prima della scadenza annuale, l'incarico si intende tacitamente rinnovato per un ulteriore anno, salvo diverse previsioni contrattuali o normative applicabili.</p>
+        <p>Il medico competente opera secondo quanto previsto dal D.Lgs. 81/08 e successive modifiche, coordinandosi con il datore di lavoro, il servizio di prevenzione e protezione e gli eventuali medici competenti coordinati nominati per specifiche sedi o ambiti aziendali.</p>
+      </div>
+      <div class="signatures">
+        <div class="signature-line">Firma Datore di Lavoro</div>
+        <div class="signature-line">Firma Professionista incaricato</div>
+      </div>
+      <div class="footer">${escapeHtml(companyName)} - ${escapeHtml(tenantName)}</div>
+    </body>
+    </html>
+  `;
+
+  return pdfService.generatePDF(html, {
+    format: 'A4',
+    margin: { top: '15mm', right: '15mm', bottom: '15mm', left: '15mm' },
+  });
+}
 
 /**
  * P48 Helper: Trova o crea CompanyTenantProfile e opzionalmente un CompanySite
@@ -222,6 +495,558 @@ function sanitizeCompanyData(companyData) {
 }
 
 
+// ===== PROGETTO 57: CROSS-TENANT IMPORT =====
+
+/**
+ * GET /api/companies/check-existing
+ * Verifica se una Company esiste già globalmente per piva o codiceFiscale
+ * NON espone dati sensibili - solo conferma esistenza
+ *
+ * @query piva - Partita IVA
+ * @query codiceFiscale - Codice fiscale aziendale
+ * @query targetTenantId - Il tenant TARGET (obbligatorio per cross-tenant GET)
+ */
+router.get('/check-existing',
+  authenticateToken,
+  checkAdvancedPermission('companies', 'read'),
+  async (req, res) => {
+    try {
+      const { piva, codiceFiscale, targetTenantId } = req.query;
+      const tenantId = targetTenantId || getEffectiveTenantId(req);
+
+      if (!piva && !codiceFiscale) {
+        return res.status(400).json({
+          error: 'È richiesto almeno uno tra piva e codiceFiscale'
+        });
+      }
+
+      const whereClause = {
+        deletedAt: null,
+        OR: []
+      };
+
+      if (piva) {
+        whereClause.OR.push({ piva: piva.trim() });
+      }
+      if (codiceFiscale) {
+        whereClause.OR.push({ codiceFiscale: codiceFiscale.toUpperCase().trim() });
+      }
+
+      const existingCompany = await prisma.company.findFirst({
+        where: whereClause,
+        select: {
+          id: true,
+          ragioneSociale: true,
+          piva: true,
+          codiceFiscale: true,
+          formaGiuridica: true,
+          tenantProfiles: {
+            where: { deletedAt: null },
+            select: {
+              id: true,
+              tenantId: true
+            }
+          }
+        }
+      });
+
+      if (!existingCompany) {
+        return res.json({
+          exists: false,
+          canImport: false,
+          message: 'Nessuna azienda trovata con questi identificativi'
+        });
+      }
+
+      const existsInCurrentTenant = existingCompany.tenantProfiles.some(
+        profile => profile.tenantId === tenantId
+      );
+
+      if (existsInCurrentTenant) {
+        return res.json({
+          exists: true,
+          canImport: false,
+          existsInCurrentTenant: true,
+          message: 'L\'azienda esiste già nel tenant corrente'
+        });
+      }
+
+      return res.json({
+        exists: true,
+        canImport: true,
+        existsInCurrentTenant: false,
+        company: {
+          id: existingCompany.id,
+          ragioneSociale: existingCompany.ragioneSociale,
+          piva: existingCompany.piva,
+          codiceFiscale: existingCompany.codiceFiscale,
+          formaGiuridica: existingCompany.formaGiuridica,
+          profileCount: existingCompany.tenantProfiles.length
+        },
+        message: 'Azienda trovata in altri tenant. Puoi importarla nel tuo tenant.'
+      });
+
+    } catch (error) {
+      logger.error('Error checking existing company:', {
+        error: 'Errore interno del server',
+        piva: req.query.piva,
+        tenantId: req.person?.tenantId
+      });
+      res.status(500).json({ error: 'Errore durante la verifica' });
+    }
+  }
+);
+
+/**
+ * POST /api/companies/import-cross-tenant
+ * Importa una Company esistente creando un nuovo CompanyTenantProfile
+ * OBBLIGATORIO: Registra consenso GDPR in CompanyDataShareConsent PRIMA del profile
+ */
+router.post('/import-cross-tenant',
+  authenticateToken,
+  checkAdvancedPermission('companies', 'create'),
+  async (req, res) => {
+    try {
+      const { companyId, sharedDataTypes, profileData = {} } = req.body;
+      const tenantId = getEffectiveTenantId(req);
+      const performedById = req.person?.id;
+      const ipAddress = req.ip || req.connection?.remoteAddress;
+
+      if (!companyId) {
+        return res.status(400).json({ error: 'companyId è obbligatorio' });
+      }
+
+      const validDataTypes = ['ANAGRAFICA', 'CONTATTI', 'DOCUMENTI', 'FORMAZIONE', 'SICUREZZA'];
+      if (!Array.isArray(sharedDataTypes) || sharedDataTypes.length === 0) {
+        return res.status(400).json({ error: 'sharedDataTypes è obbligatorio e deve essere un array non vuoto' });
+      }
+      const invalidTypes = sharedDataTypes.filter(t => !validDataTypes.includes(t));
+      if (invalidTypes.length > 0) {
+        return res.status(400).json({
+          error: `Tipi dati non validi: ${invalidTypes.join(', ')}. Valori consentiti: ${validDataTypes.join(', ')}`
+        });
+      }
+
+      const existingCompany = await prisma.company.findFirst({
+        where: { id: companyId, deletedAt: null },
+        include: {
+          tenantProfiles: {
+            where: { tenantId }
+          }
+        }
+      });
+
+      if (!existingCompany) {
+        return res.status(404).json({ error: 'Azienda non trovata' });
+      }
+
+      const activeProfile = existingCompany.tenantProfiles.find(p => !p.deletedAt);
+      const deletedProfile = existingCompany.tenantProfiles.find(p => p.deletedAt);
+
+      if (activeProfile) {
+        return res.status(409).json({ error: 'L\'azienda ha già un profilo in questo tenant' });
+      }
+
+      const sourceProfile = await prisma.companyTenantProfile.findFirst({
+        where: { companyId, deletedAt: null },
+        select: { tenantId: true }
+      });
+
+      const result = await prisma.$transaction(async (tx) => {
+        // 1. PRIMA: Crea il consenso GDPR (OBBLIGATORIO)
+        const consent = await tx.companyDataShareConsent.create({
+          data: {
+            companyId,
+            sourceTenantId: sourceProfile?.tenantId || tenantId,
+            targetTenantId: tenantId,
+            sharedDataTypes,
+            consentGiven: true,
+            consentDate: new Date(),
+            consentMethod: 'IMPORT_CROSS_TENANT',
+            legalBasis: 'GDPR Art.6.1.a - Consenso esplicito per import cross-tenant'
+          }
+        });
+
+        let newProfile;
+
+        if (deletedProfile) {
+          newProfile = await tx.companyTenantProfile.update({
+            where: { id: deletedProfile.id },
+            data: {
+              deletedAt: null,
+              ...profileData,
+              updatedAt: new Date()
+            }
+          });
+          logger.info('Restored previously deleted company profile', {
+            profileId: deletedProfile.id,
+            companyId,
+            tenantId
+          });
+        } else {
+          newProfile = await tx.companyTenantProfile.create({
+            data: {
+              companyId,
+              tenantId,
+              ...profileData
+            }
+          });
+        }
+
+        // 3. Registra audit log GDPR
+        await tx.gdprAuditLog.create({
+          data: {
+            companyId,
+            action: 'IMPORT_CROSS_TENANT',
+            resourceType: 'COMPANY_PROFILE',
+            resourceId: newProfile.id,
+            dataAccessed: {
+              profileId: newProfile.id,
+              consentId: consent.id,
+              sharedDataTypes,
+              targetTenantId: tenantId,
+              performedBy: performedById
+            },
+            ipAddress,
+            tenantId
+          }
+        });
+
+        return { profile: newProfile, consent };
+      });
+
+      logger.info('Company imported cross-tenant successfully', {
+        companyId,
+        targetTenantId: tenantId,
+        profileId: result.profile.id,
+        consentId: result.consent.id,
+        sharedDataTypes,
+        performedBy: performedById
+      });
+
+      res.status(201).json({
+        success: true,
+        message: 'Azienda importata con successo nel tenant',
+        profile: result.profile,
+        consentId: result.consent.id
+      });
+
+    } catch (error) {
+      logger.error('Error importing company cross-tenant:', {
+        error: 'Errore interno del server',
+        companyId: req.body.companyId,
+        tenantId: req.person?.tenantId
+      });
+      res.status(500).json({ error: 'Errore durante l\'importazione' });
+    }
+  }
+);
+
+/**
+ * POST /api/companies/:id/hide-from-view
+ * Revoca il consent cross-tenant senza eliminare i dati originali
+ * Usato quando un non-owner vuole "eliminare" un'azienda condivisa
+ */
+router.post('/:id/hide-from-view',
+  authenticateToken,
+  checkAdvancedPermission('companies', 'delete'),
+  async (req, res) => {
+    try {
+      const { id: companyId } = req.params;
+      const { reason } = req.body;
+      const tenantId = getEffectiveTenantId(req);
+      const revokedBy = req.person.id;
+
+      const consent = await prisma.companyDataShareConsent.findFirst({
+        where: {
+          companyId,
+          targetTenantId: tenantId,
+          isRevoked: false
+        }
+      });
+
+      if (!consent) {
+        return res.status(400).json({
+          success: false,
+          error: 'Operazione non valida',
+          message: 'Questa azienda non è stata condivisa con il tuo tenant. Se sei il proprietario, usa l\'eliminazione normale.',
+          code: 'NOT_SHARED_COMPANY'
+        });
+      }
+
+      await prisma.companyDataShareConsent.update({
+        where: { id: consent.id },
+        data: {
+          isRevoked: true,
+          revokedAt: new Date(),
+          revokedBy,
+          revokedReason: reason || 'Nascosto dalla vista dal tenant'
+        }
+      });
+
+      await prisma.gdprAuditLog.create({
+        data: {
+          companyId,
+          action: 'HIDE_FROM_VIEW',
+          resourceType: 'CompanyDataShareConsent',
+          resourceId: consent.id,
+          tenantId,
+          dataAccessed: {
+            consentId: consent.id,
+            sourceTenantId: consent.sourceTenantId,
+            targetTenantId: tenantId,
+            revokedBy,
+            reason: reason || 'Nascosto dalla vista dal tenant',
+            operation: 'REVOKE_CONSENT'
+          }
+        }
+      });
+
+      logger.info('Company hidden from view (consent revoked)', {
+        companyId,
+        consentId: consent.id,
+        tenantId,
+        revokedBy,
+        reason
+      });
+
+      res.json({
+        success: true,
+        message: 'Azienda nascosta dalla vista con successo',
+        consentId: consent.id
+      });
+
+    } catch (error) {
+      logger.error('Error hiding company from view:', {
+        error: 'Errore interno del server',
+        companyId: req.params?.id,
+        tenantId: req.person?.tenantId
+      });
+      res.status(500).json({ error: 'Errore durante l\'operazione' });
+    }
+  }
+);
+
+
+router.get('/:id/mdl-documents/nomine.pdf',
+  authenticateToken,
+  checkAdvancedPermission('companies', 'read'),
+  async (req, res) => {
+    try {
+      const tenantId = getEffectiveTenantId(req);
+      const profile = await resolveCompanyTenantProfile(req.params.id, tenantId);
+
+      if (!profile) {
+        return res.status(404).json({ success: false, error: 'Azienda non trovata' });
+      }
+
+      const buffer = await generateNominePdfBuffer(profile);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="nomine-${profile.id}.pdf"`);
+      return res.send(buffer);
+    } catch (error) {
+      logger.error({ error: error.message, companyOrProfileId: req.params.id }, 'Errore generazione PDF nomine azienda');
+      return res.status(500).json({ success: false, error: 'Errore nella generazione del PDF nomine' });
+    }
+  }
+);
+
+router.get('/:id/mdl-documents/:documentType/files',
+  authenticateToken,
+  checkAdvancedPermission('companies', 'read'),
+  async (req, res) => {
+    try {
+      const tenantId = getEffectiveTenantId(req);
+      const documentType = safeDocumentType(req.params.documentType);
+      if (!documentType) return res.status(400).json({ success: false, error: 'Tipologia documento non valida' });
+
+      const profile = await resolveCompanyTenantProfile(req.params.id, tenantId);
+      if (!profile) return res.status(404).json({ success: false, error: 'Azienda non trovata' });
+
+      return res.json({
+        success: true,
+        data: listMdlDocumentFiles(tenantId, profile.id, documentType)
+      });
+    } catch (error) {
+      logger.error({ error: error.message, companyOrProfileId: req.params.id }, 'Errore elenco documenti MDL azienda');
+      return res.status(500).json({ success: false, error: 'Errore nel recupero dei documenti' });
+    }
+  }
+);
+
+router.get('/:id/mdl-documents/:documentType/files/:filename',
+  authenticateToken,
+  checkAdvancedPermission('companies', 'read'),
+  async (req, res) => {
+    try {
+      const tenantId = getEffectiveTenantId(req);
+      const documentType = safeDocumentType(req.params.documentType);
+      if (!documentType) return res.status(400).json({ success: false, error: 'Tipologia documento non valida' });
+
+      const profile = await resolveCompanyTenantProfile(req.params.id, tenantId);
+      if (!profile) return res.status(404).json({ success: false, error: 'Azienda non trovata' });
+
+      const dir = ensureMdlDocumentDir(tenantId, profile.id, documentType);
+      const filePath = path.resolve(dir, sanitizeStoredFilename(req.params.filename));
+      if (!filePath.startsWith(dir + path.sep) || !fs.existsSync(filePath)) {
+        return res.status(404).json({ success: false, error: 'Documento non trovato' });
+      }
+
+      return res.sendFile(filePath);
+    } catch (error) {
+      logger.error({ error: error.message, companyOrProfileId: req.params.id }, 'Errore download documento MDL azienda');
+      return res.status(500).json({ success: false, error: 'Errore nel recupero del documento' });
+    }
+  }
+);
+
+router.post('/:id/mdl-documents/:documentType/upload',
+  authenticateToken,
+  checkAdvancedPermission('companies', 'update'),
+  createSingleUpload('documento', {
+    destination: 'uploads/company-mdl-temp',
+    allowedMimeTypes: ['application/pdf', 'image/jpeg', 'image/png'],
+    maxFileSize: 25 * 1024 * 1024
+  }),
+  multerErrorHandler,
+  async (req, res) => {
+    try {
+      const tenantId = getEffectiveTenantId(req);
+      const documentType = safeDocumentType(req.params.documentType);
+      if (!documentType) return res.status(400).json({ success: false, error: 'Tipologia documento non valida' });
+      if (!req.file) return res.status(400).json({ success: false, error: 'File documento obbligatorio' });
+
+      const profile = await resolveCompanyTenantProfile(req.params.id, tenantId);
+      if (!profile) return res.status(404).json({ success: false, error: 'Azienda non trovata' });
+
+      const dir = ensureMdlDocumentDir(tenantId, profile.id, documentType);
+      const storedName = `${documentType}-${Date.now()}-${sanitizeStoredFilename(req.file.originalname)}`;
+      const targetPath = path.join(dir, storedName);
+      fs.renameSync(req.file.path, targetPath);
+      const metadata = {
+        originalName: req.file.originalname,
+        mimeType: req.file.mimetype,
+        note: req.body?.note || null,
+        signedOnline: false,
+        uploadedBy: req.person?.id || null,
+        createdAt: new Date().toISOString()
+      };
+      fs.writeFileSync(`${targetPath}.json`, JSON.stringify(metadata, null, 2));
+
+      await prisma.activityLog.create({
+        data: {
+          personId: req.person.id,
+          tenantId,
+          action: 'COMPANY_MDL_DOCUMENT_UPLOAD',
+          category: 'companies',
+          resource: 'CompanyTenantProfile',
+          resourceId: profile.id,
+          details: JSON.stringify({ documentType, filename: storedName, originalName: req.file.originalname }),
+          timestamp: new Date(),
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent')
+        }
+      }).catch(err => logger.warn('ActivityLog upload documento MDL non salvato', { error: err.message }));
+
+      return res.status(201).json({
+        success: true,
+        data: listMdlDocumentFiles(tenantId, profile.id, documentType)[0]
+      });
+    } catch (error) {
+      logger.error({ error: error.message, companyOrProfileId: req.params.id }, 'Errore upload documento MDL azienda');
+      return res.status(500).json({ success: false, error: 'Errore nel caricamento del documento' });
+    }
+  }
+);
+
+router.post('/:id/mdl-documents/:documentType/sign',
+  authenticateToken,
+  checkAdvancedPermission('companies', 'update'),
+  async (req, res) => {
+    try {
+      const tenantId = getEffectiveTenantId(req);
+      const documentType = safeDocumentType(req.params.documentType);
+      if (!documentType) return res.status(400).json({ success: false, error: 'Tipologia documento non valida' });
+
+      const profile = await resolveCompanyTenantProfile(req.params.id, tenantId);
+      if (!profile) return res.status(404).json({ success: false, error: 'Azienda non trovata' });
+
+      const firma = String(req.body?.signature || '').trim();
+      const signatureImage = req.body?.signatureImage || '';
+      if (!signatureImage && firma.length < 2) {
+        return res.status(400).json({ success: false, error: 'Firma obbligatoria' });
+      }
+
+      const companyName = profile.company?.ragioneSociale || 'Azienda';
+      let buffer;
+      if (documentType === 'nomine') {
+        buffer = await generateNominePdfBuffer(profile);
+      } else {
+        const html = `
+          <!doctype html>
+          <html lang="it"><head><meta charset="utf-8" />
+          <style>
+            body { font-family: Arial, sans-serif; padding: 32px; color: #111827; }
+            h1 { color: #0f766e; font-size: 22px; }
+            p { font-size: 12px; line-height: 1.5; }
+            .box { border: 1px solid #d1d5db; border-radius: 10px; padding: 16px; background: #f8fafc; }
+          </style></head><body>
+            <h1>Tariffario Medicina del Lavoro</h1>
+            <div class="box">
+              <p><strong>Azienda:</strong> ${escapeHtml(companyName)}</p>
+              <p><strong>Documento:</strong> Tariffario aziendale MdL</p>
+              <p><strong>Data firma:</strong> ${new Date().toLocaleString('it-IT')}</p>
+            </div>
+          </body></html>
+        `;
+        buffer = await pdfService.generatePDF(html, {
+          format: 'A4',
+          margin: { top: '15mm', right: '15mm', bottom: '15mm', left: '15mm' },
+        });
+      }
+      buffer = await stampSignatureOnPdf(buffer, signatureImage, req.body?.placement || {});
+      const dir = ensureMdlDocumentDir(tenantId, profile.id, documentType);
+      const storedName = `${documentType}-firmato-online-${Date.now()}.pdf`;
+      const targetPath = path.join(dir, storedName);
+      fs.writeFileSync(targetPath, buffer);
+      fs.writeFileSync(`${targetPath}.json`, JSON.stringify({
+        originalName: `${documentType}-firmato-online.pdf`,
+        mimeType: 'application/pdf',
+        note: req.body?.note || null,
+        signedOnline: true,
+        signatureMode: signatureImage ? 'DRAWN' : 'TEXT',
+        signerName: firma || null,
+        uploadedBy: req.person?.id || null,
+        createdAt: new Date().toISOString()
+      }, null, 2));
+
+      await prisma.activityLog.create({
+        data: {
+          personId: req.person.id,
+          tenantId,
+          action: 'COMPANY_MDL_DOCUMENT_SIGN',
+          category: 'companies',
+          resource: 'CompanyTenantProfile',
+          resourceId: profile.id,
+          details: JSON.stringify({ documentType, filename: storedName }),
+          timestamp: new Date(),
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent')
+        }
+      }).catch(err => logger.warn('ActivityLog firma documento MDL non salvato', { error: err.message }));
+
+      return res.status(201).json({
+        success: true,
+        data: listMdlDocumentFiles(tenantId, profile.id, documentType)[0]
+      });
+    } catch (error) {
+      logger.error({ error: error.message, companyOrProfileId: req.params.id }, 'Errore firma documento MDL azienda');
+      return res.status(500).json({ success: false, error: 'Errore nella firma del documento' });
+    }
+  }
+);
+
+
 // Get all companies
 router.get('/',
   authenticateToken,
@@ -281,12 +1106,94 @@ router.get('/',
       const isEmployeeOnly = roleTypes.includes('EMPLOYEE') &&
         !roleTypes.some(r => ['ADMIN', 'TRAINING_ADMIN', 'HR_MANAGER', 'COMPANY_MANAGER', 'SITE_MANAGER'].includes(r));
 
+      const isTrainerOnly = roleTypes.includes('TRAINER') &&
+        !roleTypes.some(r => ['ADMIN', 'TRAINING_ADMIN', 'HR_MANAGER', 'COMPANY_MANAGER', 'SITE_MANAGER'].includes(r));
+
+      const isPrivilegedCompanyViewer = roleTypes.some(r => [
+        'SUPER_ADMIN',
+        'ADMIN',
+        'TENANT_ADMIN',
+        'CLINIC_ADMIN',
+        'COMPANY_MANAGER',
+        'HR_MANAGER',
+        'TRAINING_ADMIN',
+        'SEGRETERIA_CLINICA'
+      ].includes(r)) || ['SUPER_ADMIN', 'ADMIN', 'TENANT_ADMIN'].includes(globalRole);
+
+      const restrictProfileIds = (filter, ids) => {
+        const uniqueIds = [...new Set(ids.filter(Boolean))];
+        if (!filter.id) {
+          filter.id = { in: uniqueIds };
+          return;
+        }
+        if (typeof filter.id === 'string') {
+          filter.id = uniqueIds.includes(filter.id) ? filter.id : { in: [] };
+          return;
+        }
+        if (Array.isArray(filter.id?.in)) {
+          filter.id = { in: filter.id.in.filter(id => uniqueIds.includes(id)) };
+        }
+      };
+
+      const excludeProfileIds = (filter, ids) => {
+        const uniqueIds = [...new Set(ids.filter(Boolean))];
+        if (uniqueIds.length === 0) return;
+        if (!filter.id) {
+          filter.id = { notIn: uniqueIds };
+          return;
+        }
+        if (typeof filter.id === 'string') {
+          filter.id = uniqueIds.includes(filter.id) ? { in: [] } : filter.id;
+          return;
+        }
+        if (Array.isArray(filter.id?.in)) {
+          filter.id = { in: filter.id.in.filter(id => !uniqueIds.includes(id)) };
+          return;
+        }
+        if (Array.isArray(filter.id?.notIn)) {
+          filter.id = { notIn: [...new Set([...filter.id.notIn, ...uniqueIds])] };
+        }
+      };
+
       // Se è EMPLOYEE, mostra solo la propria azienda (P48: usa companyTenantProfileId)
       let profileFilter = { tenantId: tenantFilter, deletedAt: null };
       if (isEmployeeOnly && person.companyTenantProfileId) {
         profileFilter.id = person.companyTenantProfileId;
+      } else if (isTrainerOnly) {
+        // TRAINER vede solo le aziende dei propri corsi programmati
+        const baseTenantIdStr = typeof tenantFilter === 'string' ? tenantFilter : baseTenantId;
+        const trainerProfileIds = await getTrainerCompanyProfileIds(person.id, baseTenantIdStr);
+        profileFilter.id = { in: trainerProfileIds };
       } else if (permissionContext.scope === 'company' && person.companyTenantProfileId) {
         profileFilter.id = person.companyTenantProfileId;
+      }
+
+      if (req.query.mdlOnly === 'true') {
+        const nominaMedicoCompetenteMode = ['with', 'without', 'all'].includes(req.query.nominaMedicoCompetente)
+          ? req.query.nominaMedicoCompetente
+          : (req.query.includeAssignable === 'true' && isPrivilegedCompanyViewer ? 'all' : 'with');
+        const mdlNomineWhere = {
+          tenantId: tenantFilter,
+          deletedAt: null,
+          stato: 'ATTIVA',
+          tipoRuolo: { in: ['MEDICO_COMPETENTE', 'MEDICO_COMPETENTE_COORDINATO'] },
+          companyTenantProfileId: { not: null },
+          ...(!isPrivilegedCompanyViewer ? { personId: person.id } : {})
+        };
+        const mdlNomine = await prisma.nominaRuolo.findMany({
+          where: mdlNomineWhere,
+          select: { companyTenantProfileId: true }
+        });
+        const nominatedProfileIds = mdlNomine.map(n => n.companyTenantProfileId);
+        if (nominaMedicoCompetenteMode === 'with') {
+          restrictProfileIds(profileFilter, nominatedProfileIds);
+        } else if (nominaMedicoCompetenteMode === 'without') {
+          if (!isPrivilegedCompanyViewer) {
+            restrictProfileIds(profileFilter, []);
+          } else {
+            excludeProfileIds(profileFilter, nominatedProfileIds);
+          }
+        }
       }
 
       const companies = await prisma.company.findMany({

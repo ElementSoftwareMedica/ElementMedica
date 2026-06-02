@@ -15,7 +15,7 @@ NC='\033[0m'
 
 # Configurazione
 SSH_KEY="$HOME/.ssh/id_ed25519"
-SERVER="root@178.104.44.177"
+SERVER="root@178.104.197.134"
 
 # Directory base
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

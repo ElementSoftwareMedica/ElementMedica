@@ -26,7 +26,8 @@ export { getEffectiveTenantId } from '../../../utils/tenantHelper.js';
  */
 export const getBranchType = (req) => {
     // Le route cliniche sono sempre MEDICA
-    return req.branchType || BRANCH_TYPES.MEDICA;
+    // req.branchType potrebbe non essere definito per route autenticate
+    return BRANCH_TYPES.MEDICA;
 };
 
 // ============================================

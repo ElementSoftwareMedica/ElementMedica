@@ -115,7 +115,7 @@ export const HELMET_CONFIGS = {
     },
     hsts: false, // Disabilitato per HTTP locale
     noSniff: true,
-    frameguard: { action: 'deny' },
+    frameguard: { action: 'sameorigin' },
     xssFilter: true,
     referrerPolicy: { policy: 'same-origin' },
     permittedCrossDomainPolicies: false,
@@ -135,7 +135,7 @@ export const HELMET_CONFIGS = {
       preload: true
     },
     noSniff: true,
-    frameguard: { action: 'deny' },
+    frameguard: { action: 'sameorigin' },
     xssFilter: true,
     referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
     permittedCrossDomainPolicies: false,
@@ -164,14 +164,14 @@ export const SECURITY_HEADERS = {
   development: {
     'X-API-Version': '1.0',
     'X-Environment': 'development',
-    'X-Frame-Options': 'DENY',
+    'X-Frame-Options': 'SAMEORIGIN',
     'X-Content-Type-Options': 'nosniff'
   },
 
   production: {
     'X-API-Version': '1.0',
     'X-Environment': 'production',
-    'X-Frame-Options': 'DENY',
+    'X-Frame-Options': 'SAMEORIGIN',
     'X-Content-Type-Options': 'nosniff',
     'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload',
     'X-Permitted-Cross-Domain-Policies': 'none',

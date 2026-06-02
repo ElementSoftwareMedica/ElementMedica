@@ -10,13 +10,14 @@
 import React from 'react';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
-import { Edit2, CheckCircle, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Edit2, CheckCircle, Trash2, Sparkles, RefreshCcw, CalendarPlus, Phone, Mail } from 'lucide-react';
 import type {
     DeadlineItem,
     DeadlineCategory,
     DeadlinePriority,
     DeadlineStatus
 } from '../../../../services/clinicaApi';
+import ListPaginationFooter from '../../../../components/ui/ListPaginationFooter';
 
 interface DeadlineTableProps {
     data: DeadlineItem[];
@@ -30,7 +31,11 @@ interface DeadlineTableProps {
     onEdit: (deadline: DeadlineItem) => void;
     onComplete: (id: string) => void;
     onDelete: (id: string) => void;
+    onRenewFarmaco?: (deadline: DeadlineItem) => void;
+    onResolveVisit?: (deadline: DeadlineItem) => void;
+    onScheduleVisit?: (deadline: DeadlineItem) => void;
     onPageChange: (page: number) => void;
+    onPageSizeChange?: (pageSize: number) => void;
     categoryConfig: Record<DeadlineCategory, { label: string; icon: React.ComponentType<{ className?: string }>; color: string }>;
     priorityConfig: Record<DeadlinePriority, { label: string; color: string; bgColor: string }>;
     statusConfig: Record<DeadlineStatus, { label: string; color: string; bgColor: string }>;
@@ -44,7 +49,11 @@ const DeadlineTable: React.FC<DeadlineTableProps> = ({
     onEdit,
     onComplete,
     onDelete,
+    onRenewFarmaco,
+    onResolveVisit,
+    onScheduleVisit,
     onPageChange,
+    onPageSizeChange,
     categoryConfig,
     priorityConfig,
     statusConfig,
@@ -106,6 +115,13 @@ const DeadlineTable: React.FC<DeadlineTableProps> = ({
                             const prioConfig = priorityConfig[deadline.priorita];
                             const statConfig = statusConfig[deadline.status];
                             const Icon = catConfig?.icon;
+                            const isDerived = deadline.id.startsWith('derived:') || [
+                                'STRUMENTO_MANUTENZIONE',
+                                'FARMACO',
+                                'VISITA_FOLLOWUP'
+                            ].includes(deadline.entityType || '');
+                            const patientPhone = deadline.person?.phone || deadline.person?.telefono;
+                            const patientEmail = deadline.person?.email;
 
                             return (
                                 <tr key={deadline.id} className="hover:bg-gray-50 transition-colors">
@@ -116,6 +132,22 @@ const DeadlineTable: React.FC<DeadlineTableProps> = ({
                                                 <p className="text-sm text-gray-500 truncate max-w-xs">
                                                     {deadline.descrizione}
                                                 </p>
+                                            )}
+                                            {deadline.entityType === 'VISITA_FOLLOWUP' && (patientPhone || patientEmail) && (
+                                                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                                                    {patientPhone && (
+                                                        <a href={`tel:${patientPhone}`} className="inline-flex items-center gap-1 hover:text-teal-700">
+                                                            <Phone className="h-3 w-3" />
+                                                            {patientPhone}
+                                                        </a>
+                                                    )}
+                                                    {patientEmail && (
+                                                        <a href={`mailto:${patientEmail}`} className="inline-flex items-center gap-1 hover:text-teal-700">
+                                                            <Mail className="h-3 w-3" />
+                                                            {patientEmail}
+                                                        </a>
+                                                    )}
+                                                </div>
                                             )}
                                         </div>
                                     </td>
@@ -153,31 +185,67 @@ const DeadlineTable: React.FC<DeadlineTableProps> = ({
                                     </td>
                                     {canPerformCRUD && (
                                         <td className="px-4 py-3">
-                                            <div className="flex items-center justify-end gap-1">
-                                                <button
-                                                    onClick={() => onEdit(deadline)}
-                                                    className="p-2 text-gray-500 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"
-                                                    title="Modifica"
-                                                >
-                                                    <Edit2 className="w-4 h-4" />
-                                                </button>
-                                                {deadline.status !== 'COMPLETATA' && deadline.status !== 'ANNULLATA' && (
+                                            {isDerived ? (
+                                                <div className="flex items-center justify-end gap-1">
+                                                    <span className="mr-1 hidden items-center gap-1 text-xs font-medium text-slate-500 sm:inline-flex">
+                                                        <Sparkles className="w-3.5 h-3.5" />
+                                                        Automatica
+                                                    </span>
+                                                    {deadline.entityType === 'FARMACO' && (
+                                                        <button
+                                                            onClick={() => onRenewFarmaco?.(deadline)}
+                                                            className="p-2 text-gray-500 hover:text-teal-700 hover:bg-teal-50 rounded-lg transition-colors"
+                                                            title="Rinnova farmaco"
+                                                        >
+                                                            <RefreshCcw className="w-4 h-4" />
+                                                        </button>
+                                                    )}
+                                                    {deadline.entityType === 'VISITA_FOLLOWUP' && (
+                                                        <>
+                                                            <button
+                                                                onClick={() => onScheduleVisit?.(deadline)}
+                                                                className="p-2 text-gray-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                                                                title="Prenota appuntamento"
+                                                            >
+                                                                <CalendarPlus className="w-4 h-4" />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => onResolveVisit?.(deadline)}
+                                                                className="p-2 text-gray-500 hover:text-green-700 hover:bg-green-50 rounded-lg transition-colors"
+                                                                title="Segna come risolta"
+                                                            >
+                                                                <CheckCircle className="w-4 h-4" />
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <div className="flex items-center justify-end gap-1">
                                                     <button
-                                                        onClick={() => onComplete(deadline.id)}
-                                                        className="p-2 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                                                        title="Completa"
+                                                        onClick={() => onEdit(deadline)}
+                                                        className="p-2 text-gray-500 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"
+                                                        title="Modifica"
                                                     >
-                                                        <CheckCircle className="w-4 h-4" />
+                                                        <Edit2 className="w-4 h-4" />
                                                     </button>
-                                                )}
-                                                <button
-                                                    onClick={() => onDelete(deadline.id)}
-                                                    className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                    title="Elimina"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
-                                            </div>
+                                                    {deadline.status !== 'COMPLETATA' && deadline.status !== 'ANNULLATA' && (
+                                                        <button
+                                                            onClick={() => onComplete(deadline.id)}
+                                                            className="p-2 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                                                            title="Completa"
+                                                        >
+                                                            <CheckCircle className="w-4 h-4" />
+                                                        </button>
+                                                    )}
+                                                    <button
+                                                        onClick={() => onDelete(deadline.id)}
+                                                        className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                        title="Elimina"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            )}
                                         </td>
                                     )}
                                 </tr>
@@ -187,29 +255,15 @@ const DeadlineTable: React.FC<DeadlineTableProps> = ({
                 </table>
             </div>
 
-            {/* Pagination */}
-            {pagination && pagination.totalPages > 1 && (
-                <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between">
-                    <p className="text-sm text-gray-600">
-                        Pagina {pagination.page} di {pagination.totalPages} ({pagination.total} risultati)
-                    </p>
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => onPageChange(pagination.page - 1)}
-                            disabled={pagination.page <= 1}
-                            className="p-2 rounded-lg border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                        >
-                            <ChevronLeft className="w-4 h-4" />
-                        </button>
-                        <button
-                            onClick={() => onPageChange(pagination.page + 1)}
-                            disabled={pagination.page >= pagination.totalPages}
-                            className="p-2 rounded-lg border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                        >
-                            <ChevronRight className="w-4 h-4" />
-                        </button>
-                    </div>
-                </div>
+            {pagination && (
+                <ListPaginationFooter
+                    page={pagination.page}
+                    pageSize={pagination.limit}
+                    total={pagination.total}
+                    totalPages={pagination.totalPages}
+                    onPageChange={onPageChange}
+                    onPageSizeChange={onPageSizeChange}
+                />
             )}
         </div>
     );

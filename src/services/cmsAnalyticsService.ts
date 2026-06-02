@@ -46,6 +46,26 @@ export interface RefererBreakdown {
   count: number;
 }
 
+export interface OsBreakdown {
+  os: string;
+  count: number;
+}
+
+export interface CountryBreakdown {
+  country: string;
+  count: number;
+}
+
+export interface CityBreakdown {
+  city: string;
+  count: number;
+}
+
+export interface PeakHour {
+  hour: number;
+  views: number;
+}
+
 export interface ViewsOverTime {
   date: string;
   views: number;
@@ -66,6 +86,10 @@ export interface PageDetailedAnalytics {
   devices: DeviceBreakdown[];
   browsers: BrowserBreakdown[];
   referers: RefererBreakdown[];
+  os: OsBreakdown[];
+  countries: CountryBreakdown[];
+  cities: CityBreakdown[];
+  peakHours: PeakHour[];
   viewsOverTime: ViewsOverTime[];
 }
 
@@ -79,7 +103,9 @@ export interface AnalyticsSummary {
   };
   topPages: PageStats[];
   devices: Record<string, number>;
+  topCities?: { city: string; count: number }[];
   viewsOverTime?: ViewsOverTime[];
+  peakHours?: PeakHour[];
 }
 
 interface ApiResponse<T> {
@@ -114,7 +140,29 @@ export const trackPageView = async (data: PageViewData): Promise<void> => {
     await apiPost(`${ANALYTICS_BASE}/track`, payload);
   } catch (error) {
     // Non lanciare errori per il tracking - è non critico
-    console.debug('[CMS Analytics] Failed to track page view:', error);
+    if (import.meta.env.DEV) {
+      console.debug('[CMS Analytics] Failed to track page view:', error);
+    }
+  }
+};
+
+/**
+ * Traccia una visita su una pagina statica hardcoded del frontend (senza CMSPage ID)
+ */
+export const trackStaticPage = async (pageSlug: string, pageTitle: string): Promise<void> => {
+  try {
+    const payload = {
+      pageSlug,
+      pageTitle,
+      sessionId: getSessionId(),
+      referer: typeof document !== 'undefined' ? document.referrer : ''
+    };
+
+    await apiPost(`${ANALYTICS_BASE}/track`, payload);
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.debug('[CMS Analytics] Failed to track static page view:', error);
+    }
   }
 };
 
@@ -218,13 +266,16 @@ export const getAnalyticsSummary = async (period?: '7d' | '30d' | '90d' | '1y'):
     return result;
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error('[CMS Analytics] ❌ Error fetching summary:', errorMsg, error);
+    if (import.meta.env.DEV) {
+      console.error('[CMS Analytics] ❌ Error fetching summary:', errorMsg, error);
+    }
     throw error;
   }
 };
 
 export default {
   trackPageView,
+  trackStaticPage,
   getPageAnalytics,
   getPageDetailedAnalytics,
   getAnalyticsSummary,

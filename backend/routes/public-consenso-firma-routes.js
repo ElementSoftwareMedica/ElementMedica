@@ -79,6 +79,8 @@ router.post('/:token', rateLimiter, async (req, res) => {
             firmaImmagine,
             firmatoConsensi,
             firmatoPazienteNome,
+            ipAddress: req.ip,
+            userAgent: req.get('user-agent') || null,
         });
         res.json({ success: true, message: 'Consensi registrati con successo.' });
     } catch (err) {

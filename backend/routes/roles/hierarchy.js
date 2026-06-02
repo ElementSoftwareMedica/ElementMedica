@@ -15,7 +15,8 @@ import roleHierarchyService from '../../services/roleHierarchyService.js';
 // Import dei middleware
 import {
   requireHierarchyManagement,
-  requireRoleAssignmentPermission
+  requireRoleAssignmentPermission,
+  requirePermission
 } from './middleware/auth.js';
 import { logRoleOperation, auditRoleChanges } from './middleware/logging.js';
 import {
@@ -38,9 +39,10 @@ const router = express.Router();
 /**
  * GET /api/roles/hierarchy
  * Ottiene la gerarchia completa dei ruoli
+ * Accessibile a tutti gli utenti autenticati con permesso hierarchy:read (incluso TENANT_ADMIN)
  */
 router.get('/',
-  requireHierarchyManagement,
+  requirePermission('hierarchy:read'),
   logRoleOperation('GET_ROLE_HIERARCHY'),
   async (req, res) => {
     try {

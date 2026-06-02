@@ -34,6 +34,9 @@ const DEVICE_TYPE_MAP = {
     'edan-ecg': 'ECG',
     'mir-spirometer': 'SPIROMETRO',
     'oscilla-audiometer': 'AUDIOMETRO',
+    'visiotest': 'VISIOTEST',
+    'vision-tester': 'VISIOTEST',
+    'generic-visiotest': 'VISIOTEST',
 };
 
 // Map exam types to AllegatoVisita tipologiaClinica values
@@ -43,6 +46,8 @@ const EXAM_TYPE_TIPOLOGIA_MAP = {
     'spirometria': 'SPIROMETRIA',
     'audiometry': 'AUDIOMETRIA',
     'audiometria': 'AUDIOMETRIA',
+    'visiotest': 'VISIOTEST',
+    'vision': 'VISIOTEST',
 };
 
 // Map exam types to human-readable Italian labels for document names
@@ -52,6 +57,8 @@ const EXAM_TYPE_LABEL_MAP = {
     'spirometria': 'Spirometria',
     'audiometry': 'Audiometria',
     'audiometria': 'Audiometria',
+    'visiotest': 'Visiotest',
+    'vision': 'Visiotest',
 };
 
 // Normalize exam types to Italian for consistent DB storage
@@ -59,7 +66,84 @@ const EXAM_TYPE_LABEL_MAP = {
 const NORMALIZE_EXAM_TYPE = {
     'spirometry': 'spirometria',
     'audiometry': 'audiometria',
+    'vision': 'visiotest',
 };
+
+const EXAM_VISIT_FIELD_MAP = {
+    ecg: { fieldName: 'ecgStrumentario', prestazioneTokens: ['ecg', 'elettrocardiogramma'] },
+    spirometria: { fieldName: 'spirometriaStrumentario', prestazioneTokens: ['spiro', 'spirometria'] },
+    audiometria: { fieldName: 'audiometriaStrumentario', prestazioneTokens: ['audio', 'audiometria'] },
+    visiotest: { fieldName: 'visiotestStrumentario', prestazioneTokens: ['visio', 'visiotest', 'vista'] },
+};
+
+function inferEsitoFromResult(normalizedExamType, testResults = [], findings = []) {
+    const abnormal = testResults.some(r => ['high', 'low', 'abnormal', 'critical'].includes(String(r.status || '').toLowerCase()))
+        || findings.some(f => /alterat|patolog|ridott|ostru|ipoacusia|deficit/i.test(String(f)));
+    if (!abnormal) return 'normale';
+    if (normalizedExamType === 'spirometria') return 'ostruzione_lieve';
+    if (normalizedExamType === 'audiometria') return 'lieve_ipoacusia';
+    return 'alterato';
+}
+
+async function syncExamWithVisit({ esame, result, normalizedExamType, allegatoVisitaId }) {
+    const config = EXAM_VISIT_FIELD_MAP[normalizedExamType];
+    if (!config || !esame?.visitaId || !esame?.tenantId || !['COMPLETATO', 'PARZIALE'].includes(esame.stato)) return;
+
+    const visita = await prisma.visita.findFirst({
+        where: { id: esame.visitaId, tenantId: esame.tenantId, deletedAt: null },
+        select: { id: true, appuntamentoId: true, datiStrutturati: true }
+    });
+    if (!visita) return;
+
+    const noteParts = [
+        ...(Array.isArray(result.findings) ? result.findings : []),
+        ...(Array.isArray(result.testResults)
+            ? result.testResults.slice(0, 8).map(r => `${r.testName || r.testId}: ${r.value}${r.unit ? ` ${r.unit}` : ''}`)
+            : [])
+    ].filter(Boolean);
+
+    await prisma.visita.update({
+        where: { id: visita.id },
+        data: {
+            datiStrutturati: {
+                ...(visita.datiStrutturati && typeof visita.datiStrutturati === 'object' ? visita.datiStrutturati : {}),
+                [config.fieldName]: {
+                    esito: inferEsitoFromResult(normalizedExamType, result.testResults || [], result.findings || []),
+                    note: noteParts.join(' - '),
+                    esameId: esame.id,
+                    allegatoVisitaId: allegatoVisitaId || (esame.metadata && typeof esame.metadata === 'object' ? esame.metadata.allegatoVisitaId : null),
+                    importedAt: new Date().toISOString(),
+                    risultati: result.testResults || [],
+                    findings: result.findings || [],
+                }
+            }
+        }
+    });
+
+    if (!visita.appuntamentoId) return;
+    const appPrestazioni = await prisma.appuntamentoPrestazione.findMany({
+        where: {
+            appuntamentoId: visita.appuntamentoId,
+            tenantId: esame.tenantId,
+            deletedAt: null,
+            stato: { notIn: ['REFERTATA', 'ANNULLATA'] },
+            prestazione: {
+                OR: config.prestazioneTokens.flatMap(token => [
+                    { codice: { contains: token, mode: 'insensitive' } },
+                    { nome: { contains: token, mode: 'insensitive' } },
+                ])
+            }
+        },
+        select: { id: true }
+    });
+
+    if (appPrestazioni.length > 0) {
+        await prisma.appuntamentoPrestazione.updateMany({
+            where: { id: { in: appPrestazioni.map(p => p.id) }, tenantId: esame.tenantId, deletedAt: null },
+            data: { stato: 'ESEGUITA', dataEsecuzione: esame.dataEsame || new Date() }
+        });
+    }
+}
 
 // ============================================
 // BRIDGE CALLBACK - Receives results from Bridge
@@ -441,6 +525,22 @@ router.post('/risultati',
                 }
             }
 
+            try {
+                await syncExamWithVisit({
+                    esame,
+                    result,
+                    normalizedExamType,
+                    allegatoVisitaId,
+                });
+            } catch (syncError) {
+                logger.error('Failed to sync device exam with visit fields', {
+                    component: 'strumenti-bridge',
+                    esameId: esame.id,
+                    visitaId: esame.visitaId,
+                    error: syncError.message,
+                });
+            }
+
             res.status(200).json({
                 success: true,
                 data: {
@@ -724,16 +824,31 @@ router.post('/generate-api-key',
 );
 
 // ============================================
-// DOWNLOAD INSTALLER
+// DOWNLOAD INSTALLER — DEPRECATO
+// Il Medical Device Bridge è ora integrato nell'App Desktop ElementMedica.
+// Questa route restituisce 410 Gone con istruzioni per scaricare l'app desktop.
 // NOTE: Must be defined BEFORE /:id to avoid Express matching "download-installer" as :id param
 // ============================================
 
 /**
  * @route GET /strumenti-bridge/download-installer
- * @desc Scarica il pacchetto di installazione del Medical Device Bridge (ZIP)
+ * @desc DEPRECATO — Il Bridge è ora integrato nell'App Desktop ElementMedica.
  * @access Authenticated (visite:read)
  */
 router.get('/download-installer',
+    authenticate,
+    requirePermission('visite:read'),
+    async (req, res) => {
+        return res.status(410).json({
+            success: false,
+            error: 'Il Medical Device Bridge non è più disponibile come applicazione separata. È integrato nell\'App Desktop ElementMedica. Scarica l\'App Desktop dalle Impostazioni Desktop.',
+            desktopSettingsUrl: '/poliambulatorio/impostazioni/desktop',
+        });
+    }
+);
+
+// LEGACY HANDLER (keeping route structure for backward compat, actual logic above)
+router.get('/download-installer-legacy',
     authenticate,
     requirePermission('visite:read'),
     async (req, res) => {

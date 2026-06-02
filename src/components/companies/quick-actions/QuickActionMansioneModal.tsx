@@ -163,8 +163,37 @@ export const QuickActionMansioneModal: React.FC<QuickActionMansioneModalProps> =
         enabled: isOpen && !!companyId
     });
 
+    const { data: assignedMansioniData } = useQuery({
+        queryKey: ['company-assigned-mansioni-map', companyId],
+        queryFn: async () => {
+            const response = await apiGet<{ mansioni?: any[]; data?: any[] }>(`/api/v1/companies/${companyId}/mansioni`);
+            const source = response.mansioni || response.data || [];
+            const byPerson: Record<string, Array<{ id: string; mansioneId?: string; nome: string }>> = {};
+
+            source.forEach((mansione: any) => {
+                const mansioneId = mansione.id || mansione.mansioneId;
+                const nome = mansione.denominazione || mansione.nome || mansione.codice || 'Mansione';
+                const dipendenti = mansione.dipendenti || mansione.lavoratori || mansione.employeeAssignments || [];
+
+                dipendenti.forEach((assignment: any) => {
+                    const personId = assignment.personId || assignment.person?.id || assignment.employee?.id || assignment.id;
+                    if (!personId) return;
+                    if (!byPerson[personId]) byPerson[personId] = [];
+                    if (!byPerson[personId].some(item => (item.mansioneId || item.id) === mansioneId)) {
+                        byPerson[personId].push({ id: mansioneId, mansioneId, nome });
+                    }
+                });
+            });
+
+            return byPerson;
+        },
+        staleTime: 60 * 1000,
+        enabled: isOpen && !!companyId
+    });
+
     const mansioni = mansioniData || [];
     const employees = employeesData || [];
+    const assignedMansioniByPerson = assignedMansioniData || {};
 
     const selectedMansione = useMemo(() =>
         mansioni.find(m => m.id === selectedMansioneId),
@@ -555,7 +584,11 @@ export const QuickActionMansioneModal: React.FC<QuickActionMansioneModalProps> =
                             <div className="divide-y divide-gray-100 dark:divide-gray-700">
                                 {filteredEmployees.map((employee) => {
                                     const isSelected = selectedEmployeeIds.includes(employee.id);
-                                    const hasMansione = employee.mansioni?.some(m => (m.mansioneId || m.id) === selectedMansioneId);
+                                    const employeeMansioni = assignedMansioniByPerson[employee.id] || employee.mansioni || [];
+                                    const hasMansione = employeeMansioni.some(m => (m.mansioneId || m.id) === selectedMansioneId);
+                                    const assignedMansioni = employeeMansioni
+                                        .map(m => m.nome)
+                                        .filter(Boolean);
                                     return (
                                         <div
                                             key={employee.id}
@@ -581,7 +614,7 @@ export const QuickActionMansioneModal: React.FC<QuickActionMansioneModalProps> =
                                                     <Check className="h-3 w-3 text-white" />
                                                 )}
                                             </div>
-                                            <div className="ml-3">
+                                            <div className="ml-3 min-w-0 flex-1">
                                                 <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
                                                     {employee.lastName} {employee.firstName}
                                                 </p>
@@ -591,11 +624,27 @@ export const QuickActionMansioneModal: React.FC<QuickActionMansioneModalProps> =
                                                     </p>
                                                 )}
                                             </div>
-                                            {hasMansione && (
-                                                <span className="ml-auto text-xs text-gray-500 dark:text-gray-400">
-                                                    Già assegnata
-                                                </span>
-                                            )}
+                                            <div className="ml-3 flex max-w-[48%] flex-wrap justify-end gap-1">
+                                                {assignedMansioni.slice(0, 3).map((mansione) => (
+                                                    <span
+                                                        key={mansione}
+                                                        className="max-w-[150px] truncate rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600 dark:bg-gray-700 dark:text-gray-300"
+                                                        title={mansione}
+                                                    >
+                                                        {mansione}
+                                                    </span>
+                                                ))}
+                                                {assignedMansioni.length > 3 && (
+                                                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                                                        +{assignedMansioni.length - 3}
+                                                    </span>
+                                                )}
+                                                {hasMansione && (
+                                                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                                                        Gia assegnata
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
                                     );
                                 })}

@@ -275,6 +275,7 @@ const CalendarPopup: React.FC<CalendarPopupProps> = ({
         setViewMonth(today.getMonth());
         setViewYear(today.getFullYear());
         onSelect(today);
+        if (!isRangeMode) onClose();
     };
 
     const selectYear = (year: number) => {

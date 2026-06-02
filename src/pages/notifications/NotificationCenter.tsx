@@ -76,14 +76,15 @@ const TYPE_OPTIONS: { value: NotificationType | 'ALL'; label: string }[] = [
 const CATEGORY_OPTIONS: { value: NotificationCategory | 'ALL'; label: string }[] = [
   { value: 'ALL', label: 'Tutte le categorie' },
   { value: 'APPOINTMENT', label: 'Appuntamenti' },
-  { value: 'BILLING', label: 'Fatturazione' },
+  { value: 'INVOICE', label: 'Fatturazione' },
   { value: 'DOCUMENT', label: 'Documenti' },
-  { value: 'CLINICAL', label: 'Clinica' },
+  { value: 'VISIT', label: 'Visite cliniche' },
   { value: 'TRAINING', label: 'Formazione' },
-  { value: 'SAFETY', label: 'Sicurezza' },
+  { value: 'SECURITY', label: 'Sicurezza' },
+  { value: 'GDPR', label: 'GDPR' },
   { value: 'SYSTEM', label: 'Sistema' },
-  { value: 'REMINDER', label: 'Promemoria' },
-  { value: 'MARKETING', label: 'Marketing' }
+  { value: 'MARKETING', label: 'Marketing' },
+  { value: 'CUSTOM', label: 'Personalizzato' }
 ];
 
 const PRIORITY_OPTIONS: { value: NotificationPriority | 'ALL'; label: string }[] = [

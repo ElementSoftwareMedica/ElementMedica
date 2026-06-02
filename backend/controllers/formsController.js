@@ -529,8 +529,7 @@ export const getSubmission = async (req, res) => {
  */
 export const createSubmission = async (req, res) => {
   try {
-    // Tenant ID può venire da req.person (se autenticato) o req.body (se pubblico)
-    const tenantId = req.person?.tenantId || req.body.tenantId;
+    const tenantId = req.person?.tenantId || req.publicTenantId;
 
     if (!tenantId) {
       return res.status(400).json({

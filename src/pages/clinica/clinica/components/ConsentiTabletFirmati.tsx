@@ -1,7 +1,7 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { FileSignature, ChevronDown, ChevronUp, Printer, AlertCircle, Clock } from 'lucide-react';
-import { apiGet } from '../../../../services/api';
+import { FileSignature, ChevronDown, ChevronUp, Printer, AlertCircle, Clock, Download, Eye } from 'lucide-react';
+import { apiDownload, apiGet } from '../../../../services/api';
 import { formatDate } from '../../../../utils/dateUtils';
 import { formatMedicoName } from '../../../../utils/textFormatters';
 
@@ -25,6 +25,11 @@ interface FirmaToken {
     firmaImmagine: string;
     expiresAt: string;
     createdAt: string;
+    validitaDocumenti?: Record<string, {
+        firmatoAt: string;
+        validitaGiorni: number | null;
+        validUntil: string | null;
+    }>;
     appuntamento: {
         id: string;
         dataOra: string;
@@ -38,6 +43,13 @@ const DOC_LABELS: Record<string, string> = {
     sanitari: 'Consenso Trattamento Dati Sanitari',
     prestazione: 'Consenso Informato Prestazione',
     chirurgico: 'Consenso Intervento Chirurgico',
+    marketing: 'Consenso Marketing',
+    comunicazioni: 'Comunicazioni e Promemoria',
+    fse: 'Fascicolo Sanitario Elettronico',
+    fse_alimentazione: 'FSE - Alimentazione documenti',
+    fse_consultazione: 'FSE - Consultazione',
+    fse_pregresso: 'FSE - Recupero dati pregressi',
+    mdl_sorveglianza: 'Sorveglianza sanitaria Medicina del Lavoro',
 };
 
 // ============================================
@@ -51,8 +63,38 @@ interface FirmaRowProps {
 }
 
 const FirmaRow: React.FC<FirmaRowProps> = ({ firma, isOpen, onToggle }) => {
+    const documentiFirmati = useMemo(() => Array.from(new Set([
+        ...(firma.documentiDaMostrare || []),
+        ...(firma.firmatoConsensi || []),
+    ])), [firma.documentiDaMostrare, firma.firmatoConsensi]);
+    const now = Date.now();
+    const validityRows = documentiFirmati.map(codice => {
+        const validity = firma.validitaDocumenti?.[codice];
+        const validUntil = validity?.validUntil ? new Date(validity.validUntil) : null;
+        const isExpired = !!validUntil && validUntil.getTime() < now;
+        return { codice, validity, validUntil, isExpired };
+    });
+    const isExpired = validityRows.length > 0 && validityRows.every(row => row.isExpired);
+
+    const openPdf = useCallback(async (download = false) => {
+        const blob = await apiDownload(`/api/v1/clinica/appuntamenti/${firma.appuntamento.id}/consenso-pdf`);
+        const url = URL.createObjectURL(blob);
+        if (download) {
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `consenso-firmato-${firma.appuntamento.id.slice(0, 8)}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        } else {
+            window.open(url, '_blank', 'noopener,noreferrer');
+            setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        }
+    }, [firma.appuntamento.id]);
+
     const handlePrint = useCallback(() => {
-        const docsHtml = firma.firmatoConsensi.map(d => `<li>${DOC_LABELS[d] || d}</li>`).join('');
+        const docsHtml = documentiFirmati.map(d => `<li>${DOC_LABELS[d] || d}</li>`).join('');
         const html = `<!DOCTYPE html>
 <html lang="it">
 <head>
@@ -109,7 +151,7 @@ const FirmaRow: React.FC<FirmaRowProps> = ({ firma, isOpen, onToggle }) => {
         w.document.close();
         w.focus();
         w.print();
-    }, [firma]);
+    }, [documentiFirmati, firma]);
 
     const prestazione = firma.appuntamento?.prestazione?.nome || '—';
     const medico = firma.appuntamento?.medico
@@ -134,8 +176,14 @@ const FirmaRow: React.FC<FirmaRowProps> = ({ firma, isOpen, onToggle }) => {
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
-                    <span className="text-xs bg-teal-50 text-teal-700 border border-teal-200 rounded-full px-2 py-0.5">
-                        {firma.firmatoConsensi.length} doc
+                    <span className={`text-xs border rounded-full px-2 py-0.5 ${isExpired
+                        ? 'bg-red-50 text-red-700 border-red-200'
+                        : 'bg-teal-50 text-teal-700 border-teal-200'
+                        }`}>
+                        {isExpired ? 'Scaduto' : 'Valido'}
+                    </span>
+                    <span className="text-xs bg-slate-50 text-slate-700 border border-slate-200 rounded-full px-2 py-0.5">
+                        {documentiFirmati.length} doc
                     </span>
                     {isOpen ? (
                         <ChevronUp className="h-4 w-4 text-gray-400" />
@@ -161,17 +209,28 @@ const FirmaRow: React.FC<FirmaRowProps> = ({ firma, isOpen, onToggle }) => {
                             <p className="text-xs text-gray-500">Medico</p>
                             <p className="font-medium text-gray-800">{medico}</p>
                         </div>
+                        <div>
+                            <p className="text-xs text-gray-500">Validità</p>
+                            <p className={`font-medium ${isExpired ? 'text-red-700' : 'text-teal-700'}`}>
+                                {isExpired ? 'Tutti i documenti sono scaduti' : 'Valida secondo i singoli documenti'}
+                            </p>
+                        </div>
                     </div>
 
                     <div>
                         <p className="text-xs text-gray-500 mb-1">Documenti firmati</p>
                         <div className="flex flex-wrap gap-1.5">
-                            {firma.firmatoConsensi.map(d => (
+                            {validityRows.map(({ codice, validUntil, isExpired }) => (
                                 <span
-                                    key={d}
-                                    className="text-xs bg-white border border-gray-200 rounded-full px-2 py-0.5 text-gray-700"
+                                    key={codice}
+                                    title={validUntil ? `Valido fino al ${formatDate(validUntil.toISOString())}` : 'Validità legata alla singola prestazione o senza scadenza configurata'}
+                                    className={`text-xs border rounded-full px-2 py-0.5 ${isExpired
+                                        ? 'bg-red-50 border-red-200 text-red-700'
+                                        : 'bg-white border-gray-200 text-gray-700'
+                                        }`}
                                 >
-                                    {DOC_LABELS[d] || d}
+                                    {DOC_LABELS[codice] || codice}
+                                    {validUntil ? ` · fino al ${formatDate(validUntil.toISOString())}` : ''}
                                 </span>
                             ))}
                         </div>
@@ -189,6 +248,22 @@ const FirmaRow: React.FC<FirmaRowProps> = ({ firma, isOpen, onToggle }) => {
                     )}
 
                     <div className="flex justify-end">
+                        <button
+                            type="button"
+                            onClick={() => openPdf(false)}
+                            className="mr-2 flex items-center gap-1.5 text-xs font-medium text-slate-700 hover:text-teal-800 bg-white border border-slate-200 hover:border-teal-300 rounded-lg px-3 py-1.5 transition-colors"
+                        >
+                            <Eye className="h-3.5 w-3.5" />
+                            Quicklook PDF
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => openPdf(true)}
+                            className="mr-2 flex items-center gap-1.5 text-xs font-medium text-slate-700 hover:text-teal-800 bg-white border border-slate-200 hover:border-teal-300 rounded-lg px-3 py-1.5 transition-colors"
+                        >
+                            <Download className="h-3.5 w-3.5" />
+                            Scarica PDF
+                        </button>
                         <button
                             type="button"
                             onClick={handlePrint}
@@ -248,13 +323,13 @@ const ConsentiTabletFirmati: React.FC<ConsentiTabletFirmatiProps> = ({ pazienteI
             {isError && (
                 <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
                     <AlertCircle className="h-4 w-4 shrink-0" />
-                    Errore nel caricamento delle firme.
+                    Errore nel caricamento dei consensi raccolti in accettazione.
                 </div>
             )}
 
             {!isLoading && !isError && (!data || data.length === 0) && (
                 <div className="text-sm text-gray-500 bg-gray-50 rounded-lg px-4 py-4 border border-gray-200">
-                    Nessun consenso firmato tramite tablet per questo paziente.
+                    Nessun consenso raccolto in accettazione per questo paziente.
                 </div>
             )}
 

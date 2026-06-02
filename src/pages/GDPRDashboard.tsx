@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   Shield,
   Download,
@@ -34,7 +35,11 @@ import { GDPROverviewCard } from '../components/gdpr/GDPROverviewCard';
 import { ComplianceScoreCard } from '../components/gdpr/ComplianceScoreCard';
 
 export const GDPRDashboard: React.FC = () => {
-  const [activeTab, setActiveTab] = useState('consent');
+  const location = useLocation();
+  const initialTab = location.pathname.includes('/audit') ? 'audit' :
+    location.pathname.includes('/export') ? 'export' :
+      location.pathname.includes('/consent') ? 'consent' : 'consent';
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [refreshing, setRefreshing] = useState(false);
 
   // GDPR Hooks

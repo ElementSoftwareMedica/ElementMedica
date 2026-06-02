@@ -211,6 +211,65 @@ router.post('/sessions/check-existing', authenticate, requirePermission('appunta
 });
 
 /**
+ * POST /sessions/same-day - Trova sessioni dello stesso medico nella stessa giornata
+ * Usato per proporre unione sessioni mattina/pomeriggio
+ */
+router.post('/sessions/same-day', authenticate, requirePermission('appuntamenti:read'), async (req, res) => {
+    try {
+        const tenantId = getEffectiveTenantId(req);
+        const { date, medicoPersonId, excludeSlotId } = req.body;
+
+        if (!date || !medicoPersonId) {
+            return res.status(400).json({ success: false, error: 'date e medicoPersonId obbligatori' });
+        }
+
+        const sessions = await QueueSessionService.findSameDaySessions({
+            tenantId,
+            date: new Date(date),
+            medicoPersonId,
+            excludeSlotId
+        });
+
+        res.json({
+            success: true,
+            data: sessions.map(s => ({
+                id: s.id,
+                mode: s.mode,
+                qrCodeToken: s.qrCodeToken,
+                slotDisponibilita: s.slotDisponibilita,
+                ambulatorio: s.ambulatorio,
+                entriesCount: s._count?.entries || 0
+            }))
+        });
+    } catch (error) {
+        logger.error('Error finding same-day sessions', { error: error.message });
+        res.status(500).json({ success: false, error: 'Errore interno del server' });
+    }
+});
+
+/**
+ * POST /sessions/:id/link-slot - Collega uno slot aggiuntivo ad una sessione esistente
+ * Usato per unire mattina/pomeriggio nello stesso link coda
+ */
+router.post('/sessions/:id/link-slot', authenticate, requirePermission('appuntamenti:write'), async (req, res) => {
+    try {
+        const tenantId = getEffectiveTenantId(req);
+        const { id } = req.params;
+        const { slotDisponibilitaId } = req.body;
+
+        if (!slotDisponibilitaId) {
+            return res.status(400).json({ success: false, error: 'slotDisponibilitaId obbligatorio' });
+        }
+
+        const updated = await QueueSessionService.linkAdditionalSlot(id, slotDisponibilitaId, tenantId);
+        res.json({ success: true, data: updated });
+    } catch (error) {
+        logger.error('Error linking slot to session', { error: error.message });
+        res.status(500).json({ success: false, error: 'Errore nel collegamento dello slot' });
+    }
+});
+
+/**
  * POST /sessions/bulk-day - P70: Genera tutte le sessioni coda di una giornata
  * @body {string} date - Data da processare (ISO 8601)
  * @body {'MATTINA'|'POMERIGGIO'|'TUTTO'} [fascia='TUTTO'] - Fascia oraria
@@ -268,7 +327,7 @@ router.post('/sessions', authenticate, requirePermission('appuntamenti:write'), 
         res.status(201).json({ success: true, data: session });
     } catch (error) {
         logger.error('Error creating queue session', { error: error.message });
-        res.status(400).json({ success: false, error: 'Errore interno del server' });
+        res.status(400).json({ success: false, error: 'Errore nella creazione della sessione coda' });
     }
 });
 
@@ -408,8 +467,13 @@ router.delete('/sessions/:id/medici/:medicoId', authenticate, requirePermission(
         await QueueSessionService.removeMedico(id, tenantId, medicoId);
         res.json({ success: true, message: 'Medico rimosso dalla sessione' });
     } catch (error) {
-        logger.error('Error removing medico from session', { error: 'Operazione non riuscita', sessionId: req.params.id });
-        res.status(400).json({ success: false, error: 'Errore interno del server' });
+        const isNotFound = error.message?.includes('non trovata') || error.message?.includes('non associato');
+        const statusCode = isNotFound ? 404 : 500;
+        logger.error({ error: error.message, sessionId: req.params.id, medicoId: req.params.medicoId }, 'Error removing medico from session');
+        res.status(statusCode).json({
+            success: false,
+            error: isNotFound ? 'Medico non associato alla sessione' : 'Errore nella rimozione del medico dalla sessione'
+        });
     }
 });
 

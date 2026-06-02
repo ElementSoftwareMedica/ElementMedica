@@ -66,10 +66,13 @@ interface UsageStats {
 
 interface WidgetOptions {
     prestazioni: Array<{ id: string; nome: string; branche: string[]; tipo: string }>;
-    courses: Array<{ id: string; title: string; category: string }>;
+    courses: Array<{ id: string; title: string; category: string; status?: string; isPublic?: boolean }>;
+    schedules: Array<{ id: string; title: string; category: string; startDate: string; endDate: string; location: string; isPublic: boolean; status?: string }>;
     medici: Array<{ id: string; nome: string; title: string | null }>;
     branche: string[];
     forms: Array<{ id: string; name: string; description: string | null; type: string }>;
+    sedi: Array<{ id: string; nome: string; citta: string; label: string }>;
+    ambulatori: Array<{ id: string; nome: string; specializzazione: string; isEsterno: boolean; sedeId: string | null; sedeNome: string | null; label: string }>;
 }
 
 const WIDGET_OPTIONS = [
@@ -189,21 +192,43 @@ function WidgetSettingsPanel({ widgetKey, settings, onChange, options }: {
     switch (widgetKey) {
         case 'booking':
             return (
-                <div className="space-y-2">
-                    <div className="text-xs font-semibold text-gray-600">Prestazioni visibili nel widget</div>
-                    <CheckboxSelector
-                        items={(options?.prestazioni ?? []).map(p => ({
-                            id: p.id,
-                            label: p.nome,
-                            sublabel: p.branche?.join(', '),
-                        }))}
-                        selectedIds={settings.prestazioniIds ?? []}
-                        onChange={ids => set('prestazioniIds', ids)}
-                        emptyLabel="Nessuna prestazione trovata."
-                    />
-                    <p className="text-xs text-gray-400 italic mt-1">
-                        Gli altri accertamenti seguiranno il protocollo sanitario. Il prezzo sarà come da tariffario aziendale.
-                    </p>
+                <div className="space-y-4">
+                    <div className="space-y-2">
+                        <div className="text-xs font-semibold text-gray-600">Prestazioni visibili nel widget</div>
+                        <CheckboxSelector
+                            items={(options?.prestazioni ?? []).map(p => ({
+                                id: p.id,
+                                label: p.nome,
+                                sublabel: p.branche?.join(', '),
+                            }))}
+                            selectedIds={settings.prestazioniIds ?? []}
+                            onChange={ids => set('prestazioniIds', ids)}
+                            emptyLabel="Nessuna prestazione trovata."
+                        />
+                        <p className="text-xs text-gray-400 italic mt-1">
+                            Gli altri accertamenti seguiranno il protocollo sanitario. Il prezzo sarà come da tariffario aziendale.
+                        </p>
+                    </div>
+                    <div className="space-y-2 border-t border-gray-100 pt-3">
+                        <div className="text-xs font-semibold text-gray-600">Sedi visibili (filtra disponibilità per sede)</div>
+                        <CheckboxSelector
+                            items={(options?.sedi ?? []).map(s => ({ id: s.id, label: s.label }))}
+                            selectedIds={settings.sedeIds ?? []}
+                            onChange={ids => set('sedeIds', ids)}
+                            emptyLabel="Nessuna sede trovata."
+                        />
+                        <p className="text-xs text-gray-400 italic">Lascia vuoto per mostrare tutte le sedi.</p>
+                    </div>
+                    <div className="space-y-2 border-t border-gray-100 pt-3">
+                        <div className="text-xs font-semibold text-gray-600">Ambulatori visibili (filtro preciso)</div>
+                        <CheckboxSelector
+                            items={(options?.ambulatori ?? []).filter(a => !a.isEsterno).map(a => ({ id: a.id, label: a.label, sublabel: a.specializzazione || undefined }))}
+                            selectedIds={settings.ambulatoriIds ?? []}
+                            onChange={ids => set('ambulatoriIds', ids)}
+                            emptyLabel="Nessun ambulatorio trovato."
+                        />
+                        <p className="text-xs text-gray-400 italic">Se selezionato, mostra disponibilità solo in questi ambulatori (priorità rispetto al filtro sedi).</p>
+                    </div>
                 </div>
             );
         case 'courses':
@@ -211,51 +236,121 @@ function WidgetSettingsPanel({ widgetKey, settings, onChange, options }: {
                 <div className="space-y-2">
                     <div className="text-xs font-semibold text-gray-600">Corsi visibili</div>
                     <CheckboxSelector
-                        items={(options?.courses ?? []).map(c => ({ id: c.id, label: c.title, sublabel: c.category }))}
+                        items={(options?.courses ?? []).map(c => ({
+                            id: c.id,
+                            label: c.title,
+                            sublabel: c.category + (c.isPublic ? '' : ' · bozza'),
+                        }))}
                         selectedIds={settings.courseIds ?? []}
                         onChange={ids => set('courseIds', ids)}
-                        emptyLabel="Nessun corso pubblicato."
+                        emptyLabel="Nessun corso trovato."
                     />
+                    <p className="text-xs text-gray-400 italic">Seleziona i corsi da mostrare sul sito pubblico. Lascia vuoto per mostrarli tutti.</p>
                 </div>
             );
-        case 'doctors':
+        case 'doctors': {
+            const medicoItems = (options?.medici ?? []).map(m => ({ id: m.id, label: m.nome, sublabel: m.title ?? undefined }));
+            const activeMedicoIds = new Set(medicoItems.map(m => m.id));
+            // Ghost items: IDs in selectedIds that are no longer in the active medici list (deleted medici)
+            const ghostItems = (settings.doctorIds ?? [])
+                .filter(id => !activeMedicoIds.has(id))
+                .map(id => ({ id, label: '⚠ Medico non trovato (eliminato)', sublabel: id.slice(0, 8) + '…' }));
             return (
                 <div className="space-y-2">
                     <div className="text-xs font-semibold text-gray-600">Medici visibili</div>
+                    {ghostItems.length > 0 && (
+                        <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                            ⚠ {ghostItems.length} medico/i eliminato/i presente/i nella configurazione — deselezionalo per rimuoverlo.
+                        </div>
+                    )}
                     <CheckboxSelector
-                        items={(options?.medici ?? []).map(m => ({ id: m.id, label: m.nome, sublabel: m.title ?? undefined }))}
+                        items={[...ghostItems, ...medicoItems]}
                         selectedIds={settings.doctorIds ?? []}
                         onChange={ids => set('doctorIds', ids)}
                         emptyLabel="Nessun medico trovato."
                     />
                 </div>
             );
+        }
         case 'specialties':
             return (
-                <div className="space-y-2">
-                    <div className="text-xs font-semibold text-gray-600">Branche visibili</div>
-                    <CheckboxSelector
-                        items={(options?.branche ?? []).map(b => ({ id: b, label: b }))}
-                        selectedIds={settings.brancheFilter ?? []}
-                        onChange={ids => set('brancheFilter', ids)}
-                        emptyLabel="Nessuna branca trovata."
-                    />
+                <div className="space-y-4">
+                    <div className="space-y-2">
+                        <div className="text-xs font-semibold text-gray-600">Branche visibili</div>
+                        <CheckboxSelector
+                            items={(options?.branche ?? []).map(b => ({ id: b, label: b }))}
+                            selectedIds={settings.brancheFilter ?? []}
+                            onChange={ids => set('brancheFilter', ids)}
+                            emptyLabel="Nessuna branca trovata."
+                        />
+                        <p className="text-xs text-gray-400 italic">Filtra per branca specialistica. Le prestazioni che appartengono a più branche appariranno se almeno una è selezionata.</p>
+                    </div>
+                    <div className="space-y-2 border-t border-gray-100 pt-3">
+                        <div className="text-xs font-semibold text-gray-600">Prestazioni visibili (filtro preciso)</div>
+                        <CheckboxSelector
+                            items={(options?.prestazioni ?? []).map(p => ({
+                                id: p.id,
+                                label: p.nome,
+                                sublabel: p.branche?.join(', '),
+                            }))}
+                            selectedIds={settings.prestazioniIds ?? []}
+                            onChange={ids => set('prestazioniIds', ids)}
+                            emptyLabel="Nessuna prestazione trovata."
+                        />
+                        <p className="text-xs text-gray-400 italic">Se selezionata, mostra solo le prestazioni specificate (ha priorità rispetto al filtro branche).</p>
+                    </div>
                 </div>
             );
-        case 'schedules':
+        case 'schedules': {
+            const fmt = (d: string) => new Date(d).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: '2-digit' });
             return (
                 <div className="space-y-2">
-                    <div className="text-xs font-semibold text-gray-600">Calendari per corsi</div>
-                    <CheckboxSelector
-                        items={(options?.courses ?? []).map(c => ({ id: c.id, label: c.title, sublabel: c.category }))}
-                        selectedIds={settings.courseIds ?? []}
-                        onChange={ids => set('courseIds', ids)}
-                        emptyLabel="Nessun corso pubblicato."
-                    />
+                    <div className="text-xs font-semibold text-gray-600">Edizioni corso da mostrare</div>
+                    {(options?.schedules ?? []).length === 0 ? (
+                        <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-2">
+                            Nessuna edizione corso trovata nei prossimi/ultimi 30 giorni. Configura le edizioni in <strong>Formazione → Calendari</strong> e abilita la visibilità pubblica.
+                        </div>
+                    ) : (
+                        <CheckboxSelector
+                            items={(options?.schedules ?? []).map(s => ({
+                                id: s.id,
+                                label: s.title,
+                                sublabel: `${fmt(s.startDate)}${s.location ? ` · ${s.location}` : ''}${s.isPublic ? ' ✓pub' : ''}`,
+                            }))}
+                            selectedIds={settings.scheduleIds ?? []}
+                            onChange={ids => set('scheduleIds', ids)}
+                            emptyLabel="Nessuna edizione trovata."
+                        />
+                    )}
+                    <p className="text-xs text-gray-400 italic mt-1">Lascia vuoto per mostrare tutte le edizioni con visibilità pubblica attiva.</p>
                 </div>
             );
+        }
         case 'contact':
-            return <p className="text-xs text-gray-400 italic">Nessun filtro disponibile per il widget contatti.</p>;
+            return (
+                <div className="space-y-2">
+                    <div className="text-xs font-semibold text-gray-600">Form di contatto da mostrare</div>
+                    {(options?.forms ?? []).length === 0 ? (
+                        <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-2">
+                            Nessun form pubblico trovato. Vai in <strong>CMS → Form Pubblici</strong> e imposta almeno un form come pubblico e attivo.
+                        </div>
+                    ) : (
+                        <CheckboxSelector
+                            items={(options?.forms ?? []).map(f => ({
+                                id: f.id,
+                                label: f.name,
+                                sublabel: f.type,
+                            }))}
+                            selectedIds={settings.formIds ?? []}
+                            onChange={ids => set('formIds', ids)}
+                            emptyLabel="Nessun form trovato."
+                        />
+                    )}
+                    <p className="text-xs text-gray-400 italic mt-1">
+                        Seleziona i form da mostrare nel widget contatti. Lascia vuoto per mostrarli tutti.
+                    </p>
+                </div>
+            );
         case 'forms':
             return (
                 <div className="space-y-2">
@@ -395,6 +490,9 @@ const PublicApiSettingsPage: React.FC = () => {
                         if (field === 'courseIds') return widgetOptions.courses.find(c => c.id === id)?.title ?? id;
                         if (field === 'doctorIds') return widgetOptions.medici.find(m => m.id === id)?.nome ?? id;
                         if (field === 'formIds') return widgetOptions.forms?.find(f => f.id === id)?.name ?? id;
+                        if (field === 'scheduleIds') return widgetOptions.schedules?.find(s => s.id === id)?.title ?? id;
+                        if (field === 'sedeIds') return widgetOptions.sedi?.find(s => s.id === id)?.label ?? id;
+                        if (field === 'ambulatoriIds') return widgetOptions.ambulatori?.find(a => a.id === id)?.label ?? id;
                         if (field === 'brancheFilter') return id;
                         return id;
                     });

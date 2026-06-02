@@ -7,7 +7,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Shield, Check, X, Star, StarOff, Plus, Trash2, Edit2, Search, Filter, Eye, ExternalLink, Settings } from 'lucide-react';
+import { Building2, Shield, Check, X, Star, Plus, Trash2, Edit2, Search, Filter } from 'lucide-react';
 import { managementApi } from '../api';
 import type { Tenant, Feature, TenantAccessLevel, TenantSettings } from '../types';
 import { useAuth } from '../../../context/AuthContext';
@@ -35,15 +35,12 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({ personId, onT
     const [tenants, setTenants] = useState<Tenant[]>([]);
     const [features, setFeatures] = useState<Feature[]>([]);
     const [loading, setLoading] = useState(true);
-    // Modal state for tenant details
-    const [selectedTenantDetails, setSelectedTenantDetails] = useState<Tenant | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterFeature, setFilterFeature] = useState<string>('');
 
     // Modal state
     const [showAddModal, setShowAddModal] = useState(false);
-    const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
     const [tenantToEdit, setTenantToEdit] = useState<Tenant | null>(null);
     const [isSavingTenant, setIsSavingTenant] = useState(false);
     const { showToast } = useToast();
@@ -135,7 +132,6 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({ personId, onT
             }
             showToast({ message: 'Tenant aggiornato con successo', type: 'success' });
             setTenantToEdit(null);
-            setSelectedTenantDetails(null); // Chiudi anche modal dettagli se aperto
             await loadData(); // Ricarica dati per vedere le modifiche
         } catch (err: unknown) {
             showToast({ message: 'Errore nell\'aggiornamento del tenant', type: 'error' });
@@ -251,13 +247,12 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({ personId, onT
                     {filteredTenants.map(tenant => {
                         const accessInfo = getAccessLevelInfo(tenant.accessLevel);
 
-                        // Handler per click: usa onTenantSelect se passato, altrimenti mostra modal dettagli
+                        // Handler per click: usa onTenantSelect se passato, altrimenti naviga alla pagina dettaglio
                         const handleTenantClick = () => {
                             if (onTenantSelect) {
                                 onTenantSelect(tenant);
                             } else {
-                                // Mostra modal con dettagli tenant
-                                setSelectedTenantDetails(tenant);
+                                navigate(`/management/my-tenants/${tenant.id}`);
                             }
                         };
 
@@ -330,17 +325,17 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({ personId, onT
                                         <span className="text-gray-400 bg-gray-50 dark:bg-gray-700 px-2 py-0.5 rounded capitalize">{tenant.billingPlan}</span>
                                     </div>
 
-                                    {/* Actions (only for admin managing other users) */}
-                                    {!isViewingOwnTenants && !tenant.isAdminAccess && (
+                                    {/* Actions - edit shown for own tenants too; revoke/primary only for admin managing other users */}
+                                    {(isViewingOwnTenants || !tenant.isAdminAccess) && (
                                         <div className="flex items-center gap-2 mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
                                             <button
-                                                onClick={(e) => { e.stopPropagation(); setEditingTenant(tenant); }}
+                                                onClick={(e) => { e.stopPropagation(); setTenantToEdit(tenant); }}
                                                 className="flex-1 flex items-center justify-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors font-medium"
                                             >
                                                 <Edit2 className="h-3.5 w-3.5 mr-1.5" />
                                                 Modifica
                                             </button>
-                                            {!tenant.isPrimary && (
+                                            {!isViewingOwnTenants && !tenant.isPrimary && (
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); handleSetPrimary(tenant.id); }}
                                                     className="flex items-center justify-center px-3 py-2 text-sm text-amber-700 hover:bg-amber-50 rounded-lg transition-colors"
@@ -349,13 +344,15 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({ personId, onT
                                                     <Star className="h-3.5 w-3.5" />
                                                 </button>
                                             )}
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); handleRevoke(tenant.id); }}
-                                                className="flex items-center justify-center px-3 py-2 text-sm text-red-700 hover:bg-red-50 rounded-lg transition-colors"
-                                                title="Revoca accesso"
-                                            >
-                                                <Trash2 className="h-3.5 w-3.5" />
-                                            </button>
+                                            {!isViewingOwnTenants && (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); handleRevoke(tenant.id); }}
+                                                    className="flex items-center justify-center px-3 py-2 text-sm text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                                                    title="Revoca accesso"
+                                                >
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                </button>
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -365,124 +362,7 @@ const TenantAccessManager: React.FC<TenantAccessManagerProps> = ({ personId, onT
                 </div>
             )}
 
-            {/* Tenant Details Modal */}
-            {selectedTenantDetails && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedTenantDetails(null)}>
-                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl dark:shadow-black/50 w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-                        {/* Modal Header */}
-                        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-                            <div className="flex items-center">
-                                <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center mr-3">
-                                    <Building2 className="h-5 w-5 text-blue-600" />
-                                </div>
-                                <div>
-                                    <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-50">{selectedTenantDetails.name}</h3>
-                                    <p className="text-sm text-gray-500 dark:text-gray-400">{selectedTenantDetails.slug}</p>
-                                </div>
-                            </div>
-                            <button
-                                onClick={() => setSelectedTenantDetails(null)}
-                                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                            >
-                                <X className="h-5 w-5 text-gray-500 dark:text-gray-400" />
-                            </button>
-                        </div>
-
-                        {/* Modal Body */}
-                        <div className="px-6 py-4 space-y-6">
-                            {/* Access Level */}
-                            <div>
-                                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Livello di Accesso</h4>
-                                <div className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium ${getAccessLevelInfo(selectedTenantDetails.accessLevel).color}`}>
-                                    <Shield className="h-4 w-4 mr-1.5" />
-                                    {getAccessLevelInfo(selectedTenantDetails.accessLevel).label}
-                                </div>
-                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{getAccessLevelInfo(selectedTenantDetails.accessLevel).description}</p>
-                            </div>
-
-                            {/* Status */}
-                            <div>
-                                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Stato</h4>
-                                <div className="flex items-center gap-4">
-                                    <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium ${selectedTenantDetails.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                                        {selectedTenantDetails.isActive ? <Check className="h-4 w-4 mr-1.5" /> : <X className="h-4 w-4 mr-1.5" />}
-                                        {selectedTenantDetails.isActive ? 'Attivo' : 'Inattivo'}
-                                    </span>
-                                    {selectedTenantDetails.isPrimary && (
-                                        <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800">
-                                            <Star className="h-4 w-4 mr-1.5 fill-current" />
-                                            Primario
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Billing Plan */}
-                            <div>
-                                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Piano</h4>
-                                <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 capitalize">
-                                    {selectedTenantDetails.billingPlan || 'Standard'}
-                                </span>
-                            </div>
-
-                            {/* Features */}
-                            {selectedTenantDetails.enabledFeatures && selectedTenantDetails.enabledFeatures.length > 0 && (
-                                <div>
-                                    <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Funzionalità Abilitate</h4>
-                                    <div className="flex flex-wrap gap-2">
-                                        {selectedTenantDetails.enabledFeatures.map(feature => (
-                                            <span key={feature} className="bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-3 py-1.5 rounded-lg text-sm font-medium capitalize">
-                                                {feature}
-                                            </span>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Tenant ID */}
-                            <div>
-                                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">ID Tenant</h4>
-                                <code className="text-xs bg-gray-100 dark:bg-gray-700 px-3 py-1.5 rounded-lg font-mono text-gray-600 dark:text-gray-300 block overflow-x-auto">
-                                    {selectedTenantDetails.id}
-                                </code>
-                            </div>
-                        </div>
-
-                        {/* Modal Footer */}
-                        <div className="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between rounded-b-2xl">
-                            <button
-                                onClick={() => setSelectedTenantDetails(null)}
-                                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
-                            >
-                                Chiudi
-                            </button>
-                            <div className="flex items-center gap-2">
-                                <button
-                                    onClick={() => {
-                                        setTenantToEdit(selectedTenantDetails);
-                                    }}
-                                    className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                                >
-                                    <Settings className="h-4 w-4 mr-1.5" />
-                                    Modifica Configurazione
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        navigate(`/management/tenant-access?tenantId=${selectedTenantDetails.id}`);
-                                        setSelectedTenantDetails(null);
-                                    }}
-                                    className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
-                                >
-                                    <Eye className="h-4 w-4 mr-1.5" />
-                                    Gestisci Accessi
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Tenant Edit Modal - Per modificare configurazione tenant */}
+            {/* Tenant Edit Modal - Per modificare configurazione tenant (solo admin) */}
             {tenantToEdit && (
                 <TenantEditModal
                     tenant={tenantToEdit}

@@ -1,17 +1,17 @@
 import React from 'react';
 import { DocumentManager } from '../index';
-import type { FormData } from '../../hooks/useFormData';
+import type { FormData } from '../../types';
 
 type Person = { id: string | number; firstName: string; lastName: string };
-type Training = { 
-  id: string | number; 
-  name?: string; 
-  nome?: string; 
+type Training = {
+  id: string | number;
+  name?: string;
+  nome?: string;
   title?: string;
-  price?: number; 
-  prezzo?: number; 
-  duration?: number | string; 
-  tipoServizio?: string 
+  price?: number;
+  prezzo?: number;
+  duration?: number | string;
+  tipoServizio?: string
 };
 type Company = { id: string | number; ragioneSociale: string };
 

@@ -435,6 +435,8 @@ export function buildSchedulePayload(
     notes: formData.notes,
     deliveryMode: formData.delivery_mode,
     isPublic: formData.isPublic || false,
+    riskLevel: formData.risk_level || undefined,
+    courseType: formData.course_type || undefined,
     dates: datesArr.map(dt => ({
       date: dt.date,
       start: dt.start,

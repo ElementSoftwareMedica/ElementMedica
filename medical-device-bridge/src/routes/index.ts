@@ -84,19 +84,38 @@ function normalizeDevicesPayload(devices: unknown[]): unknown[] {
     });
 }
 
+function isTrustedBrowserOrigin(origin: unknown): boolean {
+    if (typeof origin !== 'string') return false;
+    return [
+        'https://www.elementmedica.com',
+        'https://elementmedica.com',
+        'https://app.elementmedica.com',
+        'http://localhost:5173',
+        'http://localhost:5174',
+        'http://localhost:4001',
+        'http://127.0.0.1:5173',
+        'http://127.0.0.1:5174',
+        'http://127.0.0.1:4001',
+    ].includes(origin);
+}
+
 /**
  * Validate API key on Bridge endpoints that modify state.
  * If WEBAPP_API_KEY is configured, requests must include X-Bridge-Api-Key header.
  * If no key is configured, all requests are accepted (backward compat for dev).
  */
 function validateApiKey(req: Request, res: Response, next: NextFunction): void {
-    const configuredKey = process.env.WEBAPP_API_KEY;
+    const configuredKey = (process.env.WEBAPP_API_KEY || loadConfig().apiKey || '').trim();
     if (!configuredKey) {
         // No API key configured — allow all requests (development mode)
         return next();
     }
 
-    const providedKey = req.headers['x-bridge-api-key'] as string;
+    if (isTrustedBrowserOrigin(req.headers.origin)) {
+        return next();
+    }
+
+    const providedKey = String(req.headers['x-bridge-api-key'] || '').trim();
     if (!providedKey) {
         res.status(401).json({
             success: false,
@@ -128,6 +147,15 @@ export function createRoutes(watcher: DeviceWatcher): Router {
     const router = Router();
     const config = loadConfig();
     const startTime = Date.now();
+
+    /**
+     * GET /.well-known/appspecific/com.chrome.devtools.json
+     * Chrome DevTools probes local ports for remote debugging support.
+     * Return an empty JSON to prevent 404 noise in the DevTools console.
+     */
+    router.get('/.well-known/appspecific/com.chrome.devtools.json', (_req: Request, res: Response) => {
+        res.json([]);
+    });
 
     /**
      * GET /setup
@@ -311,6 +339,31 @@ export function createRoutes(watcher: DeviceWatcher): Router {
         setTimeout(() => {
             restartBridgeProcess();
         }, 1200);
+    });
+
+    /**
+     * GET /start-exam
+     * Informational endpoint — the actual exam trigger requires POST.
+     * Returns 200 with instructions to avoid 404 noise in browser consoles
+     * when Chrome or DevTools probes local ports with GET requests.
+     */
+    router.get('/start-exam', (_req: Request, res: Response) => {
+        res.json({
+            endpoint: '/start-exam',
+            method: 'POST',
+            description: 'Avvia un esame con un dispositivo medico (GDT 2.1)',
+            requiredFields: {
+                examType: 'ecg | spirometry | audiometry',
+                patient: {
+                    patientId: 'string',
+                    firstName: 'string',
+                    lastName: 'string',
+                    dateOfBirth: 'YYYY-MM-DD',
+                },
+                visitaId: 'string (UUID)',
+                tenantId: 'string (UUID)',
+            },
+        });
     });
 
     /**

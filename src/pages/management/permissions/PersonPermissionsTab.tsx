@@ -38,7 +38,9 @@ import {
     Heart,
     Receipt,
     Tag,
-    FileText
+    FileText,
+    CalendarDays,
+    PencilLine
 } from 'lucide-react';
 import { useAuth } from '../../../hooks/auth/useAuth';
 import { apiGet, apiPost, apiDelete } from '../../../services/api';
@@ -142,29 +144,39 @@ const RESOURCES = [
     { id: 'settings', name: 'Impostazioni', icon: Settings },
     { id: 'roles', name: 'Ruoli', icon: Shield },
     // P65: Clinica resources
+    { id: 'clinica.appuntamenti', name: 'Appuntamenti e Calendario', icon: CalendarDays },
     { id: 'clinica.visite', name: 'Visite Mediche', icon: Stethoscope },
     { id: 'clinica.prestazioni', name: 'Prestazioni', icon: Heart },
     { id: 'clinica.tariffari', name: 'Tariffari', icon: Receipt },
     { id: 'clinica.convenzioni', name: 'Convenzioni', icon: Tag },
     { id: 'clinica.referti', name: 'Referti', icon: FileText },
+    { id: 'movimenti_contabili', name: 'Movimenti Contabili', icon: Receipt },
 ];
 
 const ACTIONS = [
     { id: 'read', name: 'Lettura', icon: Eye },
     { id: 'write', name: 'Modifica', icon: Edit2 },
     { id: 'create', name: 'Creazione', icon: Plus },
+    { id: 'update', name: 'Aggiornamento', icon: Edit2 },
     { id: 'delete', name: 'Elimina', icon: Trash2 },
+    { id: 'manage', name: 'Gestione completa', icon: Settings },
     // P65: Granular actions for clinica
+    { id: 'view_others_same_branch', name: 'Calendario stessa branca', icon: CalendarDays },
+    { id: 'view_others_all', name: 'Calendario tutti i medici', icon: Users },
+    { id: 'create_self', name: 'Crea appuntamenti propri', icon: Plus },
+    { id: 'create_others', name: 'Crea appuntamenti per altri', icon: Users },
+    { id: 'edit_others', name: 'Modifica altri medici', icon: PencilLine },
     { id: 'change_refertante', name: 'Cambia Refertante', icon: Stethoscope },
     { id: 'view_prices', name: 'Vedi Prezzi', icon: Eye },
     { id: 'manage_convenzioni', name: 'Gestisci Convenzioni/Sconti', icon: Tag },
 ];
 
 const SCOPES = [
+    { id: 'none', name: 'Nessuno', description: 'Accesso disabilitato' },
     { id: 'all', name: 'Tutti', description: 'Accesso globale' },
     { id: 'tenant', name: 'Tenant', description: 'Solo dati del tenant' },
     { id: 'own', name: 'Propri', description: 'Solo record creati dall\'utente' },
-    { id: 'related', name: 'Relazionali', description: 'Record correlati all\'utente' },
+    { id: 'relational', name: 'Relazionale', description: 'Record correlati all\'utente' },
 ];
 
 const PersonPermissionsTab: React.FC = () => {

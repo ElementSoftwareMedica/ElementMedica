@@ -42,6 +42,7 @@ import {
 import { useToast } from '@/hooks/useToast';
 import { MalattieProfessionaliTab } from '@/components/clinica/MalattieProfessionaliTab';
 import { DatePickerElegante } from '@/components/ui/DatePickerElegante';
+import MiniParametroChart from '@/pages/clinica/clinica/components/MiniParametroChart';
 
 // ─────────────────────────────────────────────
 // Types
@@ -129,6 +130,9 @@ function profileToDraft(p: ProfiloDiSalute): ProfiloDraft {
         unitaAlcolSettimana: p.unitaAlcolSettimana ?? undefined,
         attivitaFisica: p.attivitaFisica ?? undefined,
         oreAttivitaSettimana: p.oreAttivitaSettimana ?? undefined,
+        peso: p.peso ?? undefined,
+        altezza: p.altezza ?? undefined,
+        bmi: p.bmi ?? undefined,
         alimentazione: p.alimentazione ?? undefined,
         usaDpiPersonali: p.usaDpiPersonali,
         dpiPersonali: p.dpiPersonali ?? [],
@@ -251,6 +255,43 @@ const TagList: React.FC<{ tags: string[] }> = ({ tags }) => (
     </div>
 );
 
+const ALCOL_UNITS_PRESET: Record<string, number> = {
+    non_bevitore: 0,
+    occasionale: 1,
+    moderato: 7,
+    eccessivo: 14,
+};
+
+const ATTIVITA_HOURS_PRESET: Record<string, number> = {
+    sedentario: 0,
+    leggera: 1.5,
+    moderata: 3,
+    intensa: 5,
+};
+
+const calculateBmi = (peso?: number | null, altezza?: number | null) => {
+    if (!peso || !altezza || altezza <= 0) return undefined;
+    const meters = altezza / 100;
+    return Math.round((peso / (meters * meters)) * 10) / 10;
+};
+
+const VitalTrend: React.FC<{
+    personId: string;
+    fieldName: 'peso' | 'altezza' | 'bmi';
+    fieldLabel: string;
+    currentValue?: number;
+}> = ({ personId, fieldName, fieldLabel, currentValue }) => (
+    <div className="mt-1 flex items-center justify-end rounded-lg bg-slate-50 px-2 py-1 text-[11px] text-slate-500">
+        <span className="mr-1">Andamento</span>
+        <MiniParametroChart
+            pazienteId={personId}
+            fieldName={fieldName}
+            fieldLabel={fieldLabel}
+            currentValue={currentValue}
+        />
+    </div>
+);
+
 const CheckboxGroup: React.FC<{
     options: readonly { value: string; label: string }[];
     selected: string[];
@@ -345,6 +386,34 @@ export const ProfiloSaluteCard: React.FC<ProfiloSaluteCardProps> = ({
 
     const setField = <K extends keyof ProfiloDraft>(key: K, value: ProfiloDraft[K]) => {
         setDraft(prev => ({ ...prev, [key]: value }));
+    };
+
+    const setLifestylePreset = (key: 'alcol' | 'attivitaFisica', value?: string) => {
+        setDraft(prev => {
+            if (key === 'alcol') {
+                return {
+                    ...prev,
+                    alcol: value,
+                    unitaAlcolSettimana: value ? ALCOL_UNITS_PRESET[value] : undefined,
+                };
+            }
+            return {
+                ...prev,
+                attivitaFisica: value,
+                oreAttivitaSettimana: value ? ATTIVITA_HOURS_PRESET[value] : undefined,
+            };
+        });
+    };
+
+    const setVitalsField = (key: 'peso' | 'altezza', rawValue: string) => {
+        const value = rawValue ? Number(rawValue) : undefined;
+        setDraft(prev => {
+            const next = { ...prev, [key]: value } as ProfiloDraft;
+            return {
+                ...next,
+                bmi: calculateBmi(next.peso as number | undefined, next.altezza as number | undefined),
+            };
+        });
     };
 
     const hasSomething = profilo && (
@@ -459,7 +528,52 @@ export const ProfiloSaluteCard: React.FC<ProfiloSaluteCardProps> = ({
                         )}
                         {/* Invalidità */}
                         {(!tabLayout || activeTab === 'clinica') && (
-                            <div>
+                            <div className="space-y-4">
+                                <div>
+                                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Parametri antropometrici</p>
+                                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                                        <div>
+                                            <label className="text-xs text-gray-500 mb-0.5 block">Peso (kg)</label>
+                                            <input
+                                                type="number"
+                                                min={0}
+                                                max={400}
+                                                step={0.1}
+                                                value={(draft as any).peso ?? ''}
+                                                onChange={e => setVitalsField('peso', e.target.value)}
+                                                className="w-full text-sm px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-1 focus:ring-teal-400"
+                                            />
+                                            <VitalTrend personId={personId} fieldName="peso" fieldLabel="Peso" currentValue={(draft as any).peso} />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-gray-500 mb-0.5 block">Altezza (cm)</label>
+                                            <input
+                                                type="number"
+                                                min={0}
+                                                max={260}
+                                                step={0.1}
+                                                value={(draft as any).altezza ?? ''}
+                                                onChange={e => setVitalsField('altezza', e.target.value)}
+                                                className="w-full text-sm px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-1 focus:ring-teal-400"
+                                            />
+                                            <VitalTrend personId={personId} fieldName="altezza" fieldLabel="Altezza" currentValue={(draft as any).altezza} />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-gray-500 mb-0.5 block">BMI</label>
+                                            <input
+                                                type="number"
+                                                min={0}
+                                                max={100}
+                                                step={0.1}
+                                                value={(draft as any).bmi ?? ''}
+                                                onChange={e => setField('bmi' as keyof ProfiloDraft, e.target.value ? Number(e.target.value) : undefined)}
+                                                className="w-full text-sm px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-1 focus:ring-teal-400 bg-gray-50"
+                                            />
+                                            <VitalTrend personId={personId} fieldName="bmi" fieldLabel="BMI" currentValue={(draft as any).bmi} />
+                                        </div>
+                                    </div>
+                                </div>
+                                <div>
                                 <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Invalidità</p>
                                 <label className="flex items-center gap-2 cursor-pointer mb-2">
                                     <input type="checkbox" checked={!!draft.hasInvalidita}
@@ -539,6 +653,7 @@ export const ProfiloSaluteCard: React.FC<ProfiloSaluteCardProps> = ({
                                         )}
                                     </div>
                                 )}
+                                </div>
                             </div>
                         )}
 
@@ -604,7 +719,7 @@ export const ProfiloSaluteCard: React.FC<ProfiloSaluteCardProps> = ({
                                         <div className="col-span-2">
                                             <label className="text-xs text-gray-500 mb-0.5 block">Consumo</label>
                                             <select value={draft.alcol ?? ''}
-                                                onChange={e => setField('alcol', e.target.value || undefined)}
+                                                onChange={e => setLifestylePreset('alcol', e.target.value || undefined)}
                                                 className="w-full text-sm px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-1 focus:ring-teal-400">
                                                 <option value="">Non specificato</option>
                                                 {Object.entries(ALCOL_LABELS).map(([k, v]) => (
@@ -632,7 +747,7 @@ export const ProfiloSaluteCard: React.FC<ProfiloSaluteCardProps> = ({
                                         <div>
                                             <label className="text-xs text-gray-500 mb-0.5 block">Attività fisica</label>
                                             <select value={draft.attivitaFisica ?? ''}
-                                                onChange={e => setField('attivitaFisica', e.target.value || undefined)}
+                                                onChange={e => setLifestylePreset('attivitaFisica', e.target.value || undefined)}
                                                 className="w-full text-sm px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-1 focus:ring-teal-400">
                                                 <option value="">Non specificato</option>
                                                 {Object.entries(ATTIVITA_FISICA_LABELS).map(([k, v]) => (
@@ -710,7 +825,7 @@ export const ProfiloSaluteCard: React.FC<ProfiloSaluteCardProps> = ({
                                                 <span className="text-sm text-gray-700">Terapia insulinica</span>
                                             </label>
                                         )}
-                                        <div>
+                                        <div className="sm:mt-[104px]">
                                             <label className="text-xs text-gray-500 mb-0.5 block">Altre patologie</label>
                                             <textarea value={draft.altrePatologie ?? ''}
                                                 onChange={e => setField('altrePatologie', e.target.value || undefined)}

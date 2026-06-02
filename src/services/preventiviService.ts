@@ -4,7 +4,7 @@
  * Frontend service per gestione preventivi
  */
 
-import api from './api';
+import api, { apiDeleteWithPayload } from './api';
 
 export interface Preventivo {
   id: string;
@@ -46,6 +46,10 @@ export interface PreventiviListParams {
   stato?: string;
   page?: number;
   limit?: number;
+  tenantIds?: string;
+  allTenants?: string;
+  dataInizio?: string;
+  dataFine?: string;
 }
 
 /**
@@ -71,13 +75,10 @@ class PreventiviService {
    */
   async list(params?: PreventiviListParams): Promise<Preventivo[]> {
     const response = await api.get(this.basePath, { params });
-    // Backend returns { success, data: { preventivi: [...], pagination... } }
+    // Backend returns { success, data: [...], pagination: {...} }
     const responseData = response.data as any;
-    // Handle paginated response: data.preventivi or direct data array
     let preventivi: any[] = [];
-    if (responseData?.data?.preventivi) {
-      preventivi = responseData.data.preventivi;
-    } else if (Array.isArray(responseData?.data)) {
+    if (Array.isArray(responseData?.data)) {
       preventivi = responseData.data;
     } else if (Array.isArray(responseData)) {
       preventivi = responseData;
@@ -134,8 +135,11 @@ class PreventiviService {
   /**
    * Delete preventivo
    */
-  async delete(id: string): Promise<void> {
-    await api.delete(`${this.basePath}/${id}`);
+  async delete(id: string, deletionReason = 'Eliminazione manuale preventivo', options?: { stornaMovimentiFatturati?: boolean }): Promise<void> {
+    await apiDeleteWithPayload(`${this.basePath}/${id}`, {
+      deletionReason,
+      ...(options?.stornaMovimentiFatturati !== undefined && { stornaMovimentiFatturati: options.stornaMovimentiFatturati })
+    });
   }
 
   /**
@@ -196,7 +200,9 @@ class PreventiviService {
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (error: unknown) {
-      console.error('❌ PDF Download Error:', error);
+      if (import.meta.env.DEV) {
+        console.error('❌ PDF Download Error:', error);
+      }
       throw error;
     }
   }

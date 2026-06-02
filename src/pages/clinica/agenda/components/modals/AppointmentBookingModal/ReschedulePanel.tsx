@@ -10,6 +10,7 @@ import { getDoctorTitle } from '../../../../../../utils/codiceFiscale';
 import type { Medico } from '../../../../../../services/clinicaApi';
 import type { ReschedulePanelProps } from './types';
 import { DatePickerElegante } from '../../../../../../components/ui/DatePickerElegante';
+import { TimePickerElegante } from '../../../../../../components/ui/TimePickerElegante';
 
 export const ReschedulePanel: React.FC<ReschedulePanelProps> = ({
     showReschedulePanel,
@@ -38,11 +39,11 @@ export const ReschedulePanel: React.FC<ReschedulePanelProps> = ({
                 </div>
                 <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Ora</label>
-                    <input
-                        type="time"
+                    <TimePickerElegante
                         value={rescheduleData.time}
-                        onChange={(e) => setRescheduleData({ ...rescheduleData, time: e.target.value })}
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        onChange={(value) => setRescheduleData({ ...rescheduleData, time: value })}
+                        minuteStep={5}
+                        placeholder="Seleziona ora"
                     />
                 </div>
                 <div>

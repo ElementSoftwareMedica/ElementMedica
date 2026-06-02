@@ -366,7 +366,7 @@ router.get('/:id/pdf/:destinatario', requireAuth, requirePermission('clinica.vis
     res.setHeader('Content-Length', buffer.length);
     res.end(buffer);
   } catch (error) {
-    logger.error({ error: 'Operazione non riuscita', id, destinatario }, 'Errore generazione PDF giudizio idoneità');
+    logger.error({ error: error.message, stack: error.stack, id, destinatario }, 'Errore generazione PDF giudizio idoneità');
     res.status(500).json({ error: 'Errore nella generazione del PDF' });
   }
 });
@@ -471,6 +471,7 @@ router.post('/', requireAuth, requirePermission('clinica.visite:create'), async 
       'IDONEO',
       'IDONEO_CON_PRESCRIZIONI',
       'IDONEO_CON_LIMITAZIONI',
+      'IDONEO_CON_LIMITAZIONI_PRESCRIZIONI',
       'NON_IDONEO_TEMPORANEO',
       'NON_IDONEO_PERMANENTE'
     ];
@@ -492,7 +493,8 @@ router.post('/', requireAuth, requirePermission('clinica.visite:create'), async 
     // Se con prescrizioni/limitazioni, richiede dettagli
     if (
       (data.tipoGiudizio === 'IDONEO_CON_PRESCRIZIONI' && !data.prescrizioniIdoneita) ||
-      (data.tipoGiudizio === 'IDONEO_CON_LIMITAZIONI' && !data.limitazioni)
+      (data.tipoGiudizio === 'IDONEO_CON_LIMITAZIONI' && !data.limitazioni) ||
+      (data.tipoGiudizio === 'IDONEO_CON_LIMITAZIONI_PRESCRIZIONI' && (!data.limitazioni || !data.prescrizioniIdoneita))
     ) {
       return res.status(400).json({
         error: 'Dettagliare prescrizioni/limitazioni per questo tipo di giudizio'

@@ -25,22 +25,22 @@ import { apiService } from '../../../services/api';
 export interface UseGDPRAuditConfig {
   /** Configurazione audit GDPR */
   config?: GDPRAuditConfig;
-  
+
   /** Tipo di entità */
   entityType: string;
-  
+
   /** ID della persona (utente corrente) */
   personId?: string;
-  
+
   /** Livello di audit override */
   auditLevel?: GDPRAuditLevel;
-  
+
   /** Abilita audit automatico */
   autoAudit?: boolean;
-  
+
   /** Buffer size per batch logging */
   bufferSize?: number;
-  
+
   /** Intervallo flush buffer (ms) */
   flushInterval?: number;
 }
@@ -91,7 +91,7 @@ export function useGDPRAudit({
   bufferSize = 10,
   flushInterval = 30000 // 30 secondi
 }: UseGDPRAuditConfig) {
-  
+
   const [state, setState] = useState<AuditState>({
     auditLog: [],
     loading: false,
@@ -105,16 +105,16 @@ export function useGDPRAudit({
       lastWeekEntries: 0
     }
   });
-  
+
   const bufferRef = useRef<GDPRAuditLogEntry[]>([]);
   const flushTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const sessionIdRef = useRef<string>(generateSessionId());
-  
+
   // Genera session ID univoco
   function generateSessionId(): string {
     return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }
-  
+
   // Ottieni metadati browser
   const getBrowserMetadata = useCallback((): BrowserMetadata => {
     return {
@@ -130,13 +130,13 @@ export function useGDPRAudit({
       }
     };
   }, []);
-  
+
   // Determina se un'azione deve essere loggata
   const shouldLogAction = useCallback((action: GDPRAuditAction): boolean => {
     if (!config || !autoAudit) return false;
-    
+
     const level = auditLevel || 'standard';
-    
+
     switch (level) {
       case 'minimal':
         return config.minimalActions.includes(action);
@@ -148,7 +148,7 @@ export function useGDPRAudit({
         return false;
     }
   }, [config, auditLevel, autoAudit]);
-  
+
   // Crea entry di audit
   const createAuditEntry = useCallback((
     action: GDPRAuditAction,
@@ -161,7 +161,7 @@ export function useGDPRAudit({
   ): GDPRAuditLogEntry => {
     const metadata = getBrowserMetadata();
     const id = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
+
     // Calcola changes se disponibili oldData e newData
     let changes: Record<string, { from: any; to: any }> | undefined;
     if (oldData && data && typeof data === 'object' && typeof oldData === 'object') {
@@ -175,7 +175,7 @@ export function useGDPRAudit({
         }
       });
     }
-    
+
     const entry: GDPRAuditLogEntry = {
       id,
       personId,
@@ -196,36 +196,36 @@ export function useGDPRAudit({
         screen: metadata.screen
       }
     };
-    
+
     // Aggiungi metadati opzionali se configurati
     if (config?.includeUserAgent) {
       entry.userAgent = metadata.userAgent;
     }
-    
+
     if (config?.includeIpAddress) {
       // L'IP address dovrebbe essere aggiunto dal backend
       entry.ipAddress = 'to-be-set-by-backend';
     }
-    
+
     if (config?.includeSessionId) {
       entry.sessionId = metadata.sessionId;
     }
-    
+
     return entry;
   }, [config, entityType, personId, getBrowserMetadata]);
-  
+
   // Flush buffer al server
   const flushBuffer = useCallback(async () => {
     if (bufferRef.current.length === 0) return;
-    
+
     const entriesToSend = [...bufferRef.current];
     bufferRef.current = [];
-    
+
     try {
       await apiService.post('/api/gdpr/audit/batch', {
         entries: entriesToSend
       });
-      
+
       setState(prev => ({
         ...prev,
         lastSync: new Date(),
@@ -236,43 +236,43 @@ export function useGDPRAudit({
           failedOperations: prev.stats.failedOperations + entriesToSend.filter(e => !e.success).length
         }
       }));
-      
+
     } catch (error) {
-      
+
       // Rimetti le entries nel buffer
       bufferRef.current = [...entriesToSend, ...bufferRef.current];
-      
+
       setState(prev => ({
         ...prev,
         error: 'Errore nella sincronizzazione audit log'
       }));
     }
   }, []);
-  
+
   // Aggiungi entry al buffer
   const addToBuffer = useCallback((entry: GDPRAuditLogEntry) => {
     bufferRef.current.push(entry);
-    
+
     // Aggiungi anche al log locale
     setState(prev => ({
       ...prev,
       auditLog: [entry, ...prev.auditLog].slice(0, 100), // Mantieni solo le ultime 100 entries localmente
       pendingEntries: [...prev.pendingEntries, entry]
     }));
-    
+
     // Flush se buffer è pieno
     if (bufferRef.current.length >= bufferSize) {
       flushBuffer();
     }
-    
+
     // Reset timeout flush
     if (flushTimeoutRef.current) {
       clearTimeout(flushTimeoutRef.current);
     }
-    
+
     flushTimeoutRef.current = setTimeout(flushBuffer, flushInterval);
   }, [bufferSize, flushInterval, flushBuffer]);
-  
+
   // Log azione principale
   const logAction = useCallback(async (
     action: GDPRAuditAction,
@@ -288,7 +288,7 @@ export function useGDPRAudit({
     }
   ) => {
     if (!shouldLogAction(action)) return;
-    
+
     const entry = createAuditEntry(
       action,
       entityId,
@@ -298,17 +298,17 @@ export function useGDPRAudit({
       options?.errorMessage,
       options?.reason
     );
-    
+
     // Aggiungi metadati personalizzati
     if (options?.metadata) {
       entry.metadata = { ...entry.metadata, ...options.metadata };
     }
-    
+
     if (options?.immediate) {
       // Invio immediato
       try {
         await apiService.post('/api/gdpr/audit', entry);
-        
+
         setState(prev => ({
           ...prev,
           auditLog: [entry, ...prev.auditLog].slice(0, 100),
@@ -320,7 +320,7 @@ export function useGDPRAudit({
             failedOperations: !entry.success ? prev.stats.failedOperations + 1 : prev.stats.failedOperations
           }
         }));
-        
+
       } catch (error) {
         // Fallback al buffer
         addToBuffer(entry);
@@ -330,13 +330,13 @@ export function useGDPRAudit({
       addToBuffer(entry);
     }
   }, [shouldLogAction, createAuditEntry, addToBuffer]);
-  
+
   // Log operazione GDPR-aware
   const logGDPROperation = useCallback(async <T = any>(
     operation: GDPRAwareOperation<T>
   ): Promise<GDPROperationResult<T>> => {
     const startTime = Date.now();
-    
+
     try {
       // Log inizio operazione
       await logAction(
@@ -353,7 +353,7 @@ export function useGDPRAudit({
           }
         }
       );
-      
+
       // Qui andrebbe eseguita l'operazione reale
       // Per ora simuliamo il successo
       const result: GDPROperationResult<T> = {
@@ -365,7 +365,7 @@ export function useGDPRAudit({
           timestamp: new Date().toISOString()
         }
       };
-      
+
       // Log completamento operazione
       await logAction(
         operation.operation,
@@ -381,9 +381,9 @@ export function useGDPRAudit({
           }
         }
       );
-      
+
       return result;
-      
+
     } catch (error: unknown) {
       // Log errore operazione
       await logAction(
@@ -393,18 +393,18 @@ export function useGDPRAudit({
         undefined,
         {
           success: false,
-          errorMessage: error.message,
+          errorMessage: (error as Error).message,
           metadata: {
             ...operation.metadata,
             duration: Date.now() - startTime,
-            stackTrace: config?.includeStackTrace ? error.stack : undefined
+            stackTrace: config?.includeStackTrace ? (error as Error).stack : undefined
           }
         }
       );
-      
+
       return {
         success: false,
-        errors: [error.message],
+        errors: [(error as Error).message],
         metadata: {
           duration: Date.now() - startTime,
           timestamp: new Date().toISOString()
@@ -412,7 +412,7 @@ export function useGDPRAudit({
       };
     }
   }, [logAction, config]);
-  
+
   // Carica storico audit
   const loadAuditHistory = useCallback(async (
     filters?: {
@@ -426,37 +426,37 @@ export function useGDPRAudit({
     }
   ) => {
     setState(prev => ({ ...prev, loading: true, error: null }));
-    
+
     try {
       const params = new URLSearchParams();
-      
+
       if (filters?.startDate) {
         params.append('startDate', filters.startDate.toISOString());
       }
-      
+
       if (filters?.endDate) {
         params.append('endDate', filters.endDate.toISOString());
       }
-      
+
       if (filters?.actions) {
         filters.actions.forEach(action => params.append('actions', action));
       }
-      
+
       if (filters?.entityId) {
         params.append('entityId', filters.entityId);
       }
-      
+
       if (filters?.success !== undefined) {
         params.append('success', filters.success.toString());
       }
-      
+
       params.append('entityType', entityType);
       params.append('personId', personId);
       params.append('limit', (filters?.limit || 50).toString());
       params.append('offset', (filters?.offset || 0).toString());
-      
+
       const response = await apiService.get(`/api/gdpr/audit?${params.toString()}`);
-      
+
       setState(prev => ({
         ...prev,
         auditLog: (response as any).data || [],
@@ -467,7 +467,7 @@ export function useGDPRAudit({
           lastWeekEntries: (response as any).lastWeekCount || 0
         }
       }));
-      
+
     } catch (error) {
       setState(prev => ({
         ...prev,
@@ -476,7 +476,7 @@ export function useGDPRAudit({
       }));
     }
   }, [entityType, personId]);
-  
+
   // Export audit log
   const exportAuditLog = useCallback(async (
     format: 'json' | 'csv' | 'xlsx' = 'json',
@@ -486,7 +486,7 @@ export function useGDPRAudit({
     params.append('format', format);
     params.append('entityType', entityType);
     params.append('personId', personId);
-    
+
     if (filters) {
       Object.entries(filters).forEach(([key, value]) => {
         if (value !== undefined) {
@@ -498,36 +498,36 @@ export function useGDPRAudit({
         }
       });
     }
-    
+
     const response = await apiService.get(
       `/api/gdpr/audit/export?${params.toString()}`,
       { responseType: 'blob' }
     );
-    
+
     return (response as any).data;
   }, [entityType, personId]);
-  
+
   // Cleanup e flush finale
   useEffect(() => {
     return () => {
       if (flushTimeoutRef.current) {
         clearTimeout(flushTimeoutRef.current);
       }
-      
+
       // Flush finale
       if (bufferRef.current.length > 0) {
         flushBuffer();
       }
     };
   }, [flushBuffer]);
-  
+
   // Carica statistiche iniziali
   useEffect(() => {
     if (autoAudit) {
       loadAuditHistory({ limit: 10 });
     }
   }, [autoAudit, loadAuditHistory]);
-  
+
   return {
     // Stato
     auditLog: state.auditLog,
@@ -536,19 +536,19 @@ export function useGDPRAudit({
     lastSync: state.lastSync,
     pendingEntries: state.pendingEntries,
     stats: state.stats,
-    
+
     // Azioni
     logAction,
     logGDPROperation,
     loadAuditHistory,
     exportAuditLog,
     flushBuffer,
-    
+
     // Utility
     getAuditHistory: () => state.auditLog,
     getPendingCount: () => bufferRef.current.length,
     clearError: () => setState(prev => ({ ...prev, error: null })),
-    
+
     // Configurazione
     isAuditEnabled: autoAudit && !!config,
     currentAuditLevel: auditLevel || 'standard',

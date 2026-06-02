@@ -24,8 +24,124 @@
 
 import prisma from '../../config/prisma-optimization.js';
 import { logger } from '../../utils/logger.js';
+import NotificationService from '../notifications/NotificationService.js';
+import { VisitTemplateService } from './VisitTemplateService.js';
+
+function toLocalDayKey(date) {
+    return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Europe/Rome',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).format(date || new Date());
+}
 
 class VisitaSecondariaService {
+    async resolveTemplateSecondaria({ medicoReferenteId, tenantId, prestazioneId, createdBy }) {
+        let template = await VisitTemplateService.ensureSpecialistTemplateForPrestazione(
+            prestazioneId,
+            tenantId,
+            createdBy || null
+        ).catch(error => {
+            logger.warn({
+                component: 'VisitaSecondariaService',
+                action: 'ensure_specialist_template',
+                error: error.message,
+                prestazioneId,
+                tenantId
+            }, 'Template specialistico visita secondaria non creato');
+            return null;
+        });
+
+        if (template?.id) return template;
+
+        template = await VisitTemplateService.findTemplateForVisit(
+            medicoReferenteId,
+            tenantId,
+            prestazioneId || undefined,
+            undefined
+        ).catch(error => {
+            logger.warn({
+                component: 'VisitaSecondariaService',
+                action: 'resolve_template',
+                error: error.message,
+                medicoReferenteId,
+                prestazioneId,
+                tenantId
+            }, 'Template visita secondaria non risolto');
+            return null;
+        });
+
+        return template;
+    }
+
+    async notifyMedicoVisitaSecondaria(visita, tenantId, triggeredBy) {
+        if (!visita?.medicoId) return null;
+
+        const dayKey = toLocalDayKey(visita.dataOra);
+        const entityId = `${visita.medicoId}:${dayKey}`;
+        const existing = await prisma.notification.findFirst({
+            where: {
+                tenantId,
+                recipientId: visita.medicoId,
+                entityType: 'VISITE_SECONDARIE_GIORNO',
+                entityId,
+                deletedAt: null,
+                logs: {
+                    none: {
+                        recipientId: visita.medicoId,
+                        readAt: { not: null }
+                    }
+                }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        const count = Number(existing?.metadata?.count || 0) + 1;
+        const prestazioneNome = visita.prestazione?.nome || 'prestazione specialistica';
+        const body = count > 1
+            ? `Hai ${count} visite secondarie assegnate per il ${dayKey}.`
+            : `Ti e' stata assegnata una visita secondaria per ${prestazioneNome}.`;
+
+        if (existing) {
+            return prisma.notification.update({
+                where: { id: existing.id },
+                data: {
+                    body,
+                    shortBody: body,
+                    actionUrl: '/poliambulatorio/visite',
+                    metadata: {
+                        ...(existing.metadata || {}),
+                        count,
+                        latestVisitaId: visita.id,
+                        latestPrestazioneId: visita.prestazioneId
+                    }
+                }
+            });
+        }
+
+        return NotificationService.sendToPerson(visita.medicoId, {
+            title: 'Nuova visita secondaria',
+            body,
+            shortBody: body,
+            type: 'ACTION',
+            category: 'VISIT',
+            priority: 'HIGH',
+            icon: 'stethoscope',
+            entityType: 'VISITE_SECONDARIE_GIORNO',
+            entityId,
+            actionUrl: `/poliambulatorio/visite/${visita.id}`,
+            actionLabel: 'Apri visita',
+            triggeredBy: triggeredBy || null,
+            metadata: {
+                count: 1,
+                dayKey,
+                latestVisitaId: visita.id,
+                latestPrestazioneId: visita.prestazioneId
+            }
+        }, tenantId);
+    }
+
     /**
      * Crea una visita secondaria per uno specialista, collegata alla visita principale.
      *
@@ -37,6 +153,7 @@ class VisitaSecondariaService {
      * @param {string} [params.visitaParentId]    ID della Visita principale (se già create)
      * @param {string} params.tenantId
      * @param {string} [params.createdBy]         ID di chi ha eseguito l'operazione
+     * @param {boolean} [params.forceCreateForSameMedico=false] Crea la scheda anche se il medico coincide con la visita principale
      * @returns {Promise<Object>} La visita secondaria creata
      */
     async creaVisitaSecondaria({
@@ -46,7 +163,8 @@ class VisitaSecondariaService {
         appuntamentoId,
         visitaParentId,
         tenantId,
-        createdBy
+        createdBy,
+        forceCreateForSameMedico = false
     }) {
         // 1. Carica l'appuntamento per ambulatorioId, pazienteId, dataOra, tipoVisitaMDL
         const appuntamento = await prisma.appuntamento.findFirst({
@@ -85,7 +203,7 @@ class VisitaSecondariaService {
         }
 
         // 3. Verifica specialista != medico principale
-        if (medicoReferenteId === appuntamento.medicoId) {
+        if (medicoReferenteId === appuntamento.medicoId && !forceCreateForSameMedico) {
             logger.info({
                 component: 'VisitaSecondariaService',
                 action: 'creaVisitaSecondaria',
@@ -101,14 +219,51 @@ class VisitaSecondariaService {
             where: { appPrestazioneId }
         });
         if (existing) {
+            let activeExisting = existing;
+            if (existing.deletedAt || existing.stato === 'ANNULLATA') {
+                activeExisting = await prisma.visita.update({
+                    where: { id: existing.id },
+                    data: {
+                        deletedAt: null,
+                        stato: 'IN_CORSO',
+                        medicoId: medicoReferenteId,
+                        medicoRefertanteId: medicoReferenteId,
+                        prestazioneId,
+                        visitaParentId: primaryVisitaId || existing.visitaParentId || null,
+                        updatedAt: new Date()
+                    }
+                });
+            }
             logger.info({
                 component: 'VisitaSecondariaService',
                 action: 'creaVisitaSecondaria',
                 appPrestazioneId,
-                existingVisitaId: existing.id
+                existingVisitaId: activeExisting.id
             }, 'Visita secondaria già esistente per questo appPrestazioneId — skip');
-            return existing;
+            const template = await this.resolveTemplateSecondaria({
+                medicoReferenteId,
+                tenantId,
+                prestazioneId,
+                createdBy
+            });
+            if (template?.id && activeExisting.visitTemplateId !== template.id) {
+                activeExisting = await prisma.visita.update({
+                    where: { id: activeExisting.id },
+                    data: { visitTemplateId: template.id }
+                });
+            }
+            await this.notifyMedicoVisitaSecondaria(activeExisting, tenantId, createdBy).catch(err => {
+                logger.warn({ error: err.message, visitaSecondariaId: activeExisting.id }, 'Notifica visita secondaria non inviata');
+            });
+            return activeExisting;
         }
+
+        const visitTemplate = await this.resolveTemplateSecondaria({
+            medicoReferenteId,
+            tenantId,
+            prestazioneId,
+            createdBy
+        });
 
         // 5. Crea la visita secondaria
         const visitaSecundaria = await prisma.visita.create({
@@ -117,6 +272,8 @@ class VisitaSecondariaService {
                 prestazioneId,
                 pazienteId: appuntamento.pazienteId,
                 medicoId: medicoReferenteId,
+                medicoRefertanteId: medicoReferenteId,
+                visitTemplateId: visitTemplate?.id || null,
                 dataOra: appuntamento.dataOra || new Date(),
                 stato: 'IN_CORSO',
                 tenantId,
@@ -148,6 +305,10 @@ class VisitaSecondariaService {
             medicoReferenteId,
             tenantId
         }, 'Visita secondaria creata per specialista');
+
+        await this.notifyMedicoVisitaSecondaria(visitaSecundaria, tenantId, createdBy).catch(err => {
+            logger.warn({ error: err.message, visitaSecondariaId: visitaSecundaria.id }, 'Notifica visita secondaria non inviata');
+        });
 
         return visitaSecundaria;
     }
@@ -234,6 +395,12 @@ class VisitaSecondariaService {
 
         if (visita.stato === 'COMPLETATA') {
             logger.info({ visitaSecondariaId }, 'Visita secondaria già COMPLETATA');
+            if (visita.appPrestazioneId) {
+                await prisma.appuntamentoPrestazione.updateMany({
+                    where: { id: visita.appPrestazioneId, tenantId, deletedAt: null },
+                    data: { stato: 'ESEGUITA', dataEsecuzione: new Date() }
+                });
+            }
             return prisma.visita.findUnique({ where: { id: visitaSecondariaId } });
         }
 

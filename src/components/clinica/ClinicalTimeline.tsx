@@ -51,9 +51,11 @@ export interface TimelineEvent {
     dataOra: string | Date;
     medico?: {
         id: string;
-        nome: string;
-        cognome: string;
-        specializzazione?: string;
+        firstName?: string;
+        lastName?: string;
+        specialties?: string[];
+        taxCode?: string;
+        gender?: string;
     };
     dettagli?: Record<string, unknown>;
     stato?: string;
@@ -295,9 +297,9 @@ export const ClinicalTimeline: React.FC<ClinicalTimelineProps> = ({
                             <div className="flex items-center gap-2 mt-3 text-sm text-gray-500">
                                 <User className="w-4 h-4" />
                                 <span>
-                                    {getDoctorTitle((event.medico as any).taxCode, (event.medico as any).gender)} {event.medico.cognome} {event.medico.nome}
-                                    {event.medico.specializzazione && (
-                                        <span className="text-gray-400"> - {event.medico.specializzazione}</span>
+                                    {getDoctorTitle(event.medico.taxCode, event.medico.gender as import('@/utils/codiceFiscale').Gender | null | undefined)} {event.medico.lastName} {event.medico.firstName}
+                                    {event.medico.specialties && event.medico.specialties.length > 0 && (
+                                        <span className="text-gray-400"> - {event.medico.specialties[0]}</span>
                                     )}
                                 </span>
                             </div>

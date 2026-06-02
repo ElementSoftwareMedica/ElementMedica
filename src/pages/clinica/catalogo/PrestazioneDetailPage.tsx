@@ -35,7 +35,8 @@ import {
     Eye,
     Wrench,
     Package,
-    Receipt
+    Receipt,
+    ChevronDown
 } from 'lucide-react';
 import {
     prestazioniApi,
@@ -1094,6 +1095,7 @@ const ConvenzioniTab: React.FC<{ prestazione: Prestazione }> = ({ prestazione })
 // =====================================================
 
 const TariffarioAziendaleTab: React.FC<{ prestazione: Prestazione }> = ({ prestazione }) => {
+    const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
     const { data: vociResponse, isLoading } = useQuery({
         queryKey: ['voci-tariffario-prestazione', prestazione.id],
         queryFn: async () => {
@@ -1104,44 +1106,57 @@ const TariffarioAziendaleTab: React.FC<{ prestazione: Prestazione }> = ({ presta
 
     const voci = vociResponse || [];
 
-    // Flatten: per ogni voce, creare una riga per ogni azienda associata
-    const righe = useMemo(() => {
-        const rows: Array<{
-            voce: VoceTariffarioWithContext;
+    const gruppiTariffari = useMemo(() => {
+        const groups = new Map<string, {
             azienda: string;
             companyId: string;
             tariffarioNome: string;
             tariffarioCodice: string;
             convenzione?: string;
-        }> = [];
+            voci: VoceTariffarioWithContext[];
+        }>();
+
+        const addVoce = (
+            voce: VoceTariffarioWithContext,
+            azienda: string,
+            companyId: string,
+            tariffarioNome: string,
+            tariffarioCodice: string,
+            convenzione?: string
+        ) => {
+            const key = `${companyId || 'template'}:${voce.tariffarioAziendale?.id || tariffarioCodice}`;
+            if (!groups.has(key)) {
+                groups.set(key, {
+                    azienda,
+                    companyId,
+                    tariffarioNome,
+                    tariffarioCodice,
+                    convenzione,
+                    voci: []
+                });
+            }
+            groups.get(key)!.voci.push(voce);
+        };
 
         voci.forEach((voce: VoceTariffarioWithContext) => {
             const tar = voce.tariffarioAziendale;
             if (tar.companyAssociations.length === 0) {
-                // Tariffario senza aziende associate (template base)
-                rows.push({
-                    voce,
-                    azienda: '— Nessuna azienda —',
-                    companyId: '',
-                    tariffarioNome: tar.nome,
-                    tariffarioCodice: tar.codice,
-                    convenzione: tar.convenzione?.nome
-                });
+                addVoce(voce, 'Template senza azienda', '', tar.nome, tar.codice, tar.convenzione?.nome);
             } else {
                 tar.companyAssociations.forEach(assoc => {
-                    rows.push({
+                    addVoce(
                         voce,
-                        azienda: assoc.companyTenantProfile?.company?.ragioneSociale || 'N/D',
-                        companyId: assoc.companyTenantProfile?.company?.id || '',
-                        tariffarioNome: tar.nome,
-                        tariffarioCodice: tar.codice,
-                        convenzione: tar.convenzione?.nome
-                    });
+                        assoc.companyTenantProfile?.company?.ragioneSociale || 'N/D',
+                        assoc.companyTenantProfile?.company?.id || '',
+                        tar.nome,
+                        tar.codice,
+                        tar.convenzione?.nome
+                    );
                 });
             }
         });
 
-        return rows;
+        return Array.from(groups.values()).sort((a, b) => a.azienda.localeCompare(b.azienda, 'it'));
     }, [voci]);
 
     if (isLoading) {
@@ -1161,7 +1176,7 @@ const TariffarioAziendaleTab: React.FC<{ prestazione: Prestazione }> = ({ presta
                 </p>
             </div>
 
-            {righe.length === 0 ? (
+            {gruppiTariffari.length === 0 ? (
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
                     <Building2 className="w-12 h-12 text-gray-300 mx-auto mb-4" />
                     <h3 className="text-lg font-medium text-gray-900 mb-2">
@@ -1173,7 +1188,7 @@ const TariffarioAziendaleTab: React.FC<{ prestazione: Prestazione }> = ({ presta
                         Gestisci i tariffari dalla sezione Medicina del Lavoro &gt; Tariffari
                     </p>
                     <Link
-                        to="/poliambulatorio/medicina-lavoro/tariffari"
+                        to="/poliambulatorio/mdl/tariffari-aziende"
                         className="inline-flex items-center gap-2 mt-4 text-teal-600 hover:text-teal-700"
                     >
                         <Eye className="w-4 h-4" />
@@ -1181,97 +1196,91 @@ const TariffarioAziendaleTab: React.FC<{ prestazione: Prestazione }> = ({ presta
                     </Link>
                 </div>
             ) : (
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                    <table className="w-full">
-                        <thead>
-                            <tr className="bg-gray-50 border-b border-gray-200">
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                    Azienda
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                    Tariffario
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                    Tipo Visita MDL
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                    Convenzione
-                                </th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                                    Prezzo
-                                </th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                                    IVA
-                                </th>
-                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                                    Fasce
-                                </th>
-                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                                    Stato
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                            {righe.map((riga, index) => (
-                                <tr key={`${riga.voce.id}-${riga.companyId || index}`} className="hover:bg-gray-50">
-                                    <td className="px-6 py-4">
-                                        <span className="font-medium text-gray-900">{riga.azienda}</span>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <div className="flex flex-col">
-                                            <span className="text-sm text-gray-900">{riga.tariffarioNome}</span>
-                                            <span className="text-xs text-gray-500 font-mono">{riga.tariffarioCodice}</span>
+                <div className="space-y-3">
+                    {gruppiTariffari.map((gruppo) => {
+                        const groupKey = `${gruppo.companyId || 'template'}-${gruppo.tariffarioCodice}`;
+                        const isExpanded = expandedGroups.has(groupKey);
+                        return (
+                        <div key={groupKey} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                            <button
+                                type="button"
+                                onClick={() => setExpandedGroups(prev => {
+                                    const next = new Set(prev);
+                                    if (next.has(groupKey)) next.delete(groupKey);
+                                    else next.add(groupKey);
+                                    return next;
+                                })}
+                                className="w-full px-5 py-4 border-b border-gray-100 bg-slate-50/70 flex flex-col gap-3 text-left transition-colors hover:bg-slate-100/70 lg:flex-row lg:items-center lg:justify-between"
+                            >
+                                <div>
+                                    <h4 className="text-base font-semibold text-gray-900">{gruppo.azienda}</h4>
+                                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                                        <span className="font-mono">{gruppo.tariffarioCodice}</span>
+                                        <span>{gruppo.tariffarioNome}</span>
+                                        {gruppo.convenzione && <span>Convenzione: {gruppo.convenzione}</span>}
+                                    </div>
+                                </div>
+                                <span className="inline-flex w-fit items-center gap-2 rounded-full bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-700">
+                                    {gruppo.voci.length} tipologie
+                                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                </span>
+                            </button>
+                            {isExpanded && <div className="divide-y divide-gray-100">
+                                {gruppo.voci
+                                    .slice()
+                                    .sort((a, b) => String(a.categoriaVisita || '').localeCompare(String(b.categoriaVisita || ''), 'it'))
+                                    .map((voce) => (
+                                        <div key={voce.id} className="px-5 py-4 grid gap-3 md:grid-cols-[1.5fr_1fr_1fr_auto] md:items-center">
+                                            <div>
+                                                {voce.categoriaVisita ? (
+                                                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-teal-100 text-teal-800">
+                                                        {CATEGORIA_VISITA_LABELS[voce.categoriaVisita] ?? voce.categoriaVisita}
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700">
+                                                        Tutte le tipologie
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div>
+                                                <p className="text-xs uppercase text-gray-400 font-semibold">Prezzo</p>
+                                                <p className="text-sm font-semibold text-gray-900">{formatCurrency(voce.prezzoBase)}</p>
+                                                {voce.usaFasceDipendenti && voce.fasceDipendenti?.length > 0 && (
+                                                    <p className="text-xs text-amber-600">
+                                                        Da {formatCurrency(Math.min(...voce.fasceDipendenti.map(f => Number(f.prezzo || 0))))}
+                                                    </p>
+                                                )}
+                                            </div>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700">
+                                                    IVA {voce.ivaAliquota}%
+                                                </span>
+                                                {voce.usaFasceDipendenti ? (
+                                                    <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">
+                                                        {voce.fasceDipendenti?.length || 0} fasce
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
+                                                        Prezzo fisso
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="md:text-right">
+                                                {voce.attivo && voce.tariffarioAziendale.attivo ? (
+                                                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                        Attivo
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                                        Non attivo
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        {riga.voce.categoriaVisita ? (
-                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-teal-100 text-teal-800">
-                                                {CATEGORIA_VISITA_LABELS[riga.voce.categoriaVisita] ?? riga.voce.categoriaVisita}
-                                            </span>
-                                        ) : (
-                                            <span className="text-gray-400 text-xs italic">Tutte</span>
-                                        )}
-                                    </td>
-                                    <td className="px-6 py-4 text-sm text-gray-600">
-                                        {riga.convenzione || '—'}
-                                    </td>
-                                    <td className="px-6 py-4 text-right">
-                                        <span className="text-sm font-semibold text-gray-900">
-                                            {formatCurrency(riga.voce.prezzoBase)}
-                                        </span>
-                                        {riga.voce.usaFasceDipendenti && riga.voce.fasceDipendenti?.length > 0 && (
-                                            <span className="block text-xs text-amber-600">
-                                                Da {formatCurrency(Math.min(...riga.voce.fasceDipendenti.map(f => Number(f.prezzo || 0))))}
-                                            </span>
-                                        )}
-                                    </td>
-                                    <td className="px-6 py-4 text-right text-sm text-gray-600">
-                                        {riga.voce.ivaAliquota}%
-                                    </td>
-                                    <td className="px-6 py-4 text-center">
-                                        {riga.voce.usaFasceDipendenti ? (
-                                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
-                                                {riga.voce.fasceDipendenti?.length || 0} fasce
-                                            </span>
-                                        ) : (
-                                            <span className="text-gray-400 text-xs">Fisso</span>
-                                        )}
-                                    </td>
-                                    <td className="px-6 py-4 text-center">
-                                        {riga.voce.attivo && riga.voce.tariffarioAziendale.attivo ? (
-                                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                                ● Attivo
-                                            </span>
-                                        ) : (
-                                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                                                ○ Non attivo
-                                            </span>
-                                        )}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                                    ))}
+                            </div>}
+                        </div>
+                    )})}
                 </div>
             )}
         </div>

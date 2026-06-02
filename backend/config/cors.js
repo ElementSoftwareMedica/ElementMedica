@@ -40,12 +40,25 @@ const corsConfig = {
 
   production: {
     origin: function (origin, callback) {
-      const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [];
+      const allowedOrigins = (process.env.ALLOWED_ORIGINS?.split(',') || []).map(o => o.trim()).filter(Boolean);
 
-      // Allow requests with no origin (mobile apps, etc.)
-      if (!origin) return callback(null, true);
+      // Domains always allowed — includes our own webapp domain so the Electron desktop
+      // app (which rewrites its null-origin to this value) is always accepted.
+      const defaultAllowed = [
+        'https://www.elementmedica.com',
+        'https://elementmedica.com',
+        'https://www.elementsicurezza.com',
+        'https://elementsicurezza.com',
+      ];
 
-      if (allowedOrigins.indexOf(origin) !== -1) {
+      // Electron desktop apps: file:// context sends Origin: null (literal string) or no Origin.
+      // callback(null, true) would reflect "null" as ACA-Origin, which browsers reject.
+      // Instead, explicitly return our primary domain so the response is valid.
+      if (!origin || origin === 'null') {
+        return callback(null, 'https://www.elementmedica.com');
+      }
+
+      if ([...defaultAllowed, ...allowedOrigins].indexOf(origin) !== -1) {
         callback(null, true);
       } else {
         callback(new Error('Not allowed by CORS'));
@@ -62,6 +75,7 @@ const corsConfig = {
       'x-operate-tenant-id', // P59: lowercase version
       'X-Requested-With',
       'Accept',
+      'Origin',
       'cache-control',
       'pragma',
       'expires'

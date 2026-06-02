@@ -117,7 +117,7 @@ export function useScontoValidation(): UseScontoValidationReturn {
       return {
         success: false,
         sconto: null,
-        message: error.response?.data?.message || 'Errore durante la validazione',
+        message: (error as any).response?.data?.message || 'Errore durante la validazione',
         type: 'error'
       };
     } finally {

@@ -1,11 +1,10 @@
 /**
  * System Configuration Page - Management Section
- * 
- * System-wide configuration settings management
- * Includes tenant defaults, feature flags, and global settings
- * 
+ *
+ * Impostazioni reali di sistema: sicurezza, feature flags, tema.
+ * Le impostazioni generali e email sono gestite separatamente (Messaggistica).
+ *
  * @module pages/management/system/SystemConfigPage
- * @project 43 - Tenant Roles Management System
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -15,23 +14,14 @@ import {
     RefreshCw,
     AlertCircle,
     CheckCircle2,
-    Info,
     Loader2,
-    Globe,
-    Mail,
     Shield,
-    Database,
-    Bell,
-    Clock,
-    Key,
-    Palette,
-    FileText,
-    Building2,
     ToggleLeft,
-    ToggleRight
+    Sun
 } from 'lucide-react';
 import { useAuth } from '../../../hooks/auth/useAuth';
 import { apiGet, apiPut } from '../../../services/api';
+import { ThemeSelector } from '../../../components/settings/ThemeSelector';
 
 // Configuration categories
 interface ConfigCategory {
@@ -57,48 +47,8 @@ interface ConfigSetting {
     };
 }
 
-// Default configuration categories
+// Configurazioni reali del sistema (corrispondono ai DEFAULT_CONFIG del backend)
 const DEFAULT_CONFIG_CATEGORIES: ConfigCategory[] = [
-    {
-        id: 'general',
-        label: 'Impostazioni Generali',
-        description: 'Configurazioni generali del sistema',
-        icon: Settings,
-        settings: [
-            {
-                key: 'app.name',
-                label: 'Nome Applicazione',
-                description: 'Nome visualizzato nell\'applicazione',
-                type: 'text',
-                value: 'ElementSoftware',
-                required: true
-            },
-            {
-                key: 'app.timezone',
-                label: 'Fuso Orario',
-                description: 'Fuso orario di default per il sistema',
-                type: 'select',
-                value: 'Europe/Rome',
-                options: [
-                    { value: 'Europe/Rome', label: 'Europe/Rome (CET)' },
-                    { value: 'Europe/London', label: 'Europe/London (GMT)' },
-                    { value: 'America/New_York', label: 'America/New_York (EST)' }
-                ]
-            },
-            {
-                key: 'app.locale',
-                label: 'Lingua Default',
-                description: 'Lingua predefinita del sistema',
-                type: 'select',
-                value: 'it-IT',
-                options: [
-                    { value: 'it-IT', label: 'Italiano' },
-                    { value: 'en-US', label: 'English (US)' },
-                    { value: 'en-GB', label: 'English (UK)' }
-                ]
-            }
-        ]
-    },
     {
         id: 'security',
         label: 'Sicurezza',
@@ -110,13 +60,13 @@ const DEFAULT_CONFIG_CATEGORIES: ConfigCategory[] = [
                 label: 'Timeout Sessione (minuti)',
                 description: 'Durata massima sessione inattiva',
                 type: 'number',
-                value: 60,
+                value: 30,
                 validation: { min: 15, max: 480 }
             },
             {
-                key: 'security.maxLoginAttempts',
+                key: 'security.loginAttempts',
                 label: 'Tentativi Login Max',
-                description: 'Numero massimo di tentativi di login falliti',
+                description: 'Numero massimo di tentativi di login falliti prima del blocco',
                 type: 'number',
                 value: 5,
                 validation: { min: 3, max: 10 }
@@ -126,51 +76,30 @@ const DEFAULT_CONFIG_CATEGORIES: ConfigCategory[] = [
                 label: 'Durata Blocco (minuti)',
                 description: 'Durata blocco account dopo troppi tentativi',
                 type: 'number',
-                value: 30,
+                value: 15,
                 validation: { min: 5, max: 1440 }
             },
             {
-                key: 'security.requireMFA',
-                label: 'Richiedi MFA',
-                description: 'Abilita autenticazione a due fattori obbligatoria',
+                key: 'security.twoFactorEnabled',
+                label: 'Autenticazione a Due Fattori',
+                description: 'Abilita 2FA come opzione per gli utenti',
                 type: 'boolean',
                 value: false
-            }
-        ]
-    },
-    {
-        id: 'email',
-        label: 'Email',
-        description: 'Configurazione servizio email',
-        icon: Mail,
-        settings: [
-            {
-                key: 'email.fromName',
-                label: 'Nome Mittente',
-                description: 'Nome visualizzato nelle email inviate',
-                type: 'text',
-                value: 'ElementSoftware'
             },
             {
-                key: 'email.fromAddress',
-                label: 'Email Mittente',
-                description: 'Indirizzo email mittente',
-                type: 'text',
-                value: 'noreply@elementsoftware.com'
-            },
-            {
-                key: 'email.replyTo',
-                label: 'Reply-To',
-                description: 'Indirizzo per le risposte',
-                type: 'text',
-                value: 'support@elementsoftware.com'
+                key: 'security.passwordMinLength',
+                label: 'Lunghezza Minima Password',
+                description: 'Numero minimo di caratteri per le password',
+                type: 'number',
+                value: 8,
+                validation: { min: 6, max: 32 }
             }
         ]
     },
     {
         id: 'features',
         label: 'Feature Flags',
-        description: 'Attiva/disattiva funzionalità del sistema',
+        description: 'Attiva o disattiva moduli del sistema per questo tenant',
         icon: ToggleLeft,
         settings: [
             {
@@ -183,60 +112,23 @@ const DEFAULT_CONFIG_CATEGORIES: ConfigCategory[] = [
             {
                 key: 'features.cmsModule',
                 label: 'Modulo CMS',
-                description: 'Abilita gestione contenuti',
+                description: 'Abilita gestione analytics pagine e form pubblici',
                 type: 'boolean',
                 value: true
             },
             {
-                key: 'features.backupModule',
-                label: 'Modulo Backup',
-                description: 'Abilita backup automatici',
+                key: 'features.trainingModule',
+                label: 'Modulo Formazione',
+                description: 'Abilita gestione corsi e attestati',
                 type: 'boolean',
                 value: true
             },
             {
-                key: 'features.advancedReports',
-                label: 'Report Avanzati',
-                description: 'Abilita report e analytics avanzati',
+                key: 'features.billingModule',
+                label: 'Modulo Fatturazione',
+                description: 'Abilita fatturazione e gestione pagamenti',
                 type: 'boolean',
-                value: false
-            }
-        ]
-    },
-    {
-        id: 'tenant',
-        label: 'Tenant Defaults',
-        description: 'Impostazioni di default per nuovi tenant',
-        icon: Building2,
-        settings: [
-            {
-                key: 'tenant.maxUsers',
-                label: 'Max Utenti Default',
-                description: 'Numero massimo utenti per nuovo tenant',
-                type: 'number',
-                value: 50,
-                validation: { min: 1, max: 1000 }
-            },
-            {
-                key: 'tenant.maxCompanies',
-                label: 'Max Aziende Default',
-                description: 'Numero massimo aziende per nuovo tenant',
-                type: 'number',
-                value: 10,
-                validation: { min: 1, max: 100 }
-            },
-            {
-                key: 'tenant.defaultBillingPlan',
-                label: 'Piano Default',
-                description: 'Piano di abbonamento predefinito',
-                type: 'select',
-                value: 'basic',
-                options: [
-                    { value: 'free', label: 'Free' },
-                    { value: 'basic', label: 'Basic' },
-                    { value: 'professional', label: 'Professional' },
-                    { value: 'enterprise', label: 'Enterprise' }
-                ]
+                value: true
             }
         ]
     }
@@ -245,7 +137,7 @@ const DEFAULT_CONFIG_CATEGORIES: ConfigCategory[] = [
 const SystemConfigPage: React.FC = () => {
     const { user } = useAuth();
     const [categories, setCategories] = useState<ConfigCategory[]>(DEFAULT_CONFIG_CATEGORIES);
-    const [activeCategory, setActiveCategory] = useState('general');
+    const [activeCategory, setActiveCategory] = useState('security');
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -470,7 +362,7 @@ const SystemConfigPage: React.FC = () => {
 
             {hasChanges && (
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center gap-3">
-                    <Info className="w-5 h-5 text-amber-600" />
+                    <AlertCircle className="w-5 h-5 text-amber-600" />
                     <p className="text-amber-700">Hai modifiche non salvate. Ricorda di salvare prima di uscire.</p>
                 </div>
             )}
@@ -496,6 +388,16 @@ const SystemConfigPage: React.FC = () => {
                                 </button>
                             );
                         })}
+                        <button
+                            onClick={() => setActiveCategory('tema')}
+                            className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${activeCategory === 'tema'
+                                ? 'bg-purple-50 dark:bg-purple-900/30 border-l-4 border-purple-600 text-purple-700 dark:text-purple-400'
+                                : 'hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'
+                                }`}
+                        >
+                            <Sun className="w-5 h-5" />
+                            <span className="font-medium">Tema</span>
+                        </button>
                     </div>
                 </div>
 
@@ -504,6 +406,16 @@ const SystemConfigPage: React.FC = () => {
                     {loading ? (
                         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-12 flex items-center justify-center">
                             <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+                        </div>
+                    ) : activeCategory === 'tema' ? (
+                        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-50">Tema Interfaccia</h2>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">Modalità di visualizzazione del pannello di gestione</p>
+                            </div>
+                            <div className="p-6">
+                                <ThemeSelector />
+                            </div>
                         </div>
                     ) : activeCategoryData && (
                         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">

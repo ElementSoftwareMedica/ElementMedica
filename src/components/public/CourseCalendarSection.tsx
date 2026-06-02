@@ -85,7 +85,14 @@ export const CourseCalendarSection: React.FC<CourseCalendarSectionProps> = ({
             const fromDate = new Date().toISOString();
             const toDate = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(); // +3 months
 
-            const response = await fetch(`/api/public/schedules?from=${fromDate}&to=${toDate}&limit=${maxItems * 2}`);
+            // Detect brand for X-Frontend-Id header
+            const brandId = (import.meta as any).env?.VITE_BRAND_ID || 'element-sicurezza';
+
+            const response = await fetch(`/api/v1/public/schedules?from=${fromDate}&to=${toDate}&limit=${maxItems * 2}`, {
+                headers: {
+                    'X-Frontend-Id': brandId,
+                },
+            });
 
             if (!response.ok) {
                 // If endpoint doesn't exist or no data, show placeholders

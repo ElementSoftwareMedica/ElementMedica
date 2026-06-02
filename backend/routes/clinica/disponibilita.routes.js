@@ -13,11 +13,40 @@ import { authenticate } from '../../middleware/auth.js';
 import { getEffectiveTenantId } from '../../utils/tenantHelper.js';
 import DisponibilitaMedicoService from '../../services/clinical/DisponibilitaMedicoService.js';
 import SlotDisponibilitaService from '../../services/clinical/SlotDisponibilitaService.js';
+import AvailabilityNotificationService from '../../services/clinical/AvailabilityNotificationService.js';
 import Joi from 'joi';
 import { validateParamId } from '../../middleware/validateUUID.js';
 
 const router = express.Router();
 router.param('id', validateParamId);
+
+const PRIVILEGED_CLINIC_ROLES = new Set(['ADMIN', 'SUPER_ADMIN', 'TENANT_ADMIN', 'COMPANY_ADMIN', 'CLINIC_ADMIN', 'SEGRETERIA_CLINICA']);
+
+function getRoleTypes(req) {
+    return (req.person?.roles || []).map(role => typeof role === 'string' ? role : role?.roleType).filter(Boolean);
+}
+
+function isBaseMedico(req) {
+    const roles = getRoleTypes(req);
+    return roles.includes('MEDICO') &&
+        !roles.includes('MEDICO_COMPETENTE') &&
+        !roles.some(role => PRIVILEGED_CLINIC_ROLES.has(role));
+}
+
+function assertOwnMedico(req, medicoId) {
+    if (isBaseMedico(req) && medicoId && medicoId !== req.person?.id) {
+        const error = new Error('Non autorizzato a gestire disponibilita di altri medici');
+        error.statusCode = 403;
+        throw error;
+    }
+}
+
+async function assertOwnDisponibilita(req, tenantId, id) {
+    if (!isBaseMedico(req)) return null;
+    const disponibilita = await DisponibilitaMedicoService.getById(id, tenantId);
+    assertOwnMedico(req, disponibilita.medicoId);
+    return disponibilita;
+}
 
 // ============================================
 // VALIDATION SCHEMAS
@@ -83,7 +112,7 @@ router.get('/',
             const options = {
                 page: req.query.page || 1,
                 limit: req.query.limit || 100,
-                medicoId: req.query.medicoId,
+                medicoId: isBaseMedico(req) ? req.person.id : req.query.medicoId,
                 ambulatorioId: req.query.ambulatorioId,
                 giorno: req.query.giorno,
                 attivo: req.query.attivo
@@ -122,6 +151,7 @@ router.get('/medico/:medicoId',
         try {
             const tenantId = getEffectiveTenantId(req);
             const { medicoId } = req.params;
+            assertOwnMedico(req, medicoId);
 
             const data = await DisponibilitaMedicoService.getByMedico(medicoId, tenantId);
 
@@ -158,13 +188,14 @@ router.get('/:id',
             const { id } = req.params;
 
             const data = await DisponibilitaMedicoService.getById(id, tenantId);
+            assertOwnMedico(req, data.medicoId);
 
             res.json({
                 success: true,
                 data
             });
         } catch (error) {
-            const status = error.message === 'Disponibilità non trovata' ? 404 : 500;
+            const status = error.statusCode || (error.message === 'Disponibilità non trovata' ? 404 : 500);
             logger.error('Failed to get disponibilità by ID', {
                 component: 'disponibilita-routes',
                 action: 'getById',
@@ -200,10 +231,23 @@ router.post('/',
                 });
             }
 
+            assertOwnMedico(req, value.medicoId);
+
             const data = await DisponibilitaMedicoService.create({
                 ...value,
                 createdBy: req.person.id
             }, tenantId);
+
+            if (isBaseMedico(req)) {
+                await AvailabilityNotificationService.notifySecretaries({
+                    tenantId,
+                    actorId: req.person.id,
+                    medicoId: data.medicoId,
+                    action: 'created',
+                    entityId: data.id,
+                    actionUrl: '/poliambulatorio/disponibilita'
+                });
+            }
 
             res.status(201).json({
                 success: true,
@@ -216,7 +260,7 @@ router.post('/',
                 error: 'Operazione non riuscita',
                 tenantId: req.person?.tenantId
             });
-            res.status(400).json({
+            res.status(error.statusCode || 400).json({
                 success: false,
                 error: 'Errore interno del server'
             });
@@ -244,12 +288,24 @@ router.post('/copy-week',
                 });
             }
 
+            assertOwnMedico(req, value.medicoId);
+
             const result = await DisponibilitaMedicoService.copyWeek(
                 value.medicoId,
                 value.fromDate,
                 value.toDate,
                 tenantId
             );
+
+            if (isBaseMedico(req)) {
+                await AvailabilityNotificationService.notifySecretaries({
+                    tenantId,
+                    actorId: req.person.id,
+                    medicoId: value.medicoId,
+                    action: 'copied',
+                    actionUrl: '/poliambulatorio/disponibilita'
+                });
+            }
 
             res.json({
                 success: true,
@@ -262,7 +318,7 @@ router.post('/copy-week',
                 error: 'Operazione non riuscita',
                 tenantId: req.person?.tenantId
             });
-            res.status(400).json({
+            res.status(error.statusCode || 400).json({
                 success: false,
                 error: 'Errore interno del server'
             });
@@ -290,6 +346,8 @@ router.post('/generate-slots',
                 });
             }
 
+            assertOwnMedico(req, value.medicoId);
+
             // Validate date range (max 365 days)
             const startDate = new Date(value.dataInizio);
             const endDate = new Date(value.dataFine);
@@ -314,6 +372,19 @@ router.post('/generate-slots',
                 tenantId
             );
 
+            const createdCount = Array.isArray(result.created) ? result.created.length : Number(result.created || 0);
+            if (isBaseMedico(req) && createdCount > 0) {
+                await AvailabilityNotificationService.notifySecretaries({
+                    tenantId,
+                    actorId: req.person.id,
+                    medicoId: value.medicoId,
+                    action: 'generated',
+                    entityId: Array.isArray(result.created) ? result.created[0]?.id : undefined,
+                    count: createdCount,
+                    actionUrl: '/poliambulatorio/disponibilita'
+                });
+            }
+
             res.json({
                 success: true,
                 data: result
@@ -325,7 +396,7 @@ router.post('/generate-slots',
                 error: 'Operazione non riuscita',
                 tenantId: req.person?.tenantId
             });
-            res.status(400).json({
+            res.status(error.statusCode || 400).json({
                 success: false,
                 error: 'Errore interno del server'
             });
@@ -354,14 +425,28 @@ router.put('/:id',
                 });
             }
 
+            const previous = await assertOwnDisponibilita(req, tenantId, id);
+            if (value.medicoId) assertOwnMedico(req, value.medicoId);
+
             const data = await DisponibilitaMedicoService.update(id, value, tenantId);
+
+            if (isBaseMedico(req)) {
+                await AvailabilityNotificationService.notifySecretaries({
+                    tenantId,
+                    actorId: req.person.id,
+                    medicoId: data.medicoId || previous?.medicoId,
+                    action: 'updated',
+                    entityId: data.id,
+                    actionUrl: '/poliambulatorio/disponibilita'
+                });
+            }
 
             res.json({
                 success: true,
                 data
             });
         } catch (error) {
-            const status = error.message === 'Disponibilità non trovata' ? 404 : 400;
+            const status = error.statusCode || (error.message === 'Disponibilità non trovata' ? 404 : 400);
             logger.error('Failed to update disponibilità', {
                 component: 'disponibilita-routes',
                 action: 'update',
@@ -388,15 +473,28 @@ router.delete('/:id',
         try {
             const tenantId = getEffectiveTenantId(req);
             const { id } = req.params;
+            const previous = await assertOwnDisponibilita(req, tenantId, id);
 
             await DisponibilitaMedicoService.delete(id, tenantId);
+
+            if (isBaseMedico(req)) {
+                await AvailabilityNotificationService.notifySecretaries({
+                    tenantId,
+                    actorId: req.person.id,
+                    medicoId: previous.medicoId,
+                    action: 'deleted',
+                    entityId: id,
+                    count: 1,
+                    actionUrl: '/poliambulatorio/disponibilita'
+                });
+            }
 
             res.json({
                 success: true,
                 message: 'Disponibilità eliminata'
             });
         } catch (error) {
-            const status = error.message === 'Disponibilità non trovata' ? 404 : 500;
+            const status = error.statusCode || (error.message === 'Disponibilità non trovata' ? 404 : 500);
             logger.error('Failed to delete disponibilità', {
                 component: 'disponibilita-routes',
                 action: 'delete',
@@ -423,6 +521,7 @@ router.delete('/:id/cascade',
         try {
             const tenantId = getEffectiveTenantId(req);
             const { id } = req.params;
+            const previous = await assertOwnDisponibilita(req, tenantId, id);
 
             // First count how many slots will be affected
             const today = new Date();
@@ -434,6 +533,18 @@ router.delete('/:id/cascade',
 
             // Delete the pattern itself
             await DisponibilitaMedicoService.delete(id, tenantId);
+
+            if (isBaseMedico(req)) {
+                await AvailabilityNotificationService.notifySecretaries({
+                    tenantId,
+                    actorId: req.person.id,
+                    medicoId: previous.medicoId,
+                    action: 'deleted',
+                    entityId: id,
+                    count: Math.max(Number(affectedCount || 0), Number(deleteResult.deleted || 0), 1),
+                    actionUrl: '/poliambulatorio/disponibilita'
+                });
+            }
 
             logger.info('Disponibilità and future slots cascade deleted', {
                 component: 'disponibilita-routes',
@@ -449,7 +560,7 @@ router.delete('/:id/cascade',
                 deletedSlots: deleteResult.deleted
             });
         } catch (error) {
-            const status = error.message === 'Disponibilità non trovata' ? 404 : 500;
+            const status = error.statusCode || (error.message === 'Disponibilità non trovata' ? 404 : 500);
             logger.error('Failed to cascade delete disponibilità', {
                 component: 'disponibilita-routes',
                 action: 'cascadeDelete',
@@ -476,6 +587,7 @@ router.get('/:id/future-slots-count',
         try {
             const tenantId = getEffectiveTenantId(req);
             const { id } = req.params;
+            await assertOwnDisponibilita(req, tenantId, id);
 
             const today = new Date();
             today.setHours(0, 0, 0, 0);

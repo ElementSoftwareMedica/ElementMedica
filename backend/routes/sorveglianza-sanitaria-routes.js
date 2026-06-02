@@ -10,12 +10,16 @@ import express from 'express';
 import logger from '../utils/logger.js';
 import middleware from '../middleware/auth.js';
 import { requirePermission } from '../middleware/rbac.js';
+import { requireFeature } from '../middleware/featureFlags.js';
 import prisma from '../config/prisma-optimization.js';
 import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 import AppuntamentoService from '../services/clinical/AppuntamentoService.js';
 
 const router = express.Router({ mergeParams: true });
 const { authenticate: authenticateToken } = middleware;
+
+// Feature gate: sorveglianza sanitaria richiede BRANCH_MEDICA
+router.use(authenticateToken, requireFeature('BRANCH_MEDICA'));
 
 // ─── Helpers ──────────────────────────────────────────────────────
 
@@ -352,22 +356,45 @@ router.get('/medici-disponibili',
         });
       }
 
-      // Medici con nomina MEDICO_COMPETENTE attiva per questa azienda (o per le sue sedi)
+      // Medici con nomina MC/MC coordinato attiva per questa azienda (o per le sue sedi).
       const nomineAzienda = await prisma.nominaRuolo.findMany({
         where: {
           tenantId,
           deletedAt: null,
-          tipoRuolo: 'MEDICO_COMPETENTE',
+          tipoRuolo: { in: ['MEDICO_COMPETENTE', 'MEDICO_COMPETENTE_COORDINATO'] },
           stato: 'ATTIVA',
-          OR: [
-            { companyTenantProfileId: profile.id },
-            { site: { companyTenantProfileId: profile.id } }
+          AND: [
+            {
+              OR: [
+                { companyTenantProfileId: profile.id },
+                { site: { companyTenantProfileId: profile.id } }
+              ]
+            },
+            {
+              OR: [
+                { dataFine: null },
+                { dataFine: { gte: new Date() } }
+              ]
+            }
           ]
         },
         select: { personId: true }
       });
 
-      const nominatiIds = [...new Set(nomineAzienda.map(n => n.personId))];
+      const siteMedici = await prisma.companySite.findMany({
+        where: {
+          tenantId,
+          companyTenantProfileId: profile.id,
+          deletedAt: null,
+          medicoCompetenteId: { not: null }
+        },
+        select: { medicoCompetenteId: true }
+      });
+
+      const nominatiIds = [...new Set([
+        ...nomineAzienda.map(n => n.personId),
+        ...siteMedici.map(s => s.medicoCompetenteId).filter(Boolean)
+      ])];
 
       // Fetch le persone nominate
       let allMedici = [];
@@ -375,15 +402,15 @@ router.get('/medici-disponibili',
         const nominatedDocs = await prisma.person.findMany({
           where: {
             id: { in: nominatiIds },
-            // P48: tenantId rimosso da Person - gli ID sono già filtrati per tenant
-            deletedAt: null
+            deletedAt: null,
+            tenantProfiles: { some: { tenantId, deletedAt: null } }
           },
           select: { id: true, firstName: true, lastName: true }
         });
 
         allMedici = nominatedDocs.map(m => ({
           id: m.id,
-          fullName: `${m.firstName} ${m.lastName}`,
+          fullName: `${m.firstName || ''} ${m.lastName || ''}`.trim() || 'Medico',
           isNominatoPerAzienda: true
         }));
       }
@@ -405,8 +432,8 @@ router.get('/medici-disponibili',
         const altriMedici = await prisma.person.findMany({
           where: {
             id: { in: altriMediciIds },
-            // P48: tenantId rimosso da Person - gli ID sono già filtrati per tenant
-            deletedAt: null
+            deletedAt: null,
+            tenantProfiles: { some: { tenantId, deletedAt: null } }
           },
           select: { id: true, firstName: true, lastName: true }
         });
@@ -414,7 +441,7 @@ router.get('/medici-disponibili',
         for (const m of altriMedici) {
           allMedici.push({
             id: m.id,
-            fullName: `${m.firstName} ${m.lastName}`,
+            fullName: `${m.firstName || ''} ${m.lastName || ''}`.trim() || 'Medico',
             isNominatoPerAzienda: false
           });
         }

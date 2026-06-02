@@ -30,7 +30,9 @@ apiClient.interceptors.request.use(
     try {
       if (!config.method || typeof config.method !== 'string' || config.method.trim() === '') {
         config.method = 'GET';
-        console.warn('🔧 [apiClient] Method was invalid, forcing to GET');
+        if (import.meta.env.DEV) {
+          console.warn('🔧 [apiClient] Method was invalid, forcing to GET');
+        }
       } else {
         // Extra safety: verify it's still a string before calling toUpperCase
         const methodValue = config.method;
@@ -39,7 +41,9 @@ apiClient.interceptors.request.use(
           : 'GET';
       }
     } catch (methodError) {
-      console.error('🔧 [apiClient] Error processing method, defaulting to GET:', methodError);
+      if (import.meta.env.DEV) {
+        console.error('🔧 [apiClient] Error processing method, defaulting to GET:', methodError);
+      }
       config.method = 'GET';
     }
 
@@ -145,7 +149,9 @@ export function setupInterceptors(
       }
 
       const errorMessage = 'Errore nella richiesta API';
-      console.error('API Error:', error.response?.status, error.config?.url);
+      if (import.meta.env.DEV) {
+        console.error('API Error:', error.response?.status, error.config?.url);
+      }
       return Promise.reject(error);
     }
   );

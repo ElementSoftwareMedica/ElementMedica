@@ -10,7 +10,7 @@ import getpass
 from pathlib import Path
 
 BASE = Path('/Users/matteo.michielon/project 2.0')
-SERVER_IP = '178.104.44.177'
+SERVER_IP = '178.104.197.134'
 SERVER_PATH = '/var/www/elementmedica'
 SSH_KEY = str(Path.home() / '.ssh/id_ed25519')
 SSH_USER = 'root'  # Use root to avoid permission issues from mixed ownership

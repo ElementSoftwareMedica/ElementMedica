@@ -3,6 +3,7 @@ import prisma from '../config/prisma-optimization.js';
 import { body, validationResult } from 'express-validator';
 import authMiddleware from '../middleware/auth.js';
 import { requirePermissions } from '../middleware/rbac.js';
+import { requireFeature } from '../middleware/featureFlags.js';
 import { auditLog } from '../middleware/audit.js';
 import logger from '../utils/logger.js';
 import { roleDataFilter, filterResponseFields } from '../middleware/role-data-filter.js';
@@ -141,6 +142,9 @@ const sanitizeCoursePayload = (input) => {
 // Apply type conversion middleware to all routes
 router.use(convertCourseTypes);
 
+// Feature gate: tutte le route corsi richiedono BRANCH_FORMAZIONE
+router.use(authenticate, requireFeature('BRANCH_FORMAZIONE'));
+
 // GET /courses - Get all courses for user's company
 router.get('/', authenticate, roleDataFilter, filterResponseFields, async (req, res) => {
   try {
@@ -159,7 +163,7 @@ router.get('/', authenticate, roleDataFilter, filterResponseFields, async (req, 
 
     const roleTypes = personRoles.map(pr => pr.roleType);
     const isEmployeeOnly = roleTypes.includes('EMPLOYEE') &&
-      !roleTypes.some(r => ['ADMIN', 'TRAINING_ADMIN', 'HR_MANAGER', 'COMPANY_MANAGER', 'SITE_MANAGER', 'TRAINER'].includes(r));
+      !roleTypes.some(r => ['ADMIN', 'TRAINING_ADMIN', 'HR_MANAGER', 'COMPANY_MANAGER', 'SITE_MANAGER', 'TRAINER', 'TENANT_ADMIN'].includes(r));
 
     let whereClause = {
       tenantId: getEffectiveTenantId(req),

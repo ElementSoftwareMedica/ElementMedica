@@ -12,7 +12,9 @@
     "test:watch": "vitest",
     "lint": "eslint src/",
     "pkg:win": "npx pkg package.json --targets node18-win-x64 --output dist/medical-bridge-win.exe",
-    "pkg:mac": "npx pkg package.json --targets node18-macos-x64 --output dist/medical-bridge-mac",
+    "pkg:mac-arm64": "npx pkg package.json --targets node18-macos-arm64 --output dist/medical-bridge-mac-arm64",
+    "pkg:mac-x64": "npx pkg package.json --targets node18-macos-x64 --output dist/medical-bridge-mac-x64",
+    "pkg:mac": "npm run pkg:mac-arm64 && npm run pkg:mac-x64",
     "pkg:all": "npm run build && npm run pkg:win && npm run pkg:mac"
   },
   "pkg": {

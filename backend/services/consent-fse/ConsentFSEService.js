@@ -270,12 +270,51 @@ export class ConsentFSEService {
                 }
             });
 
+            const signedFseFromTablet = await prisma.consensoFirmaToken.findMany({
+                where: {
+                    tenantId,
+                    firmatoAt: { not: null },
+                    appuntamento: { pazienteId: personId },
+                    firmatoConsensi: { hasSome: ['fse_alimentazione', 'fse_consultazione', 'fse_pregresso'] },
+                },
+                select: { firmatoAt: true, firmatoConsensi: true, id: true },
+                orderBy: { firmatoAt: 'desc' },
+                take: 50,
+            });
+            const fseTipoByCode = {
+                fse_alimentazione: 'ALIMENTAZIONE',
+                fse_consultazione: 'CONSULTAZIONE',
+                fse_pregresso: 'PREGRESSO',
+            };
+            const tabletConsentByTipo = {};
+            for (const token of signedFseFromTablet) {
+                for (const codice of token.firmatoConsensi || []) {
+                    const tipo = fseTipoByCode[codice];
+                    if (tipo && !tabletConsentByTipo[tipo]) {
+                        tabletConsentByTipo[tipo] = {
+                            id: `tablet-${token.id}-${tipo}`,
+                            personId,
+                            tipoConsenso: tipo,
+                            consentGiven: true,
+                            revokedAt: null,
+                            modalitaRaccolta: 'DIGITALE_FIRMA_GRAFOMETRICA',
+                            documentoRiferimento: token.id,
+                            validFrom: token.firmatoAt,
+                            validUntil: null,
+                            tenantId,
+                            createdAt: token.firmatoAt,
+                            updatedAt: token.firmatoAt,
+                        };
+                    }
+                }
+            }
+
             // Costruisce mappa con tutti i tipi di consenso
             const consentMap = {};
 
             // Inizializza con tutti i tipi possibili
             Object.keys(CONSENT_FSE_DESCRIPTIONS).forEach(tipo => {
-                const existingConsent = consents.find(c => c.tipoConsenso === tipo);
+                const existingConsent = consents.find(c => c.tipoConsenso === tipo) || tabletConsentByTipo[tipo];
 
                 consentMap[tipo] = {
                     ...CONSENT_FSE_DESCRIPTIONS[tipo],
@@ -287,15 +326,17 @@ export class ConsentFSEService {
                 };
             });
 
+            const consentValues = Object.values(consentMap);
+
             return {
                 personId,
                 tenantId,
                 consents: consentMap,
                 summary: {
                     total: Object.keys(CONSENT_FSE_DESCRIPTIONS).length,
-                    given: consents.filter(c => c.consentGiven && !c.revokedAt).length,
+                    given: consentValues.filter(c => c.consentGiven && !c.consent?.revokedAt).length,
                     revoked: consents.filter(c => c.revokedAt).length,
-                    pending: Object.keys(CONSENT_FSE_DESCRIPTIONS).length - consents.length
+                    pending: consentValues.filter(c => !c.consentGiven).length
                 }
             };
 
@@ -684,9 +725,10 @@ export class ConsentFSEService {
                     action,
                     personId,
                     tenantId,
-                    dataAccessed: JSON.stringify(details),
-                    performedBy,
-                    performedAt: new Date()
+                    dataAccessed: {
+                        ...(details || {}),
+                        performedBy: performedBy || null
+                    }
                 }
             });
         } catch (error) {

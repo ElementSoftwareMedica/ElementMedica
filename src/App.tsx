@@ -1,17 +1,41 @@
-import React, { useEffect, Suspense, startTransition } from 'react';
+import React, { useEffect, useRef, Suspense, startTransition } from 'react';
 import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import { Layout } from './components/layouts';
 import { performanceMonitor } from './utils/performanceMonitor';
 import ProtectedRoute from './components/shared/ProtectedRoute';
+import { useRoleGuard } from './hooks/useRoleGuard';
 import { LoadingFallback } from './components/ui/LoadingFallback';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { getCurrentBrand } from './config/brands.config';
 import { BranchProvider } from './contexts/BranchContext';
 import { ThemeProvider } from './context/ThemeContext';
+import { trackStaticPage } from './services/cmsAnalyticsService';
 // TenantModeProvider è ora in providers/index.tsx per sincronizzazione corretta con TenantFilterContext
 
 // P60: Import dark mode CSS
 import './styles/dark-mode.css';
+
+const SearchPreservingRedirect: React.FC<{ to: string }> = ({ to }) => {
+  const location = useLocation();
+  return <Navigate to={`${to}${location.search || ''}`} replace />;
+};
+
+const SmartBackOriginTracker: React.FC = () => {
+  const location = useLocation();
+
+  useEffect(() => {
+    const path = `${location.pathname}${location.search || ''}${location.hash || ''}`;
+    if (!/\/poliambulatorio\/visite(?:-embedded)?\/[^/]+/.test(location.pathname)) {
+      try {
+        window.sessionStorage.setItem('element:smart-back:last-non-visit-path', path);
+      } catch {
+        // Storage non disponibile: la navigazione usa gli altri fallback.
+      }
+    }
+  }, [location.hash, location.pathname, location.search]);
+
+  return null;
+};
 
 // === PHASE 4.2b: ALL ROUTES LAZY LOADED ===
 
@@ -51,12 +75,7 @@ import TemplateEditorLazy from './pages/templates/TemplateEditor.lazy';
 // Settings & Admin
 // DesktopLicensesTab — used in both /poliambulatorio/impostazioni/desktop and /formazione/impostazioni/desktop
 const DesktopLicensesTabLazy = React.lazy(() => import('./pages/settings/DesktopLicensesTab'));
-import TenantsPageLazy from './pages/tenants/TenantsPage.lazy';
 import GoogleOAuthCallbackLazy from './pages/settings/templates/GoogleOAuthCallback.lazy';
-// Project 43 - Management Page
-import { ManagementLazy } from './pages/management/Management.lazy';
-import ManagementLayout from './components/layouts/ManagementLayout';
-
 // Finance
 import QuotesAndInvoicesLazy from './pages/QuotesAndInvoices.lazy';
 import { DocumentsCorsi as DocumentsCorsiLazy } from './pages/DocumentsCorsi.lazy';
@@ -64,6 +83,11 @@ import { DocumentsCorsi as DocumentsCorsiLazy } from './pages/DocumentsCorsi.laz
 // GDPR
 import GDPRDashboardLazy from './pages/GDPRDashboard.lazy';
 import AdminGDPRLazy from './pages/AdminGDPR.lazy';
+
+// Project 43 - Management Page
+// Lazy: removes management-specific code from main entry bundle → faster LCP for public pages
+import { ManagementLazy } from './pages/management/Management.lazy';
+const ManagementLayout = React.lazy(() => import('./components/layouts/ManagementLayout'));
 
 // Notifications (Project 47)
 import {
@@ -93,7 +117,9 @@ import { OT23PageLazy, OT23DetailPageLazy } from './pages/sicurezza/index.lazy';
 import { CMSHubLazy } from './pages/cms/CMSHub.lazy';
 
 // === CLINICA / POLIAMBULATORIO MODULE ===
-import ClinicaLayout from './components/layouts/ClinicaLayout';
+// Lazy: removes clinicaApi.ts + layout code from main entry bundle → faster LCP for public pages
+const ClinicaLayout = React.lazy(() => import('./components/layouts/ClinicaLayout'));
+const ProfilePageLazy = React.lazy(() => import('./pages/profile/ProfilePage'));
 import {
   LoginMedicaLazy,
   // Struttura
@@ -149,6 +175,8 @@ import {
   BridgeSettingsPageLazy,
   EmailTemplateSettingsPageLazy,
   ConsensiPageLazy,
+  ImpostazioniNotifichePageLazy,
+  ImpostazioniPrivacyPageLazy,
   // Coda (P53 - Queue Calling System)
   QueueManagementPageLazy,
   QueueDisplayPageLazy,
@@ -195,6 +223,23 @@ const PrenotaPageLazy = React.lazy(() => import('./pages/public/PrenotaPage'));
 // Gruppo Servizi - Cross-domain services overview
 const GruppoServiziPageLazy = React.lazy(() => import('./pages/public/GruppoServiziPage'));
 
+// Pagine pubbliche statiche (NO CMS API — SEO perfetto)
+const HomePageStaticLazy = React.lazy(() => import('./pages/public/HomePageStatic'));
+const MedicinaDelLavoroPageLazy = React.lazy(() => import('./pages/public/MedicinaDelLavoroPage'));
+const RSPPStaticPageLazy = React.lazy(() => import('./pages/public/RSPPStaticPage'));
+const ChiSiamoStaticPageLazy = React.lazy(() => import('./pages/public/ChiSiamoStaticPage'));
+const ChiSiamoMedicaStaticPageLazy = React.lazy(() => import('./pages/public/ChiSiamoMedicaStaticPage'));
+const ContattiStaticPageLazy = React.lazy(() => import('./pages/public/ContattiStaticPage'));
+const DiagnosticaStaticPageLazy = React.lazy(() => import('./pages/public/DiagnosticaStaticPage'));
+const VisiteSpecialistichePageLazy = React.lazy(() => import('./pages/public/VisiteSpecialistichePage'));
+const PrivacyPolicyStaticPageLazy = React.lazy(() => import('./pages/public/PrivacyPolicyStaticPage'));
+const CookiePolicyStaticPageLazy = React.lazy(() => import('./pages/public/CookiePolicyStaticPage'));
+const TerminiStaticPageLazy = React.lazy(() => import('./pages/public/TerminiStaticPage'));
+const LavoraConNoiStaticPageLazy = React.lazy(() => import('./pages/public/LavoraConNoiStaticPage'));
+
+// Forgot Password
+const ForgotPasswordPageLazy = React.lazy(() => import('./pages/auth/ForgotPasswordPage'));
+
 // Pagina pubblica consensi informativi (tablet firma)
 const ConsensoFirmaPageLazy = React.lazy(() => import('./pages/public/ConsensoFirmaPage'));
 const TabletFirmaPageLazy = React.lazy(() => import('./pages/public/TabletFirmaPage'));
@@ -212,12 +257,10 @@ const BrandLoginPage: React.FC = () => {
   return <LoginFormazioneLazy />;
 };
 
-// Component for brand-aware homepage
-const BrandHomePage: React.FC = () => {
-  // Entrambi i brand mostrano la pagina CMS pubblica sulla homepage
-  // La CMSPage caricherà automaticamente lo slug corretto basato sul brand
-  return <CMSPageLazy />;
-};
+// Component for brand-aware homepage (pagina statica — NO CMS API)
+const BrandHomePage: React.FC = () => (
+  <Suspense fallback={<LoadingFallback />}><HomePageStaticLazy /></Suspense>
+);
 
 // Component for brand-aware dashboard
 const BrandDashboard: React.FC = () => {
@@ -233,8 +276,40 @@ const BrandDashboard: React.FC = () => {
   );
 };
 
+const HideForBaseMedicoRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { isMedico, isMedicoCompetente } = useRoleGuard();
+  if (isMedico && !isMedicoCompetente) {
+    return <Navigate to="/poliambulatorio/impostazioni" replace />;
+  }
+  return <>{children}</>;
+};
+
+// Mappa delle pagine statiche da tracciare (non gestite da CMSPageRenderer)
+// Le pagine CMS (CMSPageLazy / /:slug) sono già tracciate automaticamente da CMSPageRenderer
+const STATIC_PAGE_MAP: Record<string, { slug: string; title: string; brand?: 'medica' | 'sicurezza' }> = {
+  '/': { slug: 'homepage', title: 'Homepage' },
+  '/rspp': { slug: 'rspp', title: 'RSPP', brand: 'sicurezza' },
+  '/medicina-del-lavoro': {
+    slug: isElementMedica ? 'medica-medicina-del-lavoro' : 'medicina-del-lavoro',
+    title: 'Medicina del Lavoro'
+  },
+  '/lavora-con-noi': { slug: 'lavora-con-noi', title: 'Lavora Con Noi' },
+  '/carriere': { slug: 'carriere', title: 'Carriere' },
+  '/contatti': { slug: 'contatti', title: 'Contatti' },
+  '/privacy-policy': { slug: 'privacy-policy', title: 'Privacy Policy' },
+  '/cookie-policy': { slug: 'cookie-policy', title: 'Cookie Policy' },
+  '/termini': { slug: 'termini', title: 'Termini di Servizio' },
+  '/diagnostica': { slug: 'diagnostica', title: 'Diagnostica', brand: 'medica' },
+  '/prenota': { slug: 'prenota', title: 'Prenota', brand: 'medica' },
+  '/chi-siamo': { slug: 'chi-siamo', title: 'Chi Siamo' },
+  '/gruppo-servizi': { slug: 'gruppo-servizi', title: 'Gruppo Servizi' },
+  '/corsi': { slug: 'corsi', title: 'Corsi di Sicurezza', brand: 'sicurezza' },
+  '/medici': { slug: 'medici', title: 'Medici', brand: 'medica' },
+};
+
 function App() {
   const location = useLocation();
+  const lastTrackedPath = useRef<string | null>(null);
 
   useEffect(() => {
     // Track route changes for performance monitoring with startTransition
@@ -247,11 +322,38 @@ function App() {
     };
   }, [location.pathname]);
 
+  // Track static page views (rispetta cookie consent analytics)
+  useEffect(() => {
+    const pathKey = location.pathname.replace(/\/+$/, '') || '/'; // rimuove trailing slash
+    if (lastTrackedPath.current === pathKey) return;
+
+    const page = STATIC_PAGE_MAP[pathKey];
+    if (!page) return; // Pagina CMS o rotta privata — gestita da CMSPageRenderer o non tracciare
+
+    // Brand check: non tracciare se la pagina è solo per certi brand
+    if (page.brand === 'medica' && !isElementMedica) return;
+    if (page.brand === 'sicurezza' && isElementMedica) return;
+
+    // Rispetta il consenso cookie analytics
+    try {
+      const raw = localStorage.getItem('cookie-consent');
+      if (raw) {
+        const consent = JSON.parse(raw);
+        if (consent.analytics === false) return;
+      }
+      // Se nessun consenso presente, il tracking avviene con sessionStorage (non cookie persistente)
+    } catch { /* localStorage non disponibile — tracking ok */ }
+
+    lastTrackedPath.current = pathKey;
+    trackStaticPage(page.slug, page.title);
+  }, [location.pathname]);
+
   return (
     <ThemeProvider>
       <BranchProvider>
         <ErrorBoundary>
           <Suspense fallback={<LoadingFallback message="Loading application..." />}>
+            <SmartBackOriginTracker />
             <Routes>
               {/* Route pubbliche - Gestite dal CMS per entrambi i brand */}
               {/* Homepage: CMS per entrambi i brand (slug mappato automaticamente) */}
@@ -259,26 +361,26 @@ function App() {
 
               {/* Pagine CMS Element Sicurezza */}
               <Route path="/servizi" element={<CMSPageLazy />} />
-              <Route path="/rspp" element={<CMSPageLazy />} />
-              <Route path="/medicina-del-lavoro" element={<CMSPageLazy />} />
-              <Route path="/lavora-con-noi" element={<CMSPageLazy />} />
-              <Route path="/carriere" element={<CMSPageLazy />} />
-              <Route path="/contatti" element={<CMSPageLazy />} />
-              <Route path="/privacy-policy" element={<CMSPageLazy />} />
-              <Route path="/cookie-policy" element={<CMSPageLazy />} />
-              <Route path="/termini" element={<CMSPageLazy />} />
+              <Route path="/rspp" element={<Suspense fallback={<LoadingFallback />}><RSPPStaticPageLazy /></Suspense>} />
+              <Route path="/medicina-del-lavoro" element={<Suspense fallback={<LoadingFallback />}><MedicinaDelLavoroPageLazy /></Suspense>} />
+              <Route path="/lavora-con-noi" element={<Suspense fallback={<LoadingFallback />}><LavoraConNoiStaticPageLazy /></Suspense>} />
+              <Route path="/carriere" element={<Suspense fallback={<LoadingFallback />}><LavoraConNoiStaticPageLazy /></Suspense>} />
+              <Route path="/contatti" element={<Suspense fallback={<LoadingFallback />}><ContattiStaticPageLazy /></Suspense>} />
+              <Route path="/privacy-policy" element={<Suspense fallback={<LoadingFallback />}><PrivacyPolicyStaticPageLazy /></Suspense>} />
+              <Route path="/cookie-policy" element={<Suspense fallback={<LoadingFallback />}><CookiePolicyStaticPageLazy /></Suspense>} />
+              <Route path="/termini" element={<Suspense fallback={<LoadingFallback />}><TerminiStaticPageLazy /></Suspense>} />
 
               {/* Pagine CMS Element Medica */}
-              <Route path="/diagnostica" element={<CMSPageLazy />} />
-              <Route path="/visite-specialistiche" element={<CMSPageLazy />} />
+              <Route path="/diagnostica" element={isElementMedica ? <Suspense fallback={<LoadingFallback />}><DiagnosticaStaticPageLazy /></Suspense> : <CMSPageLazy />} />
+              <Route path="/visite-specialistiche" element={isElementMedica ? <Suspense fallback={<LoadingFallback />}><VisiteSpecialistichePageLazy /></Suspense> : <CMSPageLazy />} />
               <Route path="/prenota" element={<Suspense fallback={<LoadingFallback />}><PrenotaPageLazy /></Suspense>} />
-              <Route path="/chi-siamo" element={<CMSPageLazy />} />
+              <Route path="/chi-siamo" element={isElementMedica ? <Suspense fallback={<LoadingFallback />}><ChiSiamoMedicaStaticPageLazy /></Suspense> : <Suspense fallback={<LoadingFallback />}><ChiSiamoStaticPageLazy /></Suspense>} />
               <Route path="/gruppo-servizi" element={<Suspense fallback={<LoadingFallback />}><GruppoServiziPageLazy /></Suspense>} />
 
-              {/* Corsi rimangono dinamici dal backend API */}
-              <Route path="/corsi" element={<CoursesPagePublicLazy />} />
-              <Route path="/corsi/unified/:title" element={<UnifiedCourseDetailPageLazy />} />
-              <Route path="/corsi/:slug" element={<CourseDetailPageLazy />} />
+              {/* Corsi: solo per Element Sicurezza — Element Medica non ha la pagina corsi */}
+              <Route path="/corsi" element={isElementMedica ? <Navigate to="/" replace /> : <CoursesPagePublicLazy />} />
+              <Route path="/corsi/unified/:title" element={isElementMedica ? <Navigate to="/" replace /> : <UnifiedCourseDetailPageLazy />} />
+              <Route path="/corsi/:slug" element={isElementMedica ? <Navigate to="/" replace /> : <CourseDetailPageLazy />} />
 
               {/* Medici pubblici - profili e prenotazione (P80) */}
               <Route path="/medici" element={<DoctorsListPageLazy />} />
@@ -302,6 +404,9 @@ function App() {
 
               {/* Tablet fisso per la firma consensi (URL permanente per postazione) */}
               <Route path="/tablet" element={<Suspense fallback={<LoadingFallback />}><TabletFirmaPageLazy /></Suspense>} />
+
+              {/* Recupero password */}
+              <Route path="/forgot-password" element={<Suspense fallback={<LoadingFallback />}><ForgotPasswordPageLazy /></Suspense>} />
 
               {/* Route pubbliche CMS dinamiche (catch-all) - DEVE ESSERE ULTIMA */}
               <Route path="/:slug" element={<CMSPageLazy />} />
@@ -483,17 +588,22 @@ function App() {
                 } />
                 {/* /settings/* rimosso — l'App Desktop è ora in /poliambulatorio/impostazioni/desktop */}
                 <Route path="/settings/*" element={<Navigate to="/poliambulatorio/impostazioni" replace />} />
+                <Route path="/clinica/mdl/scadenze" element={<SearchPreservingRedirect to="/poliambulatorio/mdl/scadenze" />} />
+                {/* Profilo utente - Layout generico (ElementSicurezza, Management e tutti i brand) */}
+                <Route path="/profile" element={
+                  <Layout>
+                    <Suspense fallback={<LoadingFallback />}>
+                      <ProfilePageLazy />
+                    </Suspense>
+                  </Layout>
+                } />
                 {/* Project 43 - Management Page with dedicated Layout */}
                 <Route path="/management/*" element={
                   <ManagementLayout>
                     <ManagementLazy />
                   </ManagementLayout>
                 } />
-                <Route path="/tenants" element={
-                  <Layout>
-                    <TenantsPageLazy />
-                  </Layout>
-                } />
+                <Route path="/tenants" element={<Navigate to="/management/tenants" replace />} />
                 <Route path="/preventivi" element={
                   <Layout>
                     <QuotesAndInvoicesLazy />
@@ -507,6 +617,11 @@ function App() {
                   </Layout>
                 } />
                 <Route path="/gdpr" element={
+                  <Layout>
+                    <GDPRDashboardLazy />
+                  </Layout>
+                } />
+                <Route path="/gdpr/audit" element={
                   <Layout>
                     <GDPRDashboardLazy />
                   </Layout>
@@ -609,6 +724,10 @@ function App() {
                 <Route path="/cms" element={<Navigate to="/management/cms" replace />} />
                 <Route path="/cms/*" element={<Navigate to="/management/cms" replace />} />
 
+                {/* Movimenti Contabili - Redirect to Management */}
+                <Route path="/movimenti-contabili" element={<Navigate to="/management/movimenti-contabili" replace />} />
+                <Route path="/movimenti-contabili/*" element={<Navigate to="/management/movimenti-contabili" replace />} />
+
                 {/* ============================================ */}
                 {/* SICUREZZA MODULE ROUTES (P44)               */}
                 {/* ============================================ */}
@@ -670,53 +789,59 @@ function App() {
                   </Suspense>
                 } />
 
+                <Route path="/poliambulatorio/visite-embedded/:id" element={
+                  <Suspense fallback={<LoadingFallback />}>
+                    <VisitaPageLazy />
+                  </Suspense>
+                } />
+
                 {/* Main Poliambulatorio Routes with ClinicaLayout */}
                 <Route path="/poliambulatorio" element={<ClinicaLayout />}>
                   {/* Dashboard - redirect to /agenda (consolidated dashboard) */}
                   <Route index element={<Navigate to="/poliambulatorio/agenda" replace />} />
 
                   {/* STRUTTURA MODULE */}
-                  <Route path="struttura" element={<StrutturaDashboardLazy />} />
+                  <Route path="struttura" element={<ProtectedRoute resource="clinica.poliambulatorio" action="manage"><StrutturaDashboardLazy /></ProtectedRoute>} />
                   {/* Legacy redirect: /struttura/poliambulatori -> /poliambulatori */}
                   <Route path="struttura/poliambulatori" element={<Navigate to="/poliambulatorio/poliambulatori" replace />} />
                   <Route path="struttura/poliambulatori/*" element={<Navigate to="/poliambulatorio/poliambulatori" replace />} />
-                  <Route path="poliambulatori" element={<PoliambulatoriPageLazy />} />
-                  <Route path="poliambulatori/nuovo" element={<PoliambulatorioFormLazy />} />
-                  <Route path="poliambulatori/:id" element={<PoliambulatorioDetailPageLazy />} />
-                  <Route path="poliambulatori/:id/modifica" element={<PoliambulatorioFormLazy />} />
-                  <Route path="ambulatori" element={<AmbulatoriPageLazy />} />
-                  <Route path="ambulatori/nuovo" element={<AmbulatorioFormLazy />} />
-                  <Route path="ambulatori/:id" element={<AmbulatorioDetailPageLazy />} />
-                  <Route path="ambulatori/:id/modifica" element={<AmbulatorioFormLazy />} />
-                  <Route path="strumenti" element={<StrumentiPageLazy />} />
-                  <Route path="strumenti/nuovo" element={<StrumentoFormLazy />} />
-                  <Route path="strumenti/:id" element={<StrumentoDetailPageLazy />} />
-                  <Route path="strumenti/:id/modifica" element={<StrumentoFormLazy />} />
-                  <Route path="strumenti/:id/manutenzione" element={<ManutenzioneFormLazy />} />
-                  <Route path="sedi" element={<SediPageLazy />} />
-                  <Route path="sedi/nuovo" element={<SedeFormLazy />} />
-                  <Route path="sedi/:id" element={<SedeDetailPageLazy />} />
-                  <Route path="sedi/:id/modifica" element={<SedeFormLazy />} />
+                  <Route path="poliambulatori" element={<ProtectedRoute resource="clinica.poliambulatorio" action="manage"><PoliambulatoriPageLazy /></ProtectedRoute>} />
+                  <Route path="poliambulatori/nuovo" element={<ProtectedRoute resource="clinica.poliambulatorio" action="manage"><PoliambulatorioFormLazy /></ProtectedRoute>} />
+                  <Route path="poliambulatori/:id" element={<ProtectedRoute resource="clinica.poliambulatorio" action="manage"><PoliambulatorioDetailPageLazy /></ProtectedRoute>} />
+                  <Route path="poliambulatori/:id/modifica" element={<ProtectedRoute resource="clinica.poliambulatorio" action="manage"><PoliambulatorioFormLazy /></ProtectedRoute>} />
+                  <Route path="ambulatori" element={<ProtectedRoute resource="clinica.ambulatori" action="manage"><AmbulatoriPageLazy /></ProtectedRoute>} />
+                  <Route path="ambulatori/nuovo" element={<ProtectedRoute resource="clinica.ambulatori" action="manage"><AmbulatorioFormLazy /></ProtectedRoute>} />
+                  <Route path="ambulatori/:id" element={<ProtectedRoute resource="clinica.ambulatori" action="manage"><AmbulatorioDetailPageLazy /></ProtectedRoute>} />
+                  <Route path="ambulatori/:id/modifica" element={<ProtectedRoute resource="clinica.ambulatori" action="manage"><AmbulatorioFormLazy /></ProtectedRoute>} />
+                  <Route path="strumenti" element={<ProtectedRoute resource="clinica.strumenti" action="manage"><StrumentiPageLazy /></ProtectedRoute>} />
+                  <Route path="strumenti/nuovo" element={<ProtectedRoute resource="clinica.strumenti" action="manage"><StrumentoFormLazy /></ProtectedRoute>} />
+                  <Route path="strumenti/:id" element={<ProtectedRoute resource="clinica.strumenti" action="manage"><StrumentoDetailPageLazy /></ProtectedRoute>} />
+                  <Route path="strumenti/:id/modifica" element={<ProtectedRoute resource="clinica.strumenti" action="manage"><StrumentoFormLazy /></ProtectedRoute>} />
+                  <Route path="strumenti/:id/manutenzione" element={<ProtectedRoute resource="clinica.strumenti" action="manage"><ManutenzioneFormLazy /></ProtectedRoute>} />
+                  <Route path="sedi" element={<ProtectedRoute resource="clinica.sedi" action="manage"><SediPageLazy /></ProtectedRoute>} />
+                  <Route path="sedi/nuovo" element={<ProtectedRoute resource="clinica.sedi" action="manage"><SedeFormLazy /></ProtectedRoute>} />
+                  <Route path="sedi/:id" element={<ProtectedRoute resource="clinica.sedi" action="manage"><SedeDetailPageLazy /></ProtectedRoute>} />
+                  <Route path="sedi/:id/modifica" element={<ProtectedRoute resource="clinica.sedi" action="manage"><SedeFormLazy /></ProtectedRoute>} />
 
                   {/* CATALOGO MODULE */}
-                  <Route path="catalogo" element={<CatalogoDashboardLazy />} />
-                  <Route path="catalogo/prestazioni" element={<PrestazioniPageLazy />} />
-                  <Route path="catalogo/prestazioni/nuovo" element={<PrestazioneFormLazy />} />
-                  <Route path="catalogo/prestazioni/:id" element={<PrestazioneDetailPageLazy />} />
-                  <Route path="catalogo/prestazioni/:id/modifica" element={<PrestazioneFormLazy />} />
-                  <Route path="catalogo/prestazioni/:id/template" element={<TemplateCampiBuilderLazy />} />
+                  <Route path="catalogo" element={<ProtectedRoute resource="clinica.prestazioni" action="manage"><CatalogoDashboardLazy /></ProtectedRoute>} />
+                  <Route path="catalogo/prestazioni" element={<ProtectedRoute resource="clinica.prestazioni" action="manage"><PrestazioniPageLazy /></ProtectedRoute>} />
+                  <Route path="catalogo/prestazioni/nuovo" element={<ProtectedRoute resource="clinica.prestazioni" action="manage"><PrestazioneFormLazy /></ProtectedRoute>} />
+                  <Route path="catalogo/prestazioni/:id" element={<ProtectedRoute resource="clinica.prestazioni" action="manage"><PrestazioneDetailPageLazy /></ProtectedRoute>} />
+                  <Route path="catalogo/prestazioni/:id/modifica" element={<ProtectedRoute resource="clinica.prestazioni" action="manage"><PrestazioneFormLazy /></ProtectedRoute>} />
+                  <Route path="catalogo/prestazioni/:id/template" element={<ProtectedRoute resource="clinica.prestazioni" action="manage"><TemplateCampiBuilderLazy /></ProtectedRoute>} />
 
                   {/* Convenzioni routes - under catalogo */}
-                  <Route path="catalogo/convenzioni" element={<ConvenzioniPageLazy />} />
-                  <Route path="catalogo/convenzioni/nuovo" element={<ConvenzioneFormLazy />} />
-                  <Route path="catalogo/convenzioni/:id" element={<ConvenzioneFormLazy />} />
-                  <Route path="catalogo/convenzioni/:id/modifica" element={<ConvenzioneFormLazy />} />
+                  <Route path="catalogo/convenzioni" element={<ProtectedRoute resource="clinica.convenzioni" action="manage"><ConvenzioniPageLazy /></ProtectedRoute>} />
+                  <Route path="catalogo/convenzioni/nuovo" element={<ProtectedRoute resource="clinica.convenzioni" action="manage"><ConvenzioneFormLazy /></ProtectedRoute>} />
+                  <Route path="catalogo/convenzioni/:id" element={<ProtectedRoute resource="clinica.convenzioni" action="manage"><ConvenzioneFormLazy /></ProtectedRoute>} />
+                  <Route path="catalogo/convenzioni/:id/modifica" element={<ProtectedRoute resource="clinica.convenzioni" action="manage"><ConvenzioneFormLazy /></ProtectedRoute>} />
 
                   {/* Bundles/Offerte */}
-                  <Route path="catalogo/bundles" element={<OfferteBundlePageLazy />} />
-                  <Route path="catalogo/bundles/nuovo" element={<OffertaBundleFormLazy />} />
-                  <Route path="catalogo/bundles/:id" element={<OffertaBundleDetailPageLazy />} />
-                  <Route path="catalogo/bundles/:id/modifica" element={<OffertaBundleFormLazy />} />
+                  <Route path="catalogo/bundles" element={<ProtectedRoute resource="clinica.offerte_bundle" action="manage"><OfferteBundlePageLazy /></ProtectedRoute>} />
+                  <Route path="catalogo/bundles/nuovo" element={<ProtectedRoute resource="clinica.offerte_bundle" action="manage"><OffertaBundleFormLazy /></ProtectedRoute>} />
+                  <Route path="catalogo/bundles/:id" element={<ProtectedRoute resource="clinica.offerte_bundle" action="manage"><OffertaBundleDetailPageLazy /></ProtectedRoute>} />
+                  <Route path="catalogo/bundles/:id/modifica" element={<ProtectedRoute resource="clinica.offerte_bundle" action="manage"><OffertaBundleFormLazy /></ProtectedRoute>} />
 
                   {/* AGENDA MODULE */}
                   <Route path="agenda" element={<AgendaDashboardLazy />} />
@@ -725,6 +850,8 @@ function App() {
                   <Route path="agenda/accettazione" element={<Navigate to="/poliambulatorio/appuntamenti" replace />} />
                   <Route path="agenda/disponibilita" element={<DisponibilitaPageLazy />} />
                   <Route path="agenda/disponibilita/:medicoId" element={<DisponibilitaPageLazy />} />
+                  <Route path="agenda/appuntamenti/nuovo" element={<AppuntamentoFormLazy />} />
+                  <Route path="agenda/appuntamenti/:id/modifica" element={<AppuntamentoFormLazy />} />
                   <Route path="agenda/appuntamenti/:id" element={<AppuntamentoDetailPageLazy />} />
                   <Route path="calendario" element={<CalendarioPageLazy />} />
                   <Route path="appuntamenti" element={<AppuntamentiPageLazy />} />
@@ -740,7 +867,7 @@ function App() {
                   <Route path="coda/sessioni/nuova" element={<CreateSessionPageLazy />} />
                   <Route path="coda/display/:sessionId" element={<QueueDisplayPageLazy />} />
                   <Route path="coda/monitors" element={<Navigate to="/poliambulatorio/struttura/monitors" replace />} />
-                  <Route path="struttura/monitors" element={<QueueMonitorsPageLazy />} />
+                  <Route path="struttura/monitors" element={<ProtectedRoute resource="clinica.poliambulatorio" action="manage"><QueueMonitorsPageLazy /></ProtectedRoute>} />
 
                   {/* CLINICA (OPERATIONS) MODULE */}
                   <Route path="medico" element={<Navigate to="/poliambulatorio/agenda" replace />} />
@@ -759,6 +886,10 @@ function App() {
                   <Route path="personale/medici/:id/modifica" element={<MedicoFormLazy />} />
 
                   {/* MDL - MEDICINA DEL LAVORO MODULE (Progetto 56) */}
+                  <Route path="mdl/aziende" element={<CompaniesPageLazy />} />
+                  <Route path="mdl/aziende/create" element={<CompanyCreateLazy />} />
+                  <Route path="mdl/aziende/:id" element={<CompanyDetailsLazy />} />
+                  <Route path="mdl/aziende/:id/edit" element={<CompanyEditLazy />} />
                   <Route path="mdl/mansioni" element={<MansioniPageLazy />} />
                   <Route path="mdl/mansioni/:id" element={<MansioneDetailPageLazy />} />
                   <Route path="mdl/giudizi-idoneita" element={<GiudiziIdoneitaPageLazy />} />
@@ -789,7 +920,13 @@ function App() {
                   <Route path="impostazioni/firma" element={<FirmaSettingsPageLazy />} />
                   <Route path="impostazioni/bridge" element={<BridgeSettingsPageLazy />} />
                   <Route path="impostazioni/email-template" element={<EmailTemplateSettingsPageLazy />} />
-                  <Route path="impostazioni/consensi-firma" element={<ConsensiPageLazy />} />
+                  <Route path="impostazioni/consensi-firma" element={
+                    <HideForBaseMedicoRoute>
+                      <ConsensiPageLazy />
+                    </HideForBaseMedicoRoute>
+                  } />
+                  <Route path="impostazioni/notifiche" element={<ImpostazioniNotifichePageLazy />} />
+                  <Route path="impostazioni/privacy" element={<ImpostazioniPrivacyPageLazy />} />
 
                   {/* App Desktop — accessibile direttamente da /poliambulatorio/impostazioni/desktop */}
                   <Route path="impostazioni/desktop" element={
@@ -798,8 +935,15 @@ function App() {
                     </Suspense>
                   } />
 
+                  {/* Profilo utente — accessibile in ClinicaLayout con tema teal */}
+                  <Route path="profilo" element={
+                    <Suspense fallback={<LoadingFallback />}>
+                      <ProfilePageLazy />
+                    </Suspense>
+                  } />
+
                   {/* P66 - SCADENZE CENTRALIZZATE */}
-                  <Route path="scadenze" element={<ScadenzePageLazy />} />
+                  <Route path="scadenze" element={<ProtectedRoute resource="scadenze" action="manage"><ScadenzePageLazy /></ProtectedRoute>} />
 
                   {/* FATTURAZIONE (P97-P98) - Redirects → /management/billing (moved to Management) */}
                   <Route path="fatturazione" element={<Navigate to="/management/billing" replace />} />

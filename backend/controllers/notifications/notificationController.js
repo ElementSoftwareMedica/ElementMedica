@@ -186,7 +186,7 @@ export const create = async (req, res) => {
 };
 
 /**
- * Broadcast a tutto il tenant
+ * Broadcast / Announce a tutto il tenant (o sottoinsieme per ruolo/persona)
  * POST /api/v1/notifications/advanced/broadcast
  */
 export const broadcast = async (req, res) => {
@@ -194,8 +194,45 @@ export const broadcast = async (req, res) => {
         const tenantId = getEffectiveTenantId(req);
         const triggeredBy = `BROADCAST:${req.person.id}`;
 
+        const { timing, scheduledAt: rawScheduledAt, targetType, targetPersonIds, ...rest } = req.body;
+
+        // Calcola scheduledAt dal campo timing
+        let scheduledAt = null;
+        if (timing === 'WEEK_START') {
+            const now = new Date();
+            const daysToMonday = ((8 - now.getDay()) % 7) || 7;
+            scheduledAt = new Date(now);
+            scheduledAt.setDate(now.getDate() + daysToMonday);
+            scheduledAt.setHours(8, 0, 0, 0);
+        } else if (timing === 'MONTH_START') {
+            const now = new Date();
+            scheduledAt = new Date(now.getFullYear(), now.getMonth() + 1, 1, 8, 0, 0);
+        } else if (timing === 'CUSTOM' && rawScheduledAt) {
+            scheduledAt = new Date(rawScheduledAt);
+        }
+        // IMMEDIATE e NEXT_LOGIN → scheduledAt rimane null (creata subito)
+
+        // Se target individuale → crea notifiche per-persona
+        if (targetType === 'INDIVIDUAL' && Array.isArray(targetPersonIds) && targetPersonIds.length > 0) {
+            const notifications = await NotificationService.createForPersons(
+                { ...rest, scheduledAt, triggeredBy },
+                targetPersonIds,
+                tenantId
+            );
+            logger.info('Individual announce sent', {
+                component: 'NotificationController',
+                action: 'broadcast',
+                recipientCount: notifications.length,
+                createdBy: req.person.id,
+                tenantId
+            });
+            return res.status(201).json({ success: true, data: notifications });
+        }
+
         const notification = await NotificationService.broadcast({
-            ...req.body,
+            ...rest,
+            targetType: targetType || 'ALL_TENANT',
+            scheduledAt,
             triggeredBy
         }, tenantId);
 
@@ -204,7 +241,9 @@ export const broadcast = async (req, res) => {
             action: 'broadcast',
             notificationId: notification.id,
             createdBy: req.person.id,
-            tenantId
+            tenantId,
+            targetType: targetType || 'ALL_TENANT',
+            scheduled: !!scheduledAt
         });
 
         res.status(201).json({
@@ -222,7 +261,7 @@ export const broadcast = async (req, res) => {
 
         res.status(400).json({
             success: false,
-            error: 'Errore interno del server'
+            error: 'Errore nella creazione dell\'avviso'
         });
     }
 };

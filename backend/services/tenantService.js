@@ -2,6 +2,7 @@ import prisma from '../config/prisma-optimization.js';
 import logger from '../utils/logger.js';
 import bcrypt from 'bcrypt';
 import DefaultTemplateService from './templates/DefaultTemplateService.js';
+import { seedDefaultPermissions } from './enhancedRole/utils/PermissionSeeder.js';
 
 class TenantService {
   /**
@@ -129,6 +130,9 @@ class TenantService {
       // Crea ruoli di default
       await this.createDefaultRoles(result.tenant.id);
 
+      // Crea feature flags di default
+      await this.createDefaultTenantFeatures(result.tenant.id, finalFeatures);
+
       // Crea template predefiniti (documenti, lettere, attestati, etc.)
       try {
         await DefaultTemplateService.createDefaultTemplates(result.tenant.id);
@@ -203,7 +207,7 @@ class TenantService {
           where: { personId, tenantId, roleType, deletedAt: null }
         });
         if (!existingRole) {
-          await tx.personRole.create({
+          const newRole = await tx.personRole.create({
             data: {
               personId,
               tenantId,
@@ -212,6 +216,7 @@ class TenantService {
               isPrimary: roleType === 'TENANT_ADMIN'
             }
           });
+          await seedDefaultPermissions(newRole.id, roleType, tx);
         }
 
         return { personId, email: existingProfile.email, isExisting: true };
@@ -248,7 +253,7 @@ class TenantService {
     });
 
     // Crea PersonRole con il ruolo specificato
-    await tx.personRole.create({
+    const createdRole = await tx.personRole.create({
       data: {
         personId,
         tenantId,
@@ -257,6 +262,7 @@ class TenantService {
         isPrimary: roleType === 'TENANT_ADMIN'
       }
     });
+    await seedDefaultPermissions(createdRole.id, roleType, tx);
 
     logger.info({
       personId, tenantId, roleType,
@@ -388,11 +394,19 @@ class TenantService {
       if (name) updatePayload.name = name;
       if (slug) updatePayload.slug = slug;
       if (domain) updatePayload.domain = domain;
-      if (settings) updatePayload.settings = settings;
       if (billingPlan) updatePayload.billingPlan = billingPlan;
       if (typeof isActive === 'boolean') updatePayload.isActive = isActive;
       // Se si riattiva un tenant, ripristina anche deletedAt a null
       if (isActive === true) updatePayload.deletedAt = null;
+
+      if (settings) {
+        // Merge settings: le nuove settings si sovrappongono alle esistenti senza cancellare campi non inclusi
+        const current = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { settings: true } });
+        updatePayload.settings = {
+          ...(current?.settings || {}),
+          ...settings
+        };
+      }
 
       if (Object.keys(updatePayload).length === 0) {
         throw new Error('Nessun campo da aggiornare fornito');
@@ -617,16 +631,22 @@ class TenantService {
         }
       ];
 
-      // Note: Questa implementazione presuppone che esista una tabella tenant_configurations
-      // Per ora salviamo nelle settings del tenant
-      const settings = defaultConfigs.reduce((acc, config) => {
+      // Merge delle configurazioni default nelle settings esistenti
+      // SENZA sovrascrivere enabledFeatures, logoUrl, branches o altri campi già configurati
+      const defaultConfigMap = defaultConfigs.reduce((acc, config) => {
         acc[config.config_key] = config.config_value;
         return acc;
       }, {});
 
+      const currentTenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { settings: true } });
+      const mergedSettings = {
+        ...defaultConfigMap,
+        ...(currentTenant?.settings || {}) // i valori esistenti vincono sui default
+      };
+
       await prisma.tenant.update({
         where: { id: tenantId, deletedAt: null },
-        data: { settings }
+        data: { settings: mergedSettings }
       });
 
       return defaultConfigs;
@@ -673,6 +693,50 @@ class TenantService {
     } catch (error) {
       logger.error('Failed to create default roles', { component: 'tenantService', action: 'createDefaultRoles', error: error.message, stack: error.stack });
       throw error;
+    }
+  }
+
+  /**
+   * Crea i record TenantFeature di default per un nuovo tenant.
+   * Mappa le feature keys richieste (o legacy) nei valori standard di FEATURE_KEYS.
+   * Assegna di default BRANCH_MEDICA, BRANCH_FORMAZIONE e MDL_BASE se non specificate.
+   */
+  async createDefaultTenantFeatures(tenantId, requestedFeatures = []) {
+    try {
+      // Keys valide secondo FEATURE_KEYS enum
+      const VALID_KEYS = new Set([
+        'BRANCH_MEDICA', 'BRANCH_FORMAZIONE', 'BRANCH_LABORATORIO', 'BRANCH_CONSULENZA',
+        'FATTURAZIONE_ELETTRONICA', 'FATTURAZIONE_PA', 'FATTURAZIONE_SPLIT_PAYMENT',
+        'PEC_INTEGRATION', 'SMS_NOTIFICATIONS', 'WHATSAPP_INTEGRATION',
+        'MDL_BASE', 'MDL_SORVEGLIANZA', 'MDL_ALLEGATO_3B', 'MDL_PROTOCOLLI',
+        'MULTI_SEDE', 'API_ACCESS', 'WHITE_LABEL', 'SSO_INTEGRATION',
+        'CUSTOM_REPORTS', 'DATA_EXPORT_ADVANCED',
+        'FIRMA_GRAFOMETRICA', 'FIRMA_FEQ', 'FIRMA_FEA', 'FIRMA_REMOTA', 'FIRMA_BIOMETRICA',
+        'FSE_EXPORT_CDA', 'FSE_CONSENSI_AVANZATI'
+      ]);
+
+      // Filtra solo le chiavi valide (ignora legacy come 'cms', 'documents')
+      const validRequested = requestedFeatures.filter(k => VALID_KEYS.has(k));
+
+      // Se nessuna chiave valida è stata fornita, usa le feature di default
+      const featureKeys = validRequested.length > 0
+        ? validRequested
+        : ['BRANCH_MEDICA', 'BRANCH_FORMAZIONE', 'MDL_BASE'];
+
+      await prisma.tenantFeature.createMany({
+        data: featureKeys.map(featureKey => ({
+          tenantId,
+          featureKey,
+          isEnabled: true,
+          enabledAt: new Date()
+        })),
+        skipDuplicates: true
+      });
+
+      logger.info({ tenantId, featureKeys }, 'Feature flags di default create per il nuovo tenant');
+    } catch (error) {
+      logger.error('Failed to create default tenant features', { component: 'tenantService', action: 'createDefaultTenantFeatures', error: error.message });
+      // Non bloccare la creazione del tenant se le feature flags falliscono
     }
   }
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { useTenantFilter } from '../context/TenantFilterContext';
 import {
@@ -94,7 +95,15 @@ const DocumentsCorsi: React.FC = () => {
   const [searchParams] = useSearchParams();
   const { confirmDelete } = useConfirmDialog();
   const { showToast } = useToast();
+  const { user } = useAuth();
   const { getTenantFilterParams, tenantFilterKey, isReady } = useTenantFilter();
+
+  // Se l'utente è solo TRAINER (senza ruoli amministrativi), filtra automaticamente i documenti per lui
+  const isTrainerOnly = useMemo(() =>
+    (user?.roles || []).includes('TRAINER') &&
+    !['ADMIN', 'TRAINING_ADMIN', 'HR_MANAGER', 'COMPANY_MANAGER', 'SITE_MANAGER'].some(r => (user?.roles || []).includes(r)),
+    [user?.roles]
+  );
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -189,7 +198,10 @@ const DocumentsCorsi: React.FC = () => {
       // Build query params for filtering
       const scheduleId = searchParams.get('scheduleId');
       const personId = searchParams.get('personId');
-      const trainerId = searchParams.get('trainerId');
+      const trainerIdFromUrl = searchParams.get('trainerId');
+
+      // Se TRAINER, auto-inietta il proprio ID (il backend filtra anche server-side per attestati)
+      const trainerId = trainerIdFromUrl || (isTrainerOnly ? user?.id : undefined);
 
       // Build query strings for each endpoint
       const attestatiParams = new URLSearchParams();

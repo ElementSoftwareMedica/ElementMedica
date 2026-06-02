@@ -81,8 +81,9 @@ echo -e "${YELLOW}   Output: dist-public/${NC}"
 echo -e "${YELLOW}=============================================${NC}"
 echo ""
 
-# Copia env di produzione medica
+# Copia env di produzione medica (sia come .env che .env.production per assicurare la precedenza Vite)
 cp .env.production.medica .env
+cp .env.production.medica .env.production
 
 # Build con output directory personalizzata
 echo "🔧 Running npm build for element-medica..."
@@ -106,9 +107,19 @@ if [ -f ".env.build-backup" ]; then
     mv .env.build-backup .env
     echo "♻️  Ripristinato .env originale"
 else
-    # Fallback: usa sicurezza come default
     cp .env.production.sicurezza .env
 fi
+# Ripristina .env.production a sicurezza (default)
+cp .env.production.sicurezza .env.production
+echo "♻️  Ripristinato .env.production a element-sicurezza (default)"
+
+# =============================================================================
+# POST-BUILD: Pre-comprimi gli asset statici per gzip_static di nginx
+# =============================================================================
+echo ""
+echo "🗜️  Pre-compressione asset statici (gzip level 9)..."
+node scripts/compress-assets.mjs
+echo "✅ Pre-compressione completata"
 
 # =============================================================================
 # SUMMARY

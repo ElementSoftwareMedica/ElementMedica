@@ -14,6 +14,12 @@ DOPO: get_errors → verifica → SOLO ALLORA conferma
 ```
 ❌ MAI "dovrebbe funzionare" senza verifica | ❌ MAI confermare senza `get_errors`
 
+### 1.b Git Hygiene (OBBLIGATORIO)
+- ✅ Micro-commit atomici e frequenti dopo ogni singola modifica verificata.
+- ✅ Worktree pulito prima di cambiare contesto, buildare, deployare o fare release.
+- ✅ File generati, build output, report test e dipendenze devono stare in `.gitignore`; se entrano nell'indice, rimuoverli con `git rm --cached` prima del commit.
+- ❌ MAI accumulare modifiche valide o file non tracciati tra attività diverse.
+
 ### 2. Multi-Tenancy
 - ✅ OGNI query: `where: { tenantId, deletedAt: null }`
 - ✅ Auth: `req.person.tenantId` (MAI `req.user`, MAI `req.tenantId`)
@@ -29,6 +35,29 @@ DOPO: get_errors → verifica → SOLO ALLORA conferma
 - ✅ Zero errori prima di completare | ✅ NO `any` senza giustificazione
 - ✅ `requirePermission()` middleware su route protette
 - ❌ MAI bypass middleware | ❌ MAI PII in logs
+
+### 5. Build & Deploy Frontend (CRITICO — NO ECCEZIONI)
+> ⚠️ In aprile 2026 `npm run build` senza env corretto ha baked `element-medica` in `dist/` → elementsicurezza.com mostrava colori sbagliati.
+
+```bash
+# dist/ → elementsicurezza.com (sicurezza CRM)
+cp .env.production.sicurezza .env && cp .env.production.sicurezza .env.production && npm run build
+# dist-public/ → elementmedica.com (medica public)
+cp .env.production.medica .env && cp .env.production.medica .env.production && npm run build -- --outDir dist-public
+# Entrambi in un colpo solo → ./scripts/build-production.sh
+```
+- ❌ MAI `npm run build` senza prima verificare `.env` / impostare brand corretto
+- ✅ Dopo ogni build: `grep -o '"element-[a-z]*"' dist/assets/index-*.js | sort | uniq -c`
+- ✅ Ripristinare sempre `.env` → sicurezza dopo ogni build medica
+- `dist/` → `elementsicurezza.com` | `dist-public/` → `elementmedica.com`
+
+### Deploy frontend (percorsi server CRITICI — NON confondere)
+```bash
+# ⚠️ ATTENZIONE: Nginx mappa dist/ → sicurezza, dist-public/ → medica
+# NON deployare dist-public/ su /var/www/elementmedica/dist/ (brand sbagliato!)
+rsync -avz --delete dist/       root@178.104.197.134:/var/www/elementmedica/dist/        # → elementsicurezza.com
+rsync -avz --delete dist-public/ root@178.104.197.134:/var/www/elementmedica/dist-public/ # → elementmedica.com
+```
 
 ---
 
@@ -62,6 +91,9 @@ Company (globale) → CompanyTenantProfile (per-tenant) → CompanySite
 | Azioni tabella | `ActionButton` da `@/components/ui` |
 | Notifiche | `showToast()` da `useToast` hook (MAI `alert()`) |
 | Righe cliccabili | `onRowClick` prop su `ResizableTable` |
+
+### Navigazione Indietro
+- Frecce/link “indietro” devono rispettare la provenienza (`location.state.from`, history o equivalente) e usare fallback contestuali solo se manca la provenienza.
 
 ### Tenant Filter (Liste)
 ```tsx
@@ -109,6 +141,19 @@ router.post('/entities', requirePermission('entities:write'), requireFeature('FE
 const tenantId = req.person.tenantId; // ✅ CORRETTO
 // Per admin cross-tenant: req.headers['x-operate-tenant-id']
 ```
+
+---
+
+## 🚨 INFRASTRUTTURA CLOUD (ASSOLUTO)
+
+> ⚠️ In aprile 2026 l'API key Hetzner fu compromessa — un attaccante creò un server CPX51 in USA (€92/mese). Questo divieto è non negoziabile.
+
+| ❌ ASSOLUTO DIVIETO | Motivo |
+|---------------------|--------|
+| **MAI creare server Hetzner** (API, hcloud, script) | Crea costi e superficie d'attacco |
+| **MAI eliminare server senza conferma scritta utente** | Irreversibile |
+| **MAI modificare firewall cloud senza autorizzazione** | Blocca produzione |
+| **MAI eseguire script su server produzione** senza ok esplicito | Rischio downtime |
 
 ---
 

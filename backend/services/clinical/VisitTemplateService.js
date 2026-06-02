@@ -431,30 +431,6 @@ const DEFAULT_VISIT_FIELDS = [
             section: 'Conclusione e Follow-Up'
         }
     },
-    // === P65 MEDICINA DEL LAVORO: Prescrizioni Follow-up ===
-    // Campo disabilitato per default; abilitare nel template MDL per sorveglianza sanitaria.
-    // Documenta: limitazioni lavorative, DPI prescritti, esami da eseguire alla prossima visita,
-    // indicazioni per il datore di lavoro (D.Lgs 81/08 art. 41 c.5-6).
-    {
-        id: 'prescrizioni_followup',
-        name: 'prescrizioniFollowup',
-        label: 'Prescrizioni e Indicazioni Follow-up',
-        type: 'RICHTEXT',
-        section: 'followup',
-        position: { row: 1, col: 0 },
-        size: { width: 12, height: 4 },
-        carryOverFromPrevious: false,
-        showChart: false,
-        required: false,
-        enabled: false,      // disabilitato nei template generali; abilitare per MDL
-        hint: 'Limitazioni lavorative, DPI prescritti, esami programmati per la prossima visita, indicazioni per il datore di lavoro (D.Lgs 81/08 art. 41).',
-        printOptions: {
-            include: 'IF_VALUED',
-            showLabel: true,
-            showTitle: true,
-            section: 'Conclusione e Follow-Up'
-        }
-    },
     // === Esami programmati per la prossima visita MDL ===
     // Struttura dedicata agli accertamenti periodici obbligatori da pianificare.
     // Es: spirometria, audiometria, visita oculistica, emocromo, ecc.
@@ -491,12 +467,13 @@ const DEFAULT_VISIT_FIELDS = [
         size: { width: 6, height: 1 },
         carryOverFromPrevious: false,
         showChart: false,
-        required: false,
+        required: true,
         enabled: false,      // abilitare nei template MDL
         options: [
             { value: 'idoneo', label: 'Idoneo' },
-            { value: 'idoneo_prescrizioni', label: 'Idoneo con prescrizioni' },
-            { value: 'idoneo_limitazioni', label: 'Idoneo con limitazioni' },
+            { value: 'idoneo_prescrizioni', label: 'Idoneo parziale con prescrizioni' },
+            { value: 'idoneo_limitazioni', label: 'Idoneo parziale con limitazioni' },
+            { value: 'idoneo_limitazioni_prescrizioni', label: 'Idoneo parziale con limitazioni e prescrizioni' },
             { value: 'temporaneamente_non_idoneo', label: 'Temporaneamente non idoneo' },
             { value: 'non_idoneo', label: 'Non idoneo alla mansione specifica' }
         ],
@@ -505,6 +482,43 @@ const DEFAULT_VISIT_FIELDS = [
             include: 'IF_VALUED',
             showLabel: true,
             showTitle: true,
+            section: 'Conclusione e Follow-Up'
+        }
+    },
+    {
+        id: 'tempistica_giudizio_idoneita_mdl',
+        name: 'tempisticaGiudizioIdoneitaMdl',
+        label: 'Tempistica giudizio parziale / non idoneità temporanea',
+        type: 'DROPDOWN',
+        section: 'followup',
+        position: { row: 3, col: 6 },
+        size: { width: 6, height: 1 },
+        carryOverFromPrevious: false,
+        showChart: false,
+        required: false,
+        enabled: false,
+        options: [
+            { value: '30_giorni', label: '30 giorni' },
+            { value: '60_giorni', label: '60 giorni' },
+            { value: '90_giorni', label: '90 giorni' },
+            { value: '6_mesi', label: '6 mesi' },
+            { value: '12_mesi', label: '12 mesi' },
+            { value: 'permanente', label: 'Permanente' }
+        ],
+        metadata: {
+            showWhen: {
+                field: 'giudizioIdoneitaMdl',
+                in: ['idoneo_prescrizioni', 'idoneo_limitazioni', 'idoneo_limitazioni_prescrizioni', 'temporaneamente_non_idoneo']
+            },
+            excludeOptionsWhen: [
+                { field: 'giudizioIdoneitaMdl', equals: 'temporaneamente_non_idoneo', values: ['permanente'] }
+            ]
+        },
+        hint: 'Obbligatoria per giudizi parziali o temporaneamente non idonei. Per prescrizioni/limitazioni è disponibile anche “Permanente”.',
+        printOptions: {
+            include: 'IF_VALUED',
+            showLabel: true,
+            showTitle: false,
             section: 'Conclusione e Follow-Up'
         }
     },
@@ -523,23 +537,18 @@ const DEFAULT_VISIT_FIELDS = [
         enabled: false,
         hint: 'Prescrizioni obbligatorie da comunicare al datore di lavoro (D.Lgs 81/08 art. 41 c.5-6). Seleziona tutte le prescrizioni applicabili.',
         options: [
-            { value: 'uso_dpi_guanti', label: 'Uso obbligatorio DPI: guanti protettivi' },
-            { value: 'uso_dpi_scarpe', label: 'Uso obbligatorio DPI: scarpe antinfortunistiche' },
-            { value: 'uso_dpi_cuffie', label: 'Uso obbligatorio DPI: cuffie / tappi antirumore' },
-            { value: 'uso_dpi_mascherina', label: 'Uso obbligatorio DPI: mascherina FFP2/FFP3' },
-            { value: 'uso_dpi_visiera', label: 'Uso obbligatorio DPI: visiera / occhiali protettivi' },
-            { value: 'uso_dpi_imbracatura', label: 'Uso obbligatorio DPI: imbracatura di sicurezza' },
-            { value: 'divieto_mmc_20', label: 'Divieto movimentazione manuale carichi > 20 kg' },
-            { value: 'divieto_mmc_10', label: 'Divieto movimentazione manuale carichi > 10 kg' },
-            { value: 'pause_vdt', label: 'Pause obbligatorie VDT: 15 minuti ogni 2 ore' },
-            { value: 'limitazione_notturno', label: 'Limitazione turni notturni (max 2 notti/settimana)' },
-            { value: 'controllo_oft_annuale', label: 'Controllo oftalmologico annuale (videoterminali)' },
-            { value: 'sorveg_rafforzata_semestrale', label: 'Sorveglianza sanitaria rafforzata semestrale' },
-            { value: 'formazione_rischio_chimico', label: 'Obbligo formazione specifica rischio chimico' },
-            { value: 'formazione_rischio_biologico', label: 'Obbligo formazione specifica rischio biologico' },
-            { value: 'evitare_cancerogeni', label: 'Evitare esposizione a sostanze cancerogene / mutagene' },
-            { value: 'esposizione_rumore_limitata', label: 'Limitazione esposizione a rumore (< 80 dB)' }
+            { value: 'uso_dpi_specifici', label: 'Uso obbligatorio dei DPI specifici previsti dal DVR', description: 'D.Lgs. 81/08 artt. 18, 41, 74-79' },
+            { value: 'pause_vdt', label: 'Pause/alternanza attività per videoterminale', description: 'D.Lgs. 81/08 artt. 173-176 e Allegato XXXIV' },
+            { value: 'mmc_carichi_limitati', label: 'Movimentazione manuale carichi entro limiti indicati', description: 'D.Lgs. 81/08 artt. 167-171 e Allegato XXXIII' },
+            { value: 'evitare_sforzi_incongrui', label: 'Evitare sforzi incongrui, posture forzate o movimenti ripetitivi prolungati', description: 'D.Lgs. 81/08 artt. 15, 41, Titolo VI' },
+            { value: 'protezione_rumore', label: 'Protezione uditiva e rispetto del programma aziendale rumore', description: 'D.Lgs. 81/08 artt. 187-198' },
+            { value: 'protezione_vibrazioni', label: 'Limitare esposizione a vibrazioni secondo valutazione del rischio', description: 'D.Lgs. 81/08 artt. 199-205' },
+            { value: 'protezione_chimici', label: 'Evitare o ridurre esposizione ad agenti chimici sensibilizzanti/irritanti', description: 'D.Lgs. 81/08 artt. 221-232' },
+            { value: 'protezione_biologici', label: 'Applicare misure di prevenzione per rischio biologico', description: 'D.Lgs. 81/08 artt. 266-286' },
+            { value: 'no_alcol_stupefacenti_rischio', label: 'Rispetto dei divieti/controlli per alcol e sostanze nelle mansioni a rischio', description: 'D.Lgs. 81/08 art. 41; L. 125/2001; DPR 309/1990' },
+            { value: 'sorveglianza_ravvicinata', label: 'Sorveglianza sanitaria ravvicinata secondo indicazione del medico competente', description: 'D.Lgs. 81/08 art. 41' }
         ],
+        allowCustom: true,
         printOptions: {
             include: 'IF_VALUED',
             showLabel: true,
@@ -562,19 +571,20 @@ const DEFAULT_VISIT_FIELDS = [
         enabled: false,
         hint: 'Limitazioni operative specifiche per la mansione svolta, da riportare nel giudizio di idoneità.',
         options: [
-            { value: 'no_lavoro_quota', label: 'Non idoneo a lavori in quota (> 2 m)' },
-            { value: 'no_piattaforme_elevabili', label: 'Non idoneo a lavori su piattaforme elevabili / cestelli' },
-            { value: 'no_guida_mezzi', label: 'Non idoneo alla conduzione di automezzi / mezzi operativi' },
-            { value: 'no_spazi_confinati', label: 'Non idoneo a lavori in spazi confinati' },
-            { value: 'limitazione_notturno_mansione', label: 'Limitata idoneità ai turni notturni' },
-            { value: 'no_vibrazioni', label: 'Non idoneo a mansioni con esposizione a vibrazioni mano-braccio' },
-            { value: 'no_rumore_85db', label: 'Non idoneo a mansioni con esposizione a rumore > 85 dB' },
-            { value: 'limitazione_mmc', label: 'Limitata movimentazione manuale di carichi (< 10 kg)' },
-            { value: 'no_cancerogeni', label: 'Non idoneo a mansioni con esposizione a cancerogeni / mutageni' },
-            { value: 'limitazione_chimici', label: 'Limitata esposizione a sostanze chimiche pericolose' },
-            { value: 'no_stress_termico', label: 'Non idoneo a lavori con stress termico (ambiente caldo / freddo)' },
-            { value: 'no_vdt_prolungato', label: 'Uso VDT limitato (max 2 ore continuative senza pausa)' }
+            { value: 'no_lavoro_quota', label: 'Non adibire a lavori in quota se non compatibili con il giudizio', description: 'D.Lgs. 81/08 artt. 41, 111-115' },
+            { value: 'no_piattaforme_elevabili', label: 'Non adibire a PLE/cestelli se non compatibili con il giudizio', description: 'D.Lgs. 81/08 artt. 41, 71, 73' },
+            { value: 'no_guida_mezzi', label: 'Limitare conduzione di mezzi/attrezzature ove non compatibile', description: 'D.Lgs. 81/08 artt. 41, 71, 73' },
+            { value: 'no_spazi_confinati', label: 'Non adibire a spazi confinati o sospetti di inquinamento', description: 'D.Lgs. 81/08 art. 66; DPR 177/2011' },
+            { value: 'limitazione_notturno_mansione', label: 'Limitazione o esclusione dal lavoro notturno', description: 'D.Lgs. 81/08 art. 41; D.Lgs. 66/2003' },
+            { value: 'limitazione_mmc', label: 'Limitazione movimentazione manuale dei carichi', description: 'D.Lgs. 81/08 Titolo VI e Allegato XXXIII' },
+            { value: 'no_vibrazioni', label: 'Limitazione esposizione a vibrazioni mano-braccio/corpo intero', description: 'D.Lgs. 81/08 Titolo VIII Capo III' },
+            { value: 'no_rumore_85db', label: 'Limitazione esposizione a rumore elevato', description: 'D.Lgs. 81/08 Titolo VIII Capo II' },
+            { value: 'limitazione_chimici', label: 'Limitazione esposizione ad agenti chimici pericolosi', description: 'D.Lgs. 81/08 Titolo IX Capo I' },
+            { value: 'no_cancerogeni', label: 'Esclusione/limitazione esposizione ad agenti cancerogeni o mutageni', description: 'D.Lgs. 81/08 Titolo IX Capo II' },
+            { value: 'no_stress_termico', label: 'Limitazione attività con stress termico severo', description: 'D.Lgs. 81/08 artt. 15, 28, 41' },
+            { value: 'no_vdt_prolungato', label: 'Limitazione uso continuativo del videoterminale', description: 'D.Lgs. 81/08 Titolo VII' }
         ],
+        allowCustom: true,
         printOptions: {
             include: 'IF_VALUED',
             showLabel: true,
@@ -597,15 +607,15 @@ const DEFAULT_VISIT_FIELDS = [
         enabled: false,
         hint: 'Indicazioni operative per il datore di lavoro, da concordare con il RSPP.',
         options: [
-            { value: 'formazione_entro_30gg', label: 'Formazione obbligatoria per il lavoratore entro 30 giorni' },
-            { value: 'adeguamento_postazione', label: 'Adeguamento ergonomico della postazione di lavoro' },
-            { value: 'fornitura_dpi', label: 'Fornitura DPI specifici entro 15 giorni' },
-            { value: 'aggiornamento_dvr', label: 'Aggiornamento DVR (Documento di Valutazione dei Rischi)' },
-            { value: 'notifica_datore_24h', label: 'Notifica al datore di lavoro entro 24 ore' },
-            { value: 'visita_controllo_6m', label: 'Visita medica di controllo entro 6 mesi' },
-            { value: 'invio_asl', label: 'Comunicazione all\'ASL / organo di vigilanza competente' },
-            { value: 'revisione_mansione', label: 'Revisione della mansione / possibile cambio mansione' }
+            { value: 'adeguamento_postazione', label: 'Adeguare ergonomia/postazione secondo DVR e indicazioni del medico competente', description: 'D.Lgs. 81/08 artt. 18, 28, 41' },
+            { value: 'fornitura_dpi', label: 'Fornire e verificare uso dei DPI prescritti', description: 'D.Lgs. 81/08 artt. 18, 74-79' },
+            { value: 'aggiornamento_dvr', label: 'Valutare aggiornamento DVR e misure di prevenzione', description: 'D.Lgs. 81/08 artt. 28-29' },
+            { value: 'revisione_mansione', label: 'Valutare revisione mansione/compiti compatibili con il giudizio', description: 'D.Lgs. 81/08 artt. 18, 41, 42' },
+            { value: 'formazione_addestramento', label: 'Integrare formazione, informazione o addestramento specifico', description: 'D.Lgs. 81/08 artt. 36-37, 73' },
+            { value: 'sorveglianza_raccordo_rspp', label: 'Condividere le misure con RSPP/RLS nei limiti della riservatezza sanitaria', description: 'D.Lgs. 81/08 artt. 25, 29, 41' },
+            { value: 'monitoraggio_misure', label: 'Monitorare l’efficacia delle misure adottate e riferire al medico competente', description: 'D.Lgs. 81/08 artt. 18, 25, 41' }
         ],
+        allowCustom: true,
         printOptions: {
             include: 'IF_VALUED',
             showLabel: true,
@@ -625,10 +635,11 @@ const DEFAULT_VISIT_FIELDS = [
         position: { row: 10, col: 0 },
         size: { width: 6, height: 4 },
         carryOverFromPrevious: false,
-        showChart: false,
+        showChart: true,
         required: false,
         enabled: false,   // abilitare nei template MDL con rischio cardiovascolare
-        metadata: { tipoEsame: 'ECG' },
+        defaultValue: 'normale',
+        metadata: { tipoEsame: 'ECG', normalPreset: 'normale' },
         options: [
             { value: 'normale', label: 'Normale' },
             { value: 'borderline', label: 'Borderline / Dubbio' },
@@ -653,10 +664,11 @@ const DEFAULT_VISIT_FIELDS = [
         position: { row: 10, col: 6 },
         size: { width: 6, height: 4 },
         carryOverFromPrevious: false,
-        showChart: false,
+        showChart: true,
         required: false,
         enabled: false,   // abilitare nei template MDL con rischio rumore
-        metadata: { tipoEsame: 'AUDIOMETRIA' },
+        defaultValue: 'normale',
+        metadata: { tipoEsame: 'AUDIOMETRIA', normalPreset: 'normale' },
         options: [
             { value: 'normale', label: 'Normale (soglie < 20 dB HL)' },
             { value: 'lieve_ipoacusia', label: 'Lieve ipoacusia (20–40 dB HL)' },
@@ -682,10 +694,11 @@ const DEFAULT_VISIT_FIELDS = [
         position: { row: 14, col: 0 },
         size: { width: 6, height: 4 },
         carryOverFromPrevious: false,
-        showChart: false,
+        showChart: true,
         required: false,
         enabled: false,   // abilitare nei template MDL con rischio polveri/fumi
-        metadata: { tipoEsame: 'SPIROMETRIA' },
+        defaultValue: 'normale',
+        metadata: { tipoEsame: 'SPIROMETRIA', normalPreset: 'normale' },
         options: [
             { value: 'normale', label: 'Normale (FVC ≥ 80%, FEV1/FVC ≥ 70%)' },
             { value: 'ostruzione_lieve', label: 'Ostruzione lieve (FEV1/FVC < 70%, FEV1 ≥ 80%)' },
@@ -699,6 +712,130 @@ const DEFAULT_VISIT_FIELDS = [
             include: 'IF_VALUED',
             showLabel: true,
             showTitle: true,
+            section: 'Esame Obiettivo'
+        }
+    },
+    // === R17: Esami Strumentali MDL — Visiotest ===
+    {
+        id: 'visiotest_strumentario',
+        name: 'visiotestStrumentario',
+        label: 'Visiotest',
+        type: 'STRUMENTARIO_IMPORT',
+        section: 'esame',
+        position: { row: 14, col: 6 },
+        size: { width: 6, height: 4 },
+        carryOverFromPrevious: false,
+        showChart: true,
+        required: false,
+        enabled: false,
+        defaultValue: 'normale',
+        metadata: { tipoEsame: 'VISIOTEST', normalPreset: 'normale' },
+        options: [
+            { value: 'normale', label: 'Normale' },
+            { value: 'alterato', label: 'Alterato — richiede approfondimento' },
+            { value: 'non_eseguito', label: 'Non eseguito' }
+        ],
+        hint: 'Acuità visiva, stereopsi e visione cromatica. Può essere importato dal dispositivo o compilato manualmente.',
+        printOptions: {
+            include: 'IF_VALUED',
+            showLabel: true,
+            showTitle: true,
+            section: 'Esame Obiettivo'
+        }
+    },
+    {
+        id: 'valutazione_rachide_funzione',
+        name: 'valutazioneRachideFunzionale',
+        label: 'Valutazione funzionale del rachide',
+        type: 'MULTI_CHOICE',
+        section: 'esame',
+        position: { row: 18, col: 0 },
+        size: { width: 6, height: 3 },
+        carryOverFromPrevious: false,
+        required: false,
+        enabled: false,
+        options: [
+            { value: 'dolore_assente', label: 'Dolore assente' },
+            { value: 'dolore_lieve', label: 'Dolore lieve' },
+            { value: 'dolore_moderato', label: 'Dolore moderato' },
+            { value: 'limitazione_flessione', label: 'Limitazione flessione' },
+            { value: 'limitazione_estensione', label: 'Limitazione estensione' },
+            { value: 'test_lasegue_positivo', label: 'Lasègue positivo' },
+            { value: 'contrattura_paravertebrale', label: 'Contrattura paravertebrale' },
+            { value: 'necessita_approfondimento', label: 'Necessita approfondimento' }
+        ],
+        hint: 'Screening funzionale rachide per MMC, posture incongrue e vibrazioni corpo intero.',
+        printOptions: {
+            include: 'IF_VALUED',
+            showLabel: true,
+            showTitle: true,
+            section: 'Esame Obiettivo'
+        }
+    },
+    {
+        id: 'valutazione_rachide_note',
+        name: 'valutazioneRachideNote',
+        label: 'Note rachide',
+        type: 'TEXTAREA',
+        section: 'esame',
+        position: { row: 21, col: 0 },
+        size: { width: 6, height: 2 },
+        carryOverFromPrevious: false,
+        required: false,
+        enabled: false,
+        hint: 'Annotazioni cliniche libere sulla valutazione funzionale del rachide.',
+        printOptions: {
+            include: 'IF_VALUED',
+            showLabel: true,
+            showTitle: false,
+            section: 'Esame Obiettivo'
+        }
+    },
+    {
+        id: 'valutazione_arti_superiori_funzione',
+        name: 'valutazioneArtiSuperioriFunzionale',
+        label: 'Valutazione funzionale arti superiori',
+        type: 'MULTI_CHOICE',
+        section: 'esame',
+        position: { row: 18, col: 6 },
+        size: { width: 6, height: 3 },
+        carryOverFromPrevious: false,
+        required: false,
+        enabled: false,
+        options: [
+            { value: 'motilita_conservata', label: 'Motilità conservata' },
+            { value: 'dolore_spalla', label: 'Dolore spalla' },
+            { value: 'dolore_gomito', label: 'Dolore gomito' },
+            { value: 'dolore_polso_mano', label: 'Dolore polso/mano' },
+            { value: 'parestesie', label: 'Parestesie' },
+            { value: 'forza_ridotta', label: 'Forza ridotta' },
+            { value: 'tinel_phalen_positivo', label: 'Tinel/Phalen positivo' },
+            { value: 'necessita_approfondimento', label: 'Necessita approfondimento' }
+        ],
+        hint: 'Screening per movimenti ripetitivi, sovraccarico biomeccanico e vibrazioni mano-braccio.',
+        printOptions: {
+            include: 'IF_VALUED',
+            showLabel: true,
+            showTitle: true,
+            section: 'Esame Obiettivo'
+        }
+    },
+    {
+        id: 'valutazione_arti_superiori_note',
+        name: 'valutazioneArtiSuperioriNote',
+        label: 'Note arti superiori',
+        type: 'TEXTAREA',
+        section: 'esame',
+        position: { row: 21, col: 6 },
+        size: { width: 6, height: 2 },
+        carryOverFromPrevious: false,
+        required: false,
+        enabled: false,
+        hint: 'Annotazioni cliniche libere sulla valutazione funzionale degli arti superiori.',
+        printOptions: {
+            include: 'IF_VALUED',
+            showLabel: true,
+            showTitle: false,
             section: 'Esame Obiettivo'
         }
     }
@@ -828,8 +965,15 @@ const getDefaultWidth = (type) => {
 const normalizeTemplateFields = (fields) => {
     if (!Array.isArray(fields)) return fields;
 
-    // Group by section to calculate positions
-    const sectionOrder = ['anamnesi', 'vitali', 'esame', 'diagnosi', 'terapia', 'followup'];
+    // Group by section to calculate positions. Specialist templates use custom
+    // sections (spalla/gomito/polso_mano): keep every present section, otherwise
+    // the API returns an apparently empty layout even when fields exist in DB.
+    const baseSectionOrder = ['anamnesi', 'vitali', 'esame', 'spalla', 'gomito', 'polso_mano', 'diagnosi', 'terapia', 'followup'];
+    const presentSections = new Set(fields.map(f => f?.section || 'anamnesi'));
+    const sectionOrder = [
+        ...baseSectionOrder.filter(section => presentSections.has(section)),
+        ...Array.from(presentSections).filter(section => !baseSectionOrder.includes(section))
+    ];
     const fieldsBySection = new Map();
 
     fields.forEach(f => {
@@ -844,16 +988,53 @@ const normalizeTemplateFields = (fields) => {
 
     sectionOrder.forEach(section => {
         const sectionFields = fieldsBySection.get(section) || [];
-        sectionFields.sort((a, b) => (a.order || 0) - (b.order || 0));
+        sectionFields.sort((a, b) =>
+            (a.position?.row ?? 0) - (b.position?.row ?? 0)
+            || (a.position?.col ?? 0) - (b.position?.col ?? 0)
+            || (a.order || 0) - (b.order || 0)
+            || String(a.label || a.name || '').localeCompare(String(b.label || b.name || ''))
+        );
 
-        let currentRow = 0;
+        const occupied = new Set();
+        const canPlace = (row, col, width, height) => {
+            if (col + width > 12) return false;
+            for (let r = row; r < row + height; r += 1) {
+                for (let c = col; c < col + width; c += 1) {
+                    if (occupied.has(`${r}:${c}`)) return false;
+                }
+            }
+            return true;
+        };
+        const markOccupied = (row, col, width, height) => {
+            for (let r = row; r < row + height; r += 1) {
+                for (let c = col; c < col + width; c += 1) {
+                    occupied.add(`${r}:${c}`);
+                }
+            }
+        };
+        const firstFreePosition = (width, height) => {
+            for (let row = 0; row < 80; row += 1) {
+                for (let col = 0; col <= 12 - width; col += 1) {
+                    if (canPlace(row, col, width, height)) return { row, col };
+                }
+            }
+            return { row: 0, col: 0 };
+        };
 
         sectionFields.forEach(field => {
-            const width = field.size?.width || getDefaultWidth(field.type);
-            const height = field.size?.height || 1;
+            const width = Math.max(1, Math.min(12, field.size?.width || getDefaultWidth(field.type)));
+            const height = Math.max(1, Math.min(6, field.size?.height || 1));
 
-            // Use existing position or calculate default
-            const position = field.position || { row: currentRow, col: 0 };
+            const existingPosition = field.position
+                ? {
+                    row: Math.max(0, Number(field.position.row || 0)),
+                    col: Math.max(0, Math.min(12 - width, Number(field.position.col || 0)))
+                }
+                : null;
+            const position = existingPosition && canPlace(existingPosition.row, existingPosition.col, width, height)
+                ? existingPosition
+                : firstFreePosition(width, height);
+            markOccupied(position.row, position.col, width, height);
 
             // P52 Session #10: Normalizza normalRange per pressione_diastolica
             // Il valore corretto è 60-85, non 60-90
@@ -867,15 +1048,12 @@ const normalizeTemplateFields = (fields) => {
 
             normalizedFields.push({
                 ...field,
+                section,
                 position,
                 size: { width, height },
+                visible: field.visible !== false,
                 ...(normalRange && { normalRange })
             });
-
-            // Only increment row if position was not set (sequential layout)
-            if (!field.position) {
-                currentRow += height;
-            }
         });
     });
 
@@ -906,6 +1084,482 @@ export class VisitTemplateService {
      */
     static normalizeTemplate(template) {
         return normalizeTemplate(template);
+    }
+
+    static getSpecialistTemplateDefinition(prestazione) {
+        const search = `${prestazione?.codice || ''} ${prestazione?.nome || ''}`.toLowerCase();
+        const definitions = [
+            {
+                tokens: ['visio', 'vista'],
+                name: 'Template Visiotest',
+                description: 'Template dedicato alla compilazione del visiotest con import da strumento e classificazione rapida.',
+                enabledFieldNames: ['visiotestStrumentario'],
+            },
+            {
+                tokens: ['rachide', 'colonna'],
+                name: 'Template Valutazione funzionale del rachide',
+                description: 'Template dedicato alla valutazione funzionale del rachide.',
+                customFields: this.buildRachideFunctionalFields(),
+            },
+            {
+                tokens: ['arti superiori', 'arto superiore', 'superiori'],
+                name: 'Template Valutazione funzionale arti superiori',
+                description: 'Template dedicato alla valutazione funzionale degli arti superiori.',
+                customFields: this.buildUpperLimbFunctionalFields(),
+            },
+            {
+                tokens: ['spiro'],
+                name: 'Template Spirometria',
+                description: 'Template dedicato alla spirometria con import dati da strumento.',
+                enabledFieldNames: ['spirometriaStrumentario'],
+            },
+            {
+                tokens: ['audio'],
+                name: 'Template Audiometria',
+                description: 'Template dedicato all’audiometria con import dati da strumento.',
+                enabledFieldNames: ['audiometriaStrumentario'],
+            },
+            {
+                tokens: ['ecg', 'elettro'],
+                name: 'Template ECG',
+                description: 'Template dedicato all’elettrocardiogramma con import dati da strumento.',
+                enabledFieldNames: ['ecgStrumentario'],
+            },
+            {
+                tokens: ['alcol', 'alcool', 'alcohol'],
+                name: 'Template Alcol test',
+                description: 'Template compatto per test alcolemico con esito rapido.',
+                customFields: this.buildAlcolTestFields(),
+            },
+            {
+                tokens: ['drug', 'droga', 'droghe', 'tossicologico', 'sostanze'],
+                name: 'Template Drug test',
+                description: 'Template compatto per drug test con sostanze ricercate ed esito rapido.',
+                customFields: this.buildDrugTestFields(),
+            },
+        ];
+        return definitions.find(def => def.tokens.some(token => search.includes(token)));
+    }
+
+    static buildSpecialistTemplateName(definition, prestazione) {
+        const prestazioneName = String(prestazione?.nome || '').trim();
+        if (!prestazioneName) return definition.name;
+        const baseName = definition.name.replace(/^Template\s+/i, '').trim().toLowerCase();
+        if (prestazioneName.toLowerCase() === baseName) return definition.name;
+        return `${definition.name} - ${prestazioneName}`;
+    }
+
+    static choiceField({ id, name, label, row, col = 0, width = 4, options, defaultValue, section = 'esame' }) {
+        return {
+            id,
+            name,
+            label,
+            type: FIELD_TYPES.DROPDOWN,
+            section,
+            position: { row, col },
+            size: { width, height: 1 },
+            required: false,
+            enabled: true,
+            defaultValue,
+            metadata: { normalPreset: defaultValue },
+            options: options.map(value => ({ value, label: value })),
+            printOptions: { include: 'IF_VALUED', showLabel: true, showTitle: false, section: 'Esame Obiettivo' }
+        };
+    }
+
+    static multiField({ id, name, label, row, col = 0, width = 6, options, normalPreset = [], section = 'esame' }) {
+        return {
+            id,
+            name,
+            label,
+            type: FIELD_TYPES.MULTI_CHOICE,
+            section,
+            position: { row, col },
+            size: { width, height: 2 },
+            required: false,
+            enabled: true,
+            defaultValue: normalPreset,
+            metadata: { normalPreset },
+            options: options.map(opt => typeof opt === 'string' ? { value: opt, label: opt } : opt),
+            printOptions: { include: 'IF_VALUED', showLabel: true, showTitle: false, section: 'Esame Obiettivo' }
+        };
+    }
+
+    static noteField({ id, name, label, row, col = 0, width = 12, defaultValue = 'Nella norma.', section = 'esame' }) {
+        return {
+            id,
+            name,
+            label,
+            type: FIELD_TYPES.TEXTAREA,
+            section,
+            position: { row, col },
+            size: { width, height: 3 },
+            required: false,
+            enabled: true,
+            defaultValue,
+            metadata: { normalPreset: defaultValue },
+            printOptions: { include: 'IF_VALUED', showLabel: true, showTitle: false, section: 'Esame Obiettivo' }
+        };
+    }
+
+    static buildRachideFunctionalFields() {
+        const noDxSx = ['NO', 'DX', 'SX', 'BILATERALE'];
+        const normale = ['NORMALE', 'RIDOTTA', 'AUMENTATA', 'RETTILINEIZZATA'];
+        const negative = ['NEGATIVO', 'POSITIVO DX', 'POSITIVO SX', 'BILATERALE'];
+        const assente = ['ASSENTE', 'PRESENTE DX', 'PRESENTE SX', 'BILATERALE'];
+        return [
+            this.choiceField({ id: 'rachide_lordosi_cervicale', name: 'rachideLordosiCervicale', label: 'Lordosi cervicale', row: 0, col: 0, options: normale, defaultValue: 'NORMALE' }),
+            this.choiceField({ id: 'rachide_cifosi_dorsale', name: 'rachideCifosiDorsale', label: 'Cifosi dorsale', row: 0, col: 6, options: normale, defaultValue: 'NORMALE' }),
+            this.choiceField({ id: 'rachide_scoliosi_dorsale', name: 'rachideScoliosiDorsale', label: 'Scoliosi dorsale', row: 1, col: 0, options: noDxSx, defaultValue: 'NO' }),
+            this.choiceField({ id: 'rachide_scoliosi_lombare', name: 'rachideScoliosiLombare', label: 'Scoliosi lombare', row: 1, col: 6, options: noDxSx, defaultValue: 'NO' }),
+            this.choiceField({ id: 'rachide_lordosi_lombare', name: 'rachideLordosiLombare', label: 'Lordosi lombare', row: 2, col: 0, options: normale, defaultValue: 'NORMALE' }),
+            this.choiceField({ id: 'rachide_lasegue', name: 'rachideLasegue', label: 'Lasègue', row: 3, col: 0, options: negative, defaultValue: 'NEGATIVO' }),
+            this.choiceField({ id: 'rachide_ischio', name: 'rachideIschioCrurali', label: 'Retrazione ischiocrurali', row: 3, col: 6, options: assente, defaultValue: 'ASSENTE' }),
+            this.choiceField({ id: 'rachide_psoas', name: 'rachidePsoas', label: 'Psoas', row: 4, col: 0, options: assente, defaultValue: 'ASSENTE' }),
+            this.choiceField({ id: 'rachide_wasserman', name: 'rachideWasserman', label: 'Wasserman', row: 4, col: 6, options: negative, defaultValue: 'NEGATIVO' }),
+            this.choiceField({ id: 'rachide_dorso_curvo', name: 'rachideDorsoCurvo', label: 'Dorso curvo', row: 5, col: 0, options: assente, defaultValue: 'ASSENTE' }),
+            this.choiceField({ id: 'rachide_ritmo_lombo_pelvico', name: 'rachideRitmoLomboPelvico', label: 'Ritmo lombo pelvico', row: 5, col: 6, options: ['NORMALE', 'ALTERATO'], defaultValue: 'NORMALE' }),
+            this.multiField({ id: 'rachide_motilita_dolente_cervicale', name: 'rachideMotilitaDolenteCervicale', label: 'Motilità dolente cervicale', row: 6, options: ['fless', 'est', 'incl DX', 'incl SX', 'rot DX', 'rot SX'], normalPreset: [] }),
+            this.multiField({ id: 'rachide_motilita_ridotta_cervicale', name: 'rachideMotilitaRidottaCervicale', label: 'Motilità ridotta cervicale', row: 6, col: 6, options: ['fless', 'est', 'incl DX', 'incl SX', 'rot DX', 'rot SX'], normalPreset: [] }),
+            this.multiField({ id: 'rachide_motilita_dolente_dorsolombare', name: 'rachideMotilitaDolenteDorsolombare', label: 'Motilità dolente dorsolombare', row: 8, options: ['fless', 'est', 'incl DX', 'incl SX', 'rot DX', 'rot SX'], normalPreset: [] }),
+            this.multiField({ id: 'rachide_motilita_ridotta_dorsolombare', name: 'rachideMotilitaRidottaDorsolombare', label: 'Motilità ridotta dorsolombare', row: 8, col: 6, options: ['fless', 'est', 'incl DX', 'incl SX', 'rot DX', 'rot SX'], normalPreset: [] }),
+            this.multiField({ id: 'rachide_riflessi', name: 'rachideRiflessi', label: 'Riflessi alterati', row: 10, options: ['addominali DX', 'addominali SX', 'achilleo DX', 'achilleo SX', 'rotuleo DX', 'rotuleo SX', 'medio plantare DX', 'medio plantare SX'], normalPreset: [] }),
+            this.multiField({ id: 'rachide_prova_dinamica', name: 'rachideProvaDinamica', label: 'Prova dinamica 15 kg x 125 cm x 30”', row: 10, col: 6, options: ['non eseguita', 'corretta', 'tremori', 'cedimento', 'dolori', 'posizione compensatoria'], normalPreset: ['corretta'] }),
+            this.noteField({ id: 'rachide_annotazioni', name: 'rachideAnnotazioni', label: 'Annotazioni', row: 12 })
+        ];
+    }
+
+    static buildUpperLimbFunctionalFields() {
+        const esito = ['NELLA NORMA', 'ALTERAZIONI LIEVI', 'ALTERAZIONI DA APPROFONDIRE'];
+        return [
+            { id: 'arti_valutazione_eseguita', name: 'artiValutazioneEseguita', label: 'Valutazione eseguita', type: FIELD_TYPES.BOOLEAN, section: 'spalla', position: { row: 0, col: 0 }, size: { width: 3, height: 1 }, enabled: true, defaultValue: true, metadata: { normalPreset: true } },
+            this.multiField({ id: 'arti_spalla_palpazione', name: 'artiSpallaPalpazione', label: 'Palpazione spalla', row: 1, section: 'spalla', options: ['negativa', 'dolore anteriore DX', 'dolore anteriore SX', 'dolore posteriore DX', 'dolore posteriore SX', 'dolore laterale DX', 'dolore laterale SX'], normalPreset: ['negativa'] }),
+            this.multiField({ id: 'arti_spalla_arco_doloroso', name: 'artiSpallaArcoDoloroso', label: 'Arco doloroso', row: 1, col: 6, section: 'spalla', options: ['negativa', 'presente DX', 'presente SX'], normalPreset: ['negativa'] }),
+            this.choiceField({ id: 'arti_spalla_fless', name: 'artiSpallaFlessione', label: 'Flessione spalla', row: 3, col: 0, section: 'spalla', options: ['NORMALE', 'RIDOTTA DX', 'RIDOTTA SX', 'RIDOTTA BILATERALE'], defaultValue: 'NORMALE' }),
+            this.choiceField({ id: 'arti_spalla_abduzione', name: 'artiSpallaAbduzione', label: 'Max abduzione', row: 3, col: 4, section: 'spalla', options: ['NORMALE', 'RIDOTTA DX', 'RIDOTTA SX', 'RIDOTTA BILATERALE'], defaultValue: 'NORMALE' }),
+            this.choiceField({ id: 'arti_spalla_rotazione', name: 'artiSpallaRotazione', label: 'Rotazioni spalla', row: 3, col: 8, section: 'spalla', options: ['NORMALE', 'RIDOTTA INTERNA', 'RIDOTTA ESTERNA'], defaultValue: 'NORMALE' }),
+            this.multiField({ id: 'arti_gomito_ispezione', name: 'artiGomitoIspezione', label: 'Ispezione gomito', row: 0, section: 'gomito', options: ['negativa', 'edema DX', 'edema SX'], normalPreset: ['negativa'] }),
+            this.multiField({ id: 'arti_gomito_palpazione', name: 'artiGomitoPalpazione', label: 'Palpazione osteoarticolare', row: 0, col: 6, section: 'gomito', options: ['negativa', 'dolore epicondilo DX', 'dolore epicondilo SX', 'dolore epitroclea DX', 'dolore epitroclea SX', 'dolore olecrano DX', 'dolore olecrano SX'], normalPreset: ['negativa'] }),
+            this.multiField({ id: 'arti_gomito_muscoli', name: 'artiGomitoMuscoli', label: 'Palpazione muscoli', row: 2, section: 'gomito', options: ['negativa', 'dolore epicondilei DX', 'dolore epicondilei SX', 'dolore epitrocleari DX', 'dolore epitrocleari SX'], normalPreset: ['negativa'] }),
+            this.multiField({ id: 'arti_gomito_test', name: 'artiGomitoTest', label: 'Test gomito', row: 2, col: 6, section: 'gomito', options: ['test epicondilite negativo', 'dolore laterale gomito DX', 'dolore laterale gomito SX', 'test intrappolamento negativo', 'parestesie avambraccio 4/5 dito DX', 'parestesie avambraccio 4/5 dito SX'], normalPreset: ['test epicondilite negativo', 'test intrappolamento negativo'] }),
+            this.multiField({ id: 'arti_polso_osservazione', name: 'artiPolsoOsservazione', label: 'Osservazione polso/mano', row: 0, section: 'polso_mano', options: ['negativa', 'cisti polso DX', 'cisti polso SX', 'edema DX', 'edema SX', 'ipotrofia DX', 'ipotrofia SX'], normalPreset: ['negativa'] }),
+            this.multiField({ id: 'arti_polso_test', name: 'artiPolsoTest', label: 'Test polso/mano', row: 0, col: 6, section: 'polso_mano', options: ['test dito a scatto negativo', 'Finkelstein negativo', 'Phalen negativo', 'test pressione negativo', 'parestesie n. mediano DX', 'parestesie n. mediano SX', 'parestesie n. ulnare DX', 'parestesie n. ulnare SX'], normalPreset: ['test dito a scatto negativo', 'Finkelstein negativo', 'Phalen negativo', 'test pressione negativo'] }),
+            this.choiceField({ id: 'arti_valutazione_finale', name: 'artiValutazioneFinale', label: 'Valutazione finale', row: 2, col: 0, width: 5, section: 'polso_mano', options: esito, defaultValue: 'NELLA NORMA' }),
+            this.noteField({ id: 'arti_note', name: 'artiNote', label: 'Annotazioni', row: 2, col: 5, width: 7, section: 'polso_mano', defaultValue: '' })
+        ];
+    }
+
+    static buildAlcolTestFields() {
+        return [
+            this.choiceField({
+                id: 'alcol_test_esito',
+                name: 'alcolTestEsito',
+                label: 'Esito alcol test',
+                row: 0,
+                col: 0,
+                width: 4,
+                options: ['NEGATIVO', 'POSITIVO', 'NON ESEGUITO'],
+                defaultValue: 'NEGATIVO'
+            }),
+            {
+                id: 'alcol_test_valore',
+                name: 'alcolTestValore',
+                label: 'Valore rilevato (g/L)',
+                type: FIELD_TYPES.NUMBER,
+                section: 'esame',
+                position: { row: 0, col: 4 },
+                size: { width: 4, height: 1 },
+                required: false,
+                enabled: true,
+                defaultValue: 0,
+                metadata: { normalPreset: 0 },
+                validation: { min: 0, max: 5 },
+                printOptions: { include: 'IF_VALUED', showLabel: true, showTitle: false, section: 'Esame Obiettivo' }
+            },
+            this.choiceField({
+                id: 'alcol_test_metodo',
+                name: 'alcolTestMetodo',
+                label: 'Metodo',
+                row: 0,
+                col: 8,
+                width: 4,
+                options: ['ETILOMETRO', 'TEST SALIVARE', 'ALTRO'],
+                defaultValue: 'ETILOMETRO'
+            }),
+            this.noteField({
+                id: 'alcol_test_note',
+                name: 'alcolTestNote',
+                label: 'Annotazioni',
+                row: 1,
+                defaultValue: 'Test negativo. Nessun segno clinico di alterazione.'
+            })
+        ];
+    }
+
+    static buildDrugTestFields() {
+        return [
+            this.choiceField({
+                id: 'drug_test_esito',
+                name: 'drugTestEsito',
+                label: 'Esito drug test',
+                row: 0,
+                col: 0,
+                width: 4,
+                options: ['NEGATIVO', 'POSITIVO', 'NON ESEGUITO'],
+                defaultValue: 'NEGATIVO'
+            }),
+            this.multiField({
+                id: 'drug_test_sostanze',
+                name: 'drugTestSostanze',
+                label: 'Sostanze ricercate',
+                row: 0,
+                col: 4,
+                width: 8,
+                options: ['OPPIACEI', 'COCAINA', 'CANNABINOIDI', 'AMFETAMINE', 'METAMFETAMINE', 'BENZODIAZEPINE', 'METADONE', 'BARBITURICI'],
+                normalPreset: ['OPPIACEI', 'COCAINA', 'CANNABINOIDI', 'AMFETAMINE', 'METAMFETAMINE', 'BENZODIAZEPINE']
+            }),
+            this.choiceField({
+                id: 'drug_test_matrice',
+                name: 'drugTestMatrice',
+                label: 'Matrice',
+                row: 2,
+                col: 0,
+                width: 4,
+                options: ['URINE', 'SALIVA', 'ALTRO'],
+                defaultValue: 'URINE'
+            }),
+            this.noteField({
+                id: 'drug_test_note',
+                name: 'drugTestNote',
+                label: 'Annotazioni',
+                row: 3,
+                defaultValue: 'Test negativo per le sostanze ricercate.'
+            })
+        ];
+    }
+
+    static compactSpecialistFields(fields) {
+        if (!Array.isArray(fields)) return [];
+        const clonedFields = JSON.parse(JSON.stringify(fields))
+            .filter(field => field && field.visible !== false)
+            .map(field => ({
+                ...field,
+                visible: true,
+                enabled: field.enabled !== false,
+                required: false,
+                section: field.section || 'esame',
+                size: {
+                    width: Math.max(1, Math.min(field.size?.width || getDefaultWidth(field.type), 12)),
+                    height: Math.max(1, field.size?.height || 1)
+                }
+            }));
+
+        const occupancyBySection = new Map();
+        const canPlace = (occupied, row, col, width, height) => {
+            if (col + width > 12) return false;
+            for (let r = row; r < row + height; r += 1) {
+                for (let c = col; c < col + width; c += 1) {
+                    if (occupied.get(`${r}:${c}`)) return false;
+                }
+            }
+            return true;
+        };
+        const markOccupied = (occupied, row, col, width, height) => {
+            for (let r = row; r < row + height; r += 1) {
+                for (let c = col; c < col + width; c += 1) {
+                    occupied.set(`${r}:${c}`, true);
+                }
+            }
+        };
+        const findSlot = (occupied, width, height) => {
+            for (let row = 0; row < 80; row += 1) {
+                for (let col = 0; col <= 12 - width; col += 1) {
+                    if (canPlace(occupied, row, col, width, height)) return { row, col };
+                }
+            }
+            return { row: 0, col: 0 };
+        };
+
+        const sorted = clonedFields.sort((a, b) => {
+            const sectionA = String(a.section || 'esame');
+            const sectionB = String(b.section || 'esame');
+            if (sectionA !== sectionB) return sectionA.localeCompare(sectionB);
+            return (a.position?.row ?? 0) - (b.position?.row ?? 0)
+                || (a.position?.col ?? 0) - (b.position?.col ?? 0)
+                || String(a.label || a.name || '').localeCompare(String(b.label || b.name || ''));
+        });
+
+        return sorted.map(field => {
+            const section = field.section || 'esame';
+            const occupied = occupancyBySection.get(section) || new Map();
+            occupancyBySection.set(section, occupied);
+            const isFullWidth = ['TEXTAREA', 'RICHTEXT', 'STRUMENTARIO_IMPORT', 'CHART', 'FILE', 'DOCUMENT_UPLOAD'].includes(String(field.type));
+            const width = isFullWidth ? 12 : Math.max(3, Math.min(field.size.width || 6, 6));
+            const height = isFullWidth ? Math.max(2, field.size.height || 2) : Math.max(1, field.size.height || 1);
+            const { row, col } = findSlot(occupied, width, height);
+            markOccupied(occupied, row, col, width, height);
+
+            return {
+                ...field,
+                position: { row, col },
+                size: { width, height }
+            };
+        });
+    }
+
+    static buildSpecialistSidebarConfig(fields) {
+        const sectionMeta = {
+            vitali: { title: 'Parametri', label: 'Parametri', icon: 'Activity', order: 0 },
+            esame: { title: 'Accertamento', label: 'Accertamento', icon: 'Stethoscope', order: 1 },
+            spalla: { title: 'Spalla', label: 'Spalla', icon: 'Activity', order: 2 },
+            gomito: { title: 'Gomito', label: 'Gomito', icon: 'Activity', order: 3 },
+            polso_mano: { title: 'Polso / mano', label: 'Polso / mano', icon: 'Activity', order: 4 },
+            diagnosi: { title: 'Esito', label: 'Esito', icon: 'FileText', order: 5 },
+            followup: { title: 'Note', label: 'Note', icon: 'Calendar', order: 6 },
+            anamnesi: { title: 'Anamnesi', label: 'Anamnesi', icon: 'ClipboardList', order: 7 },
+            terapia: { title: 'Terapia', label: 'Terapia', icon: 'Pill', order: 8 }
+        };
+        const usedSections = Array.from(new Set(
+            (Array.isArray(fields) ? fields : [])
+                .filter(field => field?.visible !== false)
+                .map(field => field.section || 'esame')
+        )).sort((a, b) => (sectionMeta[a]?.order ?? 99) - (sectionMeta[b]?.order ?? 99));
+
+        const sections = usedSections.length > 0 ? usedSections : ['esame'];
+        return {
+            collapsible: false,
+            sectionLayout: 'tabs',
+            defaultTab: sections.includes('esame') ? 'esame' : sections[0],
+            compact: true,
+            specialist: true,
+            sections: sections.map((sectionId, index) => {
+                const meta = sectionMeta[sectionId] || {
+                    title: sectionId,
+                    label: sectionId,
+                    icon: 'FileText',
+                    order: index
+                };
+                return {
+                    id: sectionId,
+                    title: meta.title,
+                    label: meta.label,
+                    icon: meta.icon,
+                    order: index,
+                    visible: true,
+                    expandedByDefault: true
+                };
+            })
+        };
+    }
+
+    static buildSpecialistTemplateFields(definitionOrEnabledFieldNames) {
+        if (definitionOrEnabledFieldNames?.customFields) {
+            return this.compactSpecialistFields(
+                JSON.parse(JSON.stringify(definitionOrEnabledFieldNames.customFields))
+                    .map(field => ({ ...field, visible: field.visible !== false }))
+            );
+        }
+        const enabled = new Set(Array.isArray(definitionOrEnabledFieldNames) ? definitionOrEnabledFieldNames : definitionOrEnabledFieldNames?.enabledFieldNames || []);
+        const baseNames = ['peso', 'altezza', 'bmi', 'noteMedico'];
+        const fields = DEFAULT_VISIT_FIELDS
+            .filter(field => enabled.has(field.name) || baseNames.includes(field.name))
+            .map(field => ({
+                ...JSON.parse(JSON.stringify(field)),
+                visible: field.visible !== false,
+                enabled: enabled.has(field.name) ? true : field.enabled,
+                required: false,
+                metadata: {
+                    ...(field.metadata || {}),
+                    normalPreset: field.metadata?.normalPreset ?? field.defaultValue ?? undefined
+                }
+            }));
+        return this.compactSpecialistFields(fields);
+    }
+
+    static async ensureSpecialistTemplateForPrestazione(prestazioneId, tenantId, createdBy = null) {
+        if (!prestazioneId) return null;
+        const prestazione = await prisma.prestazione.findFirst({
+            where: { id: prestazioneId, tenantId, deletedAt: null },
+            select: { id: true, nome: true, codice: true, tenantId: true }
+        });
+        const definition = this.getSpecialistTemplateDefinition(prestazione);
+        if (!prestazione || !definition) return null;
+        const templateName = this.buildSpecialistTemplateName(definition, prestazione);
+
+        const existing = await prisma.visitTemplate.findFirst({
+            where: {
+                prestazioneId,
+                tenantId,
+                medicoId: null,
+                scope: 'PRESTAZIONE',
+                isActive: true,
+                deletedAt: null
+            }
+        });
+        const fields = this.buildSpecialistTemplateFields(definition);
+        const sidebarConfig = this.buildSpecialistSidebarConfig(fields);
+        if (existing) {
+            const existingFields = Array.isArray(existing.fields) ? existing.fields : [];
+            const fieldNames = new Set(existingFields.map(field => field?.name).filter(Boolean));
+            const desiredFieldNames = new Set(fields.map(field => field?.name).filter(Boolean));
+            const missingFields = fields.some(field => !fieldNames.has(field.name));
+            const extraFields = existingFields.some(field => field?.name && !desiredFieldNames.has(field.name));
+            const missingNormalPreset = fields.some(field => {
+                if (field.metadata?.normalPreset === undefined) return false;
+                const current = existingFields.find(existingField => existingField?.name === field.name);
+                return current && current.metadata?.normalPreset === undefined;
+            });
+            const layoutMismatch = fields.some(field => {
+                const current = existingFields.find(existingField => existingField?.name === field.name);
+                return !current
+                    || current.section !== field.section
+                    || current.position?.row !== field.position?.row
+                    || current.position?.col !== field.position?.col
+                    || current.size?.width !== field.size?.width
+                    || current.size?.height !== field.size?.height;
+            });
+            const hasCompactLayout = existing.sidebarConfig?.sectionLayout === 'tabs'
+                && existing.sidebarConfig?.specialist === true;
+            const shouldRefresh = existing.name !== templateName
+                || missingFields
+                || extraFields
+                || missingNormalPreset
+                || layoutMismatch
+                || existingFields.length !== fields.length
+                || !hasCompactLayout;
+            if (!shouldRefresh) return existing;
+            return prisma.visitTemplate.update({
+                where: { id: existing.id },
+                data: {
+                    name: templateName,
+                    description: definition.description,
+                    fields,
+                    sidebarConfig,
+                    scope: 'PRESTAZIONE',
+                    medicoId: null,
+                    version: { increment: 1 },
+                    updatedBy: createdBy || undefined
+                }
+            });
+        }
+
+        return prisma.visitTemplate.create({
+            data: {
+                medicoId: null,
+                tenantId,
+                scope: 'PRESTAZIONE',
+                prestazioneId,
+                name: templateName,
+                description: definition.description,
+                fields,
+                sidebarConfig,
+                printConfig: DEFAULT_PRINT_CONFIG,
+                isDefault: false,
+                isActive: true,
+                version: 1,
+                createdBy
+            }
+        });
     }
 
     /**
@@ -943,19 +1597,16 @@ export class VisitTemplateService {
             } = data;
 
             // Validazione scope:
-            // - PERSONAL: medicoId OBBLIGATORIO (template personale del medico)
-            // - PRESTAZIONE: medicoId OPZIONALE (null = condiviso per tutti i medici, con id = specifico per medico)
-            // - CATALOGO/GLOBAL: medicoId deve essere null
+            // - PERSONAL: medicoId OBBLIGATORIO; prestazioneId opzionale (se nullo vale per tutte le prestazioni del medico)
+            // - PRESTAZIONE: prestazioneId OBBLIGATORIO e medicoId nullo (condiviso per tutti i medici)
+            // - CATALOGO/GLOBAL: medicoId nullo
             if (scope === 'PERSONAL' && !medicoId) {
                 throw new Error('medicoId obbligatorio per template personali');
             }
             if (scope === 'PRESTAZIONE' && !prestazioneId) {
                 throw new Error('prestazioneId obbligatorio per template di tipo PRESTAZIONE');
             }
-            if (scope === 'GLOBAL' && medicoId) {
-                // Forza medicoId a null per template globali
-                data.medicoId = null;
-            }
+            const effectiveMedicoId = scope === 'PERSONAL' ? (medicoId || null) : null;
 
             // ===================================================
             // STEP 1: Usa SEMPRE il tenantId della richiesta (req.person.tenantId)
@@ -986,9 +1637,9 @@ export class VisitTemplateService {
             // ===================================================
             // STEP 2: Verifica medico (ora con effectiveTenantId)
             // ===================================================
-            if (medicoId) {
+            if (effectiveMedicoId) {
                 const medico = await prisma.person.findFirst({
-                    where: { id: medicoId, deletedAt: null },
+                    where: { id: effectiveMedicoId, deletedAt: null },
                     include: {
                         tenantProfiles: {
                             where: { tenantId: effectiveTenantId, deletedAt: null, isActive: true },
@@ -1011,8 +1662,6 @@ export class VisitTemplateService {
             // STEP 3: Verifica unicità (usa null esplicito per medicoId, non undefined)
             // Prisma tratta undefined come "ometti dal filtro" - pericoloso per uniqueness
             // ===================================================
-            const effectiveMedicoId = medicoId || null;
-
             if (prestazioneId) {
                 const existing = await prisma.visitTemplate.findFirst({
                     where: {
@@ -1042,10 +1691,10 @@ export class VisitTemplateService {
             }
 
             // Se isDefault, rimuovi default precedente
-            if (isDefault && medicoId) {
+            if (isDefault && effectiveMedicoId) {
                 await prisma.visitTemplate.updateMany({
                     where: {
-                        medicoId,
+                        medicoId: effectiveMedicoId,
                         tenantId: effectiveTenantId,
                         isDefault: true,
                         deletedAt: null
@@ -1062,7 +1711,7 @@ export class VisitTemplateService {
                 if (prestazioneId || bundleId) {
                     const softDeletedConflict = await prisma.visitTemplate.findFirst({
                         where: {
-                            medicoId: medicoId || null,
+                            medicoId: effectiveMedicoId,
                             tenantId: effectiveTenantId,
                             deletedAt: { not: null },
                             ...(prestazioneId ? { prestazioneId } : {}),
@@ -1079,7 +1728,7 @@ export class VisitTemplateService {
 
                 template = await prisma.visitTemplate.create({
                     data: {
-                        medicoId: medicoId || null,
+                        medicoId: effectiveMedicoId,
                         tenantId: effectiveTenantId,
                         name,
                         description,
@@ -1128,7 +1777,7 @@ export class VisitTemplateService {
                 createdBy
             }, 'Visit template creato');
 
-            return template;
+            return normalizeTemplate(template);
         } catch (error) {
             logger.error({ error: error.message, data }, 'Errore creazione visit template');
             throw error;
@@ -1212,7 +1861,7 @@ export class VisitTemplateService {
                 ]
             });
 
-            return templates;
+            return templates.map(normalizeTemplate);
         } catch (error) {
             logger.error({ error: error.message, medicoId }, 'Errore recupero template medico');
             throw error;
@@ -1310,7 +1959,7 @@ export class VisitTemplateService {
             ]);
 
             return {
-                items: templates,
+                items: templates.map(normalizeTemplate),
                 total,
                 page,
                 limit,
@@ -1385,7 +2034,30 @@ export class VisitTemplateService {
             }
 
             // ===================================================
-            // STEP 2: Cerca template scope PRESTAZIONE (senza medicoId specifico)
+            // STEP 2: Cerca template PERSONALE generico del medico.
+            // Prevale sul template di prestazione condiviso quando il medico
+            // ha scelto un proprio layout per tutte le prestazioni.
+            // ===================================================
+            if (medicoId) {
+                const templatePersonaleGenerico = await prisma.visitTemplate.findFirst({
+                    where: {
+                        medicoId,
+                        tenantId: effectiveTenantId,
+                        scope: 'PERSONAL',
+                        prestazioneId: null,
+                        bundleId: null,
+                        isActive: true,
+                        deletedAt: null
+                    }
+                });
+                if (templatePersonaleGenerico) {
+                    logger.debug({ templateId: templatePersonaleGenerico.id, scope: 'PERSONAL' }, 'Template personale generico trovato');
+                    return templatePersonaleGenerico;
+                }
+            }
+
+            // ===================================================
+            // STEP 3: Cerca template scope PRESTAZIONE (senza medicoId specifico)
             // ===================================================
             if (prestazioneId) {
                 const templatePrestazione = await prisma.visitTemplate.findFirst({
@@ -1393,6 +2065,7 @@ export class VisitTemplateService {
                         prestazioneId,
                         tenantId: effectiveTenantId,
                         scope: 'PRESTAZIONE',
+                        medicoId: null,
                         isActive: true,
                         deletedAt: null
                     }
@@ -1401,10 +2074,16 @@ export class VisitTemplateService {
                     logger.debug({ templateId: templatePrestazione.id, scope: 'PRESTAZIONE' }, 'Template prestazione trovato');
                     return templatePrestazione;
                 }
+
+                const specialistTemplate = await this.ensureSpecialistTemplateForPrestazione(prestazioneId, effectiveTenantId);
+                if (specialistTemplate) {
+                    logger.debug({ templateId: specialistTemplate.id, scope: 'PRESTAZIONE_AUTO_SPECIALISTICA' }, 'Template prestazione specialistica creato/trovato');
+                    return specialistTemplate;
+                }
             }
 
             // ===================================================
-            // STEP 3: Cerca template specifico per bundle+medico
+            // STEP 4: Cerca template specifico per bundle+medico
             // ===================================================
             if (bundleId && medicoId) {
                 const templateBundleMedico = await prisma.visitTemplate.findFirst({
@@ -1423,7 +2102,7 @@ export class VisitTemplateService {
             }
 
             // ===================================================
-            // STEP 4: Cerca template scope BUNDLE (senza medicoId specifico)
+            // STEP 5: Cerca template scope BUNDLE (senza medicoId specifico)
             // ===================================================
             if (bundleId) {
                 const templateBundle = await prisma.visitTemplate.findFirst({
@@ -1442,7 +2121,7 @@ export class VisitTemplateService {
             }
 
             // ===================================================
-            // STEP 5: Cerca template default PERSONALE del medico
+            // STEP 6: Cerca template default PERSONALE del medico
             // ===================================================
             if (medicoId) {
                 const templateDefault = await prisma.visitTemplate.findFirst({
@@ -1461,7 +2140,7 @@ export class VisitTemplateService {
             }
 
             // ===================================================
-            // STEP 6: Cerca template GLOBAL del tenant
+            // STEP 7: Cerca template GLOBAL del tenant
             // ===================================================
             const templateGlobal = await prisma.visitTemplate.findFirst({
                 where: {
@@ -1478,7 +2157,7 @@ export class VisitTemplateService {
             }
 
             // ===================================================
-            // STEP 7: Restituisci template sistema (virtuale)
+            // STEP 8: Restituisci template sistema (virtuale)
             // ===================================================
             logger.debug({ medicoId, effectiveTenantId }, 'Uso template sistema default');
             return {
@@ -1515,6 +2194,10 @@ export class VisitTemplateService {
             const {
                 name,
                 description,
+                scope,
+                medicoId,
+                prestazioneId,
+                bundleId,
                 fields,
                 sidebarConfig,
                 printConfig,
@@ -1538,12 +2221,29 @@ export class VisitTemplateService {
 
             // Incrementa versione se campi modificati
             const newVersion = fields ? existing.version + 1 : existing.version;
+            const nextScope = scope || existing.scope || 'PERSONAL';
+            const nextMedicoId = nextScope === 'PERSONAL'
+                ? (medicoId !== undefined ? (medicoId || null) : existing.medicoId)
+                : null;
+            const nextPrestazioneId = prestazioneId !== undefined ? (prestazioneId || null) : existing.prestazioneId;
+            const nextBundleId = bundleId !== undefined ? (bundleId || null) : existing.bundleId;
+
+            if (nextScope === 'PERSONAL' && !nextMedicoId) {
+                throw new Error('medicoId obbligatorio per template personali');
+            }
+            if (nextScope === 'PRESTAZIONE' && !nextPrestazioneId) {
+                throw new Error('prestazioneId obbligatorio per template di tipo PRESTAZIONE');
+            }
 
             const template = await prisma.visitTemplate.update({
                 where: { id },
                 data: {
                     ...(name !== undefined && { name }),
                     ...(description !== undefined && { description }),
+                    ...(scope !== undefined && { scope: nextScope }),
+                    ...(scope !== undefined || medicoId !== undefined ? { medicoId: nextMedicoId } : {}),
+                    ...(prestazioneId !== undefined && { prestazioneId: nextPrestazioneId }),
+                    ...(bundleId !== undefined && { bundleId: nextBundleId }),
                     ...(fields !== undefined && { fields }),
                     ...(sidebarConfig !== undefined && { sidebarConfig }),
                     ...(printConfig !== undefined && { printConfig }),
@@ -1734,13 +2434,34 @@ export class VisitTemplateService {
                 }
             }
 
-            // 2. PRESTAZIONE: Template default per questa prestazione (senza medico specifico)
+            // 2. PERSONAL generico: template del medico valido per tutte le sue prestazioni
+            if (medicoId) {
+                const personalGenericTemplate = await prisma.visitTemplate.findFirst({
+                    where: {
+                        medicoId,
+                        tenantId: effectiveTenantId,
+                        scope: 'PERSONAL',
+                        prestazioneId: null,
+                        bundleId: null,
+                        isActive: true,
+                        deletedAt: null
+                    },
+                    include
+                });
+                if (personalGenericTemplate) {
+                    logger.debug({ templateId: personalGenericTemplate.id, scope: 'PERSONAL' }, 'Template PERSONAL generico risolto');
+                    return { ...personalGenericTemplate, resolvedScope: 'PERSONAL' };
+                }
+            }
+
+            // 3. PRESTAZIONE: Template default per questa prestazione (senza medico specifico)
             if (prestazioneId) {
                 const prestazioneTemplate = await prisma.visitTemplate.findFirst({
                     where: {
                         tenantId: effectiveTenantId,
                         scope: 'PRESTAZIONE',
                         prestazioneId,
+                        medicoId: null,
                         isActive: true,
                         deletedAt: null
                     },
@@ -1752,22 +2473,7 @@ export class VisitTemplateService {
                 }
             }
 
-            // 3. GLOBAL: Template globale di sistema
-            const globalTemplate = await prisma.visitTemplate.findFirst({
-                where: {
-                    tenantId: effectiveTenantId,
-                    scope: 'GLOBAL',
-                    isActive: true,
-                    deletedAt: null
-                },
-                include
-            });
-            if (globalTemplate) {
-                logger.debug({ templateId: globalTemplate.id, scope: 'GLOBAL' }, 'Template GLOBAL risolto');
-                return { ...globalTemplate, resolvedScope: 'GLOBAL' };
-            }
-
-            // 4. Fallback: Template default del medico (backward compatibility)
+            // 4. Fallback storico: Template default del medico
             const defaultTemplate = await prisma.visitTemplate.findFirst({
                 where: {
                     medicoId,
@@ -1781,6 +2487,21 @@ export class VisitTemplateService {
             if (defaultTemplate) {
                 logger.debug({ templateId: defaultTemplate.id, scope: 'DEFAULT' }, 'Template DEFAULT medico risolto');
                 return { ...defaultTemplate, resolvedScope: 'DEFAULT' };
+            }
+
+            // 5. GLOBAL: ultimo fallback tenant-wide
+            const globalTemplate = await prisma.visitTemplate.findFirst({
+                where: {
+                    tenantId: effectiveTenantId,
+                    scope: 'GLOBAL',
+                    isActive: true,
+                    deletedAt: null
+                },
+                include
+            });
+            if (globalTemplate) {
+                logger.debug({ templateId: globalTemplate.id, scope: 'GLOBAL' }, 'Template GLOBAL risolto');
+                return { ...globalTemplate, resolvedScope: 'GLOBAL' };
             }
 
             // Nessun template trovato

@@ -205,21 +205,14 @@ export function convertFromBackendFormat(backendPermissions: any[]): EntityPermi
       // Estrae l'entità e l'azione dal nome del permesso
       const permissionId = permission.permissionId || permission.action || permission.name || '';
       let entity = 'unknown';
-      let action: 'create' | 'read' | 'update' | 'delete' = 'read';
+      let action = 'read';
 
       // P69: Check for new format "entity:action" (e.g., "notifications:create")
       const colonIndex = permissionId.indexOf(':');
       if (colonIndex > 0) {
         // New format: entity:action
         entity = permissionId.substring(0, colonIndex);
-        const actionPart = permissionId.substring(colonIndex + 1);
-        // Map action to CRUD if needed
-        if (actionPart === 'create') action = 'create';
-        else if (actionPart === 'read' || actionPart === 'view') action = 'read';
-        else if (actionPart === 'update' || actionPart === 'edit' || actionPart === 'write') action = 'update';
-        else if (actionPart === 'delete' || actionPart === 'remove') action = 'delete';
-        else if (actionPart === 'manage') action = 'update'; // Map manage to update
-        else action = 'read'; // Default fallback
+        action = permissionId.substring(colonIndex + 1);
       } else {
         // Legacy format: ACTION_ENTITY (e.g., VIEW_COMPANIES)
         // Mappa le azioni del backend alle azioni del frontend
@@ -358,17 +351,7 @@ export function convertToBackendFormat(frontendPermissions: EntityPermission[]):
         return null;
       }
 
-      // Genera il permissionId nel formato atteso dal backend
-      const actionPrefix = ACTION_MAP_TO_BACKEND[permission.action] || 'VIEW_';
-      const entityName = ENTITY_MAP_TO_BACKEND[permission.entity];
-
-      // Se l'entità non è mappata, salta
-      if (!entityName) {
-        if (import.meta.env.DEV) console.warn(`⛔ Entity "${permission.entity}" not found in ENTITY_MAP_TO_BACKEND, skipping permission`);
-        return null;
-      }
-
-      const permissionId = `${actionPrefix}${entityName}`;
+      const permissionId = `${permission.entity}:${permission.action}`;
 
       // Verifica se il permesso è valido
       return {
@@ -410,7 +393,5 @@ export function extractActionFromPermissionName(permissionName: string): 'create
  * Genera il nome del permesso nel formato backend
  */
 export function generateBackendPermissionName(entity: string, action: string): string {
-  const actionPrefix = ACTION_MAP_TO_BACKEND[action] || 'VIEW_';
-  const entityName = ENTITY_MAP_TO_BACKEND[entity] || entity.toUpperCase();
-  return `${actionPrefix}${entityName}`;
+  return `${entity}:${action}`;
 }

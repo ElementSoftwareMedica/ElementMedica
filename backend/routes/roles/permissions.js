@@ -14,9 +14,48 @@ import { authenticate } from '../../middleware/auth.js';
 import { tenantAuth, requirePermission } from './middleware/auth.js';
 import enhancedRoleService from '../../services/enhancedRoleService.js';
 import logger from '../../utils/logger.js';
+import { PERMISSIONS } from '../../constants/permissions.js';
 
 // Importa le funzioni di validazione
 import { isValidPersonPermission } from './utils/validators.js';
+
+const SUPPLEMENTAL_RESOURCE_ACTION_PERMISSIONS = [
+  'clinica.agenda:read', 'clinica.agenda:create', 'clinica.agenda:update', 'clinica.agenda:delete', 'clinica.agenda:manage',
+  'clinica.medici:read', 'clinica.medici:create', 'clinica.medici:update', 'clinica.medici:delete', 'clinica.medici:manage',
+  'clinica.listini:read', 'clinica.listini:create', 'clinica.listini:update', 'clinica.listini:delete', 'clinica.listini:manage',
+  'clinica.poliambulatorio:read', 'clinica.poliambulatorio:create', 'clinica.poliambulatorio:update', 'clinica.poliambulatorio:delete', 'clinica.poliambulatorio:write', 'clinica.poliambulatorio:manage'
+];
+
+const VALID_RESOURCE_ACTION_PERMISSIONS = new Set([
+  ...Object.values(PERMISSIONS),
+  ...SUPPLEMENTAL_RESOURCE_ACTION_PERMISSIONS
+]);
+
+function normalizePermissionId(permissionId) {
+  const trimmed = permissionId.trim();
+  return trimmed.includes(':') ? trimmed.toLowerCase() : trimmed.toUpperCase();
+}
+
+function isValidResourceActionPermission(permissionId) {
+  return VALID_RESOURCE_ACTION_PERMISSIONS.has(permissionId.trim().toLowerCase());
+}
+
+function parsePermissionId(permissionId) {
+  const normalized = normalizePermissionId(permissionId);
+  if (normalized.includes(':')) {
+    const [resource, action] = normalized.split(':');
+    return { normalizedPermissionId: normalized, resource, action };
+  }
+
+  const parts = normalized.split('_');
+  if (parts.length < 2) return null;
+
+  return {
+    normalizedPermissionId: normalized,
+    action: parts[0].toLowerCase(),
+    resource: parts.slice(1).join('_').toLowerCase()
+  };
+}
 
 /**
  * Valida e filtra i permessi
@@ -34,7 +73,7 @@ function validateAndFilterPermissions(permissions) {
       return false;
     }
 
-    const isValid = isValidPersonPermission(perm.permissionId);
+    const isValid = isValidPersonPermission(perm.permissionId) || isValidResourceActionPermission(perm.permissionId);
     if (!isValid) {
       logger.warn(`Invalid permission found and filtered out: ${perm.permissionId}`);
     }
@@ -384,7 +423,10 @@ router.get('/:roleType/permissions',
           // Aggiorna con i permessi avanzati
           // IMPORTANTE: Aggiunge anche permessi avanzati non nei default
           advancedPermissions.forEach(perm => {
-            const permissionId = `${perm.action.toUpperCase()}_${perm.resource.toUpperCase()}`;
+            const permissionId = perm.resource && perm.action
+              ? `${perm.resource}:${perm.action}`.toLowerCase()
+              : '';
+            if (!permissionId) return;
             if (!permissionsMap[permissionId]) {
               // Permesso avanzato non nei default - lo aggiungiamo
               permissionsMap[permissionId] = {
@@ -509,14 +551,15 @@ router.put('/:roleType/permissions',
         perm.granted &&
         perm.permissionId &&
         typeof perm.permissionId === 'string' &&
-        !perm.permissionId.includes('_')
+        !perm.permissionId.includes('_') &&
+        !perm.permissionId.includes(':')
       );
 
       if (malformedPermissions.length > 0) {
         logger.warn({ malformedCount: malformedPermissions.length }, 'Malformed permissionIds found');
         return res.status(400).json({
           success: false,
-          error: 'Formato permesso non valido: permissionId deve contenere un underscore (es. VIEW_COMPANIES)'
+          error: 'Formato permesso non valido: usa resource:action oppure il formato legacy VIEW_COMPANIES'
         });
       }
 
@@ -563,8 +606,7 @@ router.put('/:roleType/permissions',
           const permissionsToCreate = validPermissions
             .filter(perm => perm.granted)
             .map(perm => {
-              // Normalizza il permissionId (rimuovi spazi e converti in maiuscolo)
-              const normalizedPermissionId = perm.permissionId.trim().toUpperCase();
+              const normalizedPermissionId = normalizePermissionId(perm.permissionId);
 
               // Costruisce le conditions basandosi su scope e parametri
               let conditions = null;
@@ -664,8 +706,7 @@ router.put('/:roleType/permissions',
               const rolePermissionsToCreate = validPermissions
                 .filter(perm => perm.granted)
                 .map(perm => {
-                  // Normalizza il permissionId (rimuovi spazi e converti in maiuscolo)
-                  const normalizedPermissionId = perm.permissionId.trim().toUpperCase();
+                  const normalizedPermissionId = normalizePermissionId(perm.permissionId);
                   logger.info(`🔧 Processing permission: ${perm.permissionId} -> ${normalizedPermissionId}`);
 
                   return {
@@ -693,20 +734,13 @@ router.put('/:roleType/permissions',
                 .map(perm => {
                   logger.info(`🔧 Processing advanced permission: ${perm.permissionId}`);
 
-                  // Normalizza il permissionId
-                  const normalizedPermissionId = perm.permissionId.trim().toUpperCase();
-
-                  // Estrae resource e action dal permissionId (es. "VIEW_COMPANIES" -> resource: "companies", action: "view")
-                  const parts = normalizedPermissionId.split('_');
-                  logger.info(`🔧 Permission parts: ${JSON.stringify(parts)}`);
-
-                  if (parts.length < 2) {
-                    logger.warn(`Malformed permissionId (missing underscore): ${normalizedPermissionId}`);
+                  const parsedPermission = parsePermissionId(perm.permissionId);
+                  if (!parsedPermission) {
+                    logger.warn(`Malformed permissionId: ${perm.permissionId}`);
                     return null;
                   }
 
-                  const action = parts[0].toLowerCase();
-                  const resource = parts.slice(1).join('_').toLowerCase();
+                  const { normalizedPermissionId, resource, action } = parsedPermission;
 
                   logger.info(`🔧 Extracted - action: ${action}, resource: ${resource}`);
 

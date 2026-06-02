@@ -33,11 +33,12 @@ export const PublicButton: React.FC<PublicButtonProps> = ({
 }) => {
   const baseClasses = [
     'inline-flex items-center justify-center',
-    'font-medium transition-all duration-200',
+    'font-medium duration-200',
     'rounded-full', // Full-rounded pill shape
     'focus:outline-none focus:ring-2 focus:ring-offset-2',
     'disabled:opacity-50 disabled:cursor-not-allowed',
-    'hover:transform hover:scale-105 active:scale-95' // Subtle animation
+    // Use only compositable properties (transform + opacity) to avoid paint ops
+    'transition-[transform,opacity] hover:scale-105 active:scale-95',
   ];
 
   const variantClasses = {

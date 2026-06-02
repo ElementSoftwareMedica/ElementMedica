@@ -7,7 +7,7 @@
  * Allows public users to request enrollment in a scheduled course
  * by filling a form with their personal data.
  * 
- * API: POST /api/public/courses/enroll
+ * API: POST /api/v1/public/courses/enroll
  * 
  * @module components/public/CourseEnrollmentWidget
  */
@@ -79,7 +79,7 @@ const CourseEnrollmentWidget: React.FC<CourseEnrollmentWidgetProps> = ({
     }
 
     try {
-      const response = await fetch(`/api/public/courses/enroll`, {
+      const response = await fetch(`/api/v1/public/courses/enroll`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -218,10 +218,20 @@ export class SlotDisponibilitaService {
             const results = { created: 0, skipped: 0, errors: 0, details: [] };
 
             // 3. Iterate through each day in the range
-            for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-                const dayOfWeek = d.getDay(); // 0=Sun, 1=Mon...6=Sat
-                const dateStr = d.toISOString().split('T')[0];
-                const currentDate = new Date(dateStr);
+            // Use noon-based dates to avoid DST drift (setDate+1 at midnight can skip/repeat days)
+            // Build YYYY-MM-DD strings manually instead of toISOString (which converts to UTC)
+            const startParts = dataInizio.split('-').map(Number); // [YYYY, MM, DD]
+            let cursor = new Date(startParts[0], startParts[1] - 1, startParts[2], 12, 0, 0);
+            const endParts = dataFine.split('-').map(Number);
+            const endNoon = new Date(endParts[0], endParts[1] - 1, endParts[2], 12, 0, 0);
+
+            while (cursor <= endNoon) {
+                const dayOfWeek = cursor.getDay(); // Now reliable: noon-local avoids DST edge
+                const yyyy = cursor.getFullYear();
+                const mm = String(cursor.getMonth() + 1).padStart(2, '0');
+                const dd = String(cursor.getDate()).padStart(2, '0');
+                const dateStr = `${yyyy}-${mm}-${dd}`;
+                const currentDate = new Date(`${dateStr}T00:00:00.000Z`);
 
                 // Check if this date falls within any FerieAssenza
                 const isOnLeave = ferie.some(f => {
@@ -239,9 +249,17 @@ export class SlotDisponibilitaService {
                 // Find patterns for this day of week
                 const dayPatterns = patterns.filter(p => {
                     if (p.giorno !== dayOfWeek) return false;
-                    // Check validoDal/validoAl
-                    if (p.validoDal && currentDate < new Date(p.validoDal)) return false;
-                    if (p.validoAl && currentDate > new Date(p.validoAl)) return false;
+                    // Check validoDal/validoAl — normalize to date-only to prevent timezone issues
+                    if (p.validoDal) {
+                        const valDal = new Date(p.validoDal);
+                        const valDalStr = `${valDal.getUTCFullYear()}-${String(valDal.getUTCMonth() + 1).padStart(2, '0')}-${String(valDal.getUTCDate()).padStart(2, '0')}`;
+                        if (dateStr < valDalStr) return false;
+                    }
+                    if (p.validoAl) {
+                        const valAl = new Date(p.validoAl);
+                        const valAlStr = `${valAl.getUTCFullYear()}-${String(valAl.getUTCMonth() + 1).padStart(2, '0')}-${String(valAl.getUTCDate()).padStart(2, '0')}`;
+                        if (dateStr > valAlStr) return false;
+                    }
                     return true;
                 });
 
@@ -311,6 +329,8 @@ export class SlotDisponibilitaService {
                                 disponibile: true,
                                 durataSlotMinuti: duration,
                                 maxPrenotazioni: pattern.maxAppuntamenti || 1,
+                                visibilePubblico: true,
+                                prenotabileOnline: true,
                                 tenantId
                             }
                         });
@@ -319,6 +339,53 @@ export class SlotDisponibilitaService {
                         results.errors++;
                         logger.error('Errore creazione slot', { dateStr, oraInizio, error: err.message });
                         results.details.push(`Errore creazione slot ${dateStr} ${oraInizio}`);
+                    }
+                }
+                // Advance cursor by 1 day (noon-based to avoid DST drift)
+                cursor.setDate(cursor.getDate() + 1);
+            }
+
+            // Diagnostica: se 0 creati e 0 saltati, spiega perché
+            if (results.created === 0 && results.skipped === 0 && results.errors === 0) {
+                const giorni = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato'];
+
+                // Helper: find the next date matching a day-of-week starting from a given date
+                const findNextMatchingDay = (startDateStr, targetDow) => {
+                    const d = new Date(startDateStr + 'T12:00:00Z');
+                    for (let i = 0; i < 8; i++) {
+                        if (d.getUTCDay() === targetDow) return d.toISOString().split('T')[0];
+                        d.setUTCDate(d.getUTCDate() + 1);
+                    }
+                    return null;
+                };
+
+                for (const p of patterns) {
+                    // Normalize dates to UTC strings for reliable comparison
+                    const valDal = p.validoDal ? new Date(p.validoDal) : null;
+                    const valAl = p.validoAl ? new Date(p.validoAl) : null;
+                    const validoDalStr = valDal ? `${valDal.getUTCFullYear()}-${String(valDal.getUTCMonth() + 1).padStart(2, '0')}-${String(valDal.getUTCDate()).padStart(2, '0')}` : 'sempre';
+                    const validoAlStr = valAl ? `${valAl.getUTCFullYear()}-${String(valAl.getUTCMonth() + 1).padStart(2, '0')}-${String(valAl.getUTCDate()).padStart(2, '0')}` : 'sempre';
+
+                    if (valAl && validoAlStr < dataInizio) {
+                        results.details.push(`Pattern ${giorni[p.giorno]} ${p.oraInizio}-${p.oraFine}: validità terminata il ${validoAlStr} (prima del range richiesto ${dataInizio}). Soluzione: estendere la data "Valido al" del pattern oltre ${dataInizio}`);
+                    } else if (valDal && validoDalStr > dataFine) {
+                        results.details.push(`Pattern ${giorni[p.giorno]} ${p.oraInizio}-${p.oraFine}: validità inizia il ${validoDalStr} (dopo il range richiesto ${dataFine}). Soluzione: anticipare la data "Valido dal" o selezionare un range successivo`);
+                    } else if (!p.ambulatorioId) {
+                        results.details.push(`Pattern ${giorni[p.giorno]} ${p.oraInizio}-${p.oraFine}: ambulatorio non configurato. Soluzione: assegnare un ambulatorio al pattern di disponibilità`);
+                    } else {
+                        // Pattern validity overlaps with range but no matching day-of-week found
+                        const overlapStart = (valDal && validoDalStr > dataInizio) ? validoDalStr : dataInizio;
+                        const overlapEnd = (valAl && validoAlStr < dataFine) ? validoAlStr : dataFine;
+
+                        // Calculate the specific next matching day the user should extend to
+                        const nextDay = findNextMatchingDay(overlapEnd, p.giorno);
+                        const suggestedDate = nextDay || '(data non calcolabile)';
+
+                        results.details.push(
+                            `Pattern ${giorni[p.giorno]} ${p.oraInizio}-${p.oraFine}: valido ${validoDalStr} → ${validoAlStr}, ` +
+                            `nessun ${giorni[p.giorno]} presente nell'intersezione ${overlapStart} → ${overlapEnd}. ` +
+                            `Soluzione: estendere la data "Valido al" del pattern almeno fino a ${suggestedDate} (prossimo ${giorni[p.giorno]})`
+                        );
                     }
                 }
             }

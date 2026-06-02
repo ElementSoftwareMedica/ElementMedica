@@ -39,8 +39,9 @@ import { getMedicoTitle } from '../../../../utils/textFormatters';
 // Tipi di giudizio con etichette user-friendly
 const TIPI_GIUDIZIO: { value: TipoGiudizioIdoneita; label: string; color: string }[] = [
     { value: 'IDONEO', label: 'Idoneo', color: 'bg-green-100 text-green-800' },
-    { value: 'IDONEO_CON_PRESCRIZIONI', label: 'Idoneo con prescrizioni', color: 'bg-blue-100 text-blue-800' },
-    { value: 'IDONEO_CON_LIMITAZIONI', label: 'Idoneo con limitazioni', color: 'bg-yellow-100 text-yellow-800' },
+    { value: 'IDONEO_CON_PRESCRIZIONI', label: 'Idoneo parziale con prescrizioni', color: 'bg-blue-100 text-blue-800' },
+    { value: 'IDONEO_CON_LIMITAZIONI', label: 'Idoneo parziale con limitazioni', color: 'bg-yellow-100 text-yellow-800' },
+    { value: 'IDONEO_CON_LIMITAZIONI_PRESCRIZIONI', label: 'Idoneo parziale con limitazioni e prescrizioni', color: 'bg-amber-100 text-amber-800' },
     { value: 'NON_IDONEO_TEMPORANEO', label: 'Temporaneamente non idoneo', color: 'bg-orange-100 text-orange-800' },
     { value: 'NON_IDONEO_PERMANENTE', label: 'Non idoneo permanente', color: 'bg-red-100 text-red-800' }
 ];
@@ -305,6 +306,14 @@ const GiudizioFormModal: React.FC<GiudizioFormModalProps> = ({
         }
         if (formState.tipoGiudizio === 'IDONEO_CON_LIMITAZIONI' && !formState.limitazioni.trim()) {
             newErrors.limitazioni = 'Le limitazioni sono obbligatorie per questo tipo di giudizio';
+        }
+        if (formState.tipoGiudizio === 'IDONEO_CON_LIMITAZIONI_PRESCRIZIONI') {
+            if (!formState.prescrizioniIdoneita.trim()) {
+                newErrors.prescrizioniIdoneita = 'Le prescrizioni sono obbligatorie per questo tipo di giudizio';
+            }
+            if (!formState.limitazioni.trim()) {
+                newErrors.limitazioni = 'Le limitazioni sono obbligatorie per questo tipo di giudizio';
+            }
         }
 
         // Motivazioni obbligatorie per giudizi non idonei (Art. 41 D.Lgs 81/08)
@@ -588,11 +597,11 @@ const GiudizioFormModal: React.FC<GiudizioFormModalProps> = ({
                             </div>
 
                             {/* Prescrizioni (obbligatorie per IDONEO_CON_PRESCRIZIONI; sempre visibili in edit per revisione) */}
-                            {(formState.tipoGiudizio === 'IDONEO_CON_PRESCRIZIONI' || formState.prescrizioniIdoneita || mode === 'edit') && (
+                            {(formState.tipoGiudizio === 'IDONEO_CON_PRESCRIZIONI' || formState.tipoGiudizio === 'IDONEO_CON_LIMITAZIONI_PRESCRIZIONI' || formState.prescrizioniIdoneita || mode === 'edit') && (
                                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                                     <label className="flex items-center gap-2 text-sm font-medium text-blue-800 mb-1">
                                         <ClipboardList className="h-4 w-4" />
-                                        Prescrizioni {formState.tipoGiudizio === 'IDONEO_CON_PRESCRIZIONI' && <span className="text-red-500">*</span>}
+                                        Prescrizioni {(formState.tipoGiudizio === 'IDONEO_CON_PRESCRIZIONI' || formState.tipoGiudizio === 'IDONEO_CON_LIMITAZIONI_PRESCRIZIONI') && <span className="text-red-500">*</span>}
                                     </label>
                                     <p className="text-xs text-blue-600 mb-2">
                                         Indicare le condizioni e misure operative che il lavoratore deve rispettare per svolgere la mansione (es. uso di DPI specifici, limitazioni di orario, controlli periodici).
@@ -612,11 +621,11 @@ const GiudizioFormModal: React.FC<GiudizioFormModalProps> = ({
                             )}
 
                             {/* Limitazioni (obbligatorie per IDONEO_CON_LIMITAZIONI; sempre visibili in edit per revisione) */}
-                            {(formState.tipoGiudizio === 'IDONEO_CON_LIMITAZIONI' || formState.limitazioni || mode === 'edit') && (
+                            {(formState.tipoGiudizio === 'IDONEO_CON_LIMITAZIONI' || formState.tipoGiudizio === 'IDONEO_CON_LIMITAZIONI_PRESCRIZIONI' || formState.limitazioni || mode === 'edit') && (
                                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                                     <label className="flex items-center gap-2 text-sm font-medium text-yellow-800 mb-1">
                                         <Ban className="h-4 w-4" />
-                                        Limitazioni {formState.tipoGiudizio === 'IDONEO_CON_LIMITAZIONI' && <span className="text-red-500">*</span>}
+                                        Limitazioni {(formState.tipoGiudizio === 'IDONEO_CON_LIMITAZIONI' || formState.tipoGiudizio === 'IDONEO_CON_LIMITAZIONI_PRESCRIZIONI') && <span className="text-red-500">*</span>}
                                     </label>
                                     <p className="text-xs text-yellow-700 mb-2">
                                         Indicare le attività o esposizioni che il lavoratore non può svolgere o deve evitare nella mansione (es. no movimentazione manuale carichi, no esposizione a solventi, no lavori notturni).

@@ -7,9 +7,9 @@
  * @module pages/poliambulatorio/struttura/SedeDetailPage
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     Building2,
     MapPin,
@@ -28,23 +28,100 @@ import {
     Stethoscope,
     Clock,
     CalendarX,
-    DoorOpen
+    DoorOpen,
+    Plus,
+    X
 } from 'lucide-react';
 import { clinicaApi } from '../../../services/clinicaApi';
 import { formatMedicoName } from '../../../utils/textFormatters';
+import { DatePickerElegante } from '../../../components/ui/DatePickerElegante';
+import { TimePickerElegante } from '../../../components/ui/TimePickerElegante';
+import { useToast } from '../../../hooks/useToast';
 
 // Import Element Medica theme
 import '../../../styles/clinica-theme.css';
 
 const SedeDetailPage: React.FC = () => {
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
+    const { showToast } = useToast();
     const { id } = useParams<{ id: string }>();
+    const [showChiusuraModal, setShowChiusuraModal] = useState(false);
+    const [chiusuraForm, setChiusuraForm] = useState({
+        nome: '',
+        tipo: 'STRAORDINARIA',
+        descrizione: '',
+        dataInizio: '',
+        dataFine: '',
+        isParziale: false,
+        oraInizio: '',
+        oraFine: '',
+        ricorrente: false,
+    });
 
     // Load sede data
     const { data: sede, isLoading, error } = useQuery({
         queryKey: ['sede', id],
         queryFn: () => clinicaApi.sedi.getById(id!),
         enabled: Boolean(id)
+    });
+
+    const addChiusuraMutation = useMutation({
+        mutationFn: async () => {
+            if (!id || !sede) throw new Error('Sede non disponibile');
+            if (!chiusuraForm.nome || !chiusuraForm.dataInizio) throw new Error('Nome e data inizio sono obbligatori');
+            const normalizeDate = (value: string) => value ? value.split('T')[0] : '';
+            const existingChiusure = (sede.chiusureSpeciali || []).map(c => ({
+                id: c.id,
+                tipo: c.tipo,
+                nome: c.nome,
+                descrizione: c.descrizione || undefined,
+                dataInizio: normalizeDate(c.dataInizio),
+                dataFine: normalizeDate(c.dataFine || c.dataInizio),
+                oraInizio: c.isParziale ? c.oraInizio : undefined,
+                oraFine: c.isParziale ? c.oraFine : undefined,
+                isParziale: Boolean(c.isParziale),
+                ricorrente: Boolean(c.ricorrente),
+                annoRiferimento: c.annoRiferimento,
+                attivo: c.attivo !== false,
+            }));
+            return clinicaApi.sedi.update(id, {
+                chiusureSpeciali: [
+                    ...existingChiusure,
+                    {
+                        tipo: chiusuraForm.tipo as any,
+                        nome: chiusuraForm.nome.trim(),
+                        descrizione: chiusuraForm.descrizione.trim() || undefined,
+                        dataInizio: chiusuraForm.dataInizio,
+                        dataFine: chiusuraForm.dataFine || chiusuraForm.dataInizio,
+                        oraInizio: chiusuraForm.isParziale ? chiusuraForm.oraInizio || undefined : undefined,
+                        oraFine: chiusuraForm.isParziale ? chiusuraForm.oraFine || undefined : undefined,
+                        isParziale: chiusuraForm.isParziale,
+                        ricorrente: chiusuraForm.ricorrente,
+                        annoRiferimento: chiusuraForm.ricorrente && chiusuraForm.dataInizio ? new Date(`${chiusuraForm.dataInizio}T00:00:00`).getFullYear() : undefined,
+                        attivo: true,
+                    }
+                ]
+            });
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['sede', id] });
+            setChiusuraForm({
+                nome: '',
+                tipo: 'STRAORDINARIA',
+                descrizione: '',
+                dataInizio: '',
+                dataFine: '',
+                isParziale: false,
+                oraInizio: '',
+                oraFine: '',
+                ricorrente: false,
+            });
+            showToast({ type: 'success', message: 'Chiusura speciale aggiunta. Puoi inserirne un’altra.' });
+        },
+        onError: (err: unknown) => {
+            showToast({ type: 'error', message: err instanceof Error ? err.message : 'Errore aggiunta chiusura' });
+        }
     });
 
     if (isLoading) {
@@ -336,10 +413,19 @@ const SedeDetailPage: React.FC = () => {
 
                 {/* Chiusure Speciali Card */}
                 <div className="bg-white rounded-xl border border-gray-200 p-6 h-[400px] flex flex-col">
-                    <h2 className="text-lg font-semibold text-gray-900 mb-6 flex items-center gap-2 flex-shrink-0">
-                        <CalendarX className="h-5 w-5 text-teal-600" />
-                        Chiusure Speciali
-                    </h2>
+                    <div className="mb-6 flex flex-shrink-0 items-center justify-between gap-3">
+                        <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                            <CalendarX className="h-5 w-5 text-teal-600" />
+                            Chiusure Speciali
+                        </h2>
+                        <button
+                            onClick={() => setShowChiusuraModal(true)}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700 transition-colors hover:bg-teal-100"
+                        >
+                            <Plus className="h-3.5 w-3.5" />
+                            Aggiungi
+                        </button>
+                    </div>
 
                     {sede.chiusureSpeciali && sede.chiusureSpeciali.filter(c => c.attivo).length > 0 ? (
                         <div className="space-y-3 overflow-y-auto flex-1">
@@ -441,6 +527,139 @@ const SedeDetailPage: React.FC = () => {
                     )}
                 </div>
             </div>
+
+            {showChiusuraModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/40" onClick={() => setShowChiusuraModal(false)} />
+                    <div className="relative w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+                        <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+                            <div>
+                                <h3 className="text-lg font-semibold text-gray-900">Nuova chiusura speciale</h3>
+                                <p className="text-sm text-gray-500">Aggiungi rapidamente una chiusura senza entrare nella modifica completa della sede.</p>
+                            </div>
+                            <button onClick={() => setShowChiusuraModal(false)} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                        <div className="grid max-h-[70vh] grid-cols-1 gap-4 overflow-y-auto bg-gray-50/70 p-5 sm:grid-cols-2">
+                            <label className="sm:col-span-2 text-sm font-medium text-gray-700">
+                                Nome chiusura
+                                <input
+                                    value={chiusuraForm.nome}
+                                    onChange={e => setChiusuraForm(f => ({ ...f, nome: e.target.value }))}
+                                    placeholder="Es. Ponte 2 giugno"
+                                    className="mt-1 h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm shadow-sm outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-100"
+                                />
+                            </label>
+                            <label className="text-sm font-medium text-gray-700">
+                                Tipo
+                                <div className="relative">
+                                    <select
+                                        value={chiusuraForm.tipo}
+                                        onChange={e => setChiusuraForm(f => ({ ...f, tipo: e.target.value }))}
+                                        className="mt-1 h-10 w-full appearance-none rounded-xl border border-gray-200 bg-white px-3 pr-9 text-sm font-medium text-gray-800 shadow-sm outline-none transition-all hover:border-teal-300 focus:border-teal-500 focus:ring-4 focus:ring-teal-100"
+                                    >
+                                        <option value="FESTIVITA">Festività</option>
+                                        <option value="PONTE">Ponte</option>
+                                        <option value="FERIE_ESTIVE">Ferie estive</option>
+                                        <option value="FERIE_NATALIZIE">Ferie natalizie</option>
+                                        <option value="FERIE_PASQUALI">Ferie pasquali</option>
+                                        <option value="STRAORDINARIA">Straordinaria</option>
+                                        <option value="FORMAZIONE">Formazione</option>
+                                        <option value="EVENTO">Evento</option>
+                                        <option value="ALTRO">Altro</option>
+                                    </select>
+                                </div>
+                            </label>
+                            <label className="text-sm font-medium text-gray-700">
+                                Data inizio
+                                <DatePickerElegante
+                                    value={chiusuraForm.dataInizio}
+                                    onChange={date => setChiusuraForm(f => ({
+                                        ...f,
+                                        dataInizio: date ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` : '',
+                                        dataFine: f.dataFine || (date ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` : '')
+                                    }))}
+                                    placeholder="Seleziona data"
+                                />
+                            </label>
+                            <label className="text-sm font-medium text-gray-700">
+                                Data fine
+                                <DatePickerElegante
+                                    value={chiusuraForm.dataFine}
+                                    onChange={date => setChiusuraForm(f => ({
+                                        ...f,
+                                        dataFine: date ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` : ''
+                                    }))}
+                                    placeholder="Uguale a inizio"
+                                />
+                            </label>
+                            <label className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700">
+                                <input
+                                    type="checkbox"
+                                    checked={chiusuraForm.isParziale}
+                                    onChange={e => setChiusuraForm(f => ({ ...f, isParziale: e.target.checked }))}
+                                    className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                                />
+                                Solo fascia oraria
+                            </label>
+                            <label className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700">
+                                <input
+                                    type="checkbox"
+                                    checked={chiusuraForm.ricorrente}
+                                    onChange={e => setChiusuraForm(f => ({ ...f, ricorrente: e.target.checked }))}
+                                    className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                                />
+                                Ricorrente ogni anno
+                            </label>
+                            {chiusuraForm.isParziale && (
+                                <>
+                                    <label className="text-sm font-medium text-gray-700">
+                                        Ora inizio
+                                        <TimePickerElegante
+                                            value={chiusuraForm.oraInizio}
+                                            onChange={value => setChiusuraForm(f => ({ ...f, oraInizio: value }))}
+                                            minuteStep={5}
+                                            placeholder="Ora inizio"
+                                            className="mt-1"
+                                        />
+                                    </label>
+                                    <label className="text-sm font-medium text-gray-700">
+                                        Ora fine
+                                        <TimePickerElegante
+                                            value={chiusuraForm.oraFine}
+                                            onChange={value => setChiusuraForm(f => ({ ...f, oraFine: value }))}
+                                            minuteStep={5}
+                                            placeholder="Ora fine"
+                                            className="mt-1"
+                                        />
+                                    </label>
+                                </>
+                            )}
+                            <label className="sm:col-span-2 text-sm font-medium text-gray-700">
+                                Note
+                                <textarea
+                                    value={chiusuraForm.descrizione}
+                                    onChange={e => setChiusuraForm(f => ({ ...f, descrizione: e.target.value }))}
+                                    rows={3}
+                                    className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-100"
+                                />
+                            </label>
+                        </div>
+                        <div className="flex justify-end gap-3 border-t border-gray-200 px-5 py-4">
+                            <button onClick={() => setShowChiusuraModal(false)} className="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100">Annulla</button>
+                            <button
+                                onClick={() => addChiusuraMutation.mutate()}
+                                disabled={addChiusuraMutation.isPending}
+                                className="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-60"
+                            >
+                                {addChiusuraMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                                Salva e aggiungi
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

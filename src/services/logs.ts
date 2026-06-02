@@ -159,7 +159,9 @@ export const getLogs = async (filters?: ActivityLogFilters, limit?: number, offs
       retLimit = effectiveLimit;
       retOffset = effectiveOffset;
     } else {
-      console.warn('Unexpected logs response format, using mock');
+      if (import.meta.env.DEV) {
+        console.warn('Unexpected logs response format, using mock');
+      }
       logs = MOCK_LOGS;
       total = MOCK_LOGS.length;
       retLimit = effectiveLimit;
@@ -168,7 +170,9 @@ export const getLogs = async (filters?: ActivityLogFilters, limit?: number, offs
 
     return { logs, total, limit: retLimit, offset: retOffset };
   } catch {
-    console.warn('Failed to fetch logs from backend, using mock data:');
+    if (import.meta.env.DEV) {
+      console.warn('Failed to fetch logs from backend, using mock data:');
+    }
     // In caso di errore restituisce i mock
     const fallbackLogs = MOCK_LOGS.slice(0, effectiveLimit);
     return {

@@ -34,7 +34,7 @@ export const PublicHeader: React.FC = () => {
     if (exact) {
       return location.pathname === href;
     }
-    return location.pathname.startsWith(href);
+    return location.pathname === href || location.pathname.startsWith(href + '/');
   };
 
   const toggleMenu = () => {
@@ -91,14 +91,20 @@ export const PublicHeader: React.FC = () => {
       {/* Main header */}
       <div className="container mx-auto px-4">
         <div className="flex justify-between items-center py-4">
-          {/* Logo — usa PNG reale dall'archivio loghi ufficiale */}
+          {/* Logo — WebP with PNG fallback for LCP */}
           <Link to="/" className="flex items-center">
-            <img
-              src={brandConfig.logo}
-              alt={brandConfig.logoAlt}
-              className="h-10 w-auto object-contain"
-              loading="eager"
-            />
+            <picture>
+              <source srcSet={brandConfig.logo.replace('.png', '.webp')} type="image/webp" />
+              <img
+                src={brandConfig.logo}
+                alt={brandConfig.logoAlt}
+                className="h-10 w-auto object-contain"
+                width="1483"
+                height="303"
+                loading="eager"
+                fetchPriority="high"
+              />
+            </picture>
           </Link>
 
           {/* Desktop Navigation */}
@@ -107,7 +113,7 @@ export const PublicHeader: React.FC = () => {
               <Link
                 key={item.href}
                 to={item.href}
-                className={`font-medium transition-all duration-200 hover:text-primary-600 whitespace-nowrap text-sm xl:text-base pb-1 border-b-2 ${isActiveRoute(item.href, item.exact)
+                className={`font-medium transition-colors duration-200 hover:text-primary-600 whitespace-nowrap text-sm xl:text-base pb-1 border-b-2 ${isActiveRoute(item.href, item.exact)
                   ? 'text-primary-600 border-primary-600'
                   : 'text-gray-700 border-transparent hover:border-primary-300'
                   }`}
@@ -145,7 +151,7 @@ export const PublicHeader: React.FC = () => {
       </div>
 
       {/* Mobile Navigation */}
-      <div className={`lg:hidden bg-white border-t border-gray-200 overflow-hidden transition-all duration-300 ease-in-out ${isMenuOpen ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}>
+      <div className={`lg:hidden bg-white border-t border-gray-200 overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out ${isMenuOpen ? 'max-h-[700px] opacity-100' : 'max-h-0 opacity-0'}`}>
         <nav className="container mx-auto px-4 py-4">
           <div className="flex flex-col space-y-4">
             {navigationItems.map((item) => (

@@ -96,6 +96,12 @@ router.post('/',
     scadenzeController.createDeadline
 );
 
+// POST /api/v1/scadenze/resolve-derived - Risolve scadenze automatiche da farmaci/visite
+router.post('/resolve-derived',
+    requirePermission('scadenze:write'),
+    scadenzeController.resolveDerivedDeadline
+);
+
 // GET /api/v1/scadenze/:id - Dettaglio scadenza (DOPO le route specifiche!)
 router.get('/:id',
     requirePermission('scadenze:read'),

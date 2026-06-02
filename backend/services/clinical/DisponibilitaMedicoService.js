@@ -193,12 +193,14 @@ export class DisponibilitaMedicoService {
             if (disponibilita.attivo && disponibilita.ambulatorioId) {
                 try {
                     const today = new Date();
-                    today.setHours(0, 0, 0, 0);
+                    today.setHours(12, 0, 0, 0); // noon-based to avoid DST edge
                     const threeMonthsLater = new Date(today);
                     threeMonthsLater.setMonth(threeMonthsLater.getMonth() + 3);
 
-                    const dataInizio = today.toISOString().split('T')[0];
-                    const dataFine = threeMonthsLater.toISOString().split('T')[0];
+                    // Build YYYY-MM-DD locally (toISOString converts to UTC → can shift day)
+                    const pad2 = n => String(n).padStart(2, '0');
+                    const dataInizio = `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(today.getDate())}`;
+                    const dataFine = `${threeMonthsLater.getFullYear()}-${pad2(threeMonthsLater.getMonth() + 1)}-${pad2(threeMonthsLater.getDate())}`;
 
                     const genResult = await SlotDisponibilitaService.generateFromDisponibilita(
                         data.medicoId,
@@ -324,14 +326,19 @@ export class DisponibilitaMedicoService {
 
                     // Rigenera per i prossimi 3 mesi
                     const today = new Date();
-                    today.setHours(0, 0, 0, 0);
+                    today.setHours(12, 0, 0, 0); // noon-based to avoid DST edge
                     const threeMonthsLater = new Date(today);
                     threeMonthsLater.setMonth(threeMonthsLater.getMonth() + 3);
 
+                    // Build YYYY-MM-DD locally (toISOString converts to UTC → can shift day)
+                    const pad2 = n => String(n).padStart(2, '0');
+                    const todayStr = `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(today.getDate())}`;
+                    const endStr = `${threeMonthsLater.getFullYear()}-${pad2(threeMonthsLater.getMonth() + 1)}-${pad2(threeMonthsLater.getDate())}`;
+
                     const genResult = await SlotDisponibilitaService.generateFromDisponibilita(
                         disponibilita.medicoId,
-                        today.toISOString().split('T')[0],
-                        threeMonthsLater.toISOString().split('T')[0],
+                        todayStr,
+                        endStr,
                         tenantId
                     );
 

@@ -9,6 +9,8 @@ const { authenticate } = authMiddleware;
 import prisma from '../../../config/prisma-optimization.js';
 import { logger } from '../../../utils/logger.js';
 import { RBACService } from '../../../middleware/rbac.js';
+import bcrypt from 'bcryptjs';
+import { body, validationResult } from 'express-validator';
 
 const router = express.Router();
 
@@ -67,6 +69,9 @@ router.get('/me', authenticate, async (req, res) => {
       email: profileEmail,
       firstName: person.firstName,
       lastName: person.lastName,
+      birthDate: person.birthDate || null,
+      taxCode: person.taxCode || null,
+      phone: primaryProfile.phone || null,
       globalRole: req.person.globalRole,
       tenantId: req.person.tenantId,
       companyTenantProfileId: primaryProfile.companyTenantProfileId || null,
@@ -169,13 +174,15 @@ router.get('/verify', authenticate, async (req, res) => {
       }
     });
 
-    // Build roles array from tenant-scoped roles only
-    // Preserve SUPER_ADMIN globally (system-level admin always has full access)
+    // Build roles array: global roles first (so primaryRoleType reflects globalRole for ADMIN/SUPER_ADMIN)
+    const globalRoleEntry = (req.person.globalRole === 'SUPER_ADMIN' || req.person.globalRole === 'ADMIN')
+      ? [req.person.globalRole]
+      : [];
     const roles = Array.from(new Set([
+      ...globalRoleEntry,
       ...tenantPersonRoles
         .map(pr => pr.customRole?.name || pr.roleType)
-        .filter(Boolean),
-      ...(req.person.globalRole === 'SUPER_ADMIN' ? ['SUPER_ADMIN'] : [])
+        .filter(Boolean)
     ]));
 
     // Determine primary role
@@ -183,10 +190,11 @@ router.get('/verify', authenticate, async (req, res) => {
       ? roles[0]
       : (req.person.globalRole || null);
 
-    // Add default permissions based on tenant-scoped role
+    // Add default permissions based on role (global ADMIN/SUPER_ADMIN always gets full permissions)
     const isAdmin =
       tenantPersonRoles.some(pr => pr.roleType === 'ADMIN' || pr.roleType === 'SUPER_ADMIN') ||
-      req.person.globalRole === 'SUPER_ADMIN';
+      req.person.globalRole === 'SUPER_ADMIN' ||
+      req.person.globalRole === 'ADMIN';
     if (isAdmin) {
       // Admin permissions
       permissionMap['dashboard:view'] = true;
@@ -480,6 +488,7 @@ router.get('/verify', authenticate, async (req, res) => {
     // Token is valid, return complete user info with permissions
     res.json({
       valid: true,
+      mustChangePassword: person.mustChangePassword || false,
       user: {
         id: person.id,
         personId: person.id,
@@ -517,5 +526,111 @@ router.get('/verify', authenticate, async (req, res) => {
     });
   }
 });
+
+// ============================================
+// PROFILE UPDATE
+// ============================================
+
+/**
+ * PUT /auth/me/profile — Update current user's personal info
+ */
+router.put('/me/profile',
+  authenticate,
+  [
+    body('firstName').optional().isLength({ min: 1, max: 100 }).withMessage('Nome non valido'),
+    body('lastName').optional().isLength({ min: 1, max: 100 }).withMessage('Cognome non valido'),
+    body('birthDate').optional({ nullable: true }).isISO8601().withMessage('Data di nascita non valida'),
+    body('phone').optional({ nullable: true }).isLength({ max: 30 }),
+    body('taxCode').optional({ nullable: true }).isLength({ max: 16 })
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ error: 'Errore di validazione', details: errors.array() });
+    }
+
+    try {
+      const personId = req.person.id;
+      const { firstName, lastName, birthDate, phone, taxCode } = req.body;
+
+      const updateData = {};
+      if (firstName !== undefined) updateData.firstName = firstName;
+      if (lastName !== undefined) updateData.lastName = lastName;
+      if (birthDate !== undefined) updateData.birthDate = birthDate ? new Date(birthDate) : null;
+      if (taxCode !== undefined) updateData.taxCode = taxCode || null;
+
+      const updated = await prisma.person.update({
+        where: { id: personId },
+        data: updateData,
+        select: { id: true, firstName: true, lastName: true, birthDate: true, taxCode: true }
+      });
+
+      // Update phone in PersonTenantProfile if provided
+      if (phone !== undefined && req.person.tenantId) {
+        await prisma.personTenantProfile.updateMany({
+          where: { personId, tenantId: req.person.tenantId, deletedAt: null },
+          data: { phone: phone || null }
+        });
+      }
+
+      logger.info('Profile updated', { personId });
+      res.json({ success: true, data: updated });
+    } catch (error) {
+      logger.error('Profile update error', { error: 'Operazione non riuscita', stack: error.stack });
+      res.status(500).json({ error: 'Errore durante l\'aggiornamento del profilo' });
+    }
+  }
+);
+
+/**
+ * PUT /auth/me/password — Change current user's password
+ */
+router.put('/me/password',
+  authenticate,
+  [
+    body('currentPassword').notEmpty().withMessage('Password attuale obbligatoria'),
+    body('newPassword')
+      .isLength({ min: 8 }).withMessage('La nuova password deve avere almeno 8 caratteri')
+      .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+      .withMessage('La nuova password deve contenere almeno una maiuscola, una minuscola e un numero')
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ error: 'Errore di validazione', details: errors.array() });
+    }
+
+    try {
+      const personId = req.person.id;
+      const { currentPassword, newPassword } = req.body;
+
+      const person = await prisma.person.findUnique({
+        where: { id: personId },
+        select: { password: true }
+      });
+
+      if (!person?.password) {
+        return res.status(400).json({ error: 'Account senza password impostata' });
+      }
+
+      const isValid = await bcrypt.compare(currentPassword, person.password);
+      if (!isValid) {
+        return res.status(401).json({ error: 'Password attuale non corretta' });
+      }
+
+      const hashedNew = await bcrypt.hash(newPassword, 12);
+      await prisma.person.update({
+        where: { id: personId },
+        data: { password: hashedNew, mustChangePassword: false }
+      });
+
+      logger.info('Password changed', { personId });
+      res.json({ success: true, message: 'Password aggiornata con successo' });
+    } catch (error) {
+      logger.error('Password change error', { error: 'Operazione non riuscita', stack: error.stack });
+      res.status(500).json({ error: 'Errore durante il cambio password' });
+    }
+  }
+);
 
 export default router;

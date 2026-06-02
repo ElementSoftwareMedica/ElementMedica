@@ -190,7 +190,8 @@ const PLACEHOLDER_GROUPS: PlaceholderGroup[] = [
       { marker: 'session.location', googleMarker: 'SESSIONE_SEDE', description: 'Sede della sessione' },
       { marker: 'session.trainer.fullName', googleMarker: 'SESSIONE_FORMATORE', description: 'Nome completo formatore sessione' },
       { marker: 'session.participantCompanies', googleMarker: 'AZIENDE_PARTECIPANTI', description: 'Elenco ragioni sociali aziende partecipanti' },
-      { marker: 'table.sessionAttendance', googleMarker: 'TABELLA_PRESENZE_SESSIONE', description: 'Tabella presenze sessione (Cognome, Nome, Firma In, Firma Out)' },
+      { marker: 'table.sessionAttendance', googleMarker: 'TABELLA_PRESENZE_SESSIONE_SEMPLICE', description: 'Tabella presenze semplice (solo Cognome, Nome, Azienda, Firma Ingresso, Firma Uscita)' },
+      { marker: 'tableCouseInfo.sessionAttendance', googleMarker: 'TABELLA_PRESENZE_SESSIONE', description: 'Tabella presenze completa (riepilogo presenze, ore, argomenti, firme docente/co-docente/organizzatore)' },
       { marker: 'session.participantsCount', googleMarker: 'SESSIONE_NUM_PARTECIPANTI', description: 'Numero partecipanti sessione' }
     ]
   },

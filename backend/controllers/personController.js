@@ -6,6 +6,8 @@ import prisma from '../config/prisma-optimization.js';
 import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 import AdvancedPermissionService from '../services/advanced-permission.js';
 import { personTenantAccessService } from '../services/PersonTenantAccessService.js';
+import { isTrainerOnlyAccess, getTrainerEnrolledPersonIds } from '../utils/trainerAccess.js';
+import { seedDefaultPermissions } from '../services/enhancedRole/utils/PermissionSeeder.js';
 
 const advancedPermissionService = new AdvancedPermissionService();
 
@@ -189,6 +191,13 @@ class PersonController {
       if (limit) {
         queryOptions.take = parseInt(limit);
         queryOptions.skip = offset ? parseInt(offset) : 0;
+      }
+
+      // TRAINER-only: restrict visible employees to those enrolled in the trainer's schedules
+      const trainerTenantId = tenantId || req.person?.tenantId;
+      if (trainerTenantId && await isTrainerOnlyAccess(req.person.id, trainerTenantId)) {
+        const enrolledPersonIds = await getTrainerEnrolledPersonIds(req.person.id, trainerTenantId);
+        queryOptions.where.id = { in: enrolledPersonIds };
       }
 
       const employeesRaw = await prisma.person.findMany(queryOptions);
@@ -615,7 +624,7 @@ class PersonController {
       // P59/F87: Use getEffectiveTenantId for proper role-validated cross-tenant resolution
       // Priority: body tenantId (explicit) → JWT/header via getEffectiveTenantId (with ADMIN role check)
       const finalTenantId = tenantId || getEffectiveTenantId(req);
-      const finalCompanyTenantProfileId = companyTenantProfileId || req.person?.companyTenantProfileId;
+      const finalCompanyTenantProfileId = companyTenantProfileId || companyId || req.person?.companyTenantProfileId;
 
       // Debug log per tenant resolution
       logger.debug('createPerson: tenant resolution', {
@@ -639,6 +648,10 @@ class PersonController {
         phone: personData.phone,
         taxCode: personData.taxCode || personData.codice_fiscale,
         birthDate: personData.birthDate || personData.birth_date,
+        birthPlace: personData.birthPlace || personData.birth_place,
+        birthProvince: personData.birthProvince || personData.birth_province,
+        gender: personData.gender,
+        etnia: personData.etnia,
         residenceAddress: personData.residenceAddress || personData.residence_address,
         residenceCity: personData.residenceCity || personData.residence_city,
         postalCode: personData.postalCode || personData.postal_code,
@@ -654,6 +667,8 @@ class PersonController {
         username: personData.username,
         password: personData.password,
         globalRole: personData.globalRole,
+        siteId: siteId || personData.siteId,
+        repartoId: personData.repartoId,
         status: personData.status || 'ACTIVE'
       };
 
@@ -729,10 +744,9 @@ class PersonController {
             personRoles: {
               where: { deletedAt: null }
             },
-            // P48: Include tenantProfiles per estrarre email
+            // P48: Include TUTTI i tenantProfiles attivi per rilevare same-tenant vs cross-tenant
             tenantProfiles: {
-              where: { deletedAt: null, isActive: true },
-              take: 1
+              where: { deletedAt: null, isActive: true }
             }
           }
         });
@@ -748,8 +762,168 @@ class PersonController {
         const willReplaceRole = existingPersonType === 'deleted' && roleType && !existingRoles.includes(roleType);
         const willAddRole = existingPersonType === 'active' && roleType && !existingRoles.includes(roleType);
 
-        // P48: Estrai email da tenantProfiles
-        const existingProfile = existingPerson.tenantProfiles?.[0] || {};
+        // P48: Estrai email dal profilo del tenant corrente (se presente) o dal primo profilo
+        const profileInTargetTenant = finalTenantId
+          ? existingPerson.tenantProfiles.find(p => p.tenantId === finalTenantId)
+          : null;
+        const existingProfile = profileInTargetTenant || existingPerson.tenantProfiles[0] || {};
+
+        // Determina se la persona è già in questo tenant
+        const isSameTenant = !!profileInTargetTenant;
+
+        // Verifica se il ruolo è già assegnato in questo tenant
+        const existingRolesInTargetTenant = finalTenantId
+          ? existingPerson.personRoles.filter(r => r.tenantId === finalTenantId).map(r => r.roleType)
+          : existingRoles;
+        const roleAlreadyExistsInTenant = roleType && existingRolesInTargetTenant.includes(roleType);
+
+        // Se il ruolo è già attivo in questo tenant, è un errore definitivo (non serve conferma)
+        if (roleAlreadyExistsInTenant && existingPersonType === 'active') {
+          return res.status(409).json({
+            error: `La persona ${existingPerson.firstName} ${existingPerson.lastName} ha già il ruolo ${roleType} in questa organizzazione.`,
+            code: 'ROLE_EXISTS_IN_TENANT',
+            existingPerson: {
+              id: existingPerson.id,
+              firstName: existingPerson.firstName,
+              lastName: existingPerson.lastName,
+              email: existingProfile.email || null,
+              taxCode: existingPerson.taxCode,
+              status: existingPersonType,
+              currentRoles: existingRoles
+            }
+          });
+        }
+
+        // Determina l'action corretta per il frontend
+        let action;
+        if (existingPersonType === 'deleted') {
+          action = 'REACTIVATE_AND_UPDATE';
+        } else if (isSameTenant) {
+          action = 'ADD_ROLE_SAME_TENANT';
+        } else {
+          action = 'ADD_ROLE_NEW_TENANT';
+        }
+
+        if (existingPersonType === 'active' && roleType && ['ADD_ROLE_SAME_TENANT', 'ADD_ROLE_NEW_TENANT'].includes(action)) {
+          const globalConflicts = ['firstName', 'lastName', 'birthDate', 'birthPlace', 'birthProvince', 'gender']
+            .map(field => {
+              const incoming = transformedData[field];
+              const current = existingPerson[field];
+              if (incoming === undefined || incoming === null || incoming === '') return null;
+              if (current === undefined || current === null || current === '') return null;
+              const incomingValue = incoming instanceof Date ? incoming.toISOString().slice(0, 10) : String(incoming).trim();
+              const currentValue = current instanceof Date ? current.toISOString().slice(0, 10) : String(current).trim();
+              return incomingValue !== currentValue ? { field, current: currentValue, incoming: incomingValue } : null;
+            })
+            .filter(Boolean);
+
+          if (!isSameTenant && globalConflicts.length > 0) {
+            return res.status(409).json({
+              error: 'La persona esiste già in un altro tenant con dati anagrafici diversi. Confermare quali dati globali sono corretti prima di collegarla.',
+              code: 'PERSON_GLOBAL_DATA_CONFLICT',
+              existingPerson: {
+                id: existingPerson.id,
+                firstName: existingPerson.firstName,
+                lastName: existingPerson.lastName,
+                taxCode: existingPerson.taxCode,
+                currentRoles: existingRoles
+              },
+              conflicts: globalConflicts,
+              newRoleType: roleType,
+              action
+            });
+          }
+
+          const tenantProfileFields = {
+            email: transformedData.email,
+            phone: transformedData.phone,
+            residenceAddress: transformedData.residenceAddress,
+            residenceCity: transformedData.residenceCity,
+            postalCode: transformedData.postalCode,
+            province: transformedData.province,
+            title: transformedData.title,
+            hiredDate: transformedData.hiredDate,
+            hourlyRate: transformedData.hourlyRate,
+            iban: transformedData.iban,
+            registerCode: transformedData.registerCode,
+            certifications: transformedData.certifications,
+            specialties: transformedData.specialties,
+            status: transformedData.status || 'ACTIVE',
+            companyTenantProfileId: finalCompanyTenantProfileId || null,
+            siteId: siteId || null,
+            repartoId: personData.repartoId || null
+          };
+          Object.keys(tenantProfileFields).forEach(key => {
+            if (tenantProfileFields[key] === undefined) delete tenantProfileFields[key];
+          });
+
+          await prisma.$transaction(async (tx) => {
+            const targetProfile = await tx.personTenantProfile.findFirst({
+              where: { personId: existingPerson.id, tenantId: finalTenantId, deletedAt: null }
+            });
+            if (targetProfile) {
+              await tx.personTenantProfile.update({
+                where: { id: targetProfile.id },
+                data: { ...tenantProfileFields, isActive: true, updatedAt: new Date() }
+              });
+            } else {
+              await tx.personTenantProfile.create({
+                data: {
+                  personId: existingPerson.id,
+                  tenantId: finalTenantId,
+                  isActive: true,
+                  isPrimary: false,
+                  ...tenantProfileFields
+                }
+              });
+            }
+            const existingRoleAny = await tx.personRole.findFirst({
+              where: {
+                personId: existingPerson.id,
+                roleType,
+                customRoleId: null,
+                companyTenantProfileId: finalCompanyTenantProfileId || null,
+                tenantId: finalTenantId
+              }
+            });
+            if (existingRoleAny) {
+              await tx.personRole.update({
+                where: { id: existingRoleAny.id },
+                data: { isActive: true, deletedAt: null, updatedAt: new Date() }
+              });
+            } else {
+              const mergedRole = await tx.personRole.create({
+                data: {
+                  personId: existingPerson.id,
+                  roleType,
+                  isActive: true,
+                  isPrimary: false,
+                  companyTenantProfileId: finalCompanyTenantProfileId || null,
+                  tenantId: finalTenantId,
+                  assignedBy: req.person?.id || null
+                }
+              });
+              await seedDefaultPermissions(mergedRole.id, roleType, tx);
+            }
+          });
+
+          const mergedPerson = await prisma.person.findFirst({
+            where: { id: existingPerson.id, deletedAt: null },
+            include: {
+              personRoles: { where: { deletedAt: null }, include: { companyTenantProfile: true } },
+              tenantProfiles: { where: { deletedAt: null }, include: { companyTenantProfile: true, tenant: true } }
+            }
+          });
+
+          return res.status(200).json({
+            ...mergedPerson,
+            mergedRole: true,
+            action,
+            message: isSameTenant
+              ? `Ruolo ${roleType} aggiunto alla persona già presente in questa organizzazione.`
+              : `Nuovo profilo tenant creato e ruolo ${roleType} aggiunto alla persona esistente.`
+          });
+        }
 
         return res.status(409).json({
           error: existingPersonType === 'deleted'
@@ -767,12 +941,15 @@ class PersonController {
             currentRoles: existingRoles
           },
           newRoleType: roleType,
-          action: existingPersonType === 'deleted' ? 'REACTIVATE_AND_UPDATE' : 'ADD_ROLE_OR_UPDATE',
+          action,
+          isSameTenant,
           willReplaceRole,
           willAddRole,
           message: existingPersonType === 'deleted'
             ? `La persona ${existingPerson.firstName} ${existingPerson.lastName} è stata eliminata in precedenza. Vuoi riattivare l'account e aggiornare i dati? ${willReplaceRole ? `Il ruolo cambierà da ${existingRoles.join(', ')} a ${roleType}.` : ''}`
-            : `La persona ${existingPerson.firstName} ${existingPerson.lastName} esiste già. ${willAddRole ? `Vuoi aggiungere il ruolo ${roleType}?` : 'Vuoi aggiornare i dati?'}`
+            : isSameTenant
+              ? `La persona ${existingPerson.firstName} ${existingPerson.lastName} esiste già in questa organizzazione. ${willAddRole ? `Vuoi aggiungere il ruolo ${roleType}?` : 'Vuoi aggiornare i dati?'}`
+              : `La persona ${existingPerson.firstName} ${existingPerson.lastName} esiste già in un'altra organizzazione. ${willAddRole ? `Vuoi creare un accesso con il ruolo ${roleType} in questa organizzazione?` : 'Vuoi creare un profilo in questa organizzazione?'}`
         });
       }
 
@@ -905,6 +1082,59 @@ class PersonController {
           }
         }
 
+        // P48/GDPR: Se cross-tenant e ruolo PAZIENTE, crea PersonDataShareConsent
+        // Il tenant di destinazione (finalTenantId) ha bisogno di accedere ai dati della persona
+        const profileInTargetTenant = existingPerson.tenantProfiles.find(p => p.tenantId === finalTenantId);
+        const isCrossTenant = !profileInTargetTenant && existingPersonType !== 'deleted';
+        if (isCrossTenant && roleType === 'PAZIENTE') {
+          const sourceTenantProfile = existingPerson.tenantProfiles.find(p => p.tenantId !== finalTenantId);
+          if (sourceTenantProfile) {
+            await prisma.personDataShareConsent.upsert({
+              where: {
+                personId_sourceTenantId_targetTenantId: {
+                  personId: existingPerson.id,
+                  sourceTenantId: sourceTenantProfile.tenantId,
+                  targetTenantId: finalTenantId
+                }
+              },
+              create: {
+                personId: existingPerson.id,
+                sourceTenantId: sourceTenantProfile.tenantId,
+                targetTenantId: finalTenantId,
+                sharedDataTypes: ['MEDICAL_VISITS', 'MEDICAL_HISTORY'],
+                excludedFields: [],
+                consentGiven: false,
+                approvalStatus: 'PENDING',
+                requestedBy: req.person?.id || null,
+                requestedAt: new Date(),
+                legalBasis: 'LEGITIMATE_INTEREST'
+              },
+              update: {
+                approvalStatus: 'PENDING',
+                isRevoked: false,
+                revokedAt: null,
+                revokedReason: null,
+                updatedAt: new Date()
+              }
+            });
+
+            await prisma.gdprAuditLog.create({
+              data: {
+                personId: existingPerson.id,
+                action: 'CROSS_TENANT_CONSENT_REQUEST',
+                resourceType: 'PERSON_DATA_SHARE_CONSENT',
+                resourceId: existingPerson.id,
+                dataAccessed: {
+                  sourceTenantId: sourceTenantProfile.tenantId,
+                  targetTenantId: finalTenantId,
+                  roleType,
+                  performedBy: req.person?.id
+                }
+              }
+            });
+          }
+        }
+
         // Ritorna la persona aggiornata con i ruoli (P48/P49: company è in tenantProfiles via companyTenantProfile)
         const result = await prisma.person.findFirst({ // F234: findFirst+deletedAt
           where: { id: existingPerson.id, deletedAt: null },
@@ -990,7 +1220,7 @@ class PersonController {
 
       // FK validation errors from PersonCore
       if (error.code === 'FK_VALIDATION') {
-        return res.status(400).json({ error: error.message, field: error.field });
+        return res.status(400).json({ error: 'Riferimento non valido', field: error.field });
       }
 
       // Prisma FK constraint violation (P2003)

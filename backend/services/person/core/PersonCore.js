@@ -5,6 +5,7 @@ import PersonRoleMapping from '../utils/PersonRoleMapping.js';
 import { EventBus, PersonEvents } from '../../events/index.js';
 import { generateNameVariants } from '../../../utils/nameNormalization.js';
 import { JWTService } from '../../../auth/jwt.js';
+import { seedDefaultPermissions } from '../../enhancedRole/utils/PermissionSeeder.js';
 
 /**
  * Operazioni CRUD principali per le persone
@@ -158,7 +159,7 @@ class PersonCore {
       // P48: Campi globali su Person
       const PERSON_GLOBAL_FIELDS = [
         'firstName', 'lastName', 'birthDate', 'birthPlace', 'birthProvince',
-        'gender', 'taxCode', 'vatNumber', 'username', 'password',
+        'gender', 'etnia', 'taxCode', 'vatNumber', 'username', 'password',
         'gdprConsentDate', 'gdprConsentVersion', 'dataRetentionUntil', 'profileImage'
       ];
 
@@ -296,7 +297,7 @@ class PersonCore {
             });
 
             // 3. Crea ruolo nel tenant
-            await tx.personRole.create({
+            const importedRole = await tx.personRole.create({
               data: {
                 personId: existingPerson.id,
                 roleType: mappedRoleType,
@@ -306,6 +307,7 @@ class PersonCore {
                 tenantId
               }
             });
+            await seedDefaultPermissions(importedRole.id, mappedRoleType, tx);
 
             // 4. Audit log GDPR
             await tx.gdprAuditLog.create({
@@ -572,6 +574,18 @@ class PersonCore {
       }
 
       // Valida FK references prima della transazione
+      if (profileUpdateData.companyTenantProfileId) {
+        const company = await prisma.companyTenantProfile.findFirst({
+          where: { id: profileUpdateData.companyTenantProfileId, deletedAt: null },
+          select: { id: true }
+        });
+        if (!company) {
+          const err = new Error('Azienda non trovata o non appartiene al tenant corrente');
+          err.code = 'FK_VALIDATION';
+          err.field = 'companyTenantProfileId';
+          throw err;
+        }
+      }
       if (profileUpdateData.protocolloSanitarioId) {
         const protocollo = await prisma.protocolloSanitario.findUnique({
           where: { id: profileUpdateData.protocolloSanitarioId },
@@ -727,58 +741,92 @@ class PersonCore {
         }
       }
 
-      // P58: Transazione per soft delete Person, profiles, revoca consent e GDPR audit
+      // P58+P73: Transazione per soft delete SOLO il profilo del tenant richiedente.
+      // La Person globale viene eliminata SOLO se non restano profili attivi in altri tenant.
       return await prisma.$transaction(async (tx) => {
-        // 1. Soft delete la persona
-        const deletedPerson = await tx.person.update({
-          where: { id },
-          data: { deletedAt: new Date() }
-        });
+        // 1. Soft delete SOLO il profilo del tenant richiedente
+        if (tenantId) {
+          await tx.personTenantProfile.updateMany({
+            where: {
+              personId: id,
+              tenantId: tenantId,
+              deletedAt: null
+            },
+            data: {
+              status: 'INACTIVE',
+              isActive: false,
+              deletedAt: new Date()
+            }
+          });
+        }
 
-        // 2. Imposta status INACTIVE su tutti i profili tenant
-        await tx.personTenantProfile.updateMany({
+        // 2. Controlla se restano profili attivi in altri tenant
+        const remainingActiveProfiles = await tx.personTenantProfile.count({
           where: {
             personId: id,
-            deletedAt: null
-          },
-          data: {
-            status: 'INACTIVE',
-            isActive: false,
-            deletedAt: new Date()
+            deletedAt: null,
+            isActive: true
           }
         });
 
-        // 3. P58: Revoca automatica di TUTTI i consent cross-tenant dove questa person è condivisa
-        // Quando l'owner elimina, tutti i tenant che avevano accesso perdono l'accesso
-        await tx.personDataShareConsent.updateMany({
-          where: {
-            personId: id,
-            isRevoked: false
-          },
-          data: {
-            isRevoked: true,
-            revokedAt: new Date(),
-            revokedBy: deletedBy || 'system',
-            revokedReason: deletionReason || 'Owner ha eliminato i dati'
-          }
-        });
+        // 3. Soft delete la Person globale SOLO se nessun profilo attivo rimane
+        let deletedPerson;
+        if (remainingActiveProfiles === 0) {
+          deletedPerson = await tx.person.update({
+            where: { id },
+            data: { deletedAt: new Date() }
+          });
 
-        // 4. P58: GDPR Audit Log
+          // Revoca TUTTI i consent cross-tenant solo quando eliminiamo globalmente
+          await tx.personDataShareConsent.updateMany({
+            where: {
+              personId: id,
+              isRevoked: false
+            },
+            data: {
+              isRevoked: true,
+              revokedAt: new Date(),
+              revokedBy: deletedBy || 'system',
+              revokedReason: deletionReason || 'Tutti i profili tenant eliminati'
+            }
+          });
+        } else {
+          // La persona rimane attiva globalmente, revoca solo i consent dove questo tenant è source
+          deletedPerson = await tx.person.findUnique({ where: { id } });
+          if (tenantId) {
+            await tx.personDataShareConsent.updateMany({
+              where: {
+                personId: id,
+                sourceTenantId: tenantId,
+                isRevoked: false
+              },
+              data: {
+                isRevoked: true,
+                revokedAt: new Date(),
+                revokedBy: deletedBy || 'system',
+                revokedReason: deletionReason || 'Profilo tenant eliminato'
+              }
+            });
+          }
+        }
+
+        // 4. GDPR Audit Log
         if (tenantId && deletedBy) {
           await tx.gdprAuditLog.create({
             data: {
               personId: id,
               action: 'DELETE',
-              resourceType: 'Person',
+              resourceType: 'PersonTenantProfile',
               resourceId: id,
               tenantId: tenantId,
               dataAccessed: {
                 personName: `${existing.firstName || ''} ${existing.lastName || ''}`.trim(),
-                deletionReason: deletionReason || 'Eliminazione persona',
+                deletionReason: deletionReason || 'Eliminazione persona dal tenant',
                 deletedAt: new Date().toISOString(),
                 deletedBy: deletedBy,
-                operation: 'SOFT_DELETE',
-                crossTenantConsentsRevoked: true
+                operation: 'TENANT_PROFILE_SOFT_DELETE',
+                globalPersonDeleted: remainingActiveProfiles === 0,
+                remainingActiveProfiles
               }
             }
           });

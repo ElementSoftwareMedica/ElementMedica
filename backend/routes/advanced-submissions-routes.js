@@ -9,8 +9,10 @@ import {
   bulkActionSubmissions
 } from '../controllers/advancedSubmissionsController.js';
 
-import { authenticate } from '../middleware/auth.js';
-import { checkPermission, checkPermissions } from '../middleware/permissions.js';
+import { authenticate, optionalAuth } from '../middleware/auth.js';
+import { checkPermissions } from '../middleware/permissions.js';
+import { publicContentMiddleware } from '../middleware/brandDetection.js';
+import { publicFormSubmissionLimit } from '../middleware/rateLimiting.js';
 
 const router = express.Router();
 
@@ -53,7 +55,12 @@ router.get('/:id',
  * @access Public/Private
  * @note Può essere chiamata sia da utenti autenticati che da form pubblici
  */
-router.post('/', createAdvancedSubmission);
+router.post('/',
+  publicFormSubmissionLimit,
+  publicContentMiddleware,
+  optionalAuth,
+  createAdvancedSubmission
+);
 
 /**
  * @route PUT /api/v1/submissions/advanced/:id

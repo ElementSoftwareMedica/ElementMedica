@@ -9,43 +9,96 @@ import { requirePermissions } from '../middleware/rbac.js';
 import prisma from '../config/prisma-optimization.js';
 import logger from '../utils/logger.js';
 import { getEffectiveTenantId } from '../utils/tenantHelper.js';
+import { publicContentMiddleware } from '../middleware/brandDetection.js';
 import { UAParser } from 'ua-parser-js';
+import geoip from 'geoip-lite';
 
 const router = express.Router();
 
 /**
  * POST /api/v1/cms/analytics/track
  * Traccia una visita su una pagina pubblica (no auth required)
+ * Supporta sia pageId (CMS pages) che pagePath/pageSlug (pagine statiche hardcoded)
  * Se viene fornito un sessionId con duration, aggiorna la view esistente
  */
-router.post('/track', optionalAuth, async (req, res) => {
+router.post('/track', publicContentMiddleware, optionalAuth, async (req, res) => {
   try {
-    const { pageId, sessionId, duration, referer } = req.body;
+    const { pageId, pageSlug, pageTitle, sessionId, duration, referer } = req.body;
 
-    if (!pageId) {
+    // Filtra bot/crawler per ridurre rumore nei dati analitici
+    const userAgent = req.headers['user-agent'] || '';
+    const BOT_PATTERN = /bot|crawler|spider|slurp|baiduspider|facebookexternalhit|twitterbot|rogerbot|linkedinbot|embedly|quora\slink\spreview|showyoubot|outbrain|pinterest|developers\.google\.com\/\+\/web\/snippet/i;
+    if (BOT_PATTERN.test(userAgent)) {
+      return res.json({ success: true, data: { tracked: false, reason: 'bot' } });
+    }
+
+    if (!pageId && !pageSlug) {
       return res.status(400).json({
         success: false,
-        error: 'pageId is required'
+        error: 'pageId or pageSlug is required'
       });
     }
 
-    // Verifica che la pagina esista
-    const page = await prisma.cMSPage.findUnique({
-      where: { id: pageId }
-    });
+    let page;
 
-    if (!page) {
-      return res.status(404).json({
-        success: false,
-        error: 'Pagina non trovata'
+    if (pageId) {
+      // Tracciamento via CMS page ID
+      page = await prisma.cMSPage.findUnique({
+        where: { id: pageId }
       });
+      if (!page) {
+        return res.status(404).json({
+          success: false,
+          error: 'Pagina non trovata'
+        });
+      }
+    } else {
+      // Tracciamento via slug (pagine statiche) — trova o crea la entry
+      const cleanSlug = pageSlug.replace(/^\//, '') || 'homepage';
+      // Determina il tenant corretto: autenticato > brand (X-Frontend-Id) > primo tenant
+      const resolvedTenantId = req.person?.tenantId || req.publicTenantId || null;
+
+      if (resolvedTenantId) {
+        page = await prisma.cMSPage.findFirst({
+          where: { slug: cleanSlug, tenantId: resolvedTenantId, deletedAt: null }
+        });
+      } else {
+        page = await prisma.cMSPage.findFirst({
+          where: { slug: cleanSlug, deletedAt: null }
+        });
+      }
+
+      if (!page) {
+        // Crea una entry CMS "static" per il tracking di pagine hardcoded
+        let tenantId = resolvedTenantId;
+        if (!tenantId) {
+          const allTenants = await prisma.tenant.findMany({ where: { deletedAt: null }, select: { id: true }, take: 1 });
+          tenantId = allTenants[0]?.id;
+        }
+        if (!tenantId) {
+          return res.status(200).json({ success: true, data: { tracked: false, reason: 'no tenant' } });
+        }
+        page = await prisma.cMSPage.create({
+          data: {
+            slug: cleanSlug,
+            title: pageTitle || cleanSlug,
+            content: JSON.stringify({ type: 'static', autoTracked: true }),
+            isPublished: true,
+            tenantId,
+            status: 'static'
+          }
+        });
+      }
     }
+
+    // Ottieni il pageId risolto
+    const resolvedPageId = page.id;
 
     // Se abbiamo sessionId e duration, cerca di aggiornare una view esistente
     if (sessionId && duration !== undefined && duration !== null) {
       const existingView = await prisma.cMSPageView.findFirst({
         where: {
-          pageId,
+          pageId: resolvedPageId,
           sessionId,
           duration: null // Solo view senza duration già settata
         },
@@ -61,7 +114,7 @@ router.post('/track', optionalAuth, async (req, res) => {
 
         logger.debug('Page view duration updated', {
           component: 'cms-analytics',
-          pageId,
+          pageId: resolvedPageId,
           sessionId,
           duration: parseInt(duration),
           viewId: existingView.id
@@ -85,24 +138,42 @@ router.post('/track', optionalAuth, async (req, res) => {
     if (device.type === 'mobile') deviceType = 'mobile';
     else if (device.type === 'tablet') deviceType = 'tablet';
 
+    // Geolocalizzazione IP (offline, MaxMind GeoLite2)
+    const rawIp = req.ip || req.headers['x-forwarded-for']?.split(',')[0]?.trim() || null;
+    // Anonimizzazione IP: sostituisce ultimo ottetto con 0 (GDPR compliance)
+    const anonymizedIp = rawIp ? rawIp.replace(/\.\d+$/, '.0').replace(/:[0-9a-fA-F]+$/, ':0') : null;
+    let geoCountry = null;
+    let geoCity = null;
+    if (rawIp) {
+      try {
+        const geo = geoip.lookup(rawIp);
+        if (geo) {
+          geoCountry = geo.country || null;   // 2-letter ISO code (e.g. "IT")
+          geoCity = geo.city || null;          // City name
+        }
+      } catch { /* geoip lookup non critico */ }
+    }
+
     // Crea record vista
     const pageView = await prisma.cMSPageView.create({
       data: {
-        pageId,
+        pageId: resolvedPageId,
         sessionId: sessionId || null,
-        ipAddress: req.ip || req.headers['x-forwarded-for']?.split(',')[0] || null,
+        ipAddress: anonymizedIp,
         userAgent: req.headers['user-agent'] || null,
         referer: referer || req.headers['referer'] || null,
         device: deviceType,
         browser: browser.name ? `${browser.name} ${browser.version || ''}`.trim() : null,
         os: os.name ? `${os.name} ${os.version || ''}`.trim() : null,
+        country: geoCountry,
+        city: geoCity,
         duration: duration ? parseInt(duration) : null
       }
     });
 
     logger.debug('Page view tracked', {
       component: 'cms-analytics',
-      pageId,
+      pageId: resolvedPageId,
       sessionId,
       device: deviceType
     });
@@ -253,7 +324,7 @@ router.get('/pages/:pageId',
       if (endDate) dateFilter.lte = new Date(endDate);
 
       // Statistiche generali
-      const [totalViews, uniqueSessions, deviceStats, browserStats, refererStats] = await Promise.all([
+      const [totalViews, uniqueSessions, deviceStats, browserStats, refererStats, osStats, countryStats, cityStats] = await Promise.all([
         // Total views
         prisma.cMSPageView.count({
           where: {
@@ -303,6 +374,42 @@ router.get('/pages/:pageId',
           _count: { id: true },
           orderBy: { _count: { id: 'desc' } },
           take: 10
+        }),
+        // OS breakdown
+        prisma.cMSPageView.groupBy({
+          by: ['os'],
+          where: {
+            pageId,
+            os: { not: null },
+            ...(startDate || endDate ? { createdAt: dateFilter } : {})
+          },
+          _count: { id: true },
+          orderBy: { _count: { id: 'desc' } },
+          take: 10
+        }),
+        // Country breakdown
+        prisma.cMSPageView.groupBy({
+          by: ['country'],
+          where: {
+            pageId,
+            country: { not: null },
+            ...(startDate || endDate ? { createdAt: dateFilter } : {})
+          },
+          _count: { id: true },
+          orderBy: { _count: { id: 'desc' } },
+          take: 10
+        }),
+        // City breakdown
+        prisma.cMSPageView.groupBy({
+          by: ['city'],
+          where: {
+            pageId,
+            city: { not: null },
+            ...(startDate || endDate ? { createdAt: dateFilter } : {})
+          },
+          _count: { id: true },
+          orderBy: { _count: { id: 'desc' } },
+          take: 20
         })
       ]);
 
@@ -315,6 +422,22 @@ router.get('/pages/:pageId',
         },
         _avg: { duration: true }
       });
+
+      // Peak hours — ore del giorno con più visite (raw SQL per estrarre l'ora)
+      let peakHours = [];
+      try {
+        peakHours = await prisma.$queryRawUnsafe(
+          `SELECT EXTRACT(HOUR FROM "createdAt") AS hour, COUNT(*)::int AS views
+           FROM "cms_page_views"
+           WHERE "pageId" = $1
+             ${startDate || endDate ? `AND "createdAt" >= $2 AND "createdAt" <= $3` : ''}
+           GROUP BY 1
+           ORDER BY 1 ASC`,
+          ...(startDate || endDate ? [pageId, new Date(startDate), new Date(endDate)] : [pageId])
+        );
+      } catch (err) {
+        logger.warn('Failed to get peak hours', { error: err.message });
+      }
 
       // Views per giorno (ultimi 30 giorni se non specificato)
       const thirtyDaysAgo = new Date();
@@ -373,6 +496,22 @@ router.get('/pages/:pageId',
             referer: r.referer,
             count: r._count.id
           })),
+          os: osStats.map(o => ({
+            os: o.os,
+            count: o._count.id
+          })),
+          countries: countryStats.map(c => ({
+            country: c.country,
+            count: c._count.id
+          })),
+          cities: cityStats.map(c => ({
+            city: c.city,
+            count: c._count.id
+          })),
+          peakHours: Array.isArray(peakHours) ? peakHours.map(h => ({
+            hour: Number(h.hour),
+            views: Number(h.views)
+          })) : [],
           viewsOverTime: Array.isArray(viewsOverTime)
             ? viewsOverTime.map(v => ({
               date: v.date,
@@ -439,7 +578,8 @@ router.get('/summary',
         previousPeriodViews,
         uniqueSessions,
         topPages,
-        deviceBreakdown
+        deviceBreakdown,
+        topCities
       ] = await Promise.all([
         // Views nel periodo
         prisma.cMSPageView.count({
@@ -467,7 +607,7 @@ router.get('/summary',
             createdAt: dateFilter
           }
         }),
-        // Top 5 pagine
+        // Top pagine (fino a 30 per mostrare tutte le pagine del sito)
         prisma.cMSPage.findMany({
           where: {
             tenantId,
@@ -488,7 +628,7 @@ router.get('/summary',
           orderBy: {
             pageViews: { _count: 'desc' }
           },
-          take: 5
+          take: 30
         }),
         // Breakdown dispositivi
         prisma.cMSPageView.groupBy({
@@ -499,6 +639,18 @@ router.get('/summary',
             createdAt: dateFilter
           },
           _count: { id: true }
+        }),
+        // Top comuni (city breakdown globale per periodo)
+        prisma.cMSPageView.groupBy({
+          by: ['city'],
+          where: {
+            page: { tenantId },
+            city: { not: null },
+            createdAt: dateFilter
+          },
+          _count: { id: true },
+          orderBy: { _count: { id: 'desc' } },
+          take: 20
         })
       ]);
 
@@ -540,6 +692,22 @@ router.get('/summary',
         logger.warn('Failed to get views over time', { error: err.message });
       }
 
+      // Peak hours globali del periodo
+      let peakHours = [];
+      try {
+        peakHours = await prisma.$queryRawUnsafe(
+          `SELECT EXTRACT(HOUR FROM "createdAt") AS hour, COUNT(*)::int AS views
+           FROM "cms_page_views"
+           WHERE "pageId" IN (SELECT id FROM "cms_pages" WHERE "tenantId" = $1 AND "deletedAt" IS NULL)
+             AND "createdAt" >= $2 AND "createdAt" <= $3
+           GROUP BY 1
+           ORDER BY 1 ASC`,
+          tenantId, startDate, endDate
+        );
+      } catch (err) {
+        logger.warn('Failed to get summary peak hours', { error: err.message });
+      }
+
       // Calcola trend
       const viewsTrend = previousPeriodViews > 0
         ? ((totalViews - previousPeriodViews) / previousPeriodViews * 100).toFixed(1)
@@ -565,10 +733,12 @@ router.get('/summary',
             acc[d.device || 'unknown'] = d._count.id;
             return acc;
           }, {}),
+          topCities: topCities.map(c => ({ city: c.city, count: c._count.id })),
           viewsOverTime: viewsOverTime.map(v => ({
             date: v.date,
             views: Number(v.views)
-          }))
+          })),
+          peakHours: Array.isArray(peakHours) ? peakHours.map(h => ({ hour: Number(h.hour), views: Number(h.views) })) : []
         }
       });
     } catch (error) {

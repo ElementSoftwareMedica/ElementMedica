@@ -17,6 +17,7 @@ interface CompanySite {
   telefono?: string;
   mail?: string;
   dvr?: string;
+  numeroPAT?: string;
   rsppId?: string;
   medicoCompetenteId?: string;
   ultimoSopralluogo?: string;

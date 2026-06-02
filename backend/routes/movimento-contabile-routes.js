@@ -17,7 +17,7 @@ import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 import { authenticate } from '../middleware/auth.js';
 import { checkPermissions } from '../middleware/permissions.js';
 import prisma from '../config/prisma-optimization.js';
-import movimentoContabileService from '../services/management/movimento-contabile-service.js';
+import movimentoContabileService, { StatoMovimento } from '../services/management/movimento-contabile-service.js';
 import { validateParamId } from '../middleware/validateUUID.js';
 import { omitSystemFields } from '../utils/sanitizeBody.js';
 import {
@@ -33,6 +33,45 @@ import {
 
 const router = express.Router();
 router.param('id', validateParamId);
+
+const getStatoWorkflowPath = (from, target) => {
+    if (from === target) return [];
+
+    const paths = {
+        [StatoMovimento.BOZZA]: {
+            [StatoMovimento.DA_FATTURARE]: [StatoMovimento.DA_FATTURARE],
+            [StatoMovimento.CONFERMATO]: [StatoMovimento.CONFERMATO],
+            [StatoMovimento.FATTURATO]: [StatoMovimento.DA_FATTURARE, StatoMovimento.FATTURATO],
+            [StatoMovimento.PAGATO]: [StatoMovimento.DA_FATTURARE, StatoMovimento.FATTURATO, StatoMovimento.PAGATO],
+            [StatoMovimento.ANNULLATO]: [StatoMovimento.ANNULLATO]
+        },
+        [StatoMovimento.DA_FATTURARE]: {
+            [StatoMovimento.FATTURATO]: [StatoMovimento.FATTURATO],
+            [StatoMovimento.PAGATO]: [StatoMovimento.FATTURATO, StatoMovimento.PAGATO],
+            [StatoMovimento.ANNULLATO]: [StatoMovimento.ANNULLATO]
+        },
+        [StatoMovimento.CONFERMATO]: {
+            [StatoMovimento.DA_FATTURARE]: [StatoMovimento.DA_FATTURARE],
+            [StatoMovimento.FATTURATO]: [StatoMovimento.FATTURATO],
+            [StatoMovimento.PAGATO]: [StatoMovimento.FATTURATO, StatoMovimento.PAGATO],
+            [StatoMovimento.ANNULLATO]: [StatoMovimento.ANNULLATO]
+        },
+        [StatoMovimento.FATTURATO]: {
+            [StatoMovimento.PAGATO]: [StatoMovimento.PAGATO],
+            [StatoMovimento.STORNATO]: [StatoMovimento.STORNATO]
+        },
+        [StatoMovimento.PAGATO]: {
+            [StatoMovimento.STORNATO]: [StatoMovimento.STORNATO]
+        }
+    };
+
+    return paths[from]?.[target] || null;
+};
+
+const isSoloMedico = (req) => {
+    const roles = req.person?.roles || [];
+    return roles.length === 1 && roles.includes('MEDICO');
+};
 
 // ============================================
 // MIDDLEWARE: Audit Logger
@@ -105,7 +144,7 @@ router.get('/enums', authenticate, (req, res) => {
                 'BUNDLE', 'CONVENZIONE', 'CONSULENZA',
                 'SPESA_FISSA', 'SPESA_RICORRENTE', 'RIMBORSO'
             ],
-            stati: ['BOZZA', 'CONFERMATO', 'FATTURATO', 'PAGATO', 'ANNULLATO', 'STORNATO'],
+            stati: ['BOZZA', 'DA_FATTURARE', 'CONFERMATO', 'FATTURATO', 'PAGATO', 'ANNULLATO', 'STORNATO'],
             tipiSoggetto: ['PAZIENTE', 'AZIENDA', 'DIPENDENTE', 'MEDICO', 'FORMATORE', 'RSPP', 'FORNITORE'],
             branchTypes: ['MEDICA', 'FORMAZIONE']
         }
@@ -147,6 +186,10 @@ router.get('/',
                 dataScadenzaDa: req.query.dataScadenzaDa ? new Date(req.query.dataScadenzaDa) : undefined,
                 dataScadenzaA: req.query.dataScadenzaA ? new Date(req.query.dataScadenzaA) : undefined
             };
+
+            if (isSoloMedico(req)) {
+                filters.personId = req.person.id;
+            }
 
             const options = {
                 page: parseInt(req.query.page) || 1,
@@ -195,6 +238,13 @@ router.get('/:id',
                 return res.status(404).json({
                     success: false,
                     error: 'Movimento non trovato'
+                });
+            }
+
+            if (isSoloMedico(req) && movimento.personId !== req.person.id) {
+                return res.status(403).json({
+                    success: false,
+                    error: 'Accesso non autorizzato al movimento'
                 });
             }
 
@@ -373,6 +423,85 @@ router.patch('/:id/prezzo',
                 movimentoId: req.params.id,
             });
             res.status(500).json({ success: false, error: 'Errore aggiornamento prezzo' });
+        }
+    }
+);
+
+/**
+ * @route PATCH /api/v1/movimenti-contabili/bulk/stato
+ * @desc Cambia stato a più movimenti contabili rispettando il workflow
+ * @access Private (movimenti_contabili:write)
+ */
+router.patch('/bulk/stato',
+    authenticate,
+    checkPermissions(['movimenti_contabili:write', 'movimenti_contabili:manage']),
+    auditMovimento('bulk_cambio_stato'),
+    async (req, res) => {
+        try {
+            const tenantId = getEffectiveTenantId(req);
+            const updatedBy = req.person.id;
+            const { ids, stato, dataPagamento, metodoPagamento, riferimentoPagamento } = req.body;
+
+            if (!Array.isArray(ids) || ids.length === 0) {
+                return res.status(400).json({ success: false, error: 'Seleziona almeno un movimento' });
+            }
+
+            const uniqueIds = [...new Set(ids.filter(Boolean))];
+            const updated = [];
+            const failed = [];
+
+            for (const id of uniqueIds) {
+                try {
+                    const existing = await movimentoContabileService.findById(tenantId, id);
+                    if (!existing) {
+                        throw new Error('Movimento non trovato');
+                    }
+
+                    const workflowPath = getStatoWorkflowPath(existing.stato, stato);
+                    if (workflowPath === null) {
+                        throw new Error(`Transizione non valida: ${existing.stato} -> ${stato}`);
+                    }
+
+                    let movimento = existing;
+                    for (const nextStato of workflowPath) {
+                        const isFinalStep = nextStato === stato;
+                        movimento = await movimentoContabileService.cambiaStato(tenantId, id, {
+                            stato: nextStato,
+                            dataPagamento: isFinalStep ? dataPagamento : undefined,
+                            metodoPagamento: isFinalStep ? metodoPagamento : undefined,
+                            riferimentoPagamento: isFinalStep ? riferimentoPagamento : undefined,
+                            updatedBy
+                        });
+                    }
+                    updated.push(movimento);
+                } catch (error) {
+                    logger.warn({
+                        component: 'movimento-contabile-routes',
+                        action: 'bulk-stato-item-failed',
+                        id,
+                        error: error.message
+                    }, 'Movimento non aggiornato nel cambio stato massivo');
+                    failed.push({ id, error: 'Movimento non aggiornato' });
+                }
+            }
+
+            res.json({
+                success: true,
+                data: {
+                    updated: updated.length,
+                    failed: failed.length,
+                    errors: failed
+                },
+                message: failed.length
+                    ? `${updated.length} movimenti aggiornati, ${failed.length} non aggiornati`
+                    : `${updated.length} movimenti aggiornati`
+            });
+        } catch (error) {
+            logger.error('Failed bulk stato update', {
+                component: 'movimento-contabile-routes',
+                error: error.message
+            });
+            res.status(500).json({ success: false, error: 'Errore nel cambio stato massivo' });
         }
     }
 );

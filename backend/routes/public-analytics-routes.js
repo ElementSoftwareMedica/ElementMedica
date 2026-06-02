@@ -90,6 +90,13 @@ router.post('/track', [
 
         const { path, pageType, sessionId, duration, referer, metadata } = req.body;
 
+        // Filtra bot/crawler per ridurre rumore nei dati analitici
+        const userAgent = req.headers['user-agent'] || '';
+        const BOT_PATTERN = /bot|crawler|spider|slurp|baiduspider|facebookexternalhit|twitterbot|rogerbot|linkedinbot|embedly|quora\slink\spreview|showyoubot|outbrain|pinterest|developers\.google\.com\/\+\/web\/snippet/i;
+        if (BOT_PATTERN.test(userAgent)) {
+            return res.json({ success: true, data: { tracked: false, reason: 'bot' } });
+        }
+
         // Se duration presente con sessionId, aggiorna view esistente
         if (sessionId && duration !== undefined && duration !== null) {
             const existingView = await prisma.publicPageView.findFirst({

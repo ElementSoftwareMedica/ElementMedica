@@ -9,6 +9,7 @@
 
 import express from 'express';
 import { requireAuth, requirePermission } from '../../middleware/auth.js';
+import { requireFeature } from '../../middleware/featureFlags.js';
 import prisma from '../../config/prisma-optimization.js';
 import Allegato3BService from '../../services/clinical/Allegato3BService.js';
 import logger from '../../utils/logger.js';
@@ -17,6 +18,9 @@ import { getEffectiveTenantId } from '../../utils/tenantHelper.js';
 
 const router = express.Router();
 router.param('id', validateParamId);
+
+// Feature gate: Allegato 3B richiede MDL_ALLEGATO_3B
+router.use(requireAuth, requireFeature('MDL_ALLEGATO_3B'));
 
 /**
  * Arricchisce un record Allegato 3B con la proprietà `statistiche` calcolata
@@ -29,6 +33,10 @@ function enrichWithStatistiche(record) {
     const lavoratoriPerGenere = record.lavoratoriPerGenere || {};
     const rischi = record.statistichePerRischio || {};
     const malattie = record.malattieProf || {};
+    const giudiziPerRischio = record.giudiziPerRischio || {};
+    const accertamentiIntegrativi = record.accertamentiIntegrativi || {};
+    const totaliSorveglianza = rischi._totali || {};
+    const occupatiDateRiferimento = rischi._occupatiDateRiferimento || {};
 
     // Mappa i tipi giudizio alle categorie frontend
     const idonei = (giudiziPerTipologia['IDONEO'] || 0);
@@ -46,18 +54,23 @@ function enrichWithStatistiche(record) {
     const visiteRientroMalattia = (visitePerTipologia['RIENTRO_MALATTIA'] || 0);
 
     // Trasforma statistichePerRischio da oggetto a array
-    const statistichePerRischioArr = Object.entries(rischi).map(([codice, data]) => ({
-        tipoRischio: codice,
-        lavoratoriEsposti: data.lavoratoriEsposti || 0,
-        visiteProgrammate: 0,
-        visiteEffettuate: 0,
-        giudiziEmessi: 0
-    }));
+    const statistichePerRischioArr = Object.entries(rischi)
+        .filter(([codice]) => !codice.startsWith('_'))
+        .map(([codice, data]) => ({
+            tipoRischio: codice,
+            lavoratoriEsposti: data.lavoratoriEsposti || 0,
+            visiteProgrammate: 0,
+            visiteEffettuate: 0,
+            giudiziEmessi: 0
+        }));
 
     record.statistiche = {
-        totaleOccupati: record.totLavoratoriSorvegliati || 0,
-        totaleOccupatiMaschi: lavoratoriPerGenere.maschi || 0,
-        totaleOccupatiFemmine: lavoratoriPerGenere.femmine || 0,
+        totaleOccupati: totaliSorveglianza.occupatiAl31Dicembre || record.totLavoratoriSorvegliati || 0,
+        totaleOccupatiMaschi: occupatiDateRiferimento.al31Dicembre?.perGenere?.maschi ?? lavoratoriPerGenere.maschi ?? 0,
+        totaleOccupatiFemmine: occupatiDateRiferimento.al31Dicembre?.perGenere?.femmine ?? lavoratoriPerGenere.femmine ?? 0,
+        occupatiAl30Giugno: totaliSorveglianza.occupatiAl30Giugno || 0,
+        occupatiAl31Dicembre: totaliSorveglianza.occupatiAl31Dicembre || 0,
+        occupatiDateRiferimento,
         totaleSorvegliatiSanitari: record.totLavoratoriSorvegliati || 0,
         visitePreventive,
         visitePeriodiche,
@@ -71,6 +84,8 @@ function enrichWithStatistiche(record) {
         nonIdoneiTemporanei: nonIdoneiTemp,
         nonIdoneiPermanenti: nonIdoneiPerm,
         statistichePerRischio: statistichePerRischioArr,
+        giudiziPerRischio,
+        accertamentiIntegrativi,
         malattieRilevate: malattie.totale || 0,
         malattieDeununciate: malattie.totale || 0,
         periodoRiferimento: {
@@ -311,6 +326,8 @@ router.post('/generate-all', requireAuth, requirePermission('clinica.visite:upda
                     lavoratoriPerFasciaEta: stats.lavoratoriPerFasciaEta,
                     visitePerTipologia: stats.visitePerTipologia,
                     giudiziPerTipologia: stats.giudiziPerTipologia,
+                    giudiziPerRischio: stats.giudiziPerRischio,
+                    accertamentiIntegrativi: stats.accertamentiIntegrativi,
                     dataCompilazione: new Date(),
                     stato: 'PRONTO'
                 }, tenantId);
@@ -412,6 +429,8 @@ router.post('/', requireAuth, requirePermission('clinica.visite:update'), async 
                 lavoratoriPerFasciaEta: stats.lavoratoriPerFasciaEta,
                 visitePerTipologia: stats.visitePerTipologia,
                 giudiziPerTipologia: stats.giudiziPerTipologia,
+                giudiziPerRischio: stats.giudiziPerRischio,
+                accertamentiIntegrativi: stats.accertamentiIntegrativi,
                 dataCompilazione: new Date(),
                 stato: 'PRONTO'
             }, tenantId);
@@ -478,6 +497,8 @@ router.post('/:id/compile', requireAuth, requirePermission('clinica.visite:updat
             lavoratoriPerFasciaEta: stats.lavoratoriPerFasciaEta,
             visitePerTipologia: stats.visitePerTipologia,
             giudiziPerTipologia: stats.giudiziPerTipologia,
+            giudiziPerRischio: stats.giudiziPerRischio,
+            accertamentiIntegrativi: stats.accertamentiIntegrativi,
             dataCompilazione: new Date(),
             stato: 'PRONTO'
         }, tenantId);

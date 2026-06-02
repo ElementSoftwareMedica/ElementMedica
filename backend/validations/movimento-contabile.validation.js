@@ -21,11 +21,13 @@ const TIPI_ATTIVITA_VALIDI = [
     'VISITA_MEDICA', 'PRESTAZIONE_CLINICA', 'REFERTO',
     'VISITA_MDL', 'SOPRALLUOGO_MC', 'SOPRALLUOGO_RSPP',
     'DVR_STESURA', 'DVR_AGGIORNAMENTO',
+    'DVR_NUOVO', 'DVR_AGGIORNAMENTO_CON_MODIFICHE', 'DVR_AGGIORNAMENTO_SENZA_MODIFICHE',
     'NOMINA_MC', 'NOMINA_RSPP',
     'GIUDIZIO_IDONEITA', 'ALLEGATO_3B',
     'CORSO_FORMAZIONE', 'DOCENZA', 'ATTESTATO',
     'BUNDLE', 'CONVENZIONE', 'CONSULENZA',
-    'SPESA_FISSA', 'SPESA_RICORRENTE', 'RIMBORSO'
+    'SPESA_FISSA', 'SPESA_RICORRENTE', 'RIMBORSO',
+    'COMPENSO_FORMATORE'
 ];
 
 const STATI_VALIDI = ['BOZZA', 'DA_FATTURARE', 'CONFERMATO', 'FATTURATO', 'PAGATO', 'ANNULLATO', 'STORNATO'];
@@ -318,8 +320,11 @@ export const validateQueryMovimenti = [
 
     query('stato')
         .optional()
-        .isIn(STATI_VALIDI)
-        .withMessage(`Stato deve essere uno tra: ${STATI_VALIDI.join(', ')}`),
+        .custom(value => {
+            const stati = String(value).split(',').map(s => s.trim()).filter(Boolean);
+            return stati.length > 0 && stati.every(stato => STATI_VALIDI.includes(stato));
+        })
+        .withMessage(`Stato deve essere uno o più tra: ${STATI_VALIDI.join(', ')}`),
 
     query('tipoSoggetto')
         .optional()

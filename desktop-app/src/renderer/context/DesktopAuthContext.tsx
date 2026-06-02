@@ -41,11 +41,23 @@ const DesktopAuthContext = createContext<DesktopAuthContextType | null>(null)
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4001'
 const isDev = import.meta.env.DEV
 
-/** Converte array di permessi backend → Record normalizzato frontend */
-function buildPermissionsMap(rawPermissions: string[]): Record<string, boolean> {
+/** Converte permessi backend → Record normalizzato frontend */
+function buildPermissionsMap(rawPermissions: unknown[]): Record<string, boolean> {
     const raw: Record<string, boolean> = {}
     for (const p of rawPermissions) {
-        if (p) raw[p] = true
+        if (!p) continue
+        if (typeof p === 'string') {
+            raw[p] = true
+            continue
+        }
+        if (typeof p === 'object') {
+            const item = p as Record<string, unknown>
+            const key = item.key || item.permission || item.name || item.codice
+            const resource = item.resource || item.entity
+            const action = item.action || item.operation
+            if (typeof key === 'string' && key.includes(':')) raw[key] = true
+            else if (typeof resource === 'string' && typeof action === 'string') raw[`${resource}:${action}`] = true
+        }
     }
     return convertBackendToFrontendPermissions(raw)
 }
@@ -185,10 +197,10 @@ export function DesktopAuthProvider({ children }: { children: ReactNode }): JSX.
                 headers: { Authorization: `Bearer ${token}` },
                 timeout: 8000
             })
-            const rawPerms: Record<string, boolean> | string[] = resp.data?.permissions || resp.data?.user?.permissions || {}
+            const rawPerms: Record<string, boolean> | unknown[] = resp.data?.permissions || resp.data?.user?.permissions || {}
             let map: Record<string, boolean>
             if (Array.isArray(rawPerms)) {
-                map = buildPermissionsMap(rawPerms as string[])
+                map = buildPermissionsMap(rawPerms)
             } else {
                 map = convertBackendToFrontendPermissions(rawPerms as Record<string, boolean>)
             }
@@ -295,7 +307,7 @@ export function DesktopAuthProvider({ children }: { children: ReactNode }): JSX.
         setUser(userInfo)
 
         // Build permissions from login response (array of strings)
-        const rawPermArr: string[] = Array.isArray(userData.permissions) ? userData.permissions : []
+        const rawPermArr: unknown[] = Array.isArray(userData.permissions) ? userData.permissions : []
         const permMap = buildPermissionsMap(rawPermArr)
         setPermissions(permMap)
         localStorage.setItem('desktop_permissions', JSON.stringify(permMap))

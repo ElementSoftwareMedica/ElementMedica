@@ -100,6 +100,27 @@ router.get('/check-taxcode',
   personController.checkTaxCodeAvailability
 );
 
+// GET /api/persons/check-existing - Verifica se una Person esiste globalmente (cross-tenant)
+router.get('/check-existing',
+  authenticateToken,
+  requirePermission('persons:read'),
+  personController.checkExistingPerson
+);
+
+// POST /api/persons/import-cross-tenant - Importa Person esistente in questo tenant
+router.post('/import-cross-tenant',
+  authenticateToken,
+  requirePermission('persons:create'),
+  personController.importPersonCrossTenant
+);
+
+// POST /api/persons/:id/hide-from-view - Revoca consent cross-tenant (nasconde dal tenant)
+router.post('/:id/hide-from-view',
+  authenticateToken,
+  requirePermission('persons:delete'),
+  personController.hideFromView
+);
+
 // GET /api/persons/preferences - Ottieni preferenze utente
 router.get('/preferences',
   authenticateToken,

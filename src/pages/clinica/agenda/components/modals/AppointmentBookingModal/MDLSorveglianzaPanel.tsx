@@ -260,7 +260,7 @@ export const MDLSorveglianzaPanel: React.FC<MDLSorveglianzaPanelProps> = ({
                                     <ClipboardList className="h-3.5 w-3.5 inline mr-1" />
                                     Prestazioni previste dal protocollo
                                     <span className="ml-1.5 text-gray-400 font-normal normal-case">
-                                        ({prestazioniSelezionate.size}/{prestazioniProtocollo.filter(pp => pp.prestazioneId).length} selezionate)
+                                        ({prestazioniSelezionate.size}/{prestazioniProtocollo.filter(pp => pp.prestazioneId && pp.prestazioneId !== selectedPrestazione?.id).length} selezionate)
                                     </span>
                                 </p>
                                 <div className="space-y-1">

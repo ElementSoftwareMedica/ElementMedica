@@ -20,27 +20,40 @@ export type DirezioneMovimento = 'ENTRATA' | 'USCITA';
 
 export type StatoMovimento =
     | 'BOZZA'
+    | 'DA_FATTURARE'
     | 'CONFERMATO'
     | 'FATTURATO'
     | 'PAGATO'
     | 'SCADUTO'
-    | 'ANNULLATO';
+    | 'ANNULLATO'
+    | 'STORNATO';
 
 export type TipoAttivitaMovimento =
     | 'VISITA_MEDICA'
-    | 'VISITA_SPECIALISTICA'
-    | 'ESAME_DIAGNOSTICO'
+    | 'PRESTAZIONE_CLINICA'
+    | 'REFERTO'
+    | 'VISITA_MDL'
+    | 'SOPRALLUOGO_MC'
+    | 'SOPRALLUOGO_RSPP'
+    | 'DVR_STESURA'
+    | 'DVR_AGGIORNAMENTO'
+    | 'DVR_NUOVO'
+    | 'DVR_AGGIORNAMENTO_CON_MODIFICHE'
+    | 'DVR_AGGIORNAMENTO_SENZA_MODIFICHE'
+    | 'NOMINA_MC'
+    | 'NOMINA_RSPP'
     | 'GIUDIZIO_IDONEITA'
     | 'ALLEGATO_3B'
-    | 'DVR'
-    | 'SOPRALLUOGO'
-    | 'NOMINA_RUOLO'
     | 'CORSO_FORMAZIONE'
-    | 'CORSO_AGGIORNAMENTO'
-    | 'BUNDLE_PACCHETTO'
-    | 'PREVENTIVO'
+    | 'DOCENZA'
+    | 'ATTESTATO'
+    | 'BUNDLE'
+    | 'CONVENZIONE'
     | 'CONSULENZA'
-    | 'ALTRO';
+    | 'SPESA_FISSA'
+    | 'SPESA_RICORRENTE'
+    | 'RIMBORSO'
+    | 'COMPENSO_FORMATORE';
 
 export type TipoSoggettoMovimento =
     | 'PAZIENTE'
@@ -174,6 +187,12 @@ export interface MovimentiContabiliListParams {
     include?: string; // comma separated: visita,person,company,fattura
 }
 
+export interface BulkUpdateStatoResult {
+    updated: number;
+    failed: number;
+    errors: Array<{ id: string; error: string }>;
+}
+
 export interface CreateMovimentoInput {
     direzione: DirezioneMovimento;
     tipo: TipoAttivitaMovimento;
@@ -302,14 +321,15 @@ class MovimentiContabiliService {
         const response = await api.get(this.basePath, { params });
         const responseData = response.data as any;
 
-        // Handle response structure
-        const data = responseData?.data || responseData;
-        const movimenti = data?.movimenti || data?.data || [];
-        const pagination = data?.pagination || {
-            page: params?.page || 1,
-            limit: params?.limit || 20,
-            total: movimenti.length,
-            totalPages: 1
+        // Backend returns { success, data: [...], total, page, pageSize }
+        const movimenti = Array.isArray(responseData?.data) ? responseData.data : [];
+        const pageSize = responseData?.pageSize || params?.limit || 20;
+        const total = responseData?.total ?? movimenti.length;
+        const pagination = {
+            page: responseData?.page || params?.page || 1,
+            limit: pageSize,
+            total,
+            totalPages: total > 0 ? Math.ceil(total / pageSize) : 1
         };
 
         return {
@@ -383,10 +403,20 @@ class MovimentiContabiliService {
     /**
      * Bulk update stato
      */
-    async bulkUpdateStato(ids: string[], stato: StatoMovimento): Promise<number> {
+    async bulkUpdateStatoDetailed(ids: string[], stato: StatoMovimento): Promise<BulkUpdateStatoResult> {
         const response = await api.patch(`${this.basePath}/bulk/stato`, { ids, stato });
         const responseData = response.data as any;
-        return responseData?.data?.updated || responseData?.updated || 0;
+        const data = responseData?.data || responseData || {};
+        return {
+            updated: Number(data.updated || 0),
+            failed: Number(data.failed || 0),
+            errors: Array.isArray(data.errors) ? data.errors : []
+        };
+    }
+
+    async bulkUpdateStato(ids: string[], stato: StatoMovimento): Promise<number> {
+        const result = await this.bulkUpdateStatoDetailed(ids, stato);
+        return result.updated;
     }
 
     // ==========================================

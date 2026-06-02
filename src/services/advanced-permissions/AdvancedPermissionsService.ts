@@ -28,18 +28,24 @@ export class AdvancedPermissionsService {
         );
 
         if (missingEntities.length > 0) {
-          console.warn('[AdvancedPermissions] Entità mancanti dal backend:', missingEntities);
+          if (import.meta.env.DEV) {
+            console.warn('[AdvancedPermissions] Entità mancanti dal backend:', missingEntities);
+          }
           return this.getStaticEntityDefinitionsWithVirtual();
         }
 
         // Aggiungi le entità virtuali alla lista delle entità dal backend
         return this.mergeWithVirtualEntities(response.entities);
       } else {
-        console.warn('[AdvancedPermissions] Risposta backend non valida, uso fallback');
+        if (import.meta.env.DEV) {
+          console.warn('[AdvancedPermissions] Risposta backend non valida, uso fallback');
+        }
         return this.getStaticEntityDefinitionsWithVirtual();
       }
     } catch (error) {
-      console.error('[AdvancedPermissions] Errore nel caricamento entità dal backend:', error);
+      if (import.meta.env.DEV) {
+        console.error('[AdvancedPermissions] Errore nel caricamento entità dal backend:', error);
+      }
       return this.getStaticEntityDefinitionsWithVirtual();
     }
   }
@@ -69,7 +75,9 @@ export class AdvancedPermissionsService {
       // Converte i permessi dal formato backend al formato frontend
       return convertFromBackendFormat(allPermissions);
     } catch (error) {
-      console.error('Error fetching role permissions:', error);
+      if (import.meta.env.DEV) {
+        console.error('Error fetching role permissions:', error);
+      }
       return [];
     }
   }
@@ -94,7 +102,9 @@ export class AdvancedPermissionsService {
 
       return response.success;
     } catch (error) {
-      console.error('Error updating role permissions:', error);
+      if (import.meta.env.DEV) {
+        console.error('Error updating role permissions:', error);
+      }
       return false;
     }
   }
@@ -119,7 +129,9 @@ export class AdvancedPermissionsService {
       });
       return response.hasPermission;
     } catch (error) {
-      console.error('Error checking permission:', error);
+      if (import.meta.env.DEV) {
+        console.error('Error checking permission:', error);
+      }
       return false;
     }
   }
@@ -132,7 +144,9 @@ export class AdvancedPermissionsService {
       const response = await apiGet<{ permissions: string[] }>(`${this.baseUrl}/entities/${entity}/permissions`);
       return response.permissions;
     } catch (error) {
-      console.error('Error fetching available permissions:', error);
+      if (import.meta.env.DEV) {
+        console.error('Error fetching available permissions:', error);
+      }
       return ['create', 'read', 'update', 'delete'];
     }
   }
@@ -300,10 +314,14 @@ export class AdvancedPermissionsService {
         return response.data.definitions;
       }
 
-      console.warn('[AdvancedPermissions] Nessuna relation definition trovata');
+      if (import.meta.env.DEV) {
+        console.warn('[AdvancedPermissions] Nessuna relation definition trovata');
+      }
       return [];
     } catch (error) {
-      console.error('[AdvancedPermissions] Errore nel caricamento relation definitions:', error);
+      if (import.meta.env.DEV) {
+        console.error('[AdvancedPermissions] Errore nel caricamento relation definitions:', error);
+      }
       return [];
     }
   }
@@ -324,7 +342,9 @@ export class AdvancedPermissionsService {
 
       throw new Error('Invalid response from test-data-filter endpoint');
     } catch (error) {
-      console.error('[AdvancedPermissions] Errore test data filter:', error);
+      if (import.meta.env.DEV) {
+        console.error('[AdvancedPermissions] Errore test data filter:', error);
+      }
       throw error;
     }
   }

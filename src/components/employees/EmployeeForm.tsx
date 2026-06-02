@@ -8,13 +8,14 @@ import {
   MapPin,
   Phone,
   User,
-  AlertTriangle,
   RefreshCw,
   Shield,
   Check,
   Edit2,
   Trash2,
-  X
+  X,
+  UserPlus,
+  Building2
 } from 'lucide-react';
 import { useToast } from '../../hooks/useToast';
 import EntityFormLayout from '../shared/form/EntityFormLayout';
@@ -28,6 +29,7 @@ import { useAsyncValidation } from '../../hooks/useAsyncValidation';
 import { DatePickerElegante } from '../ui/DatePickerElegante';
 import { checkEmailAvailability, checkTaxCodeAvailability } from '../../services/validation';
 import { extractBirthPlaceFromTaxCode, extractGenderFromTaxCode, generateTaxCode } from '../../utils/codiceFiscale';
+import { DEFAULT_ETHNICITY, ETHNICITY_OPTIONS } from '../../constants/ethnicityOptions';
 
 interface ExistingPersonInfo {
   id: string;
@@ -38,7 +40,8 @@ interface ExistingPersonInfo {
   status: 'active' | 'deleted';
   currentRoles: string[];
   message: string;
-  action: string;
+  action: 'REACTIVATE_AND_UPDATE' | 'ADD_ROLE_SAME_TENANT' | 'ADD_ROLE_NEW_TENANT' | 'ROLE_EXISTS_IN_TENANT' | string;
+  isSameTenant: boolean;
   newRoleType: string;
 }
 
@@ -53,6 +56,7 @@ interface PersonFormNewProps {
     birthPlace?: string;
     birthProvince?: string;
     gender?: string;
+    etnia?: string;
     vatNumber?: string;
     residenceAddress?: string;
     residenceCity?: string;
@@ -85,6 +89,12 @@ interface PersonFormNewProps {
   onClose: () => void;
   /** RoleType per controllare visibilità sezioni */
   roleType?: string;
+  /** Valori iniziali quando il form viene aperto da un flusso contestuale */
+  initialValues?: Partial<{
+    companyId: string;
+    roleType: string;
+    status: string;
+  }>;
   /** Headers multi-tenant per le operazioni CRUD */
   operateHeaders?: Record<string, string>;
 }
@@ -124,6 +134,7 @@ const EmployeeForm: React.FC<PersonFormNewProps> = ({
   onSuccess,
   onClose,
   roleType = 'EMPLOYEE',
+  initialValues,
   operateHeaders,
 }) => {
   const { getOperateHeaders } = useTenantMode();
@@ -137,12 +148,13 @@ const EmployeeForm: React.FC<PersonFormNewProps> = ({
     birthPlace: '',
     birthProvince: '',
     gender: '',
+    etnia: DEFAULT_ETHNICITY,
     vatNumber: '',
     residenceAddress: '',
     residenceCity: '',
     province: '',
     postalCode: '',
-    companyId: '',
+    companyId: initialValues?.companyId || '',
     siteId: '',
     repartoId: '',
     protocolloSanitarioId: '',
@@ -150,7 +162,7 @@ const EmployeeForm: React.FC<PersonFormNewProps> = ({
     email: '',
     phone: '',
     notes: '',
-    status: 'ACTIVE',
+    status: initialValues?.status || 'ACTIVE',
     hiredDate: '',
     photoUrl: '',
   });
@@ -219,18 +231,9 @@ const EmployeeForm: React.FC<PersonFormNewProps> = ({
         person.gender ||
         (taxCodeStr.length === 16 ? (extractGenderFromTaxCode(taxCodeStr) || '') : '');
 
-      // P49: Il Person API restituisce companyId = CompanyTenantProfile.id,
-      // ma il dropdown Azienda usa Company.id (globale).
-      // Risolvi il match: cerca l'azienda che ha companyTenantProfileId === person.companyId
-      let resolvedCompanyId = person.companyId || '';
-      if (resolvedCompanyId && companies.length > 0) {
-        const matchByCTP = companies.find(
-          c => c.companyTenantProfileId === resolvedCompanyId || c.id === resolvedCompanyId
-        );
-        if (matchByCTP) {
-          resolvedCompanyId = matchByCTP.id;
-        }
-      }
+      // P49: Il Person API restituisce companyId = CompanyTenantProfile.id.
+      // Il dropdown usa company.companyTenantProfileId come valore, quindi usiamo direttamente.
+      const resolvedCompanyId = person.companyId || '';
 
       setFormData({
         firstName: person.firstName || '',
@@ -240,6 +243,7 @@ const EmployeeForm: React.FC<PersonFormNewProps> = ({
         birthPlace: person.birthPlace || '',
         birthProvince: person.birthProvince || '',
         gender: derivedGender,
+        etnia: person.etnia || DEFAULT_ETHNICITY,
         vatNumber: person.vatNumber || '',
         residenceAddress: person.residenceAddress || '',
         residenceCity: person.residenceCity || '',
@@ -329,20 +333,16 @@ const EmployeeForm: React.FC<PersonFormNewProps> = ({
       setCompanySites([]);
       return;
     }
-    // P49: company.id è CompanyTenantProfile.id, company.companyId è Company globale ID
-    // L'endpoint /company-sites/company/:companyId richiede il Company globale ID
-    const selectedCompany = companies.find(c => c.id === formData.companyId);
-    // Attendi che companies sia caricato per risolvere il globalCompanyId corretto
+    // P49: formData.companyId = CompanyTenantProfile.id; l'API sedi richiede Company.id (globale)
+    const selectedCompany = companies.find(
+      c => c.companyTenantProfileId === formData.companyId
+    );
     if (!selectedCompany && companies.length > 0) {
-      // L'azienda non è nella lista — potrebbe essere un ID non valido
       setCompanySites([]);
       return;
     }
-    if (!selectedCompany) {
-      // companies non ancora caricato, skip
-      return;
-    }
-    const globalCompanyId = selectedCompany.companyId || formData.companyId;
+    if (!selectedCompany) return;
+    const globalCompanyId = selectedCompany.id;
     apiGet<{ sites?: Array<{ id: string; siteName: string }> }>(`/api/v1/company-sites/company/${globalCompanyId}`)
       .then(data => setCompanySites(data?.sites || (Array.isArray(data) ? data as any : [])))
       .catch(() => setCompanySites([]));
@@ -652,6 +652,7 @@ const EmployeeForm: React.FC<PersonFormNewProps> = ({
           currentRoles: responseData.existingPerson.currentRoles || [],
           message: responseData.message,
           action: responseData.action,
+          isSameTenant: responseData.isSameTenant ?? true,
           newRoleType: responseData.newRoleType
         });
         setPendingPayload({
@@ -737,70 +738,86 @@ const EmployeeForm: React.FC<PersonFormNewProps> = ({
   return (
     <>
       {/* Dialog conferma persona esistente */}
-      {showConfirmDialog && existingPersonInfo && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl dark:shadow-black/50 max-w-lg w-full mx-4 overflow-hidden">
-            <div className={`p-4 ${existingPersonInfo.status === 'deleted' ? 'bg-amber-50 dark:bg-amber-900/30 border-b border-amber-100 dark:border-amber-800' : 'bg-blue-50 dark:bg-blue-900/30 border-b border-blue-100 dark:border-blue-800'}`}>
-              <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-full ${existingPersonInfo.status === 'deleted' ? 'bg-amber-100' : 'bg-blue-100'}`}>
-                  {existingPersonInfo.status === 'deleted' ? (
-                    <RefreshCw className="w-5 h-5 text-amber-600" />
-                  ) : (
-                    <AlertTriangle className="w-5 h-5 text-blue-600" />
-                  )}
+      {showConfirmDialog && existingPersonInfo && (() => {
+        const isDeleted = existingPersonInfo.action === 'REACTIVATE_AND_UPDATE';
+        const isCrossTenant = existingPersonInfo.action === 'ADD_ROLE_NEW_TENANT';
+        const headerBg = isDeleted
+          ? 'bg-amber-50 dark:bg-amber-900/30 border-b border-amber-100 dark:border-amber-800'
+          : isCrossTenant
+            ? 'bg-teal-50 dark:bg-teal-900/30 border-b border-teal-100 dark:border-teal-800'
+            : 'bg-blue-50 dark:bg-blue-900/30 border-b border-blue-100 dark:border-blue-800';
+        const iconBg = isDeleted ? 'bg-amber-100' : isCrossTenant ? 'bg-teal-100' : 'bg-blue-100';
+        const btnClass = isDeleted
+          ? 'bg-amber-600 hover:bg-amber-700'
+          : isCrossTenant
+            ? 'bg-teal-600 hover:bg-teal-700'
+            : 'bg-blue-600 hover:bg-blue-700';
+        const title = isDeleted
+          ? 'Riattivare persona eliminata?'
+          : isCrossTenant
+            ? 'Crea accesso in questa organizzazione'
+            : 'Aggiungi ruolo alla persona';
+        const btnLabel = isDeleted ? 'Riattiva e Aggiorna' : isCrossTenant ? 'Crea Accesso' : 'Aggiungi Ruolo';
+        return (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl dark:shadow-black/50 max-w-lg w-full mx-4 overflow-hidden">
+              <div className={`p-4 ${headerBg}`}>
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-full ${iconBg}`}>
+                    {isDeleted ? (
+                      <RefreshCw className="w-5 h-5 text-amber-600" />
+                    ) : isCrossTenant ? (
+                      <Building2 className="w-5 h-5 text-teal-600" />
+                    ) : (
+                      <UserPlus className="w-5 h-5 text-blue-600" />
+                    )}
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-50">
+                    {title}
+                  </h3>
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-50">
-                  {existingPersonInfo.status === 'deleted'
-                    ? 'Riattivare persona eliminata?'
-                    : 'Persona già esistente'}
-                </h3>
               </div>
-            </div>
 
-            <div className="p-6">
-              <p className="text-gray-600 dark:text-gray-400 mb-4">{existingPersonInfo.message}</p>
+              <div className="p-6">
+                <p className="text-gray-600 dark:text-gray-400 mb-4">{existingPersonInfo.message}</p>
 
-              <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 mb-4">
-                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Dati esistenti:</p>
-                <div className="mt-2 text-sm text-gray-600 dark:text-gray-400 space-y-1">
-                  <p><span className="font-medium">Nome:</span> {existingPersonInfo.firstName} {existingPersonInfo.lastName}</p>
-                  {existingPersonInfo.email && <p><span className="font-medium">Email:</span> {existingPersonInfo.email}</p>}
-                  {existingPersonInfo.taxCode && <p><span className="font-medium">Codice Fiscale:</span> {existingPersonInfo.taxCode}</p>}
-                  <p><span className="font-medium">Ruoli attuali:</span> {existingPersonInfo.currentRoles.join(', ') || 'Nessuno'}</p>
-                  <p><span className="font-medium">Stato:</span>
-                    <span className={`ml-1 px-2 py-0.5 rounded text-xs ${existingPersonInfo.status === 'deleted' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-                      {existingPersonInfo.status === 'deleted' ? 'Eliminato' : 'Attivo'}
-                    </span>
-                  </p>
+                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 mb-4">
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Dati esistenti:</p>
+                  <div className="mt-2 text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                    <p><span className="font-medium">Nome:</span> {existingPersonInfo.firstName} {existingPersonInfo.lastName}</p>
+                    {existingPersonInfo.email && <p><span className="font-medium">Email:</span> {existingPersonInfo.email}</p>}
+                    {existingPersonInfo.taxCode && <p><span className="font-medium">Codice Fiscale:</span> {existingPersonInfo.taxCode}</p>}
+                    <p><span className="font-medium">Ruoli attuali:</span> {existingPersonInfo.currentRoles.join(', ') || 'Nessuno'}</p>
+                    <p><span className="font-medium">Stato:</span>
+                      <span className={`ml-1 px-2 py-0.5 rounded text-xs ${existingPersonInfo.status === 'deleted' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                        {existingPersonInfo.status === 'deleted' ? 'Eliminato' : 'Attivo'}
+                      </span>
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="flex justify-end gap-3 p-4 bg-gray-50 dark:bg-gray-700/50 border-t border-gray-200 dark:border-gray-700">
-              <button
-                onClick={handleCancelReactivation}
-                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                disabled={isReactivating}
-              >
-                Annulla
-              </button>
-              <button
-                onClick={handleConfirmReactivation}
-                disabled={isReactivating}
-                className={`px-4 py-2 text-white rounded-lg transition-colors flex items-center gap-2 ${existingPersonInfo.status === 'deleted'
-                  ? 'bg-amber-600 hover:bg-amber-700'
-                  : 'bg-blue-600 hover:bg-blue-700'
-                  } disabled:opacity-50`}
-              >
-                {isReactivating && <RefreshCw className="w-4 h-4 animate-spin" />}
-                {existingPersonInfo.status === 'deleted'
-                  ? 'Riattiva e Aggiorna'
-                  : 'Conferma Aggiornamento'}
-              </button>
+              <div className="flex justify-end gap-3 p-4 bg-gray-50 dark:bg-gray-700/50 border-t border-gray-200 dark:border-gray-700">
+                <button
+                  onClick={handleCancelReactivation}
+                  className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  disabled={isReactivating}
+                >
+                  Annulla
+                </button>
+                <button
+                  onClick={handleConfirmReactivation}
+                  disabled={isReactivating}
+                  className={`px-4 py-2 text-white rounded-lg transition-colors flex items-center gap-2 ${btnClass} disabled:opacity-50`}
+                >
+                  {isReactivating && <RefreshCw className="w-4 h-4 animate-spin" />}
+                  {btnLabel}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       <EntityFormLayout
         title={person ? 'Modifica Persona' : 'Nuova Persona'}
@@ -883,6 +900,16 @@ const EmployeeForm: React.FC<PersonFormNewProps> = ({
                 />
 
                 <EntityFormField
+                  name="etnia"
+                  label="Etnia"
+                  type="select"
+                  value={formData.etnia}
+                  onChange={handleChange}
+                  leftIcon={<User size={18} />}
+                  options={ETHNICITY_OPTIONS.map(option => ({ value: option.value, label: option.label }))}
+                />
+
+                <EntityFormField
                   name="birthPlace"
                   label="Comune di Nascita"
                   value={formData.birthPlace}
@@ -957,9 +984,10 @@ const EmployeeForm: React.FC<PersonFormNewProps> = ({
                     error={errors.companyId}
                     searchable
                     options={[...companies]
+                      .filter(company => company.companyTenantProfileId)
                       .sort((a, b) => (a.ragioneSociale || '').localeCompare(b.ragioneSociale || ''))
                       .map(company => ({
-                        value: company.id,
+                        value: company.companyTenantProfileId!,
                         label: company.ragioneSociale
                       }))}
                   />
@@ -1157,8 +1185,8 @@ const EmployeeForm: React.FC<PersonFormNewProps> = ({
                               <span
                                 key={p.id}
                                 className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border ${formData.protocolloSanitarioId === p.id
-                                    ? 'bg-teal-50 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300 border-teal-300 dark:border-teal-600'
-                                    : 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border-blue-200 dark:border-blue-700'
+                                  ? 'bg-teal-50 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300 border-teal-300 dark:border-teal-600'
+                                  : 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border-blue-200 dark:border-blue-700'
                                   }`}
                                 title={p.mansioneName ? `Dalla mansione: ${p.mansioneName}` : undefined}
                               >

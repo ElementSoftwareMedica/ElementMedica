@@ -61,13 +61,53 @@ interface CompanySite {
   updatedAt: string;
 }
 
+interface NominaFigureInfo {
+  id: string;
+  tipoRuolo: string;
+  stato?: string;
+  dataFine?: string | null;
+  persona?: {
+    id: string;
+    fullName?: string;
+    firstName?: string;
+    lastName?: string;
+  };
+  site?: {
+    id: string;
+    siteName?: string;
+  } | null;
+}
+
 interface CompanySitesProps {
   companyId: string;
+  nomine?: NominaFigureInfo[];
   selectedSiteId?: string | null;
   onSiteFilterChange?: (siteId: string | null) => void;
 }
 
-const CompanySites: React.FC<CompanySitesProps> = ({ companyId, selectedSiteId, onSiteFilterChange }) => {
+const ROLE_LABELS: Record<string, string> = {
+  MEDICO_COMPETENTE: 'Medico competente',
+  MEDICO_COMPETENTE_COORDINATO: 'Medico coordinato',
+  RSPP: 'RSPP',
+  RLS: 'RLS'
+};
+
+const ROLE_ICONS: Record<string, React.FC<{ className?: string }>> = {
+  MEDICO_COMPETENTE: Stethoscope,
+  MEDICO_COMPETENTE_COORDINATO: Stethoscope,
+  RSPP: Shield,
+  RLS: Users
+};
+
+const roleOrder = ['MEDICO_COMPETENTE', 'MEDICO_COMPETENTE_COORDINATO', 'RSPP', 'RLS'];
+
+const getNominaPersonName = (nomina: NominaFigureInfo) => {
+  if (nomina.persona?.fullName) return nomina.persona.fullName;
+  const name = `${nomina.persona?.firstName || ''} ${nomina.persona?.lastName || ''}`.trim();
+  return name || 'Figura nominata';
+};
+
+const CompanySites: React.FC<CompanySitesProps> = ({ companyId, nomine = [], selectedSiteId, onSiteFilterChange }) => {
   const { getOperateHeaders } = useTenantMode();
   const operateHeaders = getOperateHeaders();
   const [sites, setSites] = useState<CompanySite[]>([]);
@@ -99,6 +139,69 @@ const CompanySites: React.FC<CompanySitesProps> = ({ companyId, selectedSiteId, 
   const filteredSites = selectedSiteId
     ? sites.filter(site => site.id === selectedSiteId)
     : sites;
+
+  const getSiteNomine = useCallback((siteId: string) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return nomine
+      .filter(nomina => roleOrder.includes(nomina.tipoRuolo))
+      .filter(nomina => !nomina.stato || nomina.stato === 'ATTIVA')
+      .filter(nomina => !nomina.dataFine || new Date(nomina.dataFine) >= today)
+      .filter(nomina => !nomina.site?.id || nomina.site.id === siteId)
+      .sort((a, b) => roleOrder.indexOf(a.tipoRuolo) - roleOrder.indexOf(b.tipoRuolo));
+  }, [nomine]);
+
+  const renderSecurityFigures = useCallback((site: CompanySite, compact = false) => {
+    const figure = getSiteNomine(site.id);
+    const fallbackFigure: NominaFigureInfo[] = [
+      site.medicoCompetente ? {
+        id: `mc-${site.id}`,
+        tipoRuolo: 'MEDICO_COMPETENTE',
+        persona: {
+          id: site.medicoCompetente.id,
+          fullName: `${site.medicoCompetente.firstName} ${site.medicoCompetente.lastName}`.trim()
+        }
+      } : null,
+      site.rspp ? {
+        id: `rspp-${site.id}`,
+        tipoRuolo: 'RSPP',
+        persona: {
+          id: site.rspp.id,
+          fullName: `${site.rspp.firstName} ${site.rspp.lastName}`.trim()
+        }
+      } : null
+    ].filter(Boolean) as NominaFigureInfo[];
+    const merged = figure.length > 0 ? figure : fallbackFigure;
+
+    if (merged.length === 0 && !site.dvr) {
+      return <p className="text-sm text-gray-400">Nessuna figura nominata</p>;
+    }
+
+    return (
+      <div className={compact ? 'space-y-1' : 'space-y-2'}>
+        {merged.map(nomina => {
+          const Icon = ROLE_ICONS[nomina.tipoRuolo] || Shield;
+          const scope = nomina.site?.id ? nomina.site.siteName : 'Azienda';
+          return (
+            <div key={nomina.id} className="flex items-start gap-2 text-sm text-gray-600">
+              <Icon className="h-4 w-4 mt-0.5 flex-shrink-0 text-teal-600" />
+              <span className="min-w-0">
+                <span className="font-medium text-gray-700">{ROLE_LABELS[nomina.tipoRuolo] || nomina.tipoRuolo}:</span>{' '}
+                <span className="break-words">{getNominaPersonName(nomina)}</span>
+                <span className="ml-1 text-xs text-gray-400">({scope})</span>
+              </span>
+            </div>
+          );
+        })}
+        {site.dvr && (
+          <div className="flex items-center text-sm text-gray-600">
+            <FileText className="h-4 w-4 mr-2 text-purple-500" />
+            <span className="font-medium">DVR:</span> {site.dvr}
+          </div>
+        )}
+      </div>
+    );
+  }, [getSiteNomine]);
 
   const fetchSites = useCallback(async () => {
     try {
@@ -366,26 +469,7 @@ const CompanySites: React.FC<CompanySitesProps> = ({ companyId, selectedSiteId, 
                     {/* Sicurezza */}
                     <div className="space-y-3">
                       <h4 className="text-sm font-semibold text-gray-800 uppercase tracking-wide">Sicurezza</h4>
-                      <div className="space-y-2">
-                        {site.rspp && (
-                          <div className="flex items-center text-sm text-gray-600">
-                            <Shield className="h-4 w-4 mr-2 text-orange-500" />
-                            <span className="font-medium">RSPP:</span> {site.rspp.firstName} {site.rspp.lastName}
-                          </div>
-                        )}
-                        {site.medicoCompetente && (
-                          <div className="flex items-center text-sm text-gray-600">
-                            <Stethoscope className="h-4 w-4 mr-2 text-red-500" />
-                            <span className="font-medium">MC:</span> {site.medicoCompetente.firstName} {site.medicoCompetente.lastName}
-                          </div>
-                        )}
-                        {site.dvr && (
-                          <div className="flex items-center text-sm text-gray-600">
-                            <FileText className="h-4 w-4 mr-2 text-purple-500" />
-                            <span className="font-medium">DVR:</span> {site.dvr}
-                          </div>
-                        )}
-                      </div>
+                      {renderSecurityFigures(site)}
                     </div>
                   </div>
 
@@ -481,26 +565,7 @@ const CompanySites: React.FC<CompanySitesProps> = ({ companyId, selectedSiteId, 
                         {/* Sicurezza */}
                         <div className="space-y-2">
                           <h4 className="text-sm font-medium text-gray-700">Sicurezza</h4>
-                          <div className="space-y-1">
-                            {site.rspp && (
-                              <div className="flex items-center text-sm text-gray-600">
-                                <Shield className="h-4 w-4 mr-2" />
-                                RSPP: {site.rspp.firstName} {site.rspp.lastName}
-                              </div>
-                            )}
-                            {site.medicoCompetente && (
-                              <div className="flex items-center text-sm text-gray-600">
-                                <Stethoscope className="h-4 w-4 mr-2" />
-                                MC: {site.medicoCompetente.firstName} {site.medicoCompetente.lastName}
-                              </div>
-                            )}
-                            {site.dvr && (
-                              <div className="flex items-center text-sm text-gray-600">
-                                <FileText className="h-4 w-4 mr-2" />
-                                DVR: {site.dvr}
-                              </div>
-                            )}
-                          </div>
+                          {renderSecurityFigures(site, true)}
                         </div>
                       </div>
 

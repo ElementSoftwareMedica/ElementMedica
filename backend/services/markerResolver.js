@@ -417,7 +417,8 @@ class MarkerResolver {
     map.set('TABELLA_PRESENTI_SESSIONE_2', 'table.attendanceSession2');
     map.set('TABELLA_PRESENTI_SESSIONE_3', 'table.attendanceSession3');
     map.set('TABELLA_PRESENTI_SESSIONE_4', 'table.attendanceSession4');
-    map.set('TABELLA_PRESENZE_SESSIONE', 'table.sessionAttendance');
+    map.set('TABELLA_PRESENZE_SESSIONE', 'tableCouseInfo.sessionAttendance');
+    map.set('TABELLA_PRESENZE_SESSIONE_SEMPLICE', 'table.sessionAttendance');
 
     // Current date/time markers
     map.set('DATA_CORRENTE', 'current.date');
@@ -812,6 +813,11 @@ class MarkerResolver {
     markers.set('trainer.expensesText', 'Rimborso spese (testo o "senza alcun rimborso spese")');
     markers.set('trainer.totalCompensation', 'Compenso totale IVA inclusa (tariffa x ore + spese)');
 
+    // Co-formatore markers
+    markers.set('cotrainer.fullName', 'Nome completo co-docente (se presente)');
+    markers.set('cotrainer.firstName', 'Nome co-docente');
+    markers.set('cotrainer.lastName', 'Cognome co-docente');
+
     // System markers
     markers.set('current.date', 'Data corrente');
     markers.set('current.year', 'Anno corrente');
@@ -850,7 +856,8 @@ class MarkerResolver {
     markers.set('table.attendanceSession3', 'Tabella presenti sessione 3 (Cognome, Nome, Firma In, Firma Out)');
     markers.set('table.attendanceSession4', 'Tabella presenti sessione 4 (Cognome, Nome, Firma In, Firma Out)');
     markers.set('table.sessionsInfo', 'Informazioni sulle sessioni del corso');
-    markers.set('table.sessionAttendance', 'Tabella presenze sessione corrente (Cognome, Nome, Azienda, Firma Ingresso, Firma Uscita)');
+    markers.set('table.sessionAttendance', 'Tabella presenze semplice (Cognome, Nome, Azienda, Firma Ingresso, Firma Uscita) — senza riepilogo');
+    markers.set('tableCouseInfo.sessionAttendance', 'Tabella presenze completa (presenti, riepilogo ore/argomenti, firme docente/co-docente/organizzatore)');
 
     // Template v11 - HTML compositi per preventivo
     markers.set('vociHtml', 'HTML righe tabella voci preventivo');
@@ -1108,8 +1115,13 @@ class MarkerResolver {
       return this._generateParticipantsTable(context);
     }
 
-    // Gestione speciale per tabella presenze sessione corrente
+    // Gestione speciale per tabella presenze sessione semplice
     if (marker === 'table.sessionAttendance') {
+      return this._generateSimpleSessionAttendanceTable(context);
+    }
+
+    // Gestione speciale per tabella presenze sessione completa (con riepilogo)
+    if (marker === 'tableCouseInfo.sessionAttendance') {
       return this._generateSessionAttendanceTable(context);
     }
 
@@ -1561,6 +1573,116 @@ class MarkerResolver {
   }
 
   /**
+   * {{table.sessionAttendance}} — versione SEMPLICE
+   * Solo: numero, cognome, nome, azienda, firma ingresso, firma uscita
+   * Nessun riepilogo né righe firme finali
+   * @private
+   */
+  _generateSimpleSessionAttendanceTable(context) {
+    let participants = context.get('participants') || [];
+
+    const tableStyle = `
+      border-collapse: collapse;
+      width: 100%;
+      max-width: 100%;
+      margin: 10px 0;
+      font-size: 11px;
+      table-layout: fixed;
+    `;
+    const thStyle = `
+      border: 1px solid #000;
+      background-color: #f0f0f0;
+      padding: 6px;
+      text-align: left;
+      font-weight: bold;
+    `;
+    const tdStyle = `
+      border: 1px solid #000;
+      padding: 6px;
+      text-align: left;
+      min-height: 30px;
+    `;
+    const thSignStyle = `
+      border: 1px solid #000;
+      border-left: 2px solid #000;
+      background-color: #f0f0f0;
+      padding: 6px;
+      text-align: center;
+      font-weight: bold;
+      width: 15%;
+    `;
+    const tdSignStyle = `
+      border: 1px solid #000;
+      border-left: 2px solid #000;
+      padding: 6px;
+      text-align: center;
+      width: 15%;
+      min-height: 30px;
+    `;
+
+    const sorted = [...participants].sort((a, b) => {
+      const cA = (a.companyName || a.azienda || '').toLowerCase();
+      const cB = (b.companyName || b.azienda || '').toLowerCase();
+      if (cA < cB) return -1;
+      if (cA > cB) return 1;
+      return (a.lastName || '').toLowerCase().localeCompare((b.lastName || '').toLowerCase());
+    });
+
+    let html = `<table style="${tableStyle}">
+      <colgroup>
+        <col style="width: 5%;">
+        <col style="width: 20%;">
+        <col style="width: 20%;">
+        <col style="width: 25%;">
+        <col style="width: 15%;">
+        <col style="width: 15%;">
+      </colgroup>
+      <thead>
+        <tr>
+          <th style="${thStyle}">N.</th>
+          <th style="${thStyle}">Cognome</th>
+          <th style="${thStyle}">Nome</th>
+          <th style="${thStyle}">Azienda</th>
+          <th style="${thSignStyle}">Firma Ingresso</th>
+          <th style="${thSignStyle}">Firma Uscita</th>
+        </tr>
+      </thead>
+      <tbody>`;
+
+    if (sorted.length > 0) {
+      sorted.forEach((p, i) => {
+        html += `
+          <tr>
+            <td style="${tdStyle}">${i + 1}</td>
+            <td style="${tdStyle}">${escapeHtml(p.lastName || '')}</td>
+            <td style="${tdStyle}">${escapeHtml(p.firstName || '')}</td>
+            <td style="${tdStyle}">${escapeHtml(p.companyName || p.azienda || '')}</td>
+            <td style="${tdSignStyle}"></td>
+            <td style="${tdSignStyle}"></td>
+          </tr>`;
+      });
+    } else {
+      for (let i = 1; i <= 10; i++) {
+        html += `
+          <tr>
+            <td style="${tdStyle}">${i}</td>
+            <td style="${tdStyle}"></td>
+            <td style="${tdStyle}"></td>
+            <td style="${tdStyle}"></td>
+            <td style="${tdSignStyle}"></td>
+            <td style="${tdSignStyle}"></td>
+          </tr>`;
+      }
+    }
+
+    html += '</tbody></table>';
+    return html;
+  }
+
+  /**
+   * {{tableCouseInfo.sessionAttendance}} — versione COMPLETA
+   * Include: presenti ordinati, 3 righe extra, riepilogo totali/argomenti/moduli,
+   * righe firma organizzatore, docente e co-docente
    * Genera la tabella presenze per la sessione corrente
    * Ordina per azienda e poi per cognome
    * @private
@@ -1706,6 +1828,80 @@ class MarkerResolver {
           </tr>`;
       }
     }
+
+    // 3 righe vuote aggiuntive per iscritti extra
+    for (let i = 1; i <= 3; i++) {
+      html += `
+        <tr>
+          <td style="${tdStyle}"></td>
+          <td style="${tdStyle}"></td>
+          <td style="${tdStyle}"></td>
+          <td style="${tdStyle}"></td>
+          <td style="${tdFirstSignStyle}"></td>
+          <td style="${tdSignStyle}"></td>
+        </tr>`;
+    }
+
+    // Dati per righe di riepilogo firme
+    const tenantName = escapeHtml(context.get('tenant.name') || '');
+    const trainerFullName = escapeHtml(context.get('trainer.fullName') || '');
+    const cotrainerFullName = escapeHtml(context.get('cotrainer.fullName') || '');
+
+    // Stile cella di riepilogo (bordo scuro, senza sfondo)
+    const tdSummaryLabelStyle = `
+      border: 1px solid #000;
+      padding: 8px;
+      font-weight: bold;
+      font-size: 11px;
+      vertical-align: middle;
+    `;
+    const tdSummaryValueStyle = `
+      border: 1px solid #000;
+      padding: 8px;
+      font-size: 11px;
+      vertical-align: middle;
+    `;
+    const tdSummaryTallStyle = `
+      border: 1px solid #000;
+      padding: 8px;
+      font-size: 11px;
+      vertical-align: top;
+      height: 70px;
+    `;
+
+    // Righe di riepilogo — usano colspan per la larghezza desiderata
+    // Totale Presenze (75% + 25%)
+    html += `
+      <tr>
+        <td colspan="4" style="${tdSummaryLabelStyle}">Totale Presenze del Giorno:</td>
+        <td colspan="2" style="${tdSummaryValueStyle}"></td>
+      </tr>
+      <tr>
+        <td colspan="4" style="${tdSummaryLabelStyle}">Totale ore del giorno:</td>
+        <td colspan="2" style="${tdSummaryValueStyle}"></td>
+      </tr>
+      <tr>
+        <td colspan="2" style="${tdSummaryLabelStyle}">Moduli svolti:</td>
+        <td colspan="4" style="${tdSummaryValueStyle}"></td>
+      </tr>
+      <tr>
+        <td colspan="2" style="${tdSummaryLabelStyle}">Argomenti:</td>
+        <td colspan="4" style="${tdSummaryTallStyle}"></td>
+      </tr>
+      <tr>
+        <td colspan="4" style="${tdSummaryLabelStyle}">Firma del Soggetto Organizzatore</td>
+        <td colspan="2" style="${tdSummaryValueStyle}">${tenantName}</td>
+      </tr>
+      <tr>
+        <td colspan="2" style="${tdSummaryLabelStyle}">Firma del Docente</td>
+        <td colspan="2" style="${tdSummaryValueStyle}">${trainerFullName}</td>
+        <td colspan="2" style="${tdSummaryValueStyle}"></td>
+      </tr>
+      <tr>
+        <td colspan="2" style="${tdSummaryLabelStyle}">Firma del Co-Docente</td>
+        <td colspan="2" style="${tdSummaryValueStyle}">${cotrainerFullName}</td>
+        <td colspan="2" style="${tdSummaryValueStyle}"></td>
+      </tr>`;
 
     html += '</tbody></table>';
     return html;

@@ -143,6 +143,29 @@ router.post('/seed-defaults', authenticateToken, requirePermission('templates:cr
 });
 
 /**
+ * POST /api/v1/templates/force-update-attendance-register
+ * Aggiorna il template ATTENDANCE_REGISTER DEFAULT a tutti i tenant (admin only).
+ * Sovrascrive con il nuovo contenuto del Registro Presenze Default.
+ */
+router.post('/force-update-attendance-register', authenticateToken, requirePermission('templates:create'), async (req, res) => {
+  try {
+    const { default: DefaultTemplateService } = await import('../services/templates/DefaultTemplateService.js');
+    const results = await DefaultTemplateService.forceUpdateAttendanceRegisterDefault();
+
+    res.json({
+      success: true,
+      data: results
+    });
+  } catch (error) {
+    logger.error({ component: 'templates', error: error.message }, 'Errore force-update attendance register');
+    res.status(500).json({
+      success: false,
+      error: 'Errore nell\'aggiornamento del registro presenze'
+    });
+  }
+});
+
+/**
  * GET /api/v1/templates/default/:type
  * Get default template for a specific type
  */

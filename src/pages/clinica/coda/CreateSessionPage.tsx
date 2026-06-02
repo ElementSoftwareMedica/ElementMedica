@@ -33,6 +33,8 @@ import {
     Info
 } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
+import { useAuth } from '@/context/AuthContext';
+import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { CRUDPrimaryButton } from '@/components/shared/CRUDButton';
 import { useQueueMutations } from '@/hooks/clinica/useQueue';
 import queueApi, { QueueMode, QueueSessionConfig, PatientAccessMode, CheckExistingResult } from '@/services/queueApi';
@@ -76,6 +78,19 @@ interface ExistingSessionWarning {
  */
 const formatMedicoName = (medico: Medico): string =>
     formatMedicoNameUtil({ firstName: medico.firstName, lastName: medico.lastName, gender: medico.gender });
+
+const formatSlotHour = (value?: string | Date | null): string => {
+    if (!value) return '--:--';
+    if (value instanceof Date) {
+        return value.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+    }
+    const time = String(value);
+    if (/^\d{2}:\d{2}/.test(time)) return time.slice(0, 5);
+    const parsed = new Date(time);
+    return Number.isNaN(parsed.getTime())
+        ? time.slice(0, 5)
+        : parsed.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+};
 
 // =====================================================
 // SUB-COMPONENTS
@@ -147,6 +162,9 @@ const CreateSessionPage: React.FC = () => {
     const [searchParams] = useSearchParams();
     const { showToast } = useToast();
     const mutations = useQueueMutations();
+    const { user } = useAuth();
+    const { isMedico, isMedicoCompetente } = useRoleGuard();
+    const currentMedicoPersonId = isMedico && !isMedicoCompetente ? user?.id : undefined;
 
     // Pre-fill from query params (from EditDisponibilitaModal)
     const prefillMedicoId = searchParams.get('medicoId');
@@ -218,13 +236,36 @@ const CreateSessionPage: React.FC = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    const handleDisponibilitaSelect = useCallback((slot: SlotDisponibilita) => {
+        setSelectedDisponibilitaId(slot.id);
+        const ambulatorioId = slot.ambulatorioId;
+        const medicoId = slot.medicoId;
+        if (ambulatorioId) {
+            setSelectedAmbulatorioId(ambulatorioId);
+            setSelectedAmbulatorioIds(prev => prev.includes(ambulatorioId)
+                ? prev
+                : [ambulatorioId, ...prev]);
+        }
+        if (medicoId) {
+            setSelectedMedicoIds(prev => prev.includes(medicoId)
+                ? prev
+                : [medicoId, ...prev]);
+        }
+    }, []);
+
     // Fetch medici - runs only on mount
     useEffect(() => {
         const fetchMedici = async () => {
             try {
                 const response = await mediciApi.getAll({ limit: 100 });
                 const mediciData = Array.isArray(response) ? response : (response?.data || []);
-                setMedici(mediciData);
+                const visibleMedici = currentMedicoPersonId
+                    ? mediciData.filter(m => m.id === currentMedicoPersonId || m.personId === currentMedicoPersonId)
+                    : mediciData;
+                setMedici(visibleMedici);
+                if (currentMedicoPersonId && visibleMedici[0]) {
+                    setSelectedMedicoIds([visibleMedici[0].id]);
+                }
             } catch (err) {
             } finally {
                 setIsLoadingMedici(false);
@@ -232,7 +273,7 @@ const CreateSessionPage: React.FC = () => {
         };
         fetchMedici();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [currentMedicoPersonId]);
 
     // Fetch prestazioni - runs only on mount
     useEffect(() => {
@@ -287,9 +328,10 @@ const CreateSessionPage: React.FC = () => {
     // This allows linking session to existing medico availability
     useEffect(() => {
         const findMatchingSlots = async () => {
-            // Only search if we have date and (ambulatorio or medici)
+            // Search if we have date and at least an ambulatorio or a medico.
             if (!date) return;
-            if (!selectedAmbulatorioId && selectedMedicoIds.length === 0) {
+            const ambulatorioFilter = selectedAmbulatorioId || selectedAmbulatorioIds[0];
+            if (!ambulatorioFilter && selectedMedicoIds.length === 0) {
                 setMatchingSlots([]);
                 return;
             }
@@ -302,7 +344,7 @@ const CreateSessionPage: React.FC = () => {
                         dataInizio: date,
                         dataFine: date,
                         disponibile: true,
-                        ...(selectedAmbulatorioId && { ambulatorioId: selectedAmbulatorioId }),
+                        ...(ambulatorioFilter && { ambulatorioId: ambulatorioFilter }),
                         ...(selectedMedicoIds.length > 0 && { medicoId: selectedMedicoIds[0] }) // Primary medico
                     }
                 });
@@ -312,7 +354,7 @@ const CreateSessionPage: React.FC = () => {
 
                 // Auto-select first matching slot if none selected
                 if (slots.length === 1 && !selectedDisponibilitaId) {
-                    setSelectedDisponibilitaId(slots[0].id);
+                    handleDisponibilitaSelect(slots[0]);
                 } else if (slots.length === 0) {
                     setSelectedDisponibilitaId(null);
                 }
@@ -326,10 +368,11 @@ const CreateSessionPage: React.FC = () => {
         // Debounce search
         const timeoutId = setTimeout(findMatchingSlots, 500);
         return () => clearTimeout(timeoutId);
-    }, [date, selectedAmbulatorioId, selectedMedicoIds, selectedDisponibilitaId]);
+    }, [date, selectedAmbulatorioId, selectedAmbulatorioIds, selectedMedicoIds, selectedDisponibilitaId, handleDisponibilitaSelect]);
 
     // Handle multi-ambulatorio selection for MOBILE mode
     const handleAmbulatorioToggle = useCallback((ambulatorioId: string) => {
+        setSelectedDisponibilitaId(null);
         setSelectedAmbulatorioIds(prev => {
             if (prev.includes(ambulatorioId)) {
                 return prev.filter(id => id !== ambulatorioId);
@@ -341,6 +384,8 @@ const CreateSessionPage: React.FC = () => {
 
     // Handle medico selection
     const handleMedicoToggle = useCallback((medicoId: string) => {
+        if (currentMedicoPersonId) return;
+        setSelectedDisponibilitaId(null);
         setSelectedMedicoIds(prev => {
             if (prev.includes(medicoId)) {
                 return prev.filter(id => id !== medicoId);
@@ -348,7 +393,7 @@ const CreateSessionPage: React.FC = () => {
                 return [...prev, medicoId];
             }
         });
-    }, []);
+    }, [currentMedicoPersonId]);
 
     // Handle prestazione selection
     const handlePrestazioneToggle = useCallback((prestazioneId: string) => {
@@ -364,6 +409,20 @@ const CreateSessionPage: React.FC = () => {
     // Handle submit
     const handleSubmit = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
+
+        if (currentMedicoPersonId) {
+            const ownMedico = medici[0];
+            const allowedOwnIds = [ownMedico?.id, ownMedico?.personId, currentMedicoPersonId].filter(Boolean);
+            if (!ownMedico || !selectedMedicoIds.every(id => allowedOwnIds.includes(id))) {
+                showToast({ message: 'Puoi creare sessioni coda solo per il tuo profilo medico', type: 'error' });
+                return;
+            }
+        }
+
+        if (!selectedDisponibilitaId) {
+            showToast({ message: 'Seleziona uno slot disponibilità medico in ambulatorio per creare la sessione coda', type: 'error' });
+            return;
+        }
 
         // Validation for DISPLAY mode
         if (selectedMode === 'DISPLAY' && !selectedAmbulatorioId) {
@@ -432,7 +491,7 @@ const CreateSessionPage: React.FC = () => {
             // Navigate to queue management
             navigate('/poliambulatorio/coda');
         } catch (err: unknown) {
-            const errorMessage = 'Errore sconosciuto';
+            const errorMessage = (err as any)?.response?.data?.error || (err as any)?.message || 'Errore sconosciuto';
 
             // Parse specific error messages for user-friendly guidance
             if (errorMessage.includes('sessione attiva')) {
@@ -465,10 +524,13 @@ const CreateSessionPage: React.FC = () => {
         date,
         config,
         generateFromAppointments,
+        selectedDisponibilitaId,
         existingSessionWarning,
         mutations,
         navigate,
-        showToast
+        showToast,
+        currentMedicoPersonId,
+        medici
     ]);
 
     const handleGoToExistingSession = useCallback(() => {
@@ -613,7 +675,11 @@ const CreateSessionPage: React.FC = () => {
                                 <>
                                     <select
                                         value={selectedAmbulatorioId}
-                                        onChange={(e) => setSelectedAmbulatorioId(e.target.value)}
+                                        onChange={(e) => {
+                                            setSelectedAmbulatorioId(e.target.value);
+                                            setSelectedAmbulatorioIds(e.target.value ? [e.target.value] : []);
+                                            setSelectedDisponibilitaId(null);
+                                        }}
                                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                                         required
                                     >
@@ -654,6 +720,68 @@ const CreateSessionPage: React.FC = () => {
                         </div>
                     )}
 
+                    {selectedMode === 'DISPLAY' && selectedAmbulatorioId && (
+                        <div className="bg-white rounded-lg shadow-sm p-6">
+                            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                                <Clock className="w-5 h-5 text-teal-600" />
+                                Slot disponibilità medico
+                                {matchingSlots.length > 0 && (
+                                    <span className="text-sm font-normal bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+                                        {matchingSlots.length} trovati
+                                    </span>
+                                )}
+                            </h2>
+
+                            {isLoadingSlots ? (
+                                <div className="animate-pulse space-y-2">
+                                    <div className="bg-gray-200 h-12 rounded-lg" />
+                                </div>
+                            ) : matchingSlots.length > 0 ? (
+                                <div className="space-y-2 max-h-56 overflow-y-auto">
+                                    {matchingSlots.map((slot) => {
+                                        const medicoInfo = medici.find(m => m.id === slot.medicoId || m.personId === slot.medicoId);
+                                        const ambulatorioInfo = ambulatori.find(a => a.id === slot.ambulatorioId);
+                                        return (
+                                            <label
+                                                key={slot.id}
+                                                className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${selectedDisponibilitaId === slot.id
+                                                    ? 'border-green-500 bg-green-50'
+                                                    : 'border-gray-200 hover:border-gray-300'
+                                                    }`}
+                                            >
+                                                <input
+                                                    type="radio"
+                                                    name="disponibilita"
+                                                    checked={selectedDisponibilitaId === slot.id}
+                                                    onChange={() => handleDisponibilitaSelect(slot)}
+                                                    className="w-4 h-4 text-green-600 focus:ring-green-500"
+                                                />
+                                                <div className="flex-1">
+                                                    <span className="font-medium text-gray-900">
+                                                        {formatSlotHour(slot.oraInizio)} - {formatSlotHour(slot.oraFine)}
+                                                    </span>
+                                                    <p className="text-sm text-gray-500">
+                                                        {medicoInfo ? formatMedicoName(medicoInfo) : 'Medico'} • {ambulatorioInfo?.nome || 'Ambulatorio'}
+                                                    </p>
+                                                </div>
+                                            </label>
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
+                                    <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                                    <div>
+                                        <p className="text-sm text-amber-700 font-medium">Nessuno slot disponibilità trovato</p>
+                                        <p className="text-sm text-amber-600">
+                                            La sessione coda può essere creata solo partendo da una disponibilità con medico e ambulatorio.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     {/* MOBILE mode specific sections */}
                     {selectedMode === 'MOBILE' && (
                         <>
@@ -690,6 +818,7 @@ const CreateSessionPage: React.FC = () => {
                                                 <input
                                                     type="checkbox"
                                                     checked={selectedMedicoIds.includes(medico.id)}
+                                                    disabled={!!currentMedicoPersonId}
                                                     onChange={() => handleMedicoToggle(medico.id)}
                                                     className="w-5 h-5 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
                                                 />
@@ -745,9 +874,9 @@ const CreateSessionPage: React.FC = () => {
                                             </p>
                                             <div className="space-y-2 max-h-48 overflow-y-auto">
                                                 {matchingSlots.map((slot) => {
-                                                    const startTime = new Date(slot.oraInizio).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-                                                    const endTime = new Date(slot.oraFine).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-                                                    const medicoInfo = medici.find(m => m.id === slot.medicoId);
+                                                    const startTime = formatSlotHour(slot.oraInizio);
+                                                    const endTime = formatSlotHour(slot.oraFine);
+                                                    const medicoInfo = medici.find(m => m.id === slot.medicoId || m.personId === slot.medicoId);
                                                     const ambulatorioInfo = ambulatori.find(a => a.id === slot.ambulatorioId);
                                                     return (
                                                         <label
@@ -761,7 +890,7 @@ const CreateSessionPage: React.FC = () => {
                                                                 type="radio"
                                                                 name="disponibilita"
                                                                 checked={selectedDisponibilitaId === slot.id}
-                                                                onChange={() => setSelectedDisponibilitaId(slot.id)}
+                                                                onChange={() => handleDisponibilitaSelect(slot)}
                                                                 className="w-4 h-4 text-green-600 focus:ring-green-500"
                                                             />
                                                             <div className="flex-1">
@@ -775,24 +904,6 @@ const CreateSessionPage: React.FC = () => {
                                                         </label>
                                                     );
                                                 })}
-                                                {/* Option to not link */}
-                                                <label
-                                                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${selectedDisponibilitaId === null
-                                                        ? 'border-gray-400 bg-gray-50'
-                                                        : 'border-gray-200 hover:border-gray-300'
-                                                        }`}
-                                                >
-                                                    <input
-                                                        type="radio"
-                                                        name="disponibilita"
-                                                        checked={selectedDisponibilitaId === null}
-                                                        onChange={() => setSelectedDisponibilitaId(null)}
-                                                        className="w-4 h-4 text-gray-600 focus:ring-gray-500"
-                                                    />
-                                                    <span className="text-gray-600">
-                                                        Non collegare a uno slot (crea sessione indipendente)
-                                                    </span>
-                                                </label>
                                             </div>
                                         </>
                                     ) : (
@@ -804,7 +915,7 @@ const CreateSessionPage: React.FC = () => {
                                                 </p>
                                                 <p className="text-sm text-amber-600">
                                                     Per questa data/medico/ambulatorio non esiste uno slot nel calendario.
-                                                    La sessione verrà creata senza collegamento.
+                                                    Crea prima una disponibilità con medico e ambulatorio, poi torna qui.
                                                 </p>
                                             </div>
                                         </div>
@@ -1051,6 +1162,7 @@ const CreateSessionPage: React.FC = () => {
                             disabled={
                                 isSubmitting ||
                                 existingSessionWarning.show ||
+                                !selectedDisponibilitaId ||
                                 (selectedMode === 'DISPLAY' && !selectedAmbulatorioId) ||
                                 (selectedMode === 'MOBILE' && (selectedAmbulatorioIds.length === 0 || selectedMedicoIds.length === 0))
                             }

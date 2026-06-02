@@ -228,7 +228,9 @@ export class RBACService {
                     personRole.advancedPermissions.forEach(ap => {
                         if (ap.resource && ap.action) {
                             const permKey = `${ap.resource}:${ap.action}`;
-                            permissions[permKey] = true;
+                            if (ap.conditions?.granted !== false) {
+                                permissions[permKey] = true;
+                            }
                         }
                     });
                 }
@@ -246,6 +248,14 @@ export class RBACService {
                         });
                     }
                 }
+            });
+
+            person.personRoles.forEach(personRole => {
+                personRole.advancedPermissions?.forEach(ap => {
+                    if (ap.resource && ap.action && ap.conditions?.granted === false) {
+                        delete permissions[`${ap.resource}:${ap.action}`];
+                    }
+                });
             });
 
             return permissions;

@@ -40,6 +40,7 @@ export interface FormData {
   ordine: number;
   contenutoHtml: string;
   campi: CampoTemplate[];
+  consensoCodici: string[];
   prestazioniIds: string[];
   mediciIds: string[];
   /** Abilita sistema scoring per questionari */
@@ -352,6 +353,7 @@ export const INITIAL_FORM_DATA: FormData = {
   ordine: 0,
   contenutoHtml: '',
   campi: [],
+  consensoCodici: [],
   prestazioniIds: [],
   mediciIds: [],
   haScoring: false,

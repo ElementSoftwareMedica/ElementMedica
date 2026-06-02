@@ -4,8 +4,8 @@
  * @module routes/clinica/convenzioni
  *
  * @requires express
- * @requires ../auth/authenticateToken
- * @requires ../middleware/checkAdvancedPermission
+ * @requires ../../middleware/auth
+ * @requires ../../middleware/advanced-permissions
  * @requires ../services/clinical/ConvenzioneService
  * @requires ../services/clinical/RiconoscimentoConvenzioneService
  *
@@ -30,12 +30,12 @@
  */
 
 import express from 'express';
-import middleware from '../../middleware/auth.js';
+import { authenticate } from '../../middleware/auth.js';
 import { checkAdvancedPermission } from '../../middleware/advanced-permissions.js';
 import logger from '../../utils/logger.js';
 import { auditClinico, getEffectiveTenantId } from './utils/clinica-utils.js';
 
-const { authenticate: authenticateToken } = middleware;
+
 
 // Services
 import ConvenzioneService from '../../services/clinical/ConvenzioneService.js';
@@ -56,7 +56,7 @@ const router = express.Router();
  * @access Authenticated + VIEW_CONVENZIONI
  */
 router.get('/',
-    authenticateToken,
+    authenticate,
     checkAdvancedPermission('convenzioni', 'read'),
     clinicalValidators.convenzione.query,
     auditClinico('list_convenzioni'),
@@ -90,7 +90,7 @@ router.get('/',
  * @access Authenticated + VIEW_CONVENZIONI
  */
 router.get('/statistics',
-    authenticateToken,
+    authenticate,
     checkAdvancedPermission('convenzioni', 'read'),
     auditClinico('get_convenzioni_statistics'),
     async (req, res) => {
@@ -123,7 +123,7 @@ router.get('/statistics',
  * @access Authenticated + VIEW_CONVENZIONI
  */
 router.get('/expiring',
-    authenticateToken,
+    authenticate,
     checkAdvancedPermission('convenzioni', 'read'),
     auditClinico('list_convenzioni_expiring'),
     async (req, res) => {
@@ -159,7 +159,7 @@ router.get('/expiring',
  * @access Authenticated
  */
 router.get('/available',
-    authenticateToken,
+    authenticate,
     auditClinico('list_convenzioni_available'),
     async (req, res) => {
         try {
@@ -192,7 +192,7 @@ router.get('/available',
  * @access Authenticated + VIEW_CONVENZIONI
  */
 router.get('/:id',
-    authenticateToken,
+    authenticate,
     checkAdvancedPermission('convenzioni', 'read'),
     clinicalValidators.params.id,
     auditClinico('get_convenzione'),
@@ -234,7 +234,7 @@ router.get('/:id',
  * @access Authenticated
  */
 router.get('/:id/validity',
-    authenticateToken,
+    authenticate,
     clinicalValidators.params.id,
     auditClinico('check_convenzione_validity'),
     async (req, res) => {
@@ -269,7 +269,7 @@ router.get('/:id/validity',
  * @access Authenticated + VIEW_CONVENZIONI
  */
 router.get('/:id/listini',
-    authenticateToken,
+    authenticate,
     checkAdvancedPermission('convenzioni', 'read'),
     clinicalValidators.params.id,
     auditClinico('get_convenzione_listini'),
@@ -306,7 +306,7 @@ router.get('/:id/listini',
  * @access Authenticated + VIEW_CONVENZIONI
  */
 router.get('/:id/aziende',
-    authenticateToken,
+    authenticate,
     checkAdvancedPermission('convenzioni', 'read'),
     clinicalValidators.params.id,
     auditClinico('get_convenzione_aziende'),
@@ -342,7 +342,7 @@ router.get('/:id/aziende',
  * @access Authenticated + VIEW_CONVENZIONI
  */
 router.get('/:id/aziende/:aziendaAssociazioneId/riconoscimenti',
-    authenticateToken,
+    authenticate,
     checkAdvancedPermission('convenzioni', 'read'),
     auditClinico('get_riconoscimenti'),
     async (req, res) => {
@@ -379,7 +379,7 @@ router.get('/:id/aziende/:aziendaAssociazioneId/riconoscimenti',
  * @access Authenticated + CREATE_CONVENZIONI
  */
 router.post('/',
-    authenticateToken,
+    authenticate,
     checkAdvancedPermission('convenzioni', 'create'),
     clinicalValidators.convenzione.create,
     auditClinico('create_convenzione'),
@@ -425,7 +425,7 @@ router.post('/',
  * @access Authenticated + UPDATE_CONVENZIONI
  */
 router.post('/:id/listini',
-    authenticateToken,
+    authenticate,
     checkAdvancedPermission('convenzioni', 'update'),
     clinicalValidators.params.id,
     clinicalValidators.convenzione.associateListino,
@@ -468,7 +468,7 @@ router.post('/:id/listini',
  * @access Authenticated + UPDATE_CONVENZIONI
  */
 router.post('/:id/aziende',
-    authenticateToken,
+    authenticate,
     checkAdvancedPermission('convenzioni', 'update'),
     clinicalValidators.params.id,
     auditClinico('associate_convenzione_azienda'),
@@ -522,7 +522,7 @@ router.post('/:id/aziende',
  * @access Authenticated + UPDATE_CONVENZIONI
  */
 router.put('/:id',
-    authenticateToken,
+    authenticate,
     checkAdvancedPermission('convenzioni', 'update'),
     clinicalValidators.params.id,
     clinicalValidators.convenzione.update,
@@ -561,7 +561,7 @@ router.put('/:id',
  * @access Authenticated + UPDATE_CONVENZIONI
  */
 router.put('/:id/aziende/:aziendaAssociazioneId',
-    authenticateToken,
+    authenticate,
     checkAdvancedPermission('convenzioni', 'update'),
     auditClinico('update_convenzione_azienda'),
     async (req, res) => {
@@ -602,7 +602,7 @@ router.put('/:id/aziende/:aziendaAssociazioneId',
  * @access Authenticated + DELETE_CONVENZIONI
  */
 router.delete('/:id',
-    authenticateToken,
+    authenticate,
     checkAdvancedPermission('convenzioni', 'delete'),
     clinicalValidators.params.id,
     auditClinico('delete_convenzione'),
@@ -638,7 +638,7 @@ router.delete('/:id',
  * @access Authenticated + UPDATE_CONVENZIONI
  */
 router.delete('/:id/listini/:listinoId',
-    authenticateToken,
+    authenticate,
     checkAdvancedPermission('convenzioni', 'update'),
     auditClinico('remove_convenzione_listino'),
     async (req, res) => {
@@ -673,7 +673,7 @@ router.delete('/:id/listini/:listinoId',
  * @access Authenticated + UPDATE_CONVENZIONI
  */
 router.delete('/:id/aziende/:aziendaAssociazioneId',
-    authenticateToken,
+    authenticate,
     checkAdvancedPermission('convenzioni', 'update'),
     auditClinico('remove_convenzione_azienda'),
     async (req, res) => {

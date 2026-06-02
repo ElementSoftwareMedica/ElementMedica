@@ -13,13 +13,20 @@ import ProtectedRoute from '../../components/shared/ProtectedRoute';
 
 // Lazy load all management pages
 const ManagementDashboard = lazy(() => import('./ManagementDashboard'));
+const ControlloGestionePage = lazy(() => import('./controllo-gestione/ControlloGestionePage'));
 const TenantAccessManager = lazy(() => import('./components/TenantAccessManager'));
+// Dettaglio tenant per /my-tenants/:tenantId (full page, sostituisce modal)
+const MyTenantDetailPage = lazy(() => import('./mytenants/MyTenantDetailPage'));
 // P68: TenantUsersPage RIMOSSO - ora usa redirect a /persons
 // Use original UsersManagement with proper layout
 const UsersManagement = lazy(() => import('./users/UsersManagement'));
 // PersonDetails page for /persons/:id route - using folder index
 const PersonDetails = lazy(() => import('./persons'));
 const TenantsManagement = lazy(() => import('./tenants/TenantsManagement'));
+// P69: Admin detail page per singolo tenant (feature toggles + presets)
+const TenantAdminDetailPage = lazy(() => import('./tenants/TenantAdminDetailPage'));
+// Feature Pricing Management - ADMIN/SUPER_ADMIN
+const FeaturePricingPage = lazy(() => import('./system/FeaturePricingPage'));
 // P68: RolesManagement RIMOSSO - ora usa RoleHierarchyPage
 const RoleHierarchyPage = lazy(() => import('./roles/RoleHierarchyPage'));
 const RoleDetailPage = lazy(() => import('./roles/RoleDetailPage'));
@@ -64,7 +71,7 @@ const AgingReportPage = lazy(() => import('./movimenti-contabili/AgingReportPage
 // Cross-Tenant Approvals - P58 Feature Completion
 const CrossTenantApprovalsPage = lazy(() => import('./cross-tenant/CrossTenantApprovalsPage'));
 
-// Management Config Hub - Hub tabbed con Messaggistica, Widget Pubblici, Preferenze, Config Sistema
+// Management Config Hub - Hub tabbed con Messaggistica, Config Sistema
 const ManagementConfigHub = lazy(() => import('./system/ManagementConfigHub'));
 
 // P75 - Public API Keys & Embed System
@@ -76,6 +83,7 @@ const NotificationPreferences = lazy(() => import('../notifications/Notification
 const NotificationGroups = lazy(() => import('../notifications/NotificationGroups'));
 const EscalationDashboard = lazy(() => import('../notifications/EscalationDashboard'));
 const AnalyticsDashboard = lazy(() => import('../notifications/AnalyticsDashboard'));
+const AnnouncementComposerPage = lazy(() => import('../notifications/AnnouncementComposerPage'));
 
 // P68 - HR Personnel Management
 const HRDashboard = lazy(() => import('./hr/HRDashboard'));
@@ -99,8 +107,6 @@ const SpeseRicevutePage = lazy(() => import('../finance/billing/SpeseRicevutePag
 // P74 - Document Management
 const DocumentManagementPage = lazy(() => import('./documenti/DocumentManagementPage'));
 
-// User Preferences - Personal settings for Management users
-const ManagementPreferencesPage = lazy(() => import('./ManagementPreferencesPage'));
 
 // Loading component
 const PageLoader = () => (
@@ -119,10 +125,17 @@ const ManagementRouter: React.FC = () => {
             <Routes>
                 {/* Dashboard */}
                 <Route index element={<ManagementDashboard />} />
+                <Route path="controllo-gestione" element={<ControlloGestionePage />} />
 
                 {/* Tenant & Access Management */}
                 <Route path="my-tenants" element={<TenantAccessManager />} />
-                <Route path="tenants" element={<TenantsManagement />} />
+                <Route path="my-tenants/:tenantId" element={<MyTenantDetailPage />} />
+                {/* Tutti i Tenant - solo ADMIN/SUPER_ADMIN */}
+                <Route path="tenants" element={<ProtectedRoute superAdminOnly><TenantsManagement /></ProtectedRoute>} />
+                <Route path="tenants/:id" element={<ProtectedRoute superAdminOnly><TenantAdminDetailPage /></ProtectedRoute>} />
+                {/* Feature Pricing - solo ADMIN/SUPER_ADMIN */}
+                <Route path="feature-pricing" element={<Navigate to="/management/features" replace />} />
+                <Route path="features" element={<ProtectedRoute superAdminOnly><FeaturePricingPage /></ProtectedRoute>} />
                 <Route path="tenant-access" element={<TenantAccessPage />} />
                 {/* P69: tenant-users e persons ora redirect a HR profili */}
                 <Route path="tenant-users" element={<Navigate to="/management/hr/profili" replace />} />
@@ -135,10 +148,10 @@ const ManagementRouter: React.FC = () => {
                 {/* Roles & Permissions - Riorganizzato P68 */}
                 {/* /roles ora fa redirect a /role-hierarchy */}
                 <Route path="roles" element={<Navigate to="/management/role-hierarchy" replace />} />
-                <Route path="roles/:id" element={<RoleDetailPage />} />
-                <Route path="roles/new" element={<RoleDetailPage />} />
-                {/* Role Hierarchy - Pagina principale per gestione ruoli */}
-                <Route path="role-hierarchy" element={<RoleHierarchyPage />} />
+                <Route path="roles/:id" element={<ProtectedRoute superAdminOnly><RoleDetailPage /></ProtectedRoute>} />
+                <Route path="roles/new" element={<ProtectedRoute superAdminOnly><RoleDetailPage /></ProtectedRoute>} />
+                {/* Role Hierarchy - solo ADMIN/SUPER_ADMIN (redirect automatico per TENANT_ADMIN) */}
+                <Route path="role-hierarchy" element={<ProtectedRoute superAdminOnly><RoleHierarchyPage /></ProtectedRoute>} />
                 {/* P69: Permissions - Consolidated tabbed page */}
                 <Route path="permissions" element={<PermissionsPage />} />
                 {/* Legacy routes redirect to consolidated page */}
@@ -165,11 +178,11 @@ const ManagementRouter: React.FC = () => {
                 {/* System */}
                 <Route path="logs" element={<SystemLogsPage />} />
                 <Route path="backup" element={<BackupRestorePage />} />
-                {/* Config Hub - Messaggistica + Widget Pubblici + Preferenze + Config Sistema */}
+                {/* Config Hub - Messaggistica + Config Sistema */}
                 <Route path="config" element={<ManagementConfigHub />} />
                 <Route path="config/*" element={<ManagementConfigHub />} />
-                {/* P75 - API Pubbliche / Embed Widget */}
-                <Route path="api-pubbliche" element={<PublicApiSettingsPage />} />
+                {/* P75 - API Pubbliche / Embed Widget - solo se API_ACCESS abilitato */}
+                <Route path="api-pubbliche" element={<ProtectedRoute requiredFeature="API_ACCESS"><PublicApiSettingsPage /></ProtectedRoute>} />
                 {/* P74 - Document Management */}
                 <Route path="documenti" element={<DocumentManagementPage />} />
                 <Route path="documenti/*" element={<DocumentManagementPage />} />
@@ -194,43 +207,44 @@ const ManagementRouter: React.FC = () => {
                 <Route path="movimenti-contabili/:id" element={<MovimentoContabileDetails />} />
                 <Route path="movimenti-contabili/:id/modifica" element={<MovimentoContabileForm />} />
 
-                {/* Cross-Tenant Approvals - P58 Feature Completion */}
-                <Route path="cross-tenant-approvals" element={<CrossTenantApprovalsPage />} />
+                {/* Cross-Tenant Approvals - P58 Feature Completion - solo ADMIN/SUPER_ADMIN */}
+                <Route path="cross-tenant-approvals" element={<ProtectedRoute superAdminOnly><CrossTenantApprovalsPage /></ProtectedRoute>} />
 
                 {/* P97 - Fatturazione Elettronica & SistemaTS */}
-                <Route path="billing" element={<ProtectedRoute requiredFeature="billing"><BillingIntegrationStatusPage /></ProtectedRoute>} />
-                <Route path="billing/status" element={<ProtectedRoute requiredFeature="billing"><BillingIntegrationStatusPage /></ProtectedRoute>} />
-                <Route path="billing/integrazioni" element={<ProtectedRoute requiredFeature="billing"><BillingIntegrationStatusPage /></ProtectedRoute>} />
-                <Route path="billing/fatture" element={<ProtectedRoute requiredFeature="billing"><FatturazioneElettronicaPage /></ProtectedRoute>} />
-                <Route path="billing/enti-emittenti" element={<ProtectedRoute requiredFeature="billing"><EntiEmittentiPage /></ProtectedRoute>} />
-                <Route path="billing/sistema-ts" element={<ProtectedRoute requiredFeature="billing"><SistemaTSPage /></ProtectedRoute>} />
-                <Route path="billing/spese" element={<ProtectedRoute requiredFeature="billing"><SpeseRicevutePage /></ProtectedRoute>} />
+                <Route path="billing" element={<ProtectedRoute requiredFeature="FATTURAZIONE_ELETTRONICA"><BillingIntegrationStatusPage /></ProtectedRoute>} />
+                <Route path="billing/status" element={<ProtectedRoute requiredFeature="FATTURAZIONE_ELETTRONICA"><BillingIntegrationStatusPage /></ProtectedRoute>} />
+                <Route path="billing/integrazioni" element={<ProtectedRoute requiredFeature="FATTURAZIONE_ELETTRONICA"><BillingIntegrationStatusPage /></ProtectedRoute>} />
+                <Route path="billing/fatture" element={<ProtectedRoute requiredFeature="FATTURAZIONE_ELETTRONICA"><FatturazioneElettronicaPage /></ProtectedRoute>} />
+                <Route path="billing/enti-emittenti" element={<ProtectedRoute requiredFeature="FATTURAZIONE_ELETTRONICA"><EntiEmittentiPage /></ProtectedRoute>} />
+                <Route path="billing/sistema-ts" element={<ProtectedRoute requiredFeature="FATTURAZIONE_ELETTRONICA"><SistemaTSPage /></ProtectedRoute>} />
+                <Route path="billing/spese" element={<ProtectedRoute requiredFeature="FATTURAZIONE_ELETTRONICA"><SpeseRicevutePage /></ProtectedRoute>} />
 
                 {/* Messaging Configuration - redirect al Config Hub */}
                 <Route path="messaging" element={<Navigate to="/management/config#messaging" replace />} />
 
                 {/* Notifications - Advanced Notification System (Project 47) */}
                 <Route path="notifiche" element={<NotificationCenter />} />
+                <Route path="notifiche/crea" element={<AnnouncementComposerPage />} />
                 <Route path="notifiche/preferenze" element={<NotificationPreferences />} />
                 <Route path="notifiche/gruppi" element={<NotificationGroups />} />
                 <Route path="notifiche/escalation" element={<EscalationDashboard />} />
                 <Route path="notifiche/analytics" element={<AnalyticsDashboard />} />
 
-                {/* P68 - HR Personnel Management */}
-                <Route path="hr" element={<HRDashboard />} />
-                <Route path="hr/profili" element={<ProfiliHRPage />} />
-                <Route path="hr/profili/nuovo" element={<ProfiloHRFormPage />} />
-                <Route path="hr/profili/:id" element={<ProfiloHRFormPage />} />
-                <Route path="hr/mansioni" element={<MansioniInternePage />} />
-                <Route path="hr/mansioni/:id" element={<MansioneInternaDetailPage />} />
-                <Route path="hr/disponibilita" element={<DisponibilitaPage />} />
-                <Route path="hr/turni" element={<TurniPage />} />
-                <Route path="hr/timbrature" element={<TimbraturaPage />} />
-                <Route path="hr/assenze" element={<AssenzePage />} />
-                <Route path="hr/cartellini" element={<CartelliniPage />} />
+                {/* P68 - HR Personnel Management - gated behind HR_MANAGEMENT feature */}
+                <Route path="hr" element={<ProtectedRoute requiredFeature="HR_MANAGEMENT"><HRDashboard /></ProtectedRoute>} />
+                <Route path="hr/profili" element={<ProtectedRoute requiredFeature="HR_MANAGEMENT"><ProfiliHRPage /></ProtectedRoute>} />
+                <Route path="hr/profili/nuovo" element={<ProtectedRoute requiredFeature="HR_MANAGEMENT"><ProfiloHRFormPage /></ProtectedRoute>} />
+                <Route path="hr/profili/:id" element={<ProtectedRoute requiredFeature="HR_MANAGEMENT"><ProfiloHRFormPage /></ProtectedRoute>} />
+                <Route path="hr/mansioni" element={<ProtectedRoute requiredFeature="HR_MANAGEMENT"><MansioniInternePage /></ProtectedRoute>} />
+                <Route path="hr/mansioni/:id" element={<ProtectedRoute requiredFeature="HR_MANAGEMENT"><MansioneInternaDetailPage /></ProtectedRoute>} />
+                <Route path="hr/disponibilita" element={<ProtectedRoute requiredFeature="HR_MANAGEMENT"><DisponibilitaPage /></ProtectedRoute>} />
+                <Route path="hr/turni" element={<ProtectedRoute requiredFeature="HR_MANAGEMENT"><TurniPage /></ProtectedRoute>} />
+                <Route path="hr/timbrature" element={<ProtectedRoute requiredFeature="HR_MANAGEMENT"><TimbraturaPage /></ProtectedRoute>} />
+                <Route path="hr/assenze" element={<ProtectedRoute requiredFeature="HR_MANAGEMENT"><AssenzePage /></ProtectedRoute>} />
+                <Route path="hr/cartellini" element={<ProtectedRoute requiredFeature="HR_MANAGEMENT"><CartelliniPage /></ProtectedRoute>} />
 
-                {/* Personal Preferences - redirect al Config Hub */}
-                <Route path="preferenze" element={<Navigate to="/management/config#preferenze" replace />} />
+                {/* Personal Preferences - redirect al Config Hub sistema */}
+                <Route path="preferenze" element={<Navigate to="/management/config#sistema" replace />} />
 
                 {/* Fallback - redirect to dashboard */}
                 <Route path="*" element={<Navigate to="/management" replace />} />

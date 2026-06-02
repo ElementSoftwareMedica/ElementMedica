@@ -34,6 +34,20 @@ function periodicitaMesiFromEnum(periodicita, periodicitaCustomMesi, defaultMesi
     }
 }
 
+function startOfDay(value) {
+    const date = value ? new Date(value) : new Date();
+    date.setHours(0, 0, 0, 0);
+    return date;
+}
+
+function sameNullableId(a, b) {
+    return (a || null) === (b || null);
+}
+
+function toJsonValue(value) {
+    return JSON.parse(JSON.stringify(value ?? null));
+}
+
 
 /**
  * Service per gestione mansioni lavorative MDL
@@ -342,6 +356,14 @@ const MansioneService = {
 
             logger.info({ personId, mansioneId, tenantId }, 'Mansione assegnata a lavoratore');
 
+            // Copia i rischi della mansione come rischi personalizzati del lavoratore
+            // Il lavoratore potrà poi aggiungere/rimuovere rischi individualmente
+            try {
+                await this._copyMansioneRisksToWorker(personId, mansioneId, tenantId);
+            } catch (copyErr) {
+                logger.warn({ personId, mansioneId, tenantId, error: copyErr.message }, 'Errore copia rischi mansione a lavoratore');
+            }
+
             // Crea scadenze prima visita per ogni prestazione del protocollo della mansione
             try {
                 await this._creaScadenzePrimaVisita(personId, mansioneId, tenantId);
@@ -349,6 +371,8 @@ const MansioneService = {
                 // Non bloccare l'assegnazione se la creazione scadenze fallisce
                 logger.warn({ personId, mansioneId, tenantId, error: scadenzaErr.message }, 'Errore creazione scadenze prima visita MDL');
             }
+
+            await this.syncOccupationalSnapshot(personId, tenantId, 'MANSIONE_ASSEGNATA');
 
             return assignment;
         } catch (err) {
@@ -400,6 +424,11 @@ const MansioneService = {
      * @returns {Promise<Object>} Assegnazione terminata
      */
     async removeFromWorker(assignmentId, tenantId) {
+        const existing = await prisma.lavoratoreMansione.findFirst({
+            where: { id: assignmentId, tenantId, deletedAt: null }
+        });
+        if (!existing) throw new Error('Assegnazione mansione non trovata');
+
         const assignment = await prisma.lavoratoreMansione.update({
             where: { id: assignmentId },
             data: {
@@ -408,8 +437,77 @@ const MansioneService = {
             }
         });
 
+        await this._reconcileWorkerRisksFromActiveMansions(existing.personId, tenantId);
+        await this.syncOccupationalSnapshot(existing.personId, tenantId, 'MANSIONE_RIMOSSA');
+
         logger.info({ assignmentId, tenantId }, 'Mansione rimossa da lavoratore');
         return assignment;
+    },
+
+    /**
+     * Copia i rischi di una mansione come rischi personalizzati del lavoratore.
+     * Se il rischio esiste già attivo, lo salta. Se è soft-deleted, lo riattiva.
+     * @param {string} personId - ID lavoratore
+     * @param {string} mansioneId - ID mansione
+     * @param {string} tenantId - ID tenant
+     */
+    async _copyMansioneRisksToWorker(personId, mansioneId, tenantId) {
+        const mansioneRischi = await prisma.mansioneRischio.findMany({
+            where: { mansioneId, deletedAt: null },
+        });
+
+        if (mansioneRischi.length === 0) return;
+
+        let copied = 0;
+        let reactivated = 0;
+        let skipped = 0;
+
+        for (const rischio of mansioneRischi) {
+            // Cerca se esiste già un record per questo rischio (attivo o soft-deleted)
+            const existing = await prisma.lavoratoreRischioAggiuntivo.findFirst({
+                where: { personId, codiceRischio: rischio.codiceRischio, tenantId },
+            });
+
+            if (existing) {
+                if (existing.deletedAt) {
+                    // Era soft-deleted → riattiva con dati aggiornati dalla mansione
+                    await prisma.lavoratoreRischioAggiuntivo.update({
+                        where: { id: existing.id },
+                        data: {
+                            deletedAt: null,
+                            livello: rischio.livello,
+                            categoria: rischio.categoria,
+                            descrizioneEsposizione: rischio.descrizioneEsposizione,
+                            fonteRischio: rischio.fonteRischio,
+                            periodicitaMesi: rischio.periodicitaMesi,
+                            sourceMansioneId: mansioneId,
+                        },
+                    });
+                    reactivated++;
+                } else {
+                    // Già attivo → non sovrascrivere (il lavoratore potrebbe aver personalizzato)
+                    skipped++;
+                }
+            } else {
+                // Nuovo → crea
+                await prisma.lavoratoreRischioAggiuntivo.create({
+                    data: {
+                        personId,
+                        tenantId,
+                        codiceRischio: rischio.codiceRischio,
+                        livello: rischio.livello,
+                        categoria: rischio.categoria,
+                        descrizioneEsposizione: rischio.descrizioneEsposizione,
+                        fonteRischio: rischio.fonteRischio,
+                        periodicitaMesi: rischio.periodicitaMesi,
+                        sourceMansioneId: mansioneId,
+                    },
+                });
+                copied++;
+            }
+        }
+
+        logger.info({ personId, mansioneId, tenantId, copied, reactivated, skipped }, 'Rischi mansione copiati a lavoratore');
     },
 
     /**
@@ -419,6 +517,9 @@ const MansioneService = {
      * @returns {Promise<Array>} Lista rischi unici
      */
     async getWorkerRisks(personId, tenantId) {
+        await this.ensureWorkerProtocolAssignments(personId, tenantId);
+        await this.syncOccupationalSnapshot(personId, tenantId, 'SYNC_RISCHI_WORKER');
+
         const assignments = await prisma.lavoratoreMansione.findMany({
             where: {
                 personId,
@@ -426,6 +527,7 @@ const MansioneService = {
                 isAttiva: true,
                 deletedAt: null
             },
+            orderBy: [{ isPrimaria: 'desc' }, { dataInizio: 'desc' }],
             include: {
                 mansione: {
                     include: {
@@ -438,39 +540,561 @@ const MansioneService = {
             }
         });
 
-        // Raggruppa rischi unici con livello massimo
+        // Raccoglie mansioni uniche assegnate al lavoratore
+        // Include _assignmentId per permettere la rimozione dal frontend
+        const mansioniMap = new Map();
+        for (const assignment of assignments) {
+            if (!mansioniMap.has(assignment.mansione.id)) {
+                mansioniMap.set(assignment.mansione.id, {
+                    ...assignment.mansione,
+                    _assignmentId: assignment.id,
+                    _isPrimaria: assignment.isPrimaria,
+                    _dataInizio: assignment.dataInizio,
+                    _dataFine: assignment.dataFine,
+                });
+            }
+        }
+
+        // Fetch rischi personalizzati del lavoratore (fonte primaria)
+        const rischiPersonalizzati = await prisma.lavoratoreRischioAggiuntivo.findMany({
+            where: {
+                personId,
+                tenantId,
+                deletedAt: null,
+            },
+            orderBy: { codiceRischio: 'asc' },
+        });
+
+        // Se il lavoratore ha rischi personalizzati → usa quelli come fonte primaria
+        // Se non ne ha → fallback ai rischi delle mansioni (per backward compat con lavoratori pre-migrazione)
+        const hasPersonalizedRisks = rischiPersonalizzati.length > 0;
+
         const risksMap = new Map();
 
-        for (const assignment of assignments) {
-            for (const rischio of assignment.mansione.rischiAssociati) {
-                const existing = risksMap.get(rischio.codiceRischio);
-
-                if (!existing || this._compareLevels(rischio.livello, existing.livello) > 0) {
-                    risksMap.set(rischio.codiceRischio, {
-                        codiceRischio: rischio.codiceRischio,
-                        livello: rischio.livello,
-                        categoria: rischio.categoria,
-                        mansioni: [...(existing?.mansioni || []), assignment.mansione.denominazione],
-                        periodicitaMesi: rischio.periodicitaMesi
-                    });
-                } else {
-                    existing.mansioni.push(assignment.mansione.denominazione);
+        if (hasPersonalizedRisks) {
+            // Fonte primaria: rischi personalizzati del lavoratore
+            for (const r of rischiPersonalizzati) {
+                risksMap.set(r.codiceRischio, {
+                    codiceRischio: r.codiceRischio,
+                    livello: r.livello,
+                    categoria: r.categoria,
+                    periodicitaMesi: r.periodicitaMesi,
+                    mansioni: [],
+                    _isPersonalizzato: true,
+                    _recordId: r.id,
+                    _sourceMansioneId: r.sourceMansioneId,
+                });
+            }
+            // Aggiungi info mansione di origine per contesto
+            for (const assignment of assignments) {
+                for (const rischio of assignment.mansione.rischiAssociati) {
+                    const entry = risksMap.get(rischio.codiceRischio);
+                    if (entry) {
+                        entry.mansioni.push(assignment.mansione.denominazione);
+                    }
+                }
+            }
+        } else {
+            // Fallback: rischi derivati dalle mansioni (lavoratori pre-migrazione)
+            for (const assignment of assignments) {
+                for (const rischio of assignment.mansione.rischiAssociati) {
+                    const existing = risksMap.get(rischio.codiceRischio);
+                    if (!existing || this._compareLevels(rischio.livello, existing.livello) > 0) {
+                        risksMap.set(rischio.codiceRischio, {
+                            codiceRischio: rischio.codiceRischio,
+                            livello: rischio.livello,
+                            categoria: rischio.categoria,
+                            mansioni: [...(existing?.mansioni || []), assignment.mansione.denominazione],
+                            periodicitaMesi: rischio.periodicitaMesi,
+                            _isPersonalizzato: false,
+                            _recordId: null,
+                        });
+                    } else if (existing) {
+                        existing.mansioni.push(assignment.mansione.denominazione);
+                    }
                 }
             }
         }
 
-        // Raccoglie mansioni uniche assegnate al lavoratore (con rischiAssociati per editing frontend)
-        const mansioniMap = new Map();
-        for (const assignment of assignments) {
-            if (!mansioniMap.has(assignment.mansione.id)) {
-                mansioniMap.set(assignment.mansione.id, assignment.mansione);
-            }
-        }
+        const statoOccupazionale = await this.getOccupationalHistory(personId, tenantId);
 
         return {
             rischi: Array.from(risksMap.values()),
+            hasPersonalizedRisks,
             mansioni: Array.from(mansioniMap.values()),
+            statoOccupazionale,
         };
+    },
+
+    /**
+     * Aggiunge un rischio personalizzato per singolo lavoratore
+     */
+    async addWorkerRischio(personId, data, tenantId) {
+        const { codiceRischio, livello, categoria, descrizioneEsposizione, fonteRischio, periodicitaMesi, note } = data;
+
+        // Verifica se esiste già (attivo o soft-deleted)
+        const existing = await prisma.lavoratoreRischioAggiuntivo.findFirst({
+            where: { personId, codiceRischio, tenantId },
+        });
+
+        if (existing) {
+            if (existing.deletedAt) {
+                // Era soft-deleted → riattiva con nuovi dati
+                const rischio = await prisma.lavoratoreRischioAggiuntivo.update({
+                    where: { id: existing.id },
+                    data: {
+                        deletedAt: null,
+                        livello: livello || 'MEDIO',
+                        categoria,
+                        descrizioneEsposizione,
+                        fonteRischio,
+                        periodicitaMesi,
+                        note,
+                        sourceMansioneId: null, // Aggiunto manualmente
+                    },
+                });
+                await this.syncOccupationalSnapshot(personId, tenantId, 'RISCHIO_RIATTIVATO');
+                return rischio;
+            }
+            throw new Error(`Rischio ${codiceRischio} già assegnato a questo lavoratore`);
+        }
+
+        const rischio = await prisma.lavoratoreRischioAggiuntivo.create({
+            data: {
+                personId,
+                tenantId,
+                codiceRischio,
+                livello: livello || 'MEDIO',
+                categoria,
+                descrizioneEsposizione,
+                fonteRischio,
+                periodicitaMesi,
+                note,
+            },
+        });
+        await this.syncOccupationalSnapshot(personId, tenantId, 'RISCHIO_AGGIUNTO');
+        return rischio;
+    },
+
+    /**
+     * Aggiorna un rischio aggiuntivo per singolo lavoratore
+     */
+    async updateWorkerRischio(id, data, tenantId) {
+        const rischio = await prisma.lavoratoreRischioAggiuntivo.findFirst({
+            where: { id, tenantId, deletedAt: null },
+        });
+        if (!rischio) throw new Error('Rischio aggiuntivo non trovato');
+
+        const { livello, descrizioneEsposizione, fonteRischio, periodicitaMesi, note } = data;
+        const updated = await prisma.lavoratoreRischioAggiuntivo.update({
+            where: { id },
+            data: { livello, descrizioneEsposizione, fonteRischio, periodicitaMesi, note },
+        });
+        await this.syncOccupationalSnapshot(rischio.personId, tenantId, 'RISCHIO_AGGIORNATO');
+        return updated;
+    },
+
+    /**
+     * Rimuove (soft delete) un rischio aggiuntivo per singolo lavoratore
+     */
+    async removeWorkerRischio(id, tenantId) {
+        const rischio = await prisma.lavoratoreRischioAggiuntivo.findFirst({
+            where: { id, tenantId, deletedAt: null },
+        });
+        if (!rischio) throw new Error('Rischio aggiuntivo non trovato');
+
+        const removed = await prisma.lavoratoreRischioAggiuntivo.update({
+            where: { id },
+            data: { deletedAt: new Date() },
+        });
+        await this.syncOccupationalSnapshot(rischio.personId, tenantId, 'RISCHIO_RIMOSSO');
+        return removed;
+    },
+
+    /**
+     * Inizializza i rischi personalizzati per un lavoratore copiandoli dalle sue mansioni attive.
+     * Usato per migrare lavoratori pre-esistenti al sistema per-worker.
+     * @param {string} personId - ID lavoratore
+     * @param {string} tenantId - ID tenant
+     */
+    async initializeWorkerRisks(personId, tenantId) {
+        // Verifica che il lavoratore non abbia già rischi personalizzati
+        const existingCount = await prisma.lavoratoreRischioAggiuntivo.count({
+            where: { personId, tenantId, deletedAt: null },
+        });
+        if (existingCount > 0) {
+            throw new Error('Il lavoratore ha già rischi personalizzati');
+        }
+
+        // Trova tutte le mansioni attive e copia i rischi
+        const assignments = await prisma.lavoratoreMansione.findMany({
+            where: { personId, tenantId, isAttiva: true, deletedAt: null },
+        });
+
+        for (const assignment of assignments) {
+            await this._copyMansioneRisksToWorker(personId, assignment.mansioneId, tenantId);
+        }
+
+        await this.syncOccupationalSnapshot(personId, tenantId, 'RISCHI_INIZIALIZZATI');
+        return { initialized: true };
+    },
+
+    /**
+     * Sincronizza il contesto occupazionale con il protocollo assegnato al profilo
+     * tenant del lavoratore. Il protocollo NON assegna automaticamente mansioni:
+     * mansioni e rischi restano quelli effettivamente associati al singolo dipendente.
+     */
+    async ensureWorkerProtocolAssignments(personId, tenantId) {
+        const profile = await prisma.personTenantProfile.findFirst({
+            where: { personId, tenantId, deletedAt: null, isActive: true },
+            include: { protocolloSanitario: true }
+        });
+
+        const protocollo = profile?.protocolloSanitario;
+        if (!profile || !protocollo || protocollo.deletedAt || !protocollo.isAttivo) {
+            await this.syncOccupationalSnapshot(personId, tenantId, 'SYNC_PROTOCOLLO');
+            return { assigned: 0, skipped: 0, protocolloId: null };
+        }
+
+        await this.syncOccupationalSnapshot(personId, tenantId, 'PROTOCOLLO_SANITARIO');
+        return { assigned: 0, skipped: 0, protocolloId: protocollo.id };
+    },
+
+    async updateWorkerOccupationalProfile(personId, data, tenantId) {
+        const {
+            protocolloSanitarioId,
+            title,
+            hiredDate,
+            endDate,
+            tipoContratto,
+            tipoCollaboratore,
+            oreSettimanali,
+            companyTenantProfileId,
+            siteId,
+            repartoId
+        } = data || {};
+        const profile = await prisma.personTenantProfile.findFirst({
+            where: { personId, tenantId, deletedAt: null, isActive: true },
+            select: { id: true },
+        });
+        if (!profile) {
+            throw new Error('Profilo tenant del lavoratore non trovato');
+        }
+
+        if (protocolloSanitarioId) {
+            const protocollo = await prisma.protocolloSanitario.findFirst({
+                where: { id: protocolloSanitarioId, tenantId, deletedAt: null, isAttivo: true },
+                select: { id: true },
+            });
+            if (!protocollo) {
+                throw new Error('Protocollo sanitario non valido o non attivo');
+            }
+        }
+
+        const updateData = {
+            protocolloSanitarioId: protocolloSanitarioId || null,
+        };
+        if (Object.prototype.hasOwnProperty.call(data || {}, 'title')) updateData.title = title || null;
+        if (Object.prototype.hasOwnProperty.call(data || {}, 'hiredDate')) updateData.hiredDate = hiredDate ? new Date(hiredDate) : null;
+        if (Object.prototype.hasOwnProperty.call(data || {}, 'endDate')) updateData.endDate = endDate ? new Date(endDate) : null;
+        if (Object.prototype.hasOwnProperty.call(data || {}, 'tipoContratto')) updateData.tipoContratto = tipoContratto || null;
+        if (Object.prototype.hasOwnProperty.call(data || {}, 'tipoCollaboratore')) updateData.tipoCollaboratore = tipoCollaboratore || null;
+        if (Object.prototype.hasOwnProperty.call(data || {}, 'oreSettimanali')) updateData.oreSettimanali = oreSettimanali === '' || oreSettimanali == null ? null : Number(oreSettimanali);
+        if (Object.prototype.hasOwnProperty.call(data || {}, 'companyTenantProfileId')) updateData.companyTenantProfileId = companyTenantProfileId || null;
+        if (Object.prototype.hasOwnProperty.call(data || {}, 'siteId')) updateData.siteId = siteId || null;
+        if (Object.prototype.hasOwnProperty.call(data || {}, 'repartoId')) updateData.repartoId = repartoId || null;
+
+        await prisma.personTenantProfile.update({
+            where: { id: profile.id },
+            data: updateData,
+        });
+
+        await this.syncOccupationalSnapshot(personId, tenantId, 'STATO_OCCUPAZIONALE_MODIFICATO');
+        return this.getWorkerRisks(personId, tenantId);
+    },
+
+    async _getActiveWorkerContext(personId, tenantId) {
+        const [profile, assignments, risks] = await Promise.all([
+            prisma.personTenantProfile.findFirst({
+                where: { personId, tenantId, deletedAt: null, isActive: true },
+                include: {
+                    companyTenantProfile: {
+                        select: { id: true, company: { select: { ragioneSociale: true, piva: true, codiceFiscale: true } } }
+                    },
+                    site: { select: { id: true, siteName: true, citta: true } },
+                    reparto: { select: { id: true, nome: true, codice: true } },
+                    protocolloSanitario: {
+                        select: {
+                            id: true,
+                            codice: true,
+                            denominazione: true,
+                            periodicitaVisiteMesi: true,
+                            prestazioni: {
+                                where: { deletedAt: null },
+                                select: {
+                                    prestazioneId: true,
+                                    isObbligatoria: true,
+                                    periodicita: true,
+                                    periodicitaCustomMesi: true,
+                                    condizioniApplicazione: true,
+                                    prestazione: { select: { id: true, nome: true, codice: true, tipo: true } }
+                                }
+                            }
+                        }
+                    }
+                }
+            }),
+            prisma.lavoratoreMansione.findMany({
+                where: { personId, tenantId, isAttiva: true, deletedAt: null },
+                include: { mansione: { select: { id: true, codice: true, denominazione: true, siteId: true } } },
+                orderBy: [{ isPrimaria: 'desc' }, { dataInizio: 'desc' }]
+            }),
+            prisma.lavoratoreRischioAggiuntivo.findMany({
+                where: { personId, tenantId, deletedAt: null },
+                orderBy: { codiceRischio: 'asc' }
+            })
+        ]);
+
+        const primaryAssignment = assignments.find(a => a.isPrimaria) || assignments[0] || null;
+        const current = profile ? {
+            personId,
+            tenantId,
+            personTenantProfileId: profile.id,
+            companyTenantProfileId: profile.companyTenantProfileId || null,
+            siteId: profile.siteId || primaryAssignment?.mansione?.siteId || null,
+            repartoId: profile.repartoId || null,
+            mansioneId: primaryAssignment?.mansioneId || null,
+            protocolloSanitarioId: profile.protocolloSanitarioId || null,
+            titolo: profile.title || null,
+            status: profile.status || null,
+            tipoContratto: profile.tipoContratto || null,
+            oreSettimanali: profile.oreSettimanali || null,
+            dataInizio: startOfDay(profile.hiredDate || primaryAssignment?.dataInizio || new Date()),
+            dataFine: profile.endDate ? startOfDay(profile.endDate) : null,
+        } : null;
+
+        const snapshot = {
+            company: profile?.companyTenantProfile?.company || null,
+            site: profile?.site || null,
+            reparto: profile?.reparto || null,
+            title: profile?.title || null,
+            hiredDate: profile?.hiredDate || null,
+            endDate: profile?.endDate || null,
+            tipoContratto: profile?.tipoContratto || null,
+            tipoCollaboratore: profile?.tipoCollaboratore || null,
+            oreSettimanali: profile?.oreSettimanali || null,
+            protocolloSanitario: profile?.protocolloSanitario || null,
+            mansioni: assignments.map(a => ({
+                id: a.mansioneId,
+                assignmentId: a.id,
+                codice: a.mansione?.codice,
+                denominazione: a.mansione?.denominazione,
+                isPrimaria: a.isPrimaria,
+                dataInizio: a.dataInizio,
+                dataFine: a.dataFine
+            })),
+            rischi: risks.map(r => ({
+                id: r.id,
+                codiceRischio: r.codiceRischio,
+                livello: r.livello,
+                categoria: r.categoria,
+                periodicitaMesi: r.periodicitaMesi,
+                sourceMansioneId: r.sourceMansioneId,
+                fonteRischio: r.fonteRischio
+            }))
+        };
+
+        return { profile, current, snapshot };
+    },
+
+    async syncOccupationalSnapshot(personId, tenantId, motivo = 'SYNC') {
+        const { profile, current, snapshot } = await this._getActiveWorkerContext(personId, tenantId);
+        if (!profile || !current) return null;
+
+        const activeRecord = await prisma.statoOccupazionaleStorico.findFirst({
+            where: { personId, tenantId, isCorrente: true, deletedAt: null },
+            orderBy: { dataInizio: 'desc' }
+        });
+
+        const changed = !activeRecord ||
+            !sameNullableId(activeRecord.personTenantProfileId, current.personTenantProfileId) ||
+            !sameNullableId(activeRecord.companyTenantProfileId, current.companyTenantProfileId) ||
+            !sameNullableId(activeRecord.siteId, current.siteId) ||
+            !sameNullableId(activeRecord.repartoId, current.repartoId) ||
+            !sameNullableId(activeRecord.mansioneId, current.mansioneId) ||
+            !sameNullableId(activeRecord.protocolloSanitarioId, current.protocolloSanitarioId) ||
+            activeRecord.status !== current.status ||
+            activeRecord.tipoContratto !== current.tipoContratto ||
+            activeRecord.oreSettimanali !== current.oreSettimanali ||
+            activeRecord.titolo !== current.titolo;
+
+        let record = activeRecord;
+        if (changed) {
+            if (activeRecord) {
+                await prisma.statoOccupazionaleStorico.update({
+                    where: { id: activeRecord.id },
+                    data: {
+                        isCorrente: false,
+                        dataFine: startOfDay(new Date()),
+                        motivo: activeRecord.motivo || motivo
+                    }
+                });
+            }
+
+            record = await prisma.statoOccupazionaleStorico.create({
+                data: {
+                    ...current,
+                    fonte: 'PERSON_TENANT_PROFILE',
+                    motivo,
+                    snapshot: toJsonValue(snapshot)
+                }
+            });
+        } else if (activeRecord) {
+            record = await prisma.statoOccupazionaleStorico.update({
+                where: { id: activeRecord.id },
+                data: {
+                    dataFine: current.dataFine,
+                    snapshot: toJsonValue(snapshot),
+                    motivo
+                }
+            });
+        }
+
+        const recordSummary = record ? {
+            id: record.id,
+            personId: record.personId,
+            tenantId: record.tenantId,
+            companyTenantProfileId: record.companyTenantProfileId,
+            siteId: record.siteId,
+            repartoId: record.repartoId,
+            mansioneId: record.mansioneId,
+            protocolloSanitarioId: record.protocolloSanitarioId,
+            titolo: record.titolo,
+            status: record.status,
+            tipoContratto: record.tipoContratto,
+            oreSettimanali: record.oreSettimanali,
+            dataInizio: record.dataInizio,
+            dataFine: record.dataFine,
+            isCorrente: record.isCorrente,
+            motivo: record.motivo
+        } : null;
+
+        await prisma.profiloDiSalutePersona.upsert({
+            where: { personId_tenantId: { personId, tenantId } },
+            create: {
+                personId,
+                tenantId,
+                sorveglianzaSanitaria: toJsonValue({
+                    protocolloSanitario: snapshot.protocolloSanitario,
+                    mansioni: snapshot.mansioni,
+                    rischi: snapshot.rischi,
+                    aggiornataAl: new Date().toISOString(),
+                    fonte: motivo
+                }),
+                storicoOccupazionale: toJsonValue({
+                    corrente: recordSummary,
+                    ultimoSnapshot: snapshot,
+                    aggiornataAl: new Date().toISOString()
+                })
+            },
+            update: {
+                sorveglianzaSanitaria: toJsonValue({
+                    protocolloSanitario: snapshot.protocolloSanitario,
+                    mansioni: snapshot.mansioni,
+                    rischi: snapshot.rischi,
+                    aggiornataAl: new Date().toISOString(),
+                    fonte: motivo
+                }),
+                storicoOccupazionale: toJsonValue({
+                    corrente: recordSummary,
+                    ultimoSnapshot: snapshot,
+                    aggiornataAl: new Date().toISOString()
+                })
+            }
+        });
+
+        return record;
+    },
+
+    async getOccupationalHistory(personId, tenantId) {
+        const history = await prisma.statoOccupazionaleStorico.findMany({
+            where: { personId, tenantId, deletedAt: null },
+            orderBy: [{ isCorrente: 'desc' }, { dataInizio: 'desc' }],
+            take: 25,
+            include: {
+                companyTenantProfile: { select: { id: true, company: { select: { ragioneSociale: true, piva: true } } } },
+                site: { select: { id: true, siteName: true, citta: true } },
+                reparto: { select: { id: true, nome: true, codice: true } },
+                mansione: { select: { id: true, codice: true, denominazione: true } },
+                protocolloSanitario: {
+                    select: {
+                        id: true,
+                        codice: true,
+                        denominazione: true,
+                        periodicitaVisiteMesi: true,
+                        prestazioni: {
+                            where: { deletedAt: null },
+                            select: {
+                                prestazioneId: true,
+                                isObbligatoria: true,
+                                periodicita: true,
+                                periodicitaCustomMesi: true,
+                                condizioniApplicazione: true,
+                                prestazione: { select: { id: true, nome: true, codice: true, tipo: true } }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        return {
+            current: history.find(h => h.isCorrente) || history[0] || null,
+            history
+        };
+    },
+
+    async _reconcileWorkerRisksFromActiveMansions(personId, tenantId) {
+        const assignments = await prisma.lavoratoreMansione.findMany({
+            where: { personId, tenantId, isAttiva: true, deletedAt: null },
+            include: {
+                mansione: {
+                    include: { rischiAssociati: { where: { deletedAt: null } } }
+                }
+            }
+        });
+
+        const activeRiskSourceByCode = new Map();
+        for (const assignment of assignments) {
+            for (const rischio of assignment.mansione.rischiAssociati) {
+                const existing = activeRiskSourceByCode.get(rischio.codiceRischio);
+                if (!existing || this._compareLevels(rischio.livello, existing.livello) > 0) {
+                    activeRiskSourceByCode.set(rischio.codiceRischio, {
+                        mansioneId: assignment.mansioneId,
+                        livello: rischio.livello
+                    });
+                }
+            }
+        }
+
+        const workerRisks = await prisma.lavoratoreRischioAggiuntivo.findMany({
+            where: { personId, tenantId, deletedAt: null, sourceMansioneId: { not: null } }
+        });
+
+        for (const rischio of workerRisks) {
+            const activeSource = activeRiskSourceByCode.get(rischio.codiceRischio);
+            if (!activeSource) {
+                await prisma.lavoratoreRischioAggiuntivo.update({
+                    where: { id: rischio.id },
+                    data: { deletedAt: new Date() }
+                });
+            } else if (activeSource.mansioneId !== rischio.sourceMansioneId) {
+                await prisma.lavoratoreRischioAggiuntivo.update({
+                    where: { id: rischio.id },
+                    data: { sourceMansioneId: activeSource.mansioneId }
+                });
+            }
+        }
     },
 
     /**
@@ -558,14 +1182,24 @@ const MansioneService = {
      * @param {string} tenantId
      */
     async _creaScadenzePrimaVisita(personId, mansioneId, tenantId) {
-        // Trova il protocollo attivo per questa mansione (M:N via junction table)
-        const protocollo = await prisma.protocolloSanitario.findFirst({
-            where: {
+        const profile = await prisma.personTenantProfile.findFirst({
+            where: { personId, tenantId, deletedAt: null, isActive: true },
+            select: { protocolloSanitarioId: true }
+        });
+
+        // Priorità: protocollo assegnato al lavoratore. Fallback: protocollo associato alla mansione.
+        const protocolloWhere = profile?.protocolloSanitarioId
+            ? { id: profile.protocolloSanitarioId, tenantId, isAttivo: true, deletedAt: null }
+            : {
                 mansioniAssociate: { some: { mansioneId } },
                 tenantId,
                 isAttivo: true,
                 deletedAt: null
-            },
+            };
+
+        const protocollo = await prisma.protocolloSanitario.findFirst({
+            where: protocolloWhere,
+            orderBy: { dataInizioValidita: 'desc' },
             include: {
                 prestazioni: {
                     where: { deletedAt: null }
@@ -577,17 +1211,23 @@ const MansioneService = {
         });
 
         if (!protocollo || (!protocollo.prestazioni?.length && !protocollo.questionari?.length)) {
-            logger.info({ personId, mansioneId, tenantId }, 'Nessun protocollo configurato per mansione, skip prima visita scadenze');
+            logger.info({ personId, mansioneId, tenantId }, 'Nessun protocollo configurato per lavoratore/mansione, skip prima visita scadenze');
             return;
         }
 
-        // Verifica se esistono già scadenze prima visita per questa persona+mansione
-        const existing = await prisma.scadenzaPrestazioneProtocollo.findFirst({
-            where: { personId, mansioneId, tenantId, isPrimaVisita: true, deletedAt: null }
+        // Una stessa persona non deve ricevere duplicati dello stesso protocollo solo
+        // perché ha più mansioni coperte dallo stesso protocollo sanitario.
+        const existingProtocollo = await prisma.scadenzaPrestazioneProtocollo.findFirst({
+            where: {
+                personId,
+                tenantId,
+                protocolloId: protocollo.id,
+                isPrimaVisita: true,
+                deletedAt: null
+            }
         });
-
-        if (existing) {
-            logger.info({ personId, mansioneId, tenantId }, 'Scadenze prima visita già esistenti, skip');
+        if (existingProtocollo) {
+            logger.info({ personId, mansioneId, tenantId, protocolloId: protocollo.id }, 'Scadenze prima visita protocollo già esistenti, skip');
             return;
         }
 

@@ -37,6 +37,7 @@ import {
     FilePlus,
     BookOpen,
     Loader2,
+    Printer,
     ChevronRight,
     FileCheck,
     Briefcase,
@@ -53,7 +54,9 @@ import { CRUDButton } from '../../../components/shared/CRUDButton';
 import { useToast } from '../../../hooks/useToast';
 import { useTenantFilter } from '../../../context/TenantFilterContext';
 import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
+import { useSmartBack } from '../../../hooks/useSmartBack';
 import { AccettazionePazienteModal, type PatientFormData } from './components/AccettazionePazienteModal';
+import { apiDownloadWithFilename, apiPost } from '../../../services/api';
 
 // ============================================
 // CONSTANTS
@@ -62,6 +65,31 @@ import { AccettazionePazienteModal, type PatientFormData } from './components/Ac
 const STATO_FLOW: StatoAppuntamento[] = [
     'PRENOTATO', 'CONFERMATO', 'IN_ATTESA', 'IN_CORSO', 'COMPLETATO', 'FATTURATO'
 ];
+
+const getAppointmentPriceInfo = (app: Appuntamento) => {
+    const raw = app as any;
+    const base = Number(
+        raw._prezzoPrestazioniBase
+        ?? raw._prezzoTariffarioPrestazione
+        ?? raw._prezzoTotaleMovimenti
+        ?? raw.prezzoBase
+        ?? app.prestazione?.prezzoBase
+        ?? raw.prezzo
+        ?? 0
+    );
+    const condizioni = app.convenzione?.condizioni as any;
+    let discounted = Number(raw.prezzoScontato ?? raw.prezzoFinale ?? raw.prezzoConvenzionato ?? 0) || 0;
+    if (!discounted && condizioni && base > 0) {
+        const scontoInfo = condizioni.scontoInfo;
+        const tipoSconto = String(scontoInfo?.tipo || '').toUpperCase();
+        if (tipoSconto.includes('PERCENT')) discounted = base * (1 - Number(scontoInfo.valore || 0) / 100);
+        else if (tipoSconto.includes('VALORE') || tipoSconto.includes('FISSO')) discounted = Math.max(0, base - Number(scontoInfo.valore || 0));
+        else if (condizioni.percentualeSconto || condizioni.scontoPercentuale) discounted = base * (1 - Number(condizioni.percentualeSconto ?? condizioni.scontoPercentuale) / 100);
+        else if (condizioni.scontoFisso) discounted = Math.max(0, base - Number(condizioni.scontoFisso));
+    }
+    const finalPrice = discounted > 0 ? Math.round(discounted * 100) / 100 : base;
+    return { base, finalPrice, hasDiscount: discounted > 0 && base > 0 && Math.abs(discounted - base) >= 0.01 };
+};
 
 const STATO_CONFIG: Record<StatoAppuntamento, {
     label: string;
@@ -179,10 +207,10 @@ const StatusFlow: React.FC<{ stato: StatoAppuntamento }> = ({ stato }) => {
                 return (
                     <React.Fragment key={s}>
                         <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium flex-shrink-0 transition-all ${isCurrent
-                                ? `bg-gradient-to-r ${cfg.gradient} text-white shadow-sm`
-                                : isDone
-                                    ? 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
-                                    : 'bg-gray-50 dark:bg-gray-800 text-gray-300 dark:text-gray-600'
+                            ? `bg-gradient-to-r ${cfg.gradient} text-white shadow-sm`
+                            : isDone
+                                ? 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+                                : 'bg-gray-50 dark:bg-gray-800 text-gray-300 dark:text-gray-600'
                             }`}>
                             <Icon className="h-3 w-3" />
                             <span className="hidden sm:inline">{cfg.shortLabel}</span>
@@ -226,6 +254,7 @@ const InfoRow: React.FC<{
 const AppuntamentoDetailPage: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
+    const goBack = useSmartBack('/poliambulatorio/appuntamenti');
     const queryClient = useQueryClient();
     const { showToast } = useToast();
     const { tenantFilterKey } = useTenantFilter();
@@ -278,7 +307,10 @@ const AppuntamentoDetailPage: React.FC = () => {
 
     // Accettazione Modal state
     const [isAccettazioneOpen, setIsAccettazioneOpen] = useState(false);
+    const [accettazioneInitialTab, setAccettazioneInitialTab] = useState<'anagrafica' | 'residenza' | 'appuntamento' | 'fatturazione'>('anagrafica');
     const [isAccettazioneLoading, setIsAccettazioneLoading] = useState(false);
+    const [printingFatturaId, setPrintingFatturaId] = useState<string | null>(null);
+    const [emailingFatturaId, setEmailingFatturaId] = useState<string | null>(null);
 
     const handleChangeStato = useCallback((stato: StatoAppuntamento) => {
         changeStatoMutation.mutate(stato);
@@ -289,6 +321,38 @@ const AppuntamentoDetailPage: React.FC = () => {
             deleteMutation.mutate();
         }
     }, [deleteMutation, confirmDelete]);
+
+    const handleDownloadFatturaPdf = useCallback(async (fattura: any) => {
+        setPrintingFatturaId(fattura.id);
+        try {
+            const { blob, filename } = await apiDownloadWithFilename(`/api/v1/billing/fatture/${fattura.id}/pdf`);
+            const url = URL.createObjectURL(blob);
+            window.open(url, '_blank', 'noopener,noreferrer');
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename || `fattura-${fattura.numero || fattura.id}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 30000);
+        } catch {
+            showToast({ message: 'Errore nella generazione del PDF fattura', type: 'error' });
+        } finally {
+            setPrintingFatturaId(null);
+        }
+    }, [showToast]);
+
+    const handleInviaFatturaEmail = useCallback(async (fattura: any) => {
+        setEmailingFatturaId(fattura.id);
+        try {
+            await apiPost(`/api/v1/billing/fatture/${fattura.id}/invia-email`, {});
+            showToast({ message: 'Fattura inviata via email', type: 'success' });
+        } catch {
+            showToast({ message: 'Email destinatario non disponibile o invio non riuscito', type: 'error' });
+        } finally {
+            setEmailingFatturaId(null);
+        }
+    }, [showToast]);
 
     const handleAccettazioneConfirm = useCallback(async (patientData: PatientFormData) => {
         if (!appuntamento) return;
@@ -353,9 +417,15 @@ const AppuntamentoDetailPage: React.FC = () => {
     const StatusIcon = cfg.icon;
     const dataOra = new Date(appuntamento.dataOra);
     const oraFine = new Date(dataOra.getTime() + (appuntamento.durataMinuti || 30) * 60000);
+    const priceInfo = getAppointmentPriceInfo(appuntamento);
+    const fattureElettroniche = Array.isArray((appuntamento as any)._fattureElettroniche)
+        ? (appuntamento as any)._fattureElettroniche
+        : [];
+    const hasActiveFattura = fattureElettroniche.some((f: any) => !['ANNULLATA', 'STORNATA'].includes(f.stato));
     const isBusy = changeStatoMutation.isPending;
     const isTerminal = ['ANNULLATO', 'NO_SHOW', 'RINVIATO'].includes(appuntamento.stato);
 
+    const isMdlAppointment = !!appuntamento.tipoVisitaMDL;
     const patientName = getPersonDisplayName(appuntamento.paziente, '');
     const initials = patientName.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase() || 'P';
     const doctorName = appuntamento.medico
@@ -370,7 +440,7 @@ const AppuntamentoDetailPage: React.FC = () => {
                     {/* Back + Edit nav */}
                     <div className="flex items-center justify-between mb-3">
                         <button
-                            onClick={() => navigate(-1)}
+                            onClick={goBack}
                             className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors text-sm font-medium"
                         >
                             <ArrowLeft className="h-4 w-4" /> Appuntamenti
@@ -421,7 +491,7 @@ const AppuntamentoDetailPage: React.FC = () => {
                                         {/* PRENOTATO / CONFERMATO */}
                                         {(appuntamento.stato === 'PRENOTATO' || appuntamento.stato === 'CONFERMATO') && (
                                             <>
-                                                <button disabled={isBusy} onClick={() => setIsAccettazioneOpen(true)}
+                                                <button disabled={isBusy} onClick={() => { setAccettazioneInitialTab('anagrafica'); setIsAccettazioneOpen(true); }}
                                                     className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50 transition-colors shadow-sm">
                                                     {isBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserCheck className="h-4 w-4" />}
                                                     Accetta Paziente
@@ -472,19 +542,24 @@ const AppuntamentoDetailPage: React.FC = () => {
                                         )}
                                         {/* COMPLETATO */}
                                         {appuntamento.stato === 'COMPLETATO' && (
-                                            <button onClick={() => {
-                                                if (appuntamento.visita?.id) navigate(`/poliambulatorio/fatture/nuova?visitaId=${appuntamento.visita.id}`);
-                                                else navigate(`/poliambulatorio/fatture/nuova?appuntamentoId=${id}`);
-                                            }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-teal-600 text-white hover:bg-teal-700 transition-colors shadow-sm">
-                                                <FilePlus className="h-4 w-4" /> Crea Fattura
+                                            <button onClick={() => { setAccettazioneInitialTab('fatturazione'); setIsAccettazioneOpen(true); }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-teal-600 text-white hover:bg-teal-700 transition-colors shadow-sm">
+                                                <FilePlus className="h-4 w-4" /> {hasActiveFattura ? 'Apri Fatturazione' : 'Crea Fattura'}
                                             </button>
                                         )}
                                         {/* FATTURATO */}
-                                        {appuntamento.stato === 'FATTURATO' && appuntamento.visita?.id && (
-                                            <button onClick={() => navigate(`/poliambulatorio/visite/${appuntamento.visita!.id}`)}
-                                                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition-colors shadow-sm">
-                                                <BookOpen className="h-4 w-4" /> Vedi Referto
-                                            </button>
+                                        {appuntamento.stato === 'FATTURATO' && (
+                                            <>
+                                                <button onClick={() => { setAccettazioneInitialTab('fatturazione'); setIsAccettazioneOpen(true); }}
+                                                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-teal-600 text-white hover:bg-teal-700 transition-colors shadow-sm">
+                                                    <Receipt className="h-4 w-4" /> Apri Fatturazione
+                                                </button>
+                                                {appuntamento.visita?.id && (
+                                                    <button onClick={() => navigate(`/poliambulatorio/visite/${appuntamento.visita!.id}`)}
+                                                        className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition-colors shadow-sm">
+                                                        <BookOpen className="h-4 w-4" /> Vedi Referto
+                                                    </button>
+                                                )}
+                                            </>
                                         )}
                                     </div>
                                 </div>
@@ -508,9 +583,10 @@ const AppuntamentoDetailPage: React.FC = () => {
                                         <span className="flex items-center gap-2">
                                             {appuntamento.prestazione.nome}
                                             {appuntamento.prestazione.codice && <span className="text-xs text-gray-400 font-mono">{appuntamento.prestazione.codice}</span>}
-                                            {((appuntamento.prestazione as any)._prezzoTariffario ?? appuntamento.prestazione.prezzoBase) && (
-                                                <span className="ml-1 text-xs font-semibold text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-900/30 px-1.5 py-0.5 rounded">
-                                                    € {Number((appuntamento.prestazione as any)._prezzoTariffario ?? appuntamento.prestazione.prezzoBase).toFixed(2)}
+                                            {priceInfo.finalPrice > 0 && (
+                                                <span className="ml-1 inline-flex items-center gap-1 text-xs font-semibold text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-900/30 px-1.5 py-0.5 rounded">
+                                                    {priceInfo.hasDiscount && <span className="text-gray-400 line-through">€ {priceInfo.base.toFixed(2)}</span>}
+                                                    € {priceInfo.finalPrice.toFixed(2)}
                                                 </span>
                                             )}
                                         </span>
@@ -569,7 +645,7 @@ const AppuntamentoDetailPage: React.FC = () => {
                         )}
 
                         {/* Fatture collegate */}
-                        {appuntamento.visita?.fatture && appuntamento.visita.fatture.length > 0 && (
+                        {(fattureElettroniche.length > 0 || (appuntamento.visita?.fatture && appuntamento.visita.fatture.length > 0)) && (
                             <div className="bg-white dark:bg-gray-800 rounded-2xl border border-indigo-200 dark:border-indigo-800 p-5 shadow-sm">
                                 <h2 className="font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2 mb-3">
                                     <div className="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center">
@@ -577,7 +653,45 @@ const AppuntamentoDetailPage: React.FC = () => {
                                     </div>
                                     Fatture
                                 </h2>
-                                {appuntamento.visita.fatture.map(f => (
+                                {fattureElettroniche.map((f: any) => (
+                                    <div key={f.id} className="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 mb-2 last:mb-0">
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{f.numero || `Documento ${f.id.slice(0, 8)}`}</p>
+                                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                {formatDate(new Date(f.dataEmissione), 'short')} • {f.stato}
+                                            </p>
+                                            {f.linee?.[0]?.descrizione && (
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{f.linee[0].descrizione}</p>
+                                            )}
+                                        </div>
+                                        <div className="flex shrink-0 items-center gap-2">
+                                            <span className="font-semibold text-indigo-700 dark:text-indigo-300">€ {Number(f.totale || 0).toFixed(2)}</span>
+                                            {f.stato !== 'BOZZA' && (
+                                                <>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDownloadFatturaPdf(f)}
+                                                        disabled={printingFatturaId === f.id}
+                                                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-indigo-200 bg-white text-indigo-600 hover:bg-indigo-50 disabled:opacity-50"
+                                                        title="Stampa o scarica PDF fattura"
+                                                    >
+                                                        {printingFatturaId === f.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Printer className="h-3.5 w-3.5" />}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleInviaFatturaEmail(f)}
+                                                        disabled={emailingFatturaId === f.id}
+                                                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-indigo-200 bg-white text-indigo-600 hover:bg-indigo-50 disabled:opacity-50"
+                                                        title="Invia fattura via email"
+                                                    >
+                                                        {emailingFatturaId === f.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                                {(appuntamento.visita?.fatture || []).map(f => (
                                     <div key={f.id} className="flex items-center justify-between p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-900/20">
                                         <div>
                                             <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{f.numeroFattura || `Fattura ${f.id.slice(0, 8)}`}</p>
@@ -679,26 +793,102 @@ const AppuntamentoDetailPage: React.FC = () => {
                         </div>
 
                         {/* Company & Mansione Card — MDL only */}
-                        {(appuntamento as any)._companyProfile && (
+                        {isMdlAppointment && ((appuntamento as any)._companyProfile || (appuntamento.paziente as any)?._mdlProfile) && (
                             <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 shadow-sm">
                                 <h2 className="font-semibold text-gray-900 dark:text-gray-100 text-sm mb-4 flex items-center gap-2">
-                                    <Building2 className="h-4 w-4 text-gray-500 dark:text-gray-400" /> Azienda
+                                    <Building2 className="h-4 w-4 text-gray-500 dark:text-gray-400" /> Medicina del Lavoro
                                 </h2>
-                                <div className="space-y-1 mb-3">
-                                    <p className="font-semibold text-gray-900 dark:text-gray-100 text-sm">
-                                        {(appuntamento as any)._companyProfile.ragioneSociale}
-                                    </p>
-                                    {(appuntamento as any)._companyProfile.piva && (
-                                        <p className="text-xs text-gray-400 dark:text-gray-500 font-mono">
-                                            P.IVA {(appuntamento as any)._companyProfile.piva}
+                                {(appuntamento as any)._companyProfile && (
+                                    <div className="space-y-1 mb-3">
+                                        <p className="font-semibold text-gray-900 dark:text-gray-100 text-sm">
+                                            {(appuntamento as any)._companyProfile.ragioneSociale}
                                         </p>
-                                    )}
-                                    {((appuntamento as any)._companyProfile.citta || (appuntamento as any)._companyProfile.indirizzo) && (
-                                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                                            {[(appuntamento as any)._companyProfile.indirizzo, (appuntamento as any)._companyProfile.citta, (appuntamento as any)._companyProfile.provincia].filter(Boolean).join(', ')}
-                                        </p>
-                                    )}
-                                </div>
+                                        {(appuntamento as any)._companyProfile.piva && (
+                                            <p className="text-xs text-gray-400 dark:text-gray-500 font-mono">
+                                                P.IVA {(appuntamento as any)._companyProfile.piva}
+                                            </p>
+                                        )}
+                                        {((appuntamento as any)._companyProfile.citta || (appuntamento as any)._companyProfile.indirizzo) && (
+                                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                {[(appuntamento as any)._companyProfile.indirizzo, (appuntamento as any)._companyProfile.citta, (appuntamento as any)._companyProfile.provincia].filter(Boolean).join(', ')}
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+                                {(appuntamento.paziente as any)?._mdlProfile && (
+                                    <div className="mb-4 grid grid-cols-1 gap-2 rounded-xl bg-slate-50 p-3 text-xs dark:bg-gray-700/50">
+                                        <div>
+                                            <span className="text-gray-500 dark:text-gray-400">Protocollo: </span>
+                                            <span className="font-semibold text-gray-900 dark:text-gray-100">
+                                                {(appuntamento.paziente as any)._mdlProfile.protocolloSanitario?.nome || (appuntamento.paziente as any)._mdlProfile.protocolloSanitario?.denominazione || 'Non assegnato'}
+                                            </span>
+                                        </div>
+                                        {(appuntamento.paziente as any)._mdlProfile.title && (
+                                            <div>
+                                                <span className="text-gray-500 dark:text-gray-400">Mansione/profilo: </span>
+                                                <span className="font-semibold text-gray-900 dark:text-gray-100">{(appuntamento.paziente as any)._mdlProfile.title}</span>
+                                            </div>
+                                        )}
+                                        {(appuntamento.paziente as any)._mdlProfile.site && (
+                                            <div>
+                                                <span className="text-gray-500 dark:text-gray-400">Sede: </span>
+                                                <span className="font-semibold text-gray-900 dark:text-gray-100">
+                                                    {[
+                                                        (appuntamento.paziente as any)._mdlProfile.site.siteName,
+                                                        (appuntamento.paziente as any)._mdlProfile.site.citta,
+                                                        (appuntamento.paziente as any)._mdlProfile.site.provincia,
+                                                    ].filter(Boolean).join(' · ')}
+                                                </span>
+                                            </div>
+                                        )}
+                                        {(appuntamento.paziente as any)._mdlProfile.reparto && (
+                                            <div>
+                                                <span className="text-gray-500 dark:text-gray-400">Reparto: </span>
+                                                <span className="font-semibold text-gray-900 dark:text-gray-100">{(appuntamento.paziente as any)._mdlProfile.reparto.nome}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                                {((appuntamento as any)._workerMansioni?.length > 0 || (appuntamento as any)._rischiLavorativi?.length > 0) && (
+                                    <div className="mb-4 rounded-xl border border-orange-100 bg-orange-50/60 p-3 dark:border-orange-900/40 dark:bg-orange-900/10">
+                                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-orange-700 dark:text-orange-300">Mansioni e rischi</p>
+                                        {((appuntamento as any)._workerMansioni || []).length > 0 && (
+                                            <p className="text-xs text-gray-700 dark:text-gray-300">
+                                                {((appuntamento as any)._workerMansioni || []).map((wm: any) => wm.mansione?.denominazione || wm.mansione?.codice).filter(Boolean).join(', ')}
+                                            </p>
+                                        )}
+                                        {((appuntamento as any)._rischiLavorativi || []).length > 0 && (
+                                            <div className="mt-2 flex flex-wrap gap-1">
+                                                {((appuntamento as any)._rischiLavorativi || []).map((rischio: any) => (
+                                                    <span key={`${rischio.codiceRischio}-${rischio.livello}-${rischio.mansione || ''}`} className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-orange-700 shadow-sm dark:bg-gray-800">
+                                                        {rischio.label || rischio.codiceRischio}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                                {((appuntamento as any)._ultimaVisitaMdl || (appuntamento as any)._accertamentiMdl?.length > 0) && (
+                                    <div className="mb-4 rounded-xl border border-sky-100 bg-sky-50/60 p-3 dark:border-sky-900/40 dark:bg-sky-900/10">
+                                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-300">Storico e accertamenti</p>
+                                        {(appuntamento as any)._ultimaVisitaMdl && (
+                                            <p className="mb-2 text-xs text-gray-700 dark:text-gray-300">
+                                                Ultima visita: <span className="font-semibold">{formatDate(new Date((appuntamento as any)._ultimaVisitaMdl.dataOra), 'short')}</span>
+                                                {' · '}
+                                                {(appuntamento as any)._ultimaVisitaMdl.tipoVisitaMDL?.replace(/_/g, ' ')}
+                                            </p>
+                                        )}
+                                        {((appuntamento as any)._accertamentiMdl || []).slice(0, 6).map((acc: any) => (
+                                            <div key={acc.id} className="flex items-center justify-between gap-3 border-t border-sky-100 py-1.5 text-xs first:border-t-0 dark:border-sky-900/40">
+                                                <span className="font-medium text-gray-700 dark:text-gray-300">{acc.prestazione?.nome || 'Accertamento'}</span>
+                                                <span className="text-gray-500">
+                                                    {acc.eseguita && acc.dataEsecuzione ? `Eseguito ${formatDate(new Date(acc.dataEsecuzione), 'short')}` : `Scade ${acc.dataScadenza ? formatDate(new Date(acc.dataScadenza), 'short') : '—'}`}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                {(appuntamento as any)._companyProfile && (
                                 <div className="space-y-1.5">
                                     {(appuntamento as any)._companyProfile.telefono && (
                                         <a href={`tel:${(appuntamento as any)._companyProfile.telefono}`}
@@ -723,6 +913,7 @@ const AppuntamentoDetailPage: React.FC = () => {
                                         </Link>
                                     )}
                                 </div>
+                                )}
 
                                 {/* Worker Mansioni */}
                                 {(appuntamento as any)._workerMansioni?.length > 0 && (
@@ -823,8 +1014,34 @@ const AppuntamentoDetailPage: React.FC = () => {
                 <AccettazionePazienteModal
                     appuntamento={appuntamento}
                     isOpen={isAccettazioneOpen}
-                    onClose={() => setIsAccettazioneOpen(false)}
+                    initialTab={accettazioneInitialTab}
+                    onClose={() => {
+                        setIsAccettazioneOpen(false);
+                        setAccettazioneInitialTab('anagrafica');
+                    }}
                     onConfirm={handleAccettazioneConfirm}
+                    onSaveAppointmentOnly={async (appointmentData) => {
+                        if (!appuntamento) return;
+                        try {
+                            const updatePayload: Record<string, unknown> = {};
+                            if (appointmentData.dataOra) updatePayload.dataOra = appointmentData.dataOra;
+                            if (appointmentData.prestazioneId) updatePayload.prestazioneId = appointmentData.prestazioneId;
+                            if (appointmentData.pazienteId) updatePayload.pazienteId = appointmentData.pazienteId;
+                            if ('convenzioneId' in appointmentData) updatePayload.convenzioneId = appointmentData.convenzioneId || null;
+                            if (appointmentData.note !== undefined) updatePayload.note = appointmentData.note;
+                            if (appointmentData.noteInterne !== undefined) updatePayload.noteInterne = appointmentData.noteInterne;
+                            if (appointmentData.stato) updatePayload.stato = appointmentData.stato;
+                            if (Object.keys(updatePayload).length > 0) {
+                                await appuntamentiApi.update(appuntamento.id, updatePayload as Partial<typeof appuntamento>);
+                            }
+                            showToast({ message: 'Appuntamento aggiornato con successo', type: 'success' });
+                            queryClient.invalidateQueries({ queryKey: ['appuntamento', id] });
+                            queryClient.invalidateQueries({ queryKey: ['appuntamenti'] });
+                            setIsAccettazioneOpen(false);
+                        } catch {
+                            showToast({ message: 'Errore nell\'aggiornamento dell\'appuntamento', type: 'error' });
+                        }
+                    }}
                     isLoading={isAccettazioneLoading}
                 />
             )}

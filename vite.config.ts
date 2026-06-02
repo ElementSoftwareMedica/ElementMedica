@@ -8,6 +8,9 @@ const BRAND_META: Record<string, Record<string, string>> = {
   'element-sicurezza': {
     BRAND_FAVICON_ICO: 'element-sicurezza-favicon.ico',
     BRAND_APPLE_TOUCH: 'element-sicurezza-apple-touch.png',
+    BRAND_LOGO_FILE: 'element-sicurezza-logo.png',
+    BRAND_LOGO_WEBP: 'element-sicurezza-logo.webp',
+    BRAND_GA_ID: 'G-FV5689MRDM',
     BRAND_TITLE: 'Element Sicurezza | Corsi Sicurezza, RSPP e Medicina del Lavoro | Padova',
     BRAND_DESCRIPTION: 'Element Sicurezza: corsi sicurezza sul lavoro, RSPP esterno, medicina del lavoro e DVR a Padova e Selvazzano Dentro (PD). Ente accreditato Regione Veneto. 300+ aziende clienti. P.IVA 05580640281',
     BRAND_SITE_NAME: 'Element Sicurezza',
@@ -21,6 +24,9 @@ const BRAND_META: Record<string, Record<string, string>> = {
   'element-medica': {
     BRAND_FAVICON_ICO: 'element-medica-favicon.ico',
     BRAND_APPLE_TOUCH: 'element-medica-apple-touch.png',
+    BRAND_LOGO_FILE: 'element-medica-logo.png',
+    BRAND_LOGO_WEBP: 'element-medica-logo.webp',
+    BRAND_GA_ID: 'G-YC266LSERP',
     BRAND_TITLE: 'Element Medica | Poliambulatorio Selvazzano Dentro Padova | Centro Medico',
     BRAND_DESCRIPTION: 'Element Medica: poliambulatorio a Selvazzano Dentro (PD) vicino Padova. Visite specialistiche, medico competente, medicina del lavoro, diagnostica. 25.000+ pazienti. P.IVA 05580640281',
     BRAND_SITE_NAME: 'Element Medica',
@@ -99,11 +105,27 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       // Brand HTML Transform: injects brand-specific meta/favicon/SEO at build time
+      // Non-blocking CSS: converts render-blocking <link rel="stylesheet"> to async preload.
+      // Safe for CSR React apps — the root <div id="root"> is empty HTML, React can't render
+      // anything until JS executes anyway, so deferring CSS doesn't cause visible FOUC.
+      {
+        name: 'defer-css',
+        apply: 'build' as const,
+        transformIndexHtml: {
+          order: 'post' as const,
+          handler(html: string) {
+            return html.replace(
+              /<link rel="stylesheet" crossorigin href="([^"]+\.css)">/g,
+              (_match: string, href: string) =>
+                `<link rel="preload" href="${href}" as="style" onload="this.onload=null;this.rel='stylesheet'">\n    <noscript><link rel="stylesheet" crossorigin href="${href}"></noscript>`
+            );
+          },
+        },
+      },
       (() => {
         let resolvedOutDir = 'dist';
         return {
-          name: 'brand-html-transform',
-          configResolved(config) {
+          name: 'brand-html-transform', configResolved(config) {
             resolvedOutDir = config.build.outDir;
           },
           transformIndexHtml: {
@@ -148,46 +170,114 @@ export default defineConfig(({ mode }) => {
       treeShaking: true
     },
     build: {
+      // Only preload chunks that are always needed on every page load.
+      // Admin-only chunks (ui, lazy-ui, motion, mui, charts, etc.) are excluded
+      // from preloads so they are NOT downloaded on public landing pages.
+      // They will be loaded on-demand when the first admin route mounts.
+      modulePreload: {
+        resolveDependencies(filename: string, deps: string[]) {
+          const ALWAYS_NEEDED = ['vendor', 'router', 'utils', 'icons'];
+          return deps.filter(dep =>
+            ALWAYS_NEEDED.some(name => dep.includes(`/${name}-`) || dep.includes(`/${name}.`))
+          );
+        },
+      },
       rollupOptions: {
+        // ─── TREESHAKE: mark lazy UI modules as side-effect-free ───────────────
+        // Without this, Rollup emits bare `import"./lazy-ui-..."` and
+        // `import"./ui-..."` at the top of the main bundle, forcing the browser
+        // to fetch all @radix-ui code on every page load — including public pages
+        // that never use dialogs or accordions.
+        // Setting moduleSideEffects: false for these files tells Rollup that any
+        // import of these modules with no consumed exports can be safely dropped.
+        // Named-export imports in lazy page chunks (e.g. import{Dialog}from…)
+        // are NOT affected and continue to work correctly.
+        treeshake: {
+          moduleSideEffects(id: string): boolean {
+            if (
+              id.includes('/src/components/ui/dialog') ||
+              id.includes('/src/components/ui/accordion') ||
+              id.includes('/src/components/ui/checkbox') ||
+              id.includes('/src/components/ui/popover') ||
+              id.includes('/design-system/molecules/Dropdown')
+            ) {
+              return false;
+            }
+            return true;
+          },
+        },
         output: {
-          manualChunks: {
-            // Vendor chunks
-            vendor: ['react', 'react-dom'],
-            router: ['react-router-dom'],
+          manualChunks(id: string): string | undefined {
+            // ─── APP SOURCE: PREVENT ROLLUP HOISTING OF SHARED UI ──────────────
+            // dialog.tsx, accordion.tsx, checkbox.tsx are imported by many lazy
+            // chunks. Without this, Rollup promotes them to the main entry chunk,
+            // which forces the entire @radix-ui ecosystem to be preloaded on every
+            // page — including public landing pages that never use these components.
+            if (
+              id.includes('/src/components/ui/dialog') ||
+              id.includes('/src/components/ui/accordion') ||
+              id.includes('/src/components/ui/checkbox') ||
+              id.includes('/src/components/ui/popover')
+            ) {
+              return 'lazy-ui';
+            }
 
-            // UI Library chunks
-            ui: [
-              '@radix-ui/react-dropdown-menu',
-              '@radix-ui/react-select',
-              '@radix-ui/react-label',
-              '@radix-ui/react-slot'
-            ],
+            // ─── APP SOURCE: SHARED UTILITIES (must stay out of lazy-ui) ────────
+            // design-system/utils provides cn() used by both main-bundle components
+            // (Button, Card, Modal…) AND lazy-ui components (dialog, accordion…).
+            // Keeping it in 'utils' prevents lazy-ui from being pulled into the main
+            // entry's preload chain.
+            if (id.includes('design-system/utils') || id.includes('/lib/utils')) {
+              return 'utils';
+            }
 
-            // Heavy components
-            charts: ['recharts'],
-            calendar: [
-              '@fullcalendar/core',
-              '@fullcalendar/react',
-              '@fullcalendar/daygrid',
-              '@fullcalendar/timegrid',
-              '@fullcalendar/interaction'
-            ],
+            if (!id.includes('node_modules')) return undefined;
 
-            // Form & inputs
-            forms: ['react-select'],
+            // ─── IMPORTANT: scoped packages checked BEFORE generic /react/ ───
+            // @emotion/react, @tiptap/react, @radix-ui/react-xxx etc. all contain
+            // `/react/` in their paths — they must be caught here before the
+            // react/react-dom check below, which uses the same substring.
+            if (id.includes('@radix-ui') || id.includes('@floating-ui')) return 'ui';
+            if (id.includes('@mui/') || id.includes('@emotion/')) return 'mui';
+            if (id.includes('@fullcalendar/')) return 'calendar';
+            if (id.includes('@react-pdf/')) return 'pdf';
+            // TipTap rich-text editor + ProseMirror → admin-only, keep separate
+            if (id.includes('@tiptap/') || id.includes('prosemirror') || id.includes('/orderedmap/') || id.includes('/w3c-keyname/')) return 'editor';
 
-            // Utils
-            utils: ['axios', 'date-fns', 'clsx'],
+            // ─── REACT CORE — use node_modules/ prefix to avoid matching @scope/react ──
+            // e.g. @tiptap/react → path has "@tiptap/react/" not "node_modules/react/"
+            if (id.includes('/react-router') || id.includes('/@remix-run/')) return 'router';
+            if (id.includes('node_modules/react-dom/') || id.includes('node_modules/react/')) return 'vendor';
 
-            // i18n
-            i18n: ['i18next', 'react-i18next'],
+            // ─── ANIMATION ────────────────────────────────────────────────────
+            if (id.includes('/framer-motion/')) return 'motion';
 
-            // Icons
-            icons: ['lucide-react'],
+            // ─── ADMIN-ONLY HEAVY LIBRARIES ───────────────────────────────────
+            if (id.includes('/recharts/')) return 'charts';
+            if (id.includes('/react-select/')) return 'forms';
 
-            // Files
-            pdf: ['@react-pdf/renderer', 'papaparse']
-          }
+            // ─── UTILITIES ────────────────────────────────────────────────────
+            if (
+              id.includes('/axios/') ||
+              id.includes('/date-fns/') ||
+              id.includes('/clsx/') ||
+              id.includes('/tailwind-merge/')
+            ) return 'utils';
+
+            // ─── REAL-TIME ────────────────────────────────────────────────────
+            if (id.includes('/socket.io-client/') || id.includes('/engine.io-client/')) return 'socketio';
+
+            // ─── I18N ─────────────────────────────────────────────────────────
+            if (id.includes('/i18next/') || id.includes('/react-i18next/')) return 'i18n';
+
+            // ─── ICONS ────────────────────────────────────────────────────────
+            if (id.includes('/lucide-react/')) return 'icons';
+
+            // ─── DOCUMENTS ────────────────────────────────────────────────────
+            if (id.includes('/papaparse/')) return 'pdf';
+
+            return undefined;
+          },
         }
       },
       chunkSizeWarningLimit: 1000,
@@ -195,8 +285,11 @@ export default defineConfig(({ mode }) => {
       cssCodeSplit: true,
       target: 'es2015', // Better browser compatibility
       minify: 'esbuild', // Fast and effective
-      assetsInlineLimit: 4096, // Inline assets < 4kb
-      cssMinify: 'esbuild',
+      assetsInlineLimit: 8192, // Inline assets < 8kb (increased for small icons/svgs)
+      // lightningcss: more aggressive minification than esbuild.
+      // Removes spaces after `:` in custom properties, deduplicates rules,
+      // normalizes colors. Results in ~10-20% smaller CSS than esbuild.
+      cssMinify: 'lightningcss',
       reportCompressedSize: true // Report gzip sizes
     }
   };

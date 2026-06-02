@@ -39,6 +39,8 @@ import {
     ExternalLink
 } from 'lucide-react';
 import { useTenantFilter } from '../../../../context/TenantFilterContext';
+import { useAuth } from '../../../../context/AuthContext';
+import { useTenantMode } from '../../../../contexts/TenantModeContext';
 import {
     modulisticaTemplatesApi,
     modulisticaDocumentiApi,
@@ -128,6 +130,19 @@ const TABS: { id: DetailTab; label: string; icon: typeof Info }[] = [
     { id: 'tariffario', label: 'Tariffario MDL', icon: DollarSign }
 ];
 
+const CONSENSO_LABELS: Record<string, string> = {
+    gdpr: 'Trattamento dati personali (GDPR)',
+    sanitari: 'Trattamento dati sanitari',
+    prestazione: 'Consenso alla prestazione sanitaria',
+    chirurgico: 'Consenso atto chirurgico/invasivo',
+    marketing: 'Marketing',
+    comunicazioni: 'Comunicazioni di servizio',
+    fse_alimentazione: 'FSE - alimentazione documenti',
+    fse_consultazione: 'FSE - consultazione',
+    fse_pregresso: 'FSE - dati pregressi',
+    mdl_sorveglianza: 'Medicina del Lavoro - sorveglianza sanitaria',
+};
+
 // ============================================
 // HELPER
 // ============================================
@@ -144,6 +159,7 @@ const getCampoTypeLabel = (tipo: string): string => {
     const labels: Record<string, string> = {
         'TEXT': 'Testo',
         'TEXTAREA': 'Testo lungo',
+        'textarea': 'Testo lungo',
         'NUMBER': 'Numero',
         'EMAIL': 'Email',
         'PHONE': 'Telefono',
@@ -227,8 +243,34 @@ const TabInfoDetail: React.FC<{ template: DocumentoTemplate }> = ({ template }) 
 );
 
 /** Tab Campi — read-only field list */
-const TabCampiDetail: React.FC<{ campi: CampoTemplate[] }> = ({ campi }) => {
+const TabCampiDetail: React.FC<{ campi: CampoTemplate[]; template: DocumentoTemplate; onEdit?: () => void }> = ({ campi, template, onEdit }) => {
     if (!campi?.length) {
+        const html = template.contenutoHtml || template.contenutoPdf;
+        if (html) {
+            return (
+                <div className="space-y-3">
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <span>Questo consenso usa un testo unico: il testo mostrato sul tablet è salvato come contenuto del documento.</span>
+                        {onEdit && (
+                            <button
+                                type="button"
+                                onClick={onEdit}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+                            >
+                                <Edit2 className="h-3.5 w-3.5" />
+                                Modifica testo
+                            </button>
+                        )}
+                    </div>
+                    <div className="rounded-xl border border-gray-200 bg-white p-5">
+                        <div
+                            className="prose prose-sm max-w-none text-gray-700"
+                            dangerouslySetInnerHTML={{ __html: html }}
+                        />
+                    </div>
+                </div>
+            );
+        }
         return (
             <div className="text-center py-12 text-gray-500">
                 <List className="w-12 h-12 mx-auto mb-3 text-gray-300" />
@@ -278,8 +320,9 @@ const TabCampiDetail: React.FC<{ campi: CampoTemplate[] }> = ({ campi }) => {
 const TabAssociazioniDetail: React.FC<{ template: DocumentoTemplate }> = ({ template }) => {
     const prestazioni = template.prestazioni || [];
     const medici = template.medici || [];
+    const consensoCodici = template.consensoCodici || [];
 
-    if (!prestazioni.length && !medici.length) {
+    if (!prestazioni.length && !medici.length && !consensoCodici.length) {
         return (
             <div className="text-center py-12 text-gray-500">
                 <Link2 className="w-12 h-12 mx-auto mb-3 text-gray-300" />
@@ -290,6 +333,23 @@ const TabAssociazioniDetail: React.FC<{ template: DocumentoTemplate }> = ({ temp
 
     return (
         <div className="space-y-6">
+            {consensoCodici.length > 0 && (
+                <div>
+                    <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                        <FileSignature className="w-4 h-4" />
+                        Tipologie consenso associate ({consensoCodici.length})
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                        {consensoCodici.map(codice => (
+                            <span key={codice} className="inline-flex items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-800">
+                                <CheckCircle className="h-3.5 w-3.5" />
+                                {CONSENSO_LABELS[codice] || codice}
+                            </span>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             {prestazioni.length > 0 && (
                 <div>
                     <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
@@ -740,9 +800,12 @@ const ModulisticaDetailPage: React.FC = () => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const { showToast } = useToast();
+    const { hasPermission } = useAuth();
+    const { canPerformCRUD } = useTenantMode();
     const { tenantFilterKey, isReady } = useTenantFilter();
     const [activeTab, setActiveTab] = useState<DetailTab>('info');
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const canUpdateTemplate = canPerformCRUD && (hasPermission('templates', 'update') || hasPermission('templates:update'));
 
     // Fetch template by ID
     const { data: template, isLoading, error } = useQuery({
@@ -789,6 +852,7 @@ const ModulisticaDetailPage: React.FC = () => {
             ordine: template.ordine,
             contenutoHtml: template.contenutoHtml || '',
             campi: (template.campi as CampoTemplate[]) || [],
+            consensoCodici: template.consensoCodici || [],
             prestazioniIds: template.prestazioni?.map(p => p.prestazioneId) || [],
             mediciIds: template.medici?.map(m => m.medicoId) || [],
             haScoring: (template as any).questionarioConfig?.haScoring ?? false,
@@ -870,13 +934,15 @@ const ModulisticaDetailPage: React.FC = () => {
                         <p className="text-sm text-gray-500 mt-0.5">Codice: {template.codice}</p>
                     )}
                 </div>
-                <CRUDPrimaryButton
-                    onClick={() => setIsEditModalOpen(true)}
-                    className="flex-shrink-0"
-                >
-                    <Edit2 className="w-4 h-4 mr-2" />
-                    Modifica
-                </CRUDPrimaryButton>
+                {canUpdateTemplate && (
+                    <CRUDPrimaryButton
+                        onClick={() => setIsEditModalOpen(true)}
+                        className="flex-shrink-0"
+                    >
+                        <Edit2 className="w-4 h-4 mr-2" />
+                        Modifica
+                    </CRUDPrimaryButton>
+                )}
             </div>
 
             {/* Tabs */}
@@ -911,7 +977,13 @@ const ModulisticaDetailPage: React.FC = () => {
                 {/* Tab content */}
                 <div className="p-6">
                     {activeTab === 'info' && <TabInfoDetail template={template} />}
-                    {activeTab === 'campi' && <TabCampiDetail campi={(template.campi as CampoTemplate[]) || []} />}
+                    {activeTab === 'campi' && (
+                        <TabCampiDetail
+                            campi={(template.campi as CampoTemplate[]) || []}
+                            template={template}
+                            onEdit={canUpdateTemplate ? () => setIsEditModalOpen(true) : undefined}
+                        />
+                    )}
                     {activeTab === 'anteprima' && formDataForPreview && <TabAnteprima formData={formDataForPreview} />}
                     {activeTab === 'associazioni' && <TabAssociazioniDetail template={template} />}
                     {activeTab === 'risposte' && <TabRisposte templateId={template.id} />}
@@ -920,7 +992,7 @@ const ModulisticaDetailPage: React.FC = () => {
             </div>
 
             {/* Edit Modal */}
-            {isEditModalOpen && template && (
+            {isEditModalOpen && template && canUpdateTemplate && (
                 <TemplateFormModal
                     isOpen={isEditModalOpen}
                     onClose={() => setIsEditModalOpen(false)}

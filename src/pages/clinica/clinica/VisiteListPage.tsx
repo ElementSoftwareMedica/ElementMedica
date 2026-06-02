@@ -72,6 +72,13 @@ interface VisitaListItem {
     isMDL?: boolean;
     /** companyTenantProfileId del paziente (primo profilo attivo) */
     companyTenantProfileId?: string | null;
+    visiteSecondarieCount?: number;
+    visiteSecondarieSummary?: Array<{
+        id: string;
+        stato: string;
+        medicoId?: string | null;
+        prestazioneNome?: string | null;
+    }>;
 }
 
 interface MedicoItem {
@@ -188,6 +195,9 @@ const VisiteListPage: React.FC = () => {
     const [soloSecundarieDaRefertare, setSoloSecundarieDaRefertare] = useState<boolean>(
         () => readFilterPref('soloSecundarieDaRefertare', false)
     );
+    const [soloVisiteSecondarie, setSoloVisiteSecondarie] = useState<boolean>(
+        () => readFilterPref('soloVisiteSecondarie', false)
+    );
     // Filtro fascia oraria — gestito da TimeRangePicker
     const [timeRange, setTimeRange] = useState<TimeRange>(() => ({
         start: readFilterPref<string | null>('oraInizio', null),
@@ -261,6 +271,7 @@ const VisiteListPage: React.FC = () => {
             statoFilter,
             medicoFilter,
             soloSecundarieDaRefertare,
+            soloVisiteSecondarie,
             oraInizio: timeRange.start || null,
             oraFine: timeRange.end || null,
             fatturazioneFilter,
@@ -276,7 +287,7 @@ const VisiteListPage: React.FC = () => {
             dateRangeStart: dateRange.start ? toLocalDateStr(dateRange.start) : null,
             dateRangeEnd: dateRange.end ? toLocalDateStr(dateRange.end) : null,
         });
-    }, [statoFilter, medicoFilter, soloSecundarieDaRefertare, timeRange, fatturazioneFilter, soloNonFatturate, showAdvancedFilters, poliambulatorioFilter, sedeFilter, ambulatorioFilter, visibleCols, columnOrder, sortDir, sortField, dateRange]);
+    }, [statoFilter, medicoFilter, soloSecundarieDaRefertare, soloVisiteSecondarie, timeRange, fatturazioneFilter, soloNonFatturate, showAdvancedFilters, poliambulatorioFilter, sedeFilter, ambulatorioFilter, visibleCols, columnOrder, sortDir, sortField, dateRange]);
 
     const toggleCol = (col: OptionalCol) =>
         setVisibleCols(prev => {
@@ -338,6 +349,7 @@ const VisiteListPage: React.FC = () => {
             ...(medicoFilter && { medicoId: medicoFilter }),
             ...(companyFilter && { companyTenantProfileId: companyFilter }),
             ...(soloSecundarieDaRefertare && { soloSecundarieDaRefertare: 'true' }),
+            ...(soloVisiteSecondarie && { isVisitaSecundaria: 'true' }),
             ...(timeRange.start && { oraInizio: timeRange.start }),
             ...(timeRange.end && { oraFine: timeRange.end }),
             ...(effectiveFatturazioneFilter && { fatturazione: effectiveFatturazioneFilter }),
@@ -347,7 +359,7 @@ const VisiteListPage: React.FC = () => {
             ...(tp.tenantIds && { tenantIds: tp.tenantIds.join(',') }),
             ...(tp.allTenants && { allTenants: 'true' })
         };
-    }, [page, PAGE_SIZE, searchTerm, statoFilter, dateRange, medicoFilter, companyFilter, soloSecundarieDaRefertare, timeRange, fatturazioneFilter, soloNonFatturate, ambulatorioFilter, sedeFilter, poliambulatorioFilter, getTenantFilterParams, tenantFilterKey]);
+    }, [page, PAGE_SIZE, searchTerm, statoFilter, dateRange, medicoFilter, companyFilter, soloSecundarieDaRefertare, soloVisiteSecondarie, timeRange, fatturazioneFilter, soloNonFatturate, ambulatorioFilter, sedeFilter, poliambulatorioFilter, getTenantFilterParams, tenantFilterKey]);
 
     // Fetch visite with React Query
     const { data: visiteData, isLoading: loading, error, refetch } = useQuery({
@@ -531,7 +543,9 @@ const VisiteListPage: React.FC = () => {
             totaleCosto: v.totaleCosto ?? null,
             fatturaId: v.fatturaId ?? null,
             isMDL: v.isMDL ?? false,
-            companyTenantProfileId: v.companyTenantProfileId ?? null
+            companyTenantProfileId: v.companyTenantProfileId ?? null,
+            visiteSecondarieCount: v.visiteSecondarieCount ?? 0,
+            visiteSecondarieSummary: v.visiteSecondarieSummary ?? []
         }));
         // Client-side sort by selected field
         return [...raw].sort((a, b) => {
@@ -578,6 +592,7 @@ const VisiteListPage: React.FC = () => {
         setMedicoFilter('');
         setDateRange({ start: today, end: today });
         setSoloSecundarieDaRefertare(false);
+        setSoloVisiteSecondarie(false);
         setTimeRange({ start: null, end: null });
         setFatturazioneFilter('');
         setSoloNonFatturate(false);
@@ -795,6 +810,17 @@ const VisiteListPage: React.FC = () => {
                         )}
                     </button>
 
+                    <button
+                        onClick={() => { setSoloVisiteSecondarie(v => !v); setPage(1); }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all flex items-center gap-1.5 ${soloVisiteSecondarie
+                            ? 'bg-sky-600 text-white border-sky-600 shadow-sm'
+                            : 'bg-white text-sky-700 border-sky-300 hover:bg-sky-50'
+                            }`}
+                    >
+                        <ClipboardList className="w-3.5 h-3.5" />
+                        Visite Secondarie
+                    </button>
+
                     {/* Quick stato filter chips with counters */}
                     {Object.entries(statoConfig).map(([key, config]) => {
                         const isActive = statoFilter === key;
@@ -977,12 +1003,13 @@ const VisiteListPage: React.FC = () => {
                                 <tbody>
                                     {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                                     {prestazioniDaRefertareList.map((p: any) => {
-                                        const hasVisita = Boolean(p.appuntamento?.visita?.id);
+                                        const visitaTargetId = p.visitaSecundaria?.id || p.appuntamento?.visita?.id;
+                                        const hasVisita = Boolean(visitaTargetId);
                                         return (
                                             <tr
                                                 key={p.id}
                                                 className={`border-b border-gray-50 transition-colors ${hasVisita ? 'hover:bg-violet-50 cursor-pointer' : 'opacity-60 bg-gray-50'}`}
-                                                onClick={() => hasVisita && navigate(`/poliambulatorio/visite/${p.appuntamento.visita.id}`)}
+                                                onClick={() => hasVisita && navigate(`/poliambulatorio/visite/${visitaTargetId}`)}
                                                 title={!hasVisita ? 'Visita non trovata — record orfano' : undefined}
                                             >
                                                 <td className="py-2.5 pr-4">
@@ -1004,7 +1031,7 @@ const VisiteListPage: React.FC = () => {
                                                 <td className="py-2.5">
                                                     {hasVisita ? (
                                                         <button
-                                                            onClick={(e) => { e.stopPropagation(); navigate(`/poliambulatorio/visite/${p.appuntamento.visita.id}`); }}
+                                                            onClick={(e) => { e.stopPropagation(); navigate(`/poliambulatorio/visite/${visitaTargetId}`); }}
                                                             className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-white bg-violet-600 hover:bg-violet-700 rounded-lg transition-colors"
                                                         >
                                                             <Pencil className="w-3 h-3" />
@@ -1135,6 +1162,15 @@ const VisiteListPage: React.FC = () => {
                                                             {visita.isVisitaSecundaria && (
                                                                 <span className="text-[10px] font-semibold bg-violet-100 text-violet-700 rounded px-1.5 py-0.5 leading-none">
                                                                     Specialista
+                                                                </span>
+                                                            )}
+                                                            {!visita.isVisitaSecundaria && (visita.visiteSecondarieCount ?? 0) > 0 && (
+                                                                <span
+                                                                    className="inline-flex items-center gap-1 text-[10px] font-semibold bg-sky-100 text-sky-700 rounded px-1.5 py-0.5 leading-none"
+                                                                    title={`${visita.visiteSecondarieCount} prestazion${visita.visiteSecondarieCount === 1 ? 'e' : 'i'} secondari${visita.visiteSecondarieCount === 1 ? 'a' : 'e'} collegate`}
+                                                                >
+                                                                    <ClipboardList className="w-3 h-3" />
+                                                                    +{visita.visiteSecondarieCount}
                                                                 </span>
                                                             )}
                                                         </p>

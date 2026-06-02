@@ -2,7 +2,7 @@ import React from 'react';
 import { Label } from '../../../../design-system/atoms/Label';
 import { CourseDetailsForm, DateTimeManager } from '../index';
 import type { Training, Trainer, Option } from '../../types';
-import type { FormData } from '../../hooks/useFormData';
+import type { FormData } from '../../types';
 import { normalizeText } from '../../utils';
 
 interface StepCourseDetailsProps {
@@ -72,7 +72,18 @@ export const StepCourseDetails: React.FC<StepCourseDetailsProps> = ({
       <CourseDetailsForm
         trainings={trainings}
         trainers={effectiveTrainers}
-        formData={formData}
+        formData={{
+          training_id: formData.training_id ?? '',
+          trainer_id: formData.trainer_id ?? '',
+          co_trainer_id: formData.co_trainer_id ?? '',
+          location: formData.location ?? '',
+          max_participants: formData.max_participants ?? 0,
+          notes: formData.notes ?? '',
+          delivery_mode: formData.delivery_mode,
+          risk_level: formData.risk_level,
+          course_type: formData.course_type,
+          isPublic: formData.isPublic,
+        }}
         onFormDataChange={onFormDataChange}
         selectedCourse={selectedCourse}
         filteredTrainers={filteredTrainers}
@@ -125,7 +136,7 @@ export const StepCourseDetails: React.FC<StepCourseDetailsProps> = ({
       />
 
       <DateTimeManager
-        dates={formData.dates}
+        dates={formData.dates || []}
         trainers={effectiveTrainers}
         filteredTrainers={filteredTrainers}
         coTrainerOptions={allCoTrainers}
@@ -133,7 +144,7 @@ export const StepCourseDetails: React.FC<StepCourseDetailsProps> = ({
           if (field === 'date' || field === 'start' || field === 'end') {
             handleDateChange(index, field, value);
           } else if (field === 'trainerId' || field === 'coTrainerId') {
-            const newDates = formData.dates.map((date, i: number) =>
+            const newDates = (formData.dates || []).map((date, i: number) =>
               i === index ? { ...date, [field]: value } : date
             );
             setFormData({ dates: newDates });
@@ -141,7 +152,7 @@ export const StepCourseDetails: React.FC<StepCourseDetailsProps> = ({
         }}
         onAddDateTime={() => {
           // ✅ FIX: Logica intelligente per auto-fill date e orari nuove sessioni
-          const lastSession = formData.dates[formData.dates.length - 1];
+          const lastSession = (formData.dates || [])[(formData.dates || []).length - 1];
           const lastDate = lastSession?.date || '';
           const lastEnd = lastSession?.end || '';
 
@@ -185,7 +196,7 @@ export const StepCourseDetails: React.FC<StepCourseDetailsProps> = ({
           const endTime = `${String(endHours).padStart(2, '0')}:${String(endMinutesVal).padStart(2, '0')}`;
 
           setFormData({
-            dates: [...formData.dates, { date: newDate, start: startTime, end: endTime, trainerId: '', coTrainerId: '' }]
+            dates: [...(formData.dates || []), { date: newDate, start: startTime, end: endTime, trainerId: (formData.dates || [])[0]?.trainerId ?? '', coTrainerId: '' }]
           });
         }}
         onRemoveDateTime={handleRemoveDate}

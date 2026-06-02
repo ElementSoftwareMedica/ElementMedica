@@ -63,6 +63,22 @@ export class DeviceWatcher {
     startWatching(device: DeviceConfig): void {
         const dir = device.gdtOutputDir;
 
+        // Skip if no output directory is configured — avoids chokidar watching
+        // the entire filesystem (or CWD) when the field is an empty string.
+        // Also skip filesystem root ('/' on macOS/Linux, drive roots on Windows) which
+        // is what resolve('.') returns when the bridge runs with cwd='/'.
+        // Watching '/' immediately floods the event loop with EACCES/EPERM errors and
+        // makes the HTTP server unresponsive.
+        if (!dir || dir.trim() === '') {
+            logger.warn('Skipping watcher: gdtOutputDir not configured', { device: device.type });
+            return;
+        }
+        const isRootPath = dir === '/' || dir === '\\' || /^[A-Za-z]:[\\\/]?$/.test(dir);
+        if (isRootPath) {
+            logger.warn('Skipping watcher: gdtOutputDir is filesystem root — please configure a specific output directory in Bridge settings', { device: device.type, dir });
+            return;
+        }
+
         // Ensure directory exists
         if (!existsSync(dir)) {
             mkdirSync(dir, { recursive: true });

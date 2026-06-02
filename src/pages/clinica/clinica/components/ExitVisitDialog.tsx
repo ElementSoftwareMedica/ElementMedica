@@ -88,8 +88,8 @@ export const ExitVisitDialog: React.FC<ExitVisitDialogProps> = ({
             return;
         }
 
-        // Validate deletion reason for discard action
-        if (action === 'discard') {
+        // Validate deletion reason for discard action (skip for nuova versione - no GDPR reason needed)
+        if (action === 'discard' && !isNuovaVersione) {
             if (!deletionReason || deletionReason.trim().length < 10) {
                 setDeletionReasonError('La motivazione deve essere di almeno 10 caratteri');
                 return;
@@ -116,19 +116,19 @@ export const ExitVisitDialog: React.FC<ExitVisitDialogProps> = ({
 
     const content = (
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center"
+            className="fixed inset-0 z-[100] flex items-center justify-center"
             role="dialog"
             aria-modal="true"
             aria-labelledby="exit-visit-title"
         >
-            {/* Overlay */}
+            {/* Overlay - z-[1] ensures it stays behind dialog even with backdrop-filter stacking context */}
             <div
-                className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+                className="absolute inset-0 z-[1] bg-black/50 backdrop-blur-sm"
                 onClick={() => !isLoading && onClose()}
             />
 
-            {/* Dialog */}
-            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+            {/* Dialog - z-[2] ensures it stays above overlay */}
+            <div className="relative z-[2] bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-amber-50 to-orange-50">
                     <div className="flex items-center gap-3">

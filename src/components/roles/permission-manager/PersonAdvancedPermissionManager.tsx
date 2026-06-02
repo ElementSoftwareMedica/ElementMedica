@@ -27,7 +27,11 @@ import {
   Link2,
   Lock,
   Info,
-  ChevronRight
+  ChevronRight,
+  Calendar,
+  Stethoscope,
+  Receipt,
+  Percent
 } from 'lucide-react';
 import { EntityDefinition, advancedPermissionsService } from '../../../services/advanced-permissions';
 import { ENTITY_ICON_MAP } from './constants';
@@ -52,19 +56,29 @@ interface RolePermission {
   action: string;
 }
 
-// CRUD actions config
-const CRUD_ACTIONS = [
+const PERSON_PERMISSION_ACTIONS = [
   { id: 'create', name: 'Crea', icon: Plus, color: 'text-emerald-600', bgColor: 'bg-emerald-50 dark:bg-emerald-900/20' },
   { id: 'read', name: 'Leggi', icon: Eye, color: 'text-blue-600', bgColor: 'bg-blue-50 dark:bg-blue-900/20' },
   { id: 'update', name: 'Modifica', icon: Edit2, color: 'text-amber-600', bgColor: 'bg-amber-50 dark:bg-amber-900/20' },
   { id: 'delete', name: 'Elimina', icon: Trash2, color: 'text-red-600', bgColor: 'bg-red-50 dark:bg-red-900/20' },
+  { id: 'write', name: 'Scrittura', icon: Edit2, color: 'text-amber-600', bgColor: 'bg-amber-50 dark:bg-amber-900/20' },
+  { id: 'manage', name: 'Gestione completa', icon: Shield, color: 'text-violet-600', bgColor: 'bg-violet-50 dark:bg-violet-900/20' },
+  { id: 'view_others_same_branch', name: 'Calendario stessa branca', icon: Calendar, color: 'text-cyan-600', bgColor: 'bg-cyan-50 dark:bg-cyan-900/20' },
+  { id: 'view_others_all', name: 'Calendario tutti i medici', icon: Users, color: 'text-sky-600', bgColor: 'bg-sky-50 dark:bg-sky-900/20' },
+  { id: 'create_self', name: 'Crea appuntamenti propri', icon: Plus, color: 'text-green-600', bgColor: 'bg-green-50 dark:bg-green-900/20' },
+  { id: 'create_others', name: 'Crea appuntamenti per altri', icon: Users, color: 'text-emerald-600', bgColor: 'bg-emerald-50 dark:bg-emerald-900/20' },
+  { id: 'edit_others', name: 'Modifica altri', icon: Edit2, color: 'text-orange-600', bgColor: 'bg-orange-50 dark:bg-orange-900/20' },
+  { id: 'change_refertante', name: 'Cambia refertante', icon: Stethoscope, color: 'text-teal-600', bgColor: 'bg-teal-50 dark:bg-teal-900/20' },
+  { id: 'view_prices', name: 'Vedi prezzi', icon: Receipt, color: 'text-indigo-600', bgColor: 'bg-indigo-50 dark:bg-indigo-900/20' },
+  { id: 'manage_convenzioni', name: 'Gestisci convenzioni', icon: Percent, color: 'text-rose-600', bgColor: 'bg-rose-50 dark:bg-rose-900/20' },
 ];
 
 const SCOPES = [
+  { id: 'none', name: 'Nessuno', icon: Lock, description: 'Accesso disabilitato' },
   { id: 'all', name: 'Tutti', icon: Users, description: 'Accesso globale' },
   { id: 'tenant', name: 'Tenant', icon: Building, description: 'Solo dati del tenant' },
   { id: 'own', name: 'Propri', icon: User, description: 'Solo record propri' },
-  { id: 'related', name: 'Relazionali', icon: Link2, description: 'Record correlati' },
+  { id: 'relational', name: 'Relazionale', icon: Link2, description: 'Record correlati' },
 ];
 
 interface PersonAdvancedPermissionManagerProps {
@@ -156,6 +170,10 @@ const PersonAdvancedPermissionManager: React.FC<PersonAdvancedPermissionManagerP
         await onRemovePermission(existing.id);
       }
     } else {
+      if (activeScope === 'none') {
+        await onAddPermission(resource, action, activeScope, false);
+        return;
+      }
       if (roleHas) {
         // Role has it, add revoke override
         await onAddPermission(resource, action, activeScope, false);
@@ -182,6 +200,12 @@ const PersonAdvancedPermissionManager: React.FC<PersonAdvancedPermissionManagerP
     if (!selectedEntity) return [];
     return personPermissions.filter(p => p.resource === selectedEntity.name);
   }, [selectedEntity, personPermissions]);
+
+  const availableActions = useMemo(() => {
+    if (!selectedEntity?.actions?.length) return PERSON_PERMISSION_ACTIONS;
+    const allowedActions = new Set(selectedEntity.actions);
+    return PERSON_PERMISSION_ACTIONS.filter(action => allowedActions.has(action.id));
+  }, [selectedEntity]);
 
   // Get all person overrides grouped by entity
   const allOverridesByEntity = useMemo(() => {
@@ -280,7 +304,7 @@ const PersonAdvancedPermissionManager: React.FC<PersonAdvancedPermissionManagerP
 
               {/* CRUD Actions */}
               <div className="p-4 space-y-3">
-                {CRUD_ACTIONS.map(action => {
+                {availableActions.map(action => {
                   const ActionIcon = action.icon;
                   const state = getEffectiveState(selectedEntity.name, action.id);
                   const override = getPersonOverride(selectedEntity.name, action.id);
@@ -396,7 +420,7 @@ const PersonAdvancedPermissionManager: React.FC<PersonAdvancedPermissionManagerP
                     Risultato Effettivo
                   </h4>
                   <div className="grid grid-cols-4 gap-2">
-                    {CRUD_ACTIONS.map(action => {
+                    {PERSON_PERMISSION_ACTIONS.map(action => {
                       const state = getEffectiveState(selectedEntity.name, action.id);
                       const isEffectivelyGranted = state === 'role-granted' || state === 'person-granted';
                       return (

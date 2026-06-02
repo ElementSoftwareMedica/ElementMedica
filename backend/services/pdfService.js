@@ -18,7 +18,49 @@
 
 import puppeteer from 'puppeteer';
 import genericPool from 'generic-pool';
+import { rm, readdir } from 'fs/promises';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { logger } from '../utils/logger.js';
+
+/**
+ * Root cause of disk-filling bug:
+ * /usr/bin/chromium-browser on Ubuntu is a SNAP package.
+ * Snap has filesystem namespace isolation: /tmp inside the snap process
+ * maps to /tmp/snap-private-tmp/snap.chromium/tmp/ on the host.
+ *
+ * When Puppeteer auto-creates a temp dir (puppeteer_dev_chrome_profile-*)
+ * in host /tmp and passes it as --user-data-dir, Chrome (snap) writes to
+ * /tmp/snap-private-tmp/snap.chromium/tmp/puppeteer_dev_chrome_profile-*.
+ * browser.close() deletes the empty host-side dir but never touches the
+ * snap-side copy. On crash/SIGKILL no cleanup happens at all.
+ *
+ * Fix: explicit userDataDir with a predictable name. On destroy(), we clean
+ * both the host path AND the snap-private-tmp path.
+ */
+const SNAP_CHROMIUM_TMP = '/tmp/snap-private-tmp/snap.chromium/tmp';
+
+/**
+ * Remove leftover browser temp dirs from previous crashes (best-effort, at startup).
+ * Targets both host /tmp and snap-private-tmp because we generate em-pdf-* names.
+ */
+async function cleanupOrphanedBrowserDirs() {
+  const bases = [tmpdir(), SNAP_CHROMIUM_TMP];
+  for (const base of bases) {
+    try {
+      const entries = await readdir(base);
+      for (const entry of entries) {
+        if (entry.startsWith('em-pdf-')) {
+          try {
+            await rm(join(base, entry), { recursive: true, force: true });
+          } catch { /* ignore */ }
+        }
+      }
+    } catch { /* dir doesn't exist — ok */ }
+  }
+}
+// Fire-and-forget: clean orphaned dirs on module load (from previous crashes/SIGKILL)
+cleanupOrphanedBrowserDirs().catch(() => { });
 
 // Configurazione browser pool
 // Produzione: impostare PUPPETEER_MIN_BROWSERS=1 PUPPETEER_MAX_BROWSERS=3 in env
@@ -35,8 +77,16 @@ const browserPoolFactory = {
     try {
       logger.debug('Creating new browser instance', { service: 'pdfService' });
 
+      // Generate a unique name for this browser's user-data dir.
+      // We pass it explicitly so Puppeteer doesn't auto-create a puppeteer_dev_chrome_profile-*
+      // in /tmp (which snap Chromium would "shadow" and never clean up properly).
+      const dirSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const userDataDirName = `em-pdf-${dirSuffix}`;
+      const userDataDir = join(tmpdir(), userDataDirName);
+
       const browser = await puppeteer.launch({
-        headless: 'new', // Use new headless mode
+        headless: true, // Puppeteer v22+: true = new headless (was 'new', now deprecated)
+        userDataDir,    // explicit dir → we control cleanup; no puppeteer_dev_chrome_profile-* created
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -58,12 +108,16 @@ const browserPoolFactory = {
           '--mute-audio',
           '--safebrowsing-disable-auto-update',
         ],
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH, // Optional: custom Chrome path
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser', // Fallback to system chromium
       });
+
+      // Store dir name for cleanup (see destroy() below)
+      browser._emPdfDirName = userDataDirName;
 
       logger.info('Browser instance created', {
         service: 'pdfService',
         pid: browser.process()?.pid,
+        userDataDir,
       });
 
       return browser;
@@ -77,6 +131,7 @@ const browserPoolFactory = {
   },
 
   destroy: async (browser) => {
+    const dirName = browser._emPdfDirName;
     try {
       await browser.close();
       logger.debug('Browser instance destroyed', { service: 'pdfService' });
@@ -85,6 +140,15 @@ const browserPoolFactory = {
         service: 'pdfService',
         error: error.message,
       });
+    }
+    // Clean up userDataDir from BOTH the host /tmp AND the snap-private-tmp path.
+    // On non-snap systems one of these will fail silently (dir doesn't exist) — that's fine.
+    if (dirName) {
+      for (const base of [tmpdir(), SNAP_CHROMIUM_TMP]) {
+        try {
+          await rm(join(base, dirName), { recursive: true, force: true });
+        } catch { /* ignore */ }
+      }
     }
   },
 

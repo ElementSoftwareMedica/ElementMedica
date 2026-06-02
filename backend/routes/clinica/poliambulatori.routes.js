@@ -16,6 +16,7 @@ import { clinicalValidators } from '../../config/validation-clinical.js';
 import { getEffectiveTenantId } from '../../utils/tenantHelper.js';
 import PersonTenantAccessService from '../../services/PersonTenantAccessService.js';
 import { PoliambulatorioService } from '../../services/clinical/index.js';
+import SedePoliambulatorioService from '../../services/clinical/SedePoliambulatorioService.js';
 
 const router = express.Router();
 const { authenticate: authenticateToken } = middleware;
@@ -123,6 +124,91 @@ router.get('/',
             res.status(500).json({
                 success: false,
                 error: 'Errore nel recupero dei poliambulatori',
+            });
+        }
+    }
+);
+
+/**
+ * @route GET /:id/sedi
+ * @desc Lista sedi associate a un poliambulatorio
+ * @access Authenticated + VIEW_POLIAMBULATORIO
+ */
+router.get('/:id/sedi',
+    authenticateToken,
+    checkAdvancedPermission('poliambulatorio', 'read'),
+    auditClinico('list_sedi_by_poliambulatorio'),
+    async (req, res) => {
+        try {
+            const tenantId = getEffectiveTenantId(req);
+            const result = await SedePoliambulatorioService.findAll(tenantId, {
+                ...req.query,
+                poliambulatorioId: req.params.id
+            });
+
+            res.json({
+                success: true,
+                data: result.data,
+                pagination: {
+                    page: result.page,
+                    limit: result.limit,
+                    total: result.total,
+                    totalPages: result.totalPages
+                }
+            });
+        } catch (error) {
+            logger.error('Failed to list sedi by poliambulatorio', {
+                component: 'poliambulatori-routes',
+                error: error.message,
+                poliambulatorioId: req.params.id,
+                tenantId: getEffectiveTenantId(req)
+            });
+
+            res.status(500).json({
+                success: false,
+                error: 'Errore nel recupero delle sedi del poliambulatorio'
+            });
+        }
+    }
+);
+
+/**
+ * @route POST /:id/sedi
+ * @desc Crea una sede associata al poliambulatorio
+ * @access Authenticated + CREATE_POLIAMBULATORIO
+ */
+router.post('/:id/sedi',
+    authenticateToken,
+    checkAdvancedPermission('poliambulatorio', 'create'),
+    auditClinico('create_sede_by_poliambulatorio'),
+    async (req, res) => {
+        try {
+            const tenantId = getEffectiveTenantId(req);
+            const sede = await SedePoliambulatorioService.create(
+                {
+                    ...req.body,
+                    poliambulatorioId: req.params.id,
+                    createdBy: req.person.id
+                },
+                tenantId
+            );
+
+            res.status(201).json({
+                success: true,
+                data: sede,
+                message: 'Sede creata con successo'
+            });
+        } catch (error) {
+            logger.error('Failed to create sede by poliambulatorio', {
+                component: 'poliambulatori-routes',
+                error: error.message,
+                poliambulatorioId: req.params.id,
+                tenantId: getEffectiveTenantId(req)
+            });
+
+            res.status(500).json({
+                success: false,
+                error: 'Errore nella creazione della sede del poliambulatorio'
             });
         }
     }

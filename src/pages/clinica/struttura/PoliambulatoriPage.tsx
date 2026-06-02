@@ -28,6 +28,7 @@ import { useToast } from '../../../hooks/useToast';
 import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
 import { useTenantFilter } from '../../../context/TenantFilterContext';
 import { CRUDButton } from '../../../components/shared/CRUDButton';
+import { ActionButton } from '../../../components/ui';
 
 // Import Element Medica theme
 import '../../../styles/clinica-theme.css';
@@ -326,8 +327,12 @@ const PoliambulatoriPage: React.FC = () => {
                         </thead>
                         <tbody>
                             {poliambulatori.map((item: Poliambulatorio) => (
-                                <tr key={item.id} className={selectedItems.has(item.id) ? 'bg-teal-50' : ''}>
-                                    <td>
+                                <tr
+                                    key={item.id}
+                                    onClick={() => handleView(item.id)}
+                                    className={`cursor-pointer transition-colors hover:bg-teal-50/60 ${selectedItems.has(item.id) ? 'bg-teal-50' : ''}`}
+                                >
+                                    <td onClick={(e) => e.stopPropagation()}>
                                         <input
                                             type="checkbox"
                                             checked={selectedItems.has(item.id)}
@@ -343,30 +348,28 @@ const PoliambulatoriPage: React.FC = () => {
                                             }
                                         </td>
                                     ))}
-                                    <td>
-                                        <div className="flex items-center gap-1">
-                                            <button
-                                                onClick={() => handleView(item.id)}
-                                                className="p-1.5 rounded hover:bg-gray-100 text-gray-500 hover:text-teal-600"
-                                                title="Visualizza"
-                                            >
-                                                <Eye className="h-4 w-4" />
-                                            </button>
-                                            <button
-                                                onClick={() => handleEdit(item.id)}
-                                                className="p-1.5 rounded hover:bg-gray-100 text-gray-500 hover:text-teal-600"
-                                                title="Modifica"
-                                            >
-                                                <Edit className="h-4 w-4" />
-                                            </button>
-                                            <button
-                                                onClick={() => handleDelete(item.id)}
-                                                className="p-1.5 rounded hover:bg-gray-100 text-gray-500 hover:text-red-600"
-                                                title="Elimina"
-                                            >
-                                                <Trash2 className="h-4 w-4" />
-                                            </button>
-                                        </div>
+                                    <td onClick={(e) => e.stopPropagation()}>
+                                        <ActionButton
+                                            theme="teal"
+                                            actions={[
+                                                {
+                                                    label: 'Visualizza',
+                                                    icon: <Eye className="h-4 w-4" />,
+                                                    onClick: () => handleView(item.id)
+                                                },
+                                                {
+                                                    label: 'Modifica',
+                                                    icon: <Edit className="h-4 w-4" />,
+                                                    onClick: () => handleEdit(item.id)
+                                                },
+                                                {
+                                                    label: 'Elimina',
+                                                    icon: <Trash2 className="h-4 w-4" />,
+                                                    variant: 'danger',
+                                                    onClick: () => handleDelete(item.id)
+                                                }
+                                            ]}
+                                        />
                                     </td>
                                 </tr>
                             ))}

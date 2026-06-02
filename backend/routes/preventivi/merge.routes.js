@@ -57,8 +57,10 @@ router.post('/merge',
           deletedAt: null
         },
         include: {
-          azienda: true,
-          persona: true,
+          companyTenantProfile: {
+            include: { company: { select: { id: true, ragioneSociale: true } } }
+          },
+          persona: { select: { id: true, firstName: true, lastName: true } },
           sconti: true
         }
       });
@@ -71,12 +73,15 @@ router.post('/merge',
         });
       }
 
-      // Verifica che appartengano tutti alla stessa azienda
-      const aziendaIds = [...new Set(preventivi.map(p => p.aziendaId))];
-      if (aziendaIds.length > 1 || !aziendaIds[0]) {
+      // Verifica che appartengano tutti allo stesso cliente (azienda o persona)
+      const companyProfileIds = [...new Set(preventivi.map(p => p.companyTenantProfileId).filter(Boolean))];
+      const personaIds = [...new Set(preventivi.map(p => p.personaId).filter(Boolean))];
+      const hasCompany = companyProfileIds.length > 0;
+      const hasPersona = personaIds.length > 0;
+      if ((hasCompany && companyProfileIds.length > 1) || (hasPersona && personaIds.length > 1) || (hasCompany && hasPersona)) {
         return res.status(400).json({
           success: false,
-          error: 'I preventivi devono appartenere tutti alla stessa azienda'
+          error: 'I preventivi devono appartenere tutti allo stesso cliente'
         });
       }
 
@@ -100,8 +105,10 @@ router.post('/merge',
         });
       }
 
-      const aziendaId = aziendaIds[0];
-      const azienda = preventivi[0].azienda;
+      const companyTenantProfileId = hasCompany ? companyProfileIds[0] : null;
+      const personaIdForMerge = hasPersona ? personaIds[0] : null;
+      const clienteType = hasCompany ? 'AZIENDA' : 'PERSONA';
+      const azienda = preventivi[0].companyTenantProfile?.company || null;
 
       // Combina tutte le voci
       const vociFuse = [];
@@ -143,8 +150,9 @@ router.post('/merge',
       const preventivoUnificato = await prisma.preventivo.create({
         data: {
           tenantId,
-          aziendaId,
-          clienteType: 'AZIENDA',
+          ...(companyTenantProfileId && { companyTenantProfileId }),
+          ...(personaIdForMerge && { personaId: personaIdForMerge }),
+          clienteType,
           numero: numeroUnificato,
           numeroProgressivo: parseInt(numeroUnificato.split('-')[2]),
           annoProgressivo: new Date().getFullYear(),
@@ -172,8 +180,10 @@ router.post('/merge',
           }
         },
         include: {
-          azienda: true,
-          persona: true
+          companyTenantProfile: {
+            select: { id: true, company: { select: { id: true, ragioneSociale: true } } }
+          },
+          persona: { select: { id: true, firstName: true, lastName: true } }
         }
       });
 
@@ -193,9 +203,13 @@ router.post('/merge',
         })
       ));
 
+      // Map companyTenantProfile to azienda for frontend
+      const { companyTenantProfile: ctp, ...prevRest } = preventivoUnificato;
+      const mappedUnificato = { ...prevRest, azienda: ctp?.company || null };
+
       res.json({
         success: true,
-        data: preventivoUnificato,
+        data: mappedUnificato,
         message: `${preventivi.length} preventivi uniti in ${preventivoUnificato.numero}`,
         mergedPreventivi: preventivi.map(p => ({
           id: p.id,

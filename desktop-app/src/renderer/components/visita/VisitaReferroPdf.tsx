@@ -91,8 +91,6 @@ const FIELD_LABELS: Record<string, string> = {
     prescrizioni: 'Prescrizioni',
     noteInterne: 'Note Interne',
     notePazienti: 'Note per il Paziente',
-    prossimoControllo: 'Prossimo Controllo',
-    noteFollowup: 'Note Follow-up',
 }
 
 const SECTIONS_ORDER: Array<{ key: string; label: string; fields: (keyof typeof FIELD_LABELS)[] }> = [
@@ -117,8 +115,8 @@ const SECTIONS_ORDER: Array<{ key: string; label: string; fields: (keyof typeof 
         fields: ['terapia', 'prescrizioni']
     },
     {
-        key: 'note', label: 'Note & Follow-up',
-        fields: ['notelavoratore', 'notePazienti', 'prossimoControllo', 'noteFollowup']
+        key: 'note', label: 'Note',
+        fields: ['noteInterne', 'notePazienti']
     },
 ]
 
@@ -358,12 +356,6 @@ function VisitaRefertoPdfDoc({ data }: { data: VisitaReferroPdfData }): JSX.Elem
                         <Text style={S.visitInfoLabel}>Medico</Text>
                         <Text style={S.visitInfoValue}>{medicoFullName}</Text>
                     </View>
-                    {data.durataMinuti && (
-                        <View style={S.visitInfoItem}>
-                            <Text style={S.visitInfoLabel}>Durata</Text>
-                            <Text style={S.visitInfoValue}>{data.durataMinuti} min</Text>
-                        </View>
-                    )}
                 </View>
 
                 {/* Clinical sections */}

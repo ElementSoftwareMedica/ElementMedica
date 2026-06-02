@@ -289,8 +289,8 @@ const LoginPage: React.FC = () => {
                     Email, Username o Codice Fiscale <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <User className={`h-5 w-5 ${identifierError ? 'text-red-400' : 'text-gray-400'}`} />
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none z-10">
+                      <User className={`h-4 w-4 ${identifierError ? 'text-red-400' : 'text-gray-400'}`} />
                     </div>
                     <input
                       id="identifier"
@@ -298,7 +298,7 @@ const LoginPage: React.FC = () => {
                       type="text"
                       autoComplete="username"
                       autoFocus
-                      className={`appearance-none relative block w-full pl-10 pr-3 py-2 border placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:z-10 sm:text-sm transition-colors duration-200 ${identifierError
+                      className={`appearance-none relative block w-full pl-9 pr-4 py-2 border placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:z-10 sm:text-sm transition-colors duration-200 ${identifierError
                         ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
                         : 'border-gray-300 focus:ring-primary-500 focus:border-primary-500'
                         }`}
@@ -435,8 +435,8 @@ const LoginPage: React.FC = () => {
 
               {error && (
                 <div className={`flex items-start gap-2 px-3 py-2 rounded-lg border ${isSubscriptionError(errorCode ?? undefined)
-                    ? 'bg-amber-50 border-amber-300'
-                    : 'bg-red-50 border-red-200'
+                  ? 'bg-amber-50 border-amber-300'
+                  : 'bg-red-50 border-red-200'
                   }`}>
                   {isSubscriptionError(errorCode ?? undefined)
                     ? <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-500" />
@@ -467,8 +467,8 @@ const LoginPage: React.FC = () => {
                     Password <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Lock className={`h-5 w-5 ${passwordError ? 'text-red-400' : 'text-gray-400'}`} />
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none z-10">
+                      <Lock className={`h-4 w-4 ${passwordError ? 'text-red-400' : 'text-gray-400'}`} />
                     </div>
                     <input
                       id="password"
@@ -476,7 +476,7 @@ const LoginPage: React.FC = () => {
                       type={showPassword ? 'text' : 'password'}
                       autoComplete="current-password"
                       autoFocus
-                      className={`appearance-none relative block w-full pl-10 pr-10 py-2 border placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:z-10 sm:text-sm transition-colors duration-200 ${passwordError
+                      className={`appearance-none relative block w-full pl-[2.25rem] pr-10 py-2 border placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:z-10 sm:text-sm transition-colors duration-200 ${passwordError
                         ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
                         : 'border-gray-300 focus:ring-primary-500 focus:border-primary-500'
                         }`}
@@ -488,13 +488,13 @@ const LoginPage: React.FC = () => {
                     />
                     <button
                       type="button"
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center z-10"
                       onClick={() => setShowPassword(!showPassword)}
                     >
                       {showPassword ? (
-                        <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                        <EyeOff className="h-4 w-4 text-gray-400 hover:text-gray-600" />
                       ) : (
-                        <Eye className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                        <Eye className="h-4 w-4 text-gray-400 hover:text-gray-600" />
                       )}
                     </button>
                   </div>
@@ -504,8 +504,8 @@ const LoginPage: React.FC = () => {
 
               {error && (
                 <div className={`flex items-start gap-2 px-3 py-2 rounded-lg border animate-slide-down ${isSubscriptionError(errorCode ?? undefined)
-                    ? 'bg-amber-50 border-amber-300'
-                    : 'bg-red-50 border-red-200'
+                  ? 'bg-amber-50 border-amber-300'
+                  : 'bg-red-50 border-red-200'
                   }`}>
                   {isSubscriptionError(errorCode ?? undefined)
                     ? <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-500" />

@@ -11,8 +11,9 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import formsController from '../controllers/formsController.js';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, optionalAuth } from '../middleware/auth.js';
 import { checkPermissions } from '../middleware/permissions.js';
+import { publicContentMiddleware } from '../middleware/brandDetection.js';
 import { RATE_LIMITS } from '../constants/formEnums.js';
 
 const router = express.Router();
@@ -60,6 +61,8 @@ router.get(
 router.post(
   '/submissions',
   publicSubmissionLimiter,
+  publicContentMiddleware,
+  optionalAuth,
   formsController.createSubmission
 );
 

@@ -55,6 +55,7 @@ import { useToast } from '@/hooks/useToast';
 import { useTenantFilter } from '@/context/TenantFilterContext';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
+import { useSearchParams } from 'react-router-dom';
 
 // Import types and configuration from extracted module
 import {
@@ -84,6 +85,7 @@ const PreventiviPage: React.FC = () => {
   const { isLoading: authLoading, isAuthenticated } = useAuth();
   const { showToast } = useToast();
   const { tenantFilterKey, isReady: tenantReady } = useTenantFilter();
+  const [searchParams] = useSearchParams();
 
   const {
     preventivi,
@@ -105,7 +107,10 @@ const PreventiviPage: React.FC = () => {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStato, setFilterStato] = useState<string>('all');
-  const [filterTipo, setFilterTipo] = useState<string>('all');
+  const urlTipoServizio = searchParams.get('tipoServizio') || '';
+  const [filterTipo, setFilterTipo] = useState<string>(
+    urlTipoServizio && urlTipoServizio !== 'COMPENSO_FORMATORE' ? urlTipoServizio : 'all'
+  );
   const [filterPeriodo, setFilterPeriodo] = useState<string>('all');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -127,6 +132,7 @@ const PreventiviPage: React.FC = () => {
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [confirmUnmerge, setConfirmUnmerge] = useState<Preventivo | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
+  const [stornoDeletePrompt, setStornoDeletePrompt] = useState<{ ids: string[]; bulk: boolean; movimentiCount: number } | null>(null);
 
   // CRITICAL FIX: Only fetch preventivi AFTER auth is complete AND tenant is ready
   useEffect(() => {
@@ -202,10 +208,12 @@ const PreventiviPage: React.FC = () => {
     };
   }, [preventivi, filterPeriodo]);
 
-  // Filtered documents
+  // Filtered documents — COMPENSO_FORMATORE preventivi are no longer created,
+  // always excluded from the main list since trainer compensation is tracked via MovimentoContabile
   const filteredPreventivi = useMemo(() => {
     const filtered = (preventivi || []).filter(p => {
       if (p.dettagliServizio?.mergedIntoId) return false;
+      if (p.tipoServizio === 'COMPENSO_FORMATORE') return false; // not shown here
       if (filterStato !== 'all' && p.stato !== filterStato) return false;
       if (filterTipo !== 'all' && p.tipoServizio !== filterTipo) return false;
       if (!filterByPeriod(p.dataEmissione, filterPeriodo)) return false;
@@ -249,7 +257,7 @@ const PreventiviPage: React.FC = () => {
         await applySconto(newPreventivo.id, codiceSconto);
         showToast({ message: `Preventivo creato e sconto "${codiceSconto}" applicato`, type: 'success' });
       } catch (scontoErr: unknown) {
-        showToast({ message: `Preventivo creato, ma errore applicazione sconto: ${scontoErr?.message || 'codice non valido'}`, type: 'warning' });
+        showToast({ message: `Preventivo creato, ma errore applicazione sconto: ${(scontoErr as any)?.message || 'codice non valido'}`, type: 'warning' });
       }
     } else {
       showToast({ message: 'Preventivo creato con successo', type: 'success' });
@@ -277,8 +285,8 @@ const PreventiviPage: React.FC = () => {
           await applySconto(id, codiceSconto);
           showToast({ message: `Preventivo aggiornato e sconto "${codiceSconto}" applicato`, type: 'success' });
         } catch (scontoErr: unknown) {
-          const statusCode = scontoErr?.response?.status;
-          const errorMsg = scontoErr?.response?.data?.error || scontoErr?.message || 'codice non valido';
+          const statusCode = (scontoErr as any)?.response?.status;
+          const errorMsg = (scontoErr as any)?.response?.data?.error || (scontoErr as any)?.message || 'codice non valido';
 
           if (statusCode === 409 || errorMsg.includes('già applicato')) {
             showToast({
@@ -296,7 +304,7 @@ const PreventiviPage: React.FC = () => {
         showToast({ message: 'Preventivo aggiornato con successo', type: 'success' });
       }
     } catch (err: unknown) {
-      showToast({ message: err?.message || 'Errore durante l\'aggiornamento', type: 'error' });
+      showToast({ message: (err as any)?.message || 'Errore durante l\'aggiornamento', type: 'error' });
       throw err;
     }
   };
@@ -312,7 +320,16 @@ const PreventiviPage: React.FC = () => {
       await deletePreventivo(confirmDeleteId);
       showToast({ message: 'Preventivo eliminato con successo', type: 'success' });
     } catch (err: unknown) {
-      showToast({ message: err?.message || 'Errore durante l\'eliminazione', type: 'error' });
+      const responseData = (err as any)?.response?.data;
+      if (responseData?.requiresStornoDecision) {
+        setStornoDeletePrompt({
+          ids: [confirmDeleteId],
+          bulk: false,
+          movimentiCount: responseData.movimentiCount || 0
+        });
+        return;
+      }
+      showToast({ message: (err as any)?.message || 'Errore durante l\'eliminazione', type: 'error' });
     } finally {
       setConfirmLoading(false);
       setConfirmDeleteId(null);
@@ -330,10 +347,40 @@ const PreventiviPage: React.FC = () => {
       setSelectedIds([]);
       showToast({ message: `${selectedIds.length} preventivi eliminati con successo`, type: 'success' });
     } catch (err: unknown) {
-      showToast({ message: err?.message || 'Errore durante l\'eliminazione', type: 'error' });
+      const responseData = (err as any)?.response?.data;
+      if (responseData?.requiresStornoDecision) {
+        setStornoDeletePrompt({
+          ids: selectedIds,
+          bulk: true,
+          movimentiCount: responseData.movimentiCount || 0
+        });
+        return;
+      }
+      showToast({ message: (err as any)?.message || 'Errore durante l\'eliminazione', type: 'error' });
     } finally {
       setConfirmLoading(false);
       setConfirmBulkDelete(false);
+    }
+  };
+
+  const handleResolveStornoDelete = async (stornaMovimentiFatturati: boolean) => {
+    if (!stornoDeletePrompt) return;
+    setConfirmLoading(true);
+    try {
+      const reason = stornoDeletePrompt.bulk ? 'Eliminazione multipla preventivi' : 'Eliminazione manuale preventivo';
+      if (stornoDeletePrompt.bulk) {
+        await bulkDelete(stornoDeletePrompt.ids, reason, { stornaMovimentiFatturati });
+        setSelectedIds([]);
+        showToast({ message: `${stornoDeletePrompt.ids.length} preventivi eliminati con successo`, type: 'success' });
+      } else {
+        await deletePreventivo(stornoDeletePrompt.ids[0], reason, { stornaMovimentiFatturati });
+        showToast({ message: 'Preventivo eliminato con successo', type: 'success' });
+      }
+      setStornoDeletePrompt(null);
+    } catch (err: unknown) {
+      showToast({ message: (err as any)?.message || 'Errore durante l\'eliminazione', type: 'error' });
+    } finally {
+      setConfirmLoading(false);
     }
   };
 
@@ -420,7 +467,7 @@ const PreventiviPage: React.FC = () => {
       setShowStatusDropdown(null);
       showToast({ message: `Stato aggiornato a ${nuovoStato}`, type: 'success' });
     } catch (err: unknown) {
-      showToast({ message: err?.message || 'Errore nel cambio stato del preventivo', type: 'error' });
+      showToast({ message: (err as any)?.message || 'Errore nel cambio stato del preventivo', type: 'error' });
     }
   };
 
@@ -571,8 +618,8 @@ const PreventiviPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Financial Summary - Entrate vs Compensi */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      {/* Financial Summary - Entrate */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-sm p-4 text-white">
           <div className="flex items-center justify-between">
             <div>
@@ -580,48 +627,6 @@ const PreventiviPage: React.FC = () => {
               <p className="text-2xl font-bold">€ {stats.valoreEntrate.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</p>
             </div>
             <TrendingUp className="h-8 w-8 text-green-200" />
-          </div>
-        </div>
-
-        <div
-          className={`rounded-xl shadow-sm p-4 cursor-pointer transition-all ${filterTipo === 'COMPENSO_FORMATORE'
-            ? 'bg-amber-600 text-white'
-            : 'bg-gradient-to-br from-amber-500 to-amber-600 text-white'
-            }`}
-          onClick={() => setFilterTipo(filterTipo === 'COMPENSO_FORMATORE' ? 'all' : 'COMPENSO_FORMATORE')}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-amber-100 mb-1">Compensi Formatori ({stats.numCompensi})</p>
-              <p className="text-2xl font-bold">- € {stats.valoreCompensi.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</p>
-            </div>
-            <User className="h-8 w-8 text-amber-200" />
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl shadow-sm p-4 text-white col-span-1 md:col-span-2">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-orange-100 mb-1">Margine Netto (Entrate - Compensi)</p>
-              <p className={`text-3xl font-bold ${stats.valoreNetto < 0 ? 'text-red-200' : ''}`}>
-                € {stats.valoreNetto.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs text-orange-200">
-                {filterPeriodo !== 'all' && (
-                  <span className="bg-orange-400/30 px-2 py-1 rounded">
-                    {filterPeriodo === 'last30' ? 'Ultimi 30 giorni' :
-                      filterPeriodo === 'last90' ? 'Ultimi 90 giorni' :
-                        filterPeriodo === 'thisMonth' ? 'Questo mese' :
-                          filterPeriodo === 'thisYear' ? "Quest'anno" :
-                            filterPeriodo === 'lastYear' ? 'Ultimo anno' :
-                              filterPeriodo === 'next30' ? 'Prossimi 30 giorni' :
-                                filterPeriodo === 'next90' ? 'Prossimi 90 giorni' : ''}
-                  </span>
-                )}
-              </p>
-            </div>
           </div>
         </div>
       </div>
@@ -1186,6 +1191,55 @@ const PreventiviPage: React.FC = () => {
         cancelLabel="Annulla"
         loading={confirmLoading}
       />
+
+      {stornoDeletePrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl dark:bg-gray-800">
+            <div className="flex items-start gap-3">
+              <div className="rounded-full bg-amber-100 p-2 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                <AlertCircle className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  Movimenti fatturati collegati
+                </h3>
+                <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                  {stornoDeletePrompt.bulk
+                    ? `Uno dei preventivi selezionati ha ${stornoDeletePrompt.movimentiCount} movimento/i contabile/i fatturato/i collegato/i.`
+                    : `Questo preventivo ha ${stornoDeletePrompt.movimentiCount} movimento/i contabile/i fatturato/i collegato/i.`}
+                  {' '}Vuoi stornare i movimenti prima di eliminare il preventivo?
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setStornoDeletePrompt(null)}
+                disabled={confirmLoading}
+                className="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-700"
+              >
+                Annulla
+              </button>
+              <button
+                type="button"
+                onClick={() => handleResolveStornoDelete(false)}
+                disabled={confirmLoading}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+              >
+                Elimina senza storno
+              </button>
+              <button
+                type="button"
+                onClick={() => handleResolveStornoDelete(true)}
+                disabled={confirmLoading}
+                className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+              >
+                Storna ed elimina
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Wizard MDL */}
       <GenerateMDLModal

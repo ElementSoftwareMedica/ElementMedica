@@ -37,8 +37,8 @@ export class GroupedCoursesService {
    */
   static async getCourseTitles(): Promise<CourseTitle[]> {
     try {
-      // Endpoint corretto secondo le routes backend: /api/public/courses/titles/list
-      const resp = await apiGet<any>('/api/public/courses/titles/list', { _skipGdprCheck: true });
+      // Endpoint corretto secondo le routes backend: /api/v1/public/courses/titles/list
+      const resp = await apiGet<any>('/api/v1/public/courses/titles/list', { _skipGdprCheck: true });
       // Lo shape può essere sia { data: CourseTitle[] } sia direttamente l'array; gestiamo entrambi
       const data = (resp?.data ?? resp?.titles ?? resp) as CourseTitle[] | undefined;
       if (Array.isArray(data) && data.length > 0) return data;
@@ -67,7 +67,7 @@ export class GroupedCoursesService {
   static async getGroupedCourses(): Promise<GroupedCourse[]> {
     try {
       // Richiedi tutti i corsi (limit alto per non perdere nessun corso)
-      const resp = await apiGet('/api/public/courses?limit=500', { _skipGdprCheck: true }) as any;
+      const resp = await apiGet('/api/v1/public/courses?limit=500', { _skipGdprCheck: true }) as any;
       const extractCourses = (r: any): Course[] => {
         if (Array.isArray(r)) return r as Course[];
         if (Array.isArray(r?.courses)) return r.courses as Course[];
@@ -210,7 +210,7 @@ export class GroupedCoursesService {
           category: string;
           subcategory?: string;
           variants: Course[];
-        }>(`/api/public/courses/unified/${encodeURIComponent(titleVariant)}`, { _skipGdprCheck: true });
+        }>(`/api/v1/public/courses/unified/${encodeURIComponent(titleVariant)}`, { _skipGdprCheck: true });
 
         const rawVariants = (resp as any)?.variants ?? [];
         const title = (resp as any)?.baseTitle ?? titleVariant;
@@ -285,7 +285,7 @@ export class GroupedCoursesService {
         const qRaw = (courseTitle || '').trim();
         if (qRaw.length >= 2) {
           const q = encodeURIComponent(qRaw);
-          const resp = await apiGet<any>(`/api/public/courses/search?q=${q}&limit=10`, { _skipGdprCheck: true });
+          const resp = await apiGet<any>(`/api/v1/public/courses/search?q=${q}&limit=10`, { _skipGdprCheck: true });
           const listCandidate = (resp as any);
           const list = Array.isArray(listCandidate?.data)
             ? listCandidate.data
@@ -321,7 +321,7 @@ export class GroupedCoursesService {
         }
       } catch (e: unknown) {
         // Ignora 400 (bad request per query troppo corta/parametri mancanti), logga il resto a livello debug
-        if (e?.response?.status && e.response.status !== 400) {
+        if ((e as any)?.response?.status && (e as any).response.status !== 400) {
         }
         // Ignora, gestito nel fallback successivo
       }
@@ -405,6 +405,32 @@ export class GroupedCoursesService {
         variants,
         mainCourse
       });
+    });
+
+    // Ordine prioritario: primo soccorso → antincendio → formazione dei lavoratori/sicurezza lavoratori → sicurezza generale → RLS → dirigenti → preposti → altri (alfabetico)
+    const PRIORITY_KEYWORDS = [
+      'primo soccorso',
+      'antincendio',
+      'formazione dei lavoratori',
+      'sicurezza lavoratori',
+      'sicurezza generale',
+      'rls',
+      'rappresentante dei lavoratori',
+      'dirigenti',
+      'preposti',
+    ];
+
+    const getPriority = (title: string): number => {
+      const norm = title.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
+      const idx = PRIORITY_KEYWORDS.findIndex(kw => norm.includes(kw));
+      return idx === -1 ? PRIORITY_KEYWORDS.length : idx;
+    };
+
+    result.sort((a, b) => {
+      const pa = getPriority(a.title);
+      const pb = getPriority(b.title);
+      if (pa !== pb) return pa - pb;
+      return a.title.localeCompare(b.title, 'it');
     });
 
     return result;

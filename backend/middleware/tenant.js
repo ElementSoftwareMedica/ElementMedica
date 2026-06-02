@@ -20,21 +20,17 @@ const tenantMiddleware = async (req, res, next) => {
       '/api/v1/auth/forgot-password', // Percorso v1 per forgot password
       '/api/v1/auth/reset-password',  // Percorso v1 per reset password
       '/api/v1/public/verify-attestato', // Verifica pubblica attestati
-      '/api/public/verify-attestato',    // Verifica pubblica attestati (legacy)
       '/api/v1/public/queue',    // P53: Mobile queue check-in
-      '/api/public/queue',       // P53: Mobile queue check-in (legacy)
       '/api/v1/public/booking',  // P67: Public online booking
-      '/api/public/booking',     // P67: Public online booking
       '/api/v1/public/doctors',  // Profili medici pubblici
-      '/api/public/doctors',     // Profili medici pubblici
-      '/api/public/courses',     // Corsi pubblici
-      '/api/public/schedules',   // Calendario corsi pubblico
-      '/api/public/forms',       // Form pubblici
-      '/api/public/contact-submissions', // Richieste info corsi
-      '/api/public/analytics',   // Analytics tracking pubblico
+      '/api/v1/public/courses',  // Corsi pubblici
+      '/api/v1/public/schedules', // Calendario corsi pubblico
+      '/api/v1/public/forms',    // Form pubblici
+      '/api/v1/public/contact-submissions', // Richieste info corsi
+      '/api/public/analytics',   // Analytics tracking pubblico (chiamato anche da siti esterni)
       '/api/public/embed',       // P75: Widget embed (autenticati via API key nel path)
+      '/api/public/courses',     // Legacy path per bundle cachati (canonical: /api/v1/public/courses)
       '/api/v1/public/bridge',   // Bridge auto-activation (autenticato via license key)
-      '/api/public/bridge',      // Bridge auto-activation (legacy)
       '/api/v1/cms/pages',       // CMS pagine pubbliche
       '/api/roles/public',    // Solo l'endpoint pubblico dei ruoli
       '/api/roles/test-simple', // Endpoint di test semplice

@@ -10,8 +10,9 @@
 import React from 'react';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
-import { Edit2, Trash2, ChevronLeft, ChevronRight, MapPin, AlertTriangle, Package } from 'lucide-react';
+import { Edit2, Trash2, MapPin, AlertTriangle, Package } from 'lucide-react';
 import type { Farmaco } from '../../../../services/clinicaApi';
+import ListPaginationFooter from '../../../../components/ui/ListPaginationFooter';
 
 interface FarmacoTableProps {
     data: Farmaco[];
@@ -25,6 +26,7 @@ interface FarmacoTableProps {
     onEdit: (farmaco: Farmaco) => void;
     onDelete: (id: string) => void;
     onPageChange: (page: number) => void;
+    onPageSizeChange?: (pageSize: number) => void;
     canPerformCRUD: boolean;
 }
 
@@ -35,6 +37,7 @@ const FarmacoTable: React.FC<FarmacoTableProps> = ({
     onEdit,
     onDelete,
     onPageChange,
+    onPageSizeChange,
     canPerformCRUD
 }) => {
     // Helper per determinare se un farmaco è in stato critico
@@ -198,29 +201,15 @@ const FarmacoTable: React.FC<FarmacoTableProps> = ({
                 </table>
             </div>
 
-            {/* Pagination */}
-            {pagination && pagination.totalPages > 1 && (
-                <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between">
-                    <p className="text-sm text-gray-600">
-                        Pagina {pagination.page} di {pagination.totalPages} ({pagination.total} risultati)
-                    </p>
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => onPageChange(pagination.page - 1)}
-                            disabled={pagination.page <= 1}
-                            className="p-2 rounded-lg border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                        >
-                            <ChevronLeft className="w-4 h-4" />
-                        </button>
-                        <button
-                            onClick={() => onPageChange(pagination.page + 1)}
-                            disabled={pagination.page >= pagination.totalPages}
-                            className="p-2 rounded-lg border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                        >
-                            <ChevronRight className="w-4 h-4" />
-                        </button>
-                    </div>
-                </div>
+            {pagination && (
+                <ListPaginationFooter
+                    page={pagination.page}
+                    pageSize={pagination.limit}
+                    total={pagination.total}
+                    totalPages={pagination.totalPages}
+                    onPageChange={onPageChange}
+                    onPageSizeChange={onPageSizeChange}
+                />
             )}
         </div>
     );

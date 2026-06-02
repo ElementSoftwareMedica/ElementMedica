@@ -20,6 +20,7 @@ import React, { useMemo, useState, useRef, useCallback } from 'react';
 import { TrendingUp, TrendingDown, Minus, ChevronRight, BarChart2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { pazientiApi } from '../../../../services/clinicaApi';
+import { useAuth } from '../../../../context/AuthContext';
 
 /**
  * Fields where "up" trend is NOT positive (higher = worse)
@@ -70,6 +71,8 @@ const MiniParametroChart: React.FC<MiniParametroChartProps> = ({
 }) => {
     const [isExpanded, setIsExpanded] = useState(false);
     const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const { hasPermission } = useAuth();
+    const canReadPatientHistory = hasPermission('clinica.pazienti', 'read') || hasPermission('clinica_pazienti', 'read');
 
     /** Show tooltip immediately, cancel any pending hide */
     const handleMouseEnter = useCallback(() => {
@@ -100,10 +103,30 @@ const MiniParametroChart: React.FC<MiniParametroChartProps> = ({
                     // Extract the specific field values from past visits
                     const dataPoints: ParametroDataPoint[] = [];
 
+                    const readNumeric = (dati: Record<string, unknown>, keys: string[]): number | null => {
+                        for (const key of keys) {
+                            if (typeof dati[key] === 'number') return dati[key] as number;
+                            if (typeof dati[key] === 'string' && dati[key] !== '' && !Number.isNaN(Number(dati[key]))) return Number(dati[key]);
+                        }
+                        for (const val of Object.values(dati)) {
+                            if (!val || typeof val !== 'object' || Array.isArray(val)) continue;
+                            const obj = val as Record<string, unknown>;
+                            for (const key of keys) {
+                                if (typeof obj[key] === 'number') return obj[key] as number;
+                                if (typeof obj[key] === 'string' && obj[key] !== '' && !Number.isNaN(Number(obj[key]))) return Number(obj[key]);
+                            }
+                        }
+                        return null;
+                    };
+
                     for (const visita of response.visite) {
                         if (visita.datiStrutturati && typeof visita.datiStrutturati === 'object') {
                             const dati = visita.datiStrutturati as Record<string, unknown>;
-                            const value = dati[fieldName];
+                            const peso = readNumeric(dati, ['peso']);
+                            const altezza = readNumeric(dati, ['altezza']);
+                            const value = fieldName === 'bmi'
+                                ? (readNumeric(dati, ['bmi']) ?? (peso && altezza ? Math.round((peso / Math.pow(altezza / 100, 2)) * 10) / 10 : null))
+                                : readNumeric(dati, [fieldName]);
 
                             if (typeof value === 'number') {
                                 dataPoints.push({
@@ -124,7 +147,8 @@ const MiniParametroChart: React.FC<MiniParametroChartProps> = ({
             }
             return [];
         },
-        enabled: !!pazienteId && !!fieldName,
+        enabled: !!pazienteId && !!fieldName && canReadPatientHistory,
+        retry: (failureCount, error) => failureCount < 1 && (error as { response?: { status?: number } })?.response?.status !== 401,
         staleTime: 5 * 60 * 1000, // 5 minutes
     });
 

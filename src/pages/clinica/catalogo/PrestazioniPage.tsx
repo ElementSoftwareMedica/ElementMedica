@@ -28,7 +28,6 @@ import {
     Stethoscope,
     Building2,
     Users,
-    ChevronRight,
     AlertCircle,
     CheckCircle,
     XCircle,
@@ -41,8 +40,7 @@ import {
 import {
     prestazioniApi,
     Prestazione,
-    TipoPrestazione,
-    PaginatedResponse
+    TipoPrestazione
 } from '../../../services/clinicaApi';
 import { formatDate, formatDuration } from '../../../utils/dateUtils';
 import { formatCurrency } from '../../../lib/utils';
@@ -53,6 +51,7 @@ import { ActionMenu, createCrudActions } from '@/components/ui/ActionMenu';
 import ViewModeToggle from '../../../components/clinica/ViewModeToggle';
 import { CRUDButton } from '../../../components/shared/CRUDButton';
 import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
+import ListPaginationFooter from '../../../components/ui/ListPaginationFooter';
 import '../../../styles/clinica-theme.css';
 
 // =====================================================
@@ -148,6 +147,7 @@ export const PrestazioniPage: React.FC = () => {
     // State - View mode with localStorage persistence
     const { viewMode, setViewMode } = useViewMode({ storageKey: 'prestazioni', defaultMode: 'list' });
     const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(20);
     const [filters, setFilters] = useState<FilterState>({
         search: '',
         tipo: 'all',
@@ -161,14 +161,14 @@ export const PrestazioniPage: React.FC = () => {
         const tenantParams = getTenantFilterParams();
         return {
             page,
-            limit: 12,
+            limit: pageSize,
             search: filters.search || undefined,
             tipo: filters.tipo !== 'all' ? filters.tipo : undefined,
             isActive: filters.status === 'all' ? undefined : filters.status === 'active',
             ...(tenantParams.tenantIds && { tenantIds: tenantParams.tenantIds.join(',') }),
             ...(tenantParams.allTenants && { allTenants: 'true' })
         };
-    }, [page, filters, getTenantFilterParams, tenantFilterKey]);
+    }, [page, pageSize, filters, getTenantFilterParams, tenantFilterKey]);
 
     // Queries
     const {
@@ -678,31 +678,19 @@ export const PrestazioniPage: React.FC = () => {
                 </div>
             )}
 
-            {/* Pagination */}
-            {pagination && pagination.totalPages > 1 && (
-                <div className="flex items-center justify-between bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 px-4 py-3">
-                    <div className="text-sm text-gray-600 dark:text-gray-400">
-                        Mostrando {((page - 1) * 12) + 1}-{Math.min(page * 12, pagination.total)} di {pagination.total}
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => setPage(p => Math.max(1, p - 1))}
-                            disabled={page === 1}
-                            className="px-3 py-1 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700"
-                        >
-                            Precedente
-                        </button>
-                        <span className="px-3 py-1 text-gray-600 dark:text-gray-400">
-                            Pagina {page} di {pagination.totalPages}
-                        </span>
-                        <button
-                            onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))}
-                            disabled={page === pagination.totalPages}
-                            className="px-3 py-1 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700"
-                        >
-                            Successiva
-                        </button>
-                    </div>
+            {pagination && (
+                <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                    <ListPaginationFooter
+                        page={pagination.page}
+                        pageSize={pagination.limit}
+                        total={pagination.total}
+                        totalPages={pagination.totalPages}
+                        onPageChange={setPage}
+                        onPageSizeChange={(limit) => {
+                            setPageSize(limit);
+                            setPage(1);
+                        }}
+                    />
                 </div>
             )}
         </div>

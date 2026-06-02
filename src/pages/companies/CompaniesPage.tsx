@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { GDPREntityTemplate } from '../../templates/gdpr-entity-page/GDPREntityTemplate';
 import { DataTableColumn } from '../../templates/gdpr-entity-page/GDPREntityTemplate';
 import { Badge, Modal, Select, Button } from '../../design-system';
@@ -345,6 +346,10 @@ const csvHeaders = [
 
 export const CompaniesPage: React.FC = () => {
   const toast = useToast();
+  const location = useLocation();
+  const isMdlCompanies = location.pathname.startsWith('/poliambulatorio/mdl/aziende');
+  const companyBasePath = isMdlCompanies ? '/poliambulatorio/mdl/aziende' : '/companies';
+  const [mdlNominaTab, setMdlNominaTab] = useState<'with' | 'without'>('with');
   const [showImportModal, setShowImportModal] = useState(false);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [, setLoadingCompanies] = useState(false);
@@ -361,6 +366,10 @@ export const CompaniesPage: React.FC = () => {
   const [migrationLoading, setMigrationLoading] = useState(false);
   const [deleteEmployeesWithoutMigration, setDeleteEmployeesWithoutMigration] = useState(false);
   const { getOperateHeaders, operateTenantId } = useTenantMode();
+  const apiEndpoint = useMemo(() => {
+    if (!isMdlCompanies) return '/api/v1/companies';
+    return `/api/v1/companies?mdlOnly=true&includeAssignable=true&nominaMedicoCompetente=${mdlNominaTab}`;
+  }, [isMdlCompanies, mdlNominaTab]);
 
   // Carica i dati delle aziende per l'import (e per existingCompanies nel conflict detection)
   const loadCompanies = async () => {
@@ -541,7 +550,7 @@ export const CompaniesPage: React.FC = () => {
   // Funzione per gestire la creazione di una nuova azienda
   const handleCreateCompany = () => {
     // Naviga alla pagina di creazione azienda
-    window.location.href = '/companies/create';
+    window.location.href = `${companyBasePath}/create`;
   };
 
   const handleImportCompanies = async (importedCompanies: CompanyData[], overwriteIds?: string[]): Promise<import('../../components/companies/company-import/types').ImportResults> => {
@@ -570,6 +579,35 @@ export const CompaniesPage: React.FC = () => {
 
   return (
     <>
+      {isMdlCompanies && (
+        <div className="mb-4 rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+          <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+            {[
+              { key: 'with' as const, label: 'Aziende con Nomina Medico Competente', description: 'Aziende dove esiste una nomina attiva di medico competente o coordinato.' },
+              { key: 'without' as const, label: 'Aziende senza Nomina', description: 'Aziende del tenant disponibili per inserire una nuova nomina.' },
+            ].map((tab) => {
+              const active = mdlNominaTab === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => {
+                    setMdlNominaTab(tab.key);
+                    setRefreshTrigger((value) => value + 1);
+                  }}
+                  className={`rounded-lg px-4 py-3 text-left transition-colors ${active
+                    ? 'bg-teal-50 text-teal-800 ring-1 ring-teal-200'
+                    : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                >
+                  <span className="block text-sm font-semibold">{tab.label}</span>
+                  <span className="mt-0.5 block text-xs text-slate-500">{tab.description}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
       <GDPREntityTemplate<Company>
         refreshTrigger={refreshTrigger} // P51: Trigger refetch quando cambia
         entityName="company"
@@ -580,7 +618,8 @@ export const CompaniesPage: React.FC = () => {
         writePermission="companies:write"
         deletePermission="companies:delete"
         exportPermission="companies:export"
-        apiEndpoint="/api/v1/companies"
+        apiEndpoint={apiEndpoint}
+        entityBasePath={companyBasePath}
         columns={getCompaniesColumns(selfCompanyProfileId)}
         searchFields={['ragioneSociale', 'mail', 'citta', 'piva']}
         filterOptions={[

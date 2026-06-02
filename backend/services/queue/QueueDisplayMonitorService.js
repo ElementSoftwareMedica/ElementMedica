@@ -48,6 +48,34 @@ class QueueDisplayMonitorService {
         return crypto.randomBytes(24).toString('base64url');
     }
 
+    getTodayRange() {
+        const now = new Date();
+        const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+        const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
+        return { start, end };
+    }
+
+    async getTodaySessionIds(tenantId, ambulatoriIds) {
+        if (!ambulatoriIds.length) return [];
+
+        const { start, end } = this.getTodayRange();
+        const sessions = await prisma.queueSession.findMany({
+            where: {
+                tenantId,
+                date: { gte: start, lte: end },
+                isActive: true,
+                deletedAt: null,
+                OR: [
+                    { ambulatorioId: { in: ambulatoriIds } },
+                    { ambulatori: { some: { ambulatorioId: { in: ambulatoriIds } } } }
+                ]
+            },
+            select: { id: true }
+        });
+
+        return sessions.map(session => session.id);
+    }
+
     /**
      * Crea un nuovo monitor display
      * @param {MonitorCreateData} data
@@ -440,11 +468,20 @@ class QueueDisplayMonitorService {
             return [];
         }
 
-        // Ottieni chiamate solo per questi ambulatori
+        const sessionIds = await this.getTodaySessionIds(monitor.tenantId, ambulatoriIds);
+        if (sessionIds.length === 0) {
+            return [];
+        }
+
+        const { start, end } = this.getTodayRange();
+
+        // Ottieni chiamate solo per le sessioni odierne degli ambulatori del monitor
         const calls = await prisma.queueCall.findMany({
             where: {
                 tenantId: monitor.tenantId,
-                ambulatorioId: { in: ambulatoriIds }
+                ambulatorioId: { in: ambulatoriIds },
+                sessionId: { in: sessionIds },
+                calledAt: { gte: start, lte: end }
             },
             include: {
                 ambulatorio: {
@@ -505,12 +542,16 @@ class QueueDisplayMonitorService {
         }
 
         const ambulatoriIds = monitor.ambulatori.map(a => a.ambulatorioId);
+        const sessionIds = await this.getTodaySessionIds(monitor.tenantId, ambulatoriIds);
+        const { start, end } = this.getTodayRange();
 
         // Chiamata corrente (ultima chiamata non ancora completata)
-        const currentCall = ambulatoriIds.length > 0 ? await prisma.queueCall.findFirst({
+        const currentCall = sessionIds.length > 0 ? await prisma.queueCall.findFirst({
             where: {
                 tenantId: monitor.tenantId,
                 ambulatorioId: { in: ambulatoriIds },
+                sessionId: { in: sessionIds },
+                calledAt: { gte: start, lte: end },
                 acknowledgedAt: null
             },
             include: {
@@ -529,9 +570,10 @@ class QueueDisplayMonitorService {
         const recentCalls = await this.getRecentCalls(monitorId, { limit: 5 });
 
         // Pazienti in attesa per questi ambulatori
-        const waitingCount = ambulatoriIds.length > 0 ? await prisma.numeroChiamata.count({
+        const waitingCount = sessionIds.length > 0 ? await prisma.numeroChiamata.count({
             where: {
                 tenantId: monitor.tenantId,
+                sessionId: { in: sessionIds },
                 ambulatorioId: { in: ambulatoriIds },
                 stato: 'IN_ATTESA',
                 deletedAt: null
@@ -540,10 +582,11 @@ class QueueDisplayMonitorService {
 
         return {
             monitor: this.formatMonitor(monitor),
-            currentCall,
-            recentCalls,
+            currentCall: currentCall ? { ...currentCall, displayedMessage: null } : null,
+            recentCalls: recentCalls.map(call => ({ ...call, displayedMessage: null })),
             waitingCount,
-            ambulatoriIds
+            ambulatoriIds,
+            sessionIds
         };
     }
 

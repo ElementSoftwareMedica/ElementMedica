@@ -6,9 +6,13 @@
 import express from 'express';
 import { createSubmission } from '../controllers/contactSubmissionController.js';
 import { rateLimitMiddleware } from '../middleware/rateLimiting.js';
+import { publicContentMiddleware } from '../middleware/brandDetection.js';
 import logger from '../utils/logger.js';
 
 const router = express.Router();
+
+// Resolve publicTenantId from X-Frontend-Id brand header
+router.use(publicContentMiddleware);
 
 /**
  * POST /api/public/contact-submissions

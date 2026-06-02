@@ -37,6 +37,8 @@ import {
 } from 'lucide-react';
 import { apiGet, apiPost, apiPut, apiDelete } from '../../../services/api';
 import { useTenantMode } from '../../../contexts/TenantModeContext';
+import { useAuth } from '../../../hooks/auth/useAuth';
+import { useTenantAccess } from '../../../hooks/useTenantAccess';
 import { CRUDButton, CRUDPrimaryButton } from '../../../components/shared/CRUDButton';
 import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
 import { managementApi } from '../api';
@@ -112,6 +114,15 @@ const TenantAccessPage: React.FC = () => {
     const location = useLocation();
     const operateHeaders = getOperateHeaders();
     const { confirm: confirmDialog } = useConfirmDialog();
+    const { user } = useAuth();
+    const { currentTenantId, currentTenant } = useTenantAccess();
+
+    // Global admin = ADMIN or SUPER_ADMIN only
+    const isGlobalAdmin = user?.role === 'Admin' ||
+        user?.globalRole === 'ADMIN' ||
+        user?.globalRole === 'SUPER_ADMIN' ||
+        user?.roles?.includes('ADMIN') ||
+        user?.roles?.includes('SUPER_ADMIN');
     const [tenants, setTenants] = useState<Tenant[]>([]);
     const [persons, setPersons] = useState<Person[]>([]);
     const [accessList, setAccessList] = useState<TenantAccess[]>([]);
@@ -164,28 +175,62 @@ const TenantAccessPage: React.FC = () => {
         setPersonSearch('');
     }, []);
 
+    // Auto-select tenant when there is only one available (e.g. TENANT_ADMIN)
+    useEffect(() => {
+        if (tenants.length === 1) {
+            setNewAccess(prev => prev.tenantId ? prev : { ...prev, tenantId: tenants[0].id });
+        }
+    }, [tenants]);
+
     // Load all data
     const loadData = useCallback(async () => {
         setLoading(true);
         setError(null);
 
         try {
-            const [tenantsRes, personsRes, accessRes] = await Promise.all([
-                apiGet<{ success: boolean; data: Tenant[] }>('/api/v1/tenants'),
-                apiGet<{ data: Person[] }>('/api/v1/persons', { limit: '500' }),
-                apiGet<{ success: boolean; data: TenantAccess[] }>('/api/v1/person-tenant-access')
-            ]);
+            if (isGlobalAdmin) {
+                // Global admin: load all tenants, persons, and access list
+                const [tenantsRes, personsRes, accessRes] = await Promise.all([
+                    apiGet<{ success: boolean; data: Tenant[] }>('/api/v1/tenants'),
+                    apiGet<{ data: Person[] }>('/api/v1/persons', { limit: '500' }),
+                    apiGet<{ success: boolean; data: TenantAccess[] }>('/api/v1/person-tenant-access')
+                ]);
 
-            setTenants(tenantsRes.data || []);
-            setPersons(personsRes.data || []);
-            setAccessList(accessRes.data || []);
+                setTenants(tenantsRes.data || []);
+                setPersons(personsRes.data || []);
+                setAccessList(accessRes.data || []);
+            } else {
+                // TENANT_ADMIN: scope to own tenant only
+                const ownTenantId = currentTenantId;
+                if (!ownTenantId) {
+                    setError('Tenant non trovato');
+                    return;
+                }
+
+                const [personsRes, accessRes] = await Promise.all([
+                    apiGet<{ data: Person[] }>('/api/v1/persons', { limit: '500', tenantId: ownTenantId }),
+                    apiGet<{ success: boolean; data: TenantAccess[] }>('/api/v1/person-tenant-access')
+                ]);
+
+                // Use current tenant from context
+                setTenants([{
+                    id: ownTenantId,
+                    name: currentTenant?.name || 'Il mio Tenant',
+                    slug: currentTenant?.slug || '',
+                    isActive: true,
+                }]);
+                setPersons(personsRes.data || []);
+                // Filter access list to own tenant only
+                const allAccess = accessRes.data || [];
+                setAccessList(allAccess.filter(a => a.tenantId === ownTenantId));
+            }
 
         } catch (err: unknown) {
             setError('Errore nel caricamento dati');
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [isGlobalAdmin, currentTenantId, currentTenant]);
 
     useEffect(() => {
         loadData();
@@ -257,9 +302,13 @@ const TenantAccessPage: React.FC = () => {
 
     // Add new access
     const handleAddAccess = async () => {
-        if (!newAccess.tenantId) return;
+        if (!newAccess.tenantId) {
+            setError('Seleziona il tenant di destinazione');
+            return;
+        }
 
         if (addAccessMode === 'existing' && !newAccess.personId) {
+            setError('Seleziona un utente dalla lista');
             return;
         }
 
@@ -287,13 +336,15 @@ const TenantAccessPage: React.FC = () => {
 
                 setSuccess('Accesso tenant aggiunto con successo');
             } else {
+                // Only global admins can assign TENANT_ADMIN role (protected role)
+                const effectiveMakeTenantAdmin = isGlobalAdmin && newUserForm.makeTenantAdmin;
                 const createPersonResponse = await managementApi.createPerson({
                     firstName: newUserForm.firstName,
                     lastName: newUserForm.lastName,
                     email: newUserForm.email,
                     password: newUserForm.password,
                     tenantId: newAccess.tenantId,
-                    roleType: newUserForm.makeTenantAdmin ? 'TENANT_ADMIN' : 'EMPLOYEE',
+                    roleType: effectiveMakeTenantAdmin ? 'TENANT_ADMIN' : 'EMPLOYEE',
                 });
 
                 // Backend returns the bare person object (not wrapped in { success, data }).
@@ -305,15 +356,16 @@ const TenantAccessPage: React.FC = () => {
                     throw new Error('Creazione utente non completata: risposta API non valida');
                 }
 
-                await managementApi.grantTenantAccess(createdPersonId, {
+                await apiPost('/api/v1/person-tenant-access', {
+                    personId: createdPersonId,
                     tenantId: newAccess.tenantId,
-                    accessLevel: newUserForm.makeTenantAdmin ? 'ADMIN' : newAccess.accessLevel,
-                    defaultRoleType: newUserForm.makeTenantAdmin ? 'TENANT_ADMIN' : undefined,
+                    accessLevel: effectiveMakeTenantAdmin ? 'ADMIN' : newAccess.accessLevel,
+                    defaultRoleType: effectiveMakeTenantAdmin ? 'TENANT_ADMIN' : undefined,
                     enabledFeatures: [],
                     isPrimary: false,
-                });
+                }, { headers: operateHeaders });
 
-                setSuccess(newUserForm.makeTenantAdmin
+                setSuccess(effectiveMakeTenantAdmin
                     ? 'Primo utente creato e configurato come Tenant Admin'
                     : 'Primo utente creato e accesso tenant configurato');
             }
@@ -717,14 +769,24 @@ const TenantAccessPage: React.FC = () => {
                                     </div>
 
                                     <label className="flex items-center gap-2 p-3 border border-amber-200 bg-amber-50 rounded-lg cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            checked={newUserForm.makeTenantAdmin}
-                                            onChange={(e) => setNewUserForm((prev) => ({ ...prev, makeTenantAdmin: e.target.checked }))}
-                                            className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500"
-                                        />
-                                        <Crown className="w-4 h-4 text-amber-600" />
-                                        <span className="text-sm text-amber-800 font-medium">Configura come Tenant Admin</span>
+                                        {isGlobalAdmin ? (
+                                            <>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={newUserForm.makeTenantAdmin}
+                                                    onChange={(e) => setNewUserForm((prev) => ({ ...prev, makeTenantAdmin: e.target.checked }))}
+                                                    className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500"
+                                                />
+                                                <Crown className="w-4 h-4 text-amber-600" />
+                                                <span className="text-sm text-amber-800 font-medium">Configura come Tenant Admin</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <input type="checkbox" checked={false} disabled className="w-4 h-4 rounded text-gray-400" />
+                                                <Crown className="w-4 h-4 text-gray-400" />
+                                                <span className="text-sm text-gray-500">Configura come Tenant Admin (richiede permessi Admin globale)</span>
+                                            </>
+                                        )}
                                     </label>
                                 </>
                             )}

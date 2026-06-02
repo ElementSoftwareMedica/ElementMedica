@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Phone, Mail, MapPin, Clock, Facebook, Linkedin, Instagram } from 'lucide-react';
 import { useBrandConfig } from '../../hooks/useBrandConfig';
+import { openCookiePreferences } from './ConsentBanner';
 
 /**
  * Footer pubblico multi-brand
@@ -11,6 +12,7 @@ import { useBrandConfig } from '../../hooks/useBrandConfig';
 export const PublicFooter: React.FC = () => {
   const currentYear = new Date().getFullYear();
   const brandConfig = useBrandConfig();
+  const isElementMedica = brandConfig.id === 'element-medica';
 
   // Build brand-aware service links from navigation config
   const serviceLinks = brandConfig.navigation
@@ -26,13 +28,18 @@ export const PublicFooter: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
           {/* Company Info */}
           <div className="space-y-4">
-            {/* Logo bianco/negativo per sfondo scuro */}
-            <img
-              src={brandConfig.logoWhite}
-              alt={brandConfig.logoAlt}
-              className="h-10 w-auto object-contain brightness-0 invert"
-              loading="lazy"
-            />
+            {/* Logo bianco/negativo per sfondo scuro — WebP with PNG fallback */}
+            <picture>
+              <source srcSet={brandConfig.logoWhite.replace('.png', '.webp')} type="image/webp" />
+              <img
+                src={brandConfig.logoWhite}
+                alt={brandConfig.logoAlt}
+                className="h-10 w-auto object-contain brightness-0 invert"
+                width="1483"
+                height="303"
+                loading="lazy"
+              />
+            </picture>
             <p className="text-gray-300 text-sm leading-relaxed">
               {brandConfig.description}
             </p>
@@ -92,11 +99,13 @@ export const PublicFooter: React.FC = () => {
           <div className="space-y-4">
             <h4 className="text-lg font-semibold">Link Utili</h4>
             <ul className="space-y-2 text-sm">
-              <li>
-                <Link to="/corsi" className="text-gray-300 hover:text-white hover:translate-x-1 transition-all duration-200 inline-block">
-                  Catalogo Corsi
-                </Link>
-              </li>
+              {!isElementMedica && (
+                <li>
+                  <Link to="/corsi" className="text-gray-300 hover:text-white hover:translate-x-1 transition-all duration-200 inline-block">
+                    Catalogo Corsi
+                  </Link>
+                </li>
+              )}
               <li>
                 <Link to="/lavora-con-noi" className="text-gray-300 hover:text-white hover:translate-x-1 transition-all duration-200 inline-block">
                   Lavora con Noi
@@ -173,7 +182,7 @@ export const PublicFooter: React.FC = () => {
             <div className="text-sm text-gray-400">
               © {currentYear} {brandConfig.contacts.companyName} ({brandConfig.displayName}). Tutti i diritti riservati. | P.IVA {brandConfig.contacts.vat}
             </div>
-            <div className="flex space-x-6 text-sm">
+            <div className="flex flex-wrap gap-6 text-sm">
               <Link to="/privacy-policy" className="text-gray-400 hover:text-white transition-colors">
                 Privacy
               </Link>
@@ -183,6 +192,12 @@ export const PublicFooter: React.FC = () => {
               <Link to="/termini" className="text-gray-400 hover:text-white transition-colors">
                 Termini di Servizio
               </Link>
+              <button
+                onClick={openCookiePreferences}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                Gestisci Cookie
+              </button>
             </div>
           </div>
         </div>

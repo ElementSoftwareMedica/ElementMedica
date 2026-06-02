@@ -81,6 +81,46 @@ const makeFooter = (docType) => `
         ${docType} — Questo documento è stato generato elettronicamente.
     </div>`;
 
+const MDL_NOMINE_FIGURE_CONTENT = `<!DOCTYPE html>
+<html lang="it"><head><meta charset="UTF-8"><title>Nomine Figure Sicurezza e MDL</title>
+<style>${COMMON_STYLES}
+    :root { --brand-color: #0f766e; --brand-bg: #f0fdfa; --brand-light: #99f6e4; }
+</style></head><body>
+${makeHeader()}
+<div class="document-title">NOMINE FIGURE SICUREZZA E MEDICINA DEL LAVORO</div>
+<div class="section">
+    <p>Spett.le <strong>{{azienda}}</strong></p>
+    <p>Con il presente documento vengono riepilogate le nomine attive relative a Medico Competente, eventuali Medici Competenti Coordinati e RSPP.</p>
+</div>
+<div class="section">
+    <div class="section-title">Dati azienda</div>
+    <div class="content-box">
+        <div class="info-row"><span class="info-label">Azienda:</span><span class="info-value">{{azienda}}</span></div>
+        <div class="info-row"><span class="info-label">P.IVA / CF:</span><span class="info-value">{{piva}}</span></div>
+        <div class="info-row"><span class="info-label">Sede legale:</span><span class="info-value">{{sede_legale}}</span></div>
+    </div>
+</div>
+<div class="section">
+    <div class="section-title">Figure nominate</div>
+    <div class="content-box">
+        <p><strong>Medico Competente:</strong> {{medico_competente}}</p>
+        <p><strong>Medici Competenti Coordinati:</strong> {{medici_competenti_coordinati}}</p>
+        <p><strong>RSPP:</strong> {{rspp}}</p>
+        <p><strong>Sedi interessate:</strong> {{sedi}}</p>
+        <p><strong>Decorrenza:</strong> {{data_nomina}} - <strong>Scadenza:</strong> {{data_scadenza}}</p>
+    </div>
+</div>
+<div class="section">
+    <div class="section-title">Tacito rinnovo</div>
+    <p>Salvo disdetta scritta comunicata almeno 30 giorni prima della scadenza annuale, l'incarico si intende tacitamente rinnovato per un ulteriore anno, fatte salve diverse pattuizioni o obblighi normativi applicabili.</p>
+</div>
+<div class="signature-section">
+    <div class="signature-box"><div class="signature-line">Firma Datore di Lavoro</div></div>
+    <div class="signature-box"><div class="signature-line">Firma Professionista incaricato</div></div>
+</div>
+${makeFooter('Nomine Figure Sicurezza e MDL')}
+</body></html>`;
+
 // ============================================================================
 // TEMPLATE: Lettera di Incarico (FORMAZIONE)
 // ============================================================================
@@ -147,49 +187,7 @@ ${makeFooter('Lettera di Incarico')}
 // ============================================================================
 // TEMPLATE: Registro Presenze (FORMAZIONE)
 // ============================================================================
-const ATTENDANCE_REGISTER_CONTENT = `<!DOCTYPE html>
-<html lang="it"><head><meta charset="UTF-8"><title>Registro Presenze</title>
-<style>${COMMON_STYLES}
-    :root { --brand-color: #2563eb; --brand-bg: #eff6ff; --brand-light: #93c5fd; }
-    .attendance-table td { height: 30px; }
-    .attendance-table .sign-cell { width: 120px; }
-</style></head><body>
-${makeHeader()}
-<div class="document-title">REGISTRO PRESENZE</div>
-
-<div class="section">
-    <div class="content-box info-grid">
-        <div class="info-row"><span class="info-label">Corso:</span><span class="info-value">{{course.title}}</span></div>
-        <div class="info-row"><span class="info-label">Codice:</span><span class="info-value">{{course.code}}</span></div>
-        <div class="info-row"><span class="info-label">Data:</span><span class="info-value">{{session.date}}</span></div>
-        <div class="info-row"><span class="info-label">Orario:</span><span class="info-value">{{session.startTime}} - {{session.endTime}}</span></div>
-        <div class="info-row"><span class="info-label">Sede:</span><span class="info-value">{{schedule.location}}</span></div>
-        <div class="info-row"><span class="info-label">Docente:</span><span class="info-value">{{trainer.firstName}} {{trainer.lastName}}</span></div>
-    </div>
-</div>
-
-<div class="section">
-    <div class="section-title">Presenze Partecipanti</div>
-{{table.attendanceSession1}}
-</div>
-
-<div class="section" style="margin-top:20px;">
-    <div class="section-title">Note</div>
-    <div class="content-box" style="min-height:60px;">
-        {{note}}
-    </div>
-</div>
-
-<div class="signature-section">
-    <div class="signature-box">
-        <div class="signature-line">Firma Docente</div>
-    </div>
-    <div class="signature-box">
-        <div class="signature-line">Firma Responsabile</div>
-    </div>
-</div>
-${makeFooter('Registro Presenze')}
-</body></html>`;
+const ATTENDANCE_REGISTER_CONTENT = `<table class="border-collapse border border-slate-300" style="min-width: 25px;"><colgroup><col style="min-width: 25px;"></colgroup><tbody><tr><td class="border border-slate-300 p-2" colspan="1" rowspan="1"><p style="text-align: center;"><span style="color: rgb(0, 0, 0); font-family: Verdana, sans-serif; font-size: 14pt;"><strong>Azienda: {{session.participantCompanies}}</strong></span></p><p><span style="font-family: Verdana, sans-serif;"><br></span></p><p style="text-align: center;"><span style="color: rgb(0, 0, 0); font-family: Verdana, sans-serif; font-size: 14pt;"><strong>Corso: {{course.title}}</strong></span></p><p style="text-align: center;"><span style="color: rgb(0, 0, 0); font-family: Verdana, sans-serif; font-size: 14pt;"><strong>Rischio: {{course.riskLevel}}</strong></span></p><p style="text-align: center;"><span style="color: rgb(0, 0, 0); font-family: Verdana, sans-serif; font-size: 14pt;"><strong>Tipologia: {{course.courseType}}</strong></span></p><p></p><p></p><p style="text-align: center;"><span style="color: rgb(0, 0, 0); font-family: Verdana, sans-serif; font-size: 14pt;"><strong>Data di svolgimento: {{schedule.startDate}} - {{schedule.endDate}}</strong></span></p><p style="text-align: center;"><span style="color: rgb(0, 0, 0); font-family: Verdana, sans-serif; font-size: 14pt;"><strong>Modalità: {{schedule.deliveryMode}}</strong></span></p></td></tr></tbody></table><p><br><br><br></p><p><span style="color: rgb(37, 99, 235); font-size: 12px;"><strong>— INTERRUZIONE DI PAGINA —</strong></span></p><p></p><p></p><p><span style="color: rgb(0, 0, 0); font-family: Verdana, sans-serif; font-size: 11pt;"><strong>Compilazione del registro didattico</strong>:</span></p><p></p><ul class="list-disc pl-6 space-y-1"><li class="pl-1"><p style="text-align: justify;"><span style="color: rgb(0, 0, 0); font-family: Verdana, sans-serif; font-size: 11pt;">Il registro didattico, che attesta la regolare erogazione dell'attività formativa, ha valenza di atto pubblico, pertanto sul registro sono da evitare omissioni e alterazioni che potrebbero costituire illeciti penali nonchè abrasioni e/o cancellature;</span></p></li><li class="pl-1"><p style="text-align: justify;"><span style="color: rgb(0, 0, 0); font-family: Verdana, sans-serif; font-size: 11pt;">Il registro didattico deve riportare in ogni pagina indicazione dal Soggetto/Ente Attuatore (timbro Ente), ed avere pagine numerate e non asportabili;</span></p></li><li class="pl-1"><p style="text-align: justify;"><span style="color: rgb(0, 0, 0); font-family: Verdana, sans-serif; font-size: 11pt;">Prima dell'avvio delle attività formative ogni Registro deve essere sottoscritto dal Legale rappresentante del Soggetto/Ente Attuatore nello spazio "vidimazione" con l'indicazione della data di sottoscrizione e il numero delle pagine del registro stesso.</span></p></li><li class="pl-1"><p style="text-align: justify;"><span style="color: rgb(0, 0, 0); font-family: Verdana, sans-serif; font-size: 11pt;">Il registro didattico deve essere conservato e disponibile per eventuali controlli presso la sede di svolgimento del corso;</span></p></li><li class="pl-1"><p style="text-align: justify;"><span style="color: rgb(0, 0, 0); font-family: Verdana, sans-serif; font-size: 11pt;">Il registro deve essere compilato giorno per giorno in tutte le sue parti:</span></p><ul class="list-disc pl-6 space-y-1"><li class="pl-1"><p style="text-align: justify;"><span style="color: rgb(0, 0, 0); font-family: Verdana, sans-serif; font-size: 11pt;">deve riportare la data di lezione</span></p></li><li class="pl-1"><p style="text-align: justify;"><span style="color: rgb(0, 0, 0); font-family: Verdana, sans-serif; font-size: 11pt;">i partecipanti sono tenuti ad apporre la propria firma in corrispondenza del proprio rigo (vedasi numero progressivo elenco allievi) all'ingresso in aula; eventuali ritardi e/o uscite anticipate dovranno essere annotate, complete di ora, dal docente/relatore nell'apposito spazio a più di pagina</span></p></li><li class="pl-1"><p style="text-align: justify;"><span style="color: rgb(0, 0, 0); font-family: Verdana, sans-serif; font-size: 11pt;">il docente/relatore al termine della lezione sostenuta deve annotare il modulo, l'argomento e l'orario della stessa ed apporre la propria sottoscrizione</span></p></li><li class="pl-1"><p style="text-align: justify;"><span style="color: rgb(0, 0, 0); font-family: Verdana, sans-serif; font-size: 11pt;">al termine di ogni giornata di lezione il docente/relatore deve apporre la dicitura &lt;assente&gt; sulle caselle firma dei partecipanti assenti o barrare le stesse;</span></p></li></ul></li><li class="pl-1"><p style="text-align: justify;"><span style="color: rgb(0, 0, 0); font-family: Verdana, sans-serif; font-size: 11pt;">Il prospetto riepiloghi delle presenze e delle ore svolte deve essere compilato come segue:</span></p><ul class="list-disc pl-6 space-y-1"><li class="pl-1"><p style="text-align: justify;"><span style="color: rgb(0, 0, 0); font-family: Verdana, sans-serif; font-size: 11pt;">tot. presenze del giorno =&gt; num allievi presenti/num allievi iscritti;</span></p></li><li class="pl-1"><p style="text-align: justify;"><span style="color: rgb(0, 0, 0); font-family: Verdana, sans-serif; font-size: 11pt;">tot. ore del giorno =&gt; totale del numero di ore svolte</span></p></li></ul></li></ul><p><span style="color: rgb(37, 99, 235); font-size: 12px;"><strong>— INTERRUZIONE DI PAGINA —</strong></span></p><p></p><p></p><table class="border-collapse border border-slate-300" style="min-width: 150px;"><colgroup><col style="min-width: 25px;"><col style="min-width: 25px;"><col style="min-width: 25px;"><col style="min-width: 25px;"><col style="min-width: 25px;"><col style="min-width: 25px;"></colgroup><tbody><tr><td class="border border-slate-300 p-2" colspan="6" rowspan="1"><p style="text-align: center;"><span style="color: rgb(0, 0, 0); font-family: Calibri, sans-serif; font-size: 12pt;"><strong>Presenze del giorno {{session.date}} con orario {{session.startTime}} - {{session.endTime}}</strong></span></p></td></tr></tbody></table><p></p><p>{{tableCouseInfo.sessionAttendance}}</p><p></p>`;
 
 // ============================================================================
 // TEMPLATE: Attestato/Certificato (BOTH)
@@ -1223,33 +1221,14 @@ const GIUDIZIO_IDONEITA_MDL_CONTENT = `<!DOCTYPE html>
     </div>
     {{/if}}
 
-    <!-- PERIODICITÀ SORVEGLIANZA -->
-    {{#if mdl.periodicitaLabel}}
-    <div class="info-card" style="margin-bottom:14px;">
-        <div class="info-card-header">Periodicità Sorveglianza Sanitaria</div>
-        <div class="info-card-body">
-            <div class="info-row">
-                <span class="info-label">Frequenza visite</span>
-                <span class="info-value"><strong>Visita {{mdl.periodicitaLabel}}</strong></span>
-            </div>
-            {{#if mdl.prossimoControllo}}
-            <div class="info-row">
-                <span class="info-label">Prossimo controllo</span>
-                <span class="info-value"><strong>{{mdl.prossimoControllo}}</strong></span>
-            </div>
-            {{/if}}
-        </div>
-    </div>
-    {{/if}}
-
-    <!-- PRESCRIZIONI GENERALI / NOTE FOLLOW-UP -->
-    {{#if noteFollowup}}
+    <!-- TEMPISTICA GIUDIZIO -->
+    {{#if mdl.tempistica}}
     <div class="clinical-section">
         <div class="section-header">
             <div class="section-indicator section-indicator-teal"></div>
-            <div class="section-title">Note e Indicazioni Aggiuntive</div>
+            <div class="section-title">Tempistica del giudizio</div>
         </div>
-        <div class="section-content">{{{noteFollowup}}}</div>
+        <div class="section-content">{{mdl.tempistica}}</div>
     </div>
     {{/if}}
 
@@ -1390,10 +1369,10 @@ const DEFAULT_TEMPLATES = [
         tags: ['formazione', 'incarico', 'docente', 'predefinito']
     },
     {
-        name: 'Registro Presenze — Standard',
+        name: 'Registro Presenze Default',
         type: 'ATTENDANCE_REGISTER',
         content: ATTENDANCE_REGISTER_CONTENT,
-        description: 'Template predefinito per registro presenze. Include tabella partecipanti con firma ingresso/uscita.',
+        description: 'Template predefinito per registro presenze. Include intestazione corso, istruzioni compilazione e tabella presenze con firme.',
         isDefault: true,
         fileFormat: 'HTML',
         category: 'formazione',
@@ -1429,6 +1408,16 @@ const DEFAULT_TEMPLATES = [
         fileFormat: 'HTML',
         category: 'clinica',
         tags: ['clinica', 'mdl', 'medicina del lavoro', 'giudizio', 'idoneità', 'predefinito']
+    },
+    {
+        name: 'Nomine Figure Sicurezza e MDL — Standard',
+        type: 'CUSTOM',
+        content: MDL_NOMINE_FIGURE_CONTENT,
+        description: 'Template predefinito per nomina Medico Competente, Medici Competenti Coordinati e RSPP con clausola di tacito rinnovo.',
+        isDefault: true,
+        fileFormat: 'HTML',
+        category: 'clinica',
+        tags: ['clinica', 'mdl', 'nomine', 'medico competente', 'rspp', 'predefinito']
     },
     // === BOTH ===
     {
@@ -1489,6 +1478,7 @@ class DefaultTemplateService {
                         where: {
                             tenantId,
                             type: templateDef.type,
+                            ...(templateDef.type === 'CUSTOM' ? { name: templateDef.name } : {}),
                             isDefault: true,
                             deletedAt: null
                         }
@@ -1748,6 +1738,57 @@ class DefaultTemplateService {
 
         logger.info(results, 'Aggiornamento template predefiniti completato per tutti i tenant');
         return results;
+    }
+
+    /**
+     * Forza l'aggiornamento del template ATTENDANCE_REGISTER a tutti i tenant.
+     * Aggiorna SOLO template con isDefault=true e formato HTML (non JSON personalizzati).
+     * Usato per propagare la nuova versione del Registro Presenze Default.
+     *
+     * @returns {Promise<Object>} Risultato con conteggi e errori
+     */
+    static async forceUpdateAttendanceRegisterDefault() {
+        const templateDef = DEFAULT_TEMPLATES.find(t => t.type === 'ATTENDANCE_REGISTER');
+        if (!templateDef) {
+            return { updated: 0, skipped: 0, errors: ['Template ATTENDANCE_REGISTER non trovato in DEFAULT_TEMPLATES'] };
+        }
+
+        // Fetch all default ATTENDANCE_REGISTER templates not in JSON/custom format
+        const existing = await prisma.templateLink.findMany({
+            where: { type: 'ATTENDANCE_REGISTER', isDefault: true, deletedAt: null },
+            select: { id: true, content: true, version: true }
+        });
+
+        let updated = 0;
+        let skipped = 0;
+        const errors = [];
+
+        for (const tpl of existing) {
+            const trimmed = (tpl.content || '').trim();
+            if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+                skipped++;
+                continue;
+            }
+            try {
+                await prisma.templateLink.update({
+                    where: { id: tpl.id },
+                    data: {
+                        content: templateDef.content,
+                        name: templateDef.name,
+                        description: templateDef.description,
+                        version: (tpl.version || 1) + 1,
+                        updatedAt: new Date()
+                    }
+                });
+                updated++;
+            } catch (err) {
+                errors.push({ id: tpl.id, error: err.message });
+                logger.error({ templateId: tpl.id, error: err.message }, 'Errore force-update ATTENDANCE_REGISTER');
+            }
+        }
+
+        logger.info({ updated, skipped, errors: errors.length }, 'Force-update ATTENDANCE_REGISTER completato');
+        return { updated, skipped, errors };
     }
 
     /**

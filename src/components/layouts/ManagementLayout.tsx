@@ -14,7 +14,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
+import { Link, useLocation, Outlet, useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/auth/useAuth';
 import { useTenantAccess } from '../../hooks/useTenantAccess';
 import { getCurrentBrand } from '../../config/brands.config';
@@ -22,6 +22,8 @@ import { getTenantBranding } from '../../utils/tenantBranding';
 import { ModuleSwitcher } from '../shared/ModuleSwitcher';
 import { TenantModeSelector } from '../shared/TenantModeSelector';
 import { useNewPublicSubmissionsCount } from '../../hooks/useNewPublicSubmissionsCount';
+import NotificationBell from '../notifications/NotificationBell';
+import { useRoleGuard } from '../../hooks/useRoleGuard';
 
 // Import Management theme
 import '../../styles/management-theme.css';
@@ -60,7 +62,9 @@ import {
     Receipt,
     ArrowDownLeft,
     // P74 Document Management
-    FolderOpen
+    FolderOpen,
+    // P69 Feature Pricing
+    Euro
 } from 'lucide-react';
 
 interface NavItem {
@@ -72,6 +76,7 @@ interface NavItem {
     permission?: string;
     feature?: string | string[];
     adminOnly?: boolean;
+    superAdminOnly?: boolean;
 }
 
 /**
@@ -84,12 +89,17 @@ const navigationItems: NavItem[] = [
         href: '/management',
         icon: Home
     },
+    {
+        label: 'Controllo di Gestione',
+        href: '/management/controllo-gestione',
+        icon: BarChart3
+    },
 
     // === P68: GESTIONE HR (PERSONALE INTERNO) ===
     {
         label: 'Gestione HR',
         icon: Briefcase,
-        permission: 'hr',
+        feature: 'HR_MANAGEMENT',
         children: [
             { label: 'Dashboard HR', href: '/management/hr', icon: BarChart3 },
             { label: 'Profili Personale', href: '/management/hr/profili', icon: UserCheck },
@@ -108,9 +118,10 @@ const navigationItems: NavItem[] = [
         icon: Building2,
         children: [
             { label: 'I Miei Tenant', href: '/management/my-tenants', icon: Building2 },
-            { label: 'Tutti i Tenant', href: '/management/tenants', icon: Layers, adminOnly: true },
+            { label: 'Tutti i Tenant', href: '/management/tenants', icon: Layers, superAdminOnly: true },
             { label: 'Accessi Utenti', href: '/management/tenant-access', icon: Key },
-            { label: 'Approvazioni Cross-Tenant', href: '/management/cross-tenant-approvals', icon: Shield, adminOnly: true }
+            { label: 'Approvazioni Cross-Tenant', href: '/management/cross-tenant-approvals', icon: Shield, superAdminOnly: true },
+            { label: 'Funzionalità', href: '/management/features', icon: Euro, superAdminOnly: true }
         ]
     },
     {
@@ -118,7 +129,7 @@ const navigationItems: NavItem[] = [
         icon: Shield,
         adminOnly: true,
         children: [
-            { label: 'Ruoli e Gerarchia', href: '/management/role-hierarchy', icon: Layers },
+            { label: 'Ruoli e Gerarchia', href: '/management/role-hierarchy', icon: Layers, superAdminOnly: true },
             { label: 'Permessi', href: '/management/permissions', icon: Key }
         ]
     },
@@ -128,28 +139,25 @@ const navigationItems: NavItem[] = [
         label: 'CMS',
         href: '/management/cms',
         icon: Globe,
-        permission: 'CMS'
+        permission: 'CMS',
+        feature: 'API_ACCESS'
     },
     {
         label: 'Contenuti',
         icon: Sparkles,
         children: [
             { label: 'Templates', href: '/management/templates', icon: FileText },
-            { label: 'Codici Sconto', href: '/management/codici-sconto', icon: Tag }
+            { label: 'Codici Sconto', href: '/management/codici-sconto', icon: Tag },
+            { label: 'Documenti', href: '/management/documenti', icon: FolderOpen },
+            { label: 'Notifiche', href: '/management/notifiche', icon: Bell },
+            { label: 'Crea Avviso', href: '/management/notifiche/crea', icon: Bell }
         ]
-    },
-    // === P74: DOCUMENTI INTERNI ===
-    {
-        label: 'Documenti',
-        href: '/management/documenti',
-        icon: FolderOpen
     },
     // === P97: FATTURAZIONE ELETTRONICA & SISTEMA TS ===
     {
         label: 'Fatturazione',
         icon: Receipt,
-        permission: 'billing',
-        feature: 'billing',
+        feature: 'FATTURAZIONE_ELETTRONICA',
         children: [
             { label: 'Dashboard', href: '/management/billing', icon: BarChart3 },
             { label: 'Fatture Elettroniche', href: '/management/billing/fatture', icon: FileText },
@@ -178,7 +186,7 @@ const navigationItems: NavItem[] = [
             { label: 'Activity Logs', href: '/management/logs', icon: Activity },
             { label: 'Backup & Restore', href: '/management/backup', icon: Database },
             { label: 'Configurazioni', href: '/management/config', icon: FolderCog },
-            { label: 'API Pubbliche', href: '/management/api-pubbliche', icon: Globe },
+            { label: 'API Pubbliche', href: '/management/api-pubbliche', icon: Globe, feature: 'API_ACCESS' },
             { label: 'Reports', href: '/management/reports', icon: BarChart3 }
         ]
     }
@@ -192,6 +200,7 @@ const ManagementLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
     const navigate = useNavigate();
     const { user, logout, hasPermission } = useAuth();
     const { currentTenant, currentTenantId, loading: tenantLoading, hasFeature } = useTenantAccess();
+    const { isTrainerOnly, isPazienteOnly } = useRoleGuard();
     const currentBrand = getCurrentBrand();
     const isResolvingTenant = Boolean(currentTenantId) && !currentTenant && tenantLoading;
     // Management: general tenant name/logo (no branch-specific lookup)
@@ -205,7 +214,7 @@ const ManagementLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [expandedItems, setExpandedItems] = useState<string[]>([]);
-    const [notifications] = useState(0);
+
 
     // Badge CMS per risposte ai form pubblici (tenant-reactive)
     const { count: newCmsSubmissionsCount } = useNewPublicSubmissionsCount({ tenantId: currentTenant?.id });
@@ -219,6 +228,13 @@ const ManagementLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
         user?.roles?.includes('SUPER_ADMIN') ||
         user?.roles?.includes('TENANT_ADMIN') ||
         user?.roles?.includes('COMPANY_ADMIN');
+
+    // Check if user is a global admin (ADMIN or SUPER_ADMIN only — NOT TENANT_ADMIN)
+    const isGlobalAdmin = user?.role === 'Admin' ||
+        user?.globalRole === 'ADMIN' ||
+        user?.globalRole === 'SUPER_ADMIN' ||
+        user?.roles?.includes('ADMIN') ||
+        user?.roles?.includes('SUPER_ADMIN');
 
     // Auto-expand active menu
     useEffect(() => {
@@ -299,7 +315,9 @@ const ManagementLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
             'nuovo': 'Nuovo',
             'nuova': 'Nuova',
             'documenti': 'Documenti',
-            'cartelle': 'Cartelle'
+            'cartelle': 'Cartelle',
+            'feature-pricing': 'Prezzi Funzionalità',
+            'features': 'Funzionalità'
         };
 
         // Singular form mapping for detail pages
@@ -330,6 +348,7 @@ const ManagementLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
     // Filter nav items by permission
     const filterNavItems = (items: NavItem[]): NavItem[] => {
         return items.filter(item => {
+            if (item.superAdminOnly && !isGlobalAdmin) return false;
             if (item.adminOnly && !isAdmin) return false;
             if (item.feature && !hasFeature(Array.isArray(item.feature) ? item.feature[0] : item.feature)) return false;
             if (item.permission) {
@@ -342,7 +361,11 @@ const ManagementLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
         }).map(item => ({
             ...item,
             children: item.children ? filterNavItems(item.children) : undefined
-        }));
+        })).filter(item => {
+            // Remove parent groups with no visible children after filtering
+            if (item.children !== undefined && item.children.length === 0) return false;
+            return true;
+        });
     };
 
     const filteredNavItems = filterNavItems(navigationItems).map(item =>
@@ -430,6 +453,16 @@ const ManagementLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
             </Link>
         );
     };
+
+    // --- Guardie di accesso per ruolo ---
+    // TRAINER: non ha accesso al Management → reindirizza alla programmazione corsi
+    if (isTrainerOnly) {
+        return <Navigate to="/schedules" replace />;
+    }
+    // PAZIENTE puro: non ha accesso al Management → reindirizza alla propria cartella
+    if (isPazienteOnly && user?.id) {
+        return <Navigate to={`/poliambulatorio/pazienti/${user.id}`} replace />;
+    }
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-violet-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 management-theme">
@@ -520,19 +553,7 @@ const ManagementLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
                         {/* Right side */}
                         <div className="flex items-center gap-3">
                             {/* Notifications */}
-                            <button className="relative p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
-                                <Bell className="h-5 w-5 text-gray-500" />
-                                {notifications > 0 && (
-                                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
-                                        {notifications}
-                                    </span>
-                                )}
-                            </button>
-
-                            {/* Help */}
-                            <button className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
-                                <HelpCircle className="h-5 w-5 text-gray-500" />
-                            </button>
+                            <NotificationBell />
 
                             {/* User menu */}
                             <div className="relative group">

@@ -562,13 +562,33 @@ class DocumentoCompilatoService {
         const templateService = (await import('./DocumentoTemplateService.js')).default;
 
         // Ottieni template applicabili (exclude questionari — managed via QuestionarioMedicoService)
-        const templates = await templateService.getApplicabili({
+        const templatesBase = await templateService.getApplicabili({
             tenantId,
             prestazioneId,
             medicoId,
             fase,
             excludeQuestionari: true
         });
+        let templates = templatesBase;
+
+        // Durante la visita devono restare disponibili anche i consensi raccolti
+        // in accettazione/tablet, così il medico può consultarli, rigenerarli o
+        // firmarli senza uscire dalla visita.
+        if (fase === 'DURANTE_VISITA') {
+            const consentTemplates = (await Promise.all(['REGISTRAZIONE', 'PRE_VISITA'].map(consentFase =>
+                templateService.getApplicabili({
+                    tenantId,
+                    prestazioneId,
+                    medicoId,
+                    fase: consentFase,
+                    excludeQuestionari: true
+                })
+            ))).flat().filter(t => Array.isArray(t.consensoCodici) && t.consensoCodici.length > 0);
+
+            templates = Array.from(
+                new Map([...templatesBase, ...consentTemplates].map(t => [t.id, t])).values()
+            );
+        }
 
         // Per ogni template, verifica se già compilato per questo paziente (e non scaduto)
         const documentiEsistenti = await prisma.documentoCompilato.findMany({

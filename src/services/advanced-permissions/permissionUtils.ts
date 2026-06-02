@@ -148,18 +148,29 @@ export function deduplicatePermissions(permissions: EntityPermission[]): EntityP
  * Converte un permesso in una stringa leggibile
  */
 export function permissionToString(permission: EntityPermission): string {
-  const actionMap = {
+  const actionMap: Record<string, string> = {
     'create': 'Creare',
     'read': 'Visualizzare',
     'update': 'Modificare',
-    'delete': 'Eliminare'
+    'delete': 'Eliminare',
+    'write': 'Scrittura',
+    'manage': 'Gestione completa',
+    'view_others_same_branch': 'Vedere stessa branca',
+    'view_others_all': 'Vedere tutti i medici',
+    'create_self': 'Creare propri',
+    'create_others': 'Creare per altri',
+    'edit_others': 'Modificare altri',
+    'change_refertante': 'Cambiare refertante',
+    'view_prices': 'Vedere prezzi',
+    'manage_convenzioni': 'Gestire convenzioni'
   };
   
   const scopeMap: Record<string, string> = {
     'all': 'tutti',
     'tenant': 'del tenant',
     'own': 'propri',
-    'relational': 'relazionali'
+    'relational': 'relazionali',
+    'none': 'nessuno'
   };
   
   const action = actionMap[permission.action] || permission.action;

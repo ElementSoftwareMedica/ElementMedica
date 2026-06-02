@@ -14,6 +14,109 @@ import logger from '../../utils/logger.js';
 // Get Prisma client instance
 const prisma = optimizedPrisma.getClient();
 
+function stripHtml(html = '') {
+    return String(html)
+        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/p>/gi, '\n\n')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/[ \t]+/g, ' ')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}
+
+function buildConsentHtml(title, text) {
+    const safeTitle = String(title || 'Consenso').trim();
+    const paragraphs = String(text || '')
+        .split(/\n{2,}/)
+        .map(part => part.trim())
+        .filter(Boolean)
+        .map(part => `<p>${part.replace(/\n/g, '<br>')}</p>`)
+        .join('');
+    return `<h2>${safeTitle}</h2>${paragraphs || '<p></p>'}`;
+}
+
+function normalizeConsentTemplateData(templateData) {
+    const codici = Array.isArray(templateData.consensoCodici)
+        ? templateData.consensoCodici.filter(Boolean)
+        : [];
+    if (codici.length === 0) return templateData;
+
+    const campi = Array.isArray(templateData.campi) ? [...templateData.campi] : [];
+    const textFieldIndex = campi.findIndex(campo => campo?.name === 'testo_consenso');
+    const htmlText = stripHtml(templateData.contenutoHtml || templateData.contenutoPdf || '');
+    const existingText = textFieldIndex >= 0
+        ? String(campi[textFieldIndex]?.defaultValue || '').trim()
+        : '';
+    const testoConsenso = existingText || htmlText || String(templateData.descrizione || templateData.nome || '').trim();
+
+    const textField = {
+        name: 'testo_consenso',
+        label: 'Testo mostrato al paziente sul tablet',
+        type: 'textarea',
+        required: false,
+        defaultValue: testoConsenso,
+    };
+
+    if (textFieldIndex >= 0) {
+        campi[textFieldIndex] = { ...campi[textFieldIndex], ...textField };
+    } else {
+        campi.unshift(textField);
+    }
+
+    return {
+        ...templateData,
+        campi,
+        contenutoHtml: buildConsentHtml(templateData.nome, testoConsenso),
+    };
+}
+
+async function syncConsensoModuli(tx, template, tenantId) {
+    const codici = Array.isArray(template.consensoCodici) ? template.consensoCodici.filter(Boolean) : [];
+    if (codici.length === 0) return;
+
+    const testoCampo = Array.isArray(template.campi)
+        ? template.campi.find(campo => campo?.name === 'testo_consenso')?.defaultValue
+        : null;
+    const testo = String(testoCampo || '').trim()
+        || stripHtml(template.contenutoHtml || template.contenutoPdf || template.descrizione || template.nome);
+    if (!testo) return;
+
+    for (const codice of codici) {
+        await tx.consensoModulo.upsert({
+            where: { tenantId_codice: { tenantId, codice } },
+            create: {
+                tenantId,
+                codice,
+                titolo: template.nome,
+                sottotitolo: template.descrizione || null,
+                testo,
+                obbligatorio: !!template.obbligatorio,
+                attivo: template.isActive !== false,
+                ordine: template.ordine || 0,
+                validitaGiorni: template.validitaGiorni ?? null,
+                prestazioniIds: template.prestazioni?.map(p => p.prestazioneId).filter(Boolean) || [],
+            },
+            update: {
+                titolo: template.nome,
+                sottotitolo: template.descrizione || null,
+                testo,
+                obbligatorio: !!template.obbligatorio,
+                attivo: template.isActive !== false,
+                ordine: template.ordine || 0,
+                validitaGiorni: template.validitaGiorni ?? null,
+                prestazioniIds: template.prestazioni?.map(p => p.prestazioneId).filter(Boolean) || [],
+                deletedAt: null,
+            },
+        });
+    }
+}
+
 /**
  * Service per DocumentoTemplate
  */
@@ -158,6 +261,7 @@ class DocumentoTemplateService {
      */
     async create(data, createdBy, ipAddress) {
         const { prestazioniIds, mediciIds, questionarioConfig, ...templateData } = data;
+        const normalizedTemplateData = normalizeConsentTemplateData(templateData);
 
         logger.info({
             tenantId: data.tenantId,
@@ -171,7 +275,7 @@ class DocumentoTemplateService {
             // Crea il template
             const template = await tx.documentoTemplate.create({
                 data: {
-                    ...templateData,
+                    ...normalizedTemplateData,
                     createdBy,
                     // Crea le associazioni con prestazioni
                     prestazioni: prestazioniIds?.length > 0 ? {
@@ -216,6 +320,8 @@ class DocumentoTemplateService {
                 });
             }
 
+            await syncConsensoModuli(tx, template, data.tenantId);
+
             return template;
         });
     }
@@ -231,6 +337,7 @@ class DocumentoTemplateService {
      */
     async update(id, data, tenantId, updatedBy, ipAddress) {
         const { prestazioniIds, mediciIds, questionarioConfig, ...templateData } = data;
+        const normalizedTemplateData = normalizeConsentTemplateData(templateData);
 
         logger.info({ id, tenantId, updatedBy }, 'DocumentoTemplateService.update');
 
@@ -246,8 +353,8 @@ class DocumentoTemplateService {
 
             // Se cambia contenuto significativo, incrementa versione
             const shouldIncrementVersion =
-                templateData.contenutoHtml && templateData.contenutoHtml !== existing.contenutoHtml ||
-                templateData.campi && JSON.stringify(templateData.campi) !== JSON.stringify(existing.campi);
+                normalizedTemplateData.contenutoHtml && normalizedTemplateData.contenutoHtml !== existing.contenutoHtml ||
+                normalizedTemplateData.campi && JSON.stringify(normalizedTemplateData.campi) !== JSON.stringify(existing.campi);
 
             // Aggiorna associazioni prestazioni se fornite
             if (Array.isArray(prestazioniIds)) {
@@ -283,7 +390,7 @@ class DocumentoTemplateService {
             const template = await tx.documentoTemplate.update({
                 where: { id },
                 data: {
-                    ...templateData,
+                    ...normalizedTemplateData,
                     versione: shouldIncrementVersion ? existing.versione + 1 : existing.versione
                 },
                 include: {
@@ -317,6 +424,8 @@ class DocumentoTemplateService {
                     });
                 }
             }
+
+            await syncConsensoModuli(tx, template, tenantId);
 
             // Crea log
             await tx.documentoTemplateLog.create({

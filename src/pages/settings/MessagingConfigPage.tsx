@@ -37,6 +37,8 @@ import { useToast } from '@/hooks/useToast';
 import api from '@/services/api';
 import { clinicaApi, PecConfig, PecConfigInput, PecProviderInfo, PecConfigStatus, PecProvider } from '@/services/clinicaApi';
 import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
+import { useAuth } from '@/hooks/auth/useAuth';
+import { useTenantAccess } from '@/hooks/useTenantAccess';
 
 // ============================================
 // TYPES
@@ -264,6 +266,18 @@ const MessagingConfigPage: React.FC = () => {
     const queryClient = useQueryClient();
     const { showToast } = useToast();
     const { confirmDelete } = useConfirmDialog();
+    const { user } = useAuth();
+    const { hasFeature } = useTenantAccess();
+
+    // Feature-based tab visibility
+    const isGlobalAdmin = user?.globalRole === 'ADMIN' || user?.globalRole === 'SUPER_ADMIN' ||
+        (user?.roles as string[] | undefined)?.includes('ADMIN') ||
+        (user?.roles as string[] | undefined)?.includes('SUPER_ADMIN');
+    const showWhatsapp = isGlobalAdmin || hasFeature('WHATSAPP_INTEGRATION');
+    const showPec = isGlobalAdmin || hasFeature('PEC_INTEGRATION');
+    const showRouting = isGlobalAdmin || showWhatsapp || showPec;
+    const visibleTabCount = 1 + (showWhatsapp ? 1 : 0) + (showPec ? 1 : 0) + (showRouting ? 1 : 0);
+    const tabGridClass = visibleTabCount === 4 ? 'grid-cols-4' : visibleTabCount === 3 ? 'grid-cols-3' : visibleTabCount === 2 ? 'grid-cols-2' : 'grid-cols-1';
 
     // Branch selection state
     const [selectedBranch, setSelectedBranch] = useState<BranchType>('default');
@@ -729,10 +743,20 @@ const MessagingConfigPage: React.FC = () => {
                 type: 'success'
             });
         } catch (error: unknown) {
-            showToast({
-                message: 'Errore durante il test WhatsApp. Verifica le impostazioni.',
-                type: 'error'
-            });
+            const axiosErr = error as { response?: { data?: { code?: string; message?: string } } };
+            const serverCode = axiosErr?.response?.data?.code;
+            const serverMsg = axiosErr?.response?.data?.message;
+            let toastMsg = 'Errore durante il test WhatsApp. Verifica le impostazioni.';
+            if (serverCode === 'NOT_CONFIGURED') {
+                toastMsg = `WhatsApp non configurato per il branch "${selectedBranch}". Salva prima la configurazione.`;
+            } else if (serverCode === 'NO_TOKEN') {
+                toastMsg = 'Access token WhatsApp non disponibile sulla piattaforma. Contatta il supporto ElementMedica.';
+            } else if (serverCode === 'NO_PHONE_NUMBER_ID') {
+                toastMsg = 'Inserisci e salva il Phone Number ID prima di eseguire il test.';
+            } else if (serverMsg) {
+                toastMsg = serverMsg;
+            }
+            showToast({ message: toastMsg, type: 'error' });
         } finally {
             setIsTestingWhatsapp(false);
         }
@@ -845,7 +869,7 @@ const MessagingConfigPage: React.FC = () => {
             </Card>
 
             <Tabs defaultValue="smtp" className="space-y-6">
-                <TabsList className="grid w-full grid-cols-4">
+                <TabsList className={`grid w-full ${tabGridClass}`}>
                     <TabsTrigger value="smtp" className="flex items-center gap-2">
                         <Mail className="w-4 h-4" />
                         Email SMTP
@@ -857,32 +881,38 @@ const MessagingConfigPage: React.FC = () => {
                             />
                         )}
                     </TabsTrigger>
-                    <TabsTrigger value="whatsapp" className="flex items-center gap-2">
-                        <MessageCircle className="w-4 h-4" />
-                        WhatsApp
-                        {status?.whatsapp && (
-                            <StatusBadge
-                                configured={status.whatsapp.configured}
-                                enabled={status.whatsapp.enabled}
-                                ready={status.whatsapp.ready}
-                            />
-                        )}
-                    </TabsTrigger>
-                    <TabsTrigger value="pec" className="flex items-center gap-2">
-                        <Shield className="w-4 h-4" />
-                        PEC
-                        {pecStatus && (
-                            <StatusBadge
-                                configured={pecStatus.configured}
-                                enabled={pecStatus.enabled}
-                                ready={pecStatus.ready}
-                            />
-                        )}
-                    </TabsTrigger>
-                    <TabsTrigger value="routing" className="flex items-center gap-2">
-                        <Route className="w-4 h-4" />
-                        Routing
-                    </TabsTrigger>
+                    {showWhatsapp && (
+                        <TabsTrigger value="whatsapp" className="flex items-center gap-2">
+                            <MessageCircle className="w-4 h-4" />
+                            WhatsApp
+                            {status?.whatsapp && (
+                                <StatusBadge
+                                    configured={status.whatsapp.configured}
+                                    enabled={status.whatsapp.enabled}
+                                    ready={status.whatsapp.ready}
+                                />
+                            )}
+                        </TabsTrigger>
+                    )}
+                    {showPec && (
+                        <TabsTrigger value="pec" className="flex items-center gap-2">
+                            <Shield className="w-4 h-4" />
+                            PEC
+                            {pecStatus && (
+                                <StatusBadge
+                                    configured={pecStatus.configured}
+                                    enabled={pecStatus.enabled}
+                                    ready={pecStatus.ready}
+                                />
+                            )}
+                        </TabsTrigger>
+                    )}
+                    {showRouting && (
+                        <TabsTrigger value="routing" className="flex items-center gap-2">
+                            <Route className="w-4 h-4" />
+                            Routing
+                        </TabsTrigger>
+                    )}
                 </TabsList>
 
                 {/* ============================================ */}
@@ -1142,7 +1172,7 @@ const MessagingConfigPage: React.FC = () => {
                 {/* ============================================ */}
                 {/* WHATSAPP TAB */}
                 {/* ============================================ */}
-                <TabsContent value="whatsapp">
+                {showWhatsapp && <TabsContent value="whatsapp">
                     {/* Setup Guide Banner */}
                     <Alert className="mb-6 border-green-200 bg-green-50 dark:bg-green-950/20">
                         <Smartphone className="h-4 w-4 text-green-600" />
@@ -1303,12 +1333,12 @@ const MessagingConfigPage: React.FC = () => {
                             </CRUDPrimaryButton>
                         </div>
                     </form>
-                </TabsContent>
+                </TabsContent>}
 
                 {/* ============================================ */}
                 {/* PEC TAB */}
                 {/* ============================================ */}
-                <TabsContent value="pec">
+                {showPec && <TabsContent value="pec">
                     <form onSubmit={handlePecSubmit}>
                         <Card>
                             <CardHeader>
@@ -1500,12 +1530,12 @@ const MessagingConfigPage: React.FC = () => {
                             </CRUDPrimaryButton>
                         </div>
                     </form>
-                </TabsContent>
+                </TabsContent>}
 
                 {/* ============================================ */}
                 {/* ROUTING TAB */}
                 {/* ============================================ */}
-                <TabsContent value="routing">
+                {showRouting && <TabsContent value="routing">
                     <Card>
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">
@@ -1713,7 +1743,7 @@ const MessagingConfigPage: React.FC = () => {
                             )}
                         </CardContent>
                     </Card>
-                </TabsContent>
+                </TabsContent>}
             </Tabs>
         </div>
     );

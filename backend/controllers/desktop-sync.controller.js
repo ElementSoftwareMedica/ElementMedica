@@ -27,6 +27,135 @@ const attachmentUpload = createMulterConfig({
     maxFileSize: 50 * 1024 * 1024
 });
 
+const DESKTOP_NOMINA_ROLES = [
+    'MEDICO_COMPETENTE',
+    'MEDICO_COMPETENTE_COORDINATO',
+    'RSPP',
+    'ASPP',
+    'RLS',
+    'PREPOSTO',
+    'ADDETTO_PS',
+    'ADDETTO_AI',
+    'DIRIGENTE_SICUREZZA'
+];
+
+const DESKTOP_PROFESSIONAL_ROLES = [
+    'MEDICO',
+    'MEDICO_COMPETENTE',
+    'RSPP',
+    'ASPP',
+    'CONSULENTE_SICUREZZA',
+    'TECNICO_SICUREZZA'
+];
+
+function collectProfessionalIdsFromCompanies(aziende = []) {
+    const ids = new Set();
+    for (const profile of aziende) {
+        if (profile.referenteId) ids.add(profile.referenteId);
+        for (const site of profile.sites || []) {
+            if (site.medicoCompetenteId) ids.add(site.medicoCompetenteId);
+            if (site.rsppId) ids.add(site.rsppId);
+            if (site.referenteId) ids.add(site.referenteId);
+        }
+        for (const nomina of profile.nomine || []) {
+            if (nomina.personId) ids.add(nomina.personId);
+        }
+    }
+    return [...ids].filter(Boolean);
+}
+
+async function getDesktopProfessionals(tenantId, professionalIds = []) {
+    const idFilter = professionalIds.length > 0 ? [{ id: { in: professionalIds } }] : [];
+    return prisma.person.findMany({
+        where: {
+            deletedAt: null,
+            OR: [
+                {
+                    personRoles: {
+                        some: {
+                            tenantId,
+                            deletedAt: null,
+                            isActive: true,
+                            roleType: { in: DESKTOP_PROFESSIONAL_ROLES }
+                        }
+                    }
+                },
+                ...idFilter
+            ]
+        },
+        select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            gender: true,
+            taxCode: true,
+            tenantProfiles: {
+                where: { tenantId, deletedAt: null },
+                select: { email: true, phone: true, status: true, specialties: true },
+                take: 1
+            },
+            personRoles: {
+                where: { tenantId, deletedAt: null, isActive: true },
+                select: { roleType: true }
+            },
+            nomine: {
+                where: {
+                    tenantId,
+                    deletedAt: null,
+                    stato: 'ATTIVA',
+                    tipoRuolo: { in: DESKTOP_NOMINA_ROLES }
+                },
+                select: { tipoRuolo: true, companyTenantProfileId: true, siteId: true }
+            }
+        },
+        orderBy: { lastName: 'asc' }
+    });
+}
+
+function splitMansioniForDesktop(mansioni = []) {
+    const mansioneRischi = mansioni.flatMap(m => (m.rischiAssociati || []).map(r => ({
+        ...r,
+        mansioneId: r.mansioneId || m.id,
+        tenantId: r.tenantId || m.tenantId
+    })));
+    const mansioniBase = mansioni.map(({ rischiAssociati, ...m }) => m);
+    return { mansioniBase, mansioneRischi };
+}
+
+function splitProtocolliForDesktop(protocolli = []) {
+    const protocolloPrestazioni = protocolli.flatMap(p => (p.prestazioni || []).map(item => ({
+        id: item.id,
+        tenantId: item.tenantId || p.tenantId,
+        protocolloId: item.protocolloId || p.id,
+        prestazioneId: item.prestazioneId || item.prestazione?.id,
+        prestazioneNome: item.prestazione?.nome || item.prestazioneNome || null,
+        prestazioneCodice: item.prestazione?.codice || item.prestazioneCodice || null,
+        isObbligatoria: item.isObbligatoria,
+        periodicita: item.periodicita,
+        periodicitaCustomMesi: item.periodicitaCustomMesi,
+        scadenzaDefaultMesi: item.prestazione?.scadenzaDefaultMesi || item.scadenzaDefaultMesi || null,
+        condizioniApplicazione: item.condizioniApplicazione,
+        note: item.note,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+        deletedAt: item.deletedAt
+    })));
+    const protocolliBase = protocolli.map(({ prestazioni, ...p }) => p);
+    return { protocolliBase, protocolloPrestazioni };
+}
+
+function splitDocumentTemplatesForDesktop(documentTemplates = []) {
+    const questionariMediciConfig = documentTemplates
+        .filter(t => t.questionarioConfig)
+        .map(t => ({
+            ...t.questionarioConfig,
+            documentoTemplateId: t.id,
+            tenantId: t.questionarioConfig.tenantId || t.tenantId
+        }));
+    const documentTemplatesBase = documentTemplates.map(({ questionarioConfig, ...t }) => t);
+    return { documentTemplatesBase, questionariMediciConfig };
+}
+
 /**
  * GET /api/v1/desktop-sync/download-day
  * Scarica tutti i dati necessari per una giornata MDL.
@@ -235,6 +364,24 @@ export async function downloadDay(req, res) {
             }
         });
 
+        const slotDisponibilita = await prisma.slotDisponibilita.findMany({
+            where: {
+                tenantId,
+                deletedAt: null,
+                data: { gte: startOfDay, lte: endOfDay },
+                ...(ambulatorioId ? { ambulatorioId } : {})
+            },
+            select: {
+                id: true, ambulatorioId: true, medicoId: true, prestazioneId: true,
+                appuntamentoId: true, disponibilitaMedicoId: true, data: true,
+                oraInizio: true, oraFine: true, stato: true, disponibile: true,
+                motivoBlocco: true, note: true, visibilePubblico: true, prenotabileOnline: true,
+                maxPrenotazioni: true, anticipoMinimoOre: true, anticipoMassimoGiorni: true,
+                durataSlotMinuti: true, tenantId: true, createdAt: true, updatedAt: true, deletedAt: true
+            },
+            orderBy: [{ data: 'asc' }, { oraInizio: 'asc' }]
+        });
+
         // 10. Movimenti contabili per le visite esistenti (per continuità contabile)
         const visitaIds = visiteEsistenti.map(v => v.id);
         const movimentiContabili = visitaIds.length > 0 ? await prisma.movimentoContabile.findMany({
@@ -248,7 +395,8 @@ export async function downloadDay(req, res) {
         // 11. Mansioni complete del tenant (per assegnazione offline)
         const mansioni = await prisma.mansione.findMany({
             where: {
-                tenantId
+                tenantId,
+                deletedAt: null
             },
             include: {
                 rischiAssociati: true
@@ -279,10 +427,11 @@ export async function downloadDay(req, res) {
             }
         }) : [];
 
-        // 12. CompanyTenantProfiles coinvolti (con sedi)
-        const aziende = companyProfileIds.length > 0 ? await prisma.companyTenantProfile.findMany({
+        // 12. CompanyTenantProfiles del tenant (con sedi/nomine MDL).
+        // Il desktop usa anche /aziende e /aziende/:id offline: scaricare solo le
+        // aziende degli appuntamenti del giorno nasconde nomine MC valide.
+        const aziende = await prisma.companyTenantProfile.findMany({
             where: {
-                id: { in: companyProfileIds },
                 tenantId,
                 deletedAt: null
             },
@@ -310,27 +459,63 @@ export async function downloadDay(req, res) {
                         citta: true,
                         cap: true,
                         provincia: true,
-                        medicoCompetenteId: true
+                        medicoCompetenteId: true,
+                        rsppId: true,
+                        referenteId: true,
+                        dvr: true,
+                        dvrDataAggiornamento: true,
+                        ultimoSopralluogo: true,
+                        prossimoSopralluogo: true,
+                        ultimoSopralluogoRSPP: true,
+                        prossimoSopralluogoRSPP: true,
+                        ultimoSopralluogoMedico: true,
+                        prossimoSopralluogoMedico: true
                     }
                 },
                 nomine: {
                     where: {
                         deletedAt: null,
                         stato: 'ATTIVA',
-                        tipoRuolo: { in: ['MEDICO_COMPETENTE', 'MEDICO_COMPETENTE_COORDINATO'] }
+                        tipoRuolo: { in: DESKTOP_NOMINA_ROLES }
                     },
                     select: {
                         id: true,
                         personId: true,
+                        companyTenantProfileId: true,
+                        siteId: true,
+                        tenantId: true,
                         tipoRuolo: true,
+                        stato: true,
                         dataInizio: true,
                         dataFine: true,
                         dataScadenza: true,
-                        person: { select: { id: true, firstName: true, lastName: true } }
+                        numeroProtocollo: true,
+                        documentoNominaId: true,
+                        formazioneRichiesta: true,
+                        dataUltimaFormazione: true,
+                        dataProssimaFormazione: true,
+                        note: true,
+                        createdAt: true,
+                        updatedAt: true,
+                        deletedAt: true,
+                        person: {
+                            select: {
+                                id: true,
+                                firstName: true,
+                                lastName: true,
+                                gender: true,
+                                taxCode: true,
+                                tenantProfiles: {
+                                    where: { tenantId, deletedAt: null },
+                                    select: { email: true, phone: true, status: true, specialties: true },
+                                    take: 1
+                                }
+                            }
+                        }
                     }
                 }
             }
-        }) : [];
+        });
 
         // 14. Protocolli sanitari del tenant
         const protocolli = await prisma.protocolloSanitario.findMany({
@@ -345,34 +530,10 @@ export async function downloadDay(req, res) {
                 }
             }
         });
+        const { mansioniBase, mansioneRischi } = splitMansioniForDesktop(mansioni);
+        const { protocolliBase, protocolloPrestazioni } = splitProtocolliForDesktop(protocolli);
 
-        const medici = await prisma.person.findMany({
-            where: {
-                deletedAt: null,
-                tenantProfiles: { some: { tenantId, deletedAt: null } },
-                personRoles: {
-                    some: {
-                        tenantId,
-                        deletedAt: null,
-                        isActive: true,
-                        roleType: { in: ['MEDICO', 'MEDICO_COMPETENTE'] }
-                    }
-                }
-            },
-            select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-                gender: true,
-                taxCode: true,
-                tenantProfiles: {
-                    where: { tenantId, deletedAt: null },
-                    select: { email: true, phone: true, status: true, specialties: true },
-                    take: 1
-                }
-            },
-            orderBy: { lastName: 'asc' }
-        });
+        const medici = await getDesktopProfessionals(tenantId, collectProfessionalIdsFromCompanies(aziende));
 
         // 15. Visit templates del tenant
         const visitTemplates = await prisma.visitTemplate.findMany({
@@ -397,6 +558,88 @@ export async function downloadDay(req, res) {
                 { nome: 'asc' }
             ]
         });
+        const { documentTemplatesBase, questionariMediciConfig } = splitDocumentTemplatesForDesktop(documentTemplates);
+
+        const documentiCompilati = visitaIds.length > 0 || pazienteIds.length > 0 ? await prisma.documentoCompilato.findMany({
+            where: {
+                tenantId,
+                deletedAt: null,
+                OR: [
+                    ...(visitaIds.length > 0 ? [{ visitaId: { in: visitaIds } }] : []),
+                    ...(pazienteIds.length > 0 ? [{ pazienteId: { in: pazienteIds } }] : [])
+                ]
+            },
+            include: {
+                documentoTemplate: { select: { id: true, nome: true, tipo: true, fase: true } },
+                risposteDettagliate: true
+            },
+            orderBy: { updatedAt: 'desc' },
+            take: 1000
+        }) : [];
+        const questionariRisposte = documentiCompilati.flatMap(doc => doc.risposteDettagliate || []);
+
+        const profiliSalute = pazienteIds.length > 0 ? await prisma.profiloDiSalutePersona.findMany({
+            where: { tenantId, deletedAt: null, personId: { in: pazienteIds } }
+        }) : [];
+
+        const documentiClinici = visitaIds.length > 0 || pazienteIds.length > 0 ? await prisma.documentoClinico.findMany({
+            where: {
+                tenantId,
+                deletedAt: null,
+                OR: [
+                    ...(visitaIds.length > 0 ? [{ visitaId: { in: visitaIds } }] : []),
+                    ...(pazienteIds.length > 0 ? [{ pazienteId: { in: pazienteIds } }] : [])
+                ]
+            },
+            orderBy: { dataDocumento: 'desc' },
+            take: 1000
+        }) : [];
+
+        const personDocuments = visitaIds.length > 0 || pazienteIds.length > 0 ? await prisma.personDocument.findMany({
+            where: {
+                tenantId,
+                deletedAt: null,
+                OR: [
+                    ...(visitaIds.length > 0 ? [{ visitaId: { in: visitaIds } }] : []),
+                    ...(pazienteIds.length > 0 ? [{ personId: { in: pazienteIds } }] : [])
+                ]
+            },
+            orderBy: { dataDocumento: 'desc' },
+            take: 1000
+        }) : [];
+
+        const referti = visitaIds.length > 0 ? await prisma.referto.findMany({
+            where: { tenantId, deletedAt: null, visitaId: { in: visitaIds } },
+            orderBy: { updatedAt: 'desc' },
+            take: 1000
+        }) : [];
+
+        const visitRevisions = visitaIds.length > 0 ? await prisma.visitRevision.findMany({
+            where: { visitaId: { in: visitaIds } },
+            orderBy: { changedAt: 'desc' },
+            take: 1000
+        }) : [];
+
+        const visitAccessLogs = visitaIds.length > 0 ? await prisma.visitAccessLog.findMany({
+            where: { visitaId: { in: visitaIds } },
+            orderBy: { accessedAt: 'desc' },
+            take: 1000
+        }) : [];
+
+        const refertoIds = referti.map(r => r.id);
+        const documentoCompilatoIds = documentiCompilati.map(d => d.id);
+        const firmeDigitali = refertoIds.length > 0 || documentoCompilatoIds.length > 0 ? await prisma.firmaDigitale.findMany({
+            where: {
+                tenantId,
+                deletedAt: null,
+                OR: [
+                    ...(refertoIds.length > 0 ? [{ refertoId: { in: refertoIds } }] : []),
+                    ...(documentoCompilatoIds.length > 0 ? [{ documentoId: { in: documentoCompilatoIds } }] : [])
+                ]
+            },
+            orderBy: { updatedAt: 'desc' },
+            take: 1000
+        }) : [];
 
         const payload = {
             meta: {
@@ -414,14 +657,27 @@ export async function downloadDay(req, res) {
                     giudiziPrecedenti: giudiziPrecedenti.length,
                     prestazioni: prestazioni.length,
                     ambulatori: ambulatori.length,
-                    mansioni: mansioni.length,
+                    mansioni: mansioniBase.length,
+                    mansioneRischi: mansioneRischi.length,
                     aziende: aziende.length,
                     movimentiContabili: movimentiContabili.length,
                     rischiAggiuntivi: rischiAggiuntivi.length,
-                    protocolli: protocolli.length,
+                    protocolli: protocolliBase.length,
+                    protocolloPrestazioni: protocolloPrestazioni.length,
                     visitTemplates: visitTemplates.length,
-                    documentTemplates: documentTemplates.length,
-                    medici: medici.length
+                    documentTemplates: documentTemplatesBase.length,
+                    questionariMediciConfig: questionariMediciConfig.length,
+                    documentiCompilati: documentiCompilati.length,
+                    questionariRisposte: questionariRisposte.length,
+                    profiliSalute: profiliSalute.length,
+                    documentiClinici: documentiClinici.length,
+                    personDocuments: personDocuments.length,
+                    referti: referti.length,
+                    visitRevisions: visitRevisions.length,
+                    visitAccessLogs: visitAccessLogs.length,
+                    firmeDigitali: firmeDigitali.length,
+                    medici: medici.length,
+                    slotDisponibilita: slotDisponibilita.length
                 }
             },
             appuntamenti,
@@ -432,13 +688,26 @@ export async function downloadDay(req, res) {
             giudiziPrecedenti,
             prestazioni,
             ambulatori,
+            slotDisponibilita,
             movimentiContabili,
-            mansioni,
+            mansioni: mansioniBase,
             aziende,
+            mansioneRischi,
             rischiAggiuntivi,
-            protocolli,
+            protocolli: protocolliBase,
+            protocolloPrestazioni,
             visitTemplates,
-            documentTemplates,
+            documentTemplates: documentTemplatesBase,
+            questionariMediciConfig,
+            documentiCompilati,
+            questionariRisposte,
+            profiliSalute,
+            documentiClinici,
+            personDocuments,
+            referti,
+            visitRevisions,
+            visitAccessLogs,
+            firmeDigitali,
             medici
         };
 
@@ -495,9 +764,19 @@ export async function downloadFullDb(req, res) {
             }
         });
 
+        const companyWhere = lastSyncAt ? {
+            tenantId,
+            deletedAt: null,
+            OR: [
+                { updatedAt: { gte: lastSyncAt } },
+                { sites: { some: { deletedAt: null, updatedAt: { gte: lastSyncAt } } } },
+                { nomine: { some: { tenantId, deletedAt: null, updatedAt: { gte: lastSyncAt } } } }
+            ]
+        } : { tenantId, deletedAt: null };
+
         // 2. ALL companies for this tenant
         const aziende = await prisma.companyTenantProfile.findMany({
-            where: { tenantId, deletedAt: null, ...updatedFilter },
+            where: companyWhere,
             include: {
                 company: {
                     select: {
@@ -508,22 +787,66 @@ export async function downloadFullDb(req, res) {
                 },
                 sites: {
                     where: { deletedAt: null },
-                    select: { id: true, siteName: true, indirizzo: true, citta: true, cap: true, provincia: true, medicoCompetenteId: true }
+                    select: {
+                        id: true,
+                        siteName: true,
+                        indirizzo: true,
+                        citta: true,
+                        cap: true,
+                        provincia: true,
+                        medicoCompetenteId: true,
+                        rsppId: true,
+                        referenteId: true,
+                        dvr: true,
+                        dvrDataAggiornamento: true,
+                        ultimoSopralluogo: true,
+                        prossimoSopralluogo: true,
+                        ultimoSopralluogoRSPP: true,
+                        prossimoSopralluogoRSPP: true,
+                        ultimoSopralluogoMedico: true,
+                        prossimoSopralluogoMedico: true
+                    }
                 },
                 nomine: {
                     where: {
                         deletedAt: null,
                         stato: 'ATTIVA',
-                        tipoRuolo: { in: ['MEDICO_COMPETENTE', 'MEDICO_COMPETENTE_COORDINATO'] }
+                        tipoRuolo: { in: DESKTOP_NOMINA_ROLES }
                     },
                     select: {
                         id: true,
                         personId: true,
+                        companyTenantProfileId: true,
+                        siteId: true,
+                        tenantId: true,
                         tipoRuolo: true,
+                        stato: true,
                         dataInizio: true,
                         dataFine: true,
                         dataScadenza: true,
-                        person: { select: { id: true, firstName: true, lastName: true } }
+                        numeroProtocollo: true,
+                        documentoNominaId: true,
+                        formazioneRichiesta: true,
+                        dataUltimaFormazione: true,
+                        dataProssimaFormazione: true,
+                        note: true,
+                        createdAt: true,
+                        updatedAt: true,
+                        deletedAt: true,
+                        person: {
+                            select: {
+                                id: true,
+                                firstName: true,
+                                lastName: true,
+                                gender: true,
+                                taxCode: true,
+                                tenantProfiles: {
+                                    where: { tenantId, deletedAt: null },
+                                    select: { email: true, phone: true, status: true, specialties: true },
+                                    take: 1
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -531,7 +854,7 @@ export async function downloadFullDb(req, res) {
 
         // 3. ALL mansioni
         const mansioni = await prisma.mansione.findMany({
-            where: { tenantId, ...updatedFilter },
+            where: { tenantId, deletedAt: null, ...updatedFilter },
             include: { rischiAssociati: true }
         });
 
@@ -542,6 +865,8 @@ export async function downloadFullDb(req, res) {
                 prestazioni: { where: { deletedAt: null }, include: { prestazione: true } }
             }
         });
+        const { mansioniBase, mansioneRischi } = splitMansioniForDesktop(mansioni);
+        const { protocolliBase, protocolloPrestazioni } = splitProtocolliForDesktop(protocolli);
 
         // 5. ALL prestazioni
         const prestazioni = await prisma.prestazione.findMany({
@@ -553,38 +878,37 @@ export async function downloadFullDb(req, res) {
             }
         });
 
-        const medici = await prisma.person.findMany({
-            where: {
-                deletedAt: null,
-                tenantProfiles: { some: { tenantId, deletedAt: null } },
-                personRoles: {
-                    some: {
-                        tenantId,
-                        deletedAt: null,
-                        isActive: true,
-                        roleType: { in: ['MEDICO', 'MEDICO_COMPETENTE'] }
-                    }
-                }
-            },
-            select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-                gender: true,
-                taxCode: true,
-                tenantProfiles: {
-                    where: { tenantId, deletedAt: null },
-                    select: { email: true, phone: true, status: true, specialties: true },
-                    take: 1
-                }
-            },
-            orderBy: { lastName: 'asc' }
-        });
+        const medici = await getDesktopProfessionals(tenantId, collectProfessionalIdsFromCompanies(aziende));
 
         // 6. ALL ambulatori
         const ambulatori = await prisma.ambulatorio.findMany({
             where: { tenantId, deletedAt: null, stato: 'ATTIVO', ...updatedFilter },
             select: { id: true, codice: true, nome: true, specializzazione: true, colore: true, isEsterno: true }
+        });
+
+        const slotWindowStart = new Date();
+        slotWindowStart.setDate(slotWindowStart.getDate() - 30);
+        slotWindowStart.setHours(0, 0, 0, 0);
+        const slotWindowEnd = new Date();
+        slotWindowEnd.setDate(slotWindowEnd.getDate() + 180);
+        slotWindowEnd.setHours(23, 59, 59, 999);
+        const slotDisponibilita = await prisma.slotDisponibilita.findMany({
+            where: {
+                tenantId,
+                deletedAt: null,
+                data: { gte: slotWindowStart, lte: slotWindowEnd },
+                ...updatedFilter
+            },
+            take: 20000,
+            select: {
+                id: true, ambulatorioId: true, medicoId: true, prestazioneId: true,
+                appuntamentoId: true, disponibilitaMedicoId: true, data: true,
+                oraInizio: true, oraFine: true, stato: true, disponibile: true,
+                motivoBlocco: true, note: true, visibilePubblico: true, prenotabileOnline: true,
+                maxPrenotazioni: true, anticipoMinimoOre: true, anticipoMassimoGiorni: true,
+                durataSlotMinuti: true, tenantId: true, createdAt: true, updatedAt: true, deletedAt: true
+            },
+            orderBy: [{ data: 'asc' }, { oraInizio: 'asc' }]
         });
 
         // 7. ALL active scadenze
@@ -612,6 +936,65 @@ export async function downloadFullDb(req, res) {
                 { ordine: 'asc' },
                 { nome: 'asc' }
             ]
+        });
+        const { documentTemplatesBase, questionariMediciConfig } = splitDocumentTemplatesForDesktop(documentTemplates);
+
+        const documentiCompilati = await prisma.documentoCompilato.findMany({
+            where: { tenantId, deletedAt: null, ...updatedFilter },
+            include: {
+                documentoTemplate: { select: { id: true, nome: true, tipo: true, fase: true } },
+                risposteDettagliate: true
+            },
+            orderBy: { updatedAt: 'desc' },
+            take: 5000
+        });
+        const questionariRisposte = documentiCompilati.flatMap(doc => doc.risposteDettagliate || []);
+
+        const profiliSalute = await prisma.profiloDiSalutePersona.findMany({
+            where: { tenantId, deletedAt: null, ...updatedFilter },
+            take: 5000
+        });
+
+        const documentiClinici = await prisma.documentoClinico.findMany({
+            where: { tenantId, deletedAt: null, ...updatedFilter },
+            orderBy: { dataDocumento: 'desc' },
+            take: 5000
+        });
+
+        const personDocuments = await prisma.personDocument.findMany({
+            where: { tenantId, deletedAt: null, ...updatedFilter },
+            orderBy: { dataDocumento: 'desc' },
+            take: 5000
+        });
+
+        const referti = await prisma.referto.findMany({
+            where: { tenantId, deletedAt: null, ...updatedFilter },
+            orderBy: { updatedAt: 'desc' },
+            take: 5000
+        });
+
+        const visitRevisions = await prisma.visitRevision.findMany({
+            where: {
+                visita: { tenantId, deletedAt: null },
+                ...(lastSyncAt ? { changedAt: { gte: lastSyncAt } } : {})
+            },
+            orderBy: { changedAt: 'desc' },
+            take: 5000
+        });
+
+        const visitAccessLogs = await prisma.visitAccessLog.findMany({
+            where: {
+                visita: { tenantId, deletedAt: null },
+                ...(lastSyncAt ? { accessedAt: { gte: lastSyncAt } } : {})
+            },
+            orderBy: { accessedAt: 'desc' },
+            take: 5000
+        });
+
+        const firmeDigitali = await prisma.firmaDigitale.findMany({
+            where: { tenantId, deletedAt: null, ...updatedFilter },
+            orderBy: { updatedAt: 'desc' },
+            take: 5000
         });
 
         // 10. Rischi aggiuntivi
@@ -645,37 +1028,111 @@ export async function downloadFullDb(req, res) {
         const tariffariRaw = await prisma.tariffarioAziendale.findMany({
             where: { tenantId, deletedAt: null, attivo: true },
             include: {
-                voci: { where: { deletedAt: null, attivo: true }, include: { prestazione: true } },
+                voci: { where: { deletedAt: null, attivo: true }, include: { prestazione: true, documentoTemplate: true }, orderBy: [{ ordine: 'asc' }, { nome: 'asc' }] },
                 companyAssociations: {
                     where: { deletedAt: null, attivo: true },
-                    select: { id: true, companyTenantProfileId: true, validoDa: true, validoA: true }
+                    select: { id: true, tariffarioId: true, companyTenantProfileId: true, validoDa: true, validoA: true, attivo: true, note: true, tenantId: true, createdAt: true, updatedAt: true }
                 }
             }
         });
         const tariffari = tariffariRaw.map(t => ({
             id: t.id,
+            tenantId: t.tenantId,
             nome: t.nome,
             codice: t.codice,
             descrizione: t.descrizione,
             attivo: t.attivo,
             validoDa: t.validoDa,
             validoA: t.validoA,
-            companyAssociations: JSON.stringify((t.companyAssociations || []).map(a => ({
-                companyTenantProfileId: a.companyTenantProfileId,
-                validoDa: a.validoDa,
-                validoA: a.validoA
-            }))),
-            voci: JSON.stringify((t.voci || []).map(v => ({
-                id: v.id,
-                tipo: v.tipo,
-                nome: v.prestazione?.nome || v.tipo,
-                prezzoBase: v.prezzoBase,
-                categoriaVisita: v.categoriaVisita,
-                attivo: v.attivo
-            }))),
             createdAt: t.createdAt,
             updatedAt: t.updatedAt
         }));
+        const tariffarioCompanyAssociations = tariffariRaw.flatMap(t => (t.companyAssociations || []).map(a => ({
+            id: a.id,
+            tariffarioId: a.tariffarioId,
+            companyTenantProfileId: a.companyTenantProfileId,
+            validoDa: a.validoDa,
+            validoA: a.validoA,
+            attivo: a.attivo,
+            note: a.note,
+            tenantId: a.tenantId,
+            createdAt: a.createdAt,
+            updatedAt: a.updatedAt
+        })));
+        const vociTariffario = tariffariRaw.flatMap(t => (t.voci || []).map(v => ({
+            id: v.id,
+            tariffarioAziendaleId: v.tariffarioAziendaleId,
+            tenantId: v.tenantId,
+            tipo: v.tipo,
+            prestazioneId: v.prestazioneId,
+            documentoTemplateId: v.documentoTemplateId,
+            nome: v.nome || v.prestazione?.nome || v.documentoTemplate?.nome || v.tipo,
+            descrizione: v.descrizione,
+            prezzoBase: v.prezzoBase,
+            ivaAliquota: v.ivaAliquota,
+            categoriaVisita: v.categoriaVisita,
+            durataMinimaMinuti: v.durataMinimaMinuti,
+            compensoProfessionistaTipo: v.compensoProfessionistaTipo,
+            compensoProfessionistaValore: v.compensoProfessionistaValore,
+            compensoProfessionistaMinimo: v.compensoProfessionistaMinimo,
+            compensoProfessionistaMassimo: v.compensoProfessionistaMassimo,
+            frequenza: v.frequenza,
+            unitaCalcolo: v.unitaCalcolo,
+            modalitaAttivazione: v.modalitaAttivazione,
+            ordine: v.ordine,
+            attivo: v.attivo,
+            note: v.note,
+            createdAt: v.createdAt,
+            updatedAt: v.updatedAt
+        })));
+
+        const sopralluoghi = await prisma.sopralluogo.findMany({
+            where: { tenantId, deletedAt: null, ...updatedFilter },
+            select: {
+                id: true, siteId: true, esecutoreId: true, dataEsecuzione: true,
+                dataProssimoSopralluogo: true, valutazione: true, esito: true, note: true,
+                documentoUrl: true, documentoNome: true, tenantId: true, createdAt: true, updatedAt: true, deletedAt: true
+            },
+            orderBy: { dataEsecuzione: 'desc' },
+            take: 2000
+        });
+
+        const dvrs = await prisma.dVR.findMany({
+            where: { tenantId, deletedAt: null, ...updatedFilter },
+            select: {
+                id: true, siteId: true, effettuatoDa: true, dataEsecuzione: true, dataScadenza: true,
+                rischiRilevati: true, note: true, tipoDVR: true, documentoUrl: true, documentoNome: true,
+                tenantId: true, createdAt: true, updatedAt: true, deletedAt: true
+            },
+            orderBy: { dataEsecuzione: 'desc' },
+            take: 2000
+        });
+
+        const consulenzeMDL = await prisma.consulenzaMDL.findMany({
+            where: { tenantId, deletedAt: null, ...updatedFilter },
+            select: {
+                id: true, companyTenantProfileId: true, siteId: true, professionistaId: true,
+                data: true, durataMinuti: true, oggetto: true, note: true, importo: true,
+                stato: true, tenantId: true, createdAt: true, updatedAt: true, deletedAt: true
+            },
+            orderBy: { data: 'desc' },
+            take: 2000
+        });
+
+        const allegati3B = await prisma.allegato3B.findMany({
+            where: { tenantId, deletedAt: null, ...updatedFilter },
+            select: {
+                id: true, medicoCompetenteId: true, companyTenantProfileId: true, anno: true, tenantId: true,
+                stato: true, totLavoratoriSorvegliati: true, totVisiteEffettuate: true, totGiudiziIdoneita: true,
+                totGiudiziConLimitazioni: true, totGiudiziConPrescrizioni: true, totInidoneita: true,
+                statistichePerRischio: true, malattieProf: true, lavoratoriPerGenere: true, lavoratoriPerFasciaEta: true,
+                visitePerTipologia: true, giudiziPerTipologia: true, giudiziPerRischio: true, accertamentiIntegrativi: true,
+                dataCompilazione: true, dataInvio: true, dataConferma: true, protocolloInvio: true, ricevutaInvio: true,
+                note: true, createdAt: true, updatedAt: true, deletedAt: true
+            },
+            orderBy: [{ anno: 'desc' }, { createdAt: 'desc' }],
+            take: 2000
+        });
 
         // 13. Convenzioni
         const convenzioniRaw = await prisma.convenzione.findMany({
@@ -732,18 +1189,37 @@ export async function downloadFullDb(req, res) {
                 counts: {
                     pazienti: pazienti.length,
                     aziende: aziende.length,
-                    mansioni: mansioni.length,
-                    protocolli: protocolli.length,
+                    mansioni: mansioniBase.length,
+                    mansioneRischi: mansioneRischi.length,
+                    protocolli: protocolliBase.length,
+                    protocolloPrestazioni: protocolloPrestazioni.length,
                     prestazioni: prestazioni.length,
                     ambulatori: ambulatori.length,
+                    slotDisponibilita: slotDisponibilita.length,
                     scadenze: scadenze.length,
                     lavoratoriMansioni: lavoratoriMansioni.length,
                     visitTemplates: visitTemplates.length,
-                    documentTemplates: documentTemplates.length,
+                    documentTemplates: documentTemplatesBase.length,
+                    questionariMediciConfig: questionariMediciConfig.length,
+                    documentiCompilati: documentiCompilati.length,
+                    questionariRisposte: questionariRisposte.length,
+                    profiliSalute: profiliSalute.length,
+                    documentiClinici: documentiClinici.length,
+                    personDocuments: personDocuments.length,
+                    referti: referti.length,
+                    visitRevisions: visitRevisions.length,
+                    visitAccessLogs: visitAccessLogs.length,
+                    firmeDigitali: firmeDigitali.length,
                     medici: medici.length,
                     rischiAggiuntivi: rischiAggiuntivi.length,
                     visite: visite.length,
                     tariffari: tariffari.length,
+                    vociTariffario: vociTariffario.length,
+                    tariffarioCompanyAssociations: tariffarioCompanyAssociations.length,
+                    sopralluoghi: sopralluoghi.length,
+                    dvrs: dvrs.length,
+                    consulenzeMDL: consulenzeMDL.length,
+                    allegati3B: allegati3B.length,
                     convenzioni: convenzioni.length,
                     giudizi: giudiziPrecedenti.length,
                     movimenti: movimentiContabili.length
@@ -751,18 +1227,37 @@ export async function downloadFullDb(req, res) {
             },
             pazienti,
             aziende,
-            mansioni,
-            protocolli,
+            mansioni: mansioniBase,
+            mansioneRischi,
+            protocolli: protocolliBase,
+            protocolloPrestazioni,
             prestazioni,
             ambulatori,
+            slotDisponibilita,
             scadenze,
             lavoratoriMansioni,
             visitTemplates,
-            documentTemplates,
+            documentTemplates: documentTemplatesBase,
+            questionariMediciConfig,
+            documentiCompilati,
+            questionariRisposte,
+            profiliSalute,
+            documentiClinici,
+            personDocuments,
+            referti,
+            visitRevisions,
+            visitAccessLogs,
+            firmeDigitali,
             medici,
             rischiAggiuntivi,
             visite,
             tariffari,
+            vociTariffario,
+            tariffarioCompanyAssociations,
+            sopralluoghi,
+            dvrs,
+            consulenzeMDL,
+            allegati3B,
             convenzioni,
             giudiziPrecedenti,
             movimentiContabili
@@ -813,8 +1308,12 @@ export async function uploadBatch(req, res) {
             'personTenantProfile', 'companyTenantProfile',
             'lavoratoreRischioAggiuntivo',
             'lavoratoreMansione', 'mansione', 'companySite', 'appuntamentoPrestazione',
-            'protocolloSanitario',
-            'allegatoVisita', 'documentoCompilato'
+            'protocolloSanitario', 'protocolloPrestazione', 'mansioneRischio',
+            'allegatoVisita', 'documentoCompilato', 'questionarioMedicoConfig', 'nominaRuolo',
+            'questionarioRisposta', 'profiloDiSalutePersona', 'documentoClinico',
+            'referto', 'firmaDigitale',
+            'tariffarioCompanyAssociation',
+            'sopralluogo', 'dVR', 'consulenzaMDL', 'allegato3B'
         ];
         const allowedActions = ['create', 'update', 'delete'];
 
@@ -824,7 +1323,9 @@ export async function uploadBatch(req, res) {
         // Entity types that contain personal health data — require GDPR audit on DELETE
         const gdprAuditEntities = new Set([
             'visita', 'appuntamento', 'giudizioIdoneita', 'esameStrumentale',
-            'personTenantProfile', 'lavoratoreRischioAggiuntivo', 'appuntamentoPrestazione'
+            'personTenantProfile', 'lavoratoreRischioAggiuntivo', 'appuntamentoPrestazione',
+            'documentoCompilato', 'questionarioRisposta', 'profiloDiSalutePersona',
+            'documentoClinico', 'referto', 'firmaDigitale'
         ]);
 
         // SQLite-internal fields that must never be sent to Prisma
@@ -963,8 +1464,106 @@ export async function uploadBatch(req, res) {
                     catch { d.datiCompilati = {}; }
                     delete d.risposte;
                 }
+                if (typeof d.datiCompilati === 'string') {
+                    try { d.datiCompilati = JSON.parse(d.datiCompilati); } catch { d.datiCompilati = {}; }
+                }
+                if ('esitoCritico' in d) d.esitoCritico = d.esitoCritico === 1 || d.esitoCritico === true;
+                ['pdfGeneratoAt', 'firmaPazienteAt', 'firmaMedicoAt', 'firmaDipendenteAt',
+                    'firmaFormatoreAt', 'firmaDatoreAt', 'dataScadenza'].forEach(field => {
+                        if (d[field]) d[field] = new Date(d[field]);
+                    });
                 // dataCompilazione is local-only
                 delete d.dataCompilazione;
+            }
+
+            else if (entityType === 'questionarioRisposta') {
+                if ('valoreBoolean' in d) d.valoreBoolean = d.valoreBoolean === 1 || d.valoreBoolean === true;
+                if ('flagCritico' in d) d.flagCritico = d.flagCritico === 1 || d.flagCritico === true;
+                if ('validato' in d) d.validato = d.validato === 1 || d.validato === true;
+                if (typeof d.valoreJson === 'string') {
+                    try { d.valoreJson = JSON.parse(d.valoreJson); } catch { delete d.valoreJson; }
+                }
+                if (d.valoreData) d.valoreData = new Date(d.valoreData);
+            }
+
+            else if (entityType === 'questionarioMedicoConfig') {
+                ['codiciRischio', 'tipiVisitaMDL'].forEach(field => {
+                    if (typeof d[field] === 'string') {
+                        try { d[field] = JSON.parse(d[field]); } catch { d[field] = []; }
+                    }
+                });
+                ['scoringConfig', 'validazioniCustom'].forEach(field => {
+                    if (typeof d[field] === 'string') {
+                        try { d[field] = JSON.parse(d[field]); } catch { d[field] = {}; }
+                    }
+                });
+                ['haScoring', 'richiedeRevisione', 'isPagamento', 'fatturabile'].forEach(field => {
+                    if (field in d) d[field] = d[field] === 1 || d[field] === true;
+                });
+                if (d.prezzoDefault != null) d.prezzoDefault = Number(d.prezzoDefault);
+            }
+
+            else if (entityType === 'profiloDiSalutePersona') {
+                if ('data' in d) delete d.data;
+                ['sorveglianzaSanitaria', 'storicoOccupazionale', 'corsiFormazioneDpi', 'esposizioniLavorative',
+                    'vaccinazioni', 'abilitazioniMezzi', 'dpiConsegne'].forEach(field => {
+                        if (typeof d[field] === 'string') {
+                            try { d[field] = JSON.parse(d[field]); } catch { /* keep scalar legacy data */ }
+                        }
+                    });
+                ['dpiPersonali', 'dpiAzienda', 'mezziAziendali', 'patenteCategorie'].forEach(field => {
+                    if (typeof d[field] === 'string') {
+                        try { d[field] = JSON.parse(d[field]); } catch { d[field] = d[field].split(',').map(v => v.trim()).filter(Boolean); }
+                    }
+                });
+                ['usaDpiPersonali', 'usaMezziAziendali', 'hasInvalidita', 'legge104',
+                    'hasDiabete', 'hasIpertensione', 'hasCardiopatie', 'hasAsma', 'hasEpilessia',
+                    'sonnolenzaDiurna', 'apneaNotturna', 'formazioneGenerale', 'formazioneSpecifica',
+                    'addestramentoCompletato', 'cqc', 'terapiaInsulina'].forEach(field => {
+                        if (field in d) d[field] = d[field] === 1 || d[field] === true;
+                    });
+                ['peso', 'altezza', 'oreAttivitaSettimana', 'oreSonnoNotte'].forEach(field => {
+                    if (d[field] === '' || d[field] === undefined) delete d[field];
+                    else if (d[field] !== null) d[field] = Number(d[field]);
+                });
+                ['sigaretteGiorno', 'anniFumo', 'unitaAlcolSettimana', 'gradoInvaliditaCivile', 'numeroFigli'].forEach(field => {
+                    if (d[field] === '' || d[field] === undefined) delete d[field];
+                    else if (d[field] !== null) d[field] = Number(d[field]);
+                });
+                ['patenteScadenza', 'cqcScadenza'].forEach(field => {
+                    if (d[field]) d[field] = new Date(d[field]);
+                    else delete d[field];
+                });
+            }
+
+            else if (entityType === 'documentoClinico') {
+                if ('personId' in d && !('pazienteId' in d)) { d.pazienteId = d.personId; delete d.personId; }
+                if ('valido' in d) d.valido = d.valido === 1 || d.valido === true;
+                if (d.dataDocumento) d.dataDocumento = new Date(d.dataDocumento);
+            }
+
+            else if (entityType === 'referto') {
+                if (typeof d.allegati === 'string') {
+                    try { d.allegati = JSON.parse(d.allegati); } catch { d.allegati = []; }
+                }
+                ['dataFirma', 'dataConsegna'].forEach(field => {
+                    if (d[field]) d[field] = new Date(d[field]);
+                });
+            }
+
+            else if (entityType === 'firmaDigitale') {
+                if (d.timestampTSA) d.timestampTSA = new Date(d.timestampTSA);
+                if (d.validatoAt) d.validatoAt = new Date(d.validatoAt);
+                ['firmaImageUrl'].forEach(f => { if (!d[f]) delete d[f]; });
+            }
+
+            else if (entityType === 'tariffarioCompanyAssociation') {
+                if ('attivo' in d) d.attivo = d.attivo === 1 || d.attivo === true;
+                if (d.validoDa) d.validoDa = new Date(d.validoDa);
+                else d.validoDa = new Date();
+                if (d.validoA) d.validoA = new Date(d.validoA);
+                else delete d.validoA;
+                ['successoreAssociationId'].forEach(f => { if (!d[f]) delete d[f]; });
             }
 
             else if (entityType === 'mansione') {
@@ -973,7 +1572,64 @@ export async function uploadBatch(req, res) {
                     const suffix = String(d.id || Date.now()).replace(/[^a-zA-Z0-9]/g, '').slice(0, 12).toUpperCase();
                     d.codice = `DESK-${suffix || Date.now()}`;
                 }
-                ['companyTenantProfileId', 'companyName', 'rischi', 'rischiAssociati', 'isActive'].forEach(f => delete d[f]);
+                ['companyTenantProfileId', 'companyName', 'isActive'].forEach(f => delete d[f]);
+            }
+
+            else if (entityType === 'mansioneRischio') {
+                delete d.nome;
+                delete d.mansioneNome;
+            }
+
+            else if (entityType === 'protocolloPrestazione') {
+                if ('obbligatoria' in d && !('isObbligatoria' in d)) { d.isObbligatoria = d.obbligatoria; delete d.obbligatoria; }
+                if ('isObbligatoria' in d) d.isObbligatoria = d.isObbligatoria === 1 || d.isObbligatoria === true;
+                ['prestazioneNome', 'prestazioneCodice', 'scadenzaDefaultMesi'].forEach(f => delete d[f]);
+            }
+
+            else if (entityType === 'sopralluogo') {
+                if (d.dataEsecuzione) d.dataEsecuzione = new Date(d.dataEsecuzione);
+                if (d.dataProssimoSopralluogo) d.dataProssimoSopralluogo = new Date(d.dataProssimoSopralluogo);
+                else delete d.dataProssimoSopralluogo;
+                ['documentoUrl', 'documentoNome'].forEach(f => { if (!d[f]) delete d[f]; });
+            }
+
+            else if (entityType === 'dVR') {
+                if (d.dataEsecuzione) d.dataEsecuzione = new Date(d.dataEsecuzione);
+                if (d.dataScadenza) d.dataScadenza = new Date(d.dataScadenza);
+                else {
+                    const base = d.dataEsecuzione instanceof Date ? new Date(d.dataEsecuzione) : new Date();
+                    base.setFullYear(base.getFullYear() + 1);
+                    d.dataScadenza = base;
+                }
+                if (typeof d.rischiRilevati !== 'string') d.rischiRilevati = JSON.stringify(d.rischiRilevati || []);
+                ['documentoUrl', 'documentoNome'].forEach(f => { if (!d[f]) delete d[f]; });
+            }
+
+            else if (entityType === 'consulenzaMDL') {
+                if (d.data) d.data = new Date(d.data);
+                if (d.durataMinuti !== undefined) d.durataMinuti = Number(d.durataMinuti || 0);
+                if (d.importo === '' || d.importo === undefined || d.importo === null) delete d.importo;
+                else d.importo = Number(d.importo);
+                if (!d.stato) d.stato = 'DA_RENDICONTARE';
+            }
+
+            else if (entityType === 'allegato3B') {
+                if (d.anno !== undefined) d.anno = Number(d.anno);
+                ['totLavoratoriSorvegliati', 'totVisiteEffettuate', 'totGiudiziIdoneita',
+                    'totGiudiziConLimitazioni', 'totGiudiziConPrescrizioni', 'totInidoneita'].forEach(field => {
+                        if (d[field] !== undefined) d[field] = Number(d[field] || 0);
+                    });
+                ['statistichePerRischio', 'malattieProf', 'lavoratoriPerGenere', 'lavoratoriPerFasciaEta',
+                    'visitePerTipologia', 'giudiziPerTipologia', 'giudiziPerRischio', 'accertamentiIntegrativi'].forEach(field => {
+                        if (typeof d[field] === 'string') {
+                            try { d[field] = JSON.parse(d[field]); } catch { d[field] = {}; }
+                        }
+                    });
+                ['dataCompilazione', 'dataInvio', 'dataConferma'].forEach(field => {
+                    if (d[field]) d[field] = new Date(d[field]);
+                    else delete d[field];
+                });
+                if (!d.stato) d.stato = 'DA_COMPILARE';
             }
 
             // Strip denormalized display-only fields from all entity types
@@ -1358,8 +2014,12 @@ export async function getConflictData(req, res) {
             'movimentoContabile', 'deadlineItem', 'scadenzaPrestazioneProtocollo',
             'personTenantProfile', 'companyTenantProfile',
             'lavoratoreRischioAggiuntivo', 'lavoratoreMansione', 'companySite',
-            'appuntamentoPrestazione', 'protocolloSanitario',
-            'allegatoVisita', 'documentoCompilato'
+            'appuntamentoPrestazione', 'protocolloSanitario', 'protocolloPrestazione', 'mansioneRischio',
+            'allegatoVisita', 'documentoCompilato', 'questionarioMedicoConfig', 'nominaRuolo',
+            'questionarioRisposta', 'profiloDiSalutePersona', 'documentoClinico',
+            'referto', 'firmaDigitale',
+            'tariffarioCompanyAssociation',
+            'sopralluogo', 'dVR', 'consulenzaMDL', 'allegato3B'
         ];
 
         if (!entityType || !allowedEntityTypes.includes(entityType)) {
@@ -1370,7 +2030,11 @@ export async function getConflictData(req, res) {
         }
 
         // Models that don't have a top-level tenantId field
-        const noTenantIdModels = new Set(['allegatoVisita', 'appuntamentoPrestazione', 'documentoCompilato', 'lavoratoreMansione', 'lavoratoreRischioAggiuntivo']);
+        const noTenantIdModels = new Set([
+            'allegatoVisita', 'appuntamentoPrestazione', 'documentoCompilato',
+            'lavoratoreMansione', 'lavoratoreRischioAggiuntivo', 'visitRevision',
+            'visitAccessLog'
+        ]);
 
         let serverEntity;
         if (noTenantIdModels.has(entityType)) {

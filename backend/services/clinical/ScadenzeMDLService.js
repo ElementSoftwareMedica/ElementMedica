@@ -1047,11 +1047,23 @@ const ScadenzeMDLService = {
      * @returns {Promise<{updated: number, created: number}>}
      */
     async programmaPrestazioniDopoVisita(tenantId, personId, mansioneId, visitaId, dataVisita, excludePrestazioniIds = [], dateOverrides = {}, prestazioniAggiuntive = [], questionariAggiuntivi = []) {
+        const profile = await prisma.personTenantProfile.findFirst({
+            where: { personId, tenantId, deletedAt: null, isActive: true },
+            select: { protocolloSanitarioId: true }
+        });
+
+        const scadenzaScopeWhere = {
+            tenantId,
+            personId,
+            deletedAt: null,
+            ...(profile?.protocolloSanitarioId ? { protocolloId: profile.protocolloSanitarioId } : { mansioneId })
+        };
+
         // Guardia idempotenza: se questa visita ha già eseguito la programmazione,
         // non avanzare le scadenze una seconda volta (prevenzione bug nuova-versione).
         if (visitaId) {
             const alreadyExecuted = await prisma.scadenzaPrestazioneProtocollo.findFirst({
-                where: { tenantId, personId, mansioneId, visitaId, eseguita: true, deletedAt: null }
+                where: { ...scadenzaScopeWhere, visitaId, eseguita: true }
             });
             if (alreadyExecuted) {
                 // P72_23: se ci sono dateOverrides espliciti, applica le nuove date alle scadenze
@@ -1060,7 +1072,7 @@ const ScadenzeMDLService = {
                 const overrideKeys = Object.keys(dateOverrides);
                 if (overrideKeys.length > 0) {
                     const futureScadenze = await prisma.scadenzaPrestazioneProtocollo.findMany({
-                        where: { tenantId, personId, mansioneId, eseguita: false, deletedAt: null }
+                        where: { ...scadenzaScopeWhere, eseguita: false }
                     });
                     let overridesApplied = 0;
                     for (const s of futureScadenze) {
@@ -1092,42 +1104,44 @@ const ScadenzeMDLService = {
 
         // Trova tutte le scadenze pendenti per questa persona+mansione
         const pendingScadenze = await prisma.scadenzaPrestazioneProtocollo.findMany({
-            where: { tenantId, personId, mansioneId, eseguita: false, deletedAt: null }
+            where: { ...scadenzaScopeWhere, eseguita: false }
         });
 
         // Segna tutte le scadenze pendenti come eseguite
         if (pendingScadenze.length) {
             await prisma.scadenzaPrestazioneProtocollo.updateMany({
-                where: { tenantId, personId, mansioneId, eseguita: false, deletedAt: null },
+                where: { ...scadenzaScopeWhere, eseguita: false },
                 data: { eseguita: true, dataEsecuzione, visitaId }
             });
         }
 
-        // Recupera il protocollo sanitario attivo per questa mansione (aggiornamento pregresso)
-        const mansione = await prisma.mansione.findFirst({
-            where: { id: mansioneId, tenantId, deletedAt: null },
+        const protocolloWhere = profile?.protocolloSanitarioId
+            ? { id: profile.protocolloSanitarioId, tenantId, isAttivo: true, deletedAt: null }
+            : {
+                mansioniAssociate: { some: { mansioneId } },
+                tenantId,
+                isAttivo: true,
+                deletedAt: null
+            };
+
+        // Recupera il protocollo sanitario assegnato al lavoratore; fallback alla mansione.
+        const protocollo = await prisma.protocolloSanitario.findFirst({
+            where: protocolloWhere,
+            orderBy: { dataInizioValidita: 'desc' },
             include: {
-                protocolli: {
+                prestazioni: {
                     where: { deletedAt: null },
-                    take: 1,
+                    include: { prestazione: { select: { id: true, nome: true } } }
+                },
+                // P72_21: Includi questionari del protocollo per scheduling periodico
+                questionari: {
+                    where: { deletedAt: null },
                     include: {
-                        prestazioni: {
-                            where: { deletedAt: null },
-                            include: { prestazione: { select: { id: true, nome: true } } }
-                        },
-                        // P72_21: Includi questionari del protocollo per scheduling periodico
-                        questionari: {
-                            where: { deletedAt: null },
-                            include: {
-                                documentoTemplate: { select: { id: true, nome: true } }
-                            }
-                        }
+                        documentoTemplate: { select: { id: true, nome: true } }
                     }
                 }
             }
         });
-
-        const protocollo = mansione?.protocolli?.[0] ?? null;
         const prestazioniProtocollo = protocollo?.prestazioni ?? [];
 
         // Set degli ID prestazione già gestiti dalle scadenze pendenti (ora marchiate eseguite)
@@ -1196,7 +1210,7 @@ const ScadenzeMDLService = {
 
                 // Verifica se non esiste già una scadenza futura pendente per questa prestazione
                 const existingFutura = await prisma.scadenzaPrestazioneProtocollo.findFirst({
-                    where: { tenantId, personId, mansioneId, prestazioneId: pp.prestazione.id, eseguita: false, deletedAt: null }
+                    where: { ...scadenzaScopeWhere, prestazioneId: pp.prestazione.id, eseguita: false }
                 });
                 if (existingFutura) continue;
 
@@ -1237,7 +1251,7 @@ const ScadenzeMDLService = {
 
                 // Verifica se non esiste già una scadenza futura pendente per questo questionario
                 const existingQFuturo = await prisma.scadenzaPrestazioneProtocollo.findFirst({
-                    where: { tenantId, personId, mansioneId, documentoTemplateId: templateId, eseguita: false, deletedAt: null }
+                    where: { ...scadenzaScopeWhere, documentoTemplateId: templateId, eseguita: false }
                 });
                 if (existingQFuturo) continue;
 
@@ -1273,7 +1287,7 @@ const ScadenzeMDLService = {
 
                 // Evita duplicati: verifica che non esista già una scadenza futura pendente per questa prestazione
                 const existingAggiuntiva = await prisma.scadenzaPrestazioneProtocollo.findFirst({
-                    where: { tenantId, personId, mansioneId, prestazioneId: pa.id, eseguita: false, deletedAt: null }
+                    where: { ...scadenzaScopeWhere, prestazioneId: pa.id, eseguita: false }
                 });
                 if (existingAggiuntiva) continue;
 
@@ -1314,14 +1328,7 @@ const ScadenzeMDLService = {
 
                 // Idempotenza: non creare se esiste già una scadenza aperta per questo template
                 const existingQa = await prisma.scadenzaPrestazioneProtocollo.findFirst({
-                    where: {
-                        tenantId,
-                        personId,
-                        mansioneId,
-                        documentoTemplateId: qa.documentoTemplateId,
-                        eseguita: false,
-                        deletedAt: null
-                    }
+                    where: { ...scadenzaScopeWhere, documentoTemplateId: qa.documentoTemplateId, eseguita: false }
                 });
                 if (existingQa) continue;
 

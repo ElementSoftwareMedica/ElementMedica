@@ -23,11 +23,11 @@ export type RelationType =
 /**
  * Scope disponibili per i permessi
  */
-export type PermissionScope = 'all' | 'tenant' | 'own' | 'relational';
+export type PermissionScope = 'none' | 'all' | 'tenant' | 'own' | 'relational';
 
 export interface EntityPermission {
   entity: string;
-  action: 'create' | 'read' | 'update' | 'delete';
+  action: string;
   scope: PermissionScope;
   fields?: string[];                // Campi permessi (allowedFields)
   deniedFields?: string[];          // Campi negati
@@ -51,6 +51,7 @@ export interface EntityDefinition {
   name: string;
   displayName: string;
   fields: EntityField[];
+  actions?: string[];
   icon?: React.ComponentType<any>;
 }
 

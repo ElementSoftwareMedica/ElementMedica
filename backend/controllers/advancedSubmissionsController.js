@@ -263,7 +263,14 @@ const getAdvancedSubmission = async (req, res) => {
  */
 const createAdvancedSubmission = async (req, res) => {
   try {
-    const { tenantId } = req.person || { tenantId: req.body.tenantId }; // Supporta anche chiamate pubbliche
+    const tenantId = req.person?.tenantId || req.publicTenantId;
+
+    if (!tenantId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Tenant pubblico non determinato'
+      });
+    }
 
     // Validazione dati
     const validatedData = advancedSubmissionSchema.parse(req.body);

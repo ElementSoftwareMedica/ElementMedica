@@ -319,6 +319,17 @@ class APIServer {
         index: false,  // Don't serve directory index
         dotfiles: 'ignore'  // Don't serve dotfiles
       }));
+      this.app.get(/^\/uploads\/.*\.(png|jpe?g|gif|webp|svg)$/i, (req, res) => {
+        if (protectedDirs.some((dir) => req.path.startsWith(`/uploads/${dir}/`))) {
+          return res.status(404).json({ error: 'File non trovato' });
+        }
+        const transparentPng = Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
+          'base64'
+        );
+        res.setHeader('Cache-Control', 'public, max-age=300');
+        res.type('png').send(transparentPng);
+      });
       logger.info('Static files configured', { path: '/uploads', dir: uploadsPath });
 
       // PUBLIC SEO ROUTES: Mount sitemap and robots.txt at root BEFORE authentication

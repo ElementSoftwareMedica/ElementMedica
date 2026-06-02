@@ -1,6 +1,6 @@
 import React from 'react';
 import { CompanyEmployeeSelector } from '../index';
-import type { FormData } from '../../hooks/useFormData';
+import type { FormData } from '../../types';
 
 interface StepCompanySelectionProps {
   // Selections
@@ -10,21 +10,21 @@ interface StepCompanySelectionProps {
   onPersonToggle: (personId: string | number) => void;
   onSelectAllPersons: (companyId: string | number) => void;
   onDeselectAllPersons: (companyId: string | number) => void;
-  
+
   // Search
   companySearch: string;
   onCompanySearchChange: (value: string) => void;
   personSearch: string;
   onPersonSearchChange: (value: string) => void;
-  
+
   // Tab state
   personTab: string | number;
   onPersonTabChange: (tab: string | number) => void;
-  
+
   // Data
   companies: any[];
   persons: any[];
-  
+
   // Utility functions
   getPersonIdsForCompany: (companyId: string) => (string | number)[];
   getCompanyName: (companyId: string | number) => string;

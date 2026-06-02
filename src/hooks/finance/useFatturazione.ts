@@ -92,12 +92,14 @@ export interface FatturaElettronica {
     sistemaTsProtocol?: string;
     sistemaTsOutcome?: number;
     sistemaTsFlagOpp: number;
+    note?: string;
     fatturaOrigineId?: string;
     fatturaOrigine?: { id: string; numero: string; dataEmissione: string };
     noteCreditoEmesse?: Array<{ id: string; numero: string; totale: number; stato: StatoFattura }>;
     linee: FatturaElettronicaLinea[];
     // Collegamento entità dominio
     visitaId?: string;
+    appuntamentoId?: string;
     courseScheduleId?: string;
     nominaId?: string;
     sopralluogoId?: string;
@@ -186,6 +188,7 @@ export interface CreaBozzaInput {
     // Collegamento entità dominio
     preventivoId?: string;
     visitaId?: string;
+    appuntamentoId?: string;
     courseScheduleId?: string;
     nominaId?: string;
     sopralluogoId?: string;
@@ -308,6 +311,14 @@ export const useFatturazione = () => {
         return res.data;
     }, []);
 
+    const stornaERifai = useCallback(async (id: string, note?: string): Promise<{ fatturaId: string; notaCredito?: FatturaElettronica | null; stato: string }> => {
+        const res = await apiPost<{ data: { fatturaId: string; notaCredito?: FatturaElettronica | null; stato: string } }>(
+            `/api/v1/billing/fatture/${id}/storna-e-rifai`,
+            { note }
+        );
+        return res.data;
+    }, []);
+
     const aggiornaBozza = useCallback(async (id: string, data: Record<string, unknown>): Promise<FatturaElettronica> => {
         const res = await apiPut<{ data: FatturaElettronica }>(`/api/v1/billing/fatture/${id}`, data);
         return res.data;
@@ -374,6 +385,7 @@ export const useFatturazione = () => {
         emettiFattura,
         segnaPagata,
         creaNotaCredito,
+        stornaERifai,
         aggiornaBozza,
         eliminaFattura,
         // Enti emittenti

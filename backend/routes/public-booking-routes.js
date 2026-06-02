@@ -579,19 +579,36 @@ router.get('/booking/prestazioni', [
 
         const { tipo, search, medicoId, sedeId } = req.query;
 
+        // Widget settings filter (from publicContentMiddleware → first active API key)
+        const ws = req.publicWidgetSettings?.booking || {};
+        const wsPrestazioniIds = Array.isArray(ws.prestazioniIds) && ws.prestazioniIds.length > 0 ? ws.prestazioniIds : null;
+        const wsBrancheFilter = Array.isArray(ws.brancheFilter) && ws.brancheFilter.length > 0 ? ws.brancheFilter : null;
+        const wsSedeIds = Array.isArray(ws.sedeIds) && ws.sedeIds.length > 0 ? ws.sedeIds : null;
+        const wsAmbulatorioIds = Array.isArray(ws.ambulatoriIds) && ws.ambulatoriIds.length > 0 ? ws.ambulatoriIds : null;
+
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        // Build slot filter with optional sedeId
+        // Build slot filter with optional sedeId (query param overrides widget setting)
+        const effectiveSedeId = sedeId || null;
         const slotFilter = {
             deletedAt: null,
             visibilePubblico: true,
             prenotabileOnline: true,
             disponibile: true,
             data: { gte: today },
-            ...(sedeId && {
+            ...(effectiveSedeId && {
                 ambulatorio: {
-                    sedeId
+                    sedeId: effectiveSedeId
+                }
+            }),
+            // Widget settings: ambulatori filter (precise) takes priority over sede filter
+            ...(wsAmbulatorioIds && {
+                ambulatorioId: { in: wsAmbulatorioIds }
+            }),
+            ...(!wsAmbulatorioIds && wsSedeIds && !effectiveSedeId && {
+                ambulatorio: {
+                    sedeId: { in: wsSedeIds }
                 }
             })
         };
@@ -601,6 +618,7 @@ router.get('/booking/prestazioni', [
                 tenantId,
                 deletedAt: null,
                 attivo: true,
+                ...(wsPrestazioniIds && { id: { in: wsPrestazioniIds } }),
                 ...(tipo && { tipo }),
                 ...(search && {
                     OR: [
@@ -608,18 +626,32 @@ router.get('/booking/prestazioni', [
                         { descrizione: { contains: search, mode: 'insensitive' } }
                     ]
                 }),
-                mediciAbilitati: {
-                    some: {
-                        attivo: true,
-                        deletedAt: null,
-                        ...(medicoId && { medicoId }),
-                        medico: {
-                            slotDisponibilita: {
-                                some: slotFilter
+                mediciAbilitati: medicoId
+                    ? {
+                        // Per Doctor Profile page: include doctor even without slots
+                        some: {
+                            attivo: true,
+                            deletedAt: null,
+                            medicoId,
+                            medico: {
+                                NOT: { firstName: 'ANON', lastName: 'ANON' },
+                                deletedAt: null
                             }
                         }
                     }
-                }
+                    : {
+                        // Default: show all active prestazioni with at least one non-ANON doctor.
+                        // Slot availability is calculated per-medico in the response (slotDisponibili / onlineBookingAvailable).
+                        // This allows clinics to advertise specialties even before online calendar slots are configured.
+                        some: {
+                            attivo: true,
+                            deletedAt: null,
+                            medico: {
+                                NOT: { firstName: 'ANON', lastName: 'ANON' },
+                                deletedAt: null
+                            }
+                        }
+                    },
             },
             select: {
                 id: true,
@@ -637,7 +669,11 @@ router.get('/booking/prestazioni', [
                     where: {
                         attivo: true,
                         deletedAt: null,
-                        ...(medicoId && { medicoId })
+                        ...(medicoId && { medicoId }),
+                        medico: {
+                            NOT: { firstName: 'ANON', lastName: 'ANON' },
+                            deletedAt: null
+                        }
                     },
                     select: {
                         medicoId: true,
@@ -673,8 +709,12 @@ router.get('/booking/prestazioni', [
         });
 
         // Map to response with resolved prices per medico
-        const prestazioni = prestazioniWithDoctors.map(p => {
-            const mediciConSlot = p.mediciAbilitati.filter(ma => ma.medico.slotDisponibilita.length > 0);
+        let prestazioni = prestazioniWithDoctors.map(p => {
+            // When querying for a specific medicoId: always include them even with 0 slots
+            // so Doctor Profile pages can show specialties/prestazioni without requiring active agenda
+            const mediciConSlot = medicoId
+                ? p.mediciAbilitati.filter(ma => ma.medico.slotDisponibilita.length > 0 || ma.medicoId === medicoId)
+                : p.mediciAbilitati.filter(ma => ma.medico.slotDisponibilita.length > 0);
             const totalSlots = mediciConSlot.reduce((sum, ma) => sum + ma.medico.slotDisponibilita.length, 0);
 
             // Resolve price: ListinoPrezzo (medico-specific, non-zero) > prezzoBase
@@ -716,9 +756,19 @@ router.get('/booking/prestazioni', [
                 istruzioniPreparazione: p.istruzioniPreparazione,
                 brancheSpecialistiche: p.brancheSpecialistiche,
                 slotDisponibili: totalSlots,
+                onlineBookingAvailable: totalSlots > 0,
                 mediciDisponibili
             };
         });
+
+        // Apply branche filter if set (and prestazioniIds not already applied)
+        if (wsBrancheFilter && !wsPrestazioniIds) {
+            prestazioni = prestazioni.filter(p =>
+                p.brancheSpecialistiche.length === 0
+                    ? wsBrancheFilter.includes('Altro')
+                    : p.brancheSpecialistiche.some(b => wsBrancheFilter.includes(b))
+            );
+        }
 
         res.json({
             success: true,

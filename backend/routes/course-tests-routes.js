@@ -4,14 +4,15 @@
  */
 
 import express from 'express';
+import { requireFeature } from '../middleware/featureFlags.js';
 import { authenticate } from '../middleware/auth.js';
 import { requirePermissions } from '../middleware/rbac.js';
 import * as courseTestsController from '../controllers/courseTestsController.js';
 
 const router = express.Router();
 
-// Tutte le route richiedono autenticazione
-router.use(authenticate);
+// Tutte le route richiedono autenticazione e feature BRANCH_FORMAZIONE
+router.use(authenticate, requireFeature('BRANCH_FORMAZIONE'));
 
 // === ASSIGNMENTS ===
 

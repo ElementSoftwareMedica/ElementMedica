@@ -140,8 +140,8 @@ export function useRoleBasedData(): UseRoleBasedDataResult {
 
   // Check accesso completo
   const hasFullAccess = useMemo((): boolean => {
-    return isAdmin || isTrainingAdmin;
-  }, [isAdmin, isTrainingAdmin]);
+    return isAdmin || isTrainingAdmin || user?.roles?.includes('TENANT_ADMIN') === true;
+  }, [isAdmin, isTrainingAdmin, user?.roles]);
 
   /**
    * Filtra schedules in base al ruolo
@@ -164,7 +164,12 @@ export function useRoleBasedData(): UseRoleBasedDataResult {
       return schedules.filter(schedule => {
         const isMainTrainer = schedule.trainerId === userId;
         const isCoTrainer = options.includeCoTrainer !== false && schedule.coTrainerId === userId;
-        return isMainTrainer || isCoTrainer;
+        // Also check session-level trainer assignment (trainerId may only be set in sessions)
+        const sessions = (schedule as any).sessions as Array<{ trainer?: { id: string }; coTrainer?: { id: string } }> | undefined;
+        const isSessionTrainer = sessions?.some(s =>
+          s.trainer?.id === userId || (options.includeCoTrainer !== false && s.coTrainer?.id === userId)
+        );
+        return isMainTrainer || isCoTrainer || !!isSessionTrainer;
       });
     }
 

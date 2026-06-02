@@ -13,6 +13,7 @@ import {
   Clock,
   Tag
 } from 'lucide-react'
+import { normalizeProtocolloPrestazioni, type ProtocolloPrestazioneRow } from '../utils/protocolloSanitario'
 
 interface Mansione {
   id: string
@@ -22,21 +23,17 @@ interface Mansione {
   codice: string | null
   companyName: string | null
   isActive: number
-  // Both fields contain the same JSON (rischiAssociati from server)
-  rischi: string | null
-  rischiAssociati: string | null
 }
 
 // Actual structure from server API (MansioneRischio Prisma model)
 interface RischioMansione {
   id?: string
+  mansioneId: string
   codiceRischio: string | null
   livello: string
   categoria: string | null
   fonteRischio: string | null
   note: string | null
-  // Legacy field name – kept for backward compat
-  nome?: string | null
 }
 
 interface Protocollo {
@@ -44,13 +41,6 @@ interface Protocollo {
   nome: string | null
   mansioneId: string | null
   isActive: number
-  prestazioni: string | null
-}
-
-interface PrestazioneProtocollo {
-  prestazioneNome: string
-  periodicitaMesi: number
-  obbligatoria: boolean
 }
 
 interface EditForm {
@@ -67,17 +57,8 @@ const LIVELLO_COLORS: Record<string, { bg: string; text: string }> = {
   NON_RILEVANTE: { bg: 'bg-gray-50', text: 'text-gray-500' }
 }
 
-function parseRischi(json: string | null): RischioMansione[] {
-  if (!json) return []
-  try { return JSON.parse(json) as RischioMansione[] } catch { return [] }
-}
-
-function parsePrestazioni(json: string | null): PrestazioneProtocollo[] {
-  if (!json) return []
-  try { return JSON.parse(json) as PrestazioneProtocollo[] } catch { return [] }
-}
-
-function formatPeriodicity(mesi: number): string {
+function formatPeriodicity(mesi: number | null | undefined): string {
+  if (!mesi || mesi <= 0) return 'su indicazione'
   if (mesi >= 12 && mesi % 12 === 0) {
     const anni = mesi / 12
     return `ogni ${anni} ann${anni === 1 ? 'o' : 'i'}`
@@ -88,6 +69,8 @@ function formatPeriodicity(mesi: number): string {
 export function MansioniPage(): JSX.Element {
   const [mansioni, setMansioni] = useState<Mansione[]>([])
   const [protocolliMap, setProtocolliMap] = useState<Map<string, Protocollo>>(new Map())
+  const [rischiByMansione, setRischiByMansione] = useState<Map<string, RischioMansione[]>>(new Map())
+  const [prestazioniByProtocollo, setPrestazioniByProtocollo] = useState<Map<string, ProtocolloPrestazioneRow[]>>(new Map())
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -99,7 +82,7 @@ export function MansioniPage(): JSX.Element {
     setLoading(true)
     try {
       if (!window.desktopApi) return
-      const [mansioniRows, protocolliRows] = await Promise.all([
+      const [mansioniRows, protocolliRows, rischiRows, protocolloPrestazioniRows] = await Promise.all([
         window.desktopApi.db.query({
           table: 'mansioni',
           where: { _isDeleted: 0 },
@@ -108,9 +91,23 @@ export function MansioniPage(): JSX.Element {
         window.desktopApi.db.query({
           table: 'protocolli',
           where: { _isDeleted: 0 }
-        })
+        }),
+        window.desktopApi.db.query({
+          table: 'mansione_rischi',
+          where: { _isDeleted: 0 }
+        }).catch(() => []),
+        window.desktopApi.db.query({
+          table: 'protocollo_prestazioni',
+          where: { _isDeleted: 0 }
+        }).catch(() => [])
       ])
       setMansioni(mansioniRows as Mansione[])
+      const rmap = new Map<string, RischioMansione[]>()
+      for (const rischio of rischiRows as RischioMansione[]) {
+        if (!rischio.mansioneId) continue
+        rmap.set(rischio.mansioneId, [...(rmap.get(rischio.mansioneId) || []), rischio])
+      }
+      setRischiByMansione(rmap)
       // Build map mansioneId → protocollo (one protocollo per mansione)
       const pmap = new Map<string, Protocollo>()
       for (const p of protocolliRows as Protocollo[]) {
@@ -119,6 +116,12 @@ export function MansioniPage(): JSX.Element {
         }
       }
       setProtocolliMap(pmap)
+      const ppmap = new Map<string, ProtocolloPrestazioneRow[]>()
+      for (const row of protocolloPrestazioniRows as Array<ProtocolloPrestazioneRow & { protocolloId?: string }>) {
+        if (!row.protocolloId) continue
+        ppmap.set(row.protocolloId, [...(ppmap.get(row.protocolloId) || []), row])
+      }
+      setPrestazioniByProtocollo(ppmap)
     } catch {
       // DB not ready
     } finally {
@@ -218,8 +221,7 @@ export function MansioniPage(): JSX.Element {
       ) : (
         <div className="space-y-2">
           {filtered.map(m => {
-            // Use rischi or rischiAssociati (both contain same JSON)
-            const rischi = parseRischi(m.rischi || m.rischiAssociati)
+            const rischi = rischiByMansione.get(m.id) || []
             const isExpanded = expandedId === m.id
             const isEditing = editingId === m.id
             const protocollo = protocolliMap.get(m.id) || protocolliMap.get(m._serverId || '')
@@ -355,7 +357,7 @@ export function MansioniPage(): JSX.Element {
                           {rischi.map((r, i) => {
                             const level = LIVELLO_COLORS[r.livello] || LIVELLO_COLORS.NON_RILEVANTE
                             // Use codiceRischio as the label (correctly mapped from server)
-                            const label = r.codiceRischio || r.nome || 'Rischio non specificato'
+                            const label = r.codiceRischio || 'Rischio non specificato'
                             return (
                               <div key={i} className="flex items-start gap-2 text-xs">
                                 <AlertTriangle className="w-3 h-3 text-gray-400 shrink-0 mt-0.5" />
@@ -395,7 +397,7 @@ export function MansioniPage(): JSX.Element {
                             )}
                           </div>
                           {(() => {
-                            const prestazioni = parsePrestazioni(protocollo.prestazioni)
+                            const prestazioni = normalizeProtocolloPrestazioni(prestazioniByProtocollo.get(protocollo.id) || [])
                             return prestazioni.length > 0 ? (
                               <div className="space-y-1 mt-1">
                                 {prestazioni.map((p, pi) => (

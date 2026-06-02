@@ -136,7 +136,9 @@ export const useSedeClosures = ({ selectedSede }: UseSedeClosuresParams): UseSed
         // Parse time ranges
         let openRanges: OpenRange[] = dayOrari.flatMap(o => {
             if (!o.oraInizio || !o.oraFine) {
-                console.error('[useSedeClosures] Orario with missing oraInizio/oraFine skipped:', o);
+                if (import.meta.env.DEV) {
+                    console.error('[useSedeClosures] Orario with missing oraInizio/oraFine skipped:', o);
+                }
                 return [];
             }
             const [startH, startM] = o.oraInizio.split(':').map(Number);

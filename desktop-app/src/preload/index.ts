@@ -78,10 +78,16 @@ const desktopApi = {
     file: {
         copyToAppData: (params: { sourcePath: string; visitaId: string }) =>
             ipcRenderer.invoke('file:copyToAppData', params),
+        writeBase64Attachment: (params: { base64: string; fileName: string; visitaId: string }) =>
+            ipcRenderer.invoke('file:writeBase64Attachment', params),
         readLocalFile: (localPath: string) =>
             ipcRenderer.invoke('file:readLocalFile', localPath),
         openLocalFile: (localPath: string) =>
             ipcRenderer.invoke('file:openLocalFile', localPath),
+        saveGeneratedDocument: (params: { bufferBase64: string; fileName: string; scopeId?: string }) =>
+            ipcRenderer.invoke('file:saveGeneratedDocument', params),
+        exportLocalFile: (params: { localPath: string; fileName: string }) =>
+            ipcRenderer.invoke('file:exportLocalFile', params),
         getPendingAttachments: () =>
             ipcRenderer.invoke('file:getPendingAttachments'),
         markAttachmentSynced: (params: { id: string; serverUrl: string }) =>
@@ -149,6 +155,7 @@ const desktopApi = {
             patientData: Record<string, string>
             visitaId: string
             sessionId: string
+            tenantId?: string
         }) => ipcRenderer.invoke('bridge:startExam', params),
     },
 
@@ -232,6 +239,8 @@ const desktopApi = {
             note?: string
             rawGdt?: string
             pdfPath?: string
+            pdfBase64?: string
+            pdfFilename?: string
             deviceName?: string
             completedAt: string
         }) => void) => ipcRenderer.on('bridge:examResult', callback),

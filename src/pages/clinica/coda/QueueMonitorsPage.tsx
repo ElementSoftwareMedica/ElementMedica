@@ -11,7 +11,7 @@
  * @module pages/clinica/coda/QueueMonitorsPage
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -51,6 +51,24 @@ interface MonitorFormModalProps {
     isLoading: boolean;
 }
 
+const buildMonitorFormData = (monitor?: DisplayMonitor) => ({
+    nome: monitor?.nome || '',
+    codice: monitor?.codice || '',
+    descrizione: monitor?.descrizione || '',
+    poliambulatorioId: monitor?.poliambulatorioId || '',
+    ambulatoriIds: monitor?.ambulatori?.map(a => a.id) || [] as string[],
+    config: {
+        theme: monitor?.config?.theme || 'light',
+        fontSize: monitor?.config?.fontSize || 150,
+        showRecentCalls: monitor?.config?.showRecentCalls ?? true,
+        recentCallsCount: monitor?.config?.recentCallsCount || 5,
+        enableAudio: monitor?.config?.enableAudio ?? true,
+        audioType: monitor?.config?.audioType || 'beep' as 'beep' | 'tts' | 'both',
+        showMarquee: monitor?.config?.showMarquee ?? true,
+        marqueeText: monitor?.config?.marqueeText || ''
+    }
+});
+
 const MonitorFormModal: React.FC<MonitorFormModalProps> = ({
     isOpen,
     onClose,
@@ -60,23 +78,13 @@ const MonitorFormModal: React.FC<MonitorFormModalProps> = ({
     onSubmit,
     isLoading
 }) => {
-    const [formData, setFormData] = useState({
-        nome: monitor?.nome || '',
-        codice: monitor?.codice || '',
-        descrizione: monitor?.descrizione || '',
-        poliambulatorioId: monitor?.poliambulatorioId || '',
-        ambulatoriIds: monitor?.ambulatori?.map(a => a.id) || [] as string[],
-        config: {
-            theme: monitor?.config?.theme || 'light',
-            fontSize: monitor?.config?.fontSize || 150,
-            showRecentCalls: monitor?.config?.showRecentCalls ?? true,
-            recentCallsCount: monitor?.config?.recentCallsCount || 5,
-            enableAudio: monitor?.config?.enableAudio ?? true,
-            audioType: monitor?.config?.audioType || 'beep' as 'beep' | 'tts' | 'both',
-            showMarquee: monitor?.config?.showMarquee ?? true,
-            marqueeText: monitor?.config?.marqueeText || ''
+    const [formData, setFormData] = useState(() => buildMonitorFormData(monitor));
+
+    useEffect(() => {
+        if (isOpen) {
+            setFormData(buildMonitorFormData(monitor));
         }
-    });
+    }, [isOpen, monitor]);
 
     // Filter ambulatori by selected poliambulatorio
     const filteredAmbulatori = formData.poliambulatorioId

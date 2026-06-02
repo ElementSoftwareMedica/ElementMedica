@@ -23,12 +23,57 @@ import { IconRenderer } from '../utils/iconMapper';
 // Grid configuration - 12 column system
 const GRID_COLS = 12;
 
+const normalizeFieldsForRender = (fields: VisitField[]): VisitField[] => {
+    const occupied = new Set<string>();
+    let hasOverlap = false;
+
+    fields.forEach((field, index) => {
+        const row = Number.isFinite(field.position?.row) ? Math.max(0, field.position!.row) : index;
+        const col = Number.isFinite(field.position?.col) ? Math.max(0, Math.min(GRID_COLS - 1, field.position!.col)) : 0;
+        const width = Math.max(1, Math.min(field.size?.width || GRID_COLS, GRID_COLS - col));
+        const height = Math.max(1, field.size?.height || 1);
+        for (let r = row; r < row + height; r += 1) {
+            for (let c = col; c < col + width; c += 1) {
+                const key = `${r}:${c}`;
+                if (occupied.has(key)) hasOverlap = true;
+                occupied.add(key);
+            }
+        }
+    });
+
+    if (!hasOverlap) return fields;
+
+    let row = 0;
+    let col = 0;
+    return fields.map(field => {
+        const fullWidthTypes = new Set(['TEXTAREA', 'RICHTEXT', 'RICH_TEXT', 'DOCUMENT_UPLOAD', 'STRUMENTARIO_IMPORT', 'CHART']);
+        const desiredWidth = fullWidthTypes.has(String(field.type))
+            ? GRID_COLS
+            : Math.max(3, Math.min(field.size?.width || 6, GRID_COLS));
+        if (col + desiredWidth > GRID_COLS) {
+            row += 1;
+            col = 0;
+        }
+        const normalized = {
+            ...field,
+            position: { ...(field.position || {}), row, col },
+            size: { ...(field.size || {}), width: desiredWidth, height: Math.max(1, field.size?.height || 1) },
+        };
+        col += desiredWidth;
+        if (col >= GRID_COLS) {
+            row += 1;
+            col = 0;
+        }
+        return normalized;
+    });
+};
+
 /**
  * Calculate grid placement styles for a field
  * Supports both width (columns) and height (rows) from template configuration
  * Uses explicit row positioning for proper alignment of fields in the same row
  */
-const getFieldGridStyle = (field: VisitField, index: number, totalFields: number): React.CSSProperties => {
+const getFieldGridStyle = (field: VisitField, index: number, totalFields: number, compact = false): React.CSSProperties => {
     const position = field.position || { row: index, col: 0 };
     const size = field.size || { width: GRID_COLS, height: 1 };
 
@@ -37,6 +82,12 @@ const getFieldGridStyle = (field: VisitField, index: number, totalFields: number
     const colSpan = Math.max(1, Math.min(size.width, GRID_COLS - position.col));
     const rowStart = position.row + 1; // CSS grid is 1-indexed
     const rowSpan = Math.max(1, size.height);
+
+    if (compact) {
+        return {
+            gridColumn: `${colStart} / span ${colSpan}`,
+        };
+    }
 
     return {
         gridColumn: `${colStart} / span ${colSpan}`,
@@ -76,6 +127,8 @@ export const FormSection: React.FC<FormSectionProps & {
     isExpanded: boolean;
     onToggleExpand: () => void;
     layout?: 'sections' | 'continuous';
+    compact?: boolean;
+    showNormalPresetButton?: boolean;
 }> = ({
     section,
     values,
@@ -85,17 +138,36 @@ export const FormSection: React.FC<FormSectionProps & {
     isExpanded,
     onToggleExpand,
     layout = 'sections',
+    compact = false,
+    showNormalPresetButton = true,
     pazienteId,        // P52 Session #13b: For inline chart feature
     onOpenFullChart,   // P52 Session #13b: Callback to open full chart view
     visitaId           // R17: For STRUMENTARIO_IMPORT auto-fill from bridge
 }) => {
+        const renderFieldsList = useMemo(() => normalizeFieldsForRender(section.fields), [section.fields]);
+
         // Organize fields into rows for grid layout
-        const fieldRows = useMemo(() => organizeFieldsIntoRows(section.fields), [section.fields]);
+        const fieldRows = useMemo(() => organizeFieldsIntoRows(renderFieldsList), [renderFieldsList]);
 
         // Flatten fields in order for auto-advance
         const orderedFields = useMemo(() => {
             return fieldRows.flat();
         }, [fieldRows]);
+
+        const normalPresetEntries = useMemo(() => {
+            return section.fields
+                .map(field => {
+                    const metadata = field.metadata as { normalPreset?: unknown } | undefined;
+                    return metadata?.normalPreset !== undefined
+                        ? [field.name, metadata.normalPreset] as const
+                        : null;
+                })
+                .filter(Boolean) as Array<readonly [string, unknown]>;
+        }, [section.fields]);
+
+        const applyNormalPreset = useCallback(() => {
+            normalPresetEntries.forEach(([fieldName, normalValue]) => onChange(fieldName, normalValue));
+        }, [normalPresetEntries, onChange]);
 
         // Handle auto-advance to next field
         const handleAdvanceToNext = useCallback((currentFieldName: string) => {
@@ -116,7 +188,7 @@ export const FormSection: React.FC<FormSectionProps & {
 
         // Render fields with grid layout
         const renderFields = () => {
-            if (section.fields.length === 0) {
+            if (renderFieldsList.length === 0) {
                 return (
                     <p className="text-gray-400 text-center py-8">
                         Nessun campo in questa sezione
@@ -126,14 +198,14 @@ export const FormSection: React.FC<FormSectionProps & {
 
             return (
                 <div
-                    className="grid gap-x-4 gap-y-3"
+                    className={`grid ${compact ? 'gap-x-2 gap-y-2' : 'gap-x-4 gap-y-3'}`}
                     style={{
                         gridTemplateColumns: `repeat(${GRID_COLS}, minmax(0, 1fr))`,
-                        gridAutoRows: 'minmax(50px, auto)',
+                        gridAutoRows: compact ? 'minmax(38px, auto)' : 'minmax(50px, auto)',
                         alignItems: 'stretch',
                     }}
                 >
-                    {section.fields.map((field, index) => {
+                    {renderFieldsList.map((field, index) => {
                         // P52 Session #8: Fields with height > 1 should stretch to fill their grid span
                         const fieldHeight = field.size?.height ?? 1;
                         const shouldStretch = fieldHeight > 1;
@@ -141,7 +213,7 @@ export const FormSection: React.FC<FormSectionProps & {
                         return (
                             <div
                                 key={field.id}
-                                style={getFieldGridStyle(field, index, section.fields.length)}
+                                style={getFieldGridStyle(field, index, renderFieldsList.length, compact)}
                                 className={`min-w-0 ${shouldStretch ? 'h-full' : 'self-start'}`}
                             >
                                 <DynamicField
@@ -156,6 +228,7 @@ export const FormSection: React.FC<FormSectionProps & {
                                     pazienteId={pazienteId}
                                     onOpenFullChart={onOpenFullChart}
                                     visitaId={visitaId}
+                                    compact={compact}
                                 />
                             </div>
                         );
@@ -169,16 +242,25 @@ export const FormSection: React.FC<FormSectionProps & {
             return (
                 <div id={`section-${section.section}`} className="scroll-mt-32">
                     {/* Section Title — compact for continuous flow */}
-                    <div className="flex items-center gap-2 mb-3 pb-2 border-b border-gray-100">
-                        <IconRenderer icon={section.icon} className="w-5 h-5 text-teal-600" />
-                        <h3 className="text-base font-semibold text-gray-800">
+                    <div className={`flex items-center gap-2 border-b border-gray-100 ${compact ? 'mb-2 pb-1.5' : 'mb-3 pb-2'}`}>
+                        <IconRenderer icon={section.icon} className={`${compact ? 'h-4 w-4' : 'h-5 w-5'} text-teal-600`} />
+                        <h3 className={`${compact ? 'text-sm' : 'text-base'} font-semibold text-gray-800`}>
                             {section.label}
                         </h3>
                         <span className="text-xs text-gray-400">({section.fields.length})</span>
+                        {showNormalPresetButton && normalPresetEntries.length > 0 && !disabled && (
+                            <button
+                                type="button"
+                                onClick={applyNormalPreset}
+                                className={`ml-auto rounded-full border border-emerald-200 bg-emerald-50 font-semibold text-emerald-700 hover:bg-emerald-100 ${compact ? 'px-2 py-0.5 text-[11px]' : 'px-2.5 py-1 text-xs'}`}
+                            >
+                                Compila normalità
+                            </button>
+                        )}
                     </div>
 
                     {/* Fields with grid layout */}
-                    <div className="mb-4">
+                    <div className={compact ? 'mb-2' : 'mb-4'}>
                         {renderFields()}
                     </div>
                 </div>
@@ -205,11 +287,33 @@ export const FormSection: React.FC<FormSectionProps & {
                             </p>
                         </div>
                     </div>
-                    {isExpanded ? (
-                        <ChevronUp className="h-5 w-5 text-gray-400" />
-                    ) : (
-                        <ChevronDown className="h-5 w-5 text-gray-400" />
-                    )}
+                    <div className="flex items-center gap-2">
+                        {showNormalPresetButton && normalPresetEntries.length > 0 && !disabled && (
+                            <span
+                                role="button"
+                                tabIndex={0}
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    applyNormalPreset();
+                                }}
+                                onKeyDown={(event) => {
+                                    if (event.key === 'Enter' || event.key === ' ') {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                        applyNormalPreset();
+                                    }
+                                }}
+                                className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                            >
+                                Compila normalità
+                            </span>
+                        )}
+                        {isExpanded ? (
+                            <ChevronUp className="h-5 w-5 text-gray-400" />
+                        ) : (
+                            <ChevronDown className="h-5 w-5 text-gray-400" />
+                        )}
+                    </div>
                 </button>
 
                 {/* Section Content with grid layout */}

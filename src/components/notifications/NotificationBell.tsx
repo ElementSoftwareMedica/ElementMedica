@@ -233,7 +233,8 @@ const NotificationBell: React.FC<NotificationBellProps> = ({
     markAsRead,
     markAllAsRead,
     dismiss,
-    fetchNotifications
+    fetchNotifications,
+    refreshUnreadCount
   } = useNotifications();
 
   // A11Y hook
@@ -288,9 +289,16 @@ const NotificationBell: React.FC<NotificationBellProps> = ({
   }, [isOpen]);
 
   // Filter notifications
+  const activeNotifications = notifications.filter(n => !n.isDismissed);
+  const loadedAllActiveNotifications = (activeNotifications.length > 0 && activeNotifications.length < 20)
+    || (activeNotifications.length === 0 && unreadCount.total === 0);
+  const activeUnreadCount = activeNotifications.filter(n => !n.isRead).length;
+  const badgeUnreadCount = loadedAllActiveNotifications ? activeUnreadCount : unreadCount.total;
+  const activeCriticalCount = activeNotifications.filter(n => !n.isRead && (n.priority === 'CRITICAL_P' || n.type === 'CRITICAL')).length;
+  const criticalBadgeCount = loadedAllActiveNotifications ? activeCriticalCount : unreadCount.critical;
   const displayedNotifications = showOnlyUnread
-    ? notifications.filter(n => !n.isRead).slice(0, maxItems)
-    : notifications.slice(0, maxItems);
+    ? activeNotifications.filter(n => !n.isRead).slice(0, maxItems)
+    : activeNotifications.slice(0, maxItems);
 
   const handleNotificationClick = useCallback((notification: NotificationType) => {
     // Mark as read
@@ -342,20 +350,24 @@ const NotificationBell: React.FC<NotificationBellProps> = ({
   const toggleOpen = useCallback(() => {
     const newIsOpen = !isOpen;
     setIsOpen(newIsOpen);
+    if (newIsOpen) {
+      void fetchNotifications();
+      void refreshUnreadCount();
+    }
     if (newIsOpen && displayedNotifications.length > 0) {
       announce(`${displayedNotifications.length} notifiche. Usa le frecce per navigare.`);
     }
-  }, [isOpen, displayedNotifications.length, announce]);
+  }, [isOpen, displayedNotifications.length, announce, fetchNotifications, refreshUnreadCount]);
 
   // Animation hook for bell ring
   const { isRinging, triggerRing } = useNotificationAnimation();
 
   // Trigger ring on new notification
   useEffect(() => {
-    if (unreadCount.total > 0) {
+    if (badgeUnreadCount > 0) {
       triggerRing();
     }
-  }, [unreadCount.total, triggerRing]);
+  }, [badgeUnreadCount, triggerRing]);
 
   return (
     <div className={cn('relative', className)} ref={dropdownRef}>
@@ -366,7 +378,7 @@ const NotificationBell: React.FC<NotificationBellProps> = ({
         size="sm"
         className="relative p-2"
         onClick={toggleOpen}
-        aria-label={`Notifiche (${unreadCount.total} non lette)`}
+        aria-label={`Notifiche (${badgeUnreadCount} non lette)`}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-controls="notification-dropdown"
@@ -374,21 +386,21 @@ const NotificationBell: React.FC<NotificationBellProps> = ({
         <AnimatedBellIcon isRinging={isRinging}>
           <Bell className={cn(
             'h-5 w-5',
-            unreadCount.critical > 0 && 'text-red-500'
+            criticalBadgeCount > 0 && 'text-red-500'
           )} />
         </AnimatedBellIcon>
 
         {/* Screen reader announcement for critical */}
-        {unreadCount.critical > 0 && (
+        {criticalBadgeCount > 0 && (
           <SrOnly>
-            {unreadCount.critical} notifiche critiche
+            {criticalBadgeCount} notifiche critiche
           </SrOnly>
         )}
 
         {/* Badge */}
         <AnimatedBadge
-          count={unreadCount.total}
-          className={unreadCount.critical > 0 ? 'bg-red-500' : 'bg-blue-500'}
+          count={badgeUnreadCount}
+          className={criticalBadgeCount > 0 ? 'bg-red-500' : 'bg-blue-500'}
         />
 
         {/* Connection indicator */}
@@ -416,14 +428,14 @@ const NotificationBell: React.FC<NotificationBellProps> = ({
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 rounded-t-lg">
               <div className="flex items-center gap-2">
                 <h3 className="font-semibold text-gray-900 dark:text-gray-100" id="notification-dropdown-title">Notifiche</h3>
-                {unreadCount.total > 0 && (
+                {badgeUnreadCount > 0 && (
                   <Badge variant="secondary" className="text-xs">
-                    {unreadCount.total} nuove
+                    {badgeUnreadCount} nuove
                   </Badge>
                 )}
               </div>
 
-              {unreadCount.total > 0 && (
+              {badgeUnreadCount > 0 && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -473,7 +485,7 @@ const NotificationBell: React.FC<NotificationBellProps> = ({
             </div>
 
             {/* Footer */}
-            {notifications.length > 0 && (
+            {activeNotifications.length > 0 && (
               <>
                 <Separator className="bg-gray-200 dark:bg-gray-700" />
                 <div className="p-2 bg-gray-50 dark:bg-gray-800 rounded-b-lg">

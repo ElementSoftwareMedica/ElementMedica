@@ -288,13 +288,14 @@ export const PublicLayout: React.FC<PublicLayoutProps> = ({
     const JSON_LD_ID = 'json-ld-organization';
     if (path === '/') {
       const isMedica = brand.id === 'element-medica';
+      const logoBaseUrl = isMedica ? 'https://www.elementmedica.com' : 'https://www.elementsicurezza.com';
       const orgData = {
         '@context': 'https://schema.org',
         '@type': 'MedicalOrganization',
         name: isMedica ? 'Element Medica' : 'Element Sicurezza',
         legalName: 'Element srl',
         url: canonicalUrl,
-        logo: `${baseUrl}/assets/logos/${isMedica ? 'element-medica-icon' : 'element-sicurezza-icon'}.png`,
+        logo: `${logoBaseUrl}/assets/logos/${isMedica ? 'element-medica-icon' : 'element-sicurezza-icon'}.png`,
         image: `${baseUrl}${brand.seo.ogImage}`,
         description: meta.description,
         telephone: brand.contacts.phone,

@@ -18,6 +18,7 @@ import {
     Users,
     Loader2
 } from 'lucide-react';
+import { useAuth } from '../../../hooks/auth/useAuth';
 
 // Lazy load tab content components
 const PermissionManagementTab = lazy(() => import('./PermissionManagementTab'));
@@ -65,9 +66,20 @@ const TabLoader = () => (
 
 const PermissionsPage: React.FC = () => {
     const [searchParams, setSearchParams] = useSearchParams();
+    const { user } = useAuth();
 
-    // Get initial tab from URL or default to 'management'
-    const initialTab = (searchParams.get('tab') as TabId) || 'management';
+    // Global admin = ADMIN or SUPER_ADMIN only
+    const isGlobalAdmin = user?.role === 'Admin' ||
+        user?.globalRole === 'ADMIN' ||
+        user?.globalRole === 'SUPER_ADMIN' ||
+        user?.roles?.includes('ADMIN') ||
+        user?.roles?.includes('SUPER_ADMIN');
+
+    // For TENANT_ADMIN/COMPANY_ADMIN, only the 'person' tab is relevant
+    const visibleTabs = isGlobalAdmin ? TABS : TABS.filter(t => t.id === 'person');
+
+    // Get initial tab from URL or default
+    const initialTab = (searchParams.get('tab') as TabId) || (isGlobalAdmin ? 'management' : 'person');
     const [activeTab, setActiveTab] = useState<TabId>(initialTab);
 
     // Sync URL with tab changes
@@ -85,12 +97,12 @@ const PermissionsPage: React.FC = () => {
     // Sync tab state with URL changes (e.g., browser back/forward)
     useEffect(() => {
         const tabFromUrl = searchParams.get('tab') as TabId | null;
-        if (tabFromUrl && TABS.some(t => t.id === tabFromUrl)) {
+        if (tabFromUrl && visibleTabs.some(t => t.id === tabFromUrl)) {
             setActiveTab(tabFromUrl);
         } else if (!tabFromUrl) {
-            setActiveTab('management');
+            setActiveTab(isGlobalAdmin ? 'management' : 'person');
         }
-    }, [searchParams]);
+    }, [searchParams, isGlobalAdmin, visibleTabs]);
 
     const activeTabConfig = TABS.find(t => t.id === activeTab);
 
@@ -119,7 +131,7 @@ const PermissionsPage: React.FC = () => {
             <div className="flex-1 flex flex-col bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden mt-6">
                 {/* Tab Headers */}
                 <div className="flex border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-                    {TABS.map((tab) => {
+                    {visibleTabs.map((tab) => {
                         const Icon = tab.icon;
                         const isActive = activeTab === tab.id;
                         return (

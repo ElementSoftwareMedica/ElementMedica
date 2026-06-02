@@ -80,11 +80,18 @@ export const INITIAL_FERIE: FerieForm = {
     note: ''
 };
 
+export interface WeeklyScheduleEntry {
+    giorno: number;
+    oraInizio: string;
+    oraFine: string;
+}
+
 export interface MedicoWithStats extends Medico {
     slotsCount: number;
     nextSlot?: SlotDisponibilita;
     hasActiveVacation: boolean;
     weeklyHours: number;
+    weeklySchedule: WeeklyScheduleEntry[];
 }
 
 export type { DisponibilitaMedico, FerieAssenza, SlotDisponibilita, Medico, Ambulatorio };

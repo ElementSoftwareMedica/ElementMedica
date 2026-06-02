@@ -446,7 +446,7 @@ class PersonTenantAccessService {
             });
 
             if (!person) {
-                return normalizeFeatureSet(access.enabledFeatures).includes(feature);
+                throw new Error(`Person ${personId} not found`);
             }
 
             // Verifica che il tenant esista

@@ -6,7 +6,7 @@
  * to individual doctor profile pages.
  * 
  * Route: /medici
- * API: GET /api/public/doctors
+ * API: GET /api/v1/public/doctors
  * 
  * @module pages/public/DoctorsListPage
  */
@@ -48,7 +48,7 @@ export const DoctorsListPage: React.FC = () => {
     const fetchDoctors = async () => {
       try {
         setLoading(true);
-        const res = await fetch(`/api/public/doctors?limit=100`, {
+        const res = await fetch(`/api/v1/public/doctors?limit=100`, {
           headers: { 'X-Frontend-Id': BRAND_ID }
         });
         if (!res.ok) throw new Error('Errore di rete');

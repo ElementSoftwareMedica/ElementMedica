@@ -96,6 +96,17 @@ const Sidebar: React.FC<SidebarProps> = ({ open, setOpen, collapsed = false, onC
   const isEmployeeOnly = userRoles.includes('EMPLOYEE') &&
     !userRoles.some(r => ['ADMIN', 'SUPER_ADMIN', 'TENANT_ADMIN', 'COMPANY_ADMIN', 'TRAINING_ADMIN', 'HR_MANAGER', 'COMPANY_MANAGER', 'SITE_MANAGER'].includes(r));
 
+  // Trainer: non admin, ruolo formatore — vede Programmazione ma senza badge contatore
+  const isTrainer = !isAdmin && !isEmployeeOnly &&
+    userRoles.some(r => ['TRAINER', 'SENIOR_TRAINER', 'EXTERNAL_TRAINER', 'TRAINER_COORDINATOR'].includes(r));
+
+  // Company admin "stretto" (non anche TENANT_ADMIN/SUPER_ADMIN): mostra Programmazione senza badge
+  const isStrictCompanyAdmin = userRoles.some(r => ['COMPANY_ADMIN', 'COMPANY_MANAGER'].includes(r)) &&
+    !userRoles.some(r => ['ADMIN', 'SUPER_ADMIN', 'TENANT_ADMIN', 'TRAINING_ADMIN'].includes(r));
+
+  // Il badge "Corsi in scadenza" è visibile solo agli admin di tenant/staff (non a trainer né company admin)
+  const showExpiringBadge = !isTrainer && !isStrictCompanyAdmin;
+
   // Navigation configuration
   const navigationItems: NavItem[] = [
     {
@@ -133,11 +144,11 @@ const Sidebar: React.FC<SidebarProps> = ({ open, setOpen, collapsed = false, onC
           href: '/courses',
           icon: GraduationCap
         }] : []),
-        ...(isAdmin || hasPermission('courses', 'read') ? [{
+        ...(!isEmployeeOnly && (isAdmin || isTrainer || hasPermission('courses', 'read')) ? [{
           label: 'Programmazione',
           href: '/schedules',
           icon: Calendar,
-          badge: expiringCoursesCount > 0 ? expiringCoursesCount : undefined
+          badge: showExpiringBadge && expiringCoursesCount > 0 ? expiringCoursesCount : undefined
         }] : []),
         ...(isAdmin || hasPermission('documents', 'read') ? [{
           label: 'Documenti Corsi',

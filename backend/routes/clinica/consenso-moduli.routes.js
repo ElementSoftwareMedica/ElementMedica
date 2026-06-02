@@ -91,6 +91,66 @@ La revoca del consenso può essere comunicata verbalmente al medico o al persona
 
 Esprimo il mio consenso LIBERO E INFORMATO all'esecuzione dell'intervento e delle procedure anestesiologiche connesse, autorizzando il team chirurgico a eseguire eventuali manovre indispensabili per la mia incolumità qualora si rendessero necessarie durante l'intervento.`,
     },
+    marketing: {
+        codice: 'marketing',
+        titolo: 'Consenso a comunicazioni marketing',
+        sottotitolo: 'Comunicazioni promozionali, informative e iniziative della struttura',
+        obbligatorio: false,
+        ordine: 5,
+        validitaGiorni: 3650,
+        testo: `Acconsento a ricevere comunicazioni informative, promozionali e aggiornamenti sui servizi della struttura tramite email, SMS, telefono o altri recapiti forniti.
+
+Il consenso è facoltativo e può essere revocato in qualsiasi momento senza conseguenze sull'erogazione delle prestazioni sanitarie.`,
+    },
+    comunicazioni: {
+        codice: 'comunicazioni',
+        titolo: 'Consenso a promemoria e comunicazioni di servizio',
+        sottotitolo: 'Reminder appuntamenti, indicazioni operative e comunicazioni amministrative',
+        obbligatorio: false,
+        ordine: 6,
+        validitaGiorni: 3650,
+        testo: `Acconsento a ricevere comunicazioni di servizio relative ad appuntamenti, preparazioni, documenti, referti e informazioni amministrative connesse alle prestazioni richieste.
+
+Le comunicazioni potranno avvenire tramite email, SMS, telefono o altri canali indicati in anagrafica.`,
+    },
+    fse_alimentazione: {
+        codice: 'fse_alimentazione',
+        titolo: 'Consenso alimentazione Fascicolo Sanitario Elettronico',
+        sottotitolo: 'Inserimento dei documenti sanitari nel FSE',
+        obbligatorio: false,
+        ordine: 7,
+        validitaGiorni: 3650,
+        testo: `Acconsento all'alimentazione del Fascicolo Sanitario Elettronico con i dati e i documenti sanitari prodotti dalla struttura, secondo la normativa vigente e le indicazioni regionali applicabili.`,
+    },
+    fse_consultazione: {
+        codice: 'fse_consultazione',
+        titolo: 'Consenso consultazione Fascicolo Sanitario Elettronico',
+        sottotitolo: 'Consultazione del FSE da parte dei professionisti autorizzati',
+        obbligatorio: false,
+        ordine: 8,
+        validitaGiorni: 3650,
+        testo: `Acconsento alla consultazione del mio Fascicolo Sanitario Elettronico da parte dei professionisti sanitari autorizzati, limitatamente alle finalità di cura, prevenzione e presa in carico clinica.`,
+    },
+    fse_pregresso: {
+        codice: 'fse_pregresso',
+        titolo: 'Consenso recupero dati pregressi FSE',
+        sottotitolo: 'Consultazione dei documenti sanitari già presenti nel FSE',
+        obbligatorio: false,
+        ordine: 9,
+        validitaGiorni: 3650,
+        testo: `Acconsento al recupero e alla consultazione dei documenti sanitari pregressi presenti nel Fascicolo Sanitario Elettronico, quando utili alla continuità assistenziale e alla valutazione clinica.`,
+    },
+    mdl_sorveglianza: {
+        codice: 'mdl_sorveglianza',
+        titolo: 'Consenso sorveglianza sanitaria Medicina del Lavoro',
+        sottotitolo: 'D.Lgs. 81/2008 - visite, accertamenti e giudizio di idoneita',
+        obbligatorio: true,
+        ordine: 10,
+        validitaGiorni: 365,
+        testo: `Dichiaro di aver ricevuto informazioni sulla sorveglianza sanitaria prevista dal D.Lgs. 81/2008, sugli accertamenti sanitari correlati ai rischi lavorativi e sulle modalita di trattamento della documentazione sanitaria e del giudizio di idoneita.
+
+Acconsento all'esecuzione della visita medica del lavoro e degli accertamenti sanitari previsti dal protocollo sanitario aziendale o indicati dal medico competente, nei limiti delle finalita di prevenzione e tutela della salute nei luoghi di lavoro.`,
+    },
 };
 
 export { TESTI_CONSENSI_DEFAULT };

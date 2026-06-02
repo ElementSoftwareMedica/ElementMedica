@@ -135,6 +135,7 @@ export interface QueueSession {
     }>;
     /** P53.2: Multi-medico */
     medici?: Array<{
+        medicoId: string;
         medico: {
             personId: string;
             person: {
@@ -457,6 +458,35 @@ export const checkExistingSession = async (data: {
 };
 
 /**
+ * Find sessions for the same medico on the same day (different slots)
+ */
+export interface SameDaySession {
+    id: string;
+    mode: QueueMode;
+    qrCodeToken?: string;
+    slotDisponibilita?: { id: string; oraInizio: string; oraFine: string } | null;
+    ambulatorio?: { id: string; nome: string } | null;
+    entriesCount: number;
+}
+
+export const findSameDaySessions = async (data: {
+    date: string;
+    medicoPersonId: string;
+    excludeSlotId?: string;
+}): Promise<SameDaySession[]> => {
+    const response = await apiPost<ApiResponse<SameDaySession[]>>(`${QUEUE_BASE}/sessions/same-day`, data);
+    return extractData(response);
+};
+
+/**
+ * Link an additional slot to an existing session (merge morning/afternoon)
+ */
+export const linkSlotToSession = async (sessionId: string, slotDisponibilitaId: string): Promise<any> => {
+    const response = await apiPost<ApiResponse<any>>(`${QUEUE_BASE}/sessions/${sessionId}/link-slot`, { slotDisponibilitaId });
+    return extractData(response);
+};
+
+/**
  * Create a new queue session
  */
 export const createSession = async (data: CreateSessionInput): Promise<QueueSession> => {
@@ -529,7 +559,7 @@ export interface AvailableMedico {
     firstName: string;
     lastName: string;
     gender?: string;
-    slots: Array<{ oraInizio: string; oraFine: string }>;
+    slots: Array<{ id: string; oraInizio: string; oraFine: string; ambulatorioId?: string }>;
     ambulatori: Array<{ id: string; nome: string; codice: string }>;
 }
 
@@ -1018,6 +1048,8 @@ const queueApi = {
     getActiveSessionsToday,
     getSessionsByDate,
     checkExistingSession,
+    findSameDaySessions,
+    linkSlotToSession,
     createSession,
     generateFromAppointments,
     generateBulkDay,

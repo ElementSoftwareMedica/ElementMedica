@@ -28,71 +28,22 @@ export const RELATION_TYPES: Record<string, RelationTypeDefinition> = {
         name: 'trainer_courses',
         displayName: 'Formatore - Corsi Assegnati',
         description: 'Vede aziende e persone dei corsi dove è formatore',
-        icon: '👨‍🏫',
+        icon: 'Corsi',
         applicableRoles: ['TRAINER', 'SENIOR_TRAINER', 'EXTERNAL_TRAINER']
     },
     company_manager: {
         name: 'company_manager',
         displayName: 'Manager - Propria Azienda',
         description: 'Vede dipendenti e sedi della propria azienda',
-        icon: '🏢',
+        icon: 'Azienda',
         applicableRoles: ['COMPANY_MANAGER', 'COMPANY_ADMIN']
     },
     department_head: {
         name: 'department_head',
         displayName: 'Responsabile Reparto',
         description: 'Vede dipendenti del proprio reparto',
-        icon: '👥',
+        icon: 'Reparto',
         applicableRoles: ['DEPARTMENT_HEAD', 'SUPERVISOR']
-    },
-    site_manager: {
-        name: 'site_manager',
-        displayName: 'Responsabile Sede',
-        description: 'Vede dipendenti della propria sede',
-        icon: '📍',
-        applicableRoles: ['SITE_MANAGER', 'SUPERVISOR']
-    },
-    hr_tenant: {
-        name: 'hr_tenant',
-        displayName: 'HR - Tutti i Dipendenti',
-        description: 'Vede tutti i dipendenti del tenant',
-        icon: '👔',
-        applicableRoles: ['HR_MANAGER', 'ADMIN']
-    },
-    course_participant: {
-        name: 'course_participant',
-        displayName: 'Partecipante - Propri Corsi',
-        description: 'Vede solo i corsi a cui è iscritto',
-        icon: '🎓',
-        applicableRoles: ['EMPLOYEE']
-    },
-    auditor_tenant: {
-        name: 'auditor_tenant',
-        displayName: 'Auditor - Dati Audit',
-        description: 'Vede log di audit del tenant',
-        icon: '🔍',
-        applicableRoles: ['AUDITOR', 'ADMIN']
-    },
-    consultant_assigned: {
-        name: 'consultant_assigned',
-        displayName: 'Consulente - Aziende Assegnate',
-        description: 'Vede solo aziende assegnate',
-        icon: '💼',
-        applicableRoles: ['CONSULTANT']
-    },
-    trainer_coordinator_area: {
-        name: 'trainer_coordinator_area',
-        displayName: 'Coordinatore - Area Formatori',
-        description: 'Vede formatori e corsi della propria area',
-        icon: '📋',
-        applicableRoles: ['TRAINER_COORDINATOR']
-    },
-    external_trainer_limited: {
-        name: 'external_trainer_limited',
-        displayName: 'Formatore Esterno - Limitato',
-        description: 'Vede solo propri corsi senza dati sensibili',
-        icon: '🔒',
-        applicableRoles: ['EXTERNAL_TRAINER']
     }
 } as const;
 

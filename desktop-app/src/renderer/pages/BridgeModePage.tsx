@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, type CSSProperties } from 'react'
 import {
     Cpu, Wifi, WifiOff, Activity, MonitorDot, Stethoscope, LogOut,
     RefreshCw, ExternalLink, CheckCircle2, XCircle, Clock, Settings,
-    FolderOpen, Save, ChevronDown, ChevronUp, Heart, Wind, Ear,
+    FolderOpen, Save, ChevronDown, ChevronUp, Heart, Wind, Ear, TestTube,
     AlertCircle, CheckCheck, Loader2
 } from 'lucide-react'
 import { useDesktopAuth } from '../context/DesktopAuthContext'
@@ -22,14 +22,14 @@ interface ExamResult {
 }
 
 interface DeviceConfig {
-    type: 'edan-ecg' | 'mir-spirometer' | 'oscilla-audiometer'
+    type: 'edan-ecg' | 'mir-spirometer' | 'oscilla-audiometer' | 'drugtest-analyzer'
     enabled: boolean
     gdtId: string
     gdtInputDir: string
     gdtOutputDir: string
     pdfOutputDir: string
     executable: string
-    examType: 'ecg' | 'spirometry' | 'audiometry'
+    examType: 'ecg' | 'spirometry' | 'audiometry' | 'drugtest'
     displayName: string
 }
 
@@ -71,12 +71,24 @@ const DEFAULT_DEVICES: DeviceConfig[] = [
         examType: 'audiometry',
         displayName: 'Oscilla Audiometro',
     },
+    {
+        type: 'drugtest-analyzer',
+        enabled: false,
+        gdtId: 'DRUGTEST',
+        gdtInputDir: '',
+        gdtOutputDir: '',
+        pdfOutputDir: '',
+        executable: '',
+        examType: 'drugtest',
+        displayName: 'Drug Test',
+    },
 ]
 
 const DEVICE_ICONS: Record<string, JSX.Element> = {
     'edan-ecg': <Heart className="w-4 h-4" />,
     'mir-spirometer': <Wind className="w-4 h-4" />,
     'oscilla-audiometer': <Ear className="w-4 h-4" />,
+    'drugtest-analyzer': <TestTube className="w-4 h-4" />,
 }
 
 // macOS: traffic lights are at y=18, header needs extra space

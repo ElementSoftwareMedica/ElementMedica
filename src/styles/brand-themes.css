@@ -60,8 +60,8 @@
     /* === PREMIUM GRADIENTS === */
     /* Sicurezza: Amber primary (#E9BA49) | Medica: Verde Salvia primary (#A1C8C1) */
     /* Sicurezza: Amber gradient (primary = #E9BA49) */
-    --gradient-sicurezza-hero: linear-gradient(135deg, #876919 0%, #B08A22 30%, #D4A530 60%, #E9BA49 100%);
-    --gradient-sicurezza-cta: linear-gradient(135deg, #634D13 0%, #876919 50%, #B08A22 100%);
+    --gradient-sicurezza-hero: linear-gradient(135deg, #283646 0%, #B08A22 50%, #E9BA49 100%);
+    --gradient-sicurezza-cta: linear-gradient(135deg, #283646 0%, #3B4A59 100%);
     --gradient-sicurezza-accent: linear-gradient(135deg, #5F9B92 0%, #7FB3AB 50%, #A1C8C1 100%);
 
     /* Medica: same primary teal gradient */
@@ -116,10 +116,10 @@
     --brand-primary-300: #F9D584;
     --brand-primary-400: #F2C968;
     --brand-primary-500: #E9BA49;
-    --brand-primary-600: #D4A530;
-    --brand-primary-700: #B08A22;
-    --brand-primary-800: #876919;
-    --brand-primary-900: #634D13;
+    --brand-primary-600: #E9BA49;
+    --brand-primary-700: #D4A530;
+    --brand-primary-800: #B08A22;
+    --brand-primary-900: #876919;
     --brand-primary-950: #47360D;
 
     /* Secondary: Dark Navy */
@@ -154,10 +154,10 @@
     --color-primary-300: #F9D584;
     --color-primary-400: #F2C968;
     --color-primary-500: #E9BA49;
-    --color-primary-600: #D4A530;
-    --color-primary-700: #B08A22;
-    --color-primary-800: #876919;
-    --color-primary-900: #634D13;
+    --color-primary-600: #E9BA49;
+    --color-primary-700: #D4A530;
+    --color-primary-800: #B08A22;
+    --color-primary-900: #876919;
     --color-primary-950: #47360D;
 
     --color-secondary-50: #F0F2F4;

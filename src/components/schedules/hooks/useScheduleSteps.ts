@@ -11,6 +11,7 @@ interface UseScheduleStepsParams {
   dynamicRiskOptions?: Array<{ value: string; label: string }>;
   dynamicCourseTypeOptions?: Array<{ value: string; label: string }>;
   isEditing?: boolean; // Nuovo parametro per distinguere create/edit
+  courseDuration?: number; // Durata autoritativa dal context (override selectedCourse.duration)
 }
 
 export function useScheduleSteps({
@@ -20,7 +21,8 @@ export function useScheduleSteps({
   selectedCourse,
   dynamicRiskOptions = [],
   dynamicCourseTypeOptions = [],
-  isEditing = false
+  isEditing = false,
+  courseDuration
 }: UseScheduleStepsParams) {
   const [currentStep, setCurrentStep] = useState(0);
   const [visitedSteps, setVisitedSteps] = useState<Set<number>>(new Set([0])); // Track visited steps
@@ -59,12 +61,17 @@ export function useScheduleSteps({
     });
 
     // Calcolo ore totali selezionate e durata corso
-    const durationRaw = (selectedCourse as any)?.duration;
+    // courseDuration (dal context) è autoritativo; fallback a selectedCourse.duration
     let durationNum = 0;
-    if (typeof durationRaw === 'number') durationNum = durationRaw;
-    else if (typeof durationRaw === 'string') {
-      const parsed = parseFloat(durationRaw);
-      if (Number.isFinite(parsed)) durationNum = parsed;
+    if (typeof courseDuration === 'number' && courseDuration > 0) {
+      durationNum = courseDuration;
+    } else {
+      const durationRaw = (selectedCourse as any)?.duration;
+      if (typeof durationRaw === 'number') durationNum = durationRaw;
+      else if (typeof durationRaw === 'string') {
+        const parsed = parseFloat(durationRaw);
+        if (Number.isFinite(parsed)) durationNum = parsed;
+      }
     }
 
     let totalMinutes = 0;
@@ -86,7 +93,7 @@ export function useScheduleSteps({
     const hasParticipants = selectedCompanies.length > 0 || selectedPersons.length > 0;
 
     return hasCourse && riskOk && typeOk && perDateOk && hoursOk && hasParticipants;
-  }, [formData, selectedCourse, dynamicRiskOptions, dynamicCourseTypeOptions, selectedCompanies, selectedPersons]);
+  }, [formData, selectedCourse, courseDuration, dynamicRiskOptions, dynamicCourseTypeOptions, selectedCompanies, selectedPersons]);
 
   // Funzione per ottenere i problemi di validazione
   const getValidationIssues = useMemo(() => {
@@ -127,12 +134,17 @@ export function useScheduleSteps({
     }
 
     // Controllo ore corso
-    const durationRaw = (selectedCourse as any)?.duration;
+    // courseDuration (dal context) è autoritativo; fallback a selectedCourse.duration
     let durationNum = 0;
-    if (typeof durationRaw === 'number') durationNum = durationRaw;
-    else if (typeof durationRaw === 'string') {
-      const parsed = parseFloat(durationRaw);
-      if (Number.isFinite(parsed)) durationNum = parsed;
+    if (typeof courseDuration === 'number' && courseDuration > 0) {
+      durationNum = courseDuration;
+    } else {
+      const durationRaw = (selectedCourse as any)?.duration;
+      if (typeof durationRaw === 'number') durationNum = durationRaw;
+      else if (typeof durationRaw === 'string') {
+        const parsed = parseFloat(durationRaw);
+        if (Number.isFinite(parsed)) durationNum = parsed;
+      }
     }
 
     if (hasDates && durationNum > 0) {
@@ -161,7 +173,7 @@ export function useScheduleSteps({
     }
 
     return issues;
-  }, [formData, selectedCourse, dynamicRiskOptions, dynamicCourseTypeOptions, selectedCompanies, selectedPersons]);
+  }, [formData, selectedCourse, courseDuration, dynamicRiskOptions, dynamicCourseTypeOptions, selectedCompanies, selectedPersons]);
 
   const stepItems = useMemo(() => ([
     { label: 'Dettagli corso', isValid: isStep0Valid },

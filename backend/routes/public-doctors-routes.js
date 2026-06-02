@@ -54,6 +54,13 @@ router.get('/doctors', [
       return res.status(400).json({ error: 'Tenant non identificato. Verificare il dominio.' });
     }
 
+    // Rispetta impostazioni API key pubblica (api-pubbliche)
+    const enabledWidgets = req.enabledPublicWidgets || [];
+    if (enabledWidgets.length > 0 && !enabledWidgets.includes('doctors')) {
+      return res.json({ success: true, data: [], count: 0 });
+    }
+    const ws = (req.publicWidgetSettings || {}).doctors || {};
+
     const { specialty, search, limit = 50 } = req.query;
 
     // Build search conditions
@@ -65,71 +72,87 @@ router.get('/doctors', [
       );
     }
 
-    const doctors = await prisma.person.findMany({
-      where: {
-        deletedAt: null,
-        tenantProfiles: {
-          some: {
-            tenantId,
-            deletedAt: null,
-            isActive: true
-          }
+    // Common where clause (used in both main query and fallback)
+    const baseWhere = {
+      deletedAt: null,
+      NOT: { firstName: 'ANON', lastName: 'ANON' },
+      tenantProfiles: { some: { tenantId, deletedAt: null, isActive: true } },
+      personRoles: { some: { tenantId, deletedAt: null, roleType: { in: ['MEDICO', 'MEDICO_COMPETENTE', 'CLINIC_ADMIN'] } } },
+      ...(searchConditions.length > 0 && { OR: searchConditions })
+    };
+
+    const commonSelect = {
+      id: true,
+      firstName: true,
+      lastName: true,
+      gender: true,
+      profileImage: true,
+      tenantProfiles: {
+        where: { tenantId, deletedAt: null, isActive: true },
+        select: {
+          title: true,
+          shortDescription: true,
+          fullDescription: true,
+          specialties: true,
+          certifications: true
         },
-        // Only doctors with medical roles in this tenant
-        personRoles: {
-          some: {
-            tenantId,
-            deletedAt: null,
-            roleType: { in: ['MEDICO', 'MEDICO_COMPETENTE', 'CLINIC_ADMIN'] }
-          }
-        },
-        ...(searchConditions.length > 0 && { OR: searchConditions })
+        take: 1
       },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        gender: true,
-        profileImage: true,
-        tenantProfiles: {
-          where: { tenantId, deletedAt: null, isActive: true },
-          select: {
-            title: true,
-            shortDescription: true,
-            fullDescription: true,
-            specialties: true,
-            certifications: true
-          },
-          take: 1
-        },
-        _count: {
-          select: {
-            slotDisponibilita: {
-              where: {
-                tenantId,
-                deletedAt: null,
-                visibilePubblico: true,
-                prenotabileOnline: true,
-                disponibile: true,
-                stato: 'LIBERO',
-                data: { gte: new Date() }
-              }
+      _count: {
+        select: {
+          slotDisponibilita: {
+            where: {
+              tenantId,
+              deletedAt: null,
+              visibilePubblico: true,
+              prenotabileOnline: true,
+              disponibile: true,
+              stato: 'LIBERO',
+              data: { gte: new Date() }
             }
           }
         }
-      },
+      }
+    };
+
+    // Validate doctorIds: only keep IDs of non-anonymized active doctors
+    let validDoctorIds = null;
+    if (ws.doctorIds?.length > 0) {
+      const validDocs = await prisma.person.findMany({
+        where: { ...baseWhere, id: { in: ws.doctorIds } },
+        select: { id: true }
+      });
+      validDoctorIds = validDocs.map(d => d.id);
+    }
+
+    // Apply doctor ID filter only if there are valid IDs; otherwise show all
+    const whereWithFilter = {
+      ...baseWhere,
+      ...(validDoctorIds !== null && validDoctorIds.length > 0 && { id: { in: validDoctorIds } })
+    };
+
+    const doctors = await prisma.person.findMany({
+      where: whereWithFilter,
+      select: commonSelect,
       orderBy: { lastName: 'asc' },
       take: limit
     });
 
     // Filter by specialty if provided (post-query filter on array field)
+    // Also applies brancheFilter from widgetSettings if configured
+    const brancheFilter = ws.brancheFilter || [];
     let filteredDoctors = doctors;
-    if (specialty) {
+    if (specialty || brancheFilter.length > 0) {
       filteredDoctors = doctors.filter(d => {
         const profile = d.tenantProfiles?.[0];
-        return profile?.specialties?.some(s =>
+        const specialties = profile?.specialties || [];
+        const matchesSpecialty = !specialty || specialties.some(s =>
           s.toLowerCase().includes(specialty.toLowerCase())
         );
+        const matchesBranch = brancheFilter.length === 0 || specialties.some(s =>
+          brancheFilter.includes(s)
+        );
+        return matchesSpecialty && matchesBranch;
       });
     }
 
@@ -191,10 +214,15 @@ router.get('/doctors/:id', [
       return res.status(400).json({ error: 'Tenant non identificato' });
     }
 
+    // Booking widget settings: filter prestazioni if configured
+    const bookingWs = (req.publicWidgetSettings || {}).booking || {};
+    const filteredPrestazioniIds = bookingWs.prestazioniIds?.length > 0 ? bookingWs.prestazioniIds : null;
+
     const doctor = await prisma.person.findFirst({
       where: {
         id: req.params.id,
         deletedAt: null,
+        NOT: { firstName: 'ANON', lastName: 'ANON' },
         tenantProfiles: {
           some: {
             tenantId,
@@ -220,7 +248,13 @@ router.get('/doctors/:id', [
           },
           take: 1
         },
-        // Prestazioni abilitate per questo medico
+        // Ruoli per derivare specialità quando profile.specialties è vuoto
+        personRoles: {
+          where: { tenantId, deletedAt: null },
+          select: { roleType: true },
+          take: 10
+        },
+        // Prestazioni abilitate per questo medico (filtrate per booking widget se configurato)
         abilitazioni: {
           where: {
             deletedAt: null,
@@ -228,7 +262,8 @@ router.get('/doctors/:id', [
             prestazione: {
               tenantId,
               deletedAt: null,
-              attivo: true
+              attivo: true,
+              ...(filteredPrestazioniIds && { id: { in: filteredPrestazioniIds } })
             }
           },
           select: {
@@ -276,6 +311,19 @@ router.get('/doctors/:id', [
 
     const profile = doctor.tenantProfiles?.[0] || {};
 
+    // Deriva specialità dai ruoli quando profile.specialties è vuoto (es. nuovo medico)
+    const ROLE_SPECIALTY_MAP = {
+      MEDICO_COMPETENTE: 'Medicina del Lavoro',
+      MEDICO: 'Medicina Generale',
+      CLINIC_ADMIN: 'Medicina Generale'
+    };
+    const roleSpecialties = (doctor.personRoles || [])
+      .map(r => ROLE_SPECIALTY_MAP[r.roleType])
+      .filter(Boolean);
+    const finalSpecialties = profile.specialties?.length > 0
+      ? profile.specialties
+      : [...new Set(roleSpecialties)];
+
     res.json({
       success: true,
       data: {
@@ -288,7 +336,7 @@ router.get('/doctors/:id', [
         title: profile.title || null,
         shortDescription: profile.shortDescription || null,
         fullDescription: profile.fullDescription || null,
-        specialties: profile.specialties || [],
+        specialties: finalSpecialties,
         certifications: profile.certifications || [],
         prestazioni: doctor.abilitazioni.map(a => a.prestazione),
         prossimiSlot: doctor.slotDisponibilita.map(s => ({

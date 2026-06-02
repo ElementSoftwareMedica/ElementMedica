@@ -131,13 +131,17 @@ const getTipoColor = (tipo: TipoDocumentoTemplate): string => {
 // ============================================
 
 const ModulisticaPage: React.FC = () => {
-    const { user } = useAuth();
+    const { hasPermission } = useAuth();
     const navigate = useNavigate();
     const { showToast } = useToast();
     const queryClient = useQueryClient();
     const { getTenantFilterParams, tenantFilterKey, isReady } = useTenantFilter();
     const { canPerformCRUD } = useTenantMode();
     const { confirmDelete, confirm } = useConfirmDialog();
+    const canCreateTemplates = canPerformCRUD && (hasPermission('templates', 'create') || hasPermission('templates:create'));
+    const canUpdateTemplates = canPerformCRUD && (hasPermission('templates', 'update') || hasPermission('templates:update'));
+    const canDeleteTemplates = canPerformCRUD && (hasPermission('templates', 'delete') || hasPermission('templates:delete'));
+    const canManageTemplates = canCreateTemplates || canUpdateTemplates || canDeleteTemplates;
 
     // State
     const [filters, setFilters] = useState<TemplateFilters>({
@@ -248,6 +252,10 @@ const ModulisticaPage: React.FC = () => {
 
     // Handlers
     const handleDelete = useCallback(async (id: string, nome: string) => {
+        if (!canDeleteTemplates) {
+            showToast({ message: 'Non hai il permesso di eliminare template', type: 'warning' });
+            return;
+        }
         if (await confirmDelete(nome)) {
             try {
                 await deleteMutation.mutateAsync(id);
@@ -272,15 +280,23 @@ const ModulisticaPage: React.FC = () => {
                 }
             }
         }
-    }, [deleteMutation, confirmDelete, confirm, toggleActiveMutation, showToast]);
+    }, [deleteMutation, confirmDelete, confirm, toggleActiveMutation, showToast, canDeleteTemplates]);
 
     const handleToggleActive = useCallback((id: string, currentActive: boolean) => {
+        if (!canUpdateTemplates) {
+            showToast({ message: 'Non hai il permesso di modificare template', type: 'warning' });
+            return;
+        }
         toggleActiveMutation.mutate({ id, isActive: !currentActive });
-    }, [toggleActiveMutation]);
+    }, [toggleActiveMutation, canUpdateTemplates, showToast]);
 
     const handleDuplicate = useCallback((id: string) => {
+        if (!canCreateTemplates) {
+            showToast({ message: 'Non hai il permesso di creare template', type: 'warning' });
+            return;
+        }
         duplicateMutation.mutate(id);
-    }, [duplicateMutation]);
+    }, [duplicateMutation, canCreateTemplates, showToast]);
 
     // Reset filters
     const handleResetFilters = useCallback(() => {
@@ -314,22 +330,26 @@ const ModulisticaPage: React.FC = () => {
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
-                        <CRUDButton
-                            onClick={() => initDaNormativaMutation.mutate()}
-                            disabled={initDaNormativaMutation.isPending}
-                            className="flex items-center gap-2"
-                            title="Crea automaticamente tutti i modelli obbligatori per la Medicina del Lavoro (D.Lgs 81/08)"
-                        >
-                            <BookOpen className="w-4 h-4" />
-                            {initDaNormativaMutation.isPending ? 'Inizializzazione...' : 'Inizializza da normativa'}
-                        </CRUDButton>
-                        <CRUDPrimaryButton
-                            onClick={() => setIsCreateModalOpen(true)}
-                            className="flex items-center gap-2"
-                        >
-                            <Plus className="w-4 h-4" />
-                            Nuovo Template
-                        </CRUDPrimaryButton>
+                        {canCreateTemplates && (
+                            <>
+                                <CRUDButton
+                                    onClick={() => initDaNormativaMutation.mutate()}
+                                    disabled={initDaNormativaMutation.isPending}
+                                    className="flex items-center gap-2"
+                                    title="Crea automaticamente tutti i modelli obbligatori per la Medicina del Lavoro (D.Lgs 81/08)"
+                                >
+                                    <BookOpen className="w-4 h-4" />
+                                    {initDaNormativaMutation.isPending ? 'Inizializzazione...' : 'Inizializza da normativa'}
+                                </CRUDButton>
+                                <CRUDPrimaryButton
+                                    onClick={() => setIsCreateModalOpen(true)}
+                                    className="flex items-center gap-2"
+                                >
+                                    <Plus className="w-4 h-4" />
+                                    Nuovo Template
+                                </CRUDPrimaryButton>
+                            </>
+                        )}
                     </div>
                 </div>
 
@@ -475,7 +495,7 @@ const ModulisticaPage: React.FC = () => {
                                 ? 'Prova a modificare i filtri di ricerca'
                                 : 'Inizia creando il tuo primo template documento'}
                         </p>
-                        {canPerformCRUD && !filters.search && !filters.tipo && !filters.fase && filters.isActive === null && (
+                        {canCreateTemplates && !filters.search && !filters.tipo && !filters.fase && filters.isActive === null && (
                             <CRUDPrimaryButton onClick={() => setIsCreateModalOpen(true)}>
                                 <Plus className="w-4 h-4 mr-2" />
                                 Crea Template
@@ -516,34 +536,35 @@ const ModulisticaPage: React.FC = () => {
                                                     </p>
                                                 )}
                                             </div>
-                                            <ActionButton
-                                                theme="teal"
-                                                actions={[
-                                                    {
-                                                        label: 'Modifica',
-                                                        icon: <Edit className="w-4 h-4" />,
-                                                        onClick: () => setEditingTemplate(template)
-                                                    },
-                                                    {
-                                                        label: 'Duplica',
-                                                        icon: <Copy className="w-4 h-4" />,
-                                                        onClick: () => handleDuplicate(template.id)
-                                                    },
-                                                    {
-                                                        label: template.isActive ? 'Disattiva' : 'Attiva',
-                                                        icon: template.isActive ?
-                                                            <ToggleRight className="w-4 h-4" /> :
-                                                            <ToggleLeft className="w-4 h-4" />,
-                                                        onClick: () => handleToggleActive(template.id, template.isActive)
-                                                    },
-                                                    {
-                                                        label: 'Elimina',
-                                                        icon: <Trash2 className="w-4 h-4" />,
-                                                        onClick: () => handleDelete(template.id, template.nome),
-                                                        variant: 'danger'
-                                                    }
-                                                ]}
-                                            />
+                                            {canManageTemplates && (
+                                                <ActionButton
+                                                    theme="teal"
+                                                    actions={[
+                                                        ...(canUpdateTemplates ? [{
+                                                            label: 'Modifica',
+                                                            icon: <Edit className="w-4 h-4" />,
+                                                            onClick: () => setEditingTemplate(template)
+                                                        }, {
+                                                            label: template.isActive ? 'Disattiva' : 'Attiva',
+                                                            icon: template.isActive ?
+                                                                <ToggleRight className="w-4 h-4" /> :
+                                                                <ToggleLeft className="w-4 h-4" />,
+                                                            onClick: () => handleToggleActive(template.id, template.isActive)
+                                                        }] : []),
+                                                        ...(canCreateTemplates ? [{
+                                                            label: 'Duplica',
+                                                            icon: <Copy className="w-4 h-4" />,
+                                                            onClick: () => handleDuplicate(template.id)
+                                                        }] : []),
+                                                        ...(canDeleteTemplates ? [{
+                                                            label: 'Elimina',
+                                                            icon: <Trash2 className="w-4 h-4" />,
+                                                            onClick: () => handleDelete(template.id, template.nome),
+                                                            variant: 'danger' as const
+                                                        }] : [])
+                                                    ]}
+                                                />
+                                            )}
                                         </div>
                                     </div>
 
@@ -646,7 +667,7 @@ const ModulisticaPage: React.FC = () => {
             </div>
 
             {/* Create Modal */}
-            {isCreateModalOpen && (
+            {isCreateModalOpen && canCreateTemplates && (
                 <TemplateFormModal
                     isOpen={isCreateModalOpen}
                     onClose={() => setIsCreateModalOpen(false)}
@@ -656,7 +677,7 @@ const ModulisticaPage: React.FC = () => {
             )}
 
             {/* Edit Modal */}
-            {editingTemplate && (
+            {editingTemplate && canUpdateTemplates && (
                 <TemplateFormModal
                     isOpen={!!editingTemplate}
                     onClose={() => setEditingTemplate(null)}

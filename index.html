@@ -13,6 +13,8 @@
   <!-- Font preload for performance -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <!-- Logo preload: LCP element — WebP only (PNG served on-demand as <img src> fallback for legacy browsers) -->
+  <link rel="preload" href="/assets/logos/%BRAND_LOGO_WEBP%" as="image" type="image/webp" fetchpriority="high" />
   <meta name="description" content="%BRAND_DESCRIPTION%" />
   <meta name="author" content="Element srl" />
   <link rel="canonical" href="%BRAND_CANONICAL%" />
@@ -31,6 +33,28 @@
   <meta name="twitter:description" content="%BRAND_OG_DESCRIPTION%" />
   <meta name="twitter:image" content="%BRAND_OG_IMAGE%" />
   <title>%BRAND_TITLE%</title>
+  <!-- Google Analytics — loaded after first interaction/3s to keep GA off the LCP critical path -->
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    window.gtag = gtag;
+    gtag('js', new Date());
+    var _gaId = '%BRAND_GA_ID%';
+    gtag('config', _gaId);
+    function _loadGA() {
+      if (window._gaLoaded) return;
+      window._gaLoaded = true;
+      var s = document.createElement('script');
+      s.async = true;
+      s.src = 'https://www.googletagmanager.com/gtag/js?id=' + _gaId;
+      document.head.appendChild(s);
+    }
+    // Load after 3 s idle OR on first user interaction — whichever is earlier
+    setTimeout(_loadGA, 3000);
+    document.addEventListener('click', _loadGA, { once: true, passive: true });
+    document.addEventListener('touchstart', _loadGA, { once: true, passive: true });
+    document.addEventListener('scroll', _loadGA, { once: true, passive: true });
+  </script>
   <!-- Prevent flash of wrong theme -->
   <script>
     (function () {

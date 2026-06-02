@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
+import { Navigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import NotificationPopup from '../notifications/NotificationPopup';
+import { useRoleGuard } from '../../hooks/useRoleGuard';
+import { useAuth } from '../../context/AuthContext';
 
 // Import Formazione theme
 import '../../styles/formazione-theme.css';
@@ -18,6 +21,13 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const { user } = useAuth();
+  const { isPazienteOnly } = useRoleGuard();
+
+  // PAZIENTE puro: non ha accesso alla sezione Sicurezza → reindirizza alla propria cartella
+  if (isPazienteOnly && user?.id) {
+    return <Navigate to={`/poliambulatorio/pazienti/${user.id}`} replace />;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 formazione-theme">
@@ -48,7 +58,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       {/* Main Content Area - adjusts based on sidebar width */}
       <div className={`transition-all duration-300 ${sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
         {/* Header */}
-        <Header sidebarOpen={mobileMenuOpen} setSidebarOpen={setMobileMenuOpen} />
+        <Header />
 
         {/* Page Content */}
         <main className="p-6">

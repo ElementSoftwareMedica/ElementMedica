@@ -231,7 +231,7 @@ router.post('/', requirePermission('clinica:write'), async (req, res) => {
       },
       select: { id: true, dataInizio: true, dataFine: true, dataScadenza: true }
     });
-    if (existingNomina) {
+    if (existingNomina && !nominaData.conflictResolution) {
       const existingEndDate = existingNomina.dataFine || existingNomina.dataScadenza;
       const newStartDate = nominaData.dataInizio ? new Date(nominaData.dataInizio) : new Date();
 
@@ -254,8 +254,17 @@ router.post('/', requirePermission('clinica:write'), async (req, res) => {
         .catch(err => logger.warn({ nominaId: nomina.id, error: err.message }, 'Billing per nomina fallito'))
     );
   } catch (error) {
+    if (error.code === 'NOMINA_ACTIVE_CONFLICT' || error.code === 'PREVIOUS_NOMINA_WITHOUT_END_DATE') {
+      return res.status(409).json({
+        error: error.code === 'NOMINA_ACTIVE_CONFLICT'
+          ? 'Esiste già una nomina attiva per questo ruolo'
+          : 'La nomina precedente deve avere una data fine',
+        code: error.code,
+        existingNomina: error.existingNomina || null
+      });
+    }
     if (error.message && error.message.startsWith('OVERLAP:')) {
-      return res.status(409).json({ error: 'Sovrapposizione di date con una nomina esistente' });
+      return res.status(409).json({ error: 'Sovrapposizione di date con una nomina esistente', code: 'NOMINA_ACTIVE_CONFLICT' });
     }
     logger.error({ error: error.message }, 'Errore creazione nomina');
     res.status(500).json({ error: 'Errore creazione nomina' });
@@ -277,11 +286,23 @@ router.put('/:id', requirePermission('clinica:write'), async (req, res) => {
     // P-MDL: Aggiorna (o rigenera) MovimentiContabili BOZZA con i dati aggiornati
     setImmediate(() =>
       MovimentoContabileGenerator.aggiornaPerNomina(nomina, tenantId, req.person?.id || null)
+        .catch(err => logger.warn({ nominaId: nomina.id, error: err.message }, 'Billing aggiornamento nomina fallito'))
     );
 
     res.json(nomina);
   } catch (error) {
-    logger.error({ error: 'Operazione non riuscita', nominaId: req.params.id }, 'Errore aggiornamento nomina');
+    logger.error({ error: error.message, code: error.code, nominaId: req.params.id }, 'Errore aggiornamento nomina');
+    if (error.code === 'NOMINA_ACTIVE_CONFLICT' || error.code === 'NOMINA_PERSON_CHANGE_CONFLICT' || error.code === 'PREVIOUS_NOMINA_WITHOUT_END_DATE') {
+      return res.status(409).json({
+        error: error.code === 'NOMINA_PERSON_CHANGE_CONFLICT'
+          ? 'Cambio persona non consentito per una nomina con conflitto attivo'
+          : error.code === 'NOMINA_ACTIVE_CONFLICT'
+            ? 'Esiste già una nomina attiva per questo ruolo'
+            : 'La nomina precedente deve avere una data fine',
+        code: error.code,
+        existingNomina: error.existingNomina || null
+      });
+    }
     if (error.message === 'Nomina non trovata') {
       return res.status(404).json({ error: 'Errore interno del server' });
     }

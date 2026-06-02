@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { ClipboardCheck, Plus, ChevronDown, ChevronRight, Check, Edit3 } from 'lucide-react'
+import { ElegantSelect } from '../ElegantControls'
 
 // ============================================================
 // Types
@@ -67,13 +68,18 @@ export function QuestionariCard({ visitId, personId, tenantId, isReadOnly, defau
           orderBy: { column: 'nome', direction: 'ASC' }
         }) as Promise<VisitTemplate[]>,
         window.desktopApi.db.query({
-          table: 'questionari_compilati',
+          table: 'documenti_compilati',
           where: { visitaId: visitId, _isDeleted: 0 },
-          orderBy: { column: 'dataCompilazione', direction: 'DESC' }
-        }) as Promise<QuestionarioCompilato[]>
+          orderBy: { column: 'updatedAt', direction: 'DESC' }
+        }) as Promise<Array<QuestionarioCompilato & { documentoTemplateId?: string; datiCompilati?: string; updatedAt?: string; createdAt?: string }>>
       ])
       setTemplates(tpls)
-      setCompilati(compiled)
+      setCompilati(compiled.map(row => ({
+        ...row,
+        templateId: row.documentoTemplateId || row.templateId,
+        risposte: row.datiCompilati || row.risposte || '{}',
+        dataCompilazione: row.dataCompilazione || row.updatedAt || row.createdAt || null,
+      })))
     } catch {
       setTemplates([])
       setCompilati([])
@@ -136,34 +142,34 @@ export function QuestionariCard({ visitId, personId, tenantId, isReadOnly, defau
         tenantId,
         visitaId: visitId,
         personId,
-        templateId: selectedTemplate,
-        risposte: JSON.stringify(risposte),
-        dataCompilazione: now,
+        documentoTemplateId: selectedTemplate,
+        datiCompilati: JSON.stringify(risposte),
+        stato: 'BOZZA',
         updatedAt: now,
       }
 
       if (editingId === 'NEW') {
         const { id } = await window.desktopApi.db.insert({
-          table: 'questionari_compilati',
+          table: 'documenti_compilati',
           data: { ...data, createdAt: now }
         })
 
         await window.desktopApi.sync.enqueue({
           type: 'CREATE',
-          entity: 'questionari_compilati',
+          entity: 'documenti_compilati',
           entityId: id,
           payload: data
         })
       } else if (editingId) {
         await window.desktopApi.db.update({
-          table: 'questionari_compilati',
+          table: 'documenti_compilati',
           id: editingId,
           data
         })
 
         await window.desktopApi.sync.enqueue({
           type: 'UPDATE',
-          entity: 'questionari_compilati',
+          entity: 'documenti_compilati',
           entityId: editingId,
           payload: data
         })
@@ -206,17 +212,12 @@ export function QuestionariCard({ visitId, personId, tenantId, isReadOnly, defau
           <label className="block text-[10px] font-medium text-gray-600 mb-0.5">
             {field.label} {field.obbligatorio && <span className="text-red-400">*</span>}
           </label>
-          <select
+          <ElegantSelect
             value={(value as string) || ''}
-            onChange={(e) => setRisposte(prev => ({ ...prev, [field.key]: e.target.value }))}
+            onChange={(selected) => setRisposte(prev => ({ ...prev, [field.key]: selected }))}
             disabled={isReadOnly}
-            className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-teal-500"
-          >
-            <option value="">Seleziona...</option>
-            {field.opzioni.map(opt => (
-              <option key={opt} value={opt}>{opt}</option>
-            ))}
-          </select>
+            options={[{ value: '', label: 'Seleziona...' }, ...field.opzioni.map(opt => ({ value: opt, label: opt }))]}
+          />
         </div>
       )
     }
@@ -364,18 +365,14 @@ export function QuestionariCard({ visitId, personId, tenantId, isReadOnly, defau
                   {editingId === 'NEW' && templates.length > 1 && (
                     <div>
                       <label className="block text-[10px] font-medium text-gray-600 mb-0.5">Modello</label>
-                      <select
+                      <ElegantSelect
                         value={selectedTemplate}
-                        onChange={(e) => {
-                          setSelectedTemplate(e.target.value)
+                        onChange={(value) => {
+                          setSelectedTemplate(value)
                           setRisposte({})
                         }}
-                        className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-teal-500"
-                      >
-                        {templates.map(t => (
-                          <option key={t.id} value={t.id}>{t.nome}</option>
-                        ))}
-                      </select>
+                        options={templates.map(t => ({ value: t.id, label: t.nome }))}
+                      />
                     </div>
                   )}
 

@@ -111,24 +111,30 @@ const getStatoBadge = (stato: StatoDocumentoCompilato | undefined) => {
 function getDefaultFormValues(campi: CampoTemplate[], existingData?: Record<string, unknown>): Record<string, string | string[]> {
     const values: Record<string, string | string[]> = {};
     for (const campo of campi) {
-        if (existingData?.[campo.name] !== undefined) {
-            const val = existingData[campo.name];
+        const fieldName = getCampoName(campo);
+        const legacyKey = (campo as CampoTemplate & { key?: string }).key || '';
+        if (existingData?.[fieldName] !== undefined || (legacyKey && existingData?.[legacyKey] !== undefined)) {
+            const val = existingData[fieldName] ?? existingData[legacyKey];
             if (Array.isArray(val)) {
-                values[campo.name] = val.map(String);
+                values[fieldName] = val.map(String);
             } else {
-                values[campo.name] = String(val ?? '');
+                values[fieldName] = String(val ?? '');
             }
         } else if (campo.defaultValue) {
-            values[campo.name] = campo.defaultValue;
+            values[fieldName] = campo.defaultValue;
         } else if (campo.type === 'multiselect') {
-            values[campo.name] = [];
+            values[fieldName] = [];
         } else if (campo.type === 'boolean') {
-            values[campo.name] = '';
+            values[fieldName] = '';
         } else {
-            values[campo.name] = '';
+            values[fieldName] = '';
         }
     }
     return values;
+}
+
+function getCampoName(campo: CampoTemplate): string {
+    return campo.name || (campo as CampoTemplate & { key?: string }).key || campo.label || 'campo';
 }
 
 // ============================================
@@ -334,10 +340,11 @@ const ModulisticaModal: React.FC<ModulisticaModalProps> = ({
         const errors: Record<string, string> = {};
 
         for (const campo of campi) {
-            const value = formValues[campo.name];
+            const fieldName = getCampoName(campo);
+            const value = formValues[fieldName];
             if (campo.required) {
                 if (Array.isArray(value) ? value.length === 0 : !value) {
-                    errors[campo.name] = 'Campo obbligatorio';
+                    errors[fieldName] = 'Campo obbligatorio';
                 }
             }
             if (campo.validation?.min !== undefined && typeof value === 'string') {
@@ -866,17 +873,18 @@ const FillContent: React.FC<FillContentProps> = ({
             )}
 
             {campi.map(campo => {
+                const fieldName = getCampoName(campo);
                 // Evaluate conditional visibility
                 if (!isFieldVisible(campo as any, formValues as Record<string, unknown>, campi as any[])) {
                     return null;
                 }
                 return (
                     <FieldRenderer
-                        key={campo.name}
+                        key={fieldName}
                         campo={campo}
-                        value={formValues[campo.name] ?? ''}
-                        error={formErrors[campo.name]}
-                        onChange={(val) => onFieldChange(campo.name, val)}
+                        value={formValues[fieldName] ?? ''}
+                        error={formErrors[fieldName]}
+                        onChange={(val) => onFieldChange(fieldName, val)}
                         readOnly={readOnly}
                     />
                 );
@@ -943,9 +951,11 @@ const ViewContent: React.FC<ViewContentProps> = ({
             )}
 
             {campi.map(campo => {
-                const value = dati[campo.name];
+                const fieldName = getCampoName(campo);
+                const legacyKey = (campo as CampoTemplate & { key?: string }).key || '';
+                const value = dati[fieldName] ?? dati[legacyKey];
                 return (
-                    <div key={campo.name} className="border-b border-gray-100 pb-3 last:border-0">
+                    <div key={fieldName} className="border-b border-gray-100 pb-3 last:border-0">
                         <p className="text-xs font-medium text-gray-500 mb-1">
                             {campo.label}
                         </p>
@@ -997,6 +1007,7 @@ const FieldRenderer: React.FC<FieldRendererProps> = ({
     onChange,
     readOnly
 }) => {
+    const fieldName = getCampoName(campo);
     const stringValue = Array.isArray(value) ? '' : value;
     const arrayValue = Array.isArray(value) ? value : [];
 
@@ -1092,7 +1103,7 @@ const FieldRenderer: React.FC<FieldRendererProps> = ({
                     <label className="flex items-center gap-2 cursor-pointer">
                         <input
                             type="radio"
-                            name={campo.name}
+                            name={fieldName}
                             checked={stringValue === 'true'}
                             onChange={() => onChange('true')}
                             disabled={readOnly}
@@ -1103,7 +1114,7 @@ const FieldRenderer: React.FC<FieldRendererProps> = ({
                     <label className="flex items-center gap-2 cursor-pointer">
                         <input
                             type="radio"
-                            name={campo.name}
+                            name={fieldName}
                             checked={stringValue === 'false'}
                             onChange={() => onChange('false')}
                             disabled={readOnly}
@@ -1136,7 +1147,7 @@ const FieldRenderer: React.FC<FieldRendererProps> = ({
                         <label key={idx} className="flex items-center gap-2 cursor-pointer">
                             <input
                                 type="radio"
-                                name={campo.name}
+                                name={fieldName}
                                 checked={stringValue === getOptionValue(opt)}
                                 onChange={() => onChange(getOptionValue(opt))}
                                 disabled={readOnly}

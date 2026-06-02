@@ -92,9 +92,19 @@ function calcolaCompenso(tipo, valore, min, max, base) {
 /**
  * Trova il TariffarioAziendale attivo + le sue voci per una CompanyTenantProfile.
  */
-async function getTariffario(companyTenantProfileId, tenantId) {
+async function getTariffario(companyTenantProfileId, tenantId, referenceDate = new Date()) {
+    const baseWhere = {
+        companyTenantProfileId,
+        tenantId,
+        attivo: true,
+        deletedAt: null,
+    };
     const assoc = await prisma.tariffarioCompanyAssociation.findFirst({
-        where: { companyTenantProfileId, tenantId, attivo: true, deletedAt: null },
+        where: {
+            ...baseWhere,
+            validoDa: { lte: referenceDate },
+            OR: [{ validoA: null }, { validoA: { gte: referenceDate } }],
+        },
         include: {
             tariffario: {
                 include: { voci: { where: { attivo: true } } },
@@ -102,15 +112,25 @@ async function getTariffario(companyTenantProfileId, tenantId) {
         },
         orderBy: { validoDa: 'desc' },
     });
-    return assoc; // assoc.tariffario.voci
+    if (assoc) return assoc;
+
+    return prisma.tariffarioCompanyAssociation.findFirst({
+        where: baseWhere,
+        include: {
+            tariffario: {
+                include: { voci: { where: { attivo: true } } },
+            },
+        },
+        orderBy: { validoDa: 'desc' },
+    }); // assoc.tariffario.voci
 }
 
 /**
  * Cerca la VoceTariffario per tipo (SOPRALLUOGO_MC, NOMINA_RSPP, ecc.) nel
  * tariffario associato all'azienda. Ritorna anche l'assoc per validoDa.
  */
-async function getVocePerTipo(companyTenantProfileId, tenantId, tipoVoce) {
-    const assoc = await getTariffario(companyTenantProfileId, tenantId);
+async function getVocePerTipo(companyTenantProfileId, tenantId, tipoVoce, referenceDate = new Date()) {
+    const assoc = await getTariffario(companyTenantProfileId, tenantId, referenceDate);
     const voce = assoc?.tariffario?.voci?.find(v => v.tipo === tipoVoce) || null;
     return { assoc, voce };
 }
@@ -123,19 +143,26 @@ async function getVocePerTipo(companyTenantProfileId, tenantId, tipoVoce) {
  *  3. Voce generica PRESTAZIONE senza prestazioneId (fallback)
  * @param {string} tipoVisitaMDL - opzionale, es. 'PREVENTIVA' | 'PERIODICA' | ecc.
  */
-async function getVocePerPrestazione(companyTenantProfileId, tenantId, prestazioneId, tipoVisitaMDL = null) {
-    const assoc = await getTariffario(companyTenantProfileId, tenantId);
+async function getVocePerPrestazione(companyTenantProfileId, tenantId, prestazioneId, tipoVisitaMDL = null, referenceDate = new Date()) {
+    const assoc = await getTariffario(companyTenantProfileId, tenantId, referenceDate);
     if (!assoc) return { assoc: null, voce: null };
     const voci = assoc.tariffario?.voci || [];
-    let voce = null;
-    // 1. Specifico: prestazione + categoria visita MDL
-    if (tipoVisitaMDL) {
-        voce = voci.find(v => v.tipo === 'PRESTAZIONE' && v.prestazioneId === prestazioneId && v.categoriaVisita === tipoVisitaMDL) || null;
-    }
-    // 2. Generico: prestazione senza categoria
-    if (!voce) voce = voci.find(v => v.tipo === 'PRESTAZIONE' && v.prestazioneId === prestazioneId && !v.categoriaVisita) || null;
-    // 3. Fallback PRESTAZIONE generico (nessuna prestazione specifica)
-    if (!voce) voce = voci.find(v => v.tipo === 'PRESTAZIONE' && !v.prestazioneId) || null;
+    const prestazioneVoci = voci.filter(v => v.tipo === 'PRESTAZIONE');
+    const voce =
+        (tipoVisitaMDL && prestazioneId
+            ? prestazioneVoci.find(v => v.prestazioneId === prestazioneId && v.categoriaVisita === tipoVisitaMDL)
+            : null)
+        || (tipoVisitaMDL
+            ? prestazioneVoci.find(v => !v.prestazioneId && v.categoriaVisita === tipoVisitaMDL)
+            : null)
+        || (prestazioneId
+            ? prestazioneVoci.find(v => v.prestazioneId === prestazioneId && !v.categoriaVisita)
+            : null)
+        || (prestazioneId
+            ? prestazioneVoci.find(v => v.prestazioneId === prestazioneId)
+            : null)
+        || prestazioneVoci.find(v => !v.prestazioneId && !v.categoriaVisita)
+        || null;
     return { assoc, voce };
 }
 
@@ -149,6 +176,7 @@ async function getCompanyDipendente(personId, tenantId) {
             person: { id: personId },
             tenantId,
             deletedAt: null,
+            isActive: true,
             companyTenantProfileId: { not: null },
         },
         select: { companyTenantProfileId: true },
@@ -377,6 +405,176 @@ async function esisteMovimento(where) {
     return prisma.movimentoContabile.findFirst({ where: { ...where, deletedAt: null, stato: { not: 'ANNULLATO' } } });
 }
 
+async function aggiornaMovimentoSeBozza(movimento, data) {
+    if (!movimento || !['BOZZA', 'DA_FATTURARE'].includes(movimento.stato)) return movimento;
+    const changed = Object.entries(data).some(([key, value]) => {
+        if (value === undefined) return false;
+        const current = movimento[key];
+        if (typeof value === 'number') return Number(current) !== value;
+        return current !== value;
+    });
+    if (!changed) return movimento;
+    return prisma.movimentoContabile.update({
+        where: { id: movimento.id },
+        data: {
+            ...data,
+            updatedAt: new Date(),
+        },
+    });
+}
+
+async function resolvePrestazioneSource({ visitaId, appPrestazioneId, appuntamentoId, tenantId }) {
+    if (appPrestazioneId) {
+        const appPrestazione = await prisma.appuntamentoPrestazione.findFirst({
+            where: { id: appPrestazioneId, tenantId, deletedAt: null },
+            include: {
+                appuntamento: true,
+                prestazione: true,
+            },
+        });
+        if (!appPrestazione) return null;
+        return {
+            visita: null,
+            appPrestazione,
+            appuntamento: appPrestazione.appuntamento,
+            prestazione: appPrestazione.prestazione,
+            visitaId: null,
+            appPrestazioneId: appPrestazione.id,
+            appuntamentoId: appPrestazione.appuntamentoId,
+            medicoId: appPrestazione.medicoRefertanteId || appPrestazione.appuntamento?.medicoId || null,
+            pazienteId: appPrestazione.appuntamento?.pazienteId || null,
+            tipoVisitaMDL: appPrestazione.appuntamento?.tipoVisitaMDL || null,
+            dataEsecuzione: appPrestazione.dataEsecuzione || appPrestazione.appuntamento?.dataOra || new Date(),
+        };
+    }
+
+    if (visitaId) {
+        const visita = await prisma.visita.findFirst({
+            where: { id: visitaId, tenantId, deletedAt: null },
+            include: {
+                appuntamento: true,
+                prestazione: true,
+                appPrestazione: { include: { prestazione: true } },
+            },
+        });
+        if (!visita) return null;
+        return {
+            visita,
+            appPrestazione: visita.appPrestazione || null,
+            appuntamento: visita.appuntamento || null,
+            prestazione: visita.prestazione || visita.appPrestazione?.prestazione || null,
+            visitaId: visita.id,
+            appPrestazioneId: visita.appPrestazioneId || null,
+            appuntamentoId: visita.appuntamentoId || visita.appPrestazione?.appuntamentoId || null,
+            medicoId: visita.medicoRefertanteId || visita.medicoId || visita.appPrestazione?.medicoRefertanteId || visita.appuntamento?.medicoId || null,
+            pazienteId: visita.pazienteId || visita.appuntamento?.pazienteId || null,
+            tipoVisitaMDL: visita.tipoVisitaMDL || visita.appuntamento?.tipoVisitaMDL || null,
+            dataEsecuzione: visita.dataInizio || visita.appuntamento?.dataOra || new Date(),
+        };
+    }
+
+    if (appuntamentoId) {
+        const appuntamento = await prisma.appuntamento.findFirst({
+            where: { id: appuntamentoId, tenantId, deletedAt: null },
+            include: { prestazione: true, visita: true },
+        });
+        if (!appuntamento) return null;
+        return {
+            visita: appuntamento.visita || null,
+            appPrestazione: null,
+            appuntamento,
+            prestazione: appuntamento.prestazione || null,
+            visitaId: appuntamento.visita?.id || null,
+            appPrestazioneId: null,
+            appuntamentoId: appuntamento.id,
+            medicoId: appuntamento.medicoId || null,
+            pazienteId: appuntamento.pazienteId || null,
+            tipoVisitaMDL: appuntamento.tipoVisitaMDL || null,
+            dataEsecuzione: appuntamento.dataOra || new Date(),
+        };
+    }
+
+    return null;
+}
+
+async function syncBozzaFatturaAppuntamento(appuntamentoId, tenantId) {
+    if (!appuntamentoId) return;
+    const fattura = await prisma.fatturaElettronica.findFirst({
+        where: {
+            tenantId,
+            deletedAt: null,
+            stato: 'BOZZA',
+            OR: [
+                { note: `AUTO_ACCETTAZIONE:${appuntamentoId}` },
+                { movimentiContabili: { some: { appuntamentoId, tenantId, deletedAt: null } } },
+            ],
+        },
+        include: { linee: { orderBy: { numeroLinea: 'asc' } } },
+        orderBy: { updatedAt: 'desc' },
+    });
+    if (!fattura?.linee?.length) return;
+
+    const entrate = await prisma.movimentoContabile.findMany({
+        where: {
+            tenantId,
+            deletedAt: null,
+            appuntamentoId,
+            direzione: 'ENTRATA',
+            stato: { notIn: ['ANNULLATO', 'STORNATO'] },
+            note: { not: { contains: 'SENZA_FATTURA' } },
+        },
+        select: { id: true, importoNetto: true },
+    });
+    if (!entrate.length) return;
+
+    const totaleNetto = entrate.reduce((sum, mov) => sum + Number(mov.importoNetto || 0), 0);
+    if (totaleNetto <= 0) return;
+
+    const [primaLinea] = fattura.linee;
+    const aliquota = Number(primaLinea.aliquotaIva || 0);
+    const importoIva = Number((totaleNetto * aliquota / 100).toFixed(2));
+    const totale = Number((totaleNetto + importoIva + Number(fattura.importoBollo || 0)).toFixed(2));
+
+    await prisma.$transaction([
+        prisma.fatturaElettronicaLinea.update({
+            where: { id: primaLinea.id },
+            data: {
+                prezzoUnitario: totaleNetto,
+                prezzoTotale: totaleNetto,
+            },
+        }),
+        prisma.fatturaElettronica.update({
+            where: { id: fattura.id },
+            data: {
+                imponibile: totaleNetto,
+                importoIva,
+                totale,
+            },
+        }),
+        prisma.movimentoContabile.updateMany({
+            where: { id: { in: entrate.map(m => m.id) }, fatturaElettronicaId: null },
+            data: { fatturaElettronicaId: fattura.id },
+        }),
+    ]);
+}
+
+async function generaNumeroPagamentoSenzaFattura(tenantId) {
+    const anno = new Date().getFullYear();
+    const prefix = `SF-${anno}/`;
+    const docs = await prisma.fatturaElettronica.findMany({
+        where: {
+            tenantId,
+            numero: { startsWith: prefix },
+        },
+        select: { numero: true },
+    });
+    const latestProgressivo = docs.reduce((max, doc) => {
+        const progressivo = Number(String(doc.numero || '').replace(prefix, '')) || 0;
+        return Math.max(max, progressivo);
+    }, 0);
+    return `${prefix}${String(latestProgressivo + 1).padStart(3, '0')}`;
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Helper scadenze periodiche
 // ──────────────────────────────────────────────────────────────────────────────
@@ -438,14 +636,15 @@ const MovimentoContabileGenerator = {
 
             // Trova azienda del dipendente
             // Priorità:
-            //  1. PersonTenantProfile.companyTenantProfileId (dipendente associato)
-            //  2. visita._appuntamentoCompanyId (passato dal route termina come fallback)
-            let companyTenantProfileId = await getCompanyDipendente(visita.pazienteId, tenantId);
-            if (!companyTenantProfileId && visita._appuntamentoCompanyId) {
-                companyTenantProfileId = visita._appuntamentoCompanyId;
+            //  1. Azienda fissata sull'appuntamento della visita (fotografia contrattuale della prenotazione)
+            //  2. PersonTenantProfile.companyTenantProfileId attivo (fallback per dati storici)
+            let companyTenantProfileId = visita._appuntamentoCompanyId || visita.appuntamento?.companyTenantProfileId || null;
+            if (!companyTenantProfileId) {
+                companyTenantProfileId = await getCompanyDipendente(visita.pazienteId, tenantId);
+            } else {
                 logger.info(
                     { visitaId: visita.id, companyTenantProfileId },
-                    'generaPerVisitaMDL: usato companyTenantProfileId da appuntamento (fallback)'
+                    'generaPerVisitaMDL: usato companyTenantProfileId da appuntamento'
                 );
             }
             if (!companyTenantProfileId) {
@@ -458,7 +657,8 @@ const MovimentoContabileGenerator = {
             }
 
             // Cerca VoceTariffario per questa prestazione — priorità: specifico per tipo visita MDL
-            const { assoc, voce } = await getVocePerPrestazione(companyTenantProfileId, tenantId, visita.prestazioneId, visita.tipoVisitaMDL);
+            const referenceDate = visita.dataOra ? new Date(visita.dataOra) : new Date();
+            const { assoc, voce } = await getVocePerPrestazione(companyTenantProfileId, tenantId, visita.prestazioneId, visita.tipoVisitaMDL, referenceDate);
 
             // Prezzo ENTRATA (fallback chain)
             let importoNettoEntrata = voce ? parseFloat(voce.prezzoBase) : 0;
@@ -524,7 +724,34 @@ const MovimentoContabileGenerator = {
             const existingEntrata = await esisteMovimento({ visitaId: visita.id, direzione: 'ENTRATA', tipo: 'VISITA_MDL', tenantId });
             const existingUscita = await esisteMovimento({ visitaId: visita.id, direzione: 'USCITA', tipo: 'VISITA_MDL', tenantId });
             if (existingEntrata && existingUscita) {
-                result.movimenti.push(existingEntrata, existingUscita);
+                const compenso = await getCompensoProfessionista(
+                    voce, visita.medicoId, visita.prestazioneId, importoNetto, tenantId
+                );
+                const entrataAggiornata = await aggiornaMovimentoSeBozza(existingEntrata, {
+                    companyTenantProfileId,
+                    voceTariffarioId: voce?.id || null,
+                    importoNetto,
+                    importoIva,
+                    importoLordo,
+                    aliquotaIva,
+                    dataEsecuzione: visita.dataOra,
+                    stato: 'DA_FATTURARE',
+                });
+                const uscitaAggiornata = compenso
+                    ? await aggiornaMovimentoSeBozza(existingUscita, {
+                        personId: visita.medicoId,
+                        companyTenantProfileId,
+                        voceTariffarioId: voce?.id || null,
+                        importoNetto: compenso.compensoNetto,
+                        importoIva: 0,
+                        importoLordo: compenso.compensoNetto,
+                        compensoTipo: compenso.tipo,
+                        importoRiferimento: importoNetto,
+                        dataEsecuzione: visita.dataOra,
+                        stato: 'DA_FATTURARE',
+                    })
+                    : existingUscita;
+                result.movimenti.push(entrataAggiornata, uscitaAggiornata);
                 return result;
             }
 
@@ -2239,6 +2466,9 @@ const MovimentoContabileGenerator = {
             const existingUscita = await esisteMovimento({ appPrestazioneId: appPrestazione.id, direzione: 'USCITA', tenantId });
             if (existingEntrata && existingUscita) {
                 result.movimenti.push(existingEntrata, existingUscita);
+                await syncBozzaFatturaAppuntamento(appPrestazione.appuntamentoId, tenantId).catch(err =>
+                    logger.warn({ error: err.message, appPrestazioneId: appPrestazione.id }, 'Sync bozza fattura appuntamento fallita')
+                );
                 return result;
             }
             const soloUscita = Boolean(existingEntrata && !existingUscita);
@@ -2247,15 +2477,17 @@ const MovimentoContabileGenerator = {
             }
 
             // --- Prezzo ENTRATA ---
-            // Se il paziente è un dipendente → cerca tariffario aziendale
+            // Il tariffario aziendale si usa solo per appuntamenti MDL. Lo stesso
+            // paziente può essere anche un privato: in quel caso resta il prezzo base.
             const companyId = appuntamento?.companyTenantProfileId
                 || await getCompanyDipendente(appuntamento?.pazienteId, tenantId).catch(() => null);
+            const isMDLAppuntamento = !!(appuntamento?.tipoVisitaMDL);
 
             let importoNettoEntrata = 0;
             let voceTariffario = null;
             let prezzoFonte = 'NESSUNO';
 
-            if (companyId) {
+            if (companyId && isMDLAppuntamento) {
                 const { voce } = await getVocePerPrestazione(companyId, tenantId, appPrestazione.prestazioneId).catch(() => ({ voce: null }));
                 if (voce && parseFloat(voce.prezzoBase) > 0) {
                     importoNettoEntrata = parseFloat(voce.prezzoBase);
@@ -2267,12 +2499,14 @@ const MovimentoContabileGenerator = {
             if (!importoNettoEntrata && prestazione?.prezzoBase) {
                 importoNettoEntrata = parseFloat(prestazione.prezzoBase);
                 prezzoFonte = 'PRESTAZIONE_STANDARD';
-                result.warnings.push({
-                    type: 'MISSING_VOCE',
-                    message: `Nessuna voce tariffario per "${prestazione.nome}". Usato prezzo base €${importoNettoEntrata}. Configura il tariffario aziendale per un valore accurato.`,
-                    solutionUrl: '/tariffari-aziendali',
-                    field: 'importoNetto',
-                });
+                if (isMDLAppuntamento) {
+                    result.warnings.push({
+                        type: 'MISSING_VOCE',
+                        message: `Nessuna voce tariffario per "${prestazione.nome}". Usato prezzo base €${importoNettoEntrata}. Configura il tariffario aziendale per un valore accurato.`,
+                        solutionUrl: '/tariffari-aziendali',
+                        field: 'importoNetto',
+                    });
+                }
             }
 
             if (!importoNettoEntrata) {
@@ -2304,10 +2538,8 @@ const MovimentoContabileGenerator = {
             // Skippata se ENTRATA pre-esistente (soloUscita=true)
             let movEntrata = existingEntrata || null;
             if (!soloUscita) {
-                // Solo per appuntamenti MDL (tipoVisitaMDL valorizzato) le prestazioni vanno
-                // a carico dell'azienda. Per prestazioni non-MDL (accertamenti ordinari,
-                // visite specialistiche, ecc.) l'importo è sempre a carico del paziente.
-                const isMDLAppuntamento = !!(appuntamento?.tipoVisitaMDL);
+                // Solo per appuntamenti MDL le prestazioni aggiunte sono a carico azienda.
+                // Le visite private di un dipendente restano a carico paziente.
                 const tipoSoggettoEntrata = (companyId && isMDLAppuntamento) ? 'AZIENDA' : 'PAZIENTE';
                 movEntrata = await prisma.movimentoContabile.create({
                     data: {
@@ -2316,7 +2548,7 @@ const MovimentoContabileGenerator = {
                         stato: 'BOZZA',
                         tipoSoggetto: tipoSoggettoEntrata,
                         personId: tipoSoggettoEntrata === 'PAZIENTE' ? (appuntamento?.pazienteId || null) : null,
-                        companyTenantProfileId: companyId || null,
+                        companyTenantProfileId: tipoSoggettoEntrata === 'AZIENDA' ? (companyId || null) : null,
                         appuntamentoId: appPrestazione.appuntamentoId,
                         appPrestazioneId: appPrestazione.id,
                         voceTariffarioId: voceTariffario?.id || null,
@@ -2389,6 +2621,9 @@ const MovimentoContabileGenerator = {
                     });
                 }
             }
+            await syncBozzaFatturaAppuntamento(appPrestazione.appuntamentoId, tenantId).catch(err =>
+                logger.warn({ error: err.message, appPrestazioneId: appPrestazione.id }, 'Sync bozza fattura appuntamento fallita')
+            );
         } catch (err) {
             logger.error({ error: err.message, appPrestazioneId: appPrestazione?.id }, 'Errore generaPerAppuntamentoPrestazione');
         }
@@ -2439,15 +2674,34 @@ const MovimentoContabileGenerator = {
             }
             if (existingEntrata && !existingUscita) {
                 // ENTRATA già creata (es. da sorveglianza-sanitaria/programma), crea solo l'USCITA per il medico
-                result.movimenti.push(existingEntrata);
-                const importoNettoEsistente = Number(existingEntrata.importoNetto) || 0;
                 const cpId = existingEntrata.companyTenantProfileId
                     || appuntamento.companyTenantProfileId
                     || await getCompanyDipendente(appuntamento.pazienteId, tenantId).catch(() => null);
+                let importoNettoEsistente = Number(existingEntrata.importoNetto) || 0;
                 if (importoNettoEsistente > 0 && cpId) {
                     const { voce: voceRef } = await getVocePerPrestazione(
                         cpId, tenantId, appuntamento.prestazioneId, appuntamento.tipoVisitaMDL
                     ).catch(() => ({ voce: null }));
+                    const tariffarioNetto = Number(voceRef?.prezzoBase || 0);
+                    if (tariffarioNetto > 0 && Math.abs(tariffarioNetto - importoNettoEsistente) >= 0.01) {
+                        const aliquotaIvaRef = Number(voceRef?.ivaAliquota ?? existingEntrata.aliquotaIva ?? 22);
+                        const importiRef = calcolaImporti(tariffarioNetto, aliquotaIvaRef);
+                        const updatedEntrata = await aggiornaMovimentoSeBozza(existingEntrata, {
+                            voceTariffarioId: voceRef.id,
+                            importoNetto: importiRef.importoNetto,
+                            importoIva: importiRef.importoIva,
+                            importoLordo: importiRef.importoLordo,
+                            aliquotaIva: aliquotaIvaRef,
+                            note: [
+                                existingEntrata.note,
+                                'Importo riallineato automaticamente al tariffario aziendale vigente',
+                            ].filter(Boolean).join('\n'),
+                        });
+                        importoNettoEsistente = Number(updatedEntrata?.importoNetto || tariffarioNetto);
+                        result.movimenti.push(updatedEntrata || existingEntrata);
+                    } else {
+                        result.movimenti.push(existingEntrata);
+                    }
                     const compensoRef = await getCompensoProfessionista(
                         voceRef, appuntamento.medicoId, appuntamento.prestazioneId, importoNettoEsistente, tenantId
                     );
@@ -2475,6 +2729,8 @@ const MovimentoContabileGenerator = {
                         result.movimenti.push(movUscita);
                         logger.info({ id: movUscita.id, appuntamentoId: appuntamento.id }, 'MovimentoContabile BOZZA USCITA creato per Appuntamento MDL (ENTRATA già esistente)');
                     }
+                } else {
+                    result.movimenti.push(existingEntrata);
                 }
                 return result;
             }
@@ -2752,6 +3008,319 @@ const MovimentoContabileGenerator = {
         } catch (err) {
             logger.error({ error: err.message, appuntamentoId: appuntamento?.id }, 'Errore generaPerAccettazionePaziente');
         }
+        return result;
+    },
+
+    /**
+     * Registra una prestazione incassata senza emissione fattura.
+     * Crea/aggiorna in modo idempotente:
+     * - ENTRATA PAGATO con nota "SENZA_FATTURA", separabile nei conteggi
+     * - USCITA DA_FATTURARE per il compenso del medico
+     */
+    async generaPagamentoSenzaFattura(params, tenantId, createdBy) {
+        const result = { movimenti: [], warnings: [] };
+        const source = await resolvePrestazioneSource({ ...params, tenantId });
+        if (!source) {
+            result.warnings.push({
+                type: 'MISSING_PREZZO',
+                message: 'Prestazione o visita non trovata per il pagamento senza fattura.',
+                field: 'source',
+            });
+            return result;
+        }
+
+        const companyId = source.appuntamento?.companyTenantProfileId
+            || await getCompanyDipendente(source.pazienteId, tenantId).catch(() => null);
+        const prestazioneId = source.prestazione?.id || source.appPrestazione?.prestazioneId || source.visita?.prestazioneId || null;
+        const { voce: voceTariffario } = companyId && prestazioneId
+            ? await getVocePerPrestazione(companyId, tenantId, prestazioneId, source.tipoVisitaMDL).catch(() => ({ voce: null }))
+            : { voce: null };
+
+        const sourceWhere = {
+            tenantId,
+            deletedAt: null,
+            stato: { not: 'ANNULLATO' },
+            ...(source.visitaId ? { visitaId: source.visitaId } : {}),
+            ...(source.appPrestazioneId ? { appPrestazioneId: source.appPrestazioneId } : {}),
+            ...(!source.visitaId && !source.appPrestazioneId && source.appuntamentoId ? { appuntamentoId: source.appuntamentoId, appPrestazioneId: null } : {}),
+        };
+
+        const existingEntrata = await prisma.movimentoContabile.findFirst({
+            where: {
+                ...sourceWhere,
+                direzione: 'ENTRATA',
+                OR: [
+                    { fatturaElettronicaId: null },
+                    ...(params.bozzaFatturaId ? [{ fatturaElettronicaId: params.bozzaFatturaId }] : []),
+                ],
+            },
+            orderBy: { updatedAt: 'desc' },
+        });
+
+        const prezzoInput = Number(params.importoRiferimento ?? 0);
+        const prezzoDaMovimento = existingEntrata ? Number(existingEntrata.importoNetto || 0) : 0;
+        const prezzoDaVoce = voceTariffario ? Number(voceTariffario.prezzoBase || 0) : 0;
+        const prezzoDaPrestazione = Number(source.prestazione?.prezzoBase || 0);
+        const importoNetto = prezzoInput > 0
+            ? prezzoInput
+            : (prezzoDaMovimento || prezzoDaVoce || prezzoDaPrestazione || 0);
+        const isMedicalAesthetic = /estetic/i.test(source.prestazione?.nome || '');
+        const aliquotaIva = isMedicalAesthetic ? 22 : 0;
+        const importi = calcolaImporti(importoNetto, aliquotaIva);
+        const tipoMovimento = source.tipoVisitaMDL ? 'VISITA_MDL' : 'PRESTAZIONE_CLINICA';
+        const tipoSoggettoEntrata = source.tipoVisitaMDL && companyId ? 'AZIENDA' : 'PAZIENTE';
+        const descrizioneBase = params.descrizione
+            || source.prestazione?.nome
+            || (source.tipoVisitaMDL ? 'Visita medica del lavoro' : 'Prestazione clinica');
+        const contextNote = source.appuntamentoId ? `AUTO_ACCETTAZIONE:${source.appuntamentoId}` : null;
+        const senzaFatturaNote = contextNote
+            ? `${contextNote}\nSENZA_FATTURA - incasso registrato senza emissione fattura`
+            : 'SENZA_FATTURA - incasso registrato senza emissione fattura';
+
+        let movEntrata = existingEntrata;
+        if (movEntrata) {
+            movEntrata = await prisma.movimentoContabile.update({
+                where: { id: movEntrata.id },
+                data: {
+                    stato: 'PAGATO',
+                    metodoPagamento: params.metodoPagamento || movEntrata.metodoPagamento || null,
+                    dataPagamento: new Date(),
+                    importoNetto: importi.importoNetto,
+                    importoIva: importi.importoIva,
+                    importoLordo: importi.importoLordo,
+                    aliquotaIva,
+                    fatturaElettronicaId: null,
+                    note: senzaFatturaNote,
+                    updatedBy: createdBy || null,
+                },
+            });
+        } else {
+            movEntrata = await prisma.movimentoContabile.create({
+                data: {
+                    direzione: 'ENTRATA',
+                    tipo: tipoMovimento,
+                    stato: 'PAGATO',
+                    tipoSoggetto: tipoSoggettoEntrata,
+                    personId: tipoSoggettoEntrata === 'PAZIENTE' ? (source.pazienteId || null) : null,
+                    companyTenantProfileId: tipoSoggettoEntrata === 'AZIENDA' ? (companyId || null) : null,
+                    visitaId: source.visitaId || null,
+                    appuntamentoId: source.appuntamentoId || null,
+                    appPrestazioneId: source.appPrestazioneId || null,
+                    voceTariffarioId: voceTariffario?.id || null,
+                    importoNetto: importi.importoNetto,
+                    importoIva: importi.importoIva,
+                    importoLordo: importi.importoLordo,
+                    aliquotaIva,
+                    dataEsecuzione: source.dataEsecuzione,
+                    dataPagamento: new Date(),
+                    metodoPagamento: params.metodoPagamento || null,
+                    descrizione: `${descrizioneBase} - incasso senza fattura`,
+                    note: senzaFatturaNote,
+                    branchType: 'MEDICA',
+                    tenantId,
+                    createdBy,
+                },
+            });
+        }
+
+        const bozzaFattura = params.bozzaFatturaId
+            ? await prisma.fatturaElettronica.findFirst({
+                where: { id: params.bozzaFatturaId, tenantId, deletedAt: null },
+                include: { linee: { orderBy: { numeroLinea: 'asc' } } },
+            })
+            : null;
+        const fatturaSenzaFattura = bozzaFattura || (contextNote
+            ? await prisma.fatturaElettronica.findFirst({
+                where: {
+                    tenantId,
+                    deletedAt: null,
+                    note: { contains: contextNote },
+                    stato: 'PAGATA',
+                    numero: { startsWith: `SF-${new Date().getFullYear()}/` },
+                },
+                include: { linee: { orderBy: { numeroLinea: 'asc' } } },
+            })
+            : null);
+        if (fatturaSenzaFattura) {
+            const linea = fatturaSenzaFattura.linee?.[0] || null;
+            const alreadyInternalNumber = String(fatturaSenzaFattura.numero || '').startsWith(`SF-${new Date().getFullYear()}/`);
+            let dataFattura = null;
+            let lastUniqueError = null;
+
+            for (let attempt = 0; attempt < 5; attempt += 1) {
+                const numero = alreadyInternalNumber
+                    ? fatturaSenzaFattura.numero
+                    : await generaNumeroPagamentoSenzaFattura(tenantId);
+                dataFattura = {
+                    numero,
+                    stato: 'PAGATA',
+                    // Documento interno: resta fuori dal ciclo SDI/Acube, quindi non usa
+                    // stati di trasmissione reali che potrebbero farlo rientrare nei polling.
+                    acubeStatus: 'BOZZA',
+                    dataEmissione: new Date(),
+                    imponibile: importi.importoNetto,
+                    importoIva: importi.importoIva,
+                    totale: importi.importoLordo,
+                    aliquotaIva,
+                    note: senzaFatturaNote,
+                    modalitaPagamento: params.metodoPagamento || fatturaSenzaFattura.modalitaPagamento || null,
+                    sistemaTsFlagOpp: 1,
+                    updatedAt: new Date(),
+                };
+                try {
+                    await prisma.$transaction([
+                        prisma.fatturaElettronica.update({
+                            where: { id: fatturaSenzaFattura.id },
+                            data: dataFattura,
+                        }),
+                        ...(linea ? [
+                            prisma.fatturaElettronicaLinea.update({
+                                where: { id: linea.id },
+                                data: {
+                                    descrizione: `${descrizioneBase} - pagamento registrato senza emissione fattura`,
+                                    prezzoUnitario: importi.importoNetto,
+                                    prezzoTotale: importi.importoNetto,
+                                    aliquotaIva,
+                                    natura: aliquotaIva === 0 ? 'N4' : null,
+                                },
+                            }),
+                        ] : [
+                            prisma.fatturaElettronicaLinea.create({
+                                data: {
+                                    fatturaId: fatturaSenzaFattura.id,
+                                    tenantId,
+                                    numeroLinea: 1,
+                                    descrizione: `${descrizioneBase} - pagamento registrato senza emissione fattura`,
+                                    quantita: 1,
+                                    prezzoUnitario: importi.importoNetto,
+                                    prezzoTotale: importi.importoNetto,
+                                    aliquotaIva,
+                                    natura: aliquotaIva === 0 ? 'N4' : null,
+                                },
+                            }),
+                        ]),
+                        prisma.movimentoContabile.update({
+                            where: { id: movEntrata.id },
+                            data: { fatturaElettronicaId: fatturaSenzaFattura.id },
+                        }),
+                    ]);
+                    lastUniqueError = null;
+                    break;
+                } catch (err) {
+                    if (!alreadyInternalNumber && err?.code === 'P2002' && attempt < 4) {
+                        lastUniqueError = err;
+                        continue;
+                    }
+                    throw err;
+                }
+            }
+            if (lastUniqueError) throw lastUniqueError;
+            movEntrata = { ...movEntrata, fatturaElettronicaId: fatturaSenzaFattura.id };
+            result.fattura = { ...fatturaSenzaFattura, ...dataFattura };
+        }
+
+        if (source.appuntamentoId) {
+            const appuntamentoPagamento = await prisma.appuntamento.findFirst({
+                where: { id: source.appuntamentoId, tenantId, deletedAt: null },
+                select: { stato: true },
+            });
+            await prisma.appuntamento.updateMany({
+                where: { id: source.appuntamentoId, tenantId, deletedAt: null },
+                data: {
+                    pagamentoAnticipato: true,
+                    pagamentoDataOra: new Date(),
+                    ...(['COMPLETATO', 'FATTURATO'].includes(appuntamentoPagamento?.stato) ? { stato: 'FATTURATO' } : {}),
+                },
+            });
+        }
+        result.movimenti.push(movEntrata);
+
+        if (!source.medicoId) {
+            result.warnings.push({
+                type: 'MISSING_COMPENSO',
+                message: 'Medico non disponibile: compenso passivo non generato.',
+                field: 'medicoId',
+            });
+            return result;
+        }
+
+        let movUscita = await prisma.movimentoContabile.findFirst({
+            where: {
+                ...sourceWhere,
+                direzione: 'USCITA',
+                personId: source.medicoId,
+            },
+            orderBy: { updatedAt: 'desc' },
+        });
+
+        const compenso = await getCompensoProfessionista(
+            voceTariffario,
+            source.medicoId,
+            prestazioneId,
+            importi.importoNetto,
+            tenantId
+        );
+        if (!compenso?.compensoNetto || compenso.compensoNetto <= 0) {
+            result.warnings.push({
+                type: 'MISSING_COMPENSO',
+                message: `Nessun compenso definito per il medico su "${descrizioneBase}".`,
+                solutionUrl: '/tariffario-medico',
+                field: 'compenso',
+            });
+            return result;
+        }
+
+        if (movUscita && ['BOZZA', 'DA_FATTURARE'].includes(movUscita.stato)) {
+            movUscita = await prisma.movimentoContabile.update({
+                where: { id: movUscita.id },
+                data: {
+                    stato: 'DA_FATTURARE',
+                    importoNetto: compenso.compensoNetto,
+                    importoLordo: compenso.compensoNetto,
+                    importoIva: 0,
+                    importoRiferimento: importi.importoNetto,
+                    compensoTipo: compenso.tipo,
+                    voceTariffarioId: voceTariffario?.id || movUscita.voceTariffarioId || null,
+                    note: 'Compenso da incasso senza fattura',
+                    updatedBy: createdBy || null,
+                },
+            });
+            if (movEntrata.movimentoCollegatoId !== movUscita.id) {
+                await prisma.movimentoContabile.update({
+                    where: { id: movEntrata.id },
+                    data: { movimentoCollegatoId: movUscita.id },
+                });
+            }
+        } else if (!movUscita) {
+            movUscita = await creaMovimentoUscita({
+                tipo: tipoMovimento,
+                tipoSoggetto: 'MEDICO',
+                personId: source.medicoId,
+                companyTenantProfileId: companyId || null,
+                visitaId: source.visitaId || null,
+                appuntamentoId: source.appuntamentoId || null,
+                appPrestazioneId: source.appPrestazioneId || null,
+                voceTariffarioId: voceTariffario?.id || null,
+                compensoNetto: compenso.compensoNetto,
+                compensoTipo: compenso.tipo,
+                importoRiferimento: importi.importoNetto,
+                dataEsecuzione: source.dataEsecuzione,
+                descrizione: `Compenso medico - ${descrizioneBase} - pagata senza fattura`,
+                stato: 'DA_FATTURARE',
+                tenantId,
+                createdBy,
+            });
+            await prisma.movimentoContabile.update({
+                where: { id: movEntrata.id },
+                data: { movimentoCollegatoId: movUscita.id },
+            });
+            await prisma.movimentoContabile.update({
+                where: { id: movUscita.id },
+                data: { note: 'Compenso da incasso senza fattura' },
+            });
+        }
+
+        if (movUscita) result.movimenti.push(movUscita);
         return result;
     },
 

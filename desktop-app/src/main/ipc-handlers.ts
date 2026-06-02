@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { copyFileSync, mkdirSync, statSync, existsSync, appendFileSync, readFileSync, writeFileSync } from 'fs'
 import { join, basename, extname } from 'path'
 import { startBridge, stopBridge, getBridgeStatus, BRIDGE_PORT } from './bridge-process'
-import { bridgeEvents } from './bridge-callback-server'
+import { bridgeEvents, BRIDGE_CALLBACK_TOKEN } from './bridge-callback-server'
 import type { BridgeExamResult } from './bridge-callback-server'
 import { sendNotification } from './notifications'
 import { generateFhirBundle } from './fse-export'
@@ -67,12 +67,15 @@ export function updateAppBadge(): void {
 // through their parent (appointments/companies) and have no tenantId column.
 const TENANT_SCOPED_TABLES = new Set([
     'visits', 'appointments',
-    'patients', 'companies',
-    'mansioni', 'lavoratore_mansioni', 'protocolli',
+    'patients', 'companies', 'nomine_ruolo',
+    'mansioni', 'mansione_rischi', 'lavoratore_mansioni', 'protocolli', 'protocollo_prestazioni',
     'scadenze', 'giudizi_idoneita', 'movimenti_contabili',
-    'prestazioni', 'tariffari', 'convenzioni', 'ambulatori', 'medici',
-    'visit_templates', 'document_templates', 'esami_strumentali', 'allegati',
-    'questionari_compilati', 'lavoratore_rischi_aggiuntivi'
+    'prestazioni', 'tariffari', 'convenzioni', 'ambulatori', 'slot_disponibilita', 'medici',
+    'visit_templates', 'document_templates', 'questionari_medici_config', 'esami_strumentali', 'allegati',
+    'documenti_compilati', 'questionari_risposte',
+    'profili_salute', 'documenti_clinici', 'person_documents', 'referti',
+    'firme_digitali', 'lavoratore_rischi_aggiuntivi',
+    'tariffario_voci', 'tariffario_company_associations', 'sopralluoghi', 'dvr', 'consulenze_mdl', 'allegati_3b'
 ])
 
 export function setupIpcHandlers(): void {
@@ -280,7 +283,12 @@ export function setupIpcHandlers(): void {
         db.prepare(sql).run(...args)
 
         // GDPR Art. 30: log every deletion of personal data
-        const PII_TABLES = new Set(['patients', 'visits', 'giudizi_idoneita', 'esami_strumentali', 'allegati', 'questionari_compilati'])
+        const PII_TABLES = new Set([
+            'patients', 'visits', 'giudizi_idoneita', 'esami_strumentali', 'allegati',
+            'documenti_compilati', 'questionari_risposte',
+            'profili_salute', 'documenti_clinici', 'person_documents', 'referti',
+            'firme_digitali', 'nomine_ruolo', 'allegati_3b'
+        ])
         if (PII_TABLES.has(table)) {
             try {
                 const gdprId = uuidv4()
@@ -360,7 +368,8 @@ export function setupIpcHandlers(): void {
     // ========== SYNC: ID REMAPPING ==========
 
     ipcMain.handle('sync:remapId', async (_event, { table, localId, serverId }) => {
-        validateTableName(table)
+        const physicalTable = table === 'scadenzaPrestazioneProtocollo' ? 'scadenze' : table
+        validateTableName(physicalTable)
         if (!localId || typeof localId !== 'string') throw new Error('localId invalido')
         if (!serverId || typeof serverId !== 'string') throw new Error('serverId invalido')
 
@@ -368,7 +377,7 @@ export function setupIpcHandlers(): void {
 
         // Update the local record with the server-assigned ID
         db.prepare(
-            `UPDATE "${table}" SET _serverId = ?, _syncStatus = 'SYNCED' WHERE id = ?`
+            `UPDATE "${physicalTable}" SET _serverId = ?, _syncStatus = 'SYNCED' WHERE id = ?`
         ).run(serverId, localId)
 
         // Update pending operations that reference this entity
@@ -492,13 +501,73 @@ export function setupIpcHandlers(): void {
             if (data.aziende && Array.isArray(data.aziende)) {
                 const flatCompanies: Record<string, unknown>[] = []
                 const flatSites: Record<string, unknown>[] = []
+                const flatNomineRuolo: Record<string, unknown>[] = []
+                const nominaProfessionals = new Map<string, Record<string, unknown>>()
 
                 for (const ctp of data.aziende) {
                     const c = ctp.company || {}
                     const nomine = Array.isArray(ctp.nomine) ? ctp.nomine : []
                     const mcNomina = nomine.find((n: Record<string, unknown>) => n.tipoRuolo === 'MEDICO_COMPETENTE')
-                    const coordinatedNomine = nomine.filter((n: Record<string, unknown>) => n.tipoRuolo === 'MEDICO_COMPETENTE_COORDINATO')
+                    const rsppNomina = nomine.find((n: Record<string, unknown>) => n.tipoRuolo === 'RSPP')
                     const mainMc = mcNomina?.person || ctp.medicoCompetente
+                    const rspp = rsppNomina?.person as Record<string, unknown> | undefined
+                    const nomineFigure = nomine.map((n: Record<string, unknown>) => {
+                        const person = n.person as Record<string, unknown> | undefined
+                        if (n.personId && person) {
+                            const profiles = Array.isArray(person.tenantProfiles) ? person.tenantProfiles as Record<string, unknown>[] : []
+                            const profile = profiles[0] || {}
+                            const roleType = n.tipoRuolo === 'RSPP'
+                                ? 'RSPP'
+                                : (n.tipoRuolo === 'MEDICO_COMPETENTE' || n.tipoRuolo === 'MEDICO_COMPETENTE_COORDINATO') ? 'MEDICO_COMPETENTE' : String(n.tipoRuolo || '')
+                            const existing = nominaProfessionals.get(String(n.personId))
+                            const roleTypes = new Set<string>([
+                                ...(Array.isArray(existing?.roleTypes) ? existing?.roleTypes as string[] : []),
+                                roleType
+                            ].filter(Boolean))
+                            nominaProfessionals.set(String(n.personId), {
+                                id: n.personId,
+                                tenantId: ctp.tenantId || data.meta?.tenantId || '',
+                                firstName: person.firstName,
+                                lastName: person.lastName,
+                                gender: person.gender,
+                                taxCode: person.taxCode,
+                                email: profile.email,
+                                phone: profile.phone,
+                                roleTypes: Array.from(roleTypes),
+                                specialties: Array.isArray(profile.specialties) && profile.specialties.length > 0
+                                    ? profile.specialties
+                                    : roleType === 'MEDICO_COMPETENTE' ? ['Medicina del Lavoro'] : [],
+                                status: profile.status || 'ACTIVE'
+                            })
+                        }
+                        return {
+                            id: n.id,
+                            tenantId: n.tenantId || ctp.tenantId || data.meta?.tenantId || '',
+                            companyTenantProfileId: n.companyTenantProfileId || ctp.id,
+                            siteId: n.siteId || null,
+                            personId: n.personId,
+                            tipoRuolo: n.tipoRuolo,
+                            stato: n.stato || 'ATTIVA',
+                            dataInizio: n.dataInizio,
+                            dataFine: n.dataFine,
+                            dataScadenza: n.dataScadenza,
+                            numeroProtocollo: n.numeroProtocollo,
+                            documentoNominaId: n.documentoNominaId,
+                            formazioneRichiesta: n.formazioneRichiesta,
+                            dataUltimaFormazione: n.dataUltimaFormazione,
+                            dataProssimaFormazione: n.dataProssimaFormazione,
+                            note: n.note,
+                            firstName: person?.firstName,
+                            lastName: person?.lastName,
+                            nome: [person?.firstName, person?.lastName].filter(Boolean).join(' '),
+                            gender: person?.gender,
+                            taxCode: person?.taxCode,
+                            createdAt: n.createdAt,
+                            updatedAt: n.updatedAt,
+                            deletedAt: n.deletedAt
+                        }
+                    })
+                    flatNomineRuolo.push(...nomineFigure.filter((n: Record<string, unknown>) => n.id && n.personId && n.tipoRuolo))
                     const flat: Record<string, unknown> = {
                         id: ctp.id,
                         tenantId: ctp.tenantId || data.meta?.tenantId || '',
@@ -525,18 +594,8 @@ export function setupIpcHandlers(): void {
                                 ? [mainMc.firstName, mainMc.lastName].filter(Boolean).join(' ')
                                 : null
                         ),
-                        mediciCoordinati: JSON.stringify(
-                            ctp.mediciCoordinati ||
-                            ctp.mediciCompetentiCoordinati ||
-                            coordinatedNomine.map((n: Record<string, unknown>) => ({
-                                id: n.personId,
-                                personId: n.personId,
-                                medicoId: n.personId,
-                                firstName: (n.person as Record<string, unknown> | undefined)?.firstName,
-                                lastName: (n.person as Record<string, unknown> | undefined)?.lastName,
-                                nome: [(n.person as Record<string, unknown> | undefined)?.firstName, (n.person as Record<string, unknown> | undefined)?.lastName].filter(Boolean).join(' '),
-                            }))
-                        ),
+                        rsppId: rsppNomina?.personId || null,
+                        rsppNome: rspp ? [rspp.firstName, rspp.lastName].filter(Boolean).join(' ') : null,
                         medicoSuccessoreId: ctp.medicoSuccessoreId || null,
                         medicoSuccessoreNome: ctp.medicoSuccessoreNome || null,
                         ultimoSopralluogo: ctp.ultimoSopralluogo || c.ultimoSopralluogo || null,
@@ -563,6 +622,11 @@ export function setupIpcHandlers(): void {
                                 cap: site.cap,
                                 provincia: site.provincia,
                                 medicoCompetenteId: site.medicoCompetenteId || null,
+                                rsppId: site.rsppId || null,
+                                referenteId: site.referenteId || null,
+                                dvr: site.dvr || null,
+                                ultimoSopralluogo: site.ultimoSopralluogo || site.ultimoSopralluogoMedico || null,
+                                prossimoSopralluogo: site.prossimoSopralluogo || site.prossimoSopralluogoMedico || null,
                                 createdAt: site.createdAt,
                                 updatedAt: site.updatedAt
                             })
@@ -570,7 +634,20 @@ export function setupIpcHandlers(): void {
                     }
                 }
                 bulkUpsert('companies', flatCompanies)
+                if (flatNomineRuolo.length > 0) bulkUpsert('nomine_ruolo', flatNomineRuolo)
                 if (flatSites.length > 0) bulkUpsert('company_sites', flatSites)
+                if (nominaProfessionals.size > 0) {
+                    const flatNominaProfessionals = Array.from(nominaProfessionals.values()).map(person => ({
+                        ...person,
+                        specialties: JSON.stringify(person.specialties || []),
+                        roleTypes: JSON.stringify(person.roleTypes || []),
+                        _localUpdatedAt: now,
+                        _syncStatus: 'SYNCED',
+                        _isDeleted: 0,
+                        _version: 1
+                    }))
+                    bulkUpsert('medici', flatNominaProfessionals)
+                }
             }
 
             // ---- 2. Build patient lookup map (Person + TenantProfile flattened, uses companyMap) ----
@@ -782,6 +859,18 @@ export function setupIpcHandlers(): void {
                 const flat = data.medici.map((m: Record<string, unknown>) => {
                     const profiles = Array.isArray(m.tenantProfiles) ? m.tenantProfiles as Record<string, unknown>[] : []
                     const profile = profiles[0] || {}
+                    const personRoleTypes = Array.isArray(m.personRoles)
+                        ? (m.personRoles as Record<string, unknown>[]).map(r => String(r.roleType || '')).filter(Boolean)
+                        : []
+                    const nominaRoleTypes = Array.isArray(m.nomine)
+                        ? (m.nomine as Record<string, unknown>[]).map(n => {
+                            if (n.tipoRuolo === 'RSPP') return 'RSPP'
+                            if (n.tipoRuolo === 'MEDICO_COMPETENTE' || n.tipoRuolo === 'MEDICO_COMPETENTE_COORDINATO') return 'MEDICO_COMPETENTE'
+                            return String(n.tipoRuolo || '')
+                        }).filter(Boolean)
+                        : []
+                    const roleTypes = Array.from(new Set([...personRoleTypes, ...nominaRoleTypes]))
+                    const directSpecialties = Array.isArray(m.specialties) ? m.specialties : []
                     return {
                         id: m.id,
                         tenantId: data.meta?.tenantId || '',
@@ -789,10 +878,11 @@ export function setupIpcHandlers(): void {
                         lastName: m.lastName,
                         gender: m.gender,
                         taxCode: m.taxCode,
-                        email: profile.email,
-                        phone: profile.phone,
-                        status: profile.status || 'ACTIVE',
-                        specialties: JSON.stringify(profile.specialties || []),
+                        email: profile.email || m.email || null,
+                        phone: profile.phone || m.phone || null,
+                        status: profile.status || m.status || 'ACTIVE',
+                        specialties: JSON.stringify(profile.specialties || directSpecialties),
+                        roleTypes: JSON.stringify(roleTypes),
                         createdAt: m.createdAt,
                         updatedAt: m.updatedAt
                     }
@@ -815,12 +905,39 @@ export function setupIpcHandlers(): void {
                 bulkUpsert('ambulatori', flat)
             }
 
-            // ---- 7. Store mansioni (rischiAssociati → JSON, denormalize companyName) ----
+            if (data.slotDisponibilita && Array.isArray(data.slotDisponibilita)) {
+                bulkUpsert('slot_disponibilita', data.slotDisponibilita.map((s: Record<string, unknown>) => ({
+                    id: s.id,
+                    tenantId: s.tenantId || data.meta?.tenantId || '',
+                    ambulatorioId: s.ambulatorioId,
+                    medicoId: s.medicoId,
+                    prestazioneId: s.prestazioneId,
+                    appuntamentoId: s.appuntamentoId,
+                    disponibilitaMedicoId: s.disponibilitaMedicoId,
+                    data: typeof s.data === 'string' ? String(s.data).slice(0, 10) : s.data,
+                    oraInizio: s.oraInizio,
+                    oraFine: s.oraFine,
+                    stato: s.stato || 'LIBERO',
+                    disponibile: s.disponibile === false ? 0 : 1,
+                    motivoBlocco: s.motivoBlocco,
+                    note: s.note,
+                    visibilePubblico: s.visibilePubblico ? 1 : 0,
+                    prenotabileOnline: s.prenotabileOnline ? 1 : 0,
+                    maxPrenotazioni: s.maxPrenotazioni ?? 1,
+                    anticipoMinimoOre: s.anticipoMinimoOre ?? 0,
+                    anticipoMassimoGiorni: s.anticipoMassimoGiorni ?? 90,
+                    durataSlotMinuti: s.durataSlotMinuti,
+                    createdAt: s.createdAt,
+                    updatedAt: s.updatedAt,
+                    deletedAt: s.deletedAt
+                })))
+            }
+
+            // ---- 7. Store mansioni + dedicated rischi ----
             if (data.mansioni && Array.isArray(data.mansioni)) {
                 const flat = data.mansioni.map((m: Record<string, unknown>) => {
                     const companyId = m.companyTenantProfileId as string
                     const company = companyId ? companyMap.get(companyId) : null
-                    const rischiJson = JSON.stringify(m.rischiAssociati || [])
                     return {
                         id: m.id,
                         tenantId: m.tenantId || data.meta?.tenantId || '',
@@ -830,8 +947,6 @@ export function setupIpcHandlers(): void {
                         codice: m.codice,
                         companyTenantProfileId: m.companyTenantProfileId,
                         siteId: m.siteId,
-                        rischiAssociati: rischiJson,
-                        rischi: rischiJson,
                         companyName: company?.ragioneSociale as string || null,
                         isActive: m.isActive !== undefined ? (m.isActive ? 1 : 0) : 1,
                         createdAt: m.createdAt,
@@ -839,6 +954,24 @@ export function setupIpcHandlers(): void {
                     }
                 })
                 bulkUpsert('mansioni', flat)
+            }
+            if (data.mansioneRischi && Array.isArray(data.mansioneRischi)) {
+                const flatRischi = data.mansioneRischi.map((rischio: Record<string, unknown>) => ({
+                    id: rischio.id || `${rischio.mansioneId}-${rischio.codiceRischio}`,
+                    tenantId: rischio.tenantId || data.meta?.tenantId || '',
+                    mansioneId: rischio.mansioneId,
+                    codiceRischio: rischio.codiceRischio,
+                    livello: rischio.livello,
+                    categoria: rischio.categoria,
+                    descrizioneEsposizione: rischio.descrizioneEsposizione,
+                    misurePrevenzioneDPI: rischio.misurePrevenzioneDPI,
+                    fonteRischio: rischio.fonteRischio,
+                    periodicitaMesi: rischio.periodicitaMesi,
+                    createdAt: rischio.createdAt,
+                    updatedAt: rischio.updatedAt,
+                    deletedAt: rischio.deletedAt
+                }))
+                bulkUpsert('mansione_rischi', flatRischi.filter((r: Record<string, unknown>) => r.id && r.mansioneId && r.codiceRischio))
             }
 
             // ---- 8. Store scadenze (denormalized with patient/prestazione/mansione/company names) ----
@@ -999,7 +1132,6 @@ export function setupIpcHandlers(): void {
                     descrizione: p.descrizione,
                     mansioneId: p.mansioneId,
                     companyTenantProfileId: p.companyTenantProfileId,
-                    prestazioni: typeof p.prestazioni === 'string' ? p.prestazioni : JSON.stringify(p.prestazioni || []),
                     mansioneNome: p.mansioneNome,
                     // Backend uses `isAttivo`; local SQLite uses `isActive`
                     isActive: p.isAttivo != null ? (p.isAttivo ? 1 : 0) : (p.isActive != null ? (p.isActive ? 1 : 0) : 1),
@@ -1007,6 +1139,26 @@ export function setupIpcHandlers(): void {
                     updatedAt: p.updatedAt
                 }))
                 bulkUpsert('protocolli', flat)
+            }
+            if (data.protocolloPrestazioni && Array.isArray(data.protocolloPrestazioni)) {
+                const flatPrestazioni = data.protocolloPrestazioni.map((item: Record<string, unknown>) => ({
+                    id: item.id || `${item.protocolloId}-${item.prestazioneId}`,
+                    tenantId: item.tenantId || data.meta?.tenantId || '',
+                    protocolloId: item.protocolloId,
+                    prestazioneId: item.prestazioneId,
+                    prestazioneNome: item.prestazioneNome || item.nomePrestazione,
+                    prestazioneCodice: item.prestazioneCodice,
+                    isObbligatoria: item.isObbligatoria != null ? (item.isObbligatoria ? 1 : 0) : (item.obbligatoria != null ? (item.obbligatoria ? 1 : 0) : 1),
+                    periodicita: item.periodicita,
+                    periodicitaCustomMesi: item.periodicitaCustomMesi,
+                    scadenzaDefaultMesi: item.scadenzaDefaultMesi,
+                    condizioniApplicazione: item.condizioniApplicazione,
+                    note: item.note,
+                    createdAt: item.createdAt,
+                    updatedAt: item.updatedAt,
+                    deletedAt: item.deletedAt
+                }))
+                bulkUpsert('protocollo_prestazioni', flatPrestazioni.filter((p: Record<string, unknown>) => p.id && p.protocolloId && p.prestazioneId))
             }
 
             // ---- 14. Store visit templates ----
@@ -1037,21 +1189,307 @@ export function setupIpcHandlers(): void {
                     codice: t.codice,
                     tipo: t.tipo,
                     fase: t.fase,
+                    versione: t.versione || 1,
                     campi: typeof t.campi === 'string' ? t.campi : JSON.stringify(t.campi || []),
                     contenutoHtml: t.contenutoHtml,
+                    contenutoPdf: t.contenutoPdf,
+                    branchTypes: typeof t.branchTypes === 'string' ? t.branchTypes : JSON.stringify(t.branchTypes || []),
                     richiedeFirma: t.richiedeFirma ? 1 : 0,
                     richiedeFirmaMedico: t.richiedeFirmaMedico ? 1 : 0,
-                    questionarioConfig: typeof t.questionarioConfig === 'string' ? t.questionarioConfig : JSON.stringify(t.questionarioConfig || {}),
+                    richiedeFirmaDipendente: t.richiedeFirmaDipendente ? 1 : 0,
+                    richiedeFirmaFormatore: t.richiedeFirmaFormatore ? 1 : 0,
+                    richiedeFirmaDatore: t.richiedeFirmaDatore ? 1 : 0,
+                    validitaGiorni: t.validitaGiorni,
                     isActive: t.isActive !== undefined ? (t.isActive ? 1 : 0) : 1,
                     ordine: t.ordine || 0,
+                    obbligatorio: t.obbligatorio ? 1 : 0,
                     createdAt: t.createdAt,
                     updatedAt: t.updatedAt
                 }))
                 bulkUpsert('document_templates', flat)
             }
+            if (data.questionariMediciConfig && Array.isArray(data.questionariMediciConfig)) {
+                bulkUpsert('questionari_medici_config', data.questionariMediciConfig.map((q: Record<string, unknown>) => ({
+                    id: q.id,
+                    documentoTemplateId: q.documentoTemplateId,
+                    tenantId: q.tenantId || data.meta?.tenantId || '',
+                    codiciRischio: typeof q.codiciRischio === 'string' ? q.codiciRischio : JSON.stringify(q.codiciRischio || []),
+                    tipiVisitaMDL: typeof q.tipiVisitaMDL === 'string' ? q.tipiVisitaMDL : JSON.stringify(q.tipiVisitaMDL || []),
+                    specializzazione: q.specializzazione,
+                    haScoring: q.haScoring ? 1 : 0,
+                    scoringConfig: typeof q.scoringConfig === 'string' ? q.scoringConfig : JSON.stringify(q.scoringConfig || {}),
+                    sogliaCritica: q.sogliaCritica,
+                    compilabileDa: q.compilabileDa,
+                    tempoStimato: q.tempoStimato,
+                    istruzioniPaziente: q.istruzioniPaziente,
+                    istruzioniMedico: q.istruzioniMedico,
+                    richiedeRevisione: q.richiedeRevisione !== false ? 1 : 0,
+                    validazioniCustom: typeof q.validazioniCustom === 'string' ? q.validazioniCustom : JSON.stringify(q.validazioniCustom || {}),
+                    periodicitaMesi: q.periodicitaMesi,
+                    protocolloSanitarioId: q.protocolloSanitarioId,
+                    voceTariffarioId: q.voceTariffarioId,
+                    isPagamento: q.isPagamento ? 1 : 0,
+                    prezzoDefault: q.prezzoDefault,
+                    fatturabile: q.fatturabile !== false ? 1 : 0,
+                    createdAt: q.createdAt,
+                    updatedAt: q.updatedAt,
+                    deletedAt: q.deletedAt
+                })))
+            }
 
-            // ---- 16. Store tariffari aziendali (voci e associazioni come JSON) ----
+            // ---- 15b. Store compiled documents/questionnaires and related visit data ----
+            if (data.documentiCompilati && Array.isArray(data.documentiCompilati)) {
+                const docs = data.documentiCompilati.map((d: Record<string, unknown>) => ({
+                    id: d.id,
+                    tenantId: d.tenantId || data.meta?.tenantId || '',
+                    documentoTemplateId: d.documentoTemplateId,
+                    personId: d.pazienteId || d.personId,
+                    visitaId: d.visitaId,
+                    appuntamentoId: d.appuntamentoId,
+                    datiCompilati: typeof d.datiCompilati === 'string' ? d.datiCompilati : JSON.stringify(d.datiCompilati || {}),
+                    stato: d.stato || 'BOZZA',
+                    pdfUrl: d.pdfUrl,
+                    pdfGeneratoAt: d.pdfGeneratoAt,
+                    firmaPaziente: d.firmaPaziente,
+                    firmaPazienteAt: d.firmaPazienteAt,
+                    firmaMedico: d.firmaMedico,
+                    firmaMedicoAt: d.firmaMedicoAt,
+                    firmaMedicoId: d.firmaMedicoId,
+                    firmaDipendente: d.firmaDipendente,
+                    firmaDipendenteAt: d.firmaDipendenteAt,
+                    firmaDipendenteId: d.firmaDipendenteId,
+                    firmaFormatore: d.firmaFormatore,
+                    firmaFormatoreAt: d.firmaFormatoreAt,
+                    firmaFormatoreId: d.firmaFormatoreId,
+                    firmaDatore: d.firmaDatore,
+                    firmaDatoreAt: d.firmaDatoreAt,
+                    firmaDatoreId: d.firmaDatoreId,
+                    dataScadenza: d.dataScadenza,
+                    note: d.note,
+                    motivoAnnullamento: d.motivoAnnullamento,
+                    punteggioTotale: d.punteggioTotale,
+                    punteggioPercentuale: d.punteggioPercentuale,
+                    esitoCritico: d.esitoCritico ? 1 : 0,
+                    noteAlgoritmo: d.noteAlgoritmo,
+                    compilatoDa: d.compilatoDa,
+                    createdAt: d.createdAt,
+                    updatedAt: d.updatedAt,
+                    deletedAt: d.deletedAt
+                }))
+                bulkUpsert('documenti_compilati', docs)
+            }
+
+            if (data.questionariRisposte && Array.isArray(data.questionariRisposte)) {
+                bulkUpsert('questionari_risposte', data.questionariRisposte.map((r: Record<string, unknown>) => ({
+                    id: r.id,
+                    documentoCompilatoId: r.documentoCompilatoId,
+                    tenantId: r.tenantId || data.meta?.tenantId || '',
+                    campoId: r.campoId,
+                    campoLabel: r.campoLabel,
+                    valoreTesto: r.valoreTesto,
+                    valoreNumerico: r.valoreNumerico,
+                    valoreBoolean: r.valoreBoolean ? 1 : 0,
+                    valoreData: r.valoreData,
+                    valoreJson: typeof r.valoreJson === 'string' ? r.valoreJson : JSON.stringify(r.valoreJson || null),
+                    punteggio: r.punteggio,
+                    pesoCalcolato: r.pesoCalcolato,
+                    flagCritico: r.flagCritico ? 1 : 0,
+                    validato: r.validato ? 1 : 0,
+                    validatoDa: r.validatoDa,
+                    validatoAt: r.validatoAt,
+                    noteValidazione: r.noteValidazione,
+                    createdAt: r.createdAt,
+                    updatedAt: r.updatedAt
+                })))
+            }
+
+            if (data.profiliSalute && Array.isArray(data.profiliSalute)) {
+                const jsonField = (value: unknown, fallback: unknown) => (
+                    typeof value === 'string' ? value : JSON.stringify(value ?? fallback)
+                )
+                const boolField = (value: unknown) => (value === true || value === 1 ? 1 : 0)
+                bulkUpsert('profili_salute', data.profiliSalute.map((p: Record<string, unknown>) => ({
+                    id: p.id,
+                    personId: p.personId,
+                    tenantId: p.tenantId || data.meta?.tenantId || '',
+                    peso: p.peso,
+                    altezza: p.altezza,
+                    fumatore: p.fumatore,
+                    sigaretteGiorno: p.sigaretteGiorno,
+                    anniFumo: p.anniFumo,
+                    alcol: p.alcol,
+                    unitaAlcolSettimana: p.unitaAlcolSettimana,
+                    attivitaFisica: p.attivitaFisica,
+                    oreAttivitaSettimana: p.oreAttivitaSettimana,
+                    allergieFarmaci: p.allergieFarmaci,
+                    farmaci: p.farmaci,
+                    altrePatologie: p.altrePatologie,
+                    noteSalute: p.noteSalute,
+                    usaDpiPersonali: boolField(p.usaDpiPersonali),
+                    dpiPersonali: jsonField(p.dpiPersonali, []),
+                    dpiAzienda: jsonField(p.dpiAzienda, []),
+                    usaMezziAziendali: boolField(p.usaMezziAziendali),
+                    mezziAziendali: jsonField(p.mezziAziendali, []),
+                    patenteCategorie: jsonField(p.patenteCategorie, []),
+                    patenteScadenza: p.patenteScadenza,
+                    cqc: boolField(p.cqc),
+                    cqcScadenza: p.cqcScadenza,
+                    hasInvalidita: boolField(p.hasInvalidita),
+                    tipoInvalidita: p.tipoInvalidita,
+                    gradoInvaliditaCivile: p.gradoInvaliditaCivile,
+                    legge104: boolField(p.legge104),
+                    hasDiabete: boolField(p.hasDiabete),
+                    hasIpertensione: boolField(p.hasIpertensione),
+                    hasCardiopatie: boolField(p.hasCardiopatie),
+                    hasAsma: boolField(p.hasAsma),
+                    hasEpilessia: boolField(p.hasEpilessia),
+                    alimentazione: p.alimentazione,
+                    statoCivile: p.statoCivile,
+                    numeroFigli: p.numeroFigli,
+                    professione: p.professione,
+                    qualitaSonno: p.qualitaSonno,
+                    oreSonnoNotte: p.oreSonnoNotte,
+                    sonnolenzaDiurna: boolField(p.sonnolenzaDiurna),
+                    apneaNotturna: boolField(p.apneaNotturna),
+                    formazioneGenerale: boolField(p.formazioneGenerale),
+                    formazioneSpecifica: boolField(p.formazioneSpecifica),
+                    addestramentoCompletato: boolField(p.addestramentoCompletato),
+                    tipoDiabete: p.tipoDiabete,
+                    terapiaInsulina: boolField(p.terapiaInsulina),
+                    sorveglianzaSanitaria: jsonField(p.sorveglianzaSanitaria, {}),
+                    storicoOccupazionale: jsonField(p.storicoOccupazionale, {}),
+                    corsiFormazioneDpi: jsonField(p.corsiFormazioneDpi, {}),
+                    esposizioniLavorative: jsonField(p.esposizioniLavorative, {}),
+                    vaccinazioni: jsonField(p.vaccinazioni, {}),
+                    abilitazioniMezzi: jsonField(p.abilitazioniMezzi, {}),
+                    dpiConsegne: jsonField(p.dpiConsegne, {}),
+                    createdAt: p.createdAt,
+                    updatedAt: p.updatedAt,
+                    deletedAt: p.deletedAt
+                })))
+            }
+
+            if (data.documentiClinici && Array.isArray(data.documentiClinici)) {
+                bulkUpsert('documenti_clinici', data.documentiClinici.map((d: Record<string, unknown>) => ({
+                    id: d.id,
+                    visitaId: d.visitaId,
+                    personId: d.pazienteId || d.personId,
+                    tipo: d.tipo,
+                    titolo: d.titolo,
+                    descrizione: d.descrizione,
+                    fileName: d.fileName,
+                    fileUrl: d.fileUrl,
+                    fileSize: d.fileSize,
+                    mimeType: d.mimeType,
+                    dataDocumento: d.dataDocumento,
+                    valido: d.valido !== false ? 1 : 0,
+                    tenantId: d.tenantId || data.meta?.tenantId || '',
+                    createdAt: d.createdAt,
+                    updatedAt: d.updatedAt,
+                    deletedAt: d.deletedAt
+                })))
+            }
+
+            if (data.personDocuments && Array.isArray(data.personDocuments)) {
+                bulkUpsert('person_documents', data.personDocuments.map((d: Record<string, unknown>) => ({
+                    id: d.id,
+                    personId: d.personId || d.pazienteId,
+                    tipo: d.tipo,
+                    titolo: d.titolo,
+                    descrizione: d.descrizione,
+                    fileName: d.fileName,
+                    fileUrl: d.fileUrl,
+                    fileSize: d.fileSize,
+                    mimeType: d.mimeType,
+                    hashFile: d.hashFile,
+                    visitaId: d.visitaId,
+                    dataDocumento: d.dataDocumento,
+                    dataScadenza: d.dataScadenza,
+                    valido: d.valido !== false ? 1 : 0,
+                    tenantId: d.tenantId || data.meta?.tenantId || '',
+                    createdAt: d.createdAt,
+                    updatedAt: d.updatedAt,
+                    deletedAt: d.deletedAt
+                })))
+            }
+
+            if (data.referti && Array.isArray(data.referti)) {
+                bulkUpsert('referti', data.referti.map((r: Record<string, unknown>) => ({
+                    id: r.id,
+                    visitaId: r.visitaId,
+                    numeroReferto: r.numeroReferto,
+                    titolo: r.titolo,
+                    contenuto: r.contenuto,
+                    conclusioni: r.conclusioni,
+                    allegati: typeof r.allegati === 'string' ? r.allegati : JSON.stringify(r.allegati || []),
+                    stato: r.stato,
+                    dataFirma: r.dataFirma,
+                    firmatoBy: r.firmatoBy,
+                    hashFirma: r.hashFirma,
+                    dataConsegna: r.dataConsegna,
+                    modalitaConsegna: r.modalitaConsegna,
+                    tenantId: r.tenantId || data.meta?.tenantId || '',
+                    createdAt: r.createdAt,
+                    updatedAt: r.updatedAt,
+                    deletedAt: r.deletedAt
+                })))
+            }
+
+            if (data.visitRevisions && Array.isArray(data.visitRevisions)) {
+                bulkUpsert('visit_revisions', data.visitRevisions.map((r: Record<string, unknown>) => ({
+                    id: r.id,
+                    visitaId: r.visitaId,
+                    revisionNumber: r.revisionNumber,
+                    previousData: typeof r.previousData === 'string' ? r.previousData : JSON.stringify(r.previousData || {}),
+                    newData: typeof r.newData === 'string' ? r.newData : JSON.stringify(r.newData || {}),
+                    changedFields: typeof r.changedFields === 'string' ? r.changedFields : JSON.stringify(r.changedFields || []),
+                    changeType: r.changeType,
+                    changeReason: r.changeReason,
+                    changedBy: r.changedBy,
+                    changedAt: r.changedAt
+                })))
+            }
+
+            if (data.visitAccessLogs && Array.isArray(data.visitAccessLogs)) {
+                bulkUpsert('visit_access_logs', data.visitAccessLogs.map((l: Record<string, unknown>) => ({
+                    id: l.id,
+                    visitaId: l.visitaId,
+                    accessType: l.accessType,
+                    details: typeof l.details === 'string' ? l.details : JSON.stringify(l.details || {}),
+                    accessedBy: l.accessedBy,
+                    accessedAt: l.accessedAt
+                })))
+            }
+
+            if (data.firmeDigitali && Array.isArray(data.firmeDigitali)) {
+                bulkUpsert('firme_digitali', data.firmeDigitali.map((f: Record<string, unknown>) => ({
+                    id: f.id,
+                    refertoId: f.refertoId,
+                    documentoId: f.documentoId,
+                    documentType: f.documentType,
+                    firmatarioId: f.firmatarioId,
+                    firmatarioRole: f.firmatarioRole,
+                    stato: f.stato,
+                    tipoFirma: f.tipoFirma,
+                    hashDocumento: f.hashDocumento,
+                    hashFirma: f.hashFirma,
+                    firmaImageUrl: f.firmaImageUrl,
+                    provider: f.provider,
+                    timestampTSA: f.timestampTSA,
+                    validatoDa: f.validatoDa,
+                    validatoAt: f.validatoAt,
+                    note: f.note,
+                    tenantId: f.tenantId || data.meta?.tenantId || '',
+                    createdAt: f.createdAt,
+                    updatedAt: f.updatedAt,
+                    deletedAt: f.deletedAt
+                })))
+            }
+
+            // ---- 16. Store tariffari aziendali + voci/associazioni dedicate ----
             if (data.tariffari && Array.isArray(data.tariffari)) {
+                const flatVoci: Record<string, unknown>[] = []
+                const flatAssociations: Record<string, unknown>[] = []
                 const flat = data.tariffari.map((t: Record<string, unknown>) => ({
                     id: t.id,
                     tenantId: t.tenantId || data.meta?.tenantId || '',
@@ -1061,13 +1499,148 @@ export function setupIpcHandlers(): void {
                     attivo: t.attivo != null ? (t.attivo ? 1 : 0) : 1,
                     validoDa: t.validoDa,
                     validoA: t.validoA,
-                    voci: typeof t.voci === 'string' ? t.voci : JSON.stringify(t.voci || []),
-                    companyAssociations: typeof t.companyAssociations === 'string' ? t.companyAssociations : JSON.stringify(t.companyAssociations || []),
                     isDefault: t.isDefault != null ? (t.isDefault ? 1 : 0) : 0,
                     createdAt: t.createdAt,
                     updatedAt: t.updatedAt
                 }))
+                if (Array.isArray(data.vociTariffario)) {
+                    for (const voce of data.vociTariffario as Record<string, unknown>[]) {
+                        flatVoci.push({
+                            id: voce.id,
+                            tenantId: voce.tenantId || data.meta?.tenantId || '',
+                            tariffarioAziendaleId: voce.tariffarioAziendaleId,
+                            tipo: voce.tipo,
+                            prestazioneId: voce.prestazioneId,
+                            documentoTemplateId: voce.documentoTemplateId,
+                            nome: voce.nome,
+                            descrizione: voce.descrizione,
+                            prezzoBase: Number(voce.prezzoBase || 0),
+                            ivaAliquota: Number(voce.ivaAliquota || 22),
+                            categoriaVisita: voce.categoriaVisita,
+                            durataMinimaMinuti: voce.durataMinimaMinuti,
+                            compensoProfessionistaTipo: voce.compensoProfessionistaTipo,
+                            compensoProfessionistaValore: voce.compensoProfessionistaValore,
+                            compensoProfessionistaMinimo: voce.compensoProfessionistaMinimo,
+                            compensoProfessionistaMassimo: voce.compensoProfessionistaMassimo,
+                            frequenza: voce.frequenza,
+                            unitaCalcolo: voce.unitaCalcolo,
+                            modalitaAttivazione: voce.modalitaAttivazione,
+                            ordine: voce.ordine || 0,
+                            attivo: voce.attivo != null ? (voce.attivo ? 1 : 0) : 1,
+                            note: voce.note,
+                            createdAt: voce.createdAt,
+                            updatedAt: voce.updatedAt
+                        })
+                    }
+                }
+                if (Array.isArray(data.tariffarioCompanyAssociations)) {
+                    for (const assoc of data.tariffarioCompanyAssociations as Record<string, unknown>[]) {
+                        flatAssociations.push({
+                            id: assoc.id || `${assoc.tariffarioId}-${assoc.companyTenantProfileId}`,
+                            tenantId: assoc.tenantId || data.meta?.tenantId || '',
+                            tariffarioId: assoc.tariffarioId,
+                            companyTenantProfileId: assoc.companyTenantProfileId,
+                            validoDa: assoc.validoDa,
+                            validoA: assoc.validoA,
+                            attivo: assoc.attivo != null ? (assoc.attivo ? 1 : 0) : 1,
+                            note: assoc.note,
+                            createdAt: assoc.createdAt,
+                            updatedAt: assoc.updatedAt
+                        })
+                    }
+                }
                 bulkUpsert('tariffari', flat)
+                bulkUpsert('tariffario_voci', flatVoci.filter(v => v.id && v.tariffarioAziendaleId))
+                bulkUpsert('tariffario_company_associations', flatAssociations.filter(a => a.id && a.companyTenantProfileId))
+            }
+
+            // ---- 16b. Store servizi MDL aziendali ----
+            if (data.sopralluoghi && Array.isArray(data.sopralluoghi)) {
+                bulkUpsert('sopralluoghi', data.sopralluoghi.map((s: Record<string, unknown>) => ({
+                    id: s.id,
+                    tenantId: s.tenantId || data.meta?.tenantId || '',
+                    siteId: s.siteId,
+                    esecutoreId: s.esecutoreId,
+                    dataEsecuzione: s.dataEsecuzione,
+                    dataProssimoSopralluogo: s.dataProssimoSopralluogo,
+                    valutazione: s.valutazione,
+                    esito: s.esito,
+                    note: s.note,
+                    documentoUrl: s.documentoUrl,
+                    documentoNome: s.documentoNome,
+                    createdAt: s.createdAt,
+                    updatedAt: s.updatedAt,
+                    deletedAt: s.deletedAt
+                })))
+            }
+            if (data.dvrs && Array.isArray(data.dvrs)) {
+                bulkUpsert('dvr', data.dvrs.map((d: Record<string, unknown>) => ({
+                    id: d.id,
+                    tenantId: d.tenantId || data.meta?.tenantId || '',
+                    siteId: d.siteId,
+                    effettuatoDa: d.effettuatoDa,
+                    dataEsecuzione: d.dataEsecuzione,
+                    dataScadenza: d.dataScadenza,
+                    rischiRilevati: typeof d.rischiRilevati === 'string' ? d.rischiRilevati : JSON.stringify(d.rischiRilevati || []),
+                    note: d.note,
+                    tipoDVR: d.tipoDVR || 'NUOVO',
+                    documentoUrl: d.documentoUrl,
+                    documentoNome: d.documentoNome,
+                    createdAt: d.createdAt,
+                    updatedAt: d.updatedAt,
+                    deletedAt: d.deletedAt
+                })))
+            }
+            if (data.consulenzeMDL && Array.isArray(data.consulenzeMDL)) {
+                bulkUpsert('consulenze_mdl', data.consulenzeMDL.map((c: Record<string, unknown>) => ({
+                    id: c.id,
+                    tenantId: c.tenantId || data.meta?.tenantId || '',
+                    companyTenantProfileId: c.companyTenantProfileId,
+                    siteId: c.siteId,
+                    professionistaId: c.professionistaId,
+                    data: c.data,
+                    durataMinuti: c.durataMinuti,
+                    oggetto: c.oggetto,
+                    note: c.note,
+                    importo: c.importo,
+                    stato: c.stato || 'DA_RENDICONTARE',
+                    createdAt: c.createdAt,
+                    updatedAt: c.updatedAt,
+                    deletedAt: c.deletedAt
+                })))
+            }
+            if (data.allegati3B && Array.isArray(data.allegati3B)) {
+                bulkUpsert('allegati_3b', data.allegati3B.map((a: Record<string, unknown>) => ({
+                    id: a.id,
+                    tenantId: a.tenantId || data.meta?.tenantId || '',
+                    medicoCompetenteId: a.medicoCompetenteId,
+                    companyTenantProfileId: a.companyTenantProfileId,
+                    anno: a.anno,
+                    stato: a.stato || 'DA_COMPILARE',
+                    totLavoratoriSorvegliati: a.totLavoratoriSorvegliati || 0,
+                    totVisiteEffettuate: a.totVisiteEffettuate || 0,
+                    totGiudiziIdoneita: a.totGiudiziIdoneita || 0,
+                    totGiudiziConLimitazioni: a.totGiudiziConLimitazioni || 0,
+                    totGiudiziConPrescrizioni: a.totGiudiziConPrescrizioni || 0,
+                    totInidoneita: a.totInidoneita || 0,
+                    statistichePerRischio: typeof a.statistichePerRischio === 'string' ? a.statistichePerRischio : JSON.stringify(a.statistichePerRischio || {}),
+                    malattieProf: typeof a.malattieProf === 'string' ? a.malattieProf : JSON.stringify(a.malattieProf || {}),
+                    lavoratoriPerGenere: typeof a.lavoratoriPerGenere === 'string' ? a.lavoratoriPerGenere : JSON.stringify(a.lavoratoriPerGenere || {}),
+                    lavoratoriPerFasciaEta: typeof a.lavoratoriPerFasciaEta === 'string' ? a.lavoratoriPerFasciaEta : JSON.stringify(a.lavoratoriPerFasciaEta || {}),
+                    visitePerTipologia: typeof a.visitePerTipologia === 'string' ? a.visitePerTipologia : JSON.stringify(a.visitePerTipologia || {}),
+                    giudiziPerTipologia: typeof a.giudiziPerTipologia === 'string' ? a.giudiziPerTipologia : JSON.stringify(a.giudiziPerTipologia || {}),
+                    giudiziPerRischio: typeof a.giudiziPerRischio === 'string' ? a.giudiziPerRischio : JSON.stringify(a.giudiziPerRischio || {}),
+                    accertamentiIntegrativi: typeof a.accertamentiIntegrativi === 'string' ? a.accertamentiIntegrativi : JSON.stringify(a.accertamentiIntegrativi || {}),
+                    dataCompilazione: a.dataCompilazione,
+                    dataInvio: a.dataInvio,
+                    dataConferma: a.dataConferma,
+                    protocolloInvio: a.protocolloInvio,
+                    ricevutaInvio: a.ricevutaInvio,
+                    note: a.note,
+                    createdAt: a.createdAt,
+                    updatedAt: a.updatedAt,
+                    deletedAt: a.deletedAt
+                })))
             }
 
             // ---- 17. Store convenzioni ----
@@ -1111,14 +1684,28 @@ export function setupIpcHandlers(): void {
                     companies: data.aziende?.length || 0,
                     prestazioni: data.prestazioni?.length || 0,
                     ambulatori: data.ambulatori?.length || 0,
+                    slotDisponibilita: data.slotDisponibilita?.length || 0,
+                    medici: data.medici?.length || 0,
                     mansioni: data.mansioni?.length || 0,
                     scadenze: data.scadenze?.length || 0,
                     rischiAggiuntivi: data.rischiAggiuntivi?.length || 0,
                     protocolli: data.protocolli?.length || 0,
                     visitTemplates: data.visitTemplates?.length || 0,
                     documentTemplates: data.documentTemplates?.length || 0,
+                    documentiCompilati: data.documentiCompilati?.length || 0,
+                    questionariRisposte: data.questionariRisposte?.length || 0,
+                    profiliSalute: data.profiliSalute?.length || 0,
+                    documentiClinici: data.documentiClinici?.length || 0,
+                    personDocuments: data.personDocuments?.length || 0,
+                    referti: data.referti?.length || 0,
+                    visitRevisions: data.visitRevisions?.length || 0,
+                    visitAccessLogs: data.visitAccessLogs?.length || 0,
+                    firmeDigitali: data.firmeDigitali?.length || 0,
                     tariffari: data.tariffari?.length || 0,
-                    convenzioni: data.convenzioni?.length || 0
+                    convenzioni: data.convenzioni?.length || 0,
+                    sopralluoghi: data.sopralluoghi?.length || 0,
+                    dvrs: data.dvrs?.length || 0,
+                    consulenzeMDL: data.consulenzeMDL?.length || 0
                 }
             }
         })()
@@ -1146,7 +1733,7 @@ export function setupIpcHandlers(): void {
         const id = uuidv4()
         const now = new Date().toISOString()
         const record = encryptRecord('lavoratore_rischi_aggiuntivi', {
-            id, personId, tenantId,
+            id, _localId: id, _serverId: null, personId, tenantId,
             codiceRischio: data.codiceRischio,
             livello: data.livello || 'MEDIO',
             categoria: data.categoria || 'CHIMICO',
@@ -1268,12 +1855,57 @@ export function setupIpcHandlers(): void {
         return { success: true }
     })
 
+    ipcMain.handle('file:saveGeneratedDocument', async (_event, { bufferBase64, fileName, scopeId }: { bufferBase64: string; fileName: string; scopeId?: string }) => {
+        if (!bufferBase64 || typeof bufferBase64 !== 'string') throw new Error('Contenuto file non valido')
+        if (!fileName || typeof fileName !== 'string') throw new Error('Nome file non valido')
+        const safeFileName = basename(fileName).replace(/[^\w.\-]+/g, '_').slice(0, 180)
+        const ext = extname(safeFileName)
+        const safeScope = (scopeId && typeof scopeId === 'string' ? scopeId : 'company-documents').replace(/[^\w-]+/g, '_')
+        const attachmentsDir = join(app.getPath('userData'), 'attachments', safeScope)
+        mkdirSync(attachmentsDir, { recursive: true })
+        const destPath = join(attachmentsDir, `${uuidv4()}${ext || '.bin'}`)
+        const buffer = Buffer.from(bufferBase64, 'base64')
+        const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024
+        if (buffer.length > MAX_ATTACHMENT_BYTES) throw new Error('File troppo grande (massimo 50 MB)')
+        writeFileSync(destPath, buffer)
+        return {
+            localPath: destPath,
+            nome: safeFileName,
+            tipo: (ext || '.bin').replace('.', '').toLowerCase(),
+            dimensione: buffer.length
+        }
+    })
+
+    ipcMain.handle('file:exportLocalFile', async (_event, { localPath, fileName }: { localPath: string; fileName: string }) => {
+        if (!localPath || typeof localPath !== 'string') throw new Error('Percorso non valido')
+        const { resolve: resolvePath } = await import('path')
+        const userDataDir = app.getPath('userData')
+        const resolved = resolvePath(localPath)
+        if (!resolved.startsWith(userDataDir)) throw new Error('Accesso al file non consentito')
+        if (!existsSync(resolved)) throw new Error('File non trovato')
+        const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+        const result = await dialog.showSaveDialog(win!, {
+            title: 'Salva documento',
+            defaultPath: basename(fileName || localPath)
+        })
+        if (result.canceled || !result.filePath) return { canceled: true }
+        copyFileSync(resolved, result.filePath)
+        return { canceled: false, filePath: result.filePath }
+    })
+
     ipcMain.handle('file:getPendingAttachments', async () => {
         const db = getDatabase()
         const rows = db.prepare(
-            `SELECT id, visitaId, nome, tipo, dimensione, localPath, tenantId FROM allegati
-       WHERE localPath IS NOT NULL AND (serverUrl IS NULL OR serverUrl = '') AND _isDeleted = 0`
-        ).all() as Array<{ id: string; visitaId: string | null; nome: string; tipo: string | null; dimensione: number | null; localPath: string; tenantId: string }>
+            `SELECT a.id, a.visitaId, COALESCE(v._serverId, a.visitaId) AS serverVisitaId,
+                    a.nome, a.tipo, a.dimensione, a.localPath, a.tenantId
+             FROM allegati a
+             LEFT JOIN visits v ON v.id = a.visitaId
+             WHERE a.visitaId IS NOT NULL AND a.visitaId != ''
+               AND a.localPath IS NOT NULL
+               AND (a.serverUrl IS NULL OR a.serverUrl = '')
+               AND a._isDeleted = 0
+               AND (v.id IS NULL OR v._syncStatus = 'SYNCED' OR v._serverId IS NOT NULL)`
+        ).all() as Array<{ id: string; visitaId: string | null; serverVisitaId: string | null; nome: string; tipo: string | null; dimensione: number | null; localPath: string; tenantId: string }>
         return rows
     })
 
@@ -1313,6 +1945,29 @@ export function setupIpcHandlers(): void {
         return {
             localPath: destPath,
             nome: fileName,
+            tipo: ext.replace('.', '').toLowerCase(),
+            dimensione: stats.size
+        }
+    })
+
+    ipcMain.handle('file:writeBase64Attachment', async (_event, { base64, fileName, visitaId }: { base64: string; fileName: string; visitaId: string }) => {
+        if (!base64 || typeof base64 !== 'string') throw new Error('Contenuto file non valido')
+        if (!visitaId || typeof visitaId !== 'string') throw new Error('ID visita non valido')
+        const safeName = basename(fileName || 'referto-strumentale.pdf').replace(/[^\w.\- ()]/g, '_')
+        const ext = extname(safeName) || '.pdf'
+        const buffer = Buffer.from(base64, 'base64')
+        const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024
+        if (buffer.length > MAX_ATTACHMENT_BYTES) throw new Error('File troppo grande (massimo 50 MB)')
+
+        const attachmentsDir = join(app.getPath('userData'), 'attachments', visitaId)
+        mkdirSync(attachmentsDir, { recursive: true })
+        const destPath = join(attachmentsDir, `${uuidv4()}${ext}`)
+        writeFileSync(destPath, buffer)
+        const stats = statSync(destPath)
+
+        return {
+            localPath: destPath,
+            nome: safeName,
             tipo: ext.replace('.', '').toLowerCase(),
             dimensione: stats.size
         }
@@ -1989,28 +2644,66 @@ export function setupIpcHandlers(): void {
         patientData: Record<string, string>
         visitaId: string
         sessionId: string
+        tenantId?: string
     }) => {
         const { tipo, patientData, visitaId, sessionId } = params
         if (!tipo || !patientData || !visitaId || !sessionId) {
             throw new Error('Parametri avvio esame non validi')
         }
 
+        const examTypeMap: Record<string, string> = {
+            ECG: 'ecg',
+            SPIROMETRIA: 'spirometry',
+            AUDIOMETRIA: 'audiometry',
+            DRUG_TEST: 'drugtest',
+        }
+        const bridgeExamType = examTypeMap[tipo] || tipo
+        const genderMap: Record<string, 'MALE' | 'FEMALE' | 'OTHER' | 'NOT_SPECIFIED'> = {
+            MALE: 'MALE',
+            FEMALE: 'FEMALE',
+            M: 'MALE',
+            F: 'FEMALE',
+            MASCHIO: 'MALE',
+            FEMMINA: 'FEMALE',
+        }
+        const parseOptionalNumber = (value: string | undefined): number | undefined => {
+            if (!value) return undefined
+            const parsed = Number(String(value).replace(',', '.'))
+            return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
+        }
+        const tenantId = params.tenantId || patientData.tenantId || currentTenantId || ''
+        if (!tenantId) {
+            throw new Error('Tenant non disponibile per avvio esame')
+        }
+
         const url = `http://127.0.0.1:${BRIDGE_PORT}/start-exam`
         const body = {
-            sessionId,
             visitaId,
-            examType: tipo,
+            examType: bridgeExamType,
+            tenantId,
             patient: {
-                nome: String(patientData.nome || ''),
-                cognome: String(patientData.cognome || ''),
-                dataNascita: String(patientData.dataNascita || ''),
-                codiceStruttura: String(patientData.codiceStruttura || ''),
-            }
+                patientId: String(patientData.patientId || patientData.personId || ''),
+                firstName: String(patientData.nome || patientData.firstName || ''),
+                lastName: String(patientData.cognome || patientData.lastName || ''),
+                dateOfBirth: String(patientData.dataNascita || patientData.birthDate || '').split('T')[0],
+                gender: genderMap[String(patientData.gender || patientData.sesso || '').toUpperCase()] || 'NOT_SPECIFIED',
+                taxCode: String(patientData.codiceFiscale || patientData.taxCode || ''),
+                heightCm: parseOptionalNumber(patientData.altezza || patientData.heightCm),
+                weightKg: parseOptionalNumber(patientData.peso || patientData.weightKg),
+                ethnicity: String(patientData.etnia || patientData.ethnicity || ''),
+            },
+            metadata: {
+                desktopSessionId: sessionId,
+                requestedTipo: tipo,
+            },
         }
 
         const resp = await fetch(url, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Bridge-Api-Key': BRIDGE_CALLBACK_TOKEN,
+            },
             body: JSON.stringify(body),
             signal: AbortSignal.timeout(10000),
         })
@@ -2028,6 +2721,9 @@ export function setupIpcHandlers(): void {
     bridgeEvents.on('examResult', (data: BridgeExamResult) => {
         const win = BrowserWindow.getAllWindows()[0]
         if (win) {
+            if (win.isMinimized()) win.restore()
+            win.show()
+            win.focus()
             win.webContents.send('bridge:examResult', data)
         }
         // Native notification for exam result
@@ -2042,12 +2738,16 @@ export function setupIpcHandlers(): void {
 
 const VALID_TABLES = new Set([
     'visits', 'appointments', 'appointment_prestazioni',
-    'patients', 'companies', 'company_sites',
-    'mansioni', 'lavoratore_mansioni', 'protocolli',
+    'patients', 'companies', 'company_sites', 'nomine_ruolo',
+    'mansioni', 'mansione_rischi', 'lavoratore_mansioni', 'protocolli', 'protocollo_prestazioni',
     'scadenze', 'giudizi_idoneita', 'movimenti_contabili',
-    'prestazioni', 'tariffari', 'convenzioni', 'ambulatori', 'medici',
-    'visit_templates', 'document_templates', 'esami_strumentali', 'allegati',
-    'questionari_compilati', 'lavoratore_rischi_aggiuntivi',
+    'prestazioni', 'tariffari', 'convenzioni', 'ambulatori', 'slot_disponibilita', 'medici',
+    'visit_templates', 'document_templates', 'questionari_medici_config', 'esami_strumentali', 'allegati',
+    'documenti_compilati', 'questionari_risposte',
+    'profili_salute', 'documenti_clinici', 'person_documents', 'referti',
+    'visit_revisions', 'visit_access_logs', 'firme_digitali',
+    'lavoratore_rischi_aggiuntivi',
+    'tariffario_voci', 'tariffario_company_associations', 'sopralluoghi', 'dvr', 'consulenze_mdl', 'allegati_3b',
     'operations_queue', 'sync_log'
 ])
 

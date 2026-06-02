@@ -65,35 +65,28 @@ export async function hasPermission(personId, permission, context = {}) {
       }
     }
 
-    // Solo se necessario, fai query più complesse
-    if (permission.includes('_')) {
-      const parts = permission.split('_');
-      const action = parts.length >= 2 ? parts[0].toLowerCase() : null;
-      const resource = parts.length >= 2 ? parts.slice(1).join('_').toLowerCase() : null;
+    // Fallback: controlla RolePermission nel DB per permessi personalizzati
+    if (permission.includes('_') || permission.includes(':')) {
+      const specificPermissions = await prisma.rolePermission.findMany({
+        where: {
+          permission: permission,
+          isGranted: true,
+          deletedAt: null,
+          personRole: {
+            personId,
+            isActive: true,
+            deletedAt: null,
+            OR: [
+              { validUntil: null },
+              { validUntil: { gt: new Date() } }
+            ]
+          }
+        },
+        take: 1
+      });
 
-      if (action && resource) {
-        // Query ottimizzata per permessi specifici
-        const specificPermissions = await prisma.rolePermission.findMany({
-          where: {
-            permission: permission,
-            isGranted: true,
-            deletedAt: null, // F253: exclude soft-deleted role permissions
-            personRole: {
-              personId,
-              isActive: true,
-              deletedAt: null, // F253: exclude soft-deleted roles
-              OR: [
-                { validUntil: null },
-                { validUntil: { gt: new Date() } }
-              ]
-            }
-          },
-          take: 1 // Basta trovarne uno
-        });
-
-        if (specificPermissions.length > 0) {
-          return true;
-        }
+      if (specificPermissions.length > 0) {
+        return true;
       }
     }
 
@@ -151,7 +144,7 @@ export async function getUserPermissions(personId, tenantId = null) {
     personRoles.forEach(personRole => {
       personRole.advancedPermissions.forEach(advPerm => {
         // Guard against undefined action or resource
-        if (advPerm.action && advPerm.resource) {
+        if (advPerm.action && advPerm.resource && advPerm.conditions?.granted !== false) {
           const permission = `${advPerm.action.toUpperCase()}_${advPerm.resource.toUpperCase()}`;
           allPermissions.add(permission);
         }
@@ -217,7 +210,9 @@ export async function getAdvancedPermissions(personId, resource, action, tenantI
 
     const permissions = [];
     userRoles.forEach(role => {
-      role.advancedPermissions.forEach(permission => {
+      role.advancedPermissions
+        .filter(permission => permission.conditions?.granted !== false)
+        .forEach(permission => {
         permissions.push({
           roleType: role.roleType,
           scope: permission.scope,

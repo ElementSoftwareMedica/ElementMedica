@@ -14,8 +14,13 @@
 import puppeteer from 'puppeteer';
 import fs from 'fs/promises';
 import path from 'path';
+import { tmpdir } from 'os';
 import { fileURLToPath } from 'url';
 import logger from '../utils/logger.js';
+
+// Snap Chromium namespace isolation workaround (same pattern as pdfService).
+// See pdfService.js for detailed explanation.
+const SNAP_CHROMIUM_TMP = '/tmp/snap-private-tmp/snap.chromium/tmp';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -95,6 +100,7 @@ const SLUG_TO_PATH = {
 class PrerenderService {
   constructor() {
     this.browser = null;
+    this._browserDirName = null; // track userDataDir for cleanup
     this.isRendering = false;
     this.renderQueue = [];
   }
@@ -104,8 +110,18 @@ class PrerenderService {
    */
   async getBrowser() {
     if (!this.browser || !this.browser.isConnected()) {
+      // Clean up the previous browser's userDataDir (if browser disconnected/crashed)
+      if (this._browserDirName) {
+        for (const base of [tmpdir(), SNAP_CHROMIUM_TMP]) {
+          try { await fs.rm(path.join(base, this._browserDirName), { recursive: true, force: true }); } catch { /* ignore */ }
+        }
+        this._browserDirName = null;
+      }
+      const dirSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const userDataDirName = `em-pdf-prerender-${dirSuffix}`;
       this.browser = await puppeteer.launch({
         headless: 'new',
+        userDataDir: path.join(tmpdir(), userDataDirName),
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -118,6 +134,7 @@ class PrerenderService {
         ],
         timeout: 30000,
       });
+      this._browserDirName = userDataDirName;
       logger.info('Puppeteer browser launched for pre-rendering');
     }
     return this.browser;

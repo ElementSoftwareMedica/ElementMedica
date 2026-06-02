@@ -1,0 +1,1 @@
+ALTER TYPE "TipoDispositivoMedico" ADD VALUE IF NOT EXISTS 'VISIOTEST';

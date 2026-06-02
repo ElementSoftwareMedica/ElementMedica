@@ -12,6 +12,7 @@ import crypto from 'crypto';
 import { body, validationResult } from 'express-validator';
 import logger from '../utils/logger.js';
 import { getEffectiveTenantId } from '../utils/tenantHelper.js';
+import { seedDefaultPermissions } from '../services/enhancedRole/utils/PermissionSeeder.js';
 
 const router = express.Router();
 
@@ -516,7 +517,7 @@ router.post('/register',
                 // Validate roleType against enum
                 const validRoleTypes = ['ADMIN', 'MANAGER', 'EMPLOYEE', 'TRAINER'];
                 if (validRoleTypes.includes(roleType)) {
-                    await prisma.personRole.create({
+                    const newRole = await prisma.personRole.create({
                         data: {
                             personId: person.id,
                             roleType: roleType,
@@ -525,6 +526,7 @@ router.post('/register',
                             assignedBy: req.person.id
                         }
                     });
+                    await seedDefaultPermissions(newRole.id, roleType, prisma);
                 }
             }
 

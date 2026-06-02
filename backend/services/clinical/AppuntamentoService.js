@@ -11,6 +11,274 @@ import { EventBus, AppointmentEvents } from '../events/index.js';
 import { parseToStartOfDay, parseToEndOfDay } from '../../utils/dateUtils.js';
 import MovimentoContabileGenerator from '../management/MovimentoContabileGenerator.js';
 
+const APPOINTMENT_MEDICO_ROLE_TYPES = ['MEDICO', 'MEDICO_COMPETENTE'];
+const APPOINTMENT_COMPANY_MEDICO_NOMINE_TYPES = ['MEDICO_COMPETENTE', 'MEDICO_COMPETENTE_COORDINATO'];
+
+function formatRiskLabel(risk) {
+    if (!risk) return null;
+    return [
+        risk.descrizioneEsposizione,
+        risk.codiceRischio,
+        risk.livello ? `Lv. ${risk.livello}` : null,
+    ].filter(Boolean).join(' - ');
+}
+
+function flattenWorkerMansioni(workerMansioni = []) {
+    const risks = [];
+    const seen = new Set();
+    for (const wm of workerMansioni) {
+        for (const rischio of wm.mansione?.rischiAssociati || []) {
+            const key = `${rischio.codiceRischio}-${rischio.livello}-${rischio.descrizioneEsposizione || ''}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            risks.push({
+                ...rischio,
+                label: formatRiskLabel(rischio),
+                mansione: wm.mansione?.denominazione || wm.mansione?.codice || null,
+            });
+        }
+    }
+    return risks;
+}
+
+function roundMoney(value) {
+    return Math.round((Number(value) || 0) * 100) / 100;
+}
+
+function matchVoceTariffario(voci = [], prestazioneId = null, tipoVisitaMDL = null) {
+    const prestazioneVoci = voci.filter(v => !v.tipo || v.tipo === 'PRESTAZIONE');
+    return (
+        (tipoVisitaMDL && prestazioneId
+            ? prestazioneVoci.find(v => v.prestazioneId === prestazioneId && v.categoriaVisita === tipoVisitaMDL)
+            : null)
+        || (tipoVisitaMDL
+            ? prestazioneVoci.find(v => !v.prestazioneId && v.categoriaVisita === tipoVisitaMDL)
+            : null)
+        || (prestazioneId
+            ? prestazioneVoci.find(v => v.prestazioneId === prestazioneId && !v.categoriaVisita)
+            : null)
+        || (prestazioneId
+            ? prestazioneVoci.find(v => v.prestazioneId === prestazioneId)
+            : null)
+        || prestazioneVoci.find(v => !v.prestazioneId && !v.categoriaVisita)
+        || null
+    );
+}
+
+async function findTariffarioAssociation(companyTenantProfileId, tenantId, referenceDate = new Date(), include = {}) {
+    const baseWhere = {
+        companyTenantProfileId,
+        tenantId,
+        attivo: true,
+        deletedAt: null,
+    };
+    const datedWhere = {
+        ...baseWhere,
+        validoDa: { lte: referenceDate },
+        OR: [{ validoA: null }, { validoA: { gte: referenceDate } }],
+    };
+
+    return await prisma.tariffarioCompanyAssociation.findFirst({
+        where: datedWhere,
+        include,
+        orderBy: { validoDa: 'desc' },
+    }) || await prisma.tariffarioCompanyAssociation.findFirst({
+        where: baseWhere,
+        include,
+        orderBy: { validoDa: 'desc' },
+    });
+}
+
+function getDiscountValues(condizioni = {}) {
+    const scontoInfo = condizioni?.scontoInfo || null;
+    const tipoSconto = String(scontoInfo?.tipo || '').toUpperCase();
+    const percentuale = Number(
+        condizioni?.scontoPercentuale
+        ?? condizioni?.percentualeSconto
+        ?? (tipoSconto.includes('PERCENT') ? scontoInfo?.valore : 0)
+        ?? 0
+    );
+    const fisso = Number(
+        condizioni?.scontoFisso
+        ?? (tipoSconto.includes('VALORE') || tipoSconto.includes('FISSO') ? scontoInfo?.valore : 0)
+        ?? 0
+    );
+    return {
+        percentuale: Number.isFinite(percentuale) && percentuale > 0 ? percentuale : 0,
+        fisso: Number.isFinite(fisso) && fisso > 0 ? fisso : 0,
+    };
+}
+
+function applyConvenzioneDiscount(importo, convenzione) {
+    const base = roundMoney(importo);
+    if (!convenzione?.condizioni || base <= 0) return base;
+    const { percentuale, fisso } = getDiscountValues(convenzione.condizioni);
+    let totale = base;
+    if (percentuale > 0) totale *= (1 - percentuale / 100);
+    if (fisso > 0) totale = Math.max(0, totale - fisso);
+    return roundMoney(totale);
+}
+
+async function enrichConvenzioneWithCodiceSconto(convenzione, tenantId) {
+    const codice = convenzione?.condizioni?.codiceSconto;
+    if (!codice || convenzione.condizioni?.scontoInfo) return convenzione;
+    const codiceSconto = await prisma.codiceSconto.findFirst({
+        where: { codice, tenantId, attivo: true, deletedAt: null },
+        select: { tipoSconto: true, valore: true }
+    });
+    if (!codiceSconto) return convenzione;
+    convenzione.condizioni = {
+        ...convenzione.condizioni,
+        scontoInfo: {
+            tipo: codiceSconto.tipoSconto,
+            valore: Number(codiceSconto.valore)
+        }
+    };
+    return convenzione;
+}
+
+async function findActiveCompanyMedicoCompetente(companyTenantProfileId, tenantId) {
+    if (!companyTenantProfileId) return null;
+    const now = new Date();
+    const nomina = await prisma.nominaRuolo.findFirst({
+        where: {
+            companyTenantProfileId,
+            tenantId,
+            deletedAt: null,
+            stato: 'ATTIVA',
+            tipoRuolo: { in: APPOINTMENT_COMPANY_MEDICO_NOMINE_TYPES },
+            OR: [{ dataFine: null }, { dataFine: { gte: now } }],
+            person: {
+                deletedAt: null,
+                tenantProfiles: { some: { tenantId, deletedAt: null } },
+                personRoles: {
+                    some: {
+                        tenantId,
+                        isActive: true,
+                        deletedAt: null,
+                        roleType: { in: APPOINTMENT_MEDICO_ROLE_TYPES },
+                    },
+                },
+            },
+        },
+        include: {
+            person: {
+                include: {
+                    tenantProfiles: {
+                        where: { tenantId, deletedAt: null },
+                        take: 1,
+                    },
+                },
+            },
+        },
+        orderBy: [
+            { tipoRuolo: 'asc' },
+            { dataInizio: 'desc' },
+        ],
+    });
+    return nomina?.person || null;
+}
+
+function computeAppointmentPriceSummary(appuntamento, { tariffarioTotal = null } = {}) {
+    const tariffarioAmount = Number(tariffarioTotal || 0);
+    let base = 0;
+
+    const mainPrice = Number(
+        appuntamento?.prestazione?._prezzoTariffario
+        ?? appuntamento?.prestazione?.prezzoBase
+        ?? 0
+    );
+    base += Number.isFinite(mainPrice) ? mainPrice : 0;
+
+    for (const row of appuntamento?.prestazioni || []) {
+        if (!row || row.deletedAt || row.prestazioneId === appuntamento.prestazioneId) continue;
+        const movementPrice = Number(row.movimentiContabili?.find?.(m => m?.direzione !== 'USCITA')?.importoNetto ?? 0);
+        const rowPrice = movementPrice > 0
+            ? movementPrice
+            : Number(row.prestazione?._prezzoTariffario ?? row.prestazione?.prezzoBase ?? row.prezzo ?? 0);
+        if (Number.isFinite(rowPrice) && rowPrice > 0) base += rowPrice;
+    }
+
+    if (base <= 0) {
+        base = tariffarioAmount || Number(appuntamento?._prezzoTotaleMovimenti ?? appuntamento?.prezzoBase ?? appuntamento?.prezzo ?? 0) || 0;
+    }
+
+    base = roundMoney(base);
+    const finale = applyConvenzioneDiscount(base, appuntamento?.convenzione);
+    appuntamento._prezzoPrestazioniBase = base;
+    appuntamento._prezzoFinale = finale;
+    appuntamento.prezzoBase = base;
+    appuntamento.prezzo = finale;
+    appuntamento.prezzoFinale = finale;
+    appuntamento.prezzoScontato = finale < base ? finale : null;
+    appuntamento.prezzoConvenzionato = finale < base ? finale : null;
+    return { base, finale };
+}
+
+async function resolveMedicoForAppointment(data, tenantId, createdBy, medicoLookupOr) {
+    const medico = await prisma.person.findFirst({
+        where: {
+            OR: medicoLookupOr,
+            deletedAt: null,
+            tenantProfiles: {
+                some: { tenantId, deletedAt: null }
+            },
+            personRoles: {
+                some: {
+                    tenantId,
+                    isActive: true,
+                    deletedAt: null,
+                    roleType: { in: APPOINTMENT_MEDICO_ROLE_TYPES }
+                }
+            }
+        },
+        include: {
+            tenantProfiles: {
+                where: { tenantId, deletedAt: null },
+                take: 1
+            }
+        }
+    });
+
+    if (medico) return medico;
+
+    const allowDirectMdlFallback = data.createdFromSorveglianzaSanitaria === true &&
+        data.tipoVisitaMDL &&
+        data.companyTenantProfileId &&
+        createdBy;
+
+    if (!allowDirectMdlFallback) return null;
+
+    const activeCompanyMedico = await findActiveCompanyMedicoCompetente(data.companyTenantProfileId, tenantId);
+    if (activeCompanyMedico) return activeCompanyMedico;
+
+    const authorizedActor = await prisma.person.findFirst({
+        where: {
+            id: createdBy,
+            deletedAt: null,
+            tenantProfiles: {
+                some: { tenantId, deletedAt: null, isActive: true }
+            },
+            personRoles: {
+                some: {
+                    tenantId,
+                    isActive: true,
+                    deletedAt: null,
+                    roleType: { in: APPOINTMENT_MEDICO_ROLE_TYPES }
+                }
+            }
+        },
+        include: {
+            tenantProfiles: {
+                where: { tenantId, deletedAt: null },
+                take: 1
+            }
+        }
+    });
+
+    return authorizedActor;
+}
+
 export class AppuntamentoService {
     /**
      * Create a new appointment
@@ -37,6 +305,20 @@ export class AppuntamentoService {
 
             const numeroPrenotazione = `${startOfDay.toISOString().split('T')[0]}-${String(countToday + 1).padStart(4, '0')}`;
 
+            const requestedMedicoId = data.medicoId || createdBy;
+            const medicoLookupOr = [{ id: requestedMedicoId }];
+            const allowCreatedByFallback = data.createdFromSorveglianzaSanitaria === true &&
+                data.tipoVisitaMDL &&
+                data.companyTenantProfileId;
+            if (allowCreatedByFallback && createdBy && createdBy !== requestedMedicoId) {
+                medicoLookupOr.push({ id: createdBy });
+            }
+            medicoLookupOr.push({
+                tenantProfiles: {
+                    some: { id: requestedMedicoId, tenantId, deletedAt: null }
+                }
+            });
+
             // P48: Verify all references exist - Person non ha tenantId, usa tenantProfiles
             const [paziente, medico, ambulatorio] = await Promise.all([
                 prisma.person.findFirst({
@@ -54,29 +336,29 @@ export class AppuntamentoService {
                         }
                     }
                 }),
-                prisma.person.findFirst({
-                    where: {
-                        id: data.medicoId,
-                        deletedAt: null,
-                        tenantProfiles: {
-                            some: { tenantId, deletedAt: null }
-                        }
-                    },
-                    include: {
-                        tenantProfiles: {
-                            where: { tenantId, deletedAt: null },
-                            take: 1
-                        }
-                    }
-                }),
-                prisma.ambulatorio.findFirst({
-                    where: { id: data.ambulatorioId, tenantId, deletedAt: null }
-                })
+                resolveMedicoForAppointment(data, tenantId, createdBy, medicoLookupOr),
+                data.ambulatorioId
+                    ? prisma.ambulatorio.findFirst({
+                        where: { id: data.ambulatorioId, tenantId, deletedAt: null }
+                    })
+                    : prisma.ambulatorio.findFirst({
+                        where: { tenantId, deletedAt: null, stato: 'ATTIVO' },
+                        orderBy: { createdAt: 'asc' }
+                    })
             ]);
 
             if (!paziente) throw new Error('Paziente not found');
             if (!medico) throw new Error('Medico not found');
-            if (!ambulatorio) throw new Error('Ambulatorio not found');
+            if (!ambulatorio) {
+                throw new Error(data.ambulatorioId
+                    ? 'Ambulatorio not found'
+                    : 'Nessun ambulatorio attivo disponibile per creare l\'appuntamento senza slot disponibilità');
+            }
+
+            // Se non arriva uno slot disponibilità, il DB richiede comunque un ambulatorio:
+            // usiamo il primo ambulatorio attivo del tenant come fallback esplicito.
+            const resolvedAmbulatorioId = data.ambulatorioId || ambulatorio.id;
+            const resolvedMedicoId = medico.id;
 
             // Project 51: Validate tenant isolation for all tenant-specific entities
             // This prevents mixing entities from different tenants in an appointment
@@ -123,14 +405,15 @@ export class AppuntamentoService {
                 tenantId,
                 prestazioneId: data.prestazioneId,
                 convenzioneId: data.convenzioneId,
-                ambulatorioId: data.ambulatorioId
+                ambulatorioId: resolvedAmbulatorioId,
+                ambulatorioFallback: !data.ambulatorioId
             });
 
             // Check for conflicts (skip if overbooking is explicitly allowed)
             if (!data.isOverbooking) {
                 const conflicts = await this.checkConflicts(
-                    data.medicoId,
-                    data.ambulatorioId,
+                    resolvedMedicoId,
+                    resolvedAmbulatorioId,
                     dataOra,
                     data.durataMinuti || 30,
                     tenantId
@@ -143,7 +426,6 @@ export class AppuntamentoService {
 
             // Prepara i dati per la creazione
             // NOTA: ambulatorio.id è già trovato sopra come fallback se data.ambulatorioId non è fornito
-            const resolvedAmbulatorioId = data.ambulatorioId || ambulatorio?.id;
             const resolvedPrestazioneId = data.prestazioneId || null;
 
             const createData = {
@@ -151,7 +433,7 @@ export class AppuntamentoService {
                 ambulatorioId: resolvedAmbulatorioId,
                 ...(resolvedPrestazioneId !== null && { prestazioneId: resolvedPrestazioneId }),
                 pazienteId: data.pazienteId,
-                medicoId: data.medicoId,
+                medicoId: resolvedMedicoId,
                 // Ensure proper Date object — Prisma requires ISO 8601 DateTime (rejects bare "T09:00:00" strings)
                 dataOra: data.dataOra instanceof Date ? data.dataOra : new Date(data.dataOra),
                 durataMinuti: data.durataMinuti || 30,
@@ -225,7 +507,7 @@ export class AppuntamentoService {
                 appuntamentoId: appuntamento.id,
                 numeroPrenotazione: appuntamento.numeroPrenotazione,
                 pazienteId: data.pazienteId,
-                medicoId: data.medicoId,
+                medicoId: resolvedMedicoId,
                 tenantId
             });
 
@@ -236,7 +518,7 @@ export class AppuntamentoService {
                 pazienteId: data.pazienteId,
                 pazienteNome: `${paziente.firstName} ${paziente.lastName}`,
                 pazienteEmail: paziente.email,
-                medicoId: data.medicoId,
+                medicoId: resolvedMedicoId,
                 medicoNome: `${medico.firstName} ${medico.lastName}`,
                 dataOra: appuntamento.dataOra,
                 ambulatorioNome: appuntamento.ambulatorio?.nome,
@@ -247,7 +529,7 @@ export class AppuntamentoService {
             // P56: MDL Reconciliation — quando si prenota una VML di tipo PREVENTIVA o PERIODICA,
             // collega le ScadenzaPrestazioneProtocollo aperte del lavoratore a questo appuntamento,
             // così spariscono dalla lista scadenze pending finché l'appuntamento è attivo.
-            const TIPI_VISITA_RECONCILE = ['PREVENTIVA', 'PERIODICA'];
+            const TIPI_VISITA_RECONCILE = ['PREVENTIVA', 'PREVENTIVA_PREASSUNTIVA', 'PERIODICA'];
             if (TIPI_VISITA_RECONCILE.includes(data.tipoVisitaMDL) && data.pazienteId) {
                 try {
                     // P70: limita alle scadenze nei ±60 giorni dalla data appuntamento
@@ -320,15 +602,17 @@ export class AppuntamentoService {
                 }
             }
 
-            // P70: genera BOZZA MovimentoContabile per appuntamento MDL (non-blocking)
+            // P70: genera BOZZA MovimentoContabile per appuntamento MDL.
+            // La creazione diretta da Sorveglianza Sanitaria apre subito la visita:
+            // in quel caso attendiamo il calcolo prezzi per mostrare importi corretti.
             if (data.tipoVisitaMDL && data.companyTenantProfileId) {
-                setImmediate(async () => {
+                const generateMdlDraftMovements = async () => {
                     try {
                         const mResult = await MovimentoContabileGenerator.generaPerAppuntamentoMDL(
                             {
                                 id: appuntamento.id,
                                 pazienteId: data.pazienteId,
-                                medicoId: data.medicoId,
+                                medicoId: resolvedMedicoId,
                                 prestazioneId: data.prestazioneId || null,
                                 tipoVisitaMDL: data.tipoVisitaMDL,
                                 dataOra: appuntamento.dataOra,
@@ -353,7 +637,13 @@ export class AppuntamentoService {
                             error: billingErr.message,
                         });
                     }
-                });
+                };
+
+                if (data.createdFromSorveglianzaSanitaria) {
+                    await generateMdlDraftMovements();
+                } else {
+                    setImmediate(generateMdlDraftMovements);
+                }
             }
 
             return appuntamento;
@@ -466,7 +756,23 @@ export class AppuntamentoService {
                         birthDate: true,
                         tenantProfiles: {
                             where: { tenantId, deletedAt: null },
-                            select: { email: true, phone: true },
+                            select: {
+                                email: true,
+                                phone: true,
+                                companyTenantProfileId: true,
+                                siteId: true,
+                                repartoId: true,
+                                title: true,
+                                protocolloSanitario: {
+                                    select: { id: true, denominazione: true, descrizione: true }
+                                },
+                                site: {
+                                    select: { id: true, siteName: true, indirizzo: true, citta: true, provincia: true }
+                                },
+                                reparto: {
+                                    select: { id: true, nome: true }
+                                }
+                            },
                             take: 1
                         }
                     }
@@ -499,6 +805,13 @@ export class AppuntamentoService {
                     ...paziente,
                     email: profile.email || null,
                     phone: profile.phone || null,
+                    companyTenantProfileId: profile.companyTenantProfileId || null,
+                    _mdlProfile: {
+                        title: profile.title || null,
+                        protocolloSanitario: profile.protocolloSanitario || null,
+                        site: profile.site || null,
+                        reparto: profile.reparto || null,
+                    },
                     tenantProfiles: undefined
                 };
             }
@@ -537,35 +850,36 @@ export class AppuntamentoService {
 
             // P59: Lookup tariffario aziendale per la prestazione principale e tutte le voci
             // → arricchisce prestazione._prezzoTariffario e appuntamento._vociTariffario per PrestazioniCard
-            if (appuntamento.companyTenantProfileId) {
+            const effectiveCompanyTenantProfileId = appuntamento.companyTenantProfileId
+                || appuntamento.paziente?.companyTenantProfileId
+                || null;
+            let tariffarioVociAppuntamento = [];
+            if (effectiveCompanyTenantProfileId) {
                 // Run tariffario + company profile lookup in parallel
                 const [tariffarioAssoc, companyProfile] = await Promise.all([
-                    prisma.tariffarioCompanyAssociation.findFirst({
-                        where: {
-                            companyTenantProfileId: appuntamento.companyTenantProfileId,
-                            tenantId,
-                            attivo: true,
-                            deletedAt: null,
-                            OR: [{ validoA: null }, { validoA: { gte: new Date() } }],
-                        },
-                        include: {
+                    findTariffarioAssociation(
+                        effectiveCompanyTenantProfileId,
+                        tenantId,
+                        appuntamento.dataOra || new Date(),
+                        {
                             tariffario: {
                                 include: {
                                     voci: {
                                         where: { attivo: true, deletedAt: null },
                                         select: {
+                                            tipo: true,
                                             prestazioneId: true,
                                             prezzoBase: true,
                                             categoriaVisita: true,
                                         },
                                     },
                                 },
-                            },
-                        },
-                    }),
+                            }
+                        }
+                    ),
                     prisma.companyTenantProfile.findFirst({
                         where: {
-                            id: appuntamento.companyTenantProfileId,
+                            id: effectiveCompanyTenantProfileId,
                             tenantId,
                             deletedAt: null,
                         },
@@ -604,22 +918,55 @@ export class AppuntamentoService {
                 }
 
                 const allVoci = tariffarioAssoc?.tariffario?.voci ?? [];
+                tariffarioVociAppuntamento = allVoci;
                 // Espone tutte le voci al frontend per il selettore tipo visita
                 appuntamento._vociTariffario = allVoci;
                 // Arricchisce il prezzo della prestazione principale con quello del tariffario
                 if (appuntamento.prestazioneId && appuntamento.prestazione && allVoci.length > 0) {
                     const tipoVisita = appuntamento.tipoVisitaMDL;
-                    const voceMain =
-                        allVoci.find(v => v.prestazioneId === appuntamento.prestazioneId && v.categoriaVisita === tipoVisita)
-                        ?? allVoci.find(v => v.prestazioneId === appuntamento.prestazioneId);
+                    const voceMain = matchVoceTariffario(allVoci, appuntamento.prestazioneId, tipoVisita);
                     if (voceMain) {
                         appuntamento.prestazione._prezzoTariffario = Number(voceMain.prezzoBase);
                     }
                 }
             }
 
+            const movimentiTotale = await prisma.movimentoContabile.aggregate({
+                where: {
+                    tenantId,
+                    appuntamentoId: id,
+                    direzione: 'ENTRATA',
+                    stato: { notIn: ['ANNULLATO', 'STORNATO'] },
+                    deletedAt: null,
+                },
+                _sum: { importoNetto: true },
+            });
+            const totaleMovimenti = Number(movimentiTotale._sum.importoNetto || 0);
+            if (totaleMovimenti > 0) {
+                appuntamento._prezzoTotaleMovimenti = totaleMovimenti;
+            }
+
+            if (tariffarioVociAppuntamento.length > 0) {
+                let totaleTariffario = 0;
+                if (appuntamento.prestazioneId) {
+                    const voceMain = matchVoceTariffario(tariffarioVociAppuntamento, appuntamento.prestazioneId, appuntamento.tipoVisitaMDL);
+                    if (voceMain) totaleTariffario += Number(voceMain.prezzoBase || 0);
+                }
+                const accertamentiIds = (appuntamento.prestazioni || [])
+                    .filter(p => p?.deletedAt == null)
+                    .map(p => p.prestazioneId)
+                    .filter(pId => pId && pId !== appuntamento.prestazioneId);
+                for (const prestazioneId of accertamentiIds) {
+                    const voce = matchVoceTariffario(tariffarioVociAppuntamento, prestazioneId, null);
+                    if (voce) totaleTariffario += Number(voce.prezzoBase || 0);
+                }
+                if (totaleTariffario > 0) {
+                    appuntamento._prezzoTariffarioPrestazione = totaleTariffario;
+                }
+            }
+
             // Load worker mansione + rischi for MDL patients
-            if (appuntamento.pazienteId && appuntamento.companyTenantProfileId) {
+            if (appuntamento.pazienteId && effectiveCompanyTenantProfileId) {
                 const workerMansioni = await prisma.lavoratoreMansione.findMany({
                     where: {
                         personId: appuntamento.pazienteId,
@@ -666,7 +1013,103 @@ export class AppuntamentoService {
                             rischi: wm.mansione.rischiAssociati,
                         },
                     }));
+                    appuntamento._rischiLavorativi = flattenWorkerMansioni(workerMansioni);
                 }
+            }
+
+            if (appuntamento.pazienteId && appuntamento.tipoVisitaMDL) {
+                const currentVisitaId = appuntamento.visita?.id || null;
+                const [ultimaVisitaMdl, scadenze] = await Promise.all([
+                    prisma.visita.findFirst({
+                        where: {
+                            tenantId,
+                            pazienteId: appuntamento.pazienteId,
+                            tipoVisitaMDL: { not: null },
+                            deletedAt: null,
+                            ...(currentVisitaId ? { id: { not: currentVisitaId } } : {}),
+                        },
+                        select: {
+                            id: true,
+                            dataOra: true,
+                            tipoVisitaMDL: true,
+                            prestazione: { select: { id: true, nome: true, codice: true } },
+                            medico: { select: { id: true, firstName: true, lastName: true } },
+                        },
+                        orderBy: { dataOra: 'desc' },
+                    }),
+                    prisma.scadenzaPrestazioneProtocollo.findMany({
+                        where: {
+                            tenantId,
+                            personId: appuntamento.pazienteId,
+                            deletedAt: null,
+                        },
+                        select: {
+                            id: true,
+                            prestazioneId: true,
+                            dataScadenza: true,
+                            dataEsecuzione: true,
+                            periodicitaMesi: true,
+                            eseguita: true,
+                        },
+                        orderBy: [{ dataScadenza: 'asc' }],
+                        take: 50,
+                    }),
+                ]);
+                appuntamento._ultimaVisitaMdl = ultimaVisitaMdl || null;
+                if (scadenze.length > 0) {
+                    const prestazioneIds = [...new Set(scadenze.map(s => s.prestazioneId).filter(Boolean))];
+                    const prestazioni = prestazioneIds.length > 0
+                        ? await prisma.prestazione.findMany({
+                            where: { id: { in: prestazioneIds }, tenantId, deletedAt: null },
+                            select: { id: true, nome: true, codice: true },
+                        })
+                        : [];
+                    const prestazioniMap = new Map(prestazioni.map(p => [p.id, p]));
+                    appuntamento._accertamentiMdl = scadenze.map(s => ({
+                        ...s,
+                        prestazione: s.prestazioneId ? prestazioniMap.get(s.prestazioneId) || null : null,
+                    }));
+                } else {
+                    appuntamento._accertamentiMdl = [];
+                }
+            }
+
+            if (appuntamento.convenzione?.condizioni?.codiceSconto) {
+                await enrichConvenzioneWithCodiceSconto(appuntamento.convenzione, tenantId);
+            }
+            computeAppointmentPriceSummary(appuntamento, {
+                tariffarioTotal: appuntamento._prezzoTariffarioPrestazione || null,
+            });
+
+            const fattureElettroniche = await prisma.fatturaElettronica.findMany({
+                where: {
+                    tenantId,
+                    deletedAt: null,
+                    OR: [
+                        ...(appuntamento.visita?.id ? [{ visitaId: appuntamento.visita.id }] : []),
+                        { note: { contains: `AUTO_ACCETTAZIONE:${id}` } },
+                        {
+                            movimentiContabili: {
+                                some: {
+                                    tenantId,
+                                    deletedAt: null,
+                                    appuntamentoId: id,
+                                },
+                            },
+                        },
+                    ],
+                },
+                include: {
+                    linee: { orderBy: { numeroLinea: 'asc' } },
+                },
+                orderBy: { dataEmissione: 'desc' },
+            });
+            appuntamento._fattureElettroniche = fattureElettroniche;
+            if (
+                appuntamento.stato === 'COMPLETATO' &&
+                fattureElettroniche.some(f => ['EMESSA', 'PAGATA'].includes(f.stato))
+            ) {
+                appuntamento.stato = 'FATTURATO';
             }
 
             return appuntamento;
@@ -700,6 +1143,7 @@ export class AppuntamentoService {
                 oraInizio = null,
                 oraFine = null,
                 medicoId = null,
+                medicoIds: filterMedicoIds = null,
                 pazienteId = null,
                 ambulatorioId = null,
                 sedeId = null,
@@ -764,7 +1208,11 @@ export class AppuntamentoService {
                     where.dataOra = { ...where.dataOra, lte: endDate };
                 }
             }
-            if (medicoId) where.medicoId = medicoId;
+            if (medicoId) {
+                where.medicoId = medicoId;
+            } else if (Array.isArray(filterMedicoIds) && filterMedicoIds.length > 0) {
+                where.medicoId = { in: filterMedicoIds };
+            }
             if (pazienteId) where.pazienteId = pazienteId;
             if (ambulatorioId) where.ambulatorioId = ambulatorioId;
             // Cascading filters: sede → ambulatorio.sedeId, poliambulatorio → ambulatorio.sede.poliambulatorioId
@@ -783,6 +1231,8 @@ export class AppuntamentoService {
                 } else {
                     where.stato = stato;
                 }
+            } else {
+                where.stato = { not: 'ANNULLATO' };
             }
             if (search) {
                 where.OR = [
@@ -818,6 +1268,36 @@ export class AppuntamentoService {
                         nome: true,
                         codice: true,
                         condizioni: true
+                    }
+                },
+                prestazioni: {
+                    where: { deletedAt: null },
+                    orderBy: { ordine: 'asc' },
+                    include: {
+                        prestazione: {
+                            select: {
+                                id: true,
+                                nome: true,
+                                codice: true,
+                                prezzoBase: true,
+                                durataPrevista: true
+                            }
+                        },
+                        movimentiContabili: {
+                            where: {
+                                deletedAt: null,
+                                direzione: 'ENTRATA',
+                                stato: { notIn: ['ANNULLATO', 'STORNATO'] },
+                            },
+                            select: {
+                                id: true,
+                                importoNetto: true,
+                                importoLordo: true,
+                                stato: true,
+                            },
+                            orderBy: { createdAt: 'desc' },
+                            take: 1,
+                        }
                     }
                 }
             };
@@ -894,10 +1374,24 @@ export class AppuntamentoService {
                             select: {
                                 phone: true,
                                 email: true,
+                                companyTenantProfileId: true,
+                                title: true,
+                                protocolloSanitarioId: true,
+                                siteId: true,
+                                repartoId: true,
                                 residenceAddress: true,
                                 residenceCity: true,
                                 postalCode: true,
-                                province: true
+                                province: true,
+                                protocolloSanitario: {
+                                    select: { id: true, denominazione: true, descrizione: true }
+                                },
+                                site: {
+                                    select: { id: true, siteName: true, citta: true, provincia: true }
+                                },
+                                reparto: {
+                                    select: { id: true, nome: true }
+                                }
                             },
                             take: 1
                         }
@@ -938,6 +1432,16 @@ export class AppuntamentoService {
                     gender: p.gender || null,
                     phone: profile.phone || null,
                     email: profile.email || null,
+                    companyTenantProfileId: profile.companyTenantProfileId || null,
+                    _mdlProfile: {
+                        title: profile.title || null,
+                        protocolloSanitarioId: profile.protocolloSanitarioId || null,
+                        protocolloSanitario: profile.protocolloSanitario || null,
+                        siteId: profile.siteId || null,
+                        site: profile.site || null,
+                        repartoId: profile.repartoId || null,
+                        reparto: profile.reparto || null,
+                    },
                     residenceAddress: profile.residenceAddress || null,
                     residenceCity: profile.residenceCity || null,
                     postalCode: profile.postalCode || null,
@@ -945,6 +1449,44 @@ export class AppuntamentoService {
                 }];
             }));
             const mediciMap = new Map((medici || []).map(m => [m.id, m]));
+
+            const validConsensiByPaziente = new Map();
+            if (pazienteIds.length > 0) {
+                const validitaGiorni = {
+                    gdpr: 365,
+                    sanitari: 365,
+                    mdl_sorveglianza: 365,
+                };
+                const tokens = await prisma.consensoFirmaToken.findMany({
+                    where: {
+                        tenantId: effectiveTenantIds.length === 1 ? effectiveTenantIds[0] : { in: effectiveTenantIds },
+                        firmatoAt: { not: null },
+                        appuntamento: { pazienteId: { in: pazienteIds } },
+                    },
+                    select: {
+                        firmatoAt: true,
+                        firmatoConsensi: true,
+                        appuntamento: { select: { pazienteId: true } },
+                    },
+                    orderBy: { firmatoAt: 'desc' },
+                    take: 1000,
+                });
+                const now = Date.now();
+                for (const token of tokens) {
+                    const pazienteId = token.appuntamento?.pazienteId;
+                    if (!pazienteId) continue;
+                    if (!validConsensiByPaziente.has(pazienteId)) {
+                        validConsensiByPaziente.set(pazienteId, new Set());
+                    }
+                    const set = validConsensiByPaziente.get(pazienteId);
+                    for (const codice of (token.firmatoConsensi || [])) {
+                        const giorni = validitaGiorni[codice];
+                        if (!giorni || !token.firmatoAt) continue;
+                        const expiryMs = new Date(token.firmatoAt).getTime() + giorni * 24 * 60 * 60 * 1000;
+                        if (now < expiryMs) set.add(codice);
+                    }
+                }
+            }
 
             // Raccogli tutti i codici sconto referenziati dalle convenzioni
             const codiciScontoRefs = appuntamenti
@@ -1076,31 +1618,53 @@ export class AppuntamentoService {
             // _prezzoTotaleMovimenti (movimenti effettivi) viene usato come riferimento billing,
             // ma _prezzoTariffarioPrestazione (calcolato da contratto) ha priorità nella UI.
             let tariffarioFallbackMap = new Map(); // appuntamentoId -> prezzo totale da tariffario
-            const appsNeedingTariffario = appuntamenti.filter(a => a.companyTenantProfileId);
+            const getEffectiveCompanyId = (app) => app.companyTenantProfileId
+                || pazientiMap.get(app.pazienteId)?.companyTenantProfileId
+                || null;
+            const appsNeedingTariffario = appuntamenti.filter(a => getEffectiveCompanyId(a));
             if (appsNeedingTariffario.length > 0) {
-                const companyIds = [...new Set(appsNeedingTariffario.map(a => a.companyTenantProfileId).filter(Boolean))];
+                const companyIds = [...new Set(appsNeedingTariffario.map(a => getEffectiveCompanyId(a)).filter(Boolean))];
                 const tariffTenantIds = effectiveTenantIds.length > 0 ? effectiveTenantIds : [tenantId];
                 // Batch lookup tariffari aziendali
-                const tariffAssocs = await prisma.tariffarioCompanyAssociation.findMany({
+                const tariffAssocInclude = {
+                    tariffario: {
+                        include: {
+                            voci: {
+                                where: { attivo: true, deletedAt: null },
+                                // categoriaVisita necessario per match tipoVisitaMDL (es. PERIODICA)
+                                select: { tipo: true, prestazioneId: true, prezzoBase: true, categoriaVisita: true },
+                            },
+                        },
+                    },
+                };
+                const now = new Date();
+                const tariffAssocsCurrent = await prisma.tariffarioCompanyAssociation.findMany({
                     where: {
                         companyTenantProfileId: { in: companyIds },
                         tenantId: { in: tariffTenantIds },
                         attivo: true,
                         deletedAt: null,
-                        OR: [{ validoA: null }, { validoA: { gte: new Date() } }],
+                        validoDa: { lte: now },
+                        OR: [{ validoA: null }, { validoA: { gte: now } }],
                     },
-                    include: {
-                        tariffario: {
-                            include: {
-                                voci: {
-                                    where: { attivo: true, deletedAt: null },
-                                    // categoriaVisita necessario per match tipoVisitaMDL (es. PERIODICA)
-                                    select: { prestazioneId: true, prezzoBase: true, categoriaVisita: true },
-                                },
-                            },
-                        },
-                    },
+                    include: tariffAssocInclude,
+                    orderBy: { validoDa: 'desc' },
                 });
+                const coveredCompanies = new Set(tariffAssocsCurrent.map(a => a.companyTenantProfileId));
+                const missingCompanyIds = companyIds.filter(id => !coveredCompanies.has(id));
+                const tariffAssocsFallback = missingCompanyIds.length > 0
+                    ? await prisma.tariffarioCompanyAssociation.findMany({
+                        where: {
+                            companyTenantProfileId: { in: missingCompanyIds },
+                            tenantId: { in: tariffTenantIds },
+                            attivo: true,
+                            deletedAt: null,
+                        },
+                        include: tariffAssocInclude,
+                        orderBy: { validoDa: 'desc' },
+                    })
+                    : [];
+                const tariffAssocs = [...tariffAssocsCurrent, ...tariffAssocsFallback];
                 // Map: companyTenantProfileId -> voci tariffario (primo tariffario attivo trovato)
                 const companyVociMap = new Map();
                 for (const assoc of tariffAssocs) {
@@ -1121,14 +1685,13 @@ export class AppuntamentoService {
                 }
                 // Calcola prezzo tariffario per ogni appuntamento che ne ha bisogno
                 for (const app of appsNeedingTariffario) {
-                    const voci = companyVociMap.get(app.companyTenantProfileId);
+                    const effectiveCompanyId = getEffectiveCompanyId(app);
+                    const voci = companyVociMap.get(effectiveCompanyId);
                     if (!voci || voci.length === 0) continue;
                     let total = 0;
                     // Prestazione principale: matcha per tipoVisitaMDL (es. PREVENTIVA, PERIODICA) per prezzi differenziati
                     if (app.prestazioneId) {
-                        const voce = voci.find(v => v.prestazioneId === app.prestazioneId && v.categoriaVisita === app.tipoVisitaMDL)
-                            ?? voci.find(v => v.prestazioneId === app.prestazioneId && !v.categoriaVisita)
-                            ?? voci.find(v => v.prestazioneId === app.prestazioneId);
+                        const voce = matchVoceTariffario(voci, app.prestazioneId, app.tipoVisitaMDL);
                         if (voce) total += Number(voce.prezzoBase);
                     }
                     // Accertamenti (AppuntamentoPrestazione) — nessun tipoVisitaMDL per accertamenti.
@@ -1137,11 +1700,167 @@ export class AppuntamentoService {
                     const accertamentiIds = (appPrestazioniMap.get(app.id) ?? [])
                         .filter(pId => pId !== app.prestazioneId);
                     for (const pId of accertamentiIds) {
-                        const voce = voci.find(v => v.prestazioneId === pId && !v.categoriaVisita)
-                            ?? voci.find(v => v.prestazioneId === pId);
+                        const voce = matchVoceTariffario(voci, pId, null);
                         if (voce) total += Number(voce.prezzoBase);
                     }
                     if (total > 0) tariffarioFallbackMap.set(app.id, total);
+                }
+            }
+
+            const mdlAppuntamenti = appuntamenti.filter(a => a.tipoVisitaMDL || getEffectiveCompanyId(a));
+            const mdlPersonIds = [...new Set(mdlAppuntamenti.map(a => a.pazienteId).filter(Boolean))];
+            let companyProfilesMap = new Map();
+            let workerMansioniMap = new Map();
+            let ultimaVisitaMdlMap = new Map();
+            let accertamentiMdlMap = new Map();
+
+            if (mdlAppuntamenti.length > 0) {
+                const companyIdsForMdl = [...new Set(mdlAppuntamenti.map(a => getEffectiveCompanyId(a)).filter(Boolean))];
+                const [companyProfiles, workerMansioni, ultimeVisite, scadenze] = await Promise.all([
+                    companyIdsForMdl.length > 0 ? prisma.companyTenantProfile.findMany({
+                        where: {
+                            id: { in: companyIdsForMdl },
+                            tenantId: effectiveTenantIds.length === 1 ? effectiveTenantIds[0] : { in: effectiveTenantIds },
+                            deletedAt: null,
+                        },
+                        select: {
+                            id: true,
+                            emailGenerale: true,
+                            telefonoGenerale: true,
+                            company: {
+                                select: {
+                                    id: true,
+                                    ragioneSociale: true,
+                                    piva: true,
+                                    codiceFiscale: true,
+                                    sedeLegaleCitta: true,
+                                    sedeLegaleProvincia: true,
+                                    sedeLegaleIndirizzo: true,
+                                }
+                            }
+                        }
+                    }) : [],
+                    mdlPersonIds.length > 0 ? prisma.lavoratoreMansione.findMany({
+                        where: {
+                            personId: { in: mdlPersonIds },
+                            tenantId: effectiveTenantIds.length === 1 ? effectiveTenantIds[0] : { in: effectiveTenantIds },
+                            isAttiva: true,
+                            deletedAt: null,
+                            OR: [{ dataFine: null }, { dataFine: { gte: new Date() } }],
+                        },
+                        include: {
+                            mansione: {
+                                select: {
+                                    id: true,
+                                    denominazione: true,
+                                    codice: true,
+                                    areaLavoro: true,
+                                    rischiAssociati: {
+                                        where: { deletedAt: null },
+                                        select: {
+                                            id: true,
+                                            codiceRischio: true,
+                                            livello: true,
+                                            categoria: true,
+                                            periodicitaMesi: true,
+                                            descrizioneEsposizione: true,
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                        orderBy: [{ isPrimaria: 'desc' }, { dataInizio: 'desc' }],
+                    }) : [],
+                    mdlPersonIds.length > 0 ? prisma.visita.findMany({
+                        where: {
+                            tenantId: effectiveTenantIds.length === 1 ? effectiveTenantIds[0] : { in: effectiveTenantIds },
+                            pazienteId: { in: mdlPersonIds },
+                            tipoVisitaMDL: { not: null },
+                            deletedAt: null,
+                        },
+                        select: {
+                            id: true,
+                            pazienteId: true,
+                            dataOra: true,
+                            tipoVisitaMDL: true,
+                            prestazione: { select: { id: true, nome: true, codice: true } },
+                        },
+                        orderBy: { dataOra: 'desc' },
+                    }) : [],
+                    mdlPersonIds.length > 0 ? prisma.scadenzaPrestazioneProtocollo.findMany({
+                        where: {
+                            tenantId: effectiveTenantIds.length === 1 ? effectiveTenantIds[0] : { in: effectiveTenantIds },
+                            personId: { in: mdlPersonIds },
+                            deletedAt: null,
+                        },
+                        select: {
+                            id: true,
+                            personId: true,
+                            prestazioneId: true,
+                            dataScadenza: true,
+                            dataEsecuzione: true,
+                            periodicitaMesi: true,
+                            eseguita: true,
+                        },
+                        orderBy: [{ dataScadenza: 'asc' }],
+                        take: 500,
+                    }) : [],
+                ]);
+
+                companyProfilesMap = new Map((companyProfiles || []).map(profile => [profile.id, {
+                    id: profile.id,
+                    ragioneSociale: profile.company?.ragioneSociale || '',
+                    piva: profile.company?.piva || '',
+                    codiceFiscale: profile.company?.codiceFiscale || '',
+                    citta: profile.company?.sedeLegaleCitta || '',
+                    provincia: profile.company?.sedeLegaleProvincia || '',
+                    indirizzo: profile.company?.sedeLegaleIndirizzo || '',
+                    email: profile.emailGenerale || '',
+                    telefono: profile.telefonoGenerale || '',
+                    companyId: profile.company?.id,
+                }]));
+
+                for (const wm of workerMansioni || []) {
+                    if (!workerMansioniMap.has(wm.personId)) workerMansioniMap.set(wm.personId, []);
+                    workerMansioniMap.get(wm.personId).push({
+                        id: wm.id,
+                        isPrimaria: wm.isPrimaria,
+                        dataInizio: wm.dataInizio,
+                        dataFine: wm.dataFine,
+                        mansione: {
+                            id: wm.mansione.id,
+                            denominazione: wm.mansione.denominazione,
+                            codice: wm.mansione.codice,
+                            areaLavoro: wm.mansione.areaLavoro,
+                            rischi: wm.mansione.rischiAssociati,
+                        },
+                    });
+                }
+
+                for (const visita of ultimeVisite || []) {
+                    if (!ultimaVisitaMdlMap.has(visita.pazienteId)) {
+                        ultimaVisitaMdlMap.set(visita.pazienteId, visita);
+                    }
+                }
+
+                const scadenzePrestazioneIds = [...new Set((scadenze || []).map(s => s.prestazioneId).filter(Boolean))];
+                const scadenzePrestazioni = scadenzePrestazioneIds.length > 0
+                    ? await prisma.prestazione.findMany({
+                        where: {
+                            id: { in: scadenzePrestazioneIds },
+                            tenantId: effectiveTenantIds.length === 1 ? effectiveTenantIds[0] : { in: effectiveTenantIds },
+                            deletedAt: null,
+                        },
+                        select: { id: true, nome: true, codice: true },
+                    })
+                    : [];
+                const scadenzePrestazioniMap = new Map(scadenzePrestazioni.map(p => [p.id, p]));
+                for (const scadenza of scadenze || []) {
+                    if (!accertamentiMdlMap.has(scadenza.personId)) accertamentiMdlMap.set(scadenza.personId, []);
+                    accertamentiMdlMap.get(scadenza.personId).push({
+                        ...scadenza,
+                        prestazione: scadenza.prestazioneId ? scadenzePrestazioniMap.get(scadenza.prestazioneId) || null : null,
+                    });
                 }
             }
 
@@ -1149,6 +1868,18 @@ export class AppuntamentoService {
             for (const app of appuntamenti) {
                 app.paziente = pazientiMap.get(app.pazienteId) || null;
                 app.medico = mediciMap.get(app.medicoId) || null;
+                app.companyTenantProfileId = app.companyTenantProfileId || getEffectiveCompanyId(app);
+                app._companyProfile = app.companyTenantProfileId ? companyProfilesMap.get(app.companyTenantProfileId) || null : null;
+                app._workerMansioni = workerMansioniMap.get(app.pazienteId) || [];
+                app._rischiLavorativi = flattenWorkerMansioni((workerMansioniMap.get(app.pazienteId) || []).map(wm => ({
+                    ...wm,
+                    mansione: {
+                        ...wm.mansione,
+                        rischiAssociati: wm.mansione.rischi || [],
+                    }
+                })));
+                app._ultimaVisitaMdl = ultimaVisitaMdlMap.get(app.pazienteId) || null;
+                app._accertamentiMdl = accertamentiMdlMap.get(app.pazienteId) || [];
 
                 // P59: Prezzo tariffario contrattuale (fonte di verità per la visualizzazione nel calendario)
                 // Ha priorità su _prezzoTotaleMovimenti perché riflette l'accordo tariffario corretto
@@ -1161,6 +1892,9 @@ export class AppuntamentoService {
                 if (totMovimenti != null && totMovimenti > 0) {
                     app._prezzoTotaleMovimenti = totMovimenti;
                 }
+
+                const consensi = app.pazienteId ? validConsensiByPaziente.get(app.pazienteId) : null;
+                app._consensiMdlValidi = !!(app.tipoVisitaMDL && consensi?.has('gdpr') && consensi?.has('sanitari'));
 
                 // P61: Aggiungi numero coda se presente
                 const queueEntry = queueEntriesMap.get(app.id);
@@ -1192,6 +1926,10 @@ export class AppuntamentoService {
                         };
                     }
                 }
+
+                computeAppointmentPriceSummary(app, {
+                    tariffarioTotal: app._prezzoTariffarioPrestazione || null,
+                });
             }
 
             return {
@@ -1338,10 +2076,21 @@ export class AppuntamentoService {
                 throw new Error('Appuntamento not found');
             }
 
+            if (stato === 'ANNULLATO') {
+                const error = new Error('Per annullare una prenotazione usare eliminazione appuntamento con motivo. NO_SHOW resta uno stato visibile distinto.');
+                error.statusCode = 400;
+                throw error;
+            }
+
             const updateData = {
                 stato,
                 updatedAt: new Date()
             };
+            const statusReason = (
+                additionalData.motivoAnnullamento ||
+                additionalData.motivo ||
+                (stato === 'NO_SHOW' ? 'Paziente non presentato senza preavviso' : null)
+            );
 
             // Handle specific state transitions (solo campi esistenti nello schema)
             switch (stato) {
@@ -1369,11 +2118,8 @@ export class AppuntamentoService {
                         updateData.oraFine = new Date();
                     }
                     break;
-                case 'ANNULLATO':
-                    // Note interne per il motivo annullamento
-                    if (additionalData.motivoAnnullamento) {
-                        updateData.noteInterne = additionalData.motivoAnnullamento;
-                    }
+                case 'NO_SHOW':
+                    updateData.motivoAnnullamento = statusReason;
                     break;
             }
 
@@ -1509,13 +2255,39 @@ export class AppuntamentoService {
                 appuntamentoId: id,
                 oldStato: existing.stato,
                 newStato: stato,
+                updatedBy: additionalData.updatedBy || null,
                 tenantId
             });
 
+            await prisma.gdprAuditLog.create({
+                data: {
+                    tenantId,
+                    personId: additionalData.updatedBy || null,
+                    resourceType: 'Appuntamento',
+                    resourceId: id,
+                    action: 'UPDATE',
+                    dataAccessed: {
+                        operation: 'STATUS_CHANGE',
+                        oldStato: existing.stato,
+                        newStato: stato,
+                        reason: statusReason,
+                        visibleRecord: stato === 'NO_SHOW',
+                        pazienteId: existing.pazienteId,
+                        medicoId: existing.medicoId
+                    },
+                    ipAddress: additionalData.ipAddress || null,
+                    userAgent: additionalData.userAgent || null
+                }
+            }).catch(err => logger.warn('GdprAuditLog appuntamento status failed', {
+                component: 'appuntamento-service',
+                action: 'status_audit',
+                error: err.message,
+                appuntamentoId: id,
+                tenantId
+            }));
+
             // Project 47 - Emit domain event for notification system
-            const eventType = stato === 'ANNULLATO'
-                ? AppointmentEvents.CANCELLED
-                : AppointmentEvents.STATUS_CHANGED;
+            const eventType = AppointmentEvents.STATUS_CHANGED;
 
             await EventBus.publish({
                 type: eventType,
@@ -1660,6 +2432,7 @@ export class AppuntamentoService {
                 'ambulatorioId', 'prestazioneId', 'pazienteId', 'medicoId',
                 'dataOra', 'durataMinuti', 'stato', 'isOverbooking',
                 'note', 'noteInterne', 'convenzioneId',
+                'companyTenantProfileId', 'tipoVisitaMDL',
                 'promemoriaSms', 'promemoriaEmail', 'promemoriaInviato',
                 'oraArrivo', 'oraChiamata', 'oraInizio', 'oraFine'
             ];
@@ -1722,16 +2495,19 @@ export class AppuntamentoService {
             const eventType = isRescheduled ? AppointmentEvents.RESCHEDULED : AppointmentEvents.UPDATED;
 
             // P70: Trigger modifiche per appuntamenti MDL (reschedule, cambio prestazione, cambio medico)
-            if (existing.tipoVisitaMDL && existing.companyTenantProfileId) {
+            if (updated.tipoVisitaMDL && updated.companyTenantProfileId) {
                 const isPrestazioneChanged = data.prestazioneId && data.prestazioneId !== existing.prestazioneId;
                 const isMedicoChanged = data.medicoId && data.medicoId !== existing.medicoId;
-                const needsBillingUpdate = isRescheduled || isPrestazioneChanged || isMedicoChanged;
+                const isCompanyChanged = data.companyTenantProfileId && data.companyTenantProfileId !== existing.companyTenantProfileId;
+                const isTipoMdlChanged = data.tipoVisitaMDL && data.tipoVisitaMDL !== existing.tipoVisitaMDL;
+                const isMdlActivated = !existing.tipoVisitaMDL || !existing.companyTenantProfileId;
+                const needsBillingUpdate = isRescheduled || isPrestazioneChanged || isMedicoChanged || isCompanyChanged || isTipoMdlChanged || isMdlActivated;
 
                 if (isRescheduled) {
                     // Re-linka le ScadenzaPrestazioneProtocollo alla nuova data ±60 giorni
                     setImmediate(async () => {
                         try {
-                            const TIPI_RECONCILE = ['PREVENTIVA', 'PERIODICA'];
+                            const TIPI_RECONCILE = ['PREVENTIVA', 'PREVENTIVA_PREASSUNTIVA', 'PERIODICA'];
                             if (TIPI_RECONCILE.includes(existing.tipoVisitaMDL)) {
                                 // 1. Rilascia il vecchio collegamento
                                 await prisma.scadenzaPrestazioneProtocollo.updateMany({
@@ -1802,9 +2578,9 @@ export class AppuntamentoService {
                                     pazienteId: existing.pazienteId,
                                     medicoId: data.medicoId || existing.medicoId,
                                     prestazioneId: data.prestazioneId || existing.prestazioneId,
-                                    tipoVisitaMDL: existing.tipoVisitaMDL,
+                                    tipoVisitaMDL: updated.tipoVisitaMDL,
                                     dataOra: data.dataOra || existing.dataOra,
-                                    companyTenantProfileId: existing.companyTenantProfileId,
+                                    companyTenantProfileId: updated.companyTenantProfileId,
                                 },
                                 tenantId,
                                 id
@@ -1860,8 +2636,15 @@ export class AppuntamentoService {
     /**
      * Soft delete appointment
      */
-    static async delete(id, tenantId) {
+    static async delete(id, tenantId, { deletionReason, deletedBy, ipAddress = null, userAgent = null } = {}) {
         try {
+            const normalizedDeletionReason = typeof deletionReason === 'string' ? deletionReason.trim() : '';
+            if (normalizedDeletionReason.length < 10) {
+                const error = new Error('deletionReason obbligatorio (minimo 10 caratteri)');
+                error.statusCode = 400;
+                throw error;
+            }
+
             const existing = await prisma.appuntamento.findFirst({
                 where: { id, tenantId, deletedAt: null }
             });
@@ -1936,10 +2719,37 @@ export class AppuntamentoService {
                 },
             });
 
+            await prisma.gdprAuditLog.create({
+                data: {
+                    tenantId,
+                    personId: deletedBy || null,
+                    resourceType: 'Appuntamento',
+                    resourceId: id,
+                    action: 'DELETE',
+                    dataAccessed: {
+                        deletionReason: normalizedDeletionReason,
+                        deletedBy: deletedBy || null,
+                        pazienteId: existing.pazienteId,
+                        medicoId: existing.medicoId,
+                        dataOra: existing.dataOra,
+                        operation: 'SOFT_DELETE'
+                    },
+                    ipAddress,
+                    userAgent
+                }
+            }).catch(err => logger.warn('GdprAuditLog appuntamento delete failed', {
+                component: 'appuntamento-service',
+                action: 'delete_audit',
+                error: err.message,
+                appuntamentoId: id,
+                tenantId
+            }));
+
             logger.info('Appuntamento deleted', {
                 component: 'appuntamento-service',
                 action: 'delete',
                 appuntamentoId: id,
+                deletedBy,
                 tenantId
             });
 
@@ -1952,7 +2762,7 @@ export class AppuntamentoService {
                 pazienteEmail: pazienteFlattened?.email,
                 medicoId: existing.medicoId,
                 dataOra: existing.dataOra,
-                reason: 'deleted',
+                reason: normalizedDeletionReason,
                 tenantId
             });
 

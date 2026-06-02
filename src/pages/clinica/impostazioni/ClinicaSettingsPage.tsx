@@ -24,7 +24,6 @@ import {
     Stethoscope,
     Palette,
     PenTool,
-    Cable,
     MonitorDown
 } from 'lucide-react';
 import { ThemeSelector } from '../../../components/settings/ThemeSelector';
@@ -50,6 +49,13 @@ const settingsSections: SettingsSection[] = [
         description: 'Configurazione base del poliambulatorio (sedi, ambulatori)',
         icon: Building2,
         link: '/poliambulatorio/struttura'
+    },
+    {
+        id: 'desktop-app',
+        title: 'App Desktop & Bridge MDL',
+        description: 'App offline per visite in azienda, Medical Device Bridge e gestione licenze',
+        icon: MonitorDown,
+        link: '/poliambulatorio/impostazioni/desktop'
     },
     {
         id: 'visit-templates',
@@ -87,13 +93,6 @@ const settingsSections: SettingsSection[] = [
         link: '/poliambulatorio/impostazioni/consensi-firma'
     },
     {
-        id: 'bridge',
-        title: 'Medical Device Bridge',
-        description: 'Collegamento dispositivi medici (ECG, Spirometro, Audiometro)',
-        icon: Cable,
-        link: '/poliambulatorio/impostazioni/bridge'
-    },
-    {
         id: 'orari',
         title: 'Orari & Disponibilità',
         description: 'Gestione degli orari dei medici e disponibilità ambulatori',
@@ -104,13 +103,15 @@ const settingsSections: SettingsSection[] = [
         id: 'notifiche',
         title: 'Notifiche',
         description: 'Configurazione notifiche email e SMS',
-        icon: Bell
+        icon: Bell,
+        link: '/poliambulatorio/impostazioni/notifiche'
     },
     {
         id: 'privacy',
         title: 'Privacy e GDPR',
         description: 'Impostazioni privacy e conformità GDPR',
-        icon: Shield
+        icon: Shield,
+        link: '/poliambulatorio/impostazioni/privacy'
     },
     {
         id: 'utenti',
@@ -119,13 +120,6 @@ const settingsSections: SettingsSection[] = [
         icon: Users,
         link: '/poliambulatorio/personale/medici'
     },
-    {
-        id: 'desktop-app',
-        title: 'App Desktop MDL',
-        description: 'Scarica l’app per lavorare offline durante le visite in azienda',
-        icon: MonitorDown,
-        link: '/poliambulatorio/impostazioni/desktop'
-    }
 ];
 
 const ClinicaSettingsPage: React.FC = () => {

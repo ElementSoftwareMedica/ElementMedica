@@ -10,8 +10,8 @@ export class VirtualEntityService {
    * Assegna permessi entità virtuali a un ruolo
    */
   async assignVirtualEntityPermissions(
-    roleId: string, 
-    virtualEntityName: VirtualEntityName, 
+    roleId: string,
+    virtualEntityName: VirtualEntityName,
     permissions: string[]
   ): Promise<void> {
     try {
@@ -21,7 +21,7 @@ export class VirtualEntityService {
         permissions
       });
     } catch (error: unknown) {
-      const message = error?.response?.data?.message || error?.message || 'Errore nell\'assegnazione dei permessi';
+      const message = (error as any)?.response?.data?.message || (error as any)?.message || 'Errore nell\'assegnazione dei permessi';
       throw new Error(message);
     }
   }
@@ -30,8 +30,8 @@ export class VirtualEntityService {
    * Rimuove permessi entità virtuali da un ruolo
    */
   async revokeVirtualEntityPermissions(
-    roleId: string, 
-    virtualEntityName: VirtualEntityName, 
+    roleId: string,
+    virtualEntityName: VirtualEntityName,
     permissions: string[]
   ): Promise<void> {
     try {
@@ -41,7 +41,7 @@ export class VirtualEntityService {
         permissions
       });
     } catch (error: unknown) {
-      const message = error?.response?.data?.message || error?.message || 'Errore nella rimozione dei permessi';
+      const message = (error as any)?.response?.data?.message || (error as any)?.message || 'Errore nella rimozione dei permessi';
       throw new Error(message);
     }
   }
@@ -54,7 +54,7 @@ export class VirtualEntityService {
       const result = await apiService.get<any>(`/virtual-entities/permissions/role/${roleId}`);
       return result?.data || result || [];
     } catch (error: unknown) {
-      const message = error?.response?.data?.message || error?.message || 'Errore nel recupero dei permessi del ruolo';
+      const message = (error as any)?.response?.data?.message || (error as any)?.message || 'Errore nel recupero dei permessi del ruolo';
       throw new Error(message);
     }
   }
@@ -63,7 +63,7 @@ export class VirtualEntityService {
    * Verifica se l'utente corrente ha un permesso specifico su un'entità virtuale
    */
   async checkVirtualEntityPermission(
-    virtualEntityName: VirtualEntityName, 
+    virtualEntityName: VirtualEntityName,
     action: PermissionAction
   ): Promise<boolean> {
     try {
@@ -86,7 +86,7 @@ export class VirtualEntityService {
       const result = await apiService.get<any>('/virtual-entities/permissions');
       return result?.data || result || {};
     } catch (error: unknown) {
-      const message = error?.response?.data?.message || error?.message || 'Errore nel recupero dei permessi delle entità virtuali';
+      const message = (error as any)?.response?.data?.message || (error as any)?.message || 'Errore nel recupero dei permessi delle entità virtuali';
       return {};
     }
   }

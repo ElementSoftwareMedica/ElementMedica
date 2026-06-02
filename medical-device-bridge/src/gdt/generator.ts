@@ -166,6 +166,9 @@ export function generateExamRequest(
     if (patient.weightKg) {
         lines.push(gdtLine(GDT_FIELDS.GEWICHT, String(Math.round(patient.weightKg))));
     }
+    if (patient.ethnicity) {
+        lines.push(gdtLine(GDT_FIELDS.BEFUNDTEXT, `Etnia: ${patient.ethnicity}`));
+    }
 
     // Examination date/time
     lines.push(gdtLine(GDT_FIELDS.TAG_ERHEBUNG, currentGdtDate()));

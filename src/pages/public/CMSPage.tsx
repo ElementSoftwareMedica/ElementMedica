@@ -30,7 +30,6 @@ export const CMSPage: React.FC = () => {
       'contatti': 'medica-contatti',
       'diagnostica': 'medica-diagnostica',
       'visite-specialistiche': 'medica-visite-specialistiche',
-      'prenota': 'medica-prenota',
       'chi-siamo': 'medica-chi-siamo'
     };
     rawSlug = slugMap[rawSlug] || rawSlug;

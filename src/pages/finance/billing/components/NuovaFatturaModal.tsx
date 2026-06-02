@@ -30,6 +30,7 @@ import {
 import { useToast } from '../../../../hooks/useToast';
 import { apiGet, apiPatch, apiPut } from '../../../../services/api';
 import { DatePickerElegante } from '../../../../components/ui/DatePickerElegante';
+import ElegantSelect from '../../../../components/ui/ElegantSelect';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -149,7 +150,7 @@ const Field: React.FC<{
 );
 
 const inputCls = "w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-teal-500 focus:border-transparent";
-const selectCls = inputCls;
+const selectCls = `${inputCls} appearance-none bg-[linear-gradient(45deg,transparent_50%,#64748b_50%),linear-gradient(135deg,#64748b_50%,transparent_50%)] bg-[length:5px_5px,5px_5px] bg-[position:calc(100%-18px)_50%,calc(100%-13px)_50%] bg-no-repeat pr-9`;
 
 // SistemaTS flag_opposizione: 0 = non si oppone (invia a TS, detraibile); 1 = oppone (non invia)
 const defaultSistemaTsFlag = (ts: TipoServizio): number =>
@@ -411,9 +412,12 @@ const NuovaFatturaModal: React.FC<NuovaFatturaModalProps> = ({ onClose, onCreate
             const updated = { ...l, [field]: value };
             // Quando si attiva/disattiva il flag medicinEstetica, aggiorna IVA in base al disagio
             if (field === 'medicineEstetica') {
-                if (value) {
-                    updated.aliquotaIva = disagioPsicologico ? 0 : 22;
-                    updated.natura = disagioPsicologico ? 'N4' : '';
+                if (tipoServizio === 'VISITA' || tipoServizio === 'VISITA_MDL') {
+                    updated.aliquotaIva = value && !disagioPsicologico ? 22 : 0;
+                    updated.natura = value && !disagioPsicologico ? '' : 'N4';
+                } else if (value) {
+                    updated.aliquotaIva = 22;
+                    updated.natura = '';
                 } else {
                     updated.aliquotaIva = 22;
                     updated.natura = '';
@@ -434,10 +438,11 @@ const NuovaFatturaModal: React.FC<NuovaFatturaModalProps> = ({ onClose, onCreate
     // ── Calcoli bollo e totali ─────────────────────────────────────────────────
     // lineeEffettive: safety override per garantire IVA corretta indipendentemente dallo stato UI
     const lineeEffettive = linee.map(l => {
-        if (l.medicineEstetica) {
-            return disagioPsicologico
-                ? { ...l, aliquotaIva: 0, natura: 'N4' }
-                : { ...l, aliquotaIva: 22, natura: '' };
+        if (tipoServizio === 'VISITA' || tipoServizio === 'VISITA_MDL') {
+            if (l.medicineEstetica && !disagioPsicologico) {
+                return { ...l, aliquotaIva: 22, natura: '' };
+            }
+            return { ...l, aliquotaIva: 0, natura: 'N4' };
         }
         return l;
     });
@@ -608,12 +613,17 @@ const NuovaFatturaModal: React.FC<NuovaFatturaModalProps> = ({ onClose, onCreate
 
                             <div className="grid grid-cols-2 gap-4">
                                 <Field label="Tipo documento" required>
-                                    <select value={tipoDocumento} onChange={e => setTipoDocumento(e.target.value as TipoDocumentoFattura)} className={selectCls}>
-                                        <option value="FATTURA">TD01 — Fattura</option>
-                                        <option value="ACCONTO">TD02 — Acconto</option>
-                                        <option value="NOTA_CREDITO">TD04 — Nota credito</option>
-                                        <option value="NOTA_DEBITO">TD05 — Nota debito</option>
-                                    </select>
+                                    <ElegantSelect
+                                        value={tipoDocumento}
+                                        onChange={value => setTipoDocumento(value as TipoDocumentoFattura)}
+                                        triggerClassName="h-10 rounded-lg"
+                                        options={[
+                                            { value: 'FATTURA', label: 'TD01 — Fattura' },
+                                            { value: 'ACCONTO', label: 'TD02 — Acconto' },
+                                            { value: 'NOTA_CREDITO', label: 'TD04 — Nota credito' },
+                                            { value: 'NOTA_DEBITO', label: 'TD05 — Nota debito' },
+                                        ]}
+                                    />
                                 </Field>
                                 <Field label="Data emissione" required>
                                     <DatePickerElegante
@@ -632,10 +642,15 @@ const NuovaFatturaModal: React.FC<NuovaFatturaModalProps> = ({ onClose, onCreate
                                         clearable />
                                 </Field>
                                 <Field label="SistemaTS flag" hint="0 = invia a SistemaTS (spesa detraibile); 1 = opposizione (non invia, non detraibile)">
-                                    <select value={sistemaTsFlagOpp} onChange={e => { setSistemaTsFlagOpp(Number(e.target.value)); setFlagManualeOverride(true); }} className={selectCls}>
-                                        <option value={0}>0 — Invia a SistemaTS (detraibile)</option>
-                                        <option value={1}>1 — Opposizione (non invia)</option>
-                                    </select>
+                                    <ElegantSelect
+                                        value={String(sistemaTsFlagOpp)}
+                                        onChange={value => { setSistemaTsFlagOpp(Number(value)); setFlagManualeOverride(true); }}
+                                        triggerClassName="h-10 rounded-lg"
+                                        options={[
+                                            { value: '0', label: '0 — Invia a SistemaTS (detraibile)' },
+                                            { value: '1', label: '1 — Opposizione (non invia)' },
+                                        ]}
+                                    />
                                 </Field>
                             </div>
                         </div>
@@ -892,24 +907,26 @@ const NuovaFatturaModal: React.FC<NuovaFatturaModalProps> = ({ onClose, onCreate
                                     </div>
                                     <div className="grid grid-cols-2 gap-3">
                                         <Field label="Aliquota IVA">
-                                            <select value={linea.aliquotaIva}
-                                                onChange={e => updateLinea(linea.key, 'aliquotaIva', e.target.value)}
-                                                className={selectCls}>
-                                                {ALIQUOTE_IVA.map(a => (
-                                                    <option key={a.value} value={a.value}>{a.label}</option>
-                                                ))}
-                                            </select>
+                                            <ElegantSelect
+                                                value={String(linea.aliquotaIva)}
+                                                onChange={value => updateLinea(linea.key, 'aliquotaIva', value)}
+                                                triggerClassName="h-10 rounded-lg"
+                                                options={ALIQUOTE_IVA.map(a => ({ value: String(a.value), label: a.label }))}
+                                            />
                                         </Field>
                                         {Number(linea.aliquotaIva) === 0 && (
                                             <Field label="Natura (esenzione)">
-                                                <select value={linea.natura}
-                                                    onChange={e => updateLinea(linea.key, 'natura', e.target.value)}
-                                                    className={selectCls}>
-                                                    <option value="N4">N4 — Esenti art.10</option>
-                                                    <option value="N2.2">N2.2 — Non soggette</option>
-                                                    <option value="N3.5">N3.5 — Non imponibili</option>
-                                                    <option value="N6">N6 — Reverse charge</option>
-                                                </select>
+                                                <ElegantSelect
+                                                    value={linea.natura || 'N4'}
+                                                    onChange={value => updateLinea(linea.key, 'natura', value)}
+                                                    triggerClassName="h-10 rounded-lg"
+                                                    options={[
+                                                        { value: 'N4', label: 'N4 — Esenti art.10' },
+                                                        { value: 'N2.2', label: 'N2.2 — Non soggette' },
+                                                        { value: 'N3.5', label: 'N3.5 — Non imponibili' },
+                                                        { value: 'N6', label: 'N6 — Reverse charge' },
+                                                    ]}
+                                                />
                                             </Field>
                                         )}
                                         <div className="flex items-end">
@@ -1044,14 +1061,20 @@ const NuovaFatturaModal: React.FC<NuovaFatturaModalProps> = ({ onClose, onCreate
                     {openSections.has('pagamento') && (
                         <div className="px-1 pb-2 grid grid-cols-2 gap-4">
                             <Field label="Condizioni pagamento">
-                                <select value={condizioniPagamento} onChange={e => setCondizioniPagamento(e.target.value)} className={selectCls}>
-                                    {CONDIZIONI_PAGAMENTO.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-                                </select>
+                                <ElegantSelect
+                                    value={condizioniPagamento}
+                                    onChange={setCondizioniPagamento}
+                                    triggerClassName="h-10 rounded-lg"
+                                    options={CONDIZIONI_PAGAMENTO}
+                                />
                             </Field>
                             <Field label="Modalità pagamento">
-                                <select value={modalitaPagamento} onChange={e => setModalitaPagamento(e.target.value)} className={selectCls}>
-                                    {MODALITA_PAGAMENTO.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-                                </select>
+                                <ElegantSelect
+                                    value={modalitaPagamento}
+                                    onChange={setModalitaPagamento}
+                                    triggerClassName="h-10 rounded-lg"
+                                    options={MODALITA_PAGAMENTO}
+                                />
                             </Field>
                             <div className="col-span-2">
                                 <Field label="IBAN (per bonifico)" hint="Lascia vuoto per usare l'IBAN dell'ente emittente">

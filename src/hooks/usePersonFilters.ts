@@ -117,6 +117,16 @@ export const usePersonFilters = ({
       if (includeDeleted) qs.set('includeDeleted', 'true');
       qs.set('limit', String(LIMIT));
 
+      // filterType='employees' usa l'endpoint dedicato (richiede employees:read, NON persons:read)
+      // Questo permette anche al TRAINER (che ha employees:read) di caricare i dipendenti
+      if (filterType === 'employees') {
+        const url = `/api/v1/persons/employees${qs.toString() ? `?${qs.toString()}` : ''}`;
+        const resp = await apiGet<PersonsResponse>(url);
+        const chunk = extractList(resp);
+        setPersons(mapAliases(chunk));
+        return;
+      }
+
       // Strategia: per l'import recupera tutte le pagine finché disponibili
       let page = 1;
       let all: Record<string, unknown>[] = [];

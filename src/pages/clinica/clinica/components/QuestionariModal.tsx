@@ -79,6 +79,10 @@ type ModalView = 'list' | 'fill' | 'view';
 // HELPERS
 // ============================================
 
+function isMedicalQuestionario(template?: { tipo?: string | null } | null): boolean {
+    return isQuestionarioTipo(template?.tipo);
+}
+
 /**
  * Builds a default datiCompilati object from a template's campi
  * using each field's defaultValue (mirrors the 'da-template' preset in QuestionarioRenderer)
@@ -252,6 +256,18 @@ export const QuestionariModal: React.FC<QuestionariModalProps> = ({
         queryFn: () => questionariService.getQuestionariVisita(visitaId!),
         enabled: isOpen && !!visitaId
     });
+
+    const questionariCompilati = useMemo(
+        () => (compilati || []).filter((c: QuestionarioCompilato) =>
+            isMedicalQuestionario(c.documentoTemplate || c.template)
+        ),
+        [compilati]
+    );
+
+    const suggeritiQuestionari = useMemo(
+        () => (suggeriti || []).filter((t: QuestionarioTemplate) => isMedicalQuestionario(t)),
+        [suggeriti]
+    );
 
     // R17: Auto-check tariffario for any COMPLETATO questionnaire when the list loads.
     // This covers the case where compilation + signing happened in a previous session —
@@ -499,8 +515,8 @@ export const QuestionariModal: React.FC<QuestionariModalProps> = ({
     const [isCompilingAll, setIsCompilingAll] = useState(false);
     const handleCompilaTutti = useCallback(async () => {
         if (!visitaId || readOnly) return;
-        const pending = (suggeriti || []).filter((t: QuestionarioTemplate) =>
-            !(compilati || []).some((c: QuestionarioCompilato) => c.documentoTemplateId === t.id)
+        const pending = suggeritiQuestionari.filter((t: QuestionarioTemplate) =>
+            !questionariCompilati.some((c: QuestionarioCompilato) => c.documentoTemplateId === t.id)
         );
         if (pending.length === 0) {
             showToast({ message: 'Tutti i questionari suggeriti sono già compilati', type: 'info' });
@@ -568,7 +584,7 @@ export const QuestionariModal: React.FC<QuestionariModalProps> = ({
                 }
             }
         }
-    }, [suggeriti, compilati, visitaId, pazienteId, readOnly, refetchCompilati, queryClient, showToast, companyTenantProfileId, onPrestazioneSuggerita]);
+    }, [suggeritiQuestionari, questionariCompilati, visitaId, pazienteId, readOnly, refetchCompilati, queryClient, showToast, companyTenantProfileId, onPrestazioneSuggerita]);
 
     const handleBack = useCallback(() => {
         setView('list');
@@ -614,7 +630,7 @@ export const QuestionariModal: React.FC<QuestionariModalProps> = ({
         if (!allTemplates?.data) return [];
         // S65: Only show questionario types (not modulistica)
         const questionarioTemplates = allTemplates.data.filter((t: QuestionarioTemplate) =>
-            isQuestionarioTipo(t.tipo)
+            isMedicalQuestionario(t)
         );
         if (!searchTerm) return questionarioTemplates;
 
@@ -631,7 +647,7 @@ export const QuestionariModal: React.FC<QuestionariModalProps> = ({
 
     const renderTemplateCard = (template: QuestionarioTemplate, isSuggested = false) => {
         const config = template.questionarioConfig;
-        const alreadyCompiled = compilati?.some((c: QuestionarioCompilato) => c.documentoTemplateId === template.id);
+        const alreadyCompiled = questionariCompilati.some((c: QuestionarioCompilato) => c.documentoTemplateId === template.id);
         // Warning badges only in visit context
         const hasPeriodicity = visitaId && config?.periodicitaMesi && config.periodicitaMesi > 0;
         const missingPeriodicity = visitaId && !readOnly && (!config?.periodicitaMesi);
@@ -888,29 +904,29 @@ export const QuestionariModal: React.FC<QuestionariModalProps> = ({
                             )}
 
                             {/* Questionari già compilati */}
-                            {compilati && compilati.length > 0 && (
+                            {questionariCompilati.length > 0 && (
                                 <section>
                                     <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                                         <FileText className="h-4 w-4" />
-                                        Già compilati ({compilati.length})
+                                        Già compilati ({questionariCompilati.length})
                                     </h3>
                                     <div className="space-y-2">
-                                        {compilati.map(renderCompilatoCard)}
+                                        {questionariCompilati.map(renderCompilatoCard)}
                                     </div>
                                 </section>
                             )}
 
                             {/* Questionari suggeriti */}
-                            {suggeriti && suggeriti.length > 0 && ((() => {
-                                const pending = suggeriti.filter((t: QuestionarioTemplate) =>
-                                    !(compilati || []).some((c: QuestionarioCompilato) => c.documentoTemplateId === t.id)
+                            {suggeritiQuestionari.length > 0 && ((() => {
+                                const pending = suggeritiQuestionari.filter((t: QuestionarioTemplate) =>
+                                    !questionariCompilati.some((c: QuestionarioCompilato) => c.documentoTemplateId === t.id)
                                 );
                                 return (
                                     <section>
                                         <div className="flex items-center justify-between mb-3">
                                             <h3 className="text-sm font-semibold text-teal-700 flex items-center gap-2">
                                                 <AlertCircle className="h-4 w-4" />
-                                                Suggeriti per questa visita ({suggeriti.length})
+                                                Suggeriti per questa visita ({suggeritiQuestionari.length})
                                             </h3>
                                             {pending.length > 0 && !readOnly && (
                                                 <button
@@ -928,7 +944,7 @@ export const QuestionariModal: React.FC<QuestionariModalProps> = ({
                                             )}
                                         </div>
                                         <div className="space-y-2">
-                                            {suggeriti.map((t: QuestionarioTemplate) => renderTemplateCard(t, true))}
+                                            {suggeritiQuestionari.map((t: QuestionarioTemplate) => renderTemplateCard(t, true))}
                                         </div>
                                     </section>
                                 );

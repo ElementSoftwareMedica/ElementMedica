@@ -5,6 +5,17 @@ export interface PrestazioneProtocollo {
   obbligatoria: boolean
 }
 
+export interface ProtocolloPrestazioneRow {
+  prestazioneId?: string | null
+  prestazioneNome?: string | null
+  periodicitaMesi?: number | string | null
+  periodicitaCustomMesi?: number | string | null
+  scadenzaDefaultMesi?: number | string | null
+  periodicita?: string | number | null
+  isObbligatoria?: boolean | number | null
+  obbligatoria?: boolean | number | null
+}
+
 interface RawProtocolloPrestazione {
   prestazioneId?: string | null
   prestazioneNome?: string | null
@@ -96,6 +107,22 @@ export function parseProtocolloPrestazioni(json: string | null | undefined): Pre
   } catch {
     return []
   }
+}
+
+export function normalizeProtocolloPrestazioni(rows: ProtocolloPrestazioneRow[]): PrestazioneProtocollo[] {
+  return rows.map(row => {
+    const periodicitaMesi =
+      toPositiveNumber(row.periodicitaMesi) ??
+      periodicitaToMesi(row.periodicita, row.periodicitaCustomMesi) ??
+      toPositiveNumber(row.scadenzaDefaultMesi)
+
+    return {
+      prestazioneId: row.prestazioneId ?? null,
+      prestazioneNome: row.prestazioneNome || 'Prestazione senza nome',
+      periodicitaMesi,
+      obbligatoria: toBoolean(row.isObbligatoria ?? row.obbligatoria, true),
+    }
+  }).filter(item => item.prestazioneNome.trim().length > 0)
 }
 
 export function formatProtocolloPeriodicity(mesi: number | null | undefined): string {

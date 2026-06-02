@@ -11,10 +11,18 @@ import { safeStorage } from 'electron'
 const PII_FIELDS: Record<string, Set<string>> = {
   patients: new Set(['firstName', 'lastName', 'taxCode', 'email', 'phone', 'birthDate', 'birthPlace', 'residenceAddress', 'residenceCity', 'postalCode', 'province']),
   companies: new Set(['pec', 'emailGenerale', 'telefonoGenerale', 'noteCommerciali', 'noteOperative', 'noteInterne']),
+  nomine_ruolo: new Set(['firstName', 'lastName', 'nome', 'taxCode', 'note']),
   visits: new Set(['anamnesi', 'esameObiettivo', 'diagnosi', 'terapia', 'noteInterne', 'notePazienti', 'firmaMedico', 'firmaPaziente']),
   giudizi_idoneita: new Set(['limitazioni', 'prescrizioni', 'note', 'firmaMedico']),
   esami_strumentali: new Set(['risultato', 'valori', 'note']),
-  questionari_compilati: new Set(['risposte'])
+  documenti_compilati: new Set(['datiCompilati', 'firmaPaziente', 'firmaMedico', 'firmaDipendente', 'firmaFormatore', 'firmaDatore', 'note']),
+  questionari_risposte: new Set(['valoreTesto', 'valoreJson', 'noteValidazione']),
+  mansione_rischi: new Set(['descrizioneEsposizione', 'misurePrevenzioneDPI', 'fonteRischio']),
+  profili_salute: new Set(['data', 'allergieFarmaci', 'farmaci', 'noteSalute', 'sorveglianzaSanitaria', 'storicoOccupazionale']),
+  documenti_clinici: new Set(['titolo', 'descrizione', 'fileName', 'fileUrl']),
+  person_documents: new Set(['titolo', 'descrizione', 'fileName', 'fileUrl', 'hashFile']),
+  referti: new Set(['contenuto', 'conclusioni', 'allegati', 'hashFirma']),
+  firme_digitali: new Set(['hashDocumento', 'hashFirma', 'firmaImageUrl', 'note'])
 }
 
 const ENCRYPTION_PREFIX = 'enc::' // Prefix to identify encrypted values

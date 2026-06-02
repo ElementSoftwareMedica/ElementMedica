@@ -9,7 +9,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     XAxis,
     YAxis,
@@ -48,6 +48,7 @@ import {
     Candy,
     GraduationCap,
     ClipboardList,
+    X,
     XCircle
 } from 'lucide-react';
 import {
@@ -55,21 +56,29 @@ import {
     visiteApi,
     refertiApi,
     appuntamentiApi,
+    documentiCliniciApi,
+    modulisticaDocumentiApi,
+    mansioniApi,
+    protocolliSanitariApi,
     Paziente,
     Visita,
     Referto,
     Appuntamento
 } from '../../../services/clinicaApi';
-import { documentService } from '../../../services/documentService';
-import { apiGet } from '../../../services/api';
+import { apiDownload, apiGet } from '../../../services/api';
+import questionariService from '../../../services/questionariService';
 import { formatDate, formatTime } from '../../../utils/dateUtils';
 import { formatMedicoName } from '../../../utils/textFormatters';
 import { ConsentFSEForm, ConsentFSESummary } from '../../../components/clinica/consent-fse';
 import ConsentiTabletFirmati from './components/ConsentiTabletFirmati';
 import { useBillingAccess } from '../../../hooks/useBillingAccess';
+import { useRoleGuard } from '../../../hooks/useRoleGuard';
 import QuickFatturazioneTab from '../../finance/billing/components/QuickFatturazioneTab';
 import { ProfiloSaluteCard } from '../../../components/clinica/ProfiloSaluteCard';
 import { Euro } from 'lucide-react';
+import OccupationalHistoryCard from './components/OccupationalHistoryCard';
+import MDLInfoCard from './components/MDLInfoCard';
+import type { ProtocolloSanitario, WorkerOccupationalProfile } from '../../../services/clinicaApi';
 
 // ============================================
 // TYPES
@@ -85,7 +94,147 @@ interface TimelineEvent {
     descrizione?: string;
     stato?: string;
     link?: string;
+    referto?: Referto;
+    visitaId?: string;
 }
+
+type PatientDocumentKind = 'referto' | 'allegato' | 'questionario' | 'modulo';
+
+interface PatientDocumentRow {
+    id: string;
+    kind: PatientDocumentKind;
+    title: string;
+    date?: string;
+    status?: string;
+    subtitle?: string;
+    href?: string;
+    downloadHref?: string;
+    visitaId?: string;
+    sourceId?: string;
+    blobUrl?: string;
+}
+
+interface QuickLookState {
+    title: string;
+    url: string;
+    downloadUrl?: string;
+}
+
+const toArray = <T,>(value: unknown): T[] => {
+    if (Array.isArray(value)) return value as T[];
+    if (value && typeof value === 'object') {
+        const data = (value as { data?: unknown; items?: unknown; results?: unknown }).data
+            ?? (value as { items?: unknown }).items
+            ?? (value as { results?: unknown }).results;
+        return Array.isArray(data) ? data as T[] : [];
+    }
+    return [];
+};
+
+const getRefertoForVisita = (visita: Visita & { referti?: Referto[] | null }, referti: Referto[] = []) =>
+    visita.referti?.[0] || referti.find(r => r.visitaId === visita.id);
+
+const buildVisitRefertoAction = (visita: Visita & {
+    prestazione?: { nome?: string } | null;
+    referti?: Referto[] | null;
+}, referti: Referto[] = []) => getRefertoForVisita(visita, referti) || ({
+    id: `visita-${visita.id}`,
+    visitaId: visita.id,
+    titolo: `Referto - ${visita.prestazione?.nome || 'Visita'}`,
+    stato: visita.stato,
+    createdAt: visita.updatedAt || visita.createdAt || visita.dataOra,
+} as unknown as Referto);
+
+const RISK_LABELS: Record<string, string> = {
+    RUM: 'Rumore',
+    VIB_MB: 'Vibrazioni mano-braccio',
+    VIB_WBV: 'Vibrazioni corpo intero',
+    RAD_ION: 'Radiazioni ionizzanti',
+    RAD_NIR: 'Radiazioni non ionizzanti',
+    CEM: 'Campi elettromagnetici',
+    MIC: 'Microclima severo',
+    CHI: 'Agenti chimici',
+    CAN: 'Agenti cancerogeni/mutageni',
+    AMI: 'Amianto',
+    PIO: 'Piombo e composti',
+    BIO: 'Agenti biologici',
+    MMC: 'Movimentazione manuale carichi',
+    MOV_RIP: 'Movimenti ripetitivi',
+    POS: 'Posture incongrue',
+    NOT: 'Lavoro notturno',
+    VDT: 'Videoterminale',
+    SLC: 'Stress lavoro-correlato',
+    QUO: 'Lavoro in quota',
+    SPA_CON: 'Spazi confinati',
+    GUI_MEZ: 'Guida automezzi',
+    CAR_ELE: 'Carrelli elevatori',
+    ELE: 'Rischio elettrico',
+    INC: 'Rischio incendio',
+    ISO: 'Lavoro isolato',
+    IPE: 'Lavori con funi/ipogei',
+    POL: 'Polveri/silice',
+    ALC: 'Alcol/sostanze psicotrope',
+};
+
+const riskLabel = (r: any) => {
+    const code = r.codiceRischio || r.codice || r.rischio?.codice;
+    const name = r.nome || r.denominazione || r.rischio?.nome || r.rischio?.denominazione || r.descrizione || RISK_LABELS[code] || code || 'Rischio';
+    const level = r.livello || r.livelloRischio || r.rischioLivello;
+    return [name, code && !String(name).includes(String(code)) ? `(${code})` : null, level ? `livello ${String(level).toLowerCase()}` : null]
+        .filter(Boolean)
+        .join(' ');
+};
+
+const dedupeVisite = (items: Visita[] = []) => {
+    const byKey = new Map<string, Visita>();
+    items.forEach(visita => {
+        const key = visita.isVisitaSecundaria
+            ? ((visita as any).appPrestazioneId || visita.id)
+            : (visita.appuntamentoId || visita.id);
+        const previous = byKey.get(key);
+        const previousDate = previous ? new Date(previous.updatedAt || previous.createdAt).getTime() : 0;
+        const currentDate = new Date(visita.updatedAt || visita.createdAt).getTime();
+        if (!previous || currentDate >= previousDate) {
+            byKey.set(key, visita);
+        }
+    });
+    return Array.from(byKey.values());
+};
+
+const QuickLookModal: React.FC<{ state: QuickLookState | null; onClose: () => void }> = ({ state, onClose }) => {
+    if (!state) return null;
+    return (
+        <div className="fixed inset-0 z-[1200] bg-slate-950/70 flex items-center justify-center p-4">
+            <div className="bg-white w-full max-w-5xl h-[86vh] rounded-xl shadow-2xl overflow-hidden flex flex-col">
+                <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{state.title}</p>
+                        <p className="text-xs text-gray-500">Anteprima documento</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        {state.downloadUrl && (
+                            <a
+                                href={state.downloadUrl}
+                                download
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                            >
+                                <Download className="h-3.5 w-3.5" />
+                                Scarica
+                            </a>
+                        )}
+                        <button type="button" onClick={onClose} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100">
+                            <X className="h-4 w-4" />
+                        </button>
+                    </div>
+                </div>
+                <iframe title={state.title} src={state.url} className="flex-1 w-full bg-gray-50" />
+            </div>
+        </div>
+    );
+};
+
+const unavailablePdfDataUrl = () =>
+    `data:text/html;charset=utf-8,${encodeURIComponent('<div style="font-family:system-ui;padding:32px;color:#334155"><h2>Referto PDF non ancora disponibile</h2><p>Non risulta un PDF generato per questa visita.</p></div>')}`;
 
 // ============================================
 // COMPONENTS
@@ -178,7 +327,8 @@ const StatsCards: React.FC<{
     visite: Visita[];
     referti: Referto[];
     appuntamenti: Appuntamento[];
-}> = ({ visite, referti, appuntamenti }) => {
+    consensiFirmati: number;
+}> = ({ visite, referti, appuntamenti, consensiFirmati }) => {
     const stats = useMemo(() => ({
         totaleVisite: visite.length,
         visiteAnno: visite.filter(v => {
@@ -187,11 +337,13 @@ const StatsCards: React.FC<{
             return d.getFullYear() === oggi.getFullYear();
         }).length,
         totaleReferti: referti.length,
-        refertiFirmati: referti.filter(r => r.firmato).length,
+        consensiFirmati,
+        appuntamentiFuturi: appuntamenti
+            .filter(a => new Date(a.dataOra) > new Date() && a.stato !== 'ANNULLATO').length,
         prossimoApp: appuntamenti
             .filter(a => new Date(a.dataOra) > new Date() && a.stato !== 'ANNULLATO')
             .sort((a, b) => new Date(a.dataOra).getTime() - new Date(b.dataOra).getTime())[0]
-    }), [visite, referti, appuntamenti]);
+    }), [visite, referti, appuntamenti, consensiFirmati]);
 
     return (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -225,8 +377,8 @@ const StatsCards: React.FC<{
                         <CheckCircle2 className="h-5 w-5 text-green-600" />
                     </div>
                     <div>
-                        <p className="text-2xl font-bold text-gray-900">{stats.refertiFirmati}</p>
-                        <p className="text-xs text-gray-500">Referti firmati</p>
+                        <p className="text-2xl font-bold text-gray-900">{stats.consensiFirmati}</p>
+                        <p className="text-xs text-gray-500">Consensi firmati</p>
                     </div>
                 </div>
             </div>
@@ -237,19 +389,10 @@ const StatsCards: React.FC<{
                         <Calendar className="h-5 w-5 text-amber-600" />
                     </div>
                     <div>
-                        {stats.prossimoApp ? (
-                            <>
-                                <p className="text-sm font-bold text-gray-900">
-                                    {formatDate(new Date(stats.prossimoApp.dataOra), 'short')}
-                                </p>
-                                <p className="text-xs text-gray-500">Prossimo app.</p>
-                            </>
-                        ) : (
-                            <>
-                                <p className="text-lg font-bold text-gray-400">-</p>
-                                <p className="text-xs text-gray-500">Nessun app.</p>
-                            </>
-                        )}
+                        <p className="text-2xl font-bold text-gray-900">{stats.appuntamentiFuturi}</p>
+                        <p className="text-xs text-gray-500">
+                            {stats.prossimoApp ? `Prossimo ${formatDate(new Date(stats.prossimoApp.dataOra), 'short')}` : 'App. futuri'}
+                        </p>
                     </div>
                 </div>
             </div>
@@ -263,7 +406,9 @@ const StatsCards: React.FC<{
 const Timeline: React.FC<{
     events: TimelineEvent[];
     maxItems?: number;
-}> = ({ events, maxItems = 10 }) => {
+    onQuickLookReferto?: (referto: Referto, visitaId?: string) => void;
+    onDownloadReferto?: (referto: Referto, visitaId?: string) => void;
+}> = ({ events, maxItems = 10, onQuickLookReferto, onDownloadReferto }) => {
     const sortedEvents = useMemo(() =>
         [...events]
             .sort((a, b) => b.data.getTime() - a.data.getTime())
@@ -322,6 +467,26 @@ const Timeline: React.FC<{
                                 Visualizza <ChevronRight className="h-4 w-4" />
                             </Link>
                         )}
+                        {event.referto && (
+                            <span className="mt-2 ml-3 inline-flex items-center gap-1.5">
+                                <button
+                                    type="button"
+                                    onClick={() => onQuickLookReferto?.(event.referto!, event.visitaId)}
+                                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm hover:border-teal-300 hover:bg-teal-50 hover:text-teal-700"
+                                    title="Anteprima referto"
+                                >
+                                    <Eye className="h-4 w-4" />
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => onDownloadReferto?.(event.referto!, event.visitaId)}
+                                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm hover:border-teal-300 hover:bg-teal-50 hover:text-teal-700"
+                                    title="Scarica referto PDF"
+                                >
+                                    <Download className="h-4 w-4" />
+                                </button>
+                            </span>
+                        )}
                     </div>
                 </div>
             ))}
@@ -336,9 +501,14 @@ const VisiteList: React.FC<{
     visite: (Visita & {
         prestazione?: { id: string; nome: string; codice?: string } | null;
         medico?: { id: string; firstName?: string; lastName?: string; gender?: 'MALE' | 'FEMALE' | 'OTHER' | 'NOT_SPECIFIED' | null } | null;
-        referti?: { id: string; titolo?: string; stato?: string }[] | null;
+        referti?: Referto[] | null;
     })[];
-}> = ({ visite }) => {
+    referti?: Referto[];
+    canOpenVisit: boolean;
+    onQuickLookReferto: (referto: Referto, visitaId?: string) => void;
+    onDownloadReferto: (referto: Referto, visitaId?: string) => void;
+}> = ({ visite, referti = [], canOpenVisit, onQuickLookReferto, onDownloadReferto }) => {
+    const navigate = useNavigate();
     const [search, setSearch] = useState('');
 
     const filteredVisite = useMemo(() =>
@@ -372,11 +542,25 @@ const VisiteList: React.FC<{
                 <div className="space-y-2">
                     {filteredVisite.map(visita => {
                         const dataOra = visita.dataOra || visita.createdAt;
-                        const referto = visita.referti?.[0];
+                        const referto = buildVisitRefertoAction(visita, referti);
+                        const rowTarget = canOpenVisit
+                            ? `/poliambulatorio/visite/${visita.id}`
+                            : !String(referto.id).startsWith('visita-')
+                                ? `/poliambulatorio/referti/${referto.id}`
+                                : null;
                         return (
                             <div
                                 key={visita.id}
-                                className="p-4 bg-white rounded-lg border border-gray-200 hover:border-teal-200 hover:shadow-sm transition-all"
+                                role={rowTarget ? 'button' : undefined}
+                                tabIndex={rowTarget ? 0 : undefined}
+                                onClick={() => rowTarget && navigate(rowTarget)}
+                                onKeyDown={(e) => {
+                                    if (rowTarget && (e.key === 'Enter' || e.key === ' ')) {
+                                        e.preventDefault();
+                                        navigate(rowTarget);
+                                    }
+                                }}
+                                className={`p-4 bg-white rounded-lg border border-gray-200 hover:border-teal-200 hover:shadow-sm transition-all ${rowTarget ? 'cursor-pointer' : ''}`}
                             >
                                 <div className="flex items-start justify-between gap-3">
                                     <div className="flex-1 min-w-0">
@@ -409,23 +593,38 @@ const VisiteList: React.FC<{
                                         )}
                                     </div>
                                     <div className="flex items-center gap-2 shrink-0">
-                                        {referto && (
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onQuickLookReferto(referto, visita.id);
+                                            }}
+                                            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100 transition-colors"
+                                            title="Anteprima referto"
+                                        >
+                                            <Eye className="h-4 w-4" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onDownloadReferto(referto, visita.id);
+                                            }}
+                                            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 text-gray-500 hover:text-teal-700 hover:bg-teal-50 transition-colors"
+                                            title="Scarica referto PDF"
+                                        >
+                                            <Download className="h-4 w-4" />
+                                        </button>
+                                        {canOpenVisit && (
                                             <Link
-                                                to={`/poliambulatorio/referti/${referto.id}`}
-                                                className="flex items-center gap-1 text-xs px-2.5 py-1.5 border border-teal-300 text-teal-700 rounded-lg hover:bg-teal-50 transition-colors"
-                                                title="Apri referto"
+                                                to={`/poliambulatorio/visite/${visita.id}`}
+                                                onClick={(e) => e.stopPropagation()}
+                                                className="p-1.5 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded transition-colors"
+                                                title="Apri visita"
                                             >
-                                                <Eye className="h-3.5 w-3.5" />
-                                                Referto
+                                                <ChevronRight className="h-4 w-4" />
                                             </Link>
                                         )}
-                                        <Link
-                                            to={`/poliambulatorio/visite/${visita.id}`}
-                                            className="p-1.5 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded transition-colors"
-                                            title="Apri visita"
-                                        >
-                                            <ChevronRight className="h-4 w-4" />
-                                        </Link>
                                     </div>
                                 </div>
                             </div>
@@ -443,30 +642,111 @@ const VisiteList: React.FC<{
  */
 const DocumentiList: React.FC<{
     pazienteId: string;
-}> = ({ pazienteId }) => {
-    const [filter, setFilter] = useState<'all' | 'VISITA_MEDICA' | 'CERTIFICATE' | 'other'>('all');
+    referti?: Referto[];
+    visite?: (Visita & { prestazione?: { nome?: string } | null; referti?: Referto[] | null })[];
+    onQuickLookDocument: (doc: PatientDocumentRow) => void;
+    onDownloadDocument: (doc: PatientDocumentRow) => void;
+}> = ({ pazienteId, referti = [], visite = [], onQuickLookDocument, onDownloadDocument }) => {
+    const [filter, setFilter] = useState<'all' | PatientDocumentKind>('all');
 
-    const { data: docsResponse, isLoading, error, refetch } = useQuery({
-        queryKey: ['paziente-documents', pazienteId, filter],
-        queryFn: async () => {
-            // VISITA_MEDICA and CERTIFICATE are valid TemplateType enum values
-            const filterType = filter !== 'all' && filter !== 'other' ? filter : undefined;
-            return documentService.listByPaziente(pazienteId, { type: filterType as any });
-        },
-        enabled: !!pazienteId
+    const allegatiQuery = useQuery({
+        queryKey: ['paziente-allegati-visite', pazienteId],
+        queryFn: () => documentiCliniciApi.getAllegatiPaziente(pazienteId),
+        enabled: !!pazienteId,
+        staleTime: 60_000,
     });
 
-    const documents = docsResponse?.data || [];
+    const questionariQuery = useQuery({
+        queryKey: ['paziente-questionari-compilati', pazienteId],
+        queryFn: () => questionariService.getQuestionariPaziente(pazienteId, { limit: 100 })
+            .then(res => toArray<any>(res)),
+        enabled: !!pazienteId,
+        staleTime: 60_000,
+    });
 
-    // Filter 'other' documents (not VISITA_MEDICA or CERTIFICATE)
-    const filteredDocs = useMemo(() => {
-        if (filter === 'other') {
-            return documents.filter(d =>
-                (d.type as string) !== 'VISITA_MEDICA' && (d.type as string) !== 'CERTIFICATE'
-            );
-        }
-        return documents;
-    }, [documents, filter]);
+    const moduliQuery = useQuery({
+        queryKey: ['paziente-modulistica-documenti', pazienteId],
+        queryFn: () => modulisticaDocumentiApi.getAll({ pazienteId, limit: 100 })
+            .then(res => res.data || []),
+        enabled: !!pazienteId,
+        staleTime: 60_000,
+    });
+
+    const documents = useMemo<PatientDocumentRow[]>(() => {
+        const refertoRows: PatientDocumentRow[] = referti.map(referto => ({
+            id: `referto-${referto.id}`,
+            kind: 'referto',
+            title: referto.titolo || `Referto del ${formatDate(new Date(referto.createdAt), 'short')}`,
+            date: referto.createdAt,
+            status: referto.firmato ? 'Firmato' : referto.stato,
+            subtitle: referto.visita?.prestazione?.nome,
+            href: `/poliambulatorio/referti/${referto.id}`,
+            visitaId: referto.visitaId,
+        }));
+        const refertoVisitaRows: PatientDocumentRow[] = visite
+            .filter(visita => !referti.some(referto => referto.visitaId === visita.id))
+            .map(visita => ({
+                id: `referto-visita-${visita.id}`,
+                kind: 'referto',
+                title: `Referto - ${visita.prestazione?.nome || 'Visita'}`,
+                date: visita.updatedAt || visita.createdAt || visita.dataOra,
+                status: visita.stato,
+                subtitle: visita.prestazione?.nome,
+                visitaId: visita.id,
+            }));
+
+        const allegatoRows: PatientDocumentRow[] = toArray<any>(allegatiQuery.data).map(allegato => ({
+            id: `allegato-${allegato.id}`,
+            kind: 'allegato',
+            title: allegato.nome || allegato.fileName || 'Allegato visita',
+            date: allegato.dataEsecuzione || allegato.createdAt,
+            status: allegato.tipologiaClinica || allegato.tipo,
+            subtitle: [
+                allegato.visita?.prestazione?.nome,
+                allegato.visita?.dataOra ? formatDate(new Date(allegato.visita.dataOra), 'short') : null,
+            ].filter(Boolean).join(' - '),
+            href: allegato.fileUrl || `/api/v1/clinica/documenti/visita/download/${allegato.id}`,
+            downloadHref: `/api/v1/clinica/documenti/visita/download/${allegato.id}`,
+        }));
+
+        const questionarioRows: PatientDocumentRow[] = toArray<any>(questionariQuery.data).map(q => ({
+            id: `questionario-${q.id}`,
+            kind: 'questionario',
+            title: q.template?.nome || q.documentoTemplate?.nome || q.nome || q.titolo || 'Questionario',
+            date: q.updatedAt || q.createdAt || q.compilatoAt,
+            status: q.stato,
+            subtitle: q.visita?.prestazione?.nome || q.tipo,
+            sourceId: q.id,
+            href: q.pdfUrl || q.fileUrl || q.documentoPdfUrl || q.documentoUrl || undefined,
+            downloadHref: q.pdfUrl || q.fileUrl || q.documentoPdfUrl || q.documentoUrl || undefined,
+        }));
+
+        const moduloRows: PatientDocumentRow[] = toArray<any>(moduliQuery.data).map(doc => ({
+            id: `modulo-${doc.id}`,
+            kind: 'modulo',
+            title: doc.documentoTemplate?.nome || doc.documentoTemplate?.titolo || doc.note || 'Modulo',
+            date: doc.updatedAt || doc.createdAt,
+            status: doc.dataScadenza && new Date(doc.dataScadenza) < new Date() ? 'Scaduto' : doc.stato,
+            subtitle: [
+                doc.visita?.dataOra ? formatDate(new Date(doc.visita.dataOra), 'short') : null,
+                doc.dataScadenza ? `Scade ${formatDate(new Date(doc.dataScadenza), 'short')}` : null,
+            ].filter(Boolean).join(' - '),
+            href: doc.pdfUrl || doc.fileUrl || doc.downloadUrl || undefined,
+            downloadHref: doc.pdfUrl || doc.fileUrl || doc.downloadUrl || undefined,
+        }));
+
+        return [...refertoRows, ...refertoVisitaRows, ...allegatoRows, ...questionarioRows, ...moduloRows]
+            .sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
+    }, [allegatiQuery.data, moduliQuery.data, questionariQuery.data, referti, visite]);
+
+    const filteredDocs = filter === 'all' ? documents : documents.filter(doc => doc.kind === filter);
+    const isLoading = allegatiQuery.isLoading || questionariQuery.isLoading || moduliQuery.isLoading;
+    const hasError = allegatiQuery.isError || questionariQuery.isError || moduliQuery.isError;
+    const refetch = () => {
+        allegatiQuery.refetch();
+        questionariQuery.refetch();
+        moduliQuery.refetch();
+    };
 
     if (isLoading) {
         return (
@@ -476,7 +756,7 @@ const DocumentiList: React.FC<{
         );
     }
 
-    if (error) {
+    if (hasError) {
         return (
             <div className="text-center py-12">
                 <AlertCircle className="h-12 w-12 text-red-300 mx-auto mb-4" />
@@ -497,9 +777,10 @@ const DocumentiList: React.FC<{
             <div className="flex gap-2 flex-wrap">
                 {([
                     { key: 'all', label: 'Tutti' },
-                    { key: 'VISITA_MEDICA', label: 'Referti' },
-                    { key: 'CERTIFICATE', label: 'Attestati/Certificati' },
-                    { key: 'other', label: 'Altri' }
+                    { key: 'referto', label: 'Referti' },
+                    { key: 'allegato', label: 'Allegati' },
+                    { key: 'questionario', label: 'Questionari' },
+                    { key: 'modulo', label: 'Moduli' }
                 ] as const).map(f => (
                     <button
                         key={f.key}
@@ -522,9 +803,15 @@ const DocumentiList: React.FC<{
             ) : (
                 <div className="space-y-3">
                     {filteredDocs.map(doc => {
-                        // Use displayFilename from metadata if available
-                        const displayName = (doc.metadata as { displayFilename?: string })?.displayFilename || doc.filename;
-                        const docDate = new Date(doc.generatedAt);
+                        const docDate = doc.date ? new Date(doc.date) : new Date();
+                        const kindClass = doc.kind === 'referto' ? 'bg-teal-100 text-teal-700'
+                            : doc.kind === 'allegato' ? 'bg-blue-100 text-blue-700'
+                                : doc.kind === 'questionario' ? 'bg-violet-100 text-violet-700'
+                                    : 'bg-amber-100 text-amber-700';
+                        const kindLabel = doc.kind === 'referto' ? 'Referto'
+                            : doc.kind === 'allegato' ? 'Allegato'
+                                : doc.kind === 'questionario' ? 'Questionario'
+                                    : 'Modulo';
 
                         return (
                             <div
@@ -536,44 +823,43 @@ const DocumentiList: React.FC<{
                                         <div className="flex items-center gap-2">
                                             <FileText className="h-5 w-5 text-gray-400" />
                                             <span className="font-medium text-gray-900">
-                                                {displayName}
+                                                {doc.title}
                                             </span>
                                         </div>
-                                        <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
+                                        <div className="flex items-center gap-3 mt-1 text-sm text-gray-500 flex-wrap">
                                             <span>{formatDate(docDate, 'short')}</span>
-                                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${(doc.type as string) === 'VISITA_MEDICA' ? 'bg-teal-100 text-teal-700' :
-                                                (doc.type as string) === 'CERTIFICATE' ? 'bg-blue-100 text-blue-700' :
-                                                    'bg-gray-100 text-gray-700'
-                                                }`}>
-                                                {(doc.type as string) === 'VISITA_MEDICA' ? 'Referto' :
-                                                    (doc.type as string) === 'CERTIFICATE' ? 'Attestato/Certificato' :
-                                                        doc.type}
+                                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${kindClass}`}>
+                                                {kindLabel}
                                             </span>
-                                            {doc.generator && (
+                                            {doc.status && (
                                                 <span className="text-xs">
-                                                    di {doc.generator.lastName} {doc.generator.firstName}
+                                                    {String(doc.status).replace(/_/g, ' ')}
                                                 </span>
                                             )}
+                                            {doc.subtitle && <span className="text-xs">{doc.subtitle}</span>}
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        <a
-                                            href={doc.fileUrl}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="p-2 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded"
-                                            title="Visualizza"
-                                        >
-                                            <Eye className="h-5 w-5" />
-                                        </a>
-                                        <a
-                                            href={doc.fileUrl}
-                                            download={displayName}
-                                            className="p-2 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded"
-                                            title="Scarica"
-                                        >
-                                            <Download className="h-5 w-5" />
-                                        </a>
+                                        {(doc.href || doc.visitaId) && (
+                                            <button
+                                                type="button"
+                                                onClick={() => onQuickLookDocument(doc)}
+                                                className="p-2 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded"
+                                                title="Quicklook"
+                                            >
+                                                <Eye className="h-5 w-5" />
+                                            </button>
+                                        )}
+                                        {(doc.downloadHref || doc.href || doc.visitaId) && (
+                                            <button
+                                                type="button"
+                                                onClick={() => onDownloadDocument(doc)}
+                                                className="p-2 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded"
+                                                title="Scarica"
+                                            >
+                                                <Download className="h-5 w-5" />
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -960,9 +1246,13 @@ const TrendChart: React.FC<{ pazienteId: string; initialField?: string }> = ({ p
 export const CartellaPaziente: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
     const [searchParams] = useSearchParams();
     const [activeTab, setActiveTab] = useState<TabType>('overview');
     const { hasBillingFeature } = useBillingAccess();
+    const { isPazienteOnly } = useRoleGuard();
+    const [quickLook, setQuickLook] = useState<QuickLookState | null>(null);
+    const [showAllPastAppointments, setShowAllPastAppointments] = useState(false);
 
     // Read tab from query params (e.g., ?tab=trend&field=peso)
     useEffect(() => {
@@ -1003,22 +1293,186 @@ export const CartellaPaziente: React.FC = () => {
         enabled: !!id
     });
 
+    const { data: consensiFirmatiData } = useQuery({
+        queryKey: ['paziente-consensi-firmati', id],
+        queryFn: () => apiGet<{ success: boolean; data: any[] }>(`/api/v1/clinica/pazienti/${id}/consensi-firmati`)
+            .then(res => res.data || [])
+            .catch(() => []),
+        enabled: !!id,
+    });
+
+    const appuntamenti = useMemo(() => toArray<Appuntamento>(appuntamentiData), [appuntamentiData]);
+    const appuntamentiFuturi = useMemo(() => appuntamenti
+        .filter(a => new Date(a.dataOra) > new Date() && a.stato !== 'ANNULLATO')
+        .sort((a, b) => new Date(a.dataOra).getTime() - new Date(b.dataOra).getTime()), [appuntamenti]);
+    const appuntamentiPassati = useMemo(() => appuntamenti
+        .filter(a => new Date(a.dataOra) <= new Date() || a.stato === 'ANNULLATO')
+        .sort((a, b) => new Date(b.dataOra).getTime() - new Date(a.dataOra).getTime()), [appuntamenti]);
+
+    const visiteDeduped = useMemo(
+        () => dedupeVisite((paziente as any)?.visiteComePaziente || toArray<Visita>(visite)),
+        [paziente, visite]
+    );
+
+	    const refertiList = useMemo(() => {
+	        const byId = new Map<string, Referto>();
+        toArray<Referto>(referti).forEach(referto => {
+            if (referto?.id) byId.set(referto.id, referto);
+        });
+        visiteDeduped.forEach(visita => {
+            ((visita as any).referti || []).forEach((referto: Referto) => {
+                if (referto?.id) byId.set(referto.id, { ...referto, visitaId: referto.visitaId || visita.id });
+            });
+        });
+	        return Array.from(byId.values());
+	    }, [referti, visiteDeduped]);
+
+	    const refertiDisplayList = useMemo(() => {
+	        const byVisit = new Set(refertiList.map(referto => referto.visitaId).filter(Boolean));
+	        const synthetic = visiteDeduped
+	            .filter(visita => !byVisit.has(visita.id))
+	            .map(visita => buildVisitRefertoAction(visita as Visita & { referti?: Referto[] | null }, refertiList));
+	        return [...refertiList, ...synthetic];
+	    }, [refertiList, visiteDeduped]);
+
+    const consensiFirmatiCount = useMemo(() => {
+        const tokens = toArray<any>(consensiFirmatiData);
+        const validCodes = new Set<string>();
+        tokens.forEach(t => {
+            if (!t.firmatoAt) return;
+            (t.firmatoConsensi || t.documentiDaMostrare || []).forEach((c: string) => validCodes.add(c));
+        });
+        return validCodes.size;
+    }, [consensiFirmatiData]);
+
+    const resolveRefertoPdfUrl = async (referto: Referto, visitaId?: string) => {
+        const existingUrl = (referto as any).pdfUrl || (referto as any).fileUrl || (referto as any).documentUrl;
+        if (existingUrl) return existingUrl;
+        const targetVisitaId = visitaId || referto.visitaId;
+        if (!targetVisitaId) return null;
+        const pdf = await visiteApi.getRefertoPdf(targetVisitaId);
+        return pdf?.fileUrl || null;
+    };
+
+	    const handleQuickLookReferto = async (referto: Referto, visitaId?: string) => {
+	        try {
+	            const pdfUrl = await resolveRefertoPdfUrl(referto, visitaId);
+	            const fallbackUrl = String(referto.id).startsWith('visita-')
+	                ? unavailablePdfDataUrl()
+	                : `/poliambulatorio/referti/${referto.id}`;
+	            setQuickLook({
+	                title: referto.titolo || 'Referto PDF',
+	                url: pdfUrl || fallbackUrl,
+	                downloadUrl: pdfUrl || undefined,
+	            });
+	        } catch {
+	            setQuickLook({ title: referto.titolo || 'Referto', url: unavailablePdfDataUrl() });
+	        }
+	    };
+
+	    const handleDownloadReferto = async (referto: Referto, visitaId?: string) => {
+	        const pdfUrl = await resolveRefertoPdfUrl(referto, visitaId);
+	        if (!pdfUrl && String(referto.id).startsWith('visita-')) {
+	            setQuickLook({ title: referto.titolo || 'Referto', url: unavailablePdfDataUrl() });
+	            return;
+	        }
+	        window.open(pdfUrl || `/poliambulatorio/referti/${referto.id}`, '_blank', 'noopener,noreferrer');
+	    };
+
+    const handleQuickLookDocument = async (doc: PatientDocumentRow) => {
+	        if (doc.kind === 'referto' && doc.visitaId) {
+	            const pdf = await visiteApi.getRefertoPdf(doc.visitaId);
+	            setQuickLook({
+	                title: doc.title,
+	                url: pdf?.fileUrl || doc.href || unavailablePdfDataUrl(),
+	                downloadUrl: pdf?.fileUrl || doc.href,
+	            });
+            return;
+        }
+        if (doc.kind === 'questionario' && !doc.href && doc.sourceId) {
+            try {
+                const generated = await questionariService.generateCompilatoPdf(doc.sourceId);
+                setQuickLook({
+                    title: doc.title,
+                    url: generated?.pdfUrl || unavailablePdfDataUrl(),
+                    downloadUrl: generated?.pdfUrl,
+                });
+            } catch {
+                setQuickLook({ title: doc.title, url: unavailablePdfDataUrl() });
+            }
+            return;
+        }
+        setQuickLook({
+            title: doc.title,
+            url: doc.downloadHref || doc.href || (doc.visitaId ? `/poliambulatorio/referti/${doc.visitaId}` : '#'),
+            downloadUrl: doc.downloadHref || doc.href,
+        });
+    };
+
+    const handleDownloadDocument = async (doc: PatientDocumentRow) => {
+	        if (doc.kind === 'referto' && doc.visitaId) {
+	            const pdf = await visiteApi.getRefertoPdf(doc.visitaId);
+	            if (pdf?.fileUrl || doc.href) {
+	                window.open(pdf?.fileUrl || doc.href, '_blank', 'noopener,noreferrer');
+	            } else {
+	                setQuickLook({ title: doc.title, url: unavailablePdfDataUrl() });
+	            }
+	            return;
+        }
+        if (doc.kind === 'questionario' && !doc.downloadHref && !doc.href && doc.sourceId) {
+            try {
+                const generated = await questionariService.generateCompilatoPdf(doc.sourceId);
+                if (generated?.pdfUrl) window.open(generated.pdfUrl, '_blank', 'noopener,noreferrer');
+                else setQuickLook({ title: doc.title, url: unavailablePdfDataUrl() });
+            } catch {
+                setQuickLook({ title: doc.title, url: unavailablePdfDataUrl() });
+            }
+            return;
+        }
+        const url = doc.downloadHref || doc.href;
+        if (!url) return;
+        try {
+            const blob = await apiDownload(url);
+            const objectUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = objectUrl;
+            a.download = doc.title;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(objectUrl);
+        } catch {
+            window.open(url, '_blank', 'noopener,noreferrer');
+        }
+    };
+
     // Timeline events
     const timelineEvents = useMemo<TimelineEvent[]>(() => {
         const events: TimelineEvent[] = [];
 
-        visite?.forEach(v => {
+        visiteDeduped.forEach(v => {
+            const referto = buildVisitRefertoAction(v as Visita & { referti?: Referto[] | null }, refertiList);
             events.push({
                 id: `visita-${v.id}`,
                 tipo: 'visita',
-                titolo: 'Visita',
+                titolo: v.prestazione?.nome || 'Visita',
+                descrizione: [
+                    v.medico ? formatMedicoName(v.medico as any) : null,
+                    v.stato ? String(v.stato).replace(/_/g, ' ') : null,
+                ].filter(Boolean).join(' - '),
                 data: new Date(v.createdAt),
                 stato: v.stato,
-                link: `/poliambulatorio/visite/${v.id}`
+                referto,
+                visitaId: v.id,
+                link: isPazienteOnly
+                    ? !String(referto.id).startsWith('visita-') ? `/poliambulatorio/referti/${referto.id}` : undefined
+                    : `/poliambulatorio/visite/${v.id}`
             });
         });
 
-        referti?.forEach(r => {
+        refertiList
+            .filter(r => !visiteDeduped.some(v => v.id === r.visitaId))
+            .forEach(r => {
             events.push({
                 id: `referto-${r.id}`,
                 tipo: 'referto',
@@ -1029,19 +1483,19 @@ export const CartellaPaziente: React.FC = () => {
             });
         });
 
-        appuntamentiData?.forEach(a => {
+        appuntamenti.forEach(a => {
             events.push({
                 id: `app-${a.id}`,
                 tipo: 'appuntamento',
                 titolo: a.prestazione?.nome || 'Appuntamento',
                 data: new Date(a.dataOra),
                 stato: a.stato,
-                link: `/poliambulatorio/agenda/appuntamenti/${a.id}`
+                link: isPazienteOnly ? undefined : `/poliambulatorio/agenda/appuntamenti/${a.id}`
             });
         });
 
         return events;
-    }, [visite, referti, appuntamentiData]);
+    }, [visiteDeduped, refertiList, appuntamenti, isPazienteOnly]);
 
     // Check if patient has a company assigned (for MDL tab visibility)
     const isPatientWithCompany = useMemo(() => {
@@ -1052,18 +1506,52 @@ export const CartellaPaziente: React.FC = () => {
     }, [paziente]);
 
     // MDL data (lazy loaded when tab is active)
-    const { data: mdlData } = useQuery<{ mansioni: any[]; rischi: any[] }>({
+    const { data: mdlData } = useQuery<WorkerOccupationalProfile>({
         queryKey: ['mdl-rischi-paziente', id],
-        queryFn: () => apiGet<any>(`/api/v1/clinica/mansioni/worker/${id}/risks`)
+        queryFn: () => apiGet<any>(`/api/v1/clinica/mansioni/worker/${id}/occupational-profile`)
             .then((r: any) => {
-                const data = r?.data;
+                const data = r?.data ?? r;
                 return {
                     rischi: Array.isArray(data?.rischi) ? data.rischi : [],
                     mansioni: Array.isArray(data?.mansioni) ? data.mansioni : [],
+                    hasPersonalizedRisks: !!data?.hasPersonalizedRisks,
+                    statoOccupazionale: data?.statoOccupazionale,
+                    syncResult: data?.syncResult,
                 };
             })
-            .catch(() => ({ rischi: [], mansioni: [] })),
+            .catch(() => ({ rischi: [], mansioni: [], hasPersonalizedRisks: false })),
         enabled: !!id && (activeTab === 'medicina_lavoro' || isPatientWithCompany)
+    });
+
+    const currentOccupationalProtocollo = useMemo(() => {
+        const current = mdlData?.statoOccupazionale?.current as any;
+        return current?.protocolloSanitario
+            || current?.snapshot?.protocolloSanitario
+            || mdlData?.statoOccupazionale?.history?.find((h: any) => h?.protocolloSanitario)?.protocolloSanitario
+            || null;
+    }, [mdlData?.statoOccupazionale]);
+
+    const { data: protocolliDisponibiliData } = useQuery({
+        queryKey: ['protocolli-sanitari-attivi-cartella'],
+        queryFn: () => protocolliSanitariApi.getAll({ limit: 200, isAttivo: true }),
+        enabled: !!id && activeTab === 'medicina_lavoro',
+        staleTime: 5 * 60 * 1000,
+    });
+
+    const protocolliDisponibili = useMemo<ProtocolloSanitario[]>(() =>
+        toArray<ProtocolloSanitario>((protocolliDisponibiliData as any)?.data ?? protocolliDisponibiliData),
+        [protocolliDisponibiliData]
+    );
+
+    const updateOccupationalProfileMutation = useMutation({
+        mutationFn: (protocolloSanitarioId: string | null) =>
+            mansioniApi.updateWorkerOccupationalProfile(id!, { protocolloSanitarioId }),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['mdl-rischi-paziente', id] });
+            queryClient.invalidateQueries({ queryKey: ['scadenze-persona', id] });
+            queryClient.invalidateQueries({ queryKey: ['mdl-scadenze-cartella', id] });
+            queryClient.invalidateQueries({ queryKey: ['paziente', id] });
+        },
     });
 
     const { data: mdlGiudizi } = useQuery({
@@ -1073,6 +1561,52 @@ export const CartellaPaziente: React.FC = () => {
             .catch(() => []),
         enabled: !!id && (activeTab === 'medicina_lavoro' || isPatientWithCompany)
     });
+
+    const { data: mdlScadenze } = useQuery({
+        queryKey: ['mdl-scadenze-cartella', id],
+        queryFn: () => apiGet<any>(`/api/v1/clinica/scadenze-mdl/persona/${id}`)
+            .then(r => toArray<any>(r?.data ?? r))
+            .catch(() => []),
+        enabled: !!id && activeTab === 'medicina_lavoro',
+    });
+
+    const mdlAccertamenti = useMemo(() => {
+        const rows = toArray<any>(mdlScadenze);
+        const byName = new Map<string, { nome: string; tipo: string; prossima?: string; periodicita?: number | string; fonte?: string }>();
+        const current = mdlData?.statoOccupazionale?.current as any;
+        const protocollo = current?.protocolloSanitario || current?.snapshot?.protocolloSanitario;
+
+        (protocollo?.prestazioni || []).forEach((p: any) => {
+            const nome = p.prestazione?.nome || p.nome || p.prestazioneId;
+            if (!nome) return;
+            byName.set(nome, {
+                nome,
+                tipo: p.prestazione?.tipo === 'QUESTIONARIO' ? 'Questionario' : 'Prestazione',
+                periodicita: p.periodicitaCustomMesi || protocollo.periodicitaVisiteMesi,
+                fonte: p.isObbligatoria ? 'Protocollo' : 'Protocollo opzionale',
+            });
+        });
+
+        rows
+            .filter(r => r.prestazioneTipo !== 'VISITA_MEDICINA_LAVORO')
+            .forEach(r => {
+                const nome = r.prestazioneName || r.documentoTemplate?.nome || 'Accertamento';
+                byName.set(nome, {
+                    ...byName.get(nome),
+                    nome,
+                    tipo: r.prestazioneTipo === 'QUESTIONARIO' ? 'Questionario' : 'Prestazione',
+                    prossima: r.scadenze?.find((s: any) => !s.eseguita)?.dataScadenza,
+                    periodicita: r.periodicitaMesi || byName.get(nome)?.periodicita,
+                    fonte: byName.get(nome)?.fonte || 'Aggiunto/modificato',
+                });
+            });
+
+        return Array.from(byName.values())
+            .map(r => ({
+                ...r,
+            }))
+            .sort((a, b) => a.nome.localeCompare(b.nome, 'it'));
+    }, [mdlScadenze, mdlData?.statoOccupazionale]);
 
     // Courses (formazione)
     const { data: corsiFData } = useQuery({
@@ -1085,8 +1619,12 @@ export const CartellaPaziente: React.FC = () => {
 
     const { data: attestatiData } = useQuery({
         queryKey: ['attestati-paziente', id],
-        queryFn: () => documentService.listByPaziente(id!, { type: 'CERTIFICATE' as any })
-            .then(res => res.data || [])
+        queryFn: () => modulisticaDocumentiApi.getAll({ pazienteId: id!, limit: 100 })
+            .then(res => (res.data || []).filter((doc: any) => {
+                const tipo = doc.documentoTemplate?.tipo || doc.documentoTemplate?.type || '';
+                return String(tipo).toUpperCase().includes('CERTIFICATE')
+                    || String(tipo).toUpperCase().includes('ATTESTATO');
+            }))
             .catch(() => []),
         enabled: !!id && activeTab === 'formazione'
     });
@@ -1118,10 +1656,9 @@ export const CartellaPaziente: React.FC = () => {
         );
     }
 
-    const appuntamenti = appuntamentiData || [];
-
     return (
         <div className="min-h-screen bg-gray-50">
+            <QuickLookModal state={quickLook} onClose={() => setQuickLook(null)} />
             {/* Header */}
             <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
                 <div className="max-w-7xl mx-auto px-6 py-4">
@@ -1149,27 +1686,28 @@ export const CartellaPaziente: React.FC = () => {
                     onEdit={() => navigate(`/poliambulatorio/pazienti/${id}/modifica`)}
                 />
 
-                {/* Stats */}
-                <StatsCards
-                    visite={visite || []}
-                    referti={referti || []}
-                    appuntamenti={appuntamenti}
-                />
+	                {/* Stats */}
+		                <StatsCards
+		                    visite={visiteDeduped}
+		                    referti={refertiDisplayList}
+		                    appuntamenti={appuntamenti}
+	                        consensiFirmati={consensiFirmatiCount}
+		                />
 
                 {/* Tabs */}
                 <div className="bg-white rounded-xl border border-gray-200">
                     <div className="border-b border-gray-200">
                         <nav className="flex gap-1 p-2">
                             {([
-                                { key: 'overview', label: 'Panoramica', icon: <Activity className="h-4 w-4" /> },
-                                { key: 'visite', label: 'Visite', icon: <Stethoscope className="h-4 w-4" /> },
-                                { key: 'documenti', label: 'Documenti', icon: <Paperclip className="h-4 w-4" /> },
-                                { key: 'trend', label: 'Trend', icon: <TrendingUp className="h-4 w-4" /> },
-                                { key: 'consensi', label: 'Consensi', icon: <Shield className="h-4 w-4" /> },
-                                ...(hasBillingFeature ? [{ key: 'fatturazione' as const, label: 'Fatture', icon: <Euro className="h-4 w-4" /> }] : []),
-                                ...(isPatientWithCompany ? [{ key: 'medicina_lavoro' as const, label: 'Medicina del Lavoro', icon: <ClipboardList className="h-4 w-4" /> }] : []),
-                                { key: 'formazione' as const, label: 'Formazione', icon: <GraduationCap className="h-4 w-4" /> }
-                            ] as const).map(tab => (
+	                                { key: 'overview', label: 'Panoramica', count: null, icon: <Activity className="h-4 w-4" /> },
+	                                { key: 'visite', label: 'Visite', count: visiteDeduped.length, icon: <Stethoscope className="h-4 w-4" /> },
+		                                { key: 'documenti', label: 'Documenti', count: refertiDisplayList.length, icon: <Paperclip className="h-4 w-4" /> },
+	                                { key: 'trend', label: 'Trend', count: null, icon: <TrendingUp className="h-4 w-4" /> },
+	                                { key: 'consensi', label: 'Consensi', count: null, icon: <Shield className="h-4 w-4" /> },
+	                                ...(hasBillingFeature ? [{ key: 'fatturazione' as const, label: 'Fatture', count: null, icon: <Euro className="h-4 w-4" /> }] : []),
+	                                ...(isPatientWithCompany ? [{ key: 'medicina_lavoro' as const, label: 'Medicina del Lavoro', count: mdlData?.mansioni?.length || null, icon: <ClipboardList className="h-4 w-4" /> }] : []),
+	                                { key: 'formazione' as const, label: 'Formazione', count: null, icon: <GraduationCap className="h-4 w-4" /> }
+	                            ] as const).map(tab => (
                                 <button
                                     key={tab.key}
                                     onClick={() => setActiveTab(tab.key)}
@@ -1178,9 +1716,14 @@ export const CartellaPaziente: React.FC = () => {
                                         : 'text-gray-600 hover:bg-gray-100'
                                         }`}
                                 >
-                                    {tab.icon}
-                                    {tab.label}
-                                </button>
+	                                    {tab.icon}
+	                                    {tab.label}
+	                                    {typeof tab.count === 'number' && tab.count > 0 && (
+	                                        <span className="ml-1 rounded-full bg-white/80 px-1.5 py-0.5 text-[11px] text-gray-500">
+	                                            {tab.count}
+	                                        </span>
+	                                    )}
+	                                </button>
                             ))}
                         </nav>
                     </div>
@@ -1193,17 +1736,33 @@ export const CartellaPaziente: React.FC = () => {
                                         <History className="h-5 w-5 text-gray-400" />
                                         Cronologia Recente
                                     </h3>
-                                    <Timeline events={timelineEvents} maxItems={8} />
+                                    <Timeline
+                                        events={timelineEvents}
+                                        maxItems={8}
+                                        onQuickLookReferto={handleQuickLookReferto}
+                                        onDownloadReferto={handleDownloadReferto}
+                                    />
                                 </div>
                                 <div>
                                     <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
                                         <Calendar className="h-5 w-5 text-gray-400" />
                                         Prossimi Appuntamenti
                                     </h3>
-                                    {appuntamenti
-                                        .filter(a => new Date(a.dataOra) > new Date() && a.stato !== 'ANNULLATO')
-                                        .sort((a, b) => new Date(a.dataOra).getTime() - new Date(b.dataOra).getTime())
-                                        .slice(0, 3)
+                                    <div className="flex items-center justify-between mb-3">
+                                        <span className="text-xs font-semibold uppercase text-gray-400">Futuri</span>
+                                        {!isPazienteOnly && (
+                                            <button
+                                                type="button"
+                                                onClick={() => navigate(`/poliambulatorio/appuntamenti/nuovo?pazienteId=${id}`)}
+                                                className="inline-flex items-center gap-1 rounded-lg border border-teal-200 px-2.5 py-1 text-xs font-medium text-teal-700 hover:bg-teal-50"
+                                            >
+                                                <Plus className="h-3.5 w-3.5" />
+                                                Prenota
+                                            </button>
+                                        )}
+                                    </div>
+                                    {appuntamentiFuturi
+                                        .slice(0, 4)
                                         .map(app => (
                                             <div key={app.id} className="p-3 bg-gray-50 rounded-lg mb-2">
                                                 <div className="flex items-center justify-between">
@@ -1215,12 +1774,14 @@ export const CartellaPaziente: React.FC = () => {
                                                             {formatDate(new Date(app.dataOra), 'full')} alle {formatTime(new Date(app.dataOra))}
                                                         </p>
                                                     </div>
-                                                    <Link
-                                                        to={`/poliambulatorio/agenda/appuntamenti/${app.id}`}
-                                                        className="text-teal-600 hover:text-teal-700"
-                                                    >
-                                                        <ChevronRight className="h-5 w-5" />
-                                                    </Link>
+	                                                    {!isPazienteOnly && (
+	                                                        <Link
+	                                                            to={`/poliambulatorio/agenda/appuntamenti/${app.id}`}
+	                                                            className="text-teal-600 hover:text-teal-700"
+	                                                        >
+	                                                            <ChevronRight className="h-5 w-5" />
+	                                                        </Link>
+	                                                    )}
                                                 </div>
                                             </div>
                                         ))}
@@ -1228,13 +1789,43 @@ export const CartellaPaziente: React.FC = () => {
                                         <div className="text-center py-8 text-gray-500">
                                             <Calendar className="h-10 w-10 text-gray-300 mx-auto mb-2" />
                                             <p>Nessun appuntamento programmato</p>
-                                            <Link
-                                                to={`/poliambulatorio/agenda/appuntamenti/nuovo?paziente=${id}`}
-                                                className="mt-2 inline-flex items-center gap-1 text-teal-600 hover:text-teal-700"
-                                            >
-                                                <Plus className="h-4 w-4" />
-                                                Prenota appuntamento
-                                            </Link>
+	                                            {!isPazienteOnly && (
+	                                                <button
+                                                        type="button"
+                                                        onClick={() => navigate(`/poliambulatorio/appuntamenti/nuovo?pazienteId=${id}`)}
+	                                                    className="mt-2 inline-flex items-center gap-1 text-teal-600 hover:text-teal-700"
+	                                                >
+	                                                    <Plus className="h-4 w-4" />
+	                                                    Prenota appuntamento
+	                                                </button>
+	                                            )}
+                                        </div>
+                                    )}
+                                    {appuntamentiPassati.length > 0 && (
+                                        <div className="mt-5 border-t border-gray-100 pt-4">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <span className="text-xs font-semibold uppercase text-gray-400">Passati</span>
+                                                {appuntamentiPassati.length > 3 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setShowAllPastAppointments(v => !v)}
+                                                        className="text-xs font-medium text-teal-700 hover:text-teal-800"
+                                                    >
+                                                        {showAllPastAppointments ? 'Mostra meno' : 'Vedi tutti'}
+                                                    </button>
+                                                )}
+                                            </div>
+                                            {(showAllPastAppointments ? appuntamentiPassati : appuntamentiPassati.slice(0, 3)).map(app => (
+                                                <button
+                                                    key={app.id}
+                                                    type="button"
+                                                    onClick={() => !isPazienteOnly && navigate(`/poliambulatorio/agenda/appuntamenti/${app.id}`)}
+                                                    className="w-full p-3 bg-white border border-gray-100 rounded-lg mb-2 text-left hover:border-teal-200"
+                                                >
+                                                    <p className="text-sm font-medium text-gray-800">{app.prestazione?.nome || 'Appuntamento'}</p>
+                                                    <p className="text-xs text-gray-500">{formatDate(new Date(app.dataOra), 'full')} alle {formatTime(new Date(app.dataOra))}</p>
+                                                </button>
+                                            ))}
                                         </div>
                                     )}
                                 </div>
@@ -1251,48 +1842,26 @@ export const CartellaPaziente: React.FC = () => {
                             </div>
                         )}
 
-                        {activeTab === 'visite' && <VisiteList visite={(paziente as any)?.visiteComePaziente || visite || []} />}
-                        {activeTab === 'documenti' && id && (
-                            <div className="space-y-6">
-                                {/* Referti clinici dalla cartella */}
-                                {(referti || []).length > 0 && (
-                                    <div>
-                                        <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                                            <FileText className="h-4 w-4 text-teal-600" />
-                                            Referti Clinici
-                                        </h4>
-                                        <div className="space-y-2">
-                                            {[...(referti || [])]
-                                                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                                                .map(referto => (
-                                                    <div key={referto.id} className="p-3 bg-white rounded-lg border border-gray-200 hover:border-teal-300 transition-colors flex items-center justify-between gap-3">
-                                                        <div className="flex items-center gap-3 min-w-0">
-                                                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${referto.firmato ? 'bg-green-100 text-green-700'
-                                                                : referto.stato === 'COMPLETATO' ? 'bg-blue-100 text-blue-700'
-                                                                    : 'bg-amber-100 text-amber-700'
-                                                                }`}>
-                                                                {referto.firmato ? 'Firmato' : referto.stato}
-                                                            </span>
-                                                            <span className="text-sm text-gray-700 truncate">
-                                                                {referto.titolo || `Referto del ${formatDate(new Date(referto.createdAt), 'short')}`}
-                                                            </span>
-                                                        </div>
-                                                        <Link
-                                                            to={`/poliambulatorio/referti/${referto.id}`}
-                                                            className="p-1.5 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded flex-shrink-0 transition-colors"
-                                                            title="Apri referto"
-                                                        >
-                                                            <Eye className="h-4 w-4" />
-                                                        </Link>
-                                                    </div>
-                                                ))}
-                                        </div>
-                                    </div>
-                                )}
-                                {/* Documenti generati (PDF) */}
-                                <DocumentiList pazienteId={id} />
-                            </div>
-                        )}
+	                        {activeTab === 'visite' && (
+	                            <VisiteList
+	                                visite={visiteDeduped as any}
+	                                referti={refertiList}
+	                                canOpenVisit={!isPazienteOnly}
+                                    onQuickLookReferto={handleQuickLookReferto}
+                                    onDownloadReferto={handleDownloadReferto}
+	                            />
+	                        )}
+	                        {activeTab === 'documenti' && id && (
+	                            <div className="space-y-6">
+		                                <DocumentiList
+	                                        pazienteId={id}
+	                                        referti={refertiList}
+	                                        visite={visiteDeduped as any}
+	                                        onQuickLookDocument={handleQuickLookDocument}
+	                                        onDownloadDocument={handleDownloadDocument}
+	                                    />
+	                            </div>
+	                        )}
                         {activeTab === 'trend' && id && <TrendChart pazienteId={id} initialField={searchParams.get('field') || undefined} />}
                         {activeTab === 'consensi' && id && (
                             <div>
@@ -1323,36 +1892,60 @@ export const CartellaPaziente: React.FC = () => {
                                     Medicina del Lavoro
                                 </h3>
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                    {/* Mansioni e Rischi */}
-                                    <div>
-                                        <h4 className="text-sm font-semibold text-gray-700 mb-3">Mansioni Assegnate</h4>
-                                        {!mdlData?.mansioni?.length ? (
-                                            <div className="bg-gray-50 rounded-lg p-4 text-sm text-gray-500">Nessuna mansione assegnata.</div>
-                                        ) : (
-                                            <div className="space-y-2">
-                                                {mdlData.mansioni.map((m: any, idx: number) => (
-                                                    <div key={idx} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                                                        <p className="text-sm font-medium text-gray-800">
-                                                            {m.denominazione || m.codice || `Mansione ${idx + 1}`}
-                                                            {m.isPrimaria && <span className="ml-2 text-xs bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded">Primaria</span>}
-                                                        </p>
-                                                        {m.denominazione && m.codice && (
-                                                            <p className="text-xs text-gray-400 mt-0.5">{m.codice}</p>
-                                                        )}
-                                                    </div>
-                                                ))}
+                                    <div className="space-y-4">
+                                        <MDLInfoCard
+                                            mansioni={(mdlData?.mansioni || []) as any}
+                                            protocolli={currentOccupationalProtocollo ? [currentOccupationalProtocollo] : null}
+                                            rischi={(mdlData?.rischi || []) as any}
+                                            hasPersonalizedRisks={mdlData?.hasPersonalizedRisks}
+                                            pazienteId={id!}
+                                            isReadonly={isPazienteOnly}
+                                        />
+                                        {!isPazienteOnly && (
+                                            <div className="rounded-xl border border-slate-200 bg-white p-4">
+                                                <label className="block text-xs font-semibold uppercase text-slate-500 mb-2">
+                                                    Protocollo sanitario assegnato
+                                                </label>
+                                                <select
+                                                    value={(currentOccupationalProtocollo as any)?.id || ''}
+                                                    onChange={(e) => updateOccupationalProfileMutation.mutate(e.target.value || null)}
+                                                    disabled={updateOccupationalProfileMutation.isPending}
+                                                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-100 disabled:opacity-60"
+                                                >
+                                                    <option value="">Nessun protocollo</option>
+                                                    {protocolliDisponibili.map(protocollo => (
+                                                        <option key={protocollo.id} value={protocollo.id}>
+                                                            {protocollo.denominazione}{protocollo.codice ? ` (${protocollo.codice})` : ''}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                <p className="mt-2 text-xs text-slate-500">
+                                                    Cambiare protocollo aggiorna lo stato occupazionale del lavoratore senza forzare mansioni o rischi non assegnati.
+                                                </p>
                                             </div>
                                         )}
-                                        {(mdlData?.rischi?.length ?? 0) > 0 && (
-                                            <div className="mt-4">
-                                                <h4 className="text-sm font-semibold text-gray-700 mb-2">Rischi Lavorativi</h4>
-                                                <div className="flex flex-wrap gap-2">
-                                                    {mdlData!.rischi.map((r: any, idx: number) => (
-                                                        <span key={idx} className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-1 rounded-full">
-                                                            {r.codiceRischio || r.codice || r.nome}{r.livello ? ` – Lv.${r.livello}` : ''}
-                                                        </span>
-                                                    ))}
-                                                </div>
+                                    </div>
+                                    <OccupationalHistoryCard
+                                        statoOccupazionale={mdlData?.statoOccupazionale}
+                                        className="lg:col-span-1"
+                                    />
+                                    <div className="lg:col-span-2">
+                                        <h4 className="text-sm font-semibold text-gray-700 mb-3">Accertamenti previsti</h4>
+                                        {!mdlAccertamenti.length ? (
+                                            <div className="bg-gray-50 rounded-lg p-4 text-sm text-gray-500">Nessun accertamento programmato.</div>
+                                        ) : (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                {mdlAccertamenti.map((a, idx) => (
+                                                    <div key={`${a.nome}-${idx}`} className="rounded-lg border border-gray-200 bg-white px-3 py-2">
+                                                        <p className="text-sm font-medium text-gray-800">{a.nome}</p>
+                                                        <p className="text-xs text-gray-500">
+                                                            {a.tipo}
+                                                            {a.periodicita ? ` - ogni ${a.periodicita} mesi` : ''}
+                                                            {a.prossima ? ` - prossima ${formatDate(new Date(a.prossima), 'short')}` : ''}
+                                                            {a.fonte ? ` - ${a.fonte}` : ''}
+                                                        </p>
+                                                    </div>
+                                                ))}
                                             </div>
                                         )}
                                     </div>

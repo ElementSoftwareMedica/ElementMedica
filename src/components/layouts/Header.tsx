@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import {
   ChevronRight,
   HelpCircle,
@@ -13,9 +13,14 @@ import { useTenantAccess } from '../../hooks/useTenantAccess';
 import { getCurrentBrand } from '../../config/brands.config';
 import { getTenantBranding } from '../../utils/tenantBranding';
 import Notifications from '../shared/Notifications';
-import { TenantModeSelector } from '../shared/TenantModeSelector';
-import NotificationBell from '../notifications/NotificationBell';
 import { ThemeToggle } from '../ui/ThemeToggle';
+
+// Lazy-loaded: removes framer-motion (45KB) + radix/ui (33KB) from synchronous
+// preload chain → these chunks no longer load on public/unauthenticated pages
+const TenantModeSelector = React.lazy(() =>
+  import('../shared/TenantModeSelector').then(m => ({ default: m.TenantModeSelector }))
+);
+const NotificationBell = React.lazy(() => import('../notifications/NotificationBell'));
 
 const Header: React.FC = () => {
   const { user, logout } = useAuth();
@@ -168,21 +173,20 @@ const Header: React.FC = () => {
         {/* Header: Right side */}
         <div className="flex items-center gap-3">
           {/* TenantMode Selector - compatto e elegante */}
-          <TenantModeSelector compact />
+          <Suspense fallback={null}>
+            <TenantModeSelector compact />
+          </Suspense>
 
           {/* Sistema di notifiche legacy */}
           <Notifications />
 
           {/* Advanced Notification System */}
-          <NotificationBell />
+          <Suspense fallback={null}>
+            <NotificationBell />
+          </Suspense>
 
           {/* P60: Theme Toggle (Dark Mode) */}
           <ThemeToggle variant="dropdown" size="md" />
-
-          {/* Help */}
-          <button className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
-            <HelpCircle className="h-5 w-5 text-gray-500" />
-          </button>
 
           {/* User menu */}
           {user && (
@@ -217,7 +221,15 @@ const Header: React.FC = () => {
                 </Link>
 
                 <Link
-                  to="/settings"
+                  to="/profile"
+                  className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  <User className="h-4 w-4" />
+                  Il mio Profilo
+                </Link>
+
+                <Link
+                  to="/formazione/impostazioni"
                   className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                 >
                   <Settings className="h-4 w-4" />

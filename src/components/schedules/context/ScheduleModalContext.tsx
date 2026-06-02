@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useReducer, useCallback, useMemo, ReactNode } from 'react';
+import React, { createContext, useContext, useReducer, useCallback, useMemo, useEffect, ReactNode } from 'react';
 import type { Person, Trainer, Training, ScheduleDateEntry, ScheduleFormData } from '../types';
 import type { Company } from '../../../types';
 import type { RiskLevel, CourseType, DeliveryMode } from '../../../constants/scheduleModal';
+import { normalizeRiskValue, normalizeCourseTypeValue } from '../utils';
 
 // Additional types for context
 interface ExistingEvent {
@@ -519,16 +520,89 @@ export const ScheduleModalProvider: React.FC<ScheduleModalProviderProps> = ({
   }, [state.formData.dates]);
 
   const courseDuration = useMemo(() => {
-    const selectedCourse = trainings.find(t => t.id === state.formData.training_id);
-    const duration = selectedCourse?.duration;
-    if (typeof duration === 'number') return duration;
-    if (typeof duration === 'string') return parseFloat(duration) || 0;
-    return 0;
-  }, [trainings, state.formData.training_id]);
+    const { training_id, risk_level, course_type } = state.formData;
+    const selectedCourse = training_id ? trainings.find(t => t.id === training_id) : null;
+
+    const getDuration = (t: Training | null | undefined): number => {
+      if (!t) return 0;
+      const d = t.duration;
+      if (typeof d === 'number') return d;
+      if (typeof d === 'string') return parseFloat(d) || 0;
+      return 0;
+    };
+
+    // No variant filters: use training_id direct match
+    if (!risk_level && !course_type) return getDuration(selectedCourse);
+
+    // With filters: check if selected course already matches
+    if (selectedCourse) {
+      const riskNorm = normalizeRiskValue(risk_level as string);
+      const typeNorm = normalizeCourseTypeValue(course_type as string);
+      const courseRisk = normalizeRiskValue(selectedCourse.riskLevel as string);
+      const courseTypeName = normalizeCourseTypeValue(selectedCourse.courseType as string);
+      const riskMatches = !riskNorm || courseRisk === riskNorm;
+      const typeMatches = !typeNorm || courseTypeName === typeNorm;
+
+      if (riskMatches && typeMatches) return getDuration(selectedCourse);
+
+      // Mismatch: find best variant with same title
+      const baseTitle = selectedCourse.title ?? selectedCourse.name;
+      if (baseTitle) {
+        const sameTitle = trainings.filter(t => (t.title ?? t.name) === baseTitle);
+        let best = sameTitle;
+        if (riskNorm) best = best.filter(t => normalizeRiskValue(t.riskLevel as string) === riskNorm);
+        if (typeNorm) best = best.filter(t => normalizeCourseTypeValue(t.courseType as string) === typeNorm);
+        if (best.length > 0) return getDuration(best[0]);
+        // Partial match: only by risk
+        if (riskNorm) {
+          const byRisk = sameTitle.filter(t => normalizeRiskValue(t.riskLevel as string) === riskNorm);
+          if (byRisk.length > 0) return getDuration(byRisk[0]);
+        }
+      }
+    }
+
+    return getDuration(selectedCourse);
+  }, [trainings, state.formData.training_id, state.formData.risk_level, state.formData.course_type]);
 
   const hoursLeft = useMemo(() => {
     return Math.max(0, courseDuration - totalSelectedHours);
   }, [courseDuration, totalSelectedHours]);
+
+  // Sync training_id to the correct course variant when risk_level or course_type changes.
+  // This ensures the saved courseId always points to the variant matching the selected type/risk,
+  // so generated documents show the correct duration.
+  useEffect(() => {
+    const { training_id, risk_level, course_type } = state.formData;
+    if (!training_id || (!risk_level && !course_type)) return;
+
+    const currentCourse = trainings.find(t => String(t.id) === String(training_id));
+    if (!currentCourse) return;
+
+    const riskNorm = normalizeRiskValue(risk_level as string);
+    const typeNorm = normalizeCourseTypeValue(course_type as string);
+    const courseRisk = normalizeRiskValue(currentCourse.riskLevel as string);
+    const courseTypeName = normalizeCourseTypeValue(currentCourse.courseType as string);
+    const riskMatches = !riskNorm || courseRisk === riskNorm;
+    const typeMatches = !typeNorm || courseTypeName === typeNorm;
+
+    if (riskMatches && typeMatches) return; // already correct variant
+
+    const baseTitle = currentCourse.title ?? (currentCourse as any).name;
+    if (!baseTitle) return;
+
+    const sameTitle = trainings.filter(t => (t.title ?? (t as any).name) === baseTitle);
+    let best = sameTitle;
+    if (riskNorm) best = best.filter(t => normalizeRiskValue(t.riskLevel as string) === riskNorm);
+    if (typeNorm) best = best.filter(t => normalizeCourseTypeValue(t.courseType as string) === typeNorm);
+
+    if (best.length === 0 && riskNorm) {
+      best = sameTitle.filter(t => normalizeRiskValue(t.riskLevel as string) === riskNorm);
+    }
+
+    if (best.length > 0 && String(best[0].id) !== String(training_id)) {
+      dispatch({ type: 'SET_FORM_FIELD', payload: { field: 'training_id', value: best[0].id } });
+    }
+  }, [state.formData.training_id, state.formData.risk_level, state.formData.course_type, trainings, dispatch]);
 
   const selectedCourse = useMemo(() => {
     return trainings.find(t => t.id === state.formData.training_id);

@@ -330,23 +330,32 @@
 /* Select */
 .select-clinica {
     width: 100%;
+    min-height: 2.5rem;
     padding: 0.625rem 2.5rem 0.625rem 0.875rem;
-    border: 1px solid #d1d5db;
-    border-radius: 0.5rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.75rem;
     font-size: 0.875rem;
+    font-weight: 500;
+    color: #1f2937;
     background-color: white;
     cursor: pointer;
     appearance: none;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
-    background-position: right 0.5rem center;
+    background-position: right 0.75rem center;
     background-repeat: no-repeat;
     background-size: 1.5em 1.5em;
+}
+
+.select-clinica:hover {
+    border-color: var(--clinica-primary-300);
 }
 
 .select-clinica:focus {
     outline: none;
     border-color: var(--clinica-primary-500);
-    box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.15);
+    box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.14);
 }
 
 /* ============================================

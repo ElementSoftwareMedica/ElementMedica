@@ -127,11 +127,20 @@ router.get(
   [
     query('page').optional().isInt({ min: 1 }).toInt(),
     query('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
+    query('offset').optional().isInt({ min: 0 }).toInt(),
     query('action').optional().isString().trim(),
+    query('resource').optional().isString().trim(),
     query('personId').optional().isUUID(),
+    query('personSearch').optional().isString().trim(),
+    query('tenantId').optional().isUUID(),
+    query('tenantIds').optional().isString().trim(),
+    query('allTenants').optional().isString().trim(),
+    query('includeLowSignal').optional().isString().trim(),
     query('search').optional().isString().trim(),
     query('from').optional().isISO8601(),
     query('to').optional().isISO8601(),
+    query('dateFrom').optional().isISO8601(),
+    query('dateTo').optional().isISO8601(),
   ],
   async (req, res) => {
     try {
@@ -140,17 +149,25 @@ router.get(
         return res.status(400).json({ success: false, error: 'Parametri non validi', details: errors.array() });
       }
 
-      const page = req.query.page || 1;
+      const page = req.query.page || (req.query.offset ? Math.floor(req.query.offset / (req.query.limit || 20)) + 1 : 1);
       const limit = req.query.limit || 20;
       const skip = (page - 1) * limit;
 
-      const { action, personId, search, from, to, tenantFilter } = req.query;
+      const { action, resource, personId, personSearch, search, tenantId, tenantIds, allTenants, includeLowSignal } = req.query;
+      const from = req.query.from || req.query.dateFrom;
+      const to = req.query.to || req.query.dateTo;
 
       // Admin globali possono vedere tutti i log
       const userGlobalRole = req.person?.globalRole;
       const isGlobalAdmin = userGlobalRole === 'SUPER_ADMIN' || userGlobalRole === 'ADMIN';
 
       const where = {};
+      if (includeLowSignal !== 'true') {
+        where.NOT = [
+          { action: { in: ['ENTITY_READ', 'ENTITY_LIST'] }, resource: { in: ['system', 'System', 'Sistema'] } },
+          { action: { contains: 'VIEW', mode: 'insensitive' }, resource: { in: ['system', 'System', 'Sistema'] } }
+        ];
+      }
 
       if (!isGlobalAdmin) {
         // Utenti normali: filtro tenant obbligatorio
@@ -158,16 +175,37 @@ router.get(
           return res.status(400).json({ success: false, error: 'Tenant non trovato o inattivo' });
         }
         where.tenantId = req.tenant.id;
-      } else if (tenantFilter) {
-        // Admin con filtro tenant specifico
-        where.tenantId = tenantFilter;
+      } else if (tenantIds) {
+        const requestedTenantIds = String(tenantIds).split(',').map(id => id.trim()).filter(Boolean);
+        if (requestedTenantIds.length > 0 && allTenants !== 'true') {
+          where.tenantId = { in: requestedTenantIds };
+        } else if (requestedTenantIds.length > 0) {
+          where.tenantId = { in: requestedTenantIds };
+        }
+      } else if (tenantId) {
+        where.tenantId = tenantId;
       }
       // Se isGlobalAdmin e no tenantFilter, where.tenantId rimane undefined = tutti i tenant
 
       if (personId) where.personId = personId;
+      if (resource) where.resource = { contains: resource, mode: 'insensitive' };
       if (action) {
         // filtro più flessibile sul campo action
         where.action = { contains: action, mode: 'insensitive' };
+      }
+      if (personSearch) {
+        where.person = {
+          OR: [
+            { firstName: { contains: personSearch, mode: 'insensitive' } },
+            { lastName: { contains: personSearch, mode: 'insensitive' } },
+            { taxCode: { contains: personSearch, mode: 'insensitive' } },
+            {
+              tenantProfiles: {
+                some: { email: { contains: personSearch, mode: 'insensitive' } }
+              }
+            }
+          ]
+        };
       }
 
       // Filtro intervallo date
@@ -194,17 +232,45 @@ router.get(
           take: limit,
           include: {
             person: {
-              select: { id: true, firstName: true, lastName: true }
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                username: true,
+                tenantProfiles: {
+                  where: where.tenantId && typeof where.tenantId === 'string' ? { tenantId: where.tenantId, deletedAt: null } : { deletedAt: null },
+                  select: { email: true },
+                  take: 1
+                }
+              }
+            },
+            tenant: {
+              select: { id: true, name: true, slug: true }
             }
           }
         })
       ]);
 
       const totalPages = Math.ceil(total / limit) || 1;
+      const normalizedLogs = logs.map(log => ({
+        ...log,
+        user: {
+          id: log.person?.id,
+          firstName: log.person?.firstName,
+          lastName: log.person?.lastName,
+          username: log.person?.username,
+          email: log.person?.tenantProfiles?.[0]?.email || null
+        },
+        tenantName: log.tenant?.name || log.tenant?.slug || null
+      }));
 
       return res.json({
         success: true,
-        data: logs,
+        data: normalizedLogs,
+        logs: normalizedLogs,
+        total,
+        page,
+        pageSize: limit,
         meta: { page, limit, total, totalPages }
       });
     } catch (error) {

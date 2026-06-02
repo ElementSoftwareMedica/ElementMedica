@@ -85,12 +85,13 @@ export interface PersoneItem {
     firstName: string;
     lastName: string;
     mansione?: { id: string; nome: string };
-    accertamenti?: { id: string; nome: string; isObbligatoria: boolean; periodicita?: string | null; periodicitaCustomMesi?: number | null; ultimaEsecuzione?: string | null }[];
+    accertamenti?: { id: string; nome: string; isObbligatoria: boolean; periodicita?: string | null; periodicitaCustomMesi?: number | null; ultimaEsecuzione?: string | null; dataScadenza?: string | null }[];
     ultimaVisita?: string | null;
     prossimaVisita?: string | null;
     protocollo?: { periodicitaMesi?: number } | null;
     isPrimaVisita?: boolean; // Se true → tipoVisitaMDL = PREVENTIVA (prima visita), altrimenti PERIODICA
 }
+type PersoneAccertamento = NonNullable<PersoneItem['accertamenti']>[number];
 
 interface SlotItem {
     id: string | null;
@@ -268,8 +269,54 @@ const ScheduleWeekModal: React.FC<ScheduleWeekModalProps> = ({
 
     const [expandedIdx, setExpandedIdx] = useState<Set<number>>(new Set());
     // P72_13: tipo visita MDL per-persona — override selezionabile dall'utente
+    const isDateInMdlWindow = useCallback((value: string | null | undefined, reference = new Date()): boolean => {
+        if (!value) return false;
+        const due = new Date(value);
+        if (Number.isNaN(due.getTime())) return false;
+        due.setHours(0, 0, 0, 0);
+        const start = new Date(reference);
+        start.setHours(0, 0, 0, 0);
+        start.setDate(start.getDate() - 60);
+        const end = new Date(reference);
+        end.setHours(23, 59, 59, 999);
+        end.setDate(end.getDate() + 30);
+        return due >= start && due <= end;
+    }, []);
+    const getAccertamentoScadenza = useCallback((acc: PersoneAccertamento): Date | null => {
+        if (acc.dataScadenza) {
+            const explicit = new Date(acc.dataScadenza);
+            return Number.isNaN(explicit.getTime()) ? null : explicit;
+        }
+        const mesi = periodicitaToMesi(acc.periodicita, acc.periodicitaCustomMesi);
+        if (!mesi || !acc.ultimaEsecuzione) return null;
+        const scadenza = new Date(acc.ultimaEsecuzione);
+        scadenza.setMonth(scadenza.getMonth() + mesi);
+        return scadenza;
+    }, []);
+    const hasDueAccertamenti = useCallback((p: PersoneItem): boolean =>
+        (p.accertamenti ?? []).some(acc => acc.isObbligatoria && isDateInMdlWindow(getAccertamentoScadenza(acc)?.toISOString())),
+        [getAccertamentoScadenza, isDateInMdlWindow]
+    );
+    const getDefaultTipoVisitaMDL = useCallback((p: PersoneItem): string => {
+        if (p.isPrimaVisita || !p.ultimaVisita) return 'PREVENTIVA';
+        return hasDueAccertamenti(p) ? 'PERIODICA' : 'STRAORDINARIA';
+    }, [hasDueAccertamenti]);
+    const isMainMdlPrestazione = useCallback((name?: string | null): boolean =>
+        /visita\s+medica.*lavoro|medicina\s+del\s+lavoro|visita.*lavoro/i.test(name || ''),
+        []
+    );
+    const getSortedAccertamenti = useCallback((p: PersoneItem): PersoneAccertamento[] =>
+        [...(p.accertamenti ?? [])].sort((a, b) => {
+            const mainDiff = Number(isMainMdlPrestazione(b.nome)) - Number(isMainMdlPrestazione(a.nome));
+            if (mainDiff !== 0) return mainDiff;
+            const requiredDiff = Number(b.isObbligatoria) - Number(a.isObbligatoria);
+            if (requiredDiff !== 0) return requiredDiff;
+            return a.nome.localeCompare(b.nome, 'it');
+        }),
+        [isMainMdlPrestazione]
+    );
     const [tipoVisitaMDLOverrides, setTipoVisitaMDLOverrides] = useState<Record<number, string>>(
-        () => Object.fromEntries(persone.map((p, i) => [i, p.isPrimaVisita ? 'PREVENTIVA' : 'PERIODICA']))
+        () => Object.fromEntries(persone.map((p, i) => [i, getDefaultTipoVisitaMDL(p)]))
     );
     const toggleExpanded = (idx: number) => setExpandedIdx(prev => {
         const n = new Set(prev); n.has(idx) ? n.delete(idx) : n.add(idx); return n;
@@ -494,20 +541,14 @@ const ScheduleWeekModal: React.FC<ScheduleWeekModalProps> = ({
      */
     const getAccertamentiDovuti = useCallback((p: PersoneItem) => {
         const today = new Date(); today.setHours(0, 0, 0, 0);
-        return (p.accertamenti ?? []).filter(acc => {
+        return getSortedAccertamenti(p).filter(acc => {
             if (!acc.isObbligatoria) return false;
-            const mesi = periodicitaToMesi(acc.periodicita, acc.periodicitaCustomMesi);
             if (acc.periodicita === 'UNA_TANTUM') return !acc.ultimaEsecuzione;
-            // P72_13: periodicita non definita → non possiamo determinare la scadenza,
-            // non pre-selezionare automaticamente per evitare selezione massiva involontaria
-            if (!mesi) return false;
-            if (!acc.ultimaEsecuzione) return true;
-            const ultima = new Date(acc.ultimaEsecuzione);
-            const scadenza = new Date(ultima);
-            scadenza.setMonth(scadenza.getMonth() + mesi);
-            return scadenza <= today;
+            const scadenza = getAccertamentoScadenza(acc);
+            if (!scadenza) return false;
+            return isDateInMdlWindow(scadenza.toISOString(), today);
         });
-    }, []);
+    }, [getAccertamentoScadenza, getSortedAccertamenti, isDateInMdlWindow]);
 
     /**
      * Genera la nota per una singola persona con i suoi accertamenti dovuti.
@@ -571,7 +612,7 @@ const ScheduleWeekModal: React.FC<ScheduleWeekModalProps> = ({
             // P72_13: tipo visita MDL per persona — usa override scelto dall'utente nel pannello,
             // con fallback a PREVENTIVA (prima visita) o PERIODICA
             const tipoVisitaMDLPerPersona = persone.map((p, idx) =>
-                tipoVisitaMDLOverrides[idx] ?? (p.isPrimaVisita ? 'PREVENTIVA' : 'PERIODICA')
+                tipoVisitaMDLOverrides[idx] ?? getDefaultTipoVisitaMDL(p)
             );
             return apiPost(`/api/v1/companies/${companyId}/sorveglianza-sanitaria/programma`, {
                 personeIds,
@@ -795,7 +836,7 @@ const ScheduleWeekModal: React.FC<ScheduleWeekModalProps> = ({
                                                     <div className="flex items-center gap-1.5 mb-0.5">
                                                         <span className="text-[10px] text-gray-400 flex-shrink-0">Tipo visita:</span>
                                                         <select
-                                                            value={tipoVisitaMDLOverrides[idx] ?? (p.isPrimaVisita ? 'PREVENTIVA' : 'PERIODICA')}
+                                                            value={tipoVisitaMDLOverrides[idx] ?? getDefaultTipoVisitaMDL(p)}
                                                             onChange={e => setTipoVisitaMDLOverrides(prev => ({ ...prev, [idx]: e.target.value }))}
                                                             onClick={e => e.stopPropagation()}
                                                             className="flex-1 text-[10px] border border-gray-200 dark:border-gray-600 rounded px-1 py-0.5 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200"
@@ -819,22 +860,18 @@ const ScheduleWeekModal: React.FC<ScheduleWeekModalProps> = ({
                                                             )}
                                                         </div>
                                                     )}
-                                                    {(p.accertamenti ?? []).map(acc => {
-                                                        const mesi = periodicitaToMesi(acc.periodicita, acc.periodicitaCustomMesi);
+                                                    {getSortedAccertamenti(p).map(acc => {
                                                         const today = new Date(); today.setHours(0, 0, 0, 0);
-                                                        const isDue = acc.isObbligatoria && (
-                                                            acc.periodicita === 'UNA_TANTUM' ? !acc.ultimaEsecuzione
-                                                                : !mesi ? true
-                                                                    : !acc.ultimaEsecuzione ? true
-                                                                        : (() => { const s = new Date(acc.ultimaEsecuzione!); s.setMonth(s.getMonth() + mesi); return s <= today; })()
-                                                        );
+                                                        const scadenza = getAccertamentoScadenza(acc);
+                                                        const isDue = acc.isObbligatoria && (acc.periodicita === 'UNA_TANTUM' ? !acc.ultimaEsecuzione : isDateInMdlWindow(scadenza?.toISOString(), today));
                                                         return (
                                                             <p key={acc.id} className={cn('text-[10px] flex items-start gap-1', isDue ? 'text-orange-500 dark:text-orange-400' : 'text-gray-400')}>
                                                                 <span className={cn('flex-shrink-0 mt-px', acc.isObbligatoria ? isDue ? 'text-orange-500' : 'text-teal-500' : 'text-gray-300')}>•</span>
                                                                 <span>
                                                                     {acc.nome}
-                                                                    {acc.ultimaEsecuzione && (
-                                                                        <span className="opacity-60 ml-1">({new Date(acc.ultimaEsecuzione).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })})</span>
+                                                                    {!acc.isObbligatoria && <span className="opacity-70 ml-1">facoltativo</span>}
+                                                                    {scadenza && (
+                                                                        <span className="opacity-60 ml-1">scade {scadenza.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
                                                                     )}
                                                                 </span>
                                                             </p>

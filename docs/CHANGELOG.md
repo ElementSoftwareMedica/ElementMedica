@@ -7,6 +7,401 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [Desktop 0.1.14] - 2026-04-20
+
+### Fix: React error #310 in VisitaDetailPage (violazione Rules of Hooks)
+- **Root cause**: `displaySections = useMemo(...)` era chiamato dopo due `return` condizionali (`if (loading)` e `if (error || !visit)`). Di conseguenza React riceveva un numero diverso di hook tra i render → crash con errore #310.
+- **`desktop-app/src/renderer/pages/VisitaDetailPage.tsx`**: spostato `displaySections` useMemo prima di tutti i return condizionali.
+
+### Fix: TariffariPage — aziende associate mostravano ID invece della ragione sociale
+- **Root cause**: interfaccia `CompanyRow` dichiarava `companyName` ma SQLite usa `ragioneSociale`. La mappa `cmap[c.id]` usava sempre il fallback sull'ID.
+- **`desktop-app/src/renderer/pages/TariffariPage.tsx`**: corretto campo in `ragioneSociale` sia nell'interfaccia sia nella costruzione della mappa.
+
+### Fix + Feature: MansioniPage — rischi non visibili + inline edit + protocollo collegato
+- **Root cause rischi**: campo `RischioMansione.nome` non esiste nel JSON di risposta del server; il campo corretto è `codiceRischio` (da `MansioneRischio` Prisma). Fix: rinominato e aggiunto supporto per `categoria` e `fonteRischio`.
+- **Nuova funzionalità**: pulsante matita su ogni mansione per modificare inline nome, codice e descrizione con salvataggio su SQLite + coda sync.
+- **Nuova funzionalità**: nel pannello espanso viene mostrato il protocollo sanitario collegato (nome + elenco prestazioni con periodicità e obbligatorietà), caricato da tabella `protocolli` per `mansioneId`.
+- Aggiunto badge livello rischio `MOLTO_ALTO` (rosso scuro).
+- Aggiunto fallback `r.nome` per retrocompatibilità con dati vecchi.
+
+### Fix: Deploy brand errato — elementsicurezza.com mostrava ElementMedica
+- **Root cause**: sessione precedente aveva eseguito `npm run build` con `.env.production` = `element-medica`, deployando questo brand in `dist/` → servito da `elementsicurezza.com`.
+- **Soluzione**: build separata con `npm run build:sicurezza` → `dist/element-sicurezza/` → rsync a `/var/www/elementmedica/dist/`; build con `npm run build:medica` → `dist/element-medica/` → rsync a `/var/www/elementmedica/dist-public/`. Entrambi i brand ora correttamente deployati.
+- **Impatto**: `elementsicurezza.com` mostra di nuovo il brand ElementSicurezza; bridge consolidamento visibile su `elementmedica.com`.
+
+---
+
+## [Desktop 0.1.13] - 2026-04-20
+
+### Fix: Crash su download database — `table protocolli has no column named mansioneNome`
+- **Root cause**: `storeDayData` section 13 scrive `mansioneNome` e `prestazioni` sulla tabella `protocolli`, ma queste colonne non avevano `preMigrate`. Le installazioni create con lo schema originale non le avevano → `INSERT OR REPLACE` falliva.
+- **`desktop-app/src/main/database.ts`**: aggiunti `preMigrate` per `protocolli.mansioneNome`, `protocolli.prestazioni` (confermati dal crash) e `convenzioni.isActive` (difensivo).
+
+### Audit SQLite v2 (prova definitiva — tutte le sezioni)
+| Sezione | Tabella | Colonne mancanti | Stato |
+|---------|---------|-----------------|-------|
+| 1 | companies | — | ✅ |
+| 1 | company_sites | — | ✅ |
+| 2 | patients | companyName, protocolloSanitarioId | ✅ preMigrate/tryAlter |
+| 3 | appointments | personFirstName…ambulatorioNome | ✅ preMigrate |
+| 4 | visits | personFirstName…isMDL, codiceICD10… | ✅ preMigrate/tryAlter |
+| 4b | giudizi_idoneita | — | ✅ |
+| 5 | prestazioni | tipo, categoria, branchType, ivaAliquota… | ✅ preMigrate |
+| 6 | ambulatori | codice, specializzazione, colore… | ✅ preMigrate |
+| 7 | mansioni | companyName, isActive, rischi | ✅ preMigrate |
+| 8 | scadenze | personFirstName, prestazioneNome, mansione… | ✅ preMigrate |
+| 9 | lavoratore_mansioni | tenantId | ✅ preMigrate |
+| 10 | giudizi_idoneita | — | ✅ |
+| 11 | movimenti_contabili | — | ✅ |
+| 12 | lavoratore_rischi_aggiuntivi | tutte | ✅ v0.1.10–0.1.12 |
+| **13** | **protocolli** | **mansioneNome, prestazioni** | **✅ FISSO 0.1.13** |
+| 14 | visit_templates | — | ✅ |
+| 16 | tariffari | codice, attivo, validoDa, validoA… | ✅ tryAlter |
+| **17** | **convenzioni** | **isActive** | **✅ FISSO 0.1.13 (difensivo)** |
+
+### Fix: Windows — pagine completamente bianche (`<main>` vuoto nel DOM)
+- **Root cause**: `<BrowserRouter>` con Electron `loadFile()` → `location.pathname` = percorso file fisico (es. `/C:/Users/.../index.html`). Su Windows nessuna route corrisponde, `<Routes>` restituisce `null`, `<main>` resta vuoto.
+- **`desktop-app/src/renderer/main.tsx`**: sostituito `<BrowserRouter>` con `<HashRouter>`. Il path viene letto dall'URL hash (`#/page`) invece del pathname — standard Electron per file:// protocol.
+
+### Feature: Log diagnostici renderer
+- **`desktop-app/src/renderer/main.tsx`**: listener `DOMContentLoaded` che scrive `protocol`, `pathname`, `hash`, `platform`, `userAgent` su `startup.log` (main process).
+- **`desktop-app/src/renderer/App.tsx`**: `useEffect` in `AppRoutes` logga ogni cambio di route su `startup.log`.
+
+### Web App: bridge consolidation visibile in produzione
+- Frontend buildato e deployato: redirect `/impostazioni/bridge` → `/desktop` + "App Desktop & Bridge MDL" in 3ª posizione nel menu Impostazioni.
+
+---
+
+## [Desktop 0.1.12] - 2026-04-24
+
+### Fix: Crash su download database — `NOT NULL constraint failed: lavoratore_rischi_aggiuntivi.rischioId`
+- **Root cause**: `storeDayData` section 12 costruiva l'array `flat` senza includere il campo `rischioId`. Le installazioni con schema originale avevano `rischioId TEXT NOT NULL`; `INSERT OR REPLACE` senza `rischioId` → SQLite usa NULL → violazione NOT NULL.
+- **`desktop-app/src/main/ipc-handlers.ts`**: aggiunto `rischioId: (r.rischioId as string) || ''` al mapping di `lavoratore_rischi_aggiuntivi` in section 12. Il fallback `|| ''` soddisfa il vecchio vincolo NOT NULL anche quando il dato arriva privo di `rischioId`.
+- **`desktop-app/src/main/database.ts`**: aggiunto `preMigrate("UPDATE lavoratore_rischi_aggiuntivi SET rischioId = '' WHERE rischioId IS NULL")` per sistemare le righe già presenti con NULL nei DB esistenti.
+
+### Feature: Menu Impostazioni — "App Desktop & Bridge MDL" ora in 3ª posizione
+- **`src/pages/clinica/impostazioni/ClinicaSettingsPage.tsx`**: la voce `desktop-app` spostata alla 3ª posizione (dopo `aspetto` → `generale`), prima di `visit-templates`.
+
+### Fix: Windows — selettore tenant e barra sync nascosti dai pulsanti di controllo finestra
+- **Root cause**: `titleBarOverlay { height: 40 }` sovrappone i pulsanti nativo Win32 (~138 px a destra). Il div con tenant selector e SyncStatusBar non aveva padding destro → coperto dai pulsanti.
+- **`desktop-app/src/renderer/components/DesktopLayout.tsx`**: aggiunto `pr-36` (144 px) al div destro dell'header su Windows.
+- **`desktop-app/src/renderer/pages/LicenseActivationPage.tsx`**: aggiunta rilevazione `isWin`, `WebkitAppRegion: 'drag'` sull'header Windows, `pr-36` sul div destro, altezza header `h-11` su Windows.
+
+### Fix: Windows — pagine completamente bianche senza errori visibili
+- **Root cause**: bug di rendering GPU Chromium su certi driver Windows (Intel HD Graphics, AMD legacy, VM). L'app si avvia ma il renderer non mostra nulla.
+- **`desktop-app/src/main/index.ts`**: aggiunto `app.disableHardwareAcceleration()` per `process.platform === 'win32'` (chiamato prima di `app.whenReady()`). Forza rendering software (SwANGLE) compatibile con tutti i driver.
+
+### Fix: `VITE_APP_VERSION` aggiornato
+- **`desktop-app/.env.production`**: `VITE_APP_VERSION=0.1.0` → `0.1.12`. Era rimasto al valore iniziale dalla prima release.
+
+---
+
+## [Desktop 0.1.11] - 2026-04-20
+
+### Fix: Crash su download database — colonne mancanti in `lavoratore_rischi_aggiuntivi`
+- **Root cause**: `database.ts` aveva solo il `preMigrate` per `tenantId`, ma le installazioni esistenti mancavano di tutte le colonne di dominio aggiunte dopo il deploy iniziale.
+- **`desktop-app/src/main/database.ts`**: aggiunti 10 `preMigrate` per tutte le colonne mancanti: `rischioId`, `codiceRischio`, `livello`, `categoria`, `descrizioneEsposizione`, `fonteRischio`, `periodicitaMesi`, `note`, `sourceMansioneId`, `deletedAt`.
+
+### Fix: Bridge mostra porta 3000 invece di 4050
+- **Root cause**: le costanti frontend non erano mai state allineate alla porta reale assegnata da Electron (4050).
+- **`src/pages/clinica/impostazioni/bridgeSettingsData.ts`**: `BRIDGE_PORT 3000 → 4050`.
+- **`src/services/bridgeApi.ts`**: `DEFAULT_BRIDGE_URL` e `BRIDGE_PORT_CANDIDATES` aggiornati a `4050` (era `[3000, 3001, 3002]`).
+
+### Feature: Pagina impostazioni Desktop e Bridge unificata
+- Le voci di menu `/impostazioni/bridge` e `/impostazioni/desktop` sono state consolidate in un'unica schermata `/poliambulatorio/impostazioni/desktop` con titolo "App Desktop & Bridge MDL".
+- **`src/pages/settings/DesktopLicensesTab.tsx`**: aggiunta sezione stato del bridge (con query ogni 15 s, mostra porta 4050, feature flag `BRIDGE_APP`) e integrazione `BridgeLicensesSection` condizionata a `hasBridgeAccess && canManageLicenses`.
+- **`src/pages/clinica/impostazioni/BridgeSettingsPage.tsx`**: la pagina ora reindirizza a `/poliambulatorio/impostazioni/desktop` (`<Navigate replace>`).
+- **`src/pages/clinica/impostazioni/ClinicaSettingsPage.tsx`**: le due voci di menu sono state fuse in una sola.
+
+### Fix: Windows bloccato a v0.1.0 — `licenses/activate` 404
+- **Root cause**: nessuna build Windows era mai stata pubblicata dall'uscita iniziale v0.1.0. Il file `latest.yml` sul server era `version: 0.1.0` con URL API errato (`app.elementmedica.com`).
+- Riconstruita e deployata build Windows v0.1.11 con `VITE_API_URL=https://www.elementmedica.com`.
+
+### Deploy v0.1.11
+- Bridge binari `medical-bridge-win.exe`, `medical-bridge-mac-arm64`, `medical-bridge-mac-x64` ricostruiti.
+- Desktop app macOS (arm64 + x64 DMG/ZIP) e Windows (NSIS Setup) ricostruiti.
+- `latest-mac.yml` e `latest.yml` v0.1.11 deployati su server.
+- `downloads/desktop/` sincronizzato.
+
+---
+
+## [Desktop 0.1.10] - 2026-04-20
+
+### Fix: Crash su download database completo — `table lavoratore_rischi_aggiuntivi has no column named tenantId`
+- **`desktop-app/src/main/database.ts`**: Aggiunta istruzione `preMigrate('ALTER TABLE lavoratore_rischi_aggiuntivi ADD COLUMN tenantId TEXT')`.  
+  La colonna `tenantId` era presente nel `CREATE TABLE IF NOT EXISTS` ma non nel blocco di migrazione `preMigrate` → installazioni esistenti non la trovavano → `SqliteError: table lavoratore_rischi_aggiuntivi has no column named tenantId` su ogni `downloadFullDb`.
+
+### Fix: Bridge medicale non risponde — event loop bloccato da chokidar su directory root
+- **Root cause**: il bridge process veniva spawnato senza `cwd` esplicito → ereditava `cwd = "/"` da Electron. La configurazione dei dispositivi salvata in `config.json` ha `gdtOutputDir: ""` (vuoto). In `config/index.ts`, `resolve("" || '.')` con `cwd="/"` diventava `resolve('/') = "/"`. Chokidar avviava il monitoraggio dell'intero filesystem macOS (`/dev/`, `/System/`, ecc.) → flood di eventi EACCES/EPERM → event loop del bridge completamente bloccato → timeout su `/health`.
+- **Fix primario — `desktop-app/src/main/bridge-process.ts`**: aggiunto `cwd: bridgeDataDir` al `spawn()` → il bridge ora parte con `cwd = <userData>/bridge/`. `resolve('.')` si risolve in una directory sicura.
+- **Fix difesa-in-profondità — `medical-device-bridge/src/services/watcher.ts`**: aggiunto controllo esplicito per `dir === '/'` (e root Windows `C:\`). Se il `gdtOutputDir` è la directory radice del filesystem, il watcher viene saltato con un warning chiaro invece di avviare chokidar su tutto il FS.
+- **Fix difesa-in-profondità — `medical-device-bridge/src/config/index.ts`**: `gdtOutputDir`, `gdtInputDir`, `pdfOutputDir` non usano più `|| '.'` come fallback per path vuoti. Path vuoto → stringa vuota → watcher correttamente saltato dal check `!dir || dir.trim() === ''`.
+
+### Audit completo colonne SQLite (prova)
+Tutte le tabelle verificate — nessun'altra colonna mancante:
+
+| Tabella | Colonne nel storeDayData | preMigrate/tryAlter | Stato |
+|---------|--------------------------|---------------------|-------|
+| `companies` | id, tenantId, ragioneSociale, piva... | — (nel CREATE TABLE originale) | ✅ |
+| `company_sites` | id, companyTenantProfileId, siteName... | — | ✅ |
+| `patients` | id, tenantId, firstName, lastName, taxCode... | `companyName` (preMigrate), `protocolloSanitarioId`, FSE (tryAlter) | ✅ |
+| `appointments` | id, tenantId, personId, ..., denorm fields | tutti i denorm columns (preMigrate) | ✅ |
+| `visits` | id, tenantId, personId, ..., denorm fields | tutti i denorm + FSE columns (preMigrate + tryAlter) | ✅ |
+| `prestazioni` | id, tenantId, nome, codice, tipo... | tipo/categoria/branchType/ivaAliquota/scadenzaDefaultMesi/durataPrevista/prezzoBase/attivo (preMigrate) | ✅ |
+| `ambulatori` | id, tenantId, codice, nome, specializzazione... | codice/specializzazione/colore/isEsterno/stato (preMigrate) | ✅ |
+| `mansioni` | id, tenantId, nome (da denominazione), codice... | companyName/isActive/rischi/rischiAssociati (preMigrate) | ✅ |
+| `scadenze` | id, tenantId, personId, ..., denorm fields | tutti i denorm columns (preMigrate) | ✅ |
+| `lavoratore_mansioni` | id, tenantId, personId, mansioneId... | tenantId (preMigrate) | ✅ |
+| `giudizi_idoneita` | id, tenantId, personId, visitaId... | — (nel CREATE TABLE originale) | ✅ |
+| `movimenti_contabili` | id, tenantId, visitaId, personId... | — (nel CREATE TABLE originale) | ✅ |
+| `lavoratore_rischi_aggiuntivi` | id, personId, tenantId, codiceRischio... | tenantId (preMigrate) ← **FIX in questa versione** | ✅ |
+| `protocolli` | id, tenantId, nome (da denominazione), isActive (da isAttivo)... | — (nel CREATE TABLE originale; fix campo in ipc-handlers) | ✅ |
+| `visit_templates` | id, tenantId, nome (da name), tipo (da scope)... | — (nel CREATE TABLE originale) | ✅ |
+| `tariffari` | id, tenantId, codice, nome, attivo, validoDa... | codice/attivo/validoDa/validoA/companyAssociations (tryAlter) | ✅ |
+| `convenzioni` | id, tenantId, codice, nome, tipo, branchType... | codice/tipo/descrizione/enteTerzo/branchType/attiva (tryAlter) | ✅ |
+
+### Deploy v0.1.10
+- Bridge binari arm64 e x64 ricostruiti con le fix da `watcher.ts` e `config/index.ts`.
+- Desktop app binari macOS arm64 e x64 ricostruiti e deployati in produzione.
+- `latest-mac.yml` v0.1.10 presente sul server.
+
+---
+
+## [Desktop 0.1.9] - 2026-04-20
+
+### Fix: Crash su download database completo — `NOT NULL constraint failed: mansioni.nome`
+- **`desktop-app/src/main/ipc-handlers.ts`** — sezione mansioni: il backend Prisma restituisce il campo `denominazione` (non `nome`), mentre lo schema SQLite locale usa `nome TEXT NOT NULL`. La mappatura `nome: m.nome` produceva sempre `undefined` → crash su ogni `downloadFullDb` in presenza di mansioni.
+  - **Fix**: `nome: (m.denominazione || m.nome) as string` — supporta sia il campo Prisma `denominazione` che eventuali varianti legacy.
+- **Stessa causa individuata anche su `protocolli`**: `ProtocolloSanitario` in Prisma usa `denominazione`; la mappatura `nome: p.nome` avrebbe crashato su inserimento di protocolli.
+  - **Fix**: `nome: (p.denominazione || p.nome) as string`
+- **Fix correlato su `protocolli.isActive`**: Prisma `ProtocolloSanitario` usa `isAttivo: Boolean`, non `isActive`. Fix: `p.isAttivo ?? p.isActive`.
+- **Fix correlato su scadenze — campo `mansione` (denormalizzato)**: il lookup `mansione?.nome` è fixed in `mansione?.denominazione || mansione?.nome` (campo non nella risposta Prisma).
+
+### Fix: Bridge medicale — zombie IPv6 + log + fallback ports
+- **`desktop-app/src/main/bridge-process.ts`**: Aggiunta funzione `killZombiesOnPort()` che su macOS/Linux esegue `lsof -ti :4050 | xargs kill -9` prima di ogni spawn del bridge. Elimina i processi zombie IPv6-only che tenevano occupata la porta 4050 impedendo al nuovo bridge di ascoltare.
+- **`desktop-app/src/main/bridge-process.ts`**: stdout e stderr del bridge process ora verranno scritti su `<userData>/bridge/logs/bridge-stdout.log` e `bridge-stderr.log` (invece di essere soppressi silenziosamente). Facilita il debug.
+- **`desktop-app/src/main/ipc-handlers.ts`** — `bridge:testConnectivity`: migliorata diagnostica e logica di test:
+  - Controlla le porte `[4050, 4052, 4053]` (4051 è riservata al callback server Electron).
+  - Se il bridge risponde su una porta fallback, restituisce `portNote` con il numero di porta effettivo.
+  - In caso di timeout: riporta PID del bridge process, stato running, e path dei log file invece del messaggio generico.
+
+### Deploy v0.1.9
+- Binari macOs arm64 e x64 ricostruiti e deployati in produzione (`/var/www/elementmedica/desktop-updates/`).
+- `latest-mac.yml` v0.1.9 presente sul server.
+
+---
+
+## [Desktop 0.1.8] - 2026-04-20
+
+### Fix: Crash su download database completo — `table ambulatori has no column named codice`
+- **`desktop-app/src/main/database.ts`**: Aggiunta istruzione `preMigrate` per la colonna `codice` sulla tabella `ambulatori`. La colonna era presente nello schema `CREATE TABLE` ma non nel blocco `ALTER TABLE` per upgrade, causando `SqliteError: table ambulatori has no column named codice` ad ogni `downloadFullDb`.
+
+### Fix: Bridge medicale non raggiungibile — timeout IPv4/IPv6 su macOS
+- **`medical-device-bridge/src/index.ts`**: `app.listen(port)` senza host su macOS associa il server all'IPv6 wildcard (`::`) invece di IPv4. L'health check di Electron usa `http://127.0.0.1:4050/health` (IPv4) → timeout perpetuo anche con bridge in esecuzione.
+- Fix: `app.listen(port, '127.0.0.1', callback)` — binding esplicito IPv4.
+- Fix: `isBridgeAlreadyRunningOnPort` aggiornato da `http://localhost:` a `http://127.0.0.1:`.
+- Fix: Porta 4051 esclusa dai fallback candidati (riservata al callback server Electron).
+- Binari macOS arm64 e x64 ricostruiti con `npm run pkg:mac` e deployati in produzione.
+
+---
+
+## [Backend] - 2026-04-20
+
+### Fix: `preventivo-mdl-service.js` — query Prisma completamente errata
+
+#### Fix: `rischi` → `rischiAssociati` + percorso prestazioni via `protocolliMansione`
+- **`backend/services/preventivo-mdl-service.js`**: La query `calculatePreview()` tentava di includere `mansione.rischi` (non esiste nel modello Prisma — il campo corretto è `rischiAssociati: MansioneRischio[]`). Inoltre cercava `mansioneRischio.risk.prestazioni` (struttura non esiste affatto).
+- **Fix**: Sostituita la logica con il percorso corretto: `Mansione → protocolliMansione → ProtocolloMansione → protocolloSanitario → prestazioni (ProtocolloPrestazione) → prestazione (Prestazione)`.
+- `isObbligatoria` filter corretto (era `obbligatoria`).
+- Mappatura `TipoPeriodicita` enum → mesi (MESI_6→6, MESI_12→12, ecc.).
+- `mansione.nome` → `mansione.denominazione` (campo corretto nel modello).
+- `isActive: true` → `isAttiva: true` per `lavoratori` filter.
+
+#### Fix: `_getTariffario()` — modello Prisma e campi non esistenti
+- `prisma.tariffarioAzienda` → `prisma.tariffarioAziendale` (nome corretto del modello).
+- `isActive: true` → `attivo: true` (campo corretto).
+- Rimosso filtro `companyTenantProfileId` diretto (non esiste su `TariffarioAziendale`); sostituito con lookup via `companyAssociations: { some: { companyTenantProfileId, attivo: true } }`.
+
+#### Fix: `_getPrezzoForPrestazione()` — modello e campo prezzo errati
+- `prisma.tariffarioVoce` → `prisma.voceTariffario` (nome corretto).
+- `voce.prezzo` → `Number(voce.prezzoBase)` (campo corretto).
+- `voceBase.prezzo` → `Number(voceBase.prezzoBase)`.
+
+**Impatto**: Il feature "Genera Preventivo MDL" dalla scheda azienda restituiva HTTP 500 (`Unknown field 'rischi'`) dal 17/04. Fix deployato e API riavviata.
+
+---
+
+## [Desktop 0.1.7] - 2026-04-20
+
+### Desktop App — Auto-updater Fix & Download URL Correction
+
+#### Fix: `Cannot read properties of undefined (reading 'downloadUpdate')` — null guard auto-updater
+- **`desktop-app/src/renderer/components/UpdateBanner.tsx`**: Aggiunto guard in `handleDownload()`: se `window.desktopApi?.updater?.downloadUpdate` non è definito (vecchie versioni installate < 0.1.7 non esponevano `desktopApi.updater` nel preload), mostra messaggio di errore e link manuali invece di crashare. `installUpdate` usa ora optional chaining (`?.installUpdate?.()`).
+- **`desktop-app/src/renderer/pages/SettingsPage.tsx`**: Stesso null guard su `handleDownloadUpdate()` e `handleInstallUpdate()`.
+- **Impatto**: Utenti con app 0.1.4/0.1.5 installata vedevano un crash al click su "Scarica aggiornamento" invece di un messaggio utile.
+
+#### Fix: URL download manuale puntavano a directory obsoleta
+- **`desktop-app/src/renderer/components/UpdateBanner.tsx`**: Costanti `DOWNLOAD_URL_ARM64` e `DOWNLOAD_URL_X64` corrette da `/downloads/desktop/` → `/desktop-updates/`. La directory `/downloads/desktop/` conteneva file obsoleti (versione precedente); `/desktop-updates/` è la directory aggiornata ad ogni release.
+
+#### Fix: latest-mac.yml includeva solo arm64 (utenti x64 non ricevevano aggiornamenti)
+- Il processo di build generava un `latest-mac.yml` incompleto (solo arch dell'ultimo target buildato). Corretta la procedura: `electron-builder build --mac zip:arm64 zip:x64` in un solo comando → genera `latest-mac.yml` con entrambe le architetture arm64 + x64.
+- Deployato su server: `latest-mac.yml` v0.1.7 con entries `arm64.zip` + `x64.zip` (sha512 corretti).
+
+#### Deploy: tutti i file aggiornati su server
+- `/var/www/elementmedica/desktop-updates/`: `latest-mac.yml` v0.1.7, arm64.zip (149M), x64.zip (153M), arm64.dmg (155M), x64.dmg (159M)
+- `/var/www/elementmedica/downloads/desktop/`: sincronizzato con DMG e ZIP v0.1.7
+
+---
+
+## [Desktop 0.1.6] - 2026-04-20
+
+### Desktop App — Database & Sync Fixes
+
+#### Fix: lavoratore_mansioni — colonna tenantId mancante (crash su sync)
+- **`desktop-app/src/main/database.ts`**: Aggiunta colonna `tenantId TEXT` nella `CREATE TABLE lavoratore_mansioni`. Aggiunto `preMigrate('ALTER TABLE lavoratore_mansioni ADD COLUMN tenantId TEXT')` per database esistenti.
+- **Impatto**: Il `storeDayData` inseriva `tenantId` nella tabella `lavoratore_mansioni` ma la colonna non esisteva → errore SQLite "table has no column named tenantId" durante la sincronizzazione delle mansioni dei lavoratori.
+
+#### Fix: TENANT_SCOPED_TABLES — company_sites e appointment_prestazioni rimossi
+- **`desktop-app/src/main/ipc-handlers.ts`**: Rimossi `company_sites` e `appointment_prestazioni` dall'insieme `TENANT_SCOPED_TABLES`. Queste tabelle non hanno colonna `tenantId` (sono scope indiretti tramite il record parent) — la filter injection `AND tenantId = ?` causava "no such column: tenantId" su ogni query, update e soft-delete.
+
+#### Fix: Medical Device Bridge — filesystem scanning blocca event loop
+- **`medical-device-bridge/src/services/watcher.ts`**: Aggiunto guard iniziale in `startWatching()`: se `gdtOutputDir` è vuoto/whitespace, esce subito invece di passare `""` a `chokidar.watch()` (che avrebbe scanso l'intero filesystem).
+- **`medical-device-bridge/src/config/index.ts`**: Aggiunto null check in `validateConfig()` prima di `existsSync()` su `device.executable` e `device.pdfDir`.
+- **Impatto**: Con bridge config vuota (`gdtOutputDir: ""`), chokidar guardava `/dev/rdisk*`, `/dev/ptywf` ecc. → centinaia di errori Watcher → event loop bloccato → timeout HTTP su `/health` e sulle notifiche GDT.
+- Bridge ricostruito e testato: `/health` risponde < 100ms.
+
+---
+
+## [Unreleased]
+
+### Session 69 - Feature Management Page, Pricing Admin, E2E Feature Gate Audit & Fixes
+
+#### Fix: /tenants Card → Navigazione a Pagina Dettaglio (non modal)
+- **`src/pages/management/tenants/TenantsManagement.tsx`**: Rimossa la logica del modal `TenantDetailModal` (~150 righe). `handleViewTenant()` ora naviga a `/management/tenants/${tenant.id}` tramite `useNavigate`. Rimossi: stato `showDetailModal`, componente `TenantDetailModal`, import `Eye`, `ToggleLeft`, `ToggleRight`. Corretta anche una sintassi JSX rotta (`{/* Create Tenant Modal */`→ `{/* Create Tenant Modal */}`).
+- **`src/pages/management/ManagementRouter.tsx`**: Aggiunte due nuove route:
+  - `tenants/:id` → `TenantAdminDetailPage` (lazy)
+  - `feature-pricing` → `FeaturePricingPage` (lazy)
+
+#### Nuova: TenantAdminDetailPage (Pagina Dettaglio Tenant Admin)
+- **`src/pages/management/tenants/TenantAdminDetailPage.tsx`** (nuovo file):
+  - Carica tenant via `managementApi.getTenant(id)` + feature catalog in parallelo
+  - **4 preset** con un click: `🏥 Element Medica`, `🎓 Element Sicurezza`, `⚡ Pacchetto Completo`, `📦 Solo Base`
+  - Tutti i toggle per abilitare/disabilitare singole funzionalità, per categoria
+  - Prezzi mensili/annuali visualizzati per feature
+  - Integrazione con `TenantEditModal`
+  - Solo ADMIN/SUPER_ADMIN possono modificare (canToggleFeatures)
+
+#### Nuova: FeaturePricingPage (Gestione Prezzi Funzionalità)
+- **`src/pages/management/system/FeaturePricingPage.tsx`** (nuovo file):
+  - Rotta: `/management/feature-pricing` (accessibile solo ad ADMIN/SUPER_ADMIN)
+  - Elenca tutte le 27 funzionalità per categoria
+  - Input inline: prezzo mensile (`€/mese`), prezzo annuale (`€/anno`)
+  - Pulsante espandi per opzioni avanzate: valuta, ciclo di fatturazione, nota
+  - **Pricing a fasce** (tiered): UI per aggiungere/rimuovere fasce — es. "Prime 5 attivazioni desktop a €0, poi €10/unità"
+  - Salva tutto (`PUT /api/v1/feature-catalog`) o salva singola feature
+  - Barra sticky inferiore con conteggio modifiche non salvate
+  - Design violet (Management brand)
+- **`src/components/layouts/ManagementLayout.tsx`**: Aggiunta voce "Prezzi Funzionalità" (icona `Euro`, adminOnly) nella sezione Sistema; aggiunto label breadcrumb `'feature-pricing': 'Prezzi Funzionalità'`.
+- **`src/pages/management/api.ts`**: `updateFeaturePricing()` ora accetta `tiers?: PricingTier[]` nell'oggetto aggiornamento; aggiunto export di `PricingTier` nel re-export.
+- **`src/pages/management/types.ts`**: Aggiunta interfaccia `PricingTier { upToQuantity: number|null; pricePerUnit: number; label?: string; }`; `FeaturePricing.tiers?: PricingTier[]` (opzionale).
+
+#### E2E Feature Gating Audit — Backend Gaps Risolti
+Audit completo del sistema `requireFeature` middleware. Identificati e risolti 6 route file privi di gate:
+
+| File | Feature Aggiunta | Motivo |
+|------|-----------------|--------|
+| `backend/routes/clinica/pec-config.routes.js` | `PEC_INTEGRATION` | Config PEC non richiedeva la feature |
+| `backend/routes/clinica/pec.routes.js` | `PEC_INTEGRATION` | Invio PEC non richiedeva la feature |
+| `backend/routes/clinica/allegato-3b.routes.js` | `MDL_ALLEGATO_3B` | Generazione Allegato 3B (INAIL) non gated |
+| `backend/routes/sorveglianza-sanitaria-routes.js` | `BRANCH_MEDICA` | Montato direttamente in api-server.js senza gate |
+| `backend/routes/dvr-routes.js` | `BRANCH_CONSULENZA` | DVR non gated nonostante sia funzionalità consulenza |
+| `backend/routes/consulenze-mdl-routes.js` | `BRANCH_CONSULENZA` | Consulenze MDL non gated |
+
+#### Riepilogo Copertura Attuale
+- ✅ BRANCH_MEDICA: clinica/index.js (module-wide) + sorveglianza, allegato-3b, pec (specifici)
+- ✅ BRANCH_FORMAZIONE: courses, schedules, lettere-incarico, registri-presenze, attestati, course-tests
+- ✅ BRANCH_CONSULENZA: dvr-routes, consulenze-mdl-routes (NUOVO)
+- ✅ PEC_INTEGRATION: pec-config.routes, pec.routes (NUOVO)
+- ✅ MDL_ALLEGATO_3B: allegato-3b.routes (NUOVO)
+- ✅ FATTURAZIONE_*: enti-emittenti, fatturazione-elettronica (requireAnyFeature)
+- ⚠️ 18/27 feature non hanno ancora route dedicate (es. FIRMA_*, FSE_*, SMS, WhatsApp) — funzionalità non ancora implementate nel backend
+
+#### Deploy
+- Frontend: `dist/` sincronizzato su `/var/www/elementmedica/dist/`
+- Backend: 6 route file aggiornati su `/var/www/elementmedica/backend/routes/`
+- PM2 `api-server` riavviato ✅
+
+### Session 68 - Fix Permessi ADMIN Feature Catalog, Guard Non-Admin su TenantsManagement
+
+#### Fix Permessi Feature Catalog (ADMIN → abilita toggle)
+- **`src/pages/management/mytenants/MyTenantDetailPage.tsx`**: Il toggle per abilitare/disabilitare funzionalità è ora accessibile anche agli utenti ADMIN (non solo SUPER_ADMIN). Aggiornata la logica di role check con doppio controllo su `user.roleType` e `user.roles[]` per massima compatibilità. Aggiornato testo banner admin e visibilità pulsante "Gestisci accessi".
+- **`backend/routes/feature-catalog.js`**: Aggiornati commenti per riflettere che la PUT features è accessibile a ADMIN e SUPER_ADMIN (il middleware `requireSuperAdmin` in `tenant.js` già permetteva entrambi).
+
+#### Fix Bug TenantAccessManager (editingTenant vs tenantToEdit)
+- **`src/pages/management/components/TenantAccessManager.tsx`**: Rimosso stato duplicato `editingTenant` (mai connesso al modal). Il pulsante "Modifica" usa correttamente `setTenantToEdit(tenant)` che è collegato a `TenantEditModal`. Eliminato dead code.
+
+#### Guard RBAC su TenantsManagement (previene 403 per EMPLOYEE)
+- **`src/pages/management/tenants/TenantsManagement.tsx`**: Aggiunto guard dopo tutti i hook che reindirizza a `/management` se l'utente non è ADMIN/SUPER_ADMIN. Questo previene gli errori 403 causati da EMPLOYEE che navigationva (tramite URL diretto) alla pagina admin `GET /api/v1/tenants`. Aggiornato import con `Navigate` da react-router-dom. Logic di role-check aggiornata a usare `roleType` + `globalRole` in modo robusto.
+
+#### Verifica E2E Sistema Permessi
+- `requireSuperAdmin` in `backend/middleware/tenant.js` ✅ già controlla ADMIN e SUPER_ADMIN
+- `GET /api/v1/tenants/:id/features` ✅ protetto da `router.use(authenticateToken)` globale
+- `PUT /api/v1/tenants/:id/features/:featureKey` ✅ protetto da `requireSuperAdmin`
+- Tutti gli URL API usano `/api/v1/` ✅
+- Feature-key matching tra `featureCatalog.js` e `featureFlags.js` ✅
+
+### Session 67 - Feature Catalog, Pagina Dettaglio Tenant, Fix Errore Libreria Immagini
+
+#### Feature Catalog Backend
+- **`backend/config/featureCatalog.js`** *(nuovo)*: Catalogo statico di tutte le 27 funzionalità disponibili con nome, descrizione, categoria e icona.
+- **`backend/config/feature-prices.json`** *(nuovo)*: Prezzi di listino per ogni funzionalità, aggiornabili via API da SUPER_ADMIN.
+- **`backend/routes/feature-catalog.js`** *(nuovo)*: Endpoint `GET /api/v1/feature-catalog` (autenticati) e `PUT /api/v1/feature-catalog` (solo SUPER_ADMIN) per leggere e aggiornare i prezzi.
+- **`backend/servers/api-server.js`**: Registrazione route `feature-catalog`.
+
+#### Fix Errore "Impossibile caricare la libreria immagini del tenant"
+- **`src/pages/management/components/TenantAccessManager.tsx`**: Rimosso il modal inline `selectedTenantDetails` che apriva `TenantEditModal` (con `cmsMediaService.listMedia`) per tutti gli utenti inclusi EMPLOYEE senza permessi CMS. Il click del tenant card ora naviga alla pagina dettaglio dedicata.
+
+#### Pagina Dettaglio Tenant (/management/my-tenants/:tenantId)
+- **`src/pages/management/mytenants/MyTenantDetailPage.tsx`** *(nuovo)*: Pagina completa per il dettaglio tenant, sostituisce il precedente modal. Mostra:
+  - Header con logo, nome, slug, badge di accesso, status, piano
+  - Statistiche: funzionalità abilitate / disponibili nel catalogo / piano
+  - Catalogo funzionalità completo raggruppato per categoria con stato attivo/non attivo, prezzo mensile e annuale
+  - SUPER_ADMIN: toggle per abilitare/disabilitare ogni funzionalità direttamente dalla pagina
+- **`src/pages/management/ManagementRouter.tsx`**: Aggiunta route `/management/my-tenants/:tenantId` → `MyTenantDetailPage`.
+
+#### Frontend Types & API
+- **`src/pages/management/types.ts`**: Aggiunti tipi `FeaturePricing`, `FeatureCatalogEntry`, `FeatureCategoryDef`, `FeatureCatalogResponse`.
+- **`src/pages/management/api.ts`**: Aggiunti metodi `getFeatureCatalog()` e `updateFeaturePricing()`.
+
+### Session 66 - E2E Permessi & Feature Flags, Deploy tenantService Fix, Rimozione Codice Legacy
+
+#### Feature Flags — Backend Gate (BRANCH_MEDICA / BRANCH_FORMAZIONE)
+- **`backend/routes/clinica/index.js`**: Aggiunto `requireFeature('BRANCH_MEDICA')` come middleware router-level. Blocca tutti i sub-router clinici per tenant senza la feature. Health check e enums sono registrati prima e non vengono interessati.
+- **`backend/routes/courses-routes.js`**: Aggiunto `requireFeature('BRANCH_FORMAZIONE')` prima di tutte le route corsi.
+- **`backend/routes/schedules-routes.js`**: `requireFeature('BRANCH_FORMAZIONE')` come router-level middleware.
+- **`backend/routes/attestati/index.js`**: `requireFeature('BRANCH_FORMAZIONE')` come router-level middleware.
+- **`backend/routes/course-tests-routes.js`**: `requireFeature('BRANCH_FORMAZIONE')` aggiunto a `router.use()` esistente.
+- **`backend/routes/lettere-incarico-routes.js`**: Aggiunto `requireFeature('BRANCH_FORMAZIONE')`.
+- **`backend/routes/registri-presenze-routes.js`**: Aggiunto `requireFeature('BRANCH_FORMAZIONE')`.
+
+#### Bug Fix — tenantService Settings Overwrite (Deploy)
+- **`backend/services/tenantService.js`** (fix precedente, ora deployato):
+  - `createDefaultConfigurations()`: ora MERGE i default con le impostazioni esistenti — i valori esistenti (logoUrl, enabledFeatures, ecc.) non vengono più sovrascritti.
+  - `updateTenant()`: settings ora MERGE invece di sostituire — `{...currentSettings, ...newSettings}`.
+- **`backend/routes/tenants.js`** (deployato): endpoint `PUT /api/tenants/:id/features/bulk` per upsert batch TenantFeature.
+
+#### Codice Legacy Rimosso
+- **`backend/services/enhancedRole/permissions/PermissionChecker.js`**: Rimossi i dead variables `parts`, `action`, `resource` dal fallback DB query. Il codice parsava i permessi in formato SCREAMING_SNAKE ma non usava mai i risultati. Ora il fallback è un semplice lookup DB per permessi con `:` o `_`.
+
+#### Verifica E2E Sistema Permessi
+- `RBACService.getPersonPermissions` → legge PersonRole → RolePermission + AdvancedPermission + `getDefaultPermissions` ✅
+- `auth.js` popola `req.person.permissions` tramite `RBACService.getPersonPermissions` ✅
+- `RBACMiddleware.requirePermissions` usa `req.person.permissions` con fallback DB ✅
+- `PermissionSeeder.seedDefaultPermissions` usa `getDefaultPermissions(roleType)` come unica fonte di verità ✅
+- Zero utilizzi legacy: `req.user` ✗, `req.brandTenantId` ✗, Catena B auth import ✗, `alert()` ✗
+
 ### Session 65 - VisitaPage: MDLInfoCard, Sezioni Visita Horizontal Collapse
 
 #### MDLInfoCard (Issue #2 — New Component)

@@ -176,9 +176,11 @@ export function loadConfig(): BridgeConfig {
             type: d.type as DeviceConfig['type'],
             enabled: d.enabled as boolean,
             gdtId: (d.gdtId as string || '').substring(0, 8),
-            gdtInputDir: resolve(d.gdtInputDir as string || '.'),
-            gdtOutputDir: resolve(d.gdtOutputDir as string || '.'),
-            pdfOutputDir: resolve((d.pdfOutputDir as string) || (d.gdtOutputDir as string) || '.'),
+            gdtInputDir: (d.gdtInputDir as string || '').trim() ? resolve(d.gdtInputDir as string) : '',
+            gdtOutputDir: (d.gdtOutputDir as string || '').trim() ? resolve(d.gdtOutputDir as string) : '',
+            pdfOutputDir: ((d.pdfOutputDir as string) || (d.gdtOutputDir as string) || '').trim()
+                ? resolve((d.pdfOutputDir as string) || (d.gdtOutputDir as string))
+                : '',
             executable: d.executable as string || '',
             examType: d.examType as DeviceConfig['examType'],
             displayName: d.displayName as string || '',
@@ -240,6 +242,23 @@ export function loadConfig(): BridgeConfig {
         });
     }
 
+    // Drug test analyzer (generic GDT-capable device)
+    if (process.env.DRUGTEST_ENABLED === 'true') {
+        devices.push({
+            type: 'drugtest-analyzer',
+            enabled: true,
+            gdtId: (process.env.DRUGTEST_GDT_ID || 'DRUGTEST').substring(0, 8),
+            gdtInputDir: resolve(process.env.DRUGTEST_GDT_INPUT_DIR || './data/drugtest/input'),
+            gdtOutputDir: resolve(process.env.DRUGTEST_GDT_OUTPUT_DIR || './data/drugtest/output'),
+            pdfOutputDir: resolve(process.env.DRUGTEST_PDF_OUTPUT_DIR || process.env.DRUGTEST_GDT_OUTPUT_DIR || './data/drugtest/output'),
+            executable: isWindows
+                ? (process.env.DRUGTEST_EXECUTABLE_WIN || '')
+                : (process.env.DRUGTEST_EXECUTABLE_MAC || ''),
+            examType: 'drugtest',
+            displayName: 'Drug Test',
+        });
+    }
+
     config.devices = devices;
     return config;
 }
@@ -268,7 +287,7 @@ export function validateConfig(config: BridgeConfig): { valid: boolean; warnings
     }
 
     for (const device of config.devices) {
-        if (!existsSync(device.executable)) {
+        if (device.executable && !existsSync(device.executable)) {
             warnings.push(`${device.displayName}: executable not found at ${device.executable}`);
         }
 
@@ -277,7 +296,7 @@ export function validateConfig(config: BridgeConfig): { valid: boolean; warnings
         }
 
         const pdfDir = device.pdfOutputDir || device.gdtOutputDir;
-        if (!existsSync(pdfDir)) {
+        if (pdfDir && !existsSync(pdfDir)) {
             warnings.push(`${device.displayName}: PDF output directory not found at ${pdfDir}`);
         }
     }

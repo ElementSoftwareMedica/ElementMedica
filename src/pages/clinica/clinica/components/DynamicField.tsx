@@ -13,23 +13,29 @@
  * @project P52 - Clinical Visit Template System
  */
 
-import React, { useCallback, useRef, useEffect, useState } from 'react';
+import React, { useCallback, useRef, useEffect, useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Upload, AlertCircle, Activity, Wifi, WifiOff, CheckCircle2 } from 'lucide-react';
 import RichTextEditor from '../../../../components/editor/RichTextEditor';
 import MiniParametroChart from './MiniParametroChart';
 import { DatePickerElegante } from '../../../../components/ui/DatePickerElegante';
-import { strumentiBridgeApi, type EsameStrumentale } from '../../../../services/bridgeApi';
+import { strumentiBridgeApi, type EsameStrumentale, type TestResult } from '../../../../services/bridgeApi';
 import type { DynamicFieldProps } from '../types';
 
 // ============================================
 // OPTION NORMALIZATION
 // ============================================
 
-/** Normalizza opzione: accetta sia stringa che {value, label} */
-const normalizeOpt = (opt: string | { value: string; label: string }): { value: string; label: string } => {
+/** Normalizza opzione: accetta sia stringa che {value, label, description} */
+const normalizeOpt = (opt: string | { value: string; label: string; description?: string }): { value: string; label: string; description?: string } => {
     if (typeof opt === 'string') return { value: opt, label: opt };
-    return { value: opt.value ?? String(opt), label: opt.label ?? opt.value ?? String(opt) };
+    return { value: opt.value ?? String(opt), label: opt.label ?? opt.value ?? String(opt), description: opt.description };
+};
+
+type ExcludeOptionRule = {
+    field?: string;
+    equals?: string;
+    values?: string[];
 };
 
 // ============================================
@@ -195,6 +201,19 @@ const StrumentarioImportField: React.FC<StrumentarioImportFieldProps> = ({
     const currentEsito = value?.esito ?? '';
     const currentNote = value?.note ?? '';
     const esitoColor = ESITO_COLORS[currentEsito] ?? 'bg-gray-50 text-gray-600 border-gray-200';
+    const normalOption = field.options?.map(normalizeOpt).find(opt => opt.value === 'normale');
+    const chartValues = (esame?.risultati || [])
+        .map((r) => {
+            const numeric = typeof r.value === 'number'
+                ? r.value
+                : Number(String(r.value ?? '').replace(',', '.').match(/-?\d+(\.\d+)?/)?.[0]);
+            return Number.isFinite(numeric)
+                ? { ...r, numeric }
+                : null;
+        })
+        .filter(Boolean)
+        .slice(0, 8) as Array<TestResult & { numeric: number }>;
+    const chartMax = Math.max(...chartValues.map(r => Math.abs(r.numeric)), 1);
 
     return (
         <div className="space-y-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
@@ -242,6 +261,36 @@ const StrumentarioImportField: React.FC<StrumentarioImportFieldProps> = ({
                 </div>
             )}
 
+            {chartValues.length > 0 && (
+                <div className="rounded-lg border border-gray-100 bg-white p-2">
+                    <div className="mb-2 flex items-center justify-between">
+                        <span className="text-xs font-semibold text-gray-600">Andamento misure</span>
+                        <span className="text-[11px] text-gray-400">{tipoEsame || 'Esame'}</span>
+                    </div>
+                    <div className="space-y-1.5">
+                        {chartValues.map((r) => {
+                            const width = Math.max(8, Math.min(100, (Math.abs(r.numeric) / chartMax) * 100));
+                            const tone = r.status === 'high' || r.status === 'low'
+                                ? 'bg-orange-400'
+                                : r.status === 'abnormal'
+                                    ? 'bg-red-400'
+                                    : 'bg-teal-500';
+                            return (
+                                <div key={`chart-${r.testId}`} className="grid grid-cols-[minmax(72px,1fr)_minmax(80px,2fr)_auto] items-center gap-2 text-[11px]">
+                                    <span className="truncate text-gray-500" title={r.testName}>{r.testName}</span>
+                                    <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+                                        <div className={`h-full rounded-full ${tone}`} style={{ width: `${width}%` }} />
+                                    </div>
+                                    <span className="font-medium text-gray-700 tabular-nums">
+                                        {r.value}{r.unit ? ` ${r.unit}` : ''}
+                                    </span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
             {/* Findings text from bridge */}
             {esame?.findings && esame.findings.length > 0 && (
                 <div className="text-xs text-gray-600 bg-white p-2 rounded border border-gray-100 leading-relaxed">
@@ -251,7 +300,18 @@ const StrumentarioImportField: React.FC<StrumentarioImportFieldProps> = ({
 
             {/* Esito classification (MULTI_CHOICE style) */}
             <div>
-                <p className="text-xs font-medium text-gray-600 mb-1.5">Esito / Classificazione</p>
+                <div className="mb-1.5 flex items-center justify-between gap-2">
+                    <p className="text-xs font-medium text-gray-600">Esito / Classificazione</p>
+                    {normalOption && !disabled && (
+                        <button
+                            type="button"
+                            onClick={() => onChange({ ...value, esito: normalOption.value, note: currentNote || 'Esame nei limiti della norma.' })}
+                            className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100"
+                        >
+                            Valori normali
+                        </button>
+                    )}
+                </div>
                 <div className="grid grid-cols-1 gap-1">
                     {field.options?.map((rawOpt) => {
                         const opt = normalizeOpt(rawOpt);
@@ -308,12 +368,15 @@ interface MultiChoiceFieldProps {
     selectedValues: string[];
     onChange: (values: string[]) => void;
     disabled?: boolean;
+    compact?: boolean;
 }
 
 const MULTI_CHOICE_COLLAPSE_THRESHOLD = 5;
 
-const MultiChoiceField: React.FC<MultiChoiceFieldProps> = ({ field, selectedValues, onChange, disabled }) => {
-    const hasMany = (field.options?.length ?? 0) > MULTI_CHOICE_COLLAPSE_THRESHOLD;
+const MultiChoiceField: React.FC<MultiChoiceFieldProps> = ({ field, selectedValues, onChange, disabled, compact = false }) => {
+    const metadata = field.metadata as { checklistStyle?: string; expandedChecklist?: boolean } | undefined;
+    const expandedGrid = compact || metadata?.checklistStyle === 'expanded-grid' || metadata?.expandedChecklist === true;
+    const hasMany = !expandedGrid && (field.options?.length ?? 0) > MULTI_CHOICE_COLLAPSE_THRESHOLD;
     const [isCollapsed, setIsCollapsed] = useState(hasMany);
     const [altroText, setAltroText] = useState(() => {
         // Recover any previously saved custom value
@@ -352,6 +415,12 @@ const MultiChoiceField: React.FC<MultiChoiceFieldProps> = ({ field, selectedValu
     };
 
     const selectedCount = selectedValues.filter(v => predefinedValues.has(v)).length + (altroChecked ? 1 : 0);
+    const normalPreset = useMemo(() => {
+        const values = new Set((field.options || []).map(o => normalizeOpt(o).value));
+        if (values.has('dolore_assente')) return ['dolore_assente'];
+        if (values.has('motilita_conservata')) return ['motilita_conservata'];
+        return [];
+    }, [field.options]);
 
     return (
         <div className="bg-white rounded-lg border border-gray-200">
@@ -375,25 +444,41 @@ const MultiChoiceField: React.FC<MultiChoiceFieldProps> = ({ field, selectedValu
             </button>
 
             {!isCollapsed && (
-                <div className="px-3 pb-2 space-y-1 border-t border-gray-200">
-                    {(field.options || []).map((rawOpt) => {
-                        const opt = normalizeOpt(rawOpt);
-                        return (
-                            <label
-                                key={opt.value}
-                                className="flex items-center gap-3 cursor-pointer hover:bg-white p-1.5 rounded-md transition-colors"
-                            >
-                                <input
-                                    type="checkbox"
-                                    checked={selectedValues.includes(opt.value)}
-                                    onChange={(e) => handleOptionChange(opt.value, e.target.checked)}
-                                    disabled={disabled}
-                                    className="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
-                                />
-                                <span className="text-sm text-gray-700">{opt.label}</span>
-                            </label>
-                        );
-                    })}
+                <div className="px-3 pb-2 border-t border-gray-200">
+                    {normalPreset.length > 0 && !disabled && (
+                        <button
+                            type="button"
+                            onClick={() => onChange(normalPreset)}
+                            className="mt-2 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                        >
+                            Compila valori normali
+                        </button>
+                    )}
+                    <div className={expandedGrid ? 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-1 pt-2' : 'space-y-1 pt-2'}>
+                        {(field.options || []).map((rawOpt) => {
+                            const opt = normalizeOpt(rawOpt);
+                            return (
+                                <label
+                                    key={opt.value}
+                                    className="flex items-center gap-2 cursor-pointer hover:bg-white p-1.5 rounded-md transition-colors"
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedValues.includes(opt.value)}
+                                        onChange={(e) => handleOptionChange(opt.value, e.target.checked)}
+                                        disabled={disabled}
+                                        className="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
+                                    />
+                                    <span className="min-w-0">
+                                        <span className="block text-sm text-gray-700">{opt.label}</span>
+                                        {opt.description && (
+                                            <span className="block text-[11px] leading-snug text-gray-400">{opt.description}</span>
+                                        )}
+                                    </span>
+                                </label>
+                            );
+                        })}
+                    </div>
                     {(!field.options || field.options.length === 0) && (
                         <p className="text-sm text-gray-400 italic py-1">Nessuna opzione disponibile</p>
                     )}
@@ -438,15 +523,32 @@ export const DynamicField: React.FC<DynamicFieldProps> = ({
     shouldStretch = false, // P52 Session #8: Field should stretch to fill grid span when height > 1
     pazienteId,            // P52 Session #13b: For inline chart feature
     onOpenFullChart,       // P52 Session #13b: Callback to open full chart view
-    visitaId               // R17: For STRUMENTARIO_IMPORT auto-fill from bridge
+    visitaId,              // R17: For STRUMENTARIO_IMPORT auto-fill from bridge
+    compact = false
 }) => {
     const inputRef = useRef<HTMLInputElement>(null);
+
+    const visibilityRule = (field.metadata as { showWhen?: { field?: string; in?: string[]; equals?: string } } | undefined)?.showWhen;
+    const isHiddenByRule = (() => {
+        if (!visibilityRule?.field) return false;
+        const watchedValue = allValues?.[visibilityRule.field];
+        const visibleByList = visibilityRule.in?.includes(String(watchedValue ?? ''));
+        const visibleByEquals = visibilityRule.equals !== undefined && String(watchedValue ?? '') === visibilityRule.equals;
+        return !visibleByList && !visibleByEquals;
+    })();
+    const isOptionExcluded = useCallback((optionValue: string) => {
+        const rules = (field.metadata as { excludeOptionsWhen?: ExcludeOptionRule[] } | undefined)?.excludeOptionsWhen || [];
+        return rules.some((rule) => {
+            if (!rule.field || !rule.values?.includes(optionValue)) return false;
+            return rule.equals !== undefined && String(allValues?.[rule.field] ?? '') === rule.equals;
+        });
+    }, [allValues, field.metadata]);
 
     // Determine if this field should show a chart (showChart flag from template)
     const shouldShowChart = field.showChart && pazienteId && field.type === 'NUMBER';
 
     // Common input classes
-    const inputClasses = `w-full px-4 py-2.5 border rounded-lg transition-all duration-200
+    const inputClasses = `w-full ${compact ? 'px-3 py-2 text-sm' : 'px-4 py-2.5'} border rounded-lg transition-all duration-200
         ${error
             ? 'border-red-300 focus:ring-2 focus:ring-red-500 focus:border-red-500'
             : 'border-gray-300 focus:ring-2 focus:ring-teal-500 focus:border-teal-500'
@@ -593,6 +695,7 @@ export const DynamicField: React.FC<DynamicFieldProps> = ({
                         <option value="">Seleziona...</option>
                         {field.options?.map((rawOpt) => {
                             const opt = normalizeOpt(rawOpt);
+                            if (isOptionExcluded(opt.value)) return null;
                             return (
                                 <option key={opt.value} value={opt.value}>
                                     {opt.label}
@@ -609,6 +712,7 @@ export const DynamicField: React.FC<DynamicFieldProps> = ({
                         selectedValues={(value as string[]) || []}
                         onChange={(vals) => onChange(vals)}
                         disabled={disabled}
+                        compact={compact}
                     />
                 );
 
@@ -748,10 +852,12 @@ export const DynamicField: React.FC<DynamicFieldProps> = ({
         }
     };
 
+    if (isHiddenByRule) return null;
+
     return (
         <div className={`flex flex-col ${shouldStretch ? 'h-full' : ''}`}>
             {/* Label - always aligned to top */}
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1.5 flex-shrink-0">
+            <label className={`flex items-center gap-2 font-medium text-gray-700 flex-shrink-0 ${compact ? 'mb-1 text-xs uppercase tracking-wide text-slate-500' : 'mb-1.5 text-sm'}`}>
                 <span className="flex items-center gap-1">
                     {field.label}
                     {field.required && (

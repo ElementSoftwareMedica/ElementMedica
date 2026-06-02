@@ -47,6 +47,8 @@ export interface Tenant {
     billingPlan: string;
     settings?: TenantSettings;
     isActive: boolean;
+    subscriptionStatus?: string; // active, trial, past_due, suspended, cancelled
+    subscriptionExpiresAt?: string;
     accessLevel?: TenantAccessLevel;
     enabledFeatures?: string[];
     isPrimary?: boolean;
@@ -114,6 +116,61 @@ export interface TenantFeatureRecord {
     enabledBy: string | null;
     enabledAt: string | null;
     notes: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface FeatureSubscription extends TenantFeatureRecord {
+    tenant: {
+        id: string;
+        name: string;
+        slug: string;
+        billingPlan?: string;
+        isActive?: boolean;
+        subscriptionStatus?: string;
+        subscriptionStartDate?: string | null;
+    };
+}
+
+export interface PricingTier {
+    upToQuantity: number | null; // null = unlimitato (fascia finale)
+    pricePerUnit: number;
+    label?: string; // es. "Prime 5 attivazioni", "Aggiuntive"
+}
+
+export interface FeaturePricing {
+    price: number;
+    priceYearly: number;
+    currency: string;
+    billingCycle: 'monthly' | 'yearly';
+    note?: string;
+    tiers?: PricingTier[]; // pricing a fasce (es. prime N incluse, poi X€ l'una)
+}
+
+export interface FeatureCatalogEntry {
+    key: string;
+    label: string;
+    description: string;
+    category: string;
+    icon: string;
+    pricing: FeaturePricing | null;
+    /** 'limit' = funzionalità con limite numerico (usageLimit) invece di semplice on/off */
+    type?: 'standard' | 'limit';
+}
+
+export interface FeatureCategoryDef {
+    key: string;
+    label: string;
+    icon: string;
+    color: string;
+}
+
+export interface FeatureCatalogResponse {
+    success: boolean;
+    data: {
+        features: FeatureCatalogEntry[];
+        categories: FeatureCategoryDef[];
+    };
 }
 
 export interface ManagementTab {

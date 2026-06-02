@@ -17,6 +17,7 @@ import { usePersistentPageState } from '../hooks/usePersistentPageState'
 interface Scadenza {
   id: string
   _serverId: string | null
+  personId: string | null
   dataScadenza: string
   eseguita: number
   personFirstName: string | null
@@ -26,6 +27,19 @@ interface Scadenza {
   companyName: string | null
   periodicitaMesi: number | null
   stato: string | null
+}
+
+interface PatientLookup {
+  id: string
+  firstName: string | null
+  lastName: string | null
+  companyName: string | null
+  companyTenantProfileId?: string | null
+}
+
+interface CompanyLookup {
+  id: string
+  ragioneSociale: string | null
 }
 
 type Urgenza = 'scaduto' | 'critico' | 'urgente' | 'attenzione' | 'programmato'
@@ -66,7 +80,27 @@ export function ScadenzePage(): JSX.Element {
         where: { _isDeleted: 0 },
         orderBy: { column: 'dataScadenza', direction: 'ASC' }
       }) as Scadenza[]
-      setScadenze(rows)
+      const needsEnrichment = rows.some(row => !row.personFirstName || !row.personLastName || !row.companyName)
+      if (!needsEnrichment) {
+        setScadenze(rows)
+        return
+      }
+      const [patients, companies] = await Promise.all([
+        window.desktopApi.db.query({ table: 'patients', where: { _isDeleted: 0 } }).catch(() => []) as Promise<PatientLookup[]>,
+        window.desktopApi.db.query({ table: 'companies', where: { _isDeleted: 0 } }).catch(() => []) as Promise<CompanyLookup[]>,
+      ])
+      const patientMap = new Map(patients.map(patient => [patient.id, patient]))
+      const companyMap = new Map(companies.map(company => [company.id, company]))
+      setScadenze(rows.map(row => {
+        const patient = row.personId ? patientMap.get(row.personId) : undefined
+        const company = patient?.companyTenantProfileId ? companyMap.get(patient.companyTenantProfileId) : undefined
+        return {
+          ...row,
+          personFirstName: row.personFirstName || patient?.firstName || null,
+          personLastName: row.personLastName || patient?.lastName || null,
+          companyName: row.companyName || patient?.companyName || company?.ragioneSociale || null,
+        }
+      }))
     } catch {
       // DB not ready
     } finally {

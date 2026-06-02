@@ -45,6 +45,7 @@ interface NominaFormModalProps {
 
 const RUOLO_OPTIONS: { value: TipoNominaRuolo; label: string; description: string }[] = [
     { value: 'MEDICO_COMPETENTE', label: 'Medico Competente', description: 'Art. 38-40 D.Lgs 81/08' },
+    { value: 'MEDICO_COMPETENTE_COORDINATO', label: 'Medico Competente Coordinato', description: 'Art. 39 c.6 D.Lgs 81/08' },
     { value: 'RSPP', label: 'RSPP', description: 'Responsabile SPP - Art. 32' },
     { value: 'ASPP', label: 'ASPP', description: 'Addetto SPP - Art. 32' },
     { value: 'RLS', label: 'RLS', description: 'Rappresentante Lavoratori - Art. 47-50' },
@@ -70,6 +71,20 @@ interface MovimentoItem {
     descrizione?: string;
 }
 
+interface CompanyOption {
+    id: string;
+    companyTenantProfileId?: string | null;
+    ragioneSociale: string;
+    sites?: Array<{
+        id: string;
+        siteName: string;
+        citta?: string;
+        companyTenantProfileId?: string;
+    }>;
+}
+
+type ConflictResolution = 'CEASE_PREVIOUS' | 'START_AFTER_PREVIOUS';
+
 const formatPersonLabel = (p: PersonOption) =>
     `${p.lastName || 'N/D'} ${p.firstName || ''}${p.taxCode ? ` (${p.taxCode})` : ''}`.trim();
 
@@ -93,6 +108,7 @@ const NominaFormModal: React.FC<NominaFormModalProps> = ({
     const isEditing = !!nomina;
     const searchInputRef = useRef<HTMLInputElement>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
+    const companyDropdownRef = useRef<HTMLDivElement>(null);
 
     const [formData, setFormData] = useState({
         personId: '',
@@ -110,11 +126,19 @@ const NominaFormModal: React.FC<NominaFormModalProps> = ({
     const [showPersonSearch, setShowPersonSearch] = useState(false);
     const [selectedPerson, setSelectedPerson] = useState<PersonOption | null>(null);
     const [showDropdown, setShowDropdown] = useState(false);
+    const [companySearchText, setCompanySearchText] = useState('');
+    const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
+    const [pendingResolution, setPendingResolution] = useState<ConflictResolution | null>(null);
+    const [nominaConflict, setNominaConflict] = useState<{
+        message: string;
+        code?: string;
+        existingNomina?: NominaRuolo | null;
+    } | null>(null);
 
     const { data: companiesData } = useQuery({
         queryKey: ['companies-select'],
         queryFn: async () => {
-            const response = await apiGet<Array<{ id: string; ragioneSociale: string; sites: Array<{ id: string; siteName: string; citta?: string; companyTenantProfileId: string }> }>>('/api/v1/companies');
+            const response = await apiGet<CompanyOption[]>('/api/v1/companies');
             return Array.isArray(response) ? response : [];
         },
         staleTime: 5 * 60 * 1000
@@ -123,7 +147,7 @@ const NominaFormModal: React.FC<NominaFormModalProps> = ({
     const { data: personsData, isLoading: isLoadingPersons } = useQuery({
         queryKey: ['persons-autocomplete-nomina', personSearchText, formData.tipoRuolo],
         queryFn: async () => {
-            if (formData.tipoRuolo === 'MEDICO_COMPETENTE') {
+            if (formData.tipoRuolo === 'MEDICO_COMPETENTE' || formData.tipoRuolo === 'MEDICO_COMPETENTE_COORDINATO') {
                 const response = await apiGet<{ data: PersonOption[] }>('/api/v1/clinica/medici', {
                     search: personSearchText, specializzazione: 'Medicina del Lavoro', attivo: 'true', limit: 20
                 });
@@ -154,10 +178,24 @@ const NominaFormModal: React.FC<NominaFormModalProps> = ({
         staleTime: 60 * 1000
     });
 
-    const companies = companiesData || [];
+    const getCompanyProfileId = useCallback((company: CompanyOption) => company.companyTenantProfileId || company.id, []);
+    const companies = (companiesData || [])
+        .map(c => ({
+            ...c,
+            sites: (c.sites || []).map(s => ({
+                ...s,
+                companyTenantProfileId: s.companyTenantProfileId || c.companyTenantProfileId || c.id
+            }))
+        }))
+        .sort((a, b) => (a.ragioneSociale || '').localeCompare(b.ragioneSociale || '', 'it', { sensitivity: 'base' }));
+    const selectedCompany = companies.find(c => getCompanyProfileId(c) === formData.companyTenantProfileId) || null;
+    const filteredCompanies = companies.filter(c =>
+        !companySearchText.trim() ||
+        (c.ragioneSociale || '').toLowerCase().includes(companySearchText.trim().toLowerCase())
+    );
     // Derive CompanySite list from companies (filtered by selected company if any)
     const sedi = companies.flatMap(c =>
-        (c.sites || []).map(s => ({ id: s.id, siteName: s.siteName, citta: s.citta, companyTenantProfileId: c.id }))
+        (c.sites || []).map(s => ({ id: s.id, siteName: s.siteName, citta: s.citta, companyTenantProfileId: getCompanyProfileId(c) }))
     ).filter(s => !formData.companyTenantProfileId || s.companyTenantProfileId === formData.companyTenantProfileId);
     const persons = personsData || [];
     const movimenti = movimentiData?.data || [];
@@ -168,6 +206,7 @@ const NominaFormModal: React.FC<NominaFormModalProps> = ({
                 // Derive companyTenantProfileId from site if not directly set
                 const derivedCompanyId = nomina.companyTenantProfileId
                     || nomina.site?.companyTenantProfileId
+                    || (companiesData || []).find(c => c.sites?.some(s => s.id === nomina.siteId))?.companyTenantProfileId
                     || (companiesData || []).find(c => c.sites?.some(s => s.id === nomina.siteId))?.id
                     || '';
                 setFormData({
@@ -192,6 +231,8 @@ const NominaFormModal: React.FC<NominaFormModalProps> = ({
                 }
                 setShowPersonSearch(false);
                 setPersonSearchText('');
+                const company = (companiesData || []).find(c => (c.companyTenantProfileId || c.id) === derivedCompanyId);
+                setCompanySearchText(company?.ragioneSociale || '');
             } else {
                 setFormData({
                     personId: '', siteId: '', companyTenantProfileId: '', tipoRuolo: '',
@@ -201,9 +242,13 @@ const NominaFormModal: React.FC<NominaFormModalProps> = ({
                 setSelectedPerson(null);
                 setShowPersonSearch(true);
                 setPersonSearchText('');
+                setCompanySearchText('');
             }
             setErrors({});
             setShowDropdown(false);
+            setShowCompanyDropdown(false);
+            setNominaConflict(null);
+            setPendingResolution(null);
         }
     }, [nomina, isOpen, companiesData]);
 
@@ -211,6 +256,9 @@ const NominaFormModal: React.FC<NominaFormModalProps> = ({
         const handleClickOutside = (evt: MouseEvent) => {
             if (dropdownRef.current && !dropdownRef.current.contains(evt.target as Node)) {
                 setShowDropdown(false);
+            }
+            if (companyDropdownRef.current && !companyDropdownRef.current.contains(evt.target as Node)) {
+                setShowCompanyDropdown(false);
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
@@ -222,8 +270,12 @@ const NominaFormModal: React.FC<NominaFormModalProps> = ({
         setErrors({});
         setSelectedPerson(null);
         setPersonSearchText('');
+        setCompanySearchText('');
         setShowPersonSearch(false);
         setShowDropdown(false);
+        setShowCompanyDropdown(false);
+        setNominaConflict(null);
+        setPendingResolution(null);
         onClose();
     }, [onClose]);
 
@@ -237,21 +289,42 @@ const NominaFormModal: React.FC<NominaFormModalProps> = ({
             }
             if (field === 'companyTenantProfileId' && value !== prev.companyTenantProfileId) {
                 // When company changes, clear siteId if not part of new company's sites
-                const companySites = (companiesData || []).find(c => c.id === value)?.sites || [];
+                const companySites = companies.find(c => getCompanyProfileId(c) === value)?.sites || [];
                 const siteStillValid = companySites.some(s => s.id === prev.siteId);
                 return { ...prev, companyTenantProfileId: value, ...(siteStillValid ? {} : { siteId: '' }) };
             }
             if (field === 'siteId' && value) {
                 // Auto-select company when a site is selected
-                const siteCompany = (companiesData || []).find(c => c.sites?.some(s => s.id === value));
+                const siteCompany = companies.find(c => c.sites?.some(s => s.id === value));
                 if (siteCompany && !prev.companyTenantProfileId) {
-                    return { ...prev, siteId: value, companyTenantProfileId: siteCompany.id };
+                    return { ...prev, siteId: value, companyTenantProfileId: getCompanyProfileId(siteCompany) };
                 }
             }
             return { ...prev, [field]: value } as typeof prev;
         });
         if (errors[field]) setErrors(prev => ({ ...prev, [field]: '' }));
-    }, [errors, companiesData]);
+        setNominaConflict(null);
+    }, [errors, companies, getCompanyProfileId]);
+
+    const handleSelectCompany = (company: CompanyOption) => {
+        const profileId = getCompanyProfileId(company);
+        setFormData(prev => {
+            const companySites = company.sites || [];
+            const siteStillValid = companySites.some(s => s.id === prev.siteId);
+            return { ...prev, companyTenantProfileId: profileId, ...(siteStillValid ? {} : { siteId: '' }) };
+        });
+        setCompanySearchText(company.ragioneSociale || '');
+        setShowCompanyDropdown(false);
+        setNominaConflict(null);
+        if (errors.association) setErrors(prev => ({ ...prev, association: '' }));
+    };
+
+    const handleClearCompany = () => {
+        setFormData(prev => ({ ...prev, companyTenantProfileId: '', siteId: '' }));
+        setCompanySearchText('');
+        setShowCompanyDropdown(true);
+        setNominaConflict(null);
+    };
 
     const handleSelectPerson = (person: PersonOption) => {
         setSelectedPerson(person);
@@ -283,32 +356,41 @@ const NominaFormModal: React.FC<NominaFormModalProps> = ({
         return Object.keys(newErrors).length === 0;
     }, [formData]);
 
+    const buildPayload = useCallback(() => ({
+        ...formData,
+        tipoRuolo: formData.tipoRuolo as TipoNominaRuolo,
+        siteId: formData.siteId || undefined,
+        companyTenantProfileId: formData.companyTenantProfileId || undefined,
+        dataFine: formData.dataFine || undefined,
+        dataScadenza: formData.dataScadenza || undefined,
+        note: formData.note || undefined,
+        ...(pendingResolution ? { conflictResolution: pendingResolution } : {})
+    }), [formData, pendingResolution]);
+
+    const handleConflictError = useCallback((error: Error & { status?: number; response?: { data?: any } }, fallback: string) => {
+        const data = error.response?.data;
+        if (error.status === 409 || data?.code) {
+            setNominaConflict({
+                message: data?.error || error.message || fallback,
+                code: data?.code,
+                existingNomina: data?.existingNomina || null
+            });
+            showToast({ type: 'warning', message: 'Esiste già una nomina attiva: scegli come procedere.' });
+            return;
+        }
+        showToast({ type: 'error', message: fallback });
+    }, [showToast]);
+
     const createMutation = useMutation({
-        mutationFn: () => clinicaApi.nomineRuolo.create({
-            ...formData,
-            tipoRuolo: formData.tipoRuolo as TipoNominaRuolo,
-            siteId: formData.siteId || undefined,
-            companyTenantProfileId: formData.companyTenantProfileId || undefined,
-            dataFine: formData.dataFine || undefined,
-            dataScadenza: formData.dataScadenza || undefined,
-            note: formData.note || undefined
-        }),
+        mutationFn: () => clinicaApi.nomineRuolo.create(buildPayload()),
         onSuccess: () => { showToast({ type: 'success', message: 'Nomina creata con successo' }); onSuccess(); handleClose(); },
-        onError: (error: Error) => showToast({ type: 'error', message: 'Errore durante la creazione' })
+        onError: (error: Error & { status?: number; response?: { data?: any } }) => handleConflictError(error, 'Errore durante la creazione')
     });
 
     const updateMutation = useMutation({
-        mutationFn: () => clinicaApi.nomineRuolo.update(nomina!.id, {
-            ...formData,
-            tipoRuolo: formData.tipoRuolo as TipoNominaRuolo,
-            siteId: formData.siteId || undefined,
-            companyTenantProfileId: formData.companyTenantProfileId || undefined,
-            dataFine: formData.dataFine || undefined,
-            dataScadenza: formData.dataScadenza || undefined,
-            note: formData.note || undefined
-        }),
+        mutationFn: () => clinicaApi.nomineRuolo.update(nomina!.id, buildPayload()),
         onSuccess: () => { showToast({ type: 'success', message: 'Nomina aggiornata con successo' }); onSuccess(); handleClose(); },
-        onError: (error: Error) => showToast({ type: 'error', message: 'Errore durante l\'aggiornamento' })
+        onError: (error: Error & { status?: number; response?: { data?: any } }) => handleConflictError(error, 'Errore durante l\'aggiornamento')
     });
 
     const handleSubmit = useCallback((e: React.FormEvent) => {
@@ -317,6 +399,15 @@ const NominaFormModal: React.FC<NominaFormModalProps> = ({
         if (isEditing) updateMutation.mutate();
         else createMutation.mutate();
     }, [validate, isEditing, createMutation, updateMutation]);
+
+    const handleResolveConflict = (resolution: ConflictResolution) => {
+        setPendingResolution(resolution);
+        setNominaConflict(null);
+        setTimeout(() => {
+            if (isEditing) updateMutation.mutate();
+            else createMutation.mutate();
+        }, 0);
+    };
 
     const isPending = createMutation.isPending || updateMutation.isPending;
     const selectedRuolo = RUOLO_OPTIONS.find(r => r.value === formData.tipoRuolo);
@@ -450,27 +541,106 @@ const NominaFormModal: React.FC<NominaFormModalProps> = ({
                         Associazione <span className="font-normal text-gray-500 dark:text-gray-400 text-xs ml-1">(almeno una richiesta)</span>
                     </h3>
                     {errors.association && <p className="text-red-500 text-xs mb-2">{errors.association}</p>}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 gap-3">
+                        <div>
+                            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Azienda</label>
+                            <div className="relative" ref={companyDropdownRef}>
+                                <div className="relative">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                                    <input
+                                        type="text"
+                                        value={companySearchText}
+                                        onChange={(e) => {
+                                            setCompanySearchText(e.target.value);
+                                            setShowCompanyDropdown(true);
+                                            if (selectedCompany && e.target.value !== selectedCompany.ragioneSociale) {
+                                                setFormData(prev => ({ ...prev, companyTenantProfileId: '', siteId: '' }));
+                                            }
+                                        }}
+                                        onFocus={() => setShowCompanyDropdown(true)}
+                                        placeholder="Cerca azienda..."
+                                        className="w-full pl-9 pr-9 border border-gray-300 dark:border-gray-600 rounded-lg py-2.5 text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-white dark:bg-gray-800 dark:text-gray-100 transition-colors"
+                                    />
+                                    {formData.companyTenantProfileId && (
+                                        <button
+                                            type="button"
+                                            onClick={handleClearCompany}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                            title="Cambia azienda"
+                                        >
+                                            <X className="h-3.5 w-3.5" />
+                                        </button>
+                                    )}
+                                </div>
+                                {showCompanyDropdown && (
+                                    <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+                                        {filteredCompanies.length > 0 ? (
+                                            filteredCompanies.map(c => (
+                                                <button
+                                                    key={getCompanyProfileId(c)}
+                                                    type="button"
+                                                    onClick={() => handleSelectCompany(c)}
+                                                    className="w-full text-left px-3 py-2.5 text-sm hover:bg-teal-50 dark:hover:bg-teal-900/30 hover:text-teal-700 dark:hover:text-teal-300 transition-colors border-b border-gray-100 dark:border-gray-700 last:border-b-0"
+                                                >
+                                                    <span className="font-medium">{c.ragioneSociale}</span>
+                                                    {(c.sites?.length || 0) > 0 && (
+                                                        <span className="ml-2 text-xs text-gray-400">{c.sites?.length} sed{c.sites?.length === 1 ? 'e' : 'i'}</span>
+                                                    )}
+                                                </button>
+                                            ))
+                                        ) : (
+                                            <div className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">Nessuna azienda trovata</div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                         <div>
                             <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Sede</label>
                             <select value={formData.siteId} onChange={(e) => handleInputChange('siteId', e.target.value)}
+                                disabled={!formData.companyTenantProfileId}
                                 className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 bg-white dark:bg-gray-800 dark:text-gray-100">
                                 <option value="">— Tutte le sedi —</option>
                                 {sedi.map(s => <option key={s.id} value={s.id}>{s.siteName}{s.citta ? ` (${s.citta})` : ''}</option>)}
                             </select>
                         </div>
-                        <div>
-                            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Azienda</label>
-                            <select value={formData.companyTenantProfileId} onChange={(e) => handleInputChange('companyTenantProfileId', e.target.value)}
-                                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 bg-white dark:bg-gray-800 dark:text-gray-100">
-                                <option value="">— Nessuna —</option>
-                                {companies.map((c) => (
-                                    <option key={c.id} value={c.id}>{c.ragioneSociale}</option>
-                                ))}
-                            </select>
-                        </div>
                     </div>
                 </div>
+
+                {nominaConflict && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                        <div className="flex items-start gap-2">
+                            <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                            <div className="flex-1">
+                                <p className="text-sm font-semibold text-amber-900">Nomina attiva già presente</p>
+                                <p className="text-xs text-amber-800 mt-1">{nominaConflict.message}</p>
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => handleResolveConflict('CEASE_PREVIOUS')}
+                                        className="px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-600 text-white hover:bg-amber-700"
+                                    >
+                                        Cessa precedente e salva nuova
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleResolveConflict('START_AFTER_PREVIOUS')}
+                                        className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-amber-300 text-amber-800 hover:bg-amber-100"
+                                    >
+                                        Avvia dopo cessazione precedente
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setNominaConflict(null); setPendingResolution(null); }}
+                                        className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
+                                    >
+                                        Annulla
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Date Nomina */}
                 <div className="border border-gray-200 dark:border-gray-700 rounded-xl p-4">

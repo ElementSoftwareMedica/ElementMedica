@@ -352,7 +352,6 @@ const GiudizioIdoneitaService = {
             data: {
                 ...data,
                 // Non permettere modifica di alcuni campi critici
-                tipoGiudizio: undefined,
                 personId: undefined,
                 medicoCompetenteId: undefined
             },

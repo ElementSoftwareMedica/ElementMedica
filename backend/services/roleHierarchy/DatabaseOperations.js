@@ -8,6 +8,7 @@ import logger from "../../utils/logger.js";
 import { canAssignToRole, canManageRole } from './HierarchyCalculator.js';
 import { canAssignPermission } from './PermissionManager.js';
 import prisma from '../../config/prisma-optimization.js';
+import { seedDefaultPermissions } from '../enhancedRole/utils/PermissionSeeder.js';
 
 
 /**
@@ -130,6 +131,7 @@ export async function assignRoleWithHierarchy(assignerId, targetUserId, roleType
         assignedByPerson: true
       }
     });
+    await seedDefaultPermissions(assignment.id, roleType, prisma);
 
     return {
       success: true,

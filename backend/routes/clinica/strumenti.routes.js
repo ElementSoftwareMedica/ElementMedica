@@ -185,6 +185,39 @@ router.post('/roi/compare',
     }
 );
 
+/**
+ * @route GET /strumenti/manutenzioni/scadenze
+ * @desc Strumenti con manutenzione in scadenza o stato critico
+ * @access Authenticated + VIEW_STRUMENTI
+ */
+router.get('/manutenzioni/scadenze',
+    authenticateToken,
+    checkAdvancedPermission('strumenti', 'read'),
+    auditClinico('strumenti_manutenzioni_scadenze'),
+    async (req, res) => {
+        try {
+            const tenantId = getEffectiveTenantId(req);
+            const giorni = Number.parseInt(req.query.giorni || '30', 10);
+            const strumenti = await StrumentoService.getMaintenanceSchedule(
+                tenantId,
+                Number.isFinite(giorni) ? giorni : 30
+            );
+
+            res.json({ success: true, data: strumenti });
+        } catch (error) {
+            logger.error('Failed to get strumenti maintenance schedule', {
+                component: 'strumenti-routes',
+                error: error.message,
+                tenantId: getEffectiveTenantId(req)
+            });
+            res.status(500).json({
+                success: false,
+                error: 'Errore nel recupero delle scadenze manutenzione strumenti'
+            });
+        }
+    }
+);
+
 // ============================================
 // LIST & CREATE
 // ============================================

@@ -210,17 +210,14 @@ export function setupPageHtml(defaultServerUrl: string): string {
         const CANONICAL_SERVER_URL = 'https://www.elementmedica.com';
 
         function normalizeServerUrl(raw) {
-            const value = (raw || '').trim();
+            var value = (raw || '').trim();
             if (!value) return CANONICAL_SERVER_URL;
 
-            let withProtocol = value;
-            if (!/^https?:\/\//i.test(withProtocol)) {
-                withProtocol = 'https://' + withProtocol;
-            }
+            var urlStr = /^https?:\/\//i.test(value) ? value : 'https://' + value;
 
             try {
-                const parsed = new URL(withProtocol);
-                const host = (parsed.hostname || '').toLowerCase();
+                var parsed = new URL(urlStr);
+                var host = (parsed.hostname || '').toLowerCase();
                 if (host === 'app.elementmedica.com' || host === 'elementmedica.com' || host === 'www.elementmedica.com') {
                     return CANONICAL_SERVER_URL;
                 }

@@ -58,6 +58,26 @@ const evaluateComputedFields = (
     return computedUpdates;
 };
 
+const hasStructuredSelection = (value: unknown): boolean => {
+    if (Array.isArray(value)) return value.some(v => String(v ?? '').trim().length > 0);
+    return String(value ?? '').trim().length > 0;
+};
+
+const deriveMdlGiudizio = (values: FormValues): string | null => {
+    const hasPrescrizioni = hasStructuredSelection(values.prescrizioniNormativaMdl);
+    const hasLimitazioni = hasStructuredSelection(values.limitazioniMansioneMdl);
+    if (hasPrescrizioni && hasLimitazioni) return 'idoneo_limitazioni_prescrizioni';
+    if (hasPrescrizioni) return 'idoneo_prescrizioni';
+    if (hasLimitazioni) return 'idoneo_limitazioni';
+    return null;
+};
+
+const partialGiudizi = new Set([
+    'idoneo_prescrizioni',
+    'idoneo_limitazioni',
+    'idoneo_limitazioni_prescrizioni',
+]);
+
 export function useVisitaForm(
     visitaId: string | null,
     template: VisitTemplate | null,
@@ -178,7 +198,7 @@ export function useVisitaForm(
         let isValid = true;
 
         template.fields.forEach((field: VisitField) => {
-            if (!field.visible) return;
+            if (field.visible === false) return;
 
             const error = validateField(field, values[field.name]);
             if (error) {
@@ -186,6 +206,34 @@ export function useVisitaForm(
                 isValid = false;
             }
         });
+
+        const hasGiudizioMdl = template.fields.some(field => field.name === 'giudizioIdoneitaMdl' && field.visible !== false);
+        if (hasGiudizioMdl) {
+            const giudizio = String(values.giudizioIdoneitaMdl ?? '');
+            const hasPrescrizioni = hasStructuredSelection(values.prescrizioniNormativaMdl);
+            const hasLimitazioni = hasStructuredSelection(values.limitazioniMansioneMdl);
+            if (giudizio === 'idoneo_prescrizioni' && !hasPrescrizioni) {
+                errors.prescrizioniNormativaMdl = 'Aggiungi almeno una prescrizione normativa';
+                isValid = false;
+            }
+            if (giudizio === 'idoneo_limitazioni' && !hasLimitazioni) {
+                errors.limitazioniMansioneMdl = 'Aggiungi almeno una limitazione alla mansione';
+                isValid = false;
+            }
+            if (giudizio === 'idoneo_limitazioni_prescrizioni' && (!hasPrescrizioni || !hasLimitazioni)) {
+                if (!hasPrescrizioni) errors.prescrizioniNormativaMdl = 'Aggiungi almeno una prescrizione normativa';
+                if (!hasLimitazioni) errors.limitazioniMansioneMdl = 'Aggiungi almeno una limitazione alla mansione';
+                isValid = false;
+            }
+            if ((partialGiudizi.has(giudizio) || giudizio === 'temporaneamente_non_idoneo') && !hasStructuredSelection(values.tempisticaGiudizioIdoneitaMdl)) {
+                errors.tempisticaGiudizioIdoneitaMdl = 'Indica la tempistica del giudizio';
+                isValid = false;
+            }
+            if (giudizio === 'temporaneamente_non_idoneo' && values.tempisticaGiudizioIdoneitaMdl === 'permanente') {
+                errors.tempisticaGiudizioIdoneitaMdl = 'Per la non idoneità temporanea indica una durata definita';
+                isValid = false;
+            }
+        }
 
         setValidation(prev => ({
             ...prev,
@@ -344,6 +392,13 @@ export function useVisitaForm(
                 [fieldName]: value
             };
 
+            if (fieldName === 'prescrizioniNormativaMdl' || fieldName === 'limitazioniMansioneMdl') {
+                const autoGiudizio = deriveMdlGiudizio(newValues);
+                if (autoGiudizio) {
+                    newValues.giudizioIdoneitaMdl = autoGiudizio;
+                }
+            }
+
             // Calculate computed fields if peso or altezza changed
             if (template?.fields && (fieldName === 'peso' || fieldName === 'altezza')) {
                 const computedUpdates = evaluateComputedFields(newValues, template.fields);
@@ -363,10 +418,13 @@ export function useVisitaForm(
             isDirty: true,
             pendingChanges: {
                 ...prev.pendingChanges,
-                [fieldName]: value
+                [fieldName]: value,
+                ...(fieldName === 'prescrizioniNormativaMdl' || fieldName === 'limitazioniMansioneMdl'
+                    ? { giudizioIdoneitaMdl: deriveMdlGiudizio({ ...values, [fieldName]: value }) ?? values.giudizioIdoneitaMdl }
+                    : {})
             }
         }));
-    }, [template?.fields]);
+    }, [template?.fields, existingVisita?.stato, values]);
 
     /**
      * Save Draft - saves structured data only, NO PDF generation, NO stato change

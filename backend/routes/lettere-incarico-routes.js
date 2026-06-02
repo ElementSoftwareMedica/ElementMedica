@@ -6,13 +6,15 @@
  */
 
 import express from 'express';
+import { requireFeature } from '../middleware/featureFlags.js';
 import prisma from '../config/prisma-optimization.js';
-import middleware from '../middleware/auth.js';
+import { authenticate, requirePermission } from '../middleware/auth.js';
 import { body, validationResult } from 'express-validator';
 import logger from '../utils/logger.js';
 import { DocumentService } from '../services/documentService.js';
 import movimentoContabileService from '../services/management/movimento-contabile-service.js';
 import { getEffectiveTenantId } from '../utils/tenantHelper.js';
+import { isTrainerOnlyAccess, getTrainerScheduleIds } from '../utils/trainerAccess.js';
 import { signDocument, signDocumentsBulk } from '../services/documentSigningService.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -24,13 +26,62 @@ const __dirname = path.dirname(__filename);
 const router = express.Router();
 const documentService = new DocumentService();
 
-const { authenticate: authenticateToken, requirePermission } = middleware;
+const isSignedLettera = (lettera) => Boolean(
+  lettera.firmaFormatore ||
+  lettera.firmaFormatoreAt ||
+  lettera.firmaDatoreLavoro ||
+  lettera.firmaDatoreLavoroAt ||
+  lettera.firmaDatoreLavoroId
+);
+
+async function auditLetteraDelete(req, lettera, tenantId, deletionReason, db = prisma) {
+  if (isSignedLettera(lettera)) {
+    await db.gdprAuditLog.create({
+      data: {
+        tenantId,
+        personId: req.person.id,
+        resourceType: 'LetteraIncarico',
+        resourceId: lettera.id,
+        action: 'DELETE',
+        dataAccessed: {
+          operation: 'SOFT_DELETE',
+          deletionReason,
+          signedDocument: true,
+          scheduledCourseId: lettera.scheduledCourseId,
+          trainerId: lettera.trainerId
+        },
+        ipAddress: req.ip || null,
+        userAgent: req.get?.('user-agent') || null
+      }
+    });
+    return;
+  }
+
+  await db.activityLog.create({
+    data: {
+      personId: req.person.id,
+      tenantId,
+      action: 'LETTERA_INCARICO_DELETE',
+      category: 'DOCUMENTS',
+      resource: 'LetteraIncarico',
+      resourceId: lettera.id,
+      details: deletionReason,
+      metadata: { signedDocument: false, scheduledCourseId: lettera.scheduledCourseId, trainerId: lettera.trainerId },
+      ipAddress: req.ip || null,
+      userAgent: req.get?.('user-agent') || null
+    }
+  });
+}
+
+
+// Feature gate: tutte le route lettere incarico richiedono BRANCH_FORMAZIONE
+router.use(authenticate, requireFeature('BRANCH_FORMAZIONE'));
 
 /**
  * GET /api/v1/lettere-incarico
  * Get all letters of engagement
  */
-router.get('/', authenticateToken, requirePermission('documents:read'), async (req, res) => {
+router.get('/', authenticate, requirePermission('documents:read'), async (req, res) => {
   try {
     const { scheduleId, trainerId } = req.query;
     const tenantId = getEffectiveTenantId(req);
@@ -42,6 +93,14 @@ router.get('/', authenticateToken, requirePermission('documents:read'), async (r
 
     if (scheduleId) where.scheduledCourseId = scheduleId;
     if (trainerId) where.trainerId = trainerId;
+
+    // TRAINER-only: limita alle lettere dei propri corsi programmati
+    const person = req.person;
+    if (await isTrainerOnlyAccess(person.id, tenantId)) {
+      const scheduleIds = await getTrainerScheduleIds(person.id, tenantId);
+      if (scheduleIds.length === 0) return res.json([]);
+      where.scheduledCourseId = { in: scheduleIds };
+    }
 
     const lettere = await prisma.letteraIncarico.findMany({
       where,
@@ -83,7 +142,7 @@ router.get('/', authenticateToken, requirePermission('documents:read'), async (r
  * Generate letter of engagement from template
  */
 router.post('/generate',
-  authenticateToken,
+  authenticate,
   requirePermission('documents:create'),
   [
     body('scheduleId').notEmpty().withMessage('ID programmazione obbligatorio'),
@@ -391,113 +450,6 @@ router.post('/generate',
         });
       }
 
-      // ====================================================================
-      // COMPENSO FORMATORE - Crea/aggiorna preventivo per compensi formatore
-      // ====================================================================
-      let preventivoCompensazione = null;
-
-      // Solo se c'è un compenso da tracciare (tariffa oraria o spese)
-      if (totalCompensation > 0) {
-        // Cerca preventivo esistente per questo formatore/schedule
-        const existingPreventivo = await prisma.preventivo.findFirst({
-          where: {
-            scheduledCourseId: scheduleId,
-            tipoServizio: 'COMPENSO_FORMATORE',
-            tenantId,
-            deletedAt: null,
-            // Usa dettagliServizio per trovare il trainer specifico
-            dettagliServizio: {
-              path: ['trainerId'],
-              equals: trainerId
-            }
-          }
-        });
-
-        // Get progressive number for preventivo
-        const lastPreventivo = await prisma.preventivo.findFirst({
-          where: {
-            tenantId,
-            annoProgressivo: year,
-            deletedAt: null
-          },
-          orderBy: { numeroProgressivo: 'desc' }
-        });
-        const nextPreventivoNumber = (lastPreventivo?.numeroProgressivo || 0) + 1;
-
-        // Prepara i dati del preventivo
-        const preventivoData = {
-          tipoServizio: 'COMPENSO_FORMATORE',
-          tipoPrezzo: 'ORARIO',
-          titoloServizio: `Compenso Formatore - ${trainer.firstName} ${trainer.lastName}`,
-          descrizioneServizio: `Compenso per attività di formazione\nCorso: ${schedule.course?.title || 'N/A'}\nOre: ${totalHours}h\nTariffa: €${effectiveHourlyRate.toFixed(2)}/h\nSpese: €${effectiveExpenses.toFixed(2)}`,
-          clienteType: 'PERSONA',
-          personaId: trainerId,
-          scheduledCourseId: scheduleId,
-          corsoId: schedule.course?.id || null,
-          quantita: Math.ceil(totalHours) || 1,
-          prezzoUnitario: effectiveHourlyRate,
-          prezzoTotale: totalCompensation,
-          scontoTotale: 0,
-          imponibile: totalCompensation,
-          aliquotaIva: 0, // Formatori spesso con ritenuta d'acconto, no IVA
-          importoIva: 0,
-          importoFinale: totalCompensation,
-          stato: 'BOZZA',
-          dataEmissione: new Date(),
-          dataScadenza: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 giorni
-          dettagliServizio: {
-            trainerId: trainerId,
-            trainerName: `${trainer.firstName} ${trainer.lastName}`,
-            scheduleId: scheduleId,
-            courseName: schedule.course?.title || 'N/A',
-            totalHours: totalHours,
-            hourlyRate: effectiveHourlyRate,
-            expenses: effectiveExpenses,
-            letteraIncaricoId: lettera.id
-          },
-          note: `Collegato a Lettera di Incarico n. ${documentNumber}`,
-          tenantId,
-          generatedBy: userId
-        };
-
-        if (existingPreventivo) {
-          // Aggiorna preventivo esistente
-          preventivoCompensazione = await prisma.preventivo.update({
-            where: { id: existingPreventivo.id },
-            data: {
-              ...preventivoData,
-              generatedBy: userId
-            }
-          });
-
-          logger.info('Preventivo compenso formatore updated', {
-            component: 'lettere-incarico-routes',
-            action: 'update-preventivo-compenso',
-            preventivoId: preventivoCompensazione.id,
-            trainerId,
-            totalCompensation
-          });
-        } else {
-          // Crea nuovo preventivo
-          preventivoCompensazione = await prisma.preventivo.create({
-            data: {
-              ...preventivoData,
-              numero: `COMP-${year}-${String(nextPreventivoNumber).padStart(4, '0')}`,
-              annoProgressivo: year,
-              numeroProgressivo: nextPreventivoNumber
-            }
-          });
-
-          logger.info('Preventivo compenso formatore created', {
-            component: 'lettere-incarico-routes',
-            action: 'create-preventivo-compenso',
-            preventivoId: preventivoCompensazione.id,
-            trainerId,
-            totalCompensation
-          });
-        }
-      }
-
       // Crea bozza MovimentoContabile USCITA per compenso formatore (idempotente)
       if (totalCompensation > 0) {
         try {
@@ -510,15 +462,15 @@ router.post('/generate',
               data: {
                 importoLordo: totalCompensation, importoNetto: totalCompensation, importoIva: 0, aliquotaIva: 0,
                 descrizione: `Compenso formatore - ${trainer.firstName} ${trainer.lastName} - ${schedule.course?.title || 'Corso'}`,
-                preventivoId: preventivoCompensazione?.id || null, updatedBy: userId
+                updatedBy: userId
               }
             });
           } else {
             await movimentoContabileService.create(tenantId, {
-              direzione: 'USCITA', tipo: 'COMPENSO_FORMATORE', tipoSoggetto: 'FORMATORE', stato: 'BOZZA',
+              direzione: 'USCITA', tipo: 'COMPENSO_FORMATORE', tipoSoggetto: 'FORMATORE', stato: 'DA_FATTURARE',
               importoLordo: totalCompensation, importoNetto: totalCompensation, importoIva: 0, aliquotaIva: 0,
               dataEsecuzione: new Date(), courseScheduleId: scheduleId,
-              preventivoId: preventivoCompensazione?.id || null, personId: trainerId,
+              preventivoId: null, personId: trainerId,
               descrizione: `Compenso formatore - ${trainer.firstName} ${trainer.lastName} - ${schedule.course?.title || 'Corso'}`,
               branchType: 'MEDICA', createdBy: userId
             });
@@ -532,7 +484,7 @@ router.post('/generate',
       logger.info('Letter of engagement generated', {
         component: 'lettere-incarico-routes', action: 'generate',
         letteraId: lettera.id, documentId: document.id, scheduleId, trainerId,
-        templateId: template.id, personId: userId, preventivoCompensoId: preventivoCompensazione?.id || null
+        templateId: template.id, personId: userId
       });
 
       res.json({
@@ -542,8 +494,7 @@ router.post('/generate',
           trainerEmail: trainerProfile.email || null
         },
         document,
-        downloadUrl: document.fileUrl,
-        preventivoCompenso: preventivoCompensazione
+        downloadUrl: document.fileUrl
       });
     } catch (error) {
       logger.error('Failed to generate letter of engagement', {
@@ -563,7 +514,7 @@ router.post('/generate',
  * Generate letters for multiple trainers in a schedule
  */
 router.post('/generate-batch',
-  authenticateToken,
+  authenticate,
   requirePermission('documents:create'),
   [
     body('scheduleId').notEmpty().withMessage('ID programmazione obbligatorio'),
@@ -660,7 +611,7 @@ router.post('/generate-batch',
  * DELETE /api/v1/lettere-incarico/:id
  * Delete letter (soft delete)
  */
-router.delete('/:id', authenticateToken, requirePermission('documents:delete'), async (req, res) => {
+router.delete('/:id', authenticate, requirePermission('documents:delete'), async (req, res) => {
   try {
     const { id } = req.params;
     const tenantId = getEffectiveTenantId(req);
@@ -673,10 +624,36 @@ router.delete('/:id', authenticateToken, requirePermission('documents:delete'), 
       return res.status(404).json({ error: 'Lettera di incarico non trovata' });
     }
 
-    await prisma.letteraIncarico.update({
-      where: { id },
-      data: { deletedAt: new Date() }
+    const deletionReason = req.body?.deletionReason || 'Eliminazione lettera incarico formazione';
+
+    await prisma.$transaction(async (tx) => {
+      await tx.letteraIncarico.update({
+        where: { id },
+        data: { deletedAt: new Date() }
+      });
+      await auditLetteraDelete(req, lettera, tenantId, deletionReason, tx);
     });
+
+    // Soft-delete del MovimentoContabile USCITA collegato (se presente)
+    try {
+      await prisma.movimentoContabile.updateMany({
+        where: {
+          courseScheduleId: lettera.scheduledCourseId,
+          personId: lettera.trainerId,
+          tipo: 'COMPENSO_FORMATORE',
+          direzione: 'USCITA',
+          tenantId,
+          deletedAt: null
+        },
+        data: { deletedAt: new Date() }
+      });
+    } catch (movErr) {
+      logger.error('Errore eliminazione MovimentoContabile USCITA collegato', {
+        component: 'lettere-incarico-routes',
+        letteraId: id,
+        error: movErr.message
+      });
+    }
 
     logger.info('Letter of engagement deleted', {
       component: 'lettere-incarico-routes',
@@ -702,7 +679,7 @@ router.delete('/:id', authenticateToken, requirePermission('documents:delete'), 
  * GET /api/v1/lettere-incarico/:id/download
  * Download letter PDF
  */
-router.get('/:id/download', authenticateToken, requirePermission('documents:read'), async (req, res) => {
+router.get('/:id/download', authenticate, requirePermission('documents:read'), async (req, res) => {
   try {
     const { id } = req.params;
     const tenantId = getEffectiveTenantId(req);
@@ -766,7 +743,7 @@ router.get('/:id/download', authenticateToken, requirePermission('documents:read
  * Download multiple letters as ZIP for a schedule
  */
 router.get('/schedule/:scheduleId/download-zip',
-  authenticateToken,
+  authenticate,
   requirePermission('documents:read'),
   async (req, res) => {
     try {
@@ -867,7 +844,7 @@ router.get('/schedule/:scheduleId/download-zip',
  * GET /api/v1/lettere-incarico/:id
  * Get single letter of engagement
  */
-router.get('/:id', authenticateToken, requirePermission('documents:read'), async (req, res) => {
+router.get('/:id', authenticate, requirePermission('documents:read'), async (req, res) => {
   try {
     const { id } = req.params;
     const tenantId = getEffectiveTenantId(req);
@@ -914,7 +891,7 @@ router.get('/:id', authenticateToken, requirePermission('documents:read'), async
  * GET /api/v1/lettere-incarico/:id/preview
  * Serve lettera PDF inline for preview (used by SigningWorkflowModal)
  */
-router.get('/:id/preview', authenticateToken, requirePermission('documents:read'), async (req, res) => {
+router.get('/:id/preview', authenticate, requirePermission('documents:read'), async (req, res) => {
   try {
     const { id } = req.params;
     const tenantId = getEffectiveTenantId(req);
@@ -973,7 +950,7 @@ router.get('/:id/preview', authenticateToken, requirePermission('documents:read'
  * POST /api/v1/lettere-incarico/:id/sign
  * Apply signature to lettera di incarico
  */
-router.post('/:id/sign', authenticateToken, requirePermission('documents:write'), async (req, res) => {
+router.post('/:id/sign', authenticate, requirePermission('documents:write'), async (req, res) => {
   try {
     const { id } = req.params;
     const tenantId = getEffectiveTenantId(req);
@@ -1014,7 +991,7 @@ router.post('/:id/sign', authenticateToken, requirePermission('documents:write')
  * POST /api/v1/lettere-incarico/bulk-sign
  * Apply signature to multiple lettere di incarico
  */
-router.post('/bulk-sign', authenticateToken, requirePermission('documents:write'), async (req, res) => {
+router.post('/bulk-sign', authenticate, requirePermission('documents:write'), async (req, res) => {
   try {
     const tenantId = getEffectiveTenantId(req);
     const { documentIds, signatureData, placement } = req.body;

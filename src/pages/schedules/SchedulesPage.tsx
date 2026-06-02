@@ -48,6 +48,7 @@ import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { useTenantFilter } from '../../context/TenantFilterContext';
 import { useTenantMode } from '../../contexts/TenantModeContext';
 import { useToast } from '../../hooks/useToast';
+import { useAuth } from '../../context/AuthContext';
 
 interface Schedule {
   id: string;
@@ -90,6 +91,11 @@ interface Schedule {
 interface Course {
   id: string;
   name: string;
+  title?: string;
+  duration?: string | number;
+  riskLevel?: string;
+  courseType?: string;
+  certifications?: string;
 }
 
 interface Trainer {
@@ -133,6 +139,14 @@ function combineDateAndTime(dateStr: string, timeStr: string) {
 const SchedulesPage: React.FC = () => {
   const { confirmDelete } = useConfirmDialog();
   const loadingRef = useRef(false);
+  const { user } = useAuth();
+
+  // Ruolo: il contatore "Corsi in Scadenza" è visibile solo agli admin/staff (non trainer, non employee)
+  const _userRoles = user?.roles || [];
+  const _isStaffAdmin = _userRoles.some(r =>
+    ['ADMIN', 'SUPER_ADMIN', 'TENANT_ADMIN', 'TRAINING_ADMIN', 'OPERATOR', 'COORDINATOR'].includes(r)
+  ) || user?.role === 'Admin' || user?.role === 'Administrator';
+  const showExpiringCourses = _isStaffAdmin;
 
   // Tenant filter from global context
   const { getTenantFilterParams, tenantFilterKey, isReady } = useTenantFilter();
@@ -296,9 +310,11 @@ const SchedulesPage: React.FC = () => {
       const [schedulesData, rawCourses, trainersData, companiesData, personsData] = await Promise.all([
         apiGet(`/api/v1/schedules${tenantQueryString}`),
         getCourses(),
-        getTrainers(),
+        // TRAINER non ha persons:read — salta il caricamento della lista formatori
+        (user?.roleType === 'TRAINER') ? Promise.resolve([]) : getTrainers(),
         getCompanies(companyTenantParams),
-        getPersons(personsFilter).catch(err => {
+        // TRAINER non ha persons:read — salta il caricamento delle persone
+        (user?.roleType === 'TRAINER') ? Promise.resolve({ persons: [] }) : getPersons(personsFilter).catch(err => {
           if (import.meta.env.DEV) console.warn('[SchedulesPage] ⚠️ Persons loading failed:', err);
           return { persons: [] };
         })
@@ -315,10 +331,15 @@ const SchedulesPage: React.FC = () => {
         if (import.meta.env.DEV) console.error('[SchedulesPage] ⚠️ schedulesData is not an array:', schedulesData);
       }
 
-      // Mappa i corsi del service unificato alla shape locale { id, name }
+      // Mappa i corsi del service unificato preservando tutti i campi necessari per il modal
       const coursesData: Course[] = (Array.isArray(rawCourses) ? rawCourses : []).map((c: any) => ({
         id: c.id,
-        name: c.title || c.name || 'N/A'
+        name: c.title || c.name || 'N/A',
+        title: c.title || c.name,
+        duration: c.duration,
+        riskLevel: c.riskLevel,
+        courseType: c.courseType,
+        certifications: c.certifications
       }));
 
       // ✅ Imposta i dati essenziali usando setState batch per evitare flickering
@@ -1112,8 +1133,8 @@ const SchedulesPage: React.FC = () => {
       loading={loading}
       error={undefined}
     >
-      {/* Sezione Corsi in Scadenza */}
-      <div id="expiring-courses">
+      {/* Sezione Corsi in Scadenza: solo per admin/staff, non per trainer/employee */}
+      {showExpiringCourses && <div id="expiring-courses">
         <ExpiringCoursesSection
           refreshKey={expiringCoursesRefreshKey}
           onScheduleCourse={(personId, courseId) => {
@@ -1135,7 +1156,7 @@ const SchedulesPage: React.FC = () => {
             setShowForm(true);
           }}
         />
-      </div>
+      </div>}
 
       {selectionMode && (
         <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg">

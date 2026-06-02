@@ -345,6 +345,7 @@ export interface AuthResponse {
 
 export interface AuthVerifyResponse {
   valid: boolean;
+  mustChangePassword?: boolean;
   user: Person;
   permissions: Record<string, boolean>;
   timestamp?: string;

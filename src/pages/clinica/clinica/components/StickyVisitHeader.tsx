@@ -8,7 +8,7 @@
  * @project P52 - Clinical Visit Template System
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
     ArrowLeft,
     Save,
@@ -31,6 +31,7 @@ import {
     ChevronDown,
     ChevronUp,
     Edit2,
+    ClipboardCheck,
 } from 'lucide-react';
 import type { Visita, VisitTemplate } from '../../../../services/clinicaApi';
 import type { CompletionPhase } from '../types';
@@ -97,6 +98,8 @@ interface StickyVisitHeaderProps {
     onNuovaVersione: () => void;
     onAnnullaModifiche?: () => void;
     onCreateReferto: () => Promise<string | undefined>;
+    /** Callback per aprire il PDF del giudizio di idoneità (solo MDL) */
+    onOpenGiudizioPdf?: () => void;
     // P61: Queue actions
     onChiamaPaziente?: () => void;
     onRichiamaPaziente?: () => void;
@@ -107,13 +110,107 @@ interface StickyVisitHeaderProps {
     personId?: string;
     /** Callback per aprire il modal di modifica ProfiloSalute */
     onEditProfiloSalute?: () => void;
+    /** Callback per modifica rapida anagrafica paziente */
+    onEditPatient?: () => void;
     // P74: invio referto via email nel menu Salva e Completa
     invioRefertoMail?: boolean;
     onInvioRefertoMailChange?: (value: boolean) => void;
     isMDLVisit?: boolean;
     saveInvioMailPending?: boolean;
     marketingDocs?: { id: string; nome: string; fileName?: string | null }[];
-}
+	    occupationalSummary?: {
+	        mansione?: string | null;
+	        mansioni?: string[];
+	        azienda?: string | null;
+	        sede?: string | null;
+	        protocollo?: string | null;
+	        reparto?: string | null;
+	        periodo?: string | null;
+	        title?: string | null;
+	        hiredDate?: string | Date | null;
+	        endDate?: string | Date | null;
+	        tipoContratto?: string | null;
+	        tipoCollaboratore?: string | null;
+	        rischi?: string[];
+	        historyCount?: number;
+	        rischiCount?: number;
+	    } | null;
+        onEditOccupationalSummary?: () => void;
+	}
+
+/** Split button: PDF Visita + PDF Giudizio (MDL) */
+const PdfSplitButton: React.FC<{
+    onCreateReferto: () => Promise<string | undefined>;
+    onOpenGiudizioPdf: () => void;
+}> = ({ onCreateReferto, onOpenGiudizioPdf }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    // Close dropdown on click outside
+    useEffect(() => {
+        if (!isOpen) return;
+        const handleClickOutside = (e: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [isOpen]);
+
+    return (
+        <div className="relative" ref={dropdownRef}>
+            <div className="flex items-stretch">
+                {/* Main button: PDF Referto */}
+                <button
+                    onClick={() => { onCreateReferto(); setIsOpen(false); }}
+                    title="Visualizza il referto PDF della visita"
+                    className="flex items-center gap-2 px-4 py-2.5 bg-teal-600 text-white 
+                             rounded-l-lg hover:bg-teal-700 transition-all shadow-md 
+                             hover:shadow-lg font-semibold text-sm border-r border-teal-500"
+                >
+                    <FileText className="h-4 w-4" />
+                    <span className="hidden sm:inline">PDF</span>
+                </button>
+                {/* Dropdown toggle */}
+                <button
+                    onClick={() => setIsOpen(!isOpen)}
+                    title="Scegli tipo di PDF"
+                    className="flex items-center px-2 py-2.5 bg-teal-600 text-white 
+                             rounded-r-lg hover:bg-teal-700 transition-all shadow-md hover:shadow-lg"
+                >
+                    <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                </button>
+            </div>
+            {/* Dropdown menu */}
+            {isOpen && (
+                <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50">
+                    <button
+                        onClick={() => { onCreateReferto(); setIsOpen(false); }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-teal-50 hover:text-teal-700 transition-colors"
+                    >
+                        <FileText className="h-4 w-4 text-teal-600" />
+                        <div className="text-left">
+                            <div className="font-medium">PDF Visita</div>
+                            <div className="text-xs text-gray-500">Referto della visita medica</div>
+                        </div>
+                    </button>
+                    <div className="border-t border-gray-100 mx-2" />
+                    <button
+                        onClick={() => { onOpenGiudizioPdf(); setIsOpen(false); }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-700 transition-colors"
+                    >
+                        <ClipboardCheck className="h-4 w-4 text-amber-600" />
+                        <div className="text-left">
+                            <div className="font-medium">PDF Giudizio Idoneità</div>
+                            <div className="text-xs text-gray-500">Art. 41 c.7 D.Lgs 81/08</div>
+                        </div>
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+};
 
 export const StickyVisitHeader: React.FC<StickyVisitHeaderProps> = ({
     paziente,
@@ -131,6 +228,7 @@ export const StickyVisitHeader: React.FC<StickyVisitHeaderProps> = ({
     onNuovaVersione,
     onAnnullaModifiche,
     onCreateReferto,
+    onOpenGiudizioPdf,
     versioneCorrente,
     // P61: Queue actions
     onChiamaPaziente,
@@ -140,15 +238,20 @@ export const StickyVisitHeader: React.FC<StickyVisitHeaderProps> = ({
     queueInAttesaCount,
     personId,
     onEditProfiloSalute,
+    onEditPatient,
     // P74
     invioRefertoMail = false,
     onInvioRefertoMailChange,
     isMDLVisit = false,
     saveInvioMailPending,
     marketingDocs,
+    occupationalSummary,
+    onEditOccupationalSummary,
 }) => {
     // ProfiloSalute expandable state
     const [profiloExpanded, setProfiloExpanded] = useState(false);
+    const [occupationalTooltipOpen, setOccupationalTooltipOpen] = useState(false);
+    const occupationalTooltipTimer = useRef<number | null>(null);
     // Computed patient data (handle both naming conventions)
     const patientName = `${paziente.cognome || paziente.lastName || ''} ${paziente.nome || paziente.firstName || ''}`.trim();
     const patientCF = paziente.codiceFiscale || paziente.taxCode || '';
@@ -219,8 +322,46 @@ export const StickyVisitHeader: React.FC<StickyVisitHeaderProps> = ({
         })
         : appuntamento?.ora || null;
 
-    // Prestazione name
-    const prestazioneName = prestazione?.nome || prestazione?.name || 'Visita generica';
+	    // Prestazione name
+	    const prestazioneName = prestazione?.nome || prestazione?.name || 'Visita generica';
+	    const occupationalTags = occupationalSummary ? [
+	        occupationalSummary.azienda,
+	        occupationalSummary.sede,
+	        occupationalSummary.reparto,
+	        occupationalSummary.protocollo ? `Protocollo: ${occupationalSummary.protocollo}` : null,
+	        occupationalSummary.periodo,
+	        typeof occupationalSummary.rischiCount === 'number' && occupationalSummary.rischiCount > 0
+	            ? `${occupationalSummary.rischiCount} rischi`
+	            : null,
+	        typeof occupationalSummary.historyCount === 'number' && occupationalSummary.historyCount > 0
+	            ? `${occupationalSummary.historyCount} versioni`
+	            : null,
+	    ].filter(Boolean) as string[] : [];
+        const occupationalDetailRows = occupationalSummary ? [
+            ['Azienda', occupationalSummary.azienda],
+            ['Titolo', occupationalSummary.title],
+            ['Assunzione', occupationalSummary.hiredDate ? new Date(occupationalSummary.hiredDate).toLocaleDateString('it-IT') : null],
+            ['Fine rapporto', occupationalSummary.endDate ? new Date(occupationalSummary.endDate).toLocaleDateString('it-IT') : null],
+            ['Contratto', occupationalSummary.tipoContratto],
+            ['Collaboratore', occupationalSummary.tipoCollaboratore],
+            ['Sede', occupationalSummary.sede],
+            ['Reparto', occupationalSummary.reparto],
+            ['Mansione', occupationalSummary.mansione],
+            ['Protocollo', occupationalSummary.protocollo],
+        ].filter(([, value]) => Boolean(value)) as [string, string][] : [];
+
+        const showOccupationalTooltip = () => {
+            if (occupationalTooltipTimer.current) window.clearTimeout(occupationalTooltipTimer.current);
+            occupationalTooltipTimer.current = window.setTimeout(() => setOccupationalTooltipOpen(true), 2000);
+        };
+        const hideOccupationalTooltip = () => {
+            if (occupationalTooltipTimer.current) window.clearTimeout(occupationalTooltipTimer.current);
+            setOccupationalTooltipOpen(false);
+        };
+        const hideOccupationalTooltipDelayed = () => {
+            if (occupationalTooltipTimer.current) window.clearTimeout(occupationalTooltipTimer.current);
+            occupationalTooltipTimer.current = window.setTimeout(() => setOccupationalTooltipOpen(false), 350);
+        };
 
     // Stato visita badge
     const getStatoBadge = () => {
@@ -267,6 +408,16 @@ export const StickyVisitHeader: React.FC<StickyVisitHeaderProps> = ({
                                     <h1 className="text-lg font-bold text-gray-900">
                                         {patientName || 'Paziente'}
                                     </h1>
+                                    {onEditPatient && (
+                                        <button
+                                            type="button"
+                                            onClick={onEditPatient}
+                                            className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 transition-colors hover:border-teal-200 hover:bg-teal-50 hover:text-teal-700"
+                                            title="Modifica anagrafica paziente"
+                                        >
+                                            <Edit2 className="h-3.5 w-3.5" />
+                                        </button>
+                                    )}
                                     {/* Gender Badge */}
                                     {genderBadge && (
                                         <span className={`px-2 py-0.5 rounded-full text-xs font-bold border ${genderBadge.color}`}>
@@ -437,16 +588,24 @@ export const StickyVisitHeader: React.FC<StickyVisitHeaderProps> = ({
                                     <span className="hidden sm:inline">Nuova Versione</span>
                                 </button>
 
-                                <button
-                                    onClick={onCreateReferto}
-                                    title="Visualizza il referto PDF generato"
-                                    className="flex items-center gap-2 px-5 py-2.5 bg-teal-600 text-white 
-                                             rounded-lg hover:bg-teal-700 transition-all shadow-md 
-                                             hover:shadow-lg font-semibold text-sm"
-                                >
-                                    <FileText className="h-4.5 w-4.5" />
-                                    <span className="hidden sm:inline">Referto PDF</span>
-                                </button>
+                                {/* PDF split button: Referto + Giudizio (MDL only) */}
+                                {isMDLVisit && onOpenGiudizioPdf ? (
+                                    <PdfSplitButton
+                                        onCreateReferto={onCreateReferto}
+                                        onOpenGiudizioPdf={onOpenGiudizioPdf}
+                                    />
+                                ) : (
+                                    <button
+                                        onClick={onCreateReferto}
+                                        title="Visualizza il referto PDF generato"
+                                        className="flex items-center gap-2 px-5 py-2.5 bg-teal-600 text-white 
+                                                 rounded-lg hover:bg-teal-700 transition-all shadow-md 
+                                                 hover:shadow-lg font-semibold text-sm"
+                                    >
+                                        <FileText className="h-4.5 w-4.5" />
+                                        <span className="hidden sm:inline">Referto PDF</span>
+                                    </button>
+                                )}
                             </div>
                         ) : (
                             /* Visita IN_CORSO - mostra Salva Bozza (o Annulla Modifiche se nuova versione) e Salva e Completa */
@@ -497,12 +656,12 @@ export const StickyVisitHeader: React.FC<StickyVisitHeaderProps> = ({
                 </div>
 
                 {/* Secondary Row: Contact & Appointment Info + ProfiloSalute toggle */}
-                <div className="flex items-center justify-between py-2 text-sm">
-                    {/* Patient Contact */}
-                    <div className="flex items-center gap-4 text-gray-600">
-                        {patientPhone && (
-                            <a
-                                href={`tel:${patientPhone}`}
+	                <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-2 py-2 text-sm">
+	                    {/* Patient Contact */}
+	                    <div className="flex flex-wrap items-center gap-3 text-gray-600 min-w-0">
+	                        {patientPhone && (
+	                            <a
+	                                href={`tel:${patientPhone}`}
                                 className="flex items-center gap-1.5 hover:text-teal-600 transition-colors"
                             >
                                 <Phone className="h-4 w-4" />
@@ -515,13 +674,90 @@ export const StickyVisitHeader: React.FC<StickyVisitHeaderProps> = ({
                                 className="flex items-center gap-1.5 hover:text-teal-600 transition-colors"
                             >
                                 <Mail className="h-4 w-4" />
-                                {patientEmail}
-                            </a>
-                        )}
-                    </div>
+	                                {patientEmail}
+	                            </a>
+	                        )}
+	                        {isMDLVisit && occupationalSummary && (
+	                            <div
+	                                className="relative flex flex-wrap items-center gap-2 min-w-0 rounded-lg border border-teal-100 bg-teal-50/70 px-2.5 py-1 text-xs text-slate-700"
+                                    onMouseEnter={showOccupationalTooltip}
+                                    onMouseLeave={hideOccupationalTooltipDelayed}
+                                    onFocus={showOccupationalTooltip}
+                                    onBlur={hideOccupationalTooltipDelayed}
+	                            >
+	                                <ClipboardCheck className="h-3.5 w-3.5 text-teal-600 flex-shrink-0" />
+	                                <span className="font-semibold text-slate-800">
+	                                    {occupationalSummary.mansione || 'Stato occupazionale'}
+	                                </span>
+	                                {occupationalTags.slice(0, 6).map(tag => (
+	                                    <span key={tag} className="max-w-[220px] truncate text-slate-600">
+	                                        {tag}
+	                                    </span>
+	                                ))}
+                                    {occupationalTooltipOpen && (
+                                        <div
+                                            className="absolute left-0 top-full z-[1600] mt-2 w-[min(92vw,460px)] rounded-xl border border-teal-100 bg-white p-3 text-xs text-slate-700 shadow-xl"
+                                            onMouseEnter={() => {
+                                                if (occupationalTooltipTimer.current) window.clearTimeout(occupationalTooltipTimer.current);
+                                            }}
+                                            onMouseLeave={hideOccupationalTooltipDelayed}
+                                        >
+                                            <div className="mb-2 flex items-start justify-between gap-3">
+                                                <div>
+                                                    <p className="font-semibold text-slate-900">Stato occupazionale</p>
+                                                    <p className="text-[11px] text-slate-500">Dettaglio azienda, sede, mansione e rischi</p>
+                                                </div>
+                                                {onEditOccupationalSummary && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={onEditOccupationalSummary}
+                                                        className="inline-flex items-center gap-1 rounded-lg border border-teal-100 px-2 py-1 font-semibold text-teal-700 hover:bg-teal-50"
+                                                    >
+                                                        <Edit2 className="h-3 w-3" />
+                                                        Modifica
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                                                {occupationalDetailRows.map(([label, value]) => (
+                                                    <div key={label} className="rounded-lg bg-slate-50 px-2 py-1.5">
+                                                        <p className="text-[10px] font-semibold uppercase text-slate-400">{label}</p>
+                                                        <p className="font-medium text-slate-800">{value}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            {!!occupationalSummary.mansioni?.length && (
+                                                <div className="mt-2">
+                                                    <p className="mb-1 text-[10px] font-semibold uppercase text-slate-400">Mansioni</p>
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {occupationalSummary.mansioni.map(mansione => (
+                                                            <span key={mansione} className="rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-medium text-teal-700">
+                                                                {mansione}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {!!occupationalSummary.rischi?.length && (
+                                                <div className="mt-2">
+                                                    <p className="mb-1 text-[10px] font-semibold uppercase text-slate-400">Rischi</p>
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {occupationalSummary.rischi.map(rischio => (
+                                                            <span key={rischio} className="rounded-full bg-orange-50 px-2 py-0.5 text-[11px] font-medium text-orange-700">
+                                                                {rischio}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+	                            </div>
+	                        )}
+	                    </div>
 
-                    {/* Right: Appointment Info + ProfiloSalute button */}
-                    <div className="flex items-center gap-4 text-gray-600">
+	                    {/* Right: Appointment Info + ProfiloSalute button */}
+	                    <div className="flex flex-wrap items-center gap-4 text-gray-600">
                         {(formattedDate || formattedTime2) && (
                             <span className="flex items-center gap-1.5">
                                 <Calendar className="h-4 w-4" />
@@ -532,8 +768,7 @@ export const StickyVisitHeader: React.FC<StickyVisitHeaderProps> = ({
                         <span className="text-teal-600 font-medium">
                             {prestazioneName}
                         </span>
-
-                        {/* ProfiloSalute toggle button */}
+	                        {/* ProfiloSalute toggle button */}
                         {personId && (
                             <button
                                 onClick={() => setProfiloExpanded(v => !v)}

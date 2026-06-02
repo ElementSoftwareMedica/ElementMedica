@@ -13,13 +13,15 @@ import express from 'express';
 import TenantPecConfigService from '../../services/clinical/TenantPecConfigService.js';
 import { authenticate, requireAuth } from '../../middleware/auth.js';
 import { requirePermission } from '../../middleware/rbac.js';
+import { requireFeature } from '../../middleware/featureFlags.js';
 import logger from '../../utils/logger.js';
 import { getEffectiveTenantId } from '../../utils/tenantHelper.js';
 
 const router = express.Router();
 
-// Tutti gli endpoint richiedono autenticazione
+// Tutti gli endpoint richiedono autenticazione + feature PEC_INTEGRATION
 router.use(authenticate);
+router.use(requireFeature('PEC_INTEGRATION'));
 
 // ============================================
 // GET /api/v1/clinica/pec-config/providers

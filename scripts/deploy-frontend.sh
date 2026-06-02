@@ -16,7 +16,7 @@ NC='\033[0m'
 
 # Configurazione
 SSH_KEY="$HOME/.ssh/id_ed25519"
-SERVER="root@178.104.44.177"
+SERVER="root@178.104.197.134"
 REMOTE_PATH="/var/www/elementmedica/dist"
 
 # Directory base
@@ -36,6 +36,7 @@ fi
 echo ""
 echo -e "${BLUE}📊 File da sincronizzare:${NC}"
 rsync -avzn --delete \
+    --no-perms \
     --exclude '.DS_Store' \
     --exclude '*.map' \
     -e "ssh -i $SSH_KEY" \
@@ -54,17 +55,18 @@ echo ""
 echo -e "${BLUE}📤 Sincronizzazione in corso...${NC}"
 
 rsync -avz --delete \
+    --no-perms \
     --exclude '.DS_Store' \
     -e "ssh -i $SSH_KEY" \
     dist/ \
     $SERVER:$REMOTE_PATH/
 
-echo ""
-echo -e "${BLUE}🔐 Correzione permessi file statici...${NC}"
-ssh -i $SSH_KEY $SERVER "find $REMOTE_PATH -type f \( -name '*.png' -o -name '*.jpg' -o -name '*.ico' -o -name '*.svg' -o -name '*.webp' \) ! -perm 644 -exec chmod 644 {} \;"
+# Fix permessi dopo rsync (macOS rsync non supporta --chmod=D755,F644)
+echo -e "${BLUE}🔧 Correzione permessi...${NC}"
+ssh -i "$SSH_KEY" "$SERVER" "find $REMOTE_PATH -type f | xargs chmod 644 && find $REMOTE_PATH -type d | xargs chmod 755"
 
 echo ""
-echo -e "${GREEN}✅ Frontend deployed!${NC}"
+echo -e "${GREEN}✅ Frontend deployed! (permessi corretti: file=644, dirs=755)${NC}"
 echo ""
 echo "🌐 Verifica: https://www.elementsicurezza.com"
 echo "🔄 Cache: Ctrl+Shift+R nel browser per forzare refresh"

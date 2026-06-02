@@ -12,17 +12,17 @@
  * - Real Appuntamento creation (P67)
  * 
  * API endpoints used:
- * - GET /api/public/booking/sedi -> sedi with opening hours
- * - GET /api/public/booking/prestazioni -> services grouped by brancheSpecialistiche
- * - GET /api/public/booking/times?medicoId=X&giorno=Y -> sub-slot times
- * - GET /api/public/booking/times-multi?prestazioneId=X&giorno=Y -> all medici times
- * - POST /api/public/booking/create -> creates real Appuntamento
+ * - GET /api/v1/public/booking/sedi -> sedi with opening hours
+ * - GET /api/v1/public/booking/prestazioni -> services grouped by brancheSpecialistiche
+ * - GET /api/v1/public/booking/times?medicoId=X&giorno=Y -> sub-slot times
+ * - GET /api/v1/public/booking/times-multi?prestazioneId=X&giorno=Y -> all medici times
+ * - POST /api/v1/public/booking/create -> creates real Appuntamento
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Calendar, Clock, User, Stethoscope, ChevronRight, ChevronLeft, Check,
-  CreditCard, FileText, AlertCircle, Loader2, Tags, MapPin, Users
+  CreditCard, FileText, AlertCircle, Loader2, Tags, MapPin, Users, Phone
 } from 'lucide-react';
 
 // -----------------------------------------------
@@ -50,6 +50,7 @@ interface Prestazione {
   istruzioniPreparazione?: string | null;
   brancheSpecialistiche: string[];
   slotDisponibili: number;
+  onlineBookingAvailable?: boolean;
   mediciDisponibili: MedicoDisponibile[];
 }
 
@@ -116,7 +117,7 @@ const MESI = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Lug
 // API helpers
 // -----------------------------------------------
 
-const API_BASE = '/api/public/booking';
+const API_BASE = '/api/v1/public/booking';
 const BRAND_ID = import.meta.env.VITE_BRAND_ID || 'element-sicurezza';
 const BRAND_HEADERS: Record<string, string> = { 'X-Frontend-Id': BRAND_ID };
 
@@ -127,9 +128,12 @@ async function fetchSedi(): Promise<Sede[]> {
   return data.data || [];
 }
 
-async function fetchPrestazioni(sedeId?: string): Promise<Prestazione[]> {
-  const params = sedeId ? `?sedeId=${encodeURIComponent(sedeId)}` : '';
-  const res = await fetch(`${API_BASE}/prestazioni${params}`, { headers: BRAND_HEADERS });
+async function fetchPrestazioni(sedeId?: string, medicoId?: string): Promise<Prestazione[]> {
+  const params = new URLSearchParams();
+  if (sedeId) params.set('sedeId', sedeId);
+  if (medicoId) params.set('medicoId', medicoId);
+  const queryStr = params.toString() ? `?${params.toString()}` : '';
+  const res = await fetch(`${API_BASE}/prestazioni${queryStr}`, { headers: BRAND_HEADERS });
   if (!res.ok) throw new Error('Errore nel caricamento delle prestazioni');
   const data = await res.json();
   return data.data || data;
@@ -300,19 +304,20 @@ const BookingCalendarIsland: React.FC<BookingCalendarIslandProps> = ({
         p.brancheSpecialistiche.some(b => config.brancheFilter!.includes(b))
       );
     }
-    const brancaMap = new Map<string, { count: number; mediciIds: Set<string> }>();
+    const brancaMap = new Map<string, { count: number; mediciIds: Set<string>; hasOnline: boolean }>();
     for (const p of filtered) {
       const branches = p.brancheSpecialistiche.length > 0 ? p.brancheSpecialistiche : ['Altro'];
       for (const b of branches) {
         if (config?.brancheFilter?.length && !config.brancheFilter.includes(b)) continue;
-        if (!brancaMap.has(b)) brancaMap.set(b, { count: 0, mediciIds: new Set() });
+        if (!brancaMap.has(b)) brancaMap.set(b, { count: 0, mediciIds: new Set(), hasOnline: false });
         const entry = brancaMap.get(b)!;
         entry.count++;
+        if (p.onlineBookingAvailable) entry.hasOnline = true;
         for (const m of p.mediciDisponibili) entry.mediciIds.add(m.id);
       }
     }
     return Array.from(brancaMap.entries())
-      .map(([nome, { count, mediciIds }]) => ({ nome, prestazioniCount: count, mediciCount: mediciIds.size }))
+      .map(([nome, { count, mediciIds, hasOnline }]) => ({ nome, prestazioniCount: count, mediciCount: mediciIds.size, hasOnline }))
       .sort((a, b) => a.nome.localeCompare(b.nome));
   }, [prestazioni, config]);
 
@@ -352,7 +357,7 @@ const BookingCalendarIsland: React.FC<BookingCalendarIslandProps> = ({
     let cancelled = false;
     setLoading(true);
 
-    Promise.all([fetchSedi(), fetchPrestazioni()])
+    Promise.all([fetchSedi(), fetchPrestazioni(undefined, initialMedicoId)])
       .then(([sediData, prestazioniData]) => {
         if (cancelled) return;
 
@@ -420,7 +425,7 @@ const BookingCalendarIsland: React.FC<BookingCalendarIslandProps> = ({
     if (!selectedSedeId || sedi.length <= 1) return;
     let cancelled = false;
     setLoading(true);
-    fetchPrestazioni(selectedSedeId)
+    fetchPrestazioni(selectedSedeId || undefined, initialMedicoId)
       .then(data => { if (!cancelled) setPrestazioni(data); })
       .catch(() => { })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -558,35 +563,37 @@ const BookingCalendarIsland: React.FC<BookingCalendarIslandProps> = ({
 
   // Step Indicator
   const renderStepIndicator = () => (
-    <div className="flex items-center justify-center gap-1 mb-6 overflow-x-auto py-1">
-      {STEPS.map((step, index) => {
-        const isActive = index === currentStepIndex;
-        const isCompleted = index < currentStepIndex;
-        const isClickable = index < currentStepIndex;
-        return (
-          <React.Fragment key={step}>
-            {index > 0 && (
-              <div className={`w-6 h-0.5 flex-shrink-0 ${isCompleted ? 'bg-primary-500' : 'bg-gray-200'}`} />
-            )}
-            <button
-              onClick={() => isClickable && goToStep(step)}
-              disabled={!isClickable}
-              className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium transition-all flex-shrink-0 ${isActive
-                ? 'bg-primary-100 text-primary-700 ring-2 ring-primary-300'
-                : isCompleted
-                  ? 'bg-primary-500 text-white cursor-pointer hover:bg-primary-600'
-                  : 'bg-gray-100 text-gray-400'
-                }`}
-            >
-              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${isActive ? 'bg-primary-600 text-white' : isCompleted ? 'bg-white text-primary-600' : 'bg-gray-300 text-white'
-                }`}>
-                {isCompleted ? <Check className="w-3 h-3" /> : index + 1}
-              </span>
-              <span className="hidden sm:inline">{STEP_LABELS[step]}</span>
-            </button>
-          </React.Fragment>
-        );
-      })}
+    <div className="overflow-x-auto mb-6">
+      <div className="flex items-center justify-center gap-1 py-2 px-4 w-max mx-auto">
+        {STEPS.map((step, index) => {
+          const isActive = index === currentStepIndex;
+          const isCompleted = index < currentStepIndex;
+          const isClickable = index < currentStepIndex;
+          return (
+            <React.Fragment key={step}>
+              {index > 0 && (
+                <div className={`w-6 h-0.5 flex-shrink-0 ${isCompleted ? 'bg-primary-500' : 'bg-gray-200'}`} />
+              )}
+              <button
+                onClick={() => isClickable && goToStep(step)}
+                disabled={!isClickable}
+                className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium transition-all flex-shrink-0 ${isActive
+                  ? 'bg-primary-100 text-primary-700 ring-2 ring-primary-300'
+                  : isCompleted
+                    ? 'bg-primary-500 text-white cursor-pointer hover:bg-primary-600'
+                    : 'bg-gray-100 text-gray-400'
+                  }`}
+              >
+                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${isActive ? 'bg-primary-600 text-white' : isCompleted ? 'bg-white text-primary-600' : 'bg-gray-300 text-white'
+                  }`}>
+                  {isCompleted ? <Check className="w-3 h-3" /> : index + 1}
+                </span>
+                <span className="hidden sm:inline">{STEP_LABELS[step]}</span>
+              </button>
+            </React.Fragment>
+          );
+        })}
+      </div>
     </div>
   );
 
@@ -612,7 +619,10 @@ const BookingCalendarIsland: React.FC<BookingCalendarIslandProps> = ({
       ) : branche.length === 0 ? (
         <div className="text-center py-8 text-gray-500">
           <AlertCircle className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-          Nessuna specialità disponibile al momento.
+          {initialMedicoId
+            ? 'Nessun appuntamento online disponibile al momento. Contatta lo studio per prenotare.'
+            : 'Nessuna specialità disponibile al momento.'
+          }
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -637,6 +647,10 @@ const BookingCalendarIsland: React.FC<BookingCalendarIslandProps> = ({
                   <p className="text-xs text-gray-500 mt-1">
                     {b.prestazioniCount} {b.prestazioniCount === 1 ? 'prestazione' : 'prestazioni'} · {b.mediciCount} {b.mediciCount === 1 ? 'medico' : 'medici'}
                   </p>
+                  <span className={`text-xs font-medium mt-1.5 inline-flex items-center gap-1 ${b.hasOnline ? 'text-green-600' : 'text-amber-600'}`}>
+                    <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ backgroundColor: 'currentColor' }} />
+                    {b.hasOnline ? 'Prenotazione online disponibile' : 'Su appuntamento'}
+                  </span>
                 </div>
                 <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-primary-500 transition-colors mt-1" />
               </div>
@@ -670,61 +684,103 @@ const BookingCalendarIsland: React.FC<BookingCalendarIslandProps> = ({
         <div className="text-center py-8 text-gray-500">Nessuna prestazione disponibile per questa specialità.</div>
       ) : (
         <div className="space-y-2">
-          {filteredPrestazioni.map(p => (
-            <button
-              key={p.id}
-              onClick={() => {
-                if (initialMedicoId) {
-                  // Doctor pre-selected: auto-set doctor and skip to calendario
-                  setFormData(prev => ({ ...prev, prestazioneId: p.id, medicoId: initialMedicoId, data: '', orario: '' }));
-                  setAllDoctorsMode(false);
-                  setWeekStart(getMonday(new Date()));
-                  setCurrentStep('calendario');
-                } else {
-                  setFormData(prev => ({ ...prev, prestazioneId: p.id, medicoId: '', data: '', orario: '' }));
-                  setAllDoctorsMode(false);
-                  goNext();
-                }
-              }}
-              className={`w-full p-4 rounded-xl border text-left transition-all hover:shadow-md group ${formData.prestazioneId === p.id
-                ? 'border-primary-500 bg-primary-50 ring-2 ring-primary-200'
-                : 'border-gray-200 hover:border-primary-300 bg-white'
-                }`}
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex-1 min-w-0">
-                  <h4 className="font-semibold text-gray-900 group-hover:text-primary-700 transition-colors">
-                    {p.nome}
-                  </h4>
-                  {p.descrizione && (
-                    <p className="text-sm text-gray-500 mt-1 line-clamp-2">{p.descrizione}</p>
-                  )}
-                  <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
-                    <span className="flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5" />
-                      {p.durataPrevista} min
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <User className="w-3.5 h-3.5" />
-                      {p.mediciDisponibili.length} {p.mediciDisponibili.length === 1 ? 'medico' : 'medici'}
-                    </span>
-                    {p.istruzioniPreparazione && (
-                      <span className="flex items-center gap-1 text-amber-600">
-                        <FileText className="w-3.5 h-3.5" />
-                        Preparazione
-                      </span>
+          {filteredPrestazioni.map(p => {
+            // Contact-only: no online slots available for this prestazione
+            if (!p.onlineBookingAvailable) {
+              return (
+                <div
+                  key={p.id}
+                  className="w-full p-4 rounded-xl border border-amber-200 bg-amber-50 text-left"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-semibold text-gray-900">{p.nome}</h4>
+                      {p.descrizione && (
+                        <p className="text-sm text-gray-500 mt-1 line-clamp-2">{p.descrizione}</p>
+                      )}
+                      <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5" />
+                          {p.durataPrevista} min
+                        </span>
+                        {p.istruzioniPreparazione && (
+                          <span className="flex items-center gap-1 text-amber-600">
+                            <FileText className="w-3.5 h-3.5" />
+                            Preparazione
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-amber-700 font-medium mt-2 flex items-center gap-1">
+                        <Phone className="w-3.5 h-3.5" />
+                        Prenota telefonicamente
+                        {selectedSede?.telefono && <> · <span className="underline">{selectedSede.telefono}</span></>}
+                      </p>
+                    </div>
+                    {!config?.hidePrice && (
+                      <div className="flex flex-col items-end ml-3 flex-shrink-0">
+                        <span className="text-lg font-bold text-primary-700">{formatEuro(p.prezzo)}</span>
+                      </div>
                     )}
                   </div>
                 </div>
-                {!config?.hidePrice && (
-                  <div className="flex flex-col items-end ml-3 flex-shrink-0">
-                    <span className="text-lg font-bold text-primary-700">{formatEuro(p.prezzo)}</span>
-                    <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-primary-500 transition-colors mt-1" />
+              );
+            }
+            return (
+              <button
+                key={p.id}
+                onClick={() => {
+                  if (initialMedicoId) {
+                    // Doctor pre-selected: auto-set doctor and skip to calendario
+                    setFormData(prev => ({ ...prev, prestazioneId: p.id, medicoId: initialMedicoId, data: '', orario: '' }));
+                    setAllDoctorsMode(false);
+                    setWeekStart(getMonday(new Date()));
+                    setCurrentStep('calendario');
+                  } else {
+                    setFormData(prev => ({ ...prev, prestazioneId: p.id, medicoId: '', data: '', orario: '' }));
+                    setAllDoctorsMode(false);
+                    goNext();
+                  }
+                }}
+                className={`w-full p-4 rounded-xl border text-left transition-all hover:shadow-md group ${formData.prestazioneId === p.id
+                  ? 'border-primary-500 bg-primary-50 ring-2 ring-primary-200'
+                  : 'border-gray-200 hover:border-primary-300 bg-white'
+                  }`}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-semibold text-gray-900 group-hover:text-primary-700 transition-colors">
+                      {p.nome}
+                    </h4>
+                    {p.descrizione && (
+                      <p className="text-sm text-gray-500 mt-1 line-clamp-2">{p.descrizione}</p>
+                    )}
+                    <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5" />
+                        {p.durataPrevista} min
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <User className="w-3.5 h-3.5" />
+                        {p.mediciDisponibili.length} {p.mediciDisponibili.length === 1 ? 'medico' : 'medici'}
+                      </span>
+                      {p.istruzioniPreparazione && (
+                        <span className="flex items-center gap-1 text-amber-600">
+                          <FileText className="w-3.5 h-3.5" />
+                          Preparazione
+                        </span>
+                      )}
+                    </div>
                   </div>
-                )}
-              </div>
-            </button>
-          ))}
+                  {!config?.hidePrice && (
+                    <div className="flex flex-col items-end ml-3 flex-shrink-0">
+                      <span className="text-lg font-bold text-primary-700">{formatEuro(p.prezzo)}</span>
+                      <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-primary-500 transition-colors mt-1" />
+                    </div>
+                  )}
+                </div>
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
@@ -772,7 +828,24 @@ const BookingCalendarIsland: React.FC<BookingCalendarIslandProps> = ({
         )}
 
         {medici.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">Nessun medico disponibile per questa prestazione.</div>
+          <div className="text-center py-8">
+            <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-3">
+              <Phone className="w-6 h-6 text-amber-500" />
+            </div>
+            <p className="font-medium text-gray-800">Nessuna disponibilità online</p>
+            <p className="text-sm text-gray-500 mt-1">
+              Per questa prestazione è necessario prenotare telefonicamente.
+            </p>
+            {selectedSede?.telefono && (
+              <a
+                href={`tel:${selectedSede.telefono}`}
+                className="inline-flex items-center gap-2 mt-3 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium rounded-lg transition-colors"
+              >
+                <Phone className="w-4 h-4" />
+                Chiama {selectedSede.telefono}
+              </a>
+            )}
+          </div>
         ) : (
           <>
             {medici.length > 1 && (

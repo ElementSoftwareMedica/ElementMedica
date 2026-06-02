@@ -9,6 +9,7 @@ import { useLocation } from 'react-router-dom';
 import authService, { IdentifyResponse, IdentifyAccount } from '../services/auth';
 import { AuthResponse, Person } from '../types';
 import { convertBackendToFrontendPermissions } from '../utils/permissionMapping';
+const ForceChangePasswordModal = React.lazy(() => import('../components/auth/ForceChangePasswordModal'));
 
 /**
  * Maps backend roles array to frontend display role
@@ -26,6 +27,7 @@ const mapRolesToDisplayRole = (roles: string[] | undefined): string => {
   if (roles.includes('TENANT_ADMIN')) return 'Administrator';
 
   // Clinical roles (P52)
+  if (roles.includes('MEDICO_COMPETENTE')) return 'Medico Competente';
   if (roles.includes('MEDICO')) return 'Medico';
   if (roles.includes('PAZIENTE')) return 'Paziente';
   if (roles.includes('INFERMIERE')) return 'Infermiere';
@@ -108,8 +110,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         '/schedules',
         '/calendar',
         '/documents',
+        '/documents-corsi',
         '/quotes',
         '/invoices',
+        '/preventivi',
         '/forms',
         '/test',
         '/templates',
@@ -118,6 +122,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         '/roles',
         '/permissions',
         '/admin',
+        '/gdpr',
+        '/notifications',
         '/cms' // CMS Hub (pagina admin per gestione pagine CMS)
       ];
 
@@ -177,15 +183,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               role: mapRolesToDisplayRole(res.user.roles)
             };
 
+            setUser(mappedUser);
+
+            // F313: Se mustChangePassword=true, mostra il modal senza caricare permessi
+            if (res.mustChangePassword) {
+              setMustChangePassword(true);
+              setPermissions({});
+              return;
+            }
+
             // Verifica che i permessi siano validi
             if (res.permissions && typeof res.permissions === 'object') {
-              setUser(mappedUser);
               // Converti i permessi dal formato backend al formato frontend per compatibilità
               const convertedPermissions = convertBackendToFrontendPermissions(res.permissions);
               setPermissions(convertedPermissions);
             } else {
               if (import.meta.env.DEV) console.error('❌ AuthContext: Invalid permissions object:', res.permissions);
-              setUser(mappedUser);
               setPermissions({});
             }
           } else {
@@ -196,7 +209,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         try {
           await performVerify();
         } catch (error: unknown) {
-          const status = error?.response?.status;
+          const status = (error as any)?.response?.status;
           if (import.meta.env.DEV) console.warn('⚠️ Verify failed', { status });
 
           if (status === 401 || status === 403) {
@@ -601,6 +614,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       refreshUser
     }}>
       {children}
+      {/* Mostra il modal globalmente quando mustChangePassword=true (gestisce anche il caso post-reload) */}
+      {mustChangePassword && (
+        <React.Suspense fallback={null}>
+          <ForceChangePasswordModal
+            currentPassword={pendingPassword || undefined}
+            onSuccess={() => {
+              clearMustChangePassword();
+            }}
+            onLogout={async () => {
+              clearMustChangePassword();
+              await logout();
+            }}
+          />
+        </React.Suspense>
+      )}
     </AuthContext.Provider>
   );
 };

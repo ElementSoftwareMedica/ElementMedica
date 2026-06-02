@@ -55,6 +55,9 @@ interface UnifiedCourse {
   commonRequirements: string[];
   commonCertification: string;
   image1Url?: string;
+  image2Url?: string;
+  fullDescription?: string;
+  shortDescription?: string;
 }
 
 /**
@@ -90,7 +93,7 @@ export const UnifiedCourseDetailPage: React.FC = () => {
     try {
       setLoading(true);
       // Usa client centralizzato: il baseURL gestisce il prefisso /api automaticamente
-      const data = await apiService.get<UnifiedCourse>(`/public/courses/unified/${encodeURIComponent(title)}`);
+      const data = await apiService.get<UnifiedCourse>(`/api/v1/public/courses/unified/${encodeURIComponent(title)}`);
       setUnifiedCourse(data);
 
       // Seleziona la prima variante di default
@@ -177,7 +180,7 @@ export const UnifiedCourseDetailPage: React.FC = () => {
     }
 
     try {
-      await apiService.post('/api/public/contact-submissions', {
+      await apiService.post('/api/v1/public/contact-submissions', {
         ...requestForm,
         courseTitle: unifiedCourse?.baseTitle,
         courseVariant: selectedVariant?.slug
@@ -283,6 +286,16 @@ export const UnifiedCourseDetailPage: React.FC = () => {
                   </div>
                 )}
               </div>
+              {/* Second image if available */}
+              {unifiedCourse.image2Url && (
+                <div className="mt-4 aspect-w-16 aspect-h-9 rounded-2xl overflow-hidden bg-gray-200">
+                  <img
+                    src={unifiedCourse.image2Url}
+                    alt={`${unifiedCourse.baseTitle} - Seconda immagine`}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              )}
             </div>
 
             {/* Course Info */}
@@ -303,7 +316,7 @@ export const UnifiedCourseDetailPage: React.FC = () => {
               </h1>
 
               <p className="text-xl text-gray-600 mb-6">
-                {selectedVariant?.shortDescription}
+                {unifiedCourse.fullDescription || unifiedCourse.shortDescription || selectedVariant?.shortDescription}
               </p>
 
               {/* Pricing and CTA */}

@@ -9,6 +9,7 @@ import prisma from '../../config/prisma-optimization.js';
 import logger from '../../utils/logger.js';
 import { EventBus, VisitaEvents } from '../events/index.js';
 import { VisitTemplateService } from './VisitTemplateService.js';
+import MovimentoContabileGenerator from '../management/MovimentoContabileGenerator.js';
 import crypto from 'crypto';
 
 // Stati visita validi
@@ -22,6 +23,71 @@ const TRANSIZIONI_STATO = {
     'COMPLETATA': [], // Stato finale
     'ANNULLATA': [] // Stato finale
 };
+
+function applicaConvenzione(importo, condizioni) {
+    if (importo == null || !condizioni) return importo;
+    const scontoInfo = condizioni.scontoInfo || null;
+    const scontoPercentuale = Number(
+        condizioni.scontoPercentuale
+        ?? condizioni.percentualeSconto
+        ?? (scontoInfo?.tipo === 'PERCENTUALE' ? scontoInfo.valore : 0)
+        ?? 0
+    );
+    const scontoFisso = Number(
+        condizioni.scontoFisso
+        ?? (scontoInfo?.tipo === 'VALORE_ASSOLUTO' ? scontoInfo.valore : 0)
+        ?? 0
+    );
+    let totale = Number(importo);
+    if (scontoPercentuale > 0) totale *= (1 - scontoPercentuale / 100);
+    if (scontoFisso > 0) totale = Math.max(0, totale - scontoFisso);
+    return Math.round(totale * 100) / 100;
+}
+
+async function findTariffarioAssociation(companyTenantProfileId, tenantId, referenceDate = new Date(), include = {}) {
+    const baseWhere = {
+        companyTenantProfileId,
+        tenantId,
+        attivo: true,
+        deletedAt: null,
+    };
+    return await prisma.tariffarioCompanyAssociation.findFirst({
+        where: {
+            ...baseWhere,
+            validoDa: { lte: referenceDate },
+            OR: [{ validoA: null }, { validoA: { gte: referenceDate } }],
+        },
+        include,
+        orderBy: { validoDa: 'desc' },
+    }) || await prisma.tariffarioCompanyAssociation.findFirst({
+        where: baseWhere,
+        include,
+        orderBy: { validoDa: 'desc' },
+    });
+}
+
+async function getCompletedAppointmentStatus(appuntamentoId, tenantId) {
+    const [appuntamento, paidMovement] = await Promise.all([
+        prisma.appuntamento.findFirst({
+            where: { id: appuntamentoId, tenantId, deletedAt: null },
+            select: { pagamentoAnticipato: true }
+        }),
+        prisma.movimentoContabile.findFirst({
+            where: {
+                tenantId,
+                appuntamentoId,
+                deletedAt: null,
+                direzione: 'ENTRATA',
+                OR: [
+                    { stato: 'PAGATO' },
+                    { fatturaElettronica: { deletedAt: null, stato: 'PAGATA' } }
+                ]
+            },
+            select: { id: true }
+        })
+    ]);
+    return appuntamento?.pagamentoAnticipato || paidMovement ? 'FATTURATO' : 'COMPLETATO';
+}
 
 export class VisitaService {
     /**
@@ -82,9 +148,21 @@ export class VisitaService {
                 where: {
                     id: medicoId,
                     deletedAt: null,
-                    tenantProfiles: {
-                        some: { tenantId, deletedAt: null }
-                    }
+                    OR: [
+                        { tenantProfiles: { some: { tenantId, deletedAt: null } } },
+                        { tenantAccesses: { some: { tenantId, isActive: true, deletedAt: null } } },
+                        { personRoles: { some: { tenantId, isActive: true, deletedAt: null, roleType: { in: ['MEDICO', 'TENANT_ADMIN', 'ADMIN', 'SUPER_ADMIN'] } } } },
+                        {
+                            nomine: {
+                                some: {
+                                    tenantId,
+                                    deletedAt: null,
+                                    stato: 'ATTIVA',
+                                    tipoRuolo: { in: ['MEDICO_COMPETENTE', 'MEDICO_COMPETENTE_COORDINATO'] }
+                                }
+                            }
+                        }
+                    ]
                 }
             });
             if (!medico) throw new Error('Medico not found');
@@ -292,7 +370,7 @@ export class VisitaService {
                             taxCode: true,
                             tenantProfiles: {
                                 where: { deletedAt: null, isActive: true },
-                                select: { email: true, phone: true, isPrimary: true },
+                                select: { email: true, phone: true, isPrimary: true, companyTenantProfileId: true },
                                 take: 1
                             }
                         }
@@ -329,6 +407,9 @@ export class VisitaService {
                             codice: true,
                             nome: true,
                             tipo: true,
+                            prezzoBase: true,
+                            prezzoPrimaVisita: true,
+                            prezzoControllo: true,
                             durataPrevista: true
                         }
                     },
@@ -337,7 +418,54 @@ export class VisitaService {
                             id: true,
                             numeroPrenotazione: true,
                             dataOra: true,
-                            stato: true
+                            stato: true,
+                            convenzioneId: true,
+                            companyTenantProfileId: true,
+                            tipoVisitaMDL: true,
+                            convenzione: {
+                                select: {
+                                    id: true,
+                                    nome: true,
+                                    condizioni: true
+                                }
+                            },
+                            prestazioni: {
+                                where: { deletedAt: null },
+                                select: {
+                                    id: true,
+                                    prestazioneId: true,
+                                    prestazione: {
+                                        select: { id: true, codice: true, nome: true, tipo: true, prezzoBase: true }
+                                    },
+                                    movimentiContabili: {
+                                        where: { deletedAt: null },
+                                        select: { importoLordo: true, direzione: true }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    movimentiContabili: {
+                        where: { deletedAt: null },
+                        select: { importoLordo: true, direzione: true }
+                    },
+                    giudizioIdoneita: {
+                        select: {
+                            id: true,
+                            tipoGiudizio: true,
+                            stato: true,
+                            dataEmissione: true,
+                            dataScadenza: true,
+                            prescrizioniIdoneita: true,
+                            limitazioni: true,
+                            motivazioni: true,
+                            mansioni: {
+                                select: {
+                                    mansione: {
+                                        select: { id: true, denominazione: true }
+                                    }
+                                }
+                            }
                         }
                     },
                     referti: {
@@ -387,7 +515,100 @@ export class VisitaService {
                 }
             });
 
-            return { ...visita, fatture };
+            // Calculate totaleCosto — aligned with frontend PrestazioniCard logic
+            // Uses tariffario aziendale prices when available (MDL company-specific pricing)
+            const primaryPrestazioneId = visita.prestazioneId;
+            const tipoVisitaMDL = visita.tipoVisitaMDL || visita.appuntamento?.tipoVisitaMDL;
+            const isMDL = !!tipoVisitaMDL;
+
+            // Lookup tariffario voce prices for company-specific pricing (MDL)
+            let tariffarioVoci = [];
+            const companyProfileId = visita.appuntamento?.companyTenantProfileId
+                || visita.paziente?.tenantProfiles?.find(p => p.companyTenantProfileId)?.companyTenantProfileId
+                || null;
+            if (companyProfileId && isMDL) {
+                try {
+                    const tariffAssoc = await findTariffarioAssociation(
+                        companyProfileId,
+                        tenantId,
+                        visita.dataOra || new Date(),
+                        {
+                            tariffario: {
+                                include: {
+                                    voci: {
+                                        where: { attivo: true, deletedAt: null },
+                                        select: { prestazioneId: true, prezzoBase: true, categoriaVisita: true },
+                                    },
+                                },
+                            }
+                        }
+                    );
+                    tariffarioVoci = tariffAssoc?.tariffario?.voci ?? [];
+                } catch (e) {
+                    logger.warn('Failed to lookup tariffario for totaleCosto', { error: e.message, visitaId: id });
+                }
+            }
+
+            // Helper: find tariffario price for a prestazione
+            const getTariffarioPrice = (prestazioneId) => {
+                if (!tariffarioVoci.length || !prestazioneId) return null;
+                const voce = tariffarioVoci.find(v => v.prestazioneId === prestazioneId && v.categoriaVisita === tipoVisitaMDL)
+                    ?? tariffarioVoci.find(v => v.prestazioneId === prestazioneId && !v.categoriaVisita)
+                    ?? tariffarioVoci.find(v => v.prestazioneId === prestazioneId);
+                return voce ? Number(voce.prezzoBase) : null;
+            };
+
+            // 1. Primary price: tariffario > prezzoPrimaVisita/prezzoControllo > prezzoBase
+            let primaryPrice = 0;
+            if (visita.prestazione) {
+                const tariffPrice = getTariffarioPrice(primaryPrestazioneId);
+                if (tariffPrice != null) {
+                    primaryPrice = tariffPrice;
+                } else if (visita.isPrimaVisita && visita.prestazione.prezzoPrimaVisita != null) {
+                    primaryPrice = Number(visita.prestazione.prezzoPrimaVisita);
+                } else if (!visita.isPrimaVisita && visita.prestazione.prezzoControllo != null) {
+                    primaryPrice = Number(visita.prestazione.prezzoControllo);
+                } else {
+                    primaryPrice = visita.prestazione.prezzoBase ? Number(visita.prestazione.prezzoBase) : 0;
+                }
+            }
+
+            // 2. Additional prestazioni prices: movimenti ENTRATA > tariffario > prezzoBase
+            const additionalPrices = (visita.appuntamento?.prestazioni ?? [])
+                .filter(ap => ap.prestazioneId !== primaryPrestazioneId)
+                .reduce((sum, ap) => {
+                    // Priority: movimenti contabili ENTRATA > tariffario > prezzoBase
+                    const movEntrata = (ap.movimentiContabili ?? []).find(m => m.direzione === 'ENTRATA');
+                    if (movEntrata) return sum + Number(movEntrata.importoLordo);
+                    const tariffPrice = getTariffarioPrice(ap.prestazioneId);
+                    if (tariffPrice != null) return sum + tariffPrice;
+                    return sum + (ap.prestazione?.prezzoBase ? Number(ap.prestazione.prezzoBase) : 0);
+                }, 0);
+
+            let totaleDaPrestazioni = (primaryPrice > 0 || additionalPrices > 0)
+                ? primaryPrice + additionalPrices
+                : null;
+
+            // 3. Apply convention discount (if appuntamento has convenzione)
+            if (totaleDaPrestazioni != null && visita.appuntamento?.convenzione?.condizioni) {
+                totaleDaPrestazioni = applicaConvenzione(totaleDaPrestazioni, visita.appuntamento.convenzione.condizioni);
+            }
+
+            // 4. Fallback: movimenti contabili
+            const movimentiVisita = visita.movimentiContabili?.filter(m => m.direzione === 'ENTRATA') ?? [];
+            const movimentiPrestazioni = (visita.appuntamento?.prestazioni ?? []).flatMap(
+                ap => (ap.movimentiContabili ?? []).filter(m => m.direzione === 'ENTRATA')
+            );
+            const tuttiMovimenti = [...movimentiVisita, ...movimentiPrestazioni];
+            const totaleDaMovimenti = tuttiMovimenti.length
+                ? tuttiMovimenti.reduce((sum, m) => sum + Number(m.importoLordo), 0)
+                : null;
+
+            const totaleCosto = totaleDaPrestazioni != null
+                ? Math.round(totaleDaPrestazioni * 100) / 100
+                : totaleDaMovimenti;
+
+            return { ...visita, fatture, totaleCosto };
         } catch (error) {
             logger.error('Failed to get visita', {
                 component: 'VisitaService',
@@ -445,6 +666,7 @@ export class VisitaService {
                 ...tenantFilter,
                 deletedAt: null
             };
+            const andConditions = [];
 
             // Apply filters
             if (filters.pazienteId) where.pazienteId = filters.pazienteId;
@@ -460,6 +682,38 @@ export class VisitaService {
             if (filters.soloSecundarieDaRefertare === 'true' || filters.soloSecundarieDaRefertare === true) {
                 where.isVisitaSecundaria = true;
                 where.stato = { notIn: ['COMPLETATA', 'ANNULLATA'] };
+            }
+
+            // Default lista visite:
+            // - mostra le visite primarie;
+            // - per un medico, mostra anche le secondarie solo se la primaria è di un altro medico;
+            // - le secondarie dello stesso medico restano dentro la visita primaria per evitare duplicati.
+            if (
+                filters.isVisitaSecundaria === undefined
+                && !(filters.soloSecundarieDaRefertare === 'true' || filters.soloSecundarieDaRefertare === true)
+            ) {
+                if (filters.medicoId) {
+                    andConditions.push({
+                        OR: [
+                            { isVisitaSecundaria: false },
+                            {
+                                AND: [
+                                    { isVisitaSecundaria: true },
+                                    {
+                                        visitaParent: {
+                                            is: {
+                                                deletedAt: null,
+                                                medicoId: { not: filters.medicoId }
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    });
+                } else {
+                    where.isVisitaSecundaria = false;
+                }
             }
 
             // Filter by company (via paziente's companyTenantProfileId in PersonTenantProfile)
@@ -504,12 +758,18 @@ export class VisitaService {
 
             // Search in diagnosi principale, anamnesi e nome paziente
             if (filters.search) {
-                where.OR = [
-                    { diagnosiPrincipale: { contains: filters.search, mode: 'insensitive' } },
-                    { anamnesi: { contains: filters.search, mode: 'insensitive' } },
-                    { paziente: { firstName: { contains: filters.search, mode: 'insensitive' } } },
-                    { paziente: { lastName: { contains: filters.search, mode: 'insensitive' } } },
-                ];
+                andConditions.push({
+                    OR: [
+                        { diagnosiPrincipale: { contains: filters.search, mode: 'insensitive' } },
+                        { anamnesi: { contains: filters.search, mode: 'insensitive' } },
+                        { paziente: { firstName: { contains: filters.search, mode: 'insensitive' } } },
+                        { paziente: { lastName: { contains: filters.search, mode: 'insensitive' } } },
+                    ]
+                });
+            }
+
+            if (andConditions.length > 0) {
+                where.AND = andConditions;
             }
 
             // When post-filters are active, fetch all records within the base filter
@@ -558,6 +818,8 @@ export class VisitaService {
                                 nome: true,
                                 tipo: true,
                                 prezzoBase: true,
+                                prezzoPrimaVisita: true,
+                                prezzoControllo: true,
                                 durataPrevista: true
                             }
                         },
@@ -567,9 +829,19 @@ export class VisitaService {
                         },
                         appuntamento: {
                             select: {
+                                convenzioneId: true,
+                                companyTenantProfileId: true,
+                                tipoVisitaMDL: true,
+                                convenzione: {
+                                    select: { id: true, condizioni: true }
+                                },
                                 prestazioni: {
                                     where: { deletedAt: null },
                                     select: {
+                                        prestazioneId: true,
+                                        prestazione: {
+                                            select: { prezzoBase: true }
+                                        },
                                         movimentiContabili: {
                                             where: { deletedAt: null },
                                             select: { importoLordo: true, direzione: true }
@@ -577,6 +849,10 @@ export class VisitaService {
                                     }
                                 }
                             }
+                        },
+                        visiteSecundarie: {
+                            where: { deletedAt: null, stato: { not: 'ANNULLATA' } },
+                            select: { id: true, stato: true, medicoId: true, prestazione: { select: { nome: true } } }
                         }
                     }
                 }),
@@ -621,25 +897,145 @@ export class VisitaService {
             const total = needsPostFilter ? filteredVisite.length : totalRaw;
             const visite = needsPostFilter ? filteredVisite.slice(skip, skip + limit) : filteredVisite;
 
+            // Batch tariffario lookup for MDL visits with company associations
+            const getVisitaCompanyProfileId = (v) => v.appuntamento?.companyTenantProfileId
+                || v.paziente?.tenantProfiles?.find(p => p.companyTenantProfileId)?.companyTenantProfileId
+                || null;
+            const companyIds = [...new Set(visite
+                .filter(v => v.tipoVisitaMDL && getVisitaCompanyProfileId(v))
+                .map(v => getVisitaCompanyProfileId(v))
+            )];
+            const tariffarioMap = new Map(); // companyProfileId → voci[]
+            if (companyIds.length > 0) {
+                try {
+                    const tariffAssocInclude = {
+                        tariffario: {
+                            include: {
+                                voci: {
+                                    where: { attivo: true, deletedAt: null },
+                                    select: { prestazioneId: true, prezzoBase: true, categoriaVisita: true },
+                                },
+                            },
+                        },
+                    };
+                    const now = new Date();
+                    const tariffAssocsCurrent = await prisma.tariffarioCompanyAssociation.findMany({
+                        where: {
+                            companyTenantProfileId: { in: companyIds },
+                            tenantId,
+                            attivo: true,
+                            deletedAt: null,
+                            validoDa: { lte: now },
+                            OR: [{ validoA: null }, { validoA: { gte: now } }],
+                        },
+                        include: tariffAssocInclude,
+                        orderBy: { validoDa: 'desc' },
+                    });
+                    const coveredCompanies = new Set(tariffAssocsCurrent.map(a => a.companyTenantProfileId));
+                    const missingCompanyIds = companyIds.filter(id => !coveredCompanies.has(id));
+                    const tariffAssocsFallback = missingCompanyIds.length > 0
+                        ? await prisma.tariffarioCompanyAssociation.findMany({
+                            where: {
+                                companyTenantProfileId: { in: missingCompanyIds },
+                                tenantId,
+                                attivo: true,
+                                deletedAt: null,
+                            },
+                            include: tariffAssocInclude,
+                            orderBy: { validoDa: 'desc' },
+                        })
+                        : [];
+                    const tariffAssocs = [...tariffAssocsCurrent, ...tariffAssocsFallback];
+                    for (const ta of tariffAssocs) {
+                        tariffarioMap.set(ta.companyTenantProfileId, ta.tariffario?.voci ?? []);
+                    }
+                } catch (e) {
+                    logger.warn('Failed to batch lookup tariffario for getAll', { error: e.message });
+                }
+            }
+
             return {
                 data: visite.map(v => {
-                    // Somma tutti i movimenti ENTRATA: sulla visita stessa + su ogni AppuntamentoPrestazione
+                    const primaryPrestazioneId = v.prestazioneId;
+                    const tipoVisitaMDL = v.tipoVisitaMDL || v.appuntamento?.tipoVisitaMDL;
+                    const companyProfileId = getVisitaCompanyProfileId(v);
+                    const voci = tariffarioMap.get(companyProfileId) || [];
+
+                    // Helper: find tariffario price for a prestazione
+                    const getTariffarioPrice = (prestazioneId) => {
+                        if (!voci.length || !prestazioneId) return null;
+                        const voce = voci.find(vc => vc.prestazioneId === prestazioneId && vc.categoriaVisita === tipoVisitaMDL)
+                            ?? voci.find(vc => vc.prestazioneId === prestazioneId && !vc.categoriaVisita)
+                            ?? voci.find(vc => vc.prestazioneId === prestazioneId);
+                        return voce ? Number(voce.prezzoBase) : null;
+                    };
+
+                    // 1. Primary price: tariffario > prezzoPrimaVisita/prezzoControllo > prezzoBase
+                    let primaryPrice = 0;
+                    if (v.prestazione) {
+                        const tariffPrice = getTariffarioPrice(primaryPrestazioneId);
+                        if (tariffPrice != null) {
+                            primaryPrice = tariffPrice;
+                        } else if (v.isPrimaVisita && v.prestazione.prezzoPrimaVisita != null) {
+                            primaryPrice = Number(v.prestazione.prezzoPrimaVisita);
+                        } else if (!v.isPrimaVisita && v.prestazione.prezzoControllo != null) {
+                            primaryPrice = Number(v.prestazione.prezzoControllo);
+                        } else {
+                            primaryPrice = v.prestazione.prezzoBase ? Number(v.prestazione.prezzoBase) : 0;
+                        }
+                    }
+
+                    // 2. Additional prestazioni prices: movimenti ENTRATA > tariffario > prezzoBase
+                    const additionalPrices = (v.appuntamento?.prestazioni ?? [])
+                        .filter(ap => ap.prestazioneId !== primaryPrestazioneId)
+                        .reduce((sum, ap) => {
+                            const movEntrata = (ap.movimentiContabili ?? []).find(m => m.direzione === 'ENTRATA');
+                            if (movEntrata) return sum + Number(movEntrata.importoLordo);
+                            const tariffPrice = getTariffarioPrice(ap.prestazioneId);
+                            if (tariffPrice != null) return sum + tariffPrice;
+                            return sum + (ap.prestazione?.prezzoBase ? Number(ap.prestazione.prezzoBase) : 0);
+                        }, 0);
+
+                    let totaleDaPrestazioni = (primaryPrice > 0 || additionalPrices > 0)
+                        ? primaryPrice + additionalPrices
+                        : null;
+
+                    // 3. Apply convention discount
+                    if (totaleDaPrestazioni != null && v.appuntamento?.convenzione?.condizioni) {
+                        totaleDaPrestazioni = applicaConvenzione(totaleDaPrestazioni, v.appuntamento.convenzione.condizioni);
+                    }
+
+                    // 4. Fallback: movimenti contabili
                     const movimentiVisita = v.movimentiContabili?.filter(m => m.direzione === 'ENTRATA') ?? [];
                     const movimentiPrestazioni = (v.appuntamento?.prestazioni ?? []).flatMap(
                         ap => (ap.movimentiContabili ?? []).filter(m => m.direzione === 'ENTRATA')
                     );
                     const tuttiMovimenti = [...movimentiVisita, ...movimentiPrestazioni];
+                    const totaleDaMovimenti = tuttiMovimenti.length
+                        ? tuttiMovimenti.reduce((sum, m) => sum + Number(m.importoLordo), 0)
+                        : null;
+
+                    const totaleCosto = totaleDaPrestazioni != null
+                        ? Math.round(totaleDaPrestazioni * 100) / 100
+                        : totaleDaMovimenti;
+
                     return {
                         ...v,
-                        totaleCosto: tuttiMovimenti.length
-                            ? tuttiMovimenti.reduce((sum, m) => sum + Number(m.importoLordo), 0)
-                            : null,
+                        totaleCosto,
                         movimentiContabili: undefined,
                         appuntamento: undefined,
                         // Extra fields for list actions
                         fatturaId: fattureMap[v.id] ?? null,
                         isMDL: !!v.tipoVisitaMDL,
-                        companyTenantProfileId: v.paziente?.tenantProfiles?.[0]?.companyTenantProfileId ?? null,
+                        companyTenantProfileId: companyProfileId,
+                        visiteSecondarieCount: v.visiteSecundarie?.length ?? 0,
+                        visiteSecondarieSummary: (v.visiteSecundarie ?? []).map(sec => ({
+                            id: sec.id,
+                            stato: sec.stato,
+                            medicoId: sec.medicoId,
+                            prestazioneNome: sec.prestazione?.nome ?? null
+                        })),
+                        visiteSecundarie: undefined,
                         // Flatten paziente back to expected shape (without tenantProfiles)
                         paziente: v.paziente ? {
                             id: v.paziente.id,
@@ -673,8 +1069,41 @@ export class VisitaService {
      * @param {string|null} medicoRefertanteId - ID del medico refertante o null per rimuovere
      * @returns {Promise<Object>} Updated visit
      */
-    static async updateMedicoRefertante(id, tenantId, medicoRefertanteId) {
+    static async updateMedicoRefertante(id, tenantId, medicoRefertanteId, options = {}) {
         try {
+            const existing = await prisma.visita.findFirst({
+                where: { id, tenantId, deletedAt: null },
+                select: { id: true, medicoId: true, medicoRefertanteId: true }
+            });
+            if (!existing) {
+                throw new Error('Visita not found');
+            }
+
+            if (options.changedBy && existing.medicoRefertanteId !== medicoRefertanteId) {
+                const lastRevision = await prisma.visitRevision.findFirst({
+                    where: { visitaId: id },
+                    orderBy: { revisionNumber: 'desc' },
+                    select: { revisionNumber: true }
+                });
+                await prisma.visitRevision.create({
+                    data: {
+                        visitaId: id,
+                        revisionNumber: (lastRevision?.revisionNumber || 0) + 1,
+                        previousData: {
+                            medicoRefertanteId: existing.medicoRefertanteId,
+                            medicoId: existing.medicoId
+                        },
+                        newData: { medicoRefertanteId },
+                        changedFields: ['medicoRefertanteId'],
+                        changeType: 'MEDICO_REFERTANTE_CHANGED',
+                        changeReason: options.changeReason || 'Cambio medico refertante',
+                        changedBy: options.changedBy,
+                        ipAddress: options.ipAddress || 'system',
+                        userAgent: options.userAgent || null
+                    }
+                });
+            }
+
             const updated = await prisma.visita.update({
                 where: { id },
                 data: { medicoRefertanteId },
@@ -964,14 +1393,14 @@ export class VisitaService {
             // Update related appuntamento if exists
             if (existing.appuntamentoId) {
                 let appuntamentoStato = null;
-                if (nuovoStato === 'COMPLETATA') appuntamentoStato = 'COMPLETATO';
+                if (nuovoStato === 'COMPLETATA') appuntamentoStato = await getCompletedAppointmentStatus(existing.appuntamentoId, tenantId);
                 else if (nuovoStato === 'ANNULLATA') appuntamentoStato = 'ANNULLATO';
 
                 if (appuntamentoStato) {
                     const appUpdateData = { stato: appuntamentoStato };
                     // Set oraFine when visit is completed, but only if not already preserved
                     // (10-minute rule: reopened visits may have preserved original oraFine)
-                    if (appuntamentoStato === 'COMPLETATO') {
+                    if (['COMPLETATO', 'FATTURATO'].includes(appuntamentoStato)) {
                         const currentApp = await prisma.appuntamento.findFirst({
                             where: { id: existing.appuntamentoId, deletedAt: null },
                             select: { oraFine: true }
@@ -1026,8 +1455,9 @@ export class VisitaService {
                 throw new Error('Visita not found');
             }
 
-            // Verify the medico is the one assigned
-            if (existing.medicoId !== medicoId) {
+            const effectiveMedicoId = existing.medicoRefertanteId || existing.medicoId;
+            // Verify the medico is the assigned refertante
+            if (effectiveMedicoId !== medicoId) {
                 throw new Error('Only the assigned doctor can sign the visit');
             }
 
@@ -1072,7 +1502,8 @@ export class VisitaService {
                     where: { id: existing.appuntamentoId, deletedAt: null },
                     select: { oraFine: true }
                 });
-                const appUpdateData = { stato: 'COMPLETATO' };
+                const completedStato = await getCompletedAppointmentStatus(existing.appuntamentoId, tenantId);
+                const appUpdateData = { stato: completedStato };
                 if (!currentApp?.oraFine) {
                     appUpdateData.oraFine = new Date();
                 }
@@ -1607,17 +2038,142 @@ export class VisitaService {
                 throw new Error('Only the owning tenant can delete this visit. Delegated access is read-only.');
             }
 
-            // P72_16: Cascade soft-delete referti (allow deleting even COMPLETATA visits with records)
             const now = new Date();
-            await prisma.referto.updateMany({
-                where: { visitaId: id, deletedAt: null },
-                data: { deletedAt: now }
-            });
+            const secondaryVisits = existing.isVisitaSecundaria
+                ? []
+                : await prisma.visita.findMany({
+                    where: {
+                        visitaParentId: id,
+                        tenantId,
+                        deletedAt: null,
+                        isVisitaSecundaria: true
+                    },
+                    select: { id: true, appPrestazioneId: true }
+                });
 
-            // Soft delete with reason stored in audit
-            await prisma.visita.update({
-                where: { id },
-                data: { deletedAt: now }
+            const visiteIdsToDelete = [id, ...secondaryVisits.map(v => v.id)];
+            const datiStrutturati = existing.datiStrutturati && typeof existing.datiStrutturati === 'object'
+                ? existing.datiStrutturati
+                : {};
+            const prestazioniAggiunteInVisita = Array.isArray(datiStrutturati._prestazioniAggiuntive)
+                ? datiStrutturati._prestazioniAggiuntive
+                : [];
+            const appPrestazioniCreateDuranteVisitaIds = prestazioniAggiunteInVisita
+                .filter(p => p && p.createdDuringVisit === true && p.appPrestazioneId)
+                .map(p => p.appPrestazioneId);
+            const appointmentPrestazioniCreateDuranteVisita = existing.appuntamentoId
+                ? await prisma.appuntamentoPrestazione.findMany({
+                    where: {
+                        appuntamentoId: existing.appuntamentoId,
+                        tenantId,
+                        deletedAt: null,
+                        stato: { not: 'REFERTATA' },
+                        createdAt: { gte: existing.createdAt }
+                    },
+                    select: { id: true }
+                })
+                : [];
+
+            const appPrestazioneIdsToClose = [
+                ...(existing.isVisitaSecundaria && existing.appPrestazioneId ? [existing.appPrestazioneId] : []),
+                ...appPrestazioniCreateDuranteVisitaIds,
+                ...appointmentPrestazioniCreateDuranteVisita.map(p => p.id)
+            ].filter((value, index, arr) => value && arr.indexOf(value) === index);
+
+            const documentiCompilatiDaAnnullare = await prisma.documentoCompilato.findMany({
+                where: {
+                    tenantId,
+                    deletedAt: null,
+                    visitaId: { in: visiteIdsToDelete },
+                    documentoTemplate: {
+                        tipo: {
+                            in: [
+                                'ANAMNESI',
+                                'QUESTIONARIO_ANAMNESI_MDL',
+                                'QUESTIONARIO_RISCHIO',
+                                'QUESTIONARIO_SINTOMI',
+                                'SCHEDA_SORVEGLIANZA',
+                                'ALCOL_SCREENING'
+                            ]
+                        }
+                    }
+                },
+                select: { id: true }
+            });
+            const documentoCompilatoIds = documentiCompilatiDaAnnullare.map(d => d.id);
+
+            await prisma.$transaction(async (tx) => {
+                // P72_16: Cascade soft-delete referti (allow deleting even COMPLETATA visits with records)
+                await tx.referto.updateMany({
+                    where: { visitaId: { in: visiteIdsToDelete }, deletedAt: null },
+                    data: { deletedAt: now }
+                });
+
+                if (secondaryVisits.length > 0) {
+                    await tx.visita.updateMany({
+                        where: { id: { in: secondaryVisits.map(v => v.id) }, tenantId, deletedAt: null },
+                        data: { stato: 'ANNULLATA', deletedAt: now }
+                    });
+                }
+
+                if (appPrestazioneIdsToClose.length > 0) {
+                    await tx.appuntamentoPrestazione.updateMany({
+                        where: { id: { in: appPrestazioneIdsToClose }, tenantId, deletedAt: null },
+                        data: { stato: 'ANNULLATA', deletedAt: now }
+                    });
+                }
+
+                if (documentoCompilatoIds.length > 0) {
+                    await tx.documentoCompilato.updateMany({
+                        where: { id: { in: documentoCompilatoIds }, tenantId, deletedAt: null },
+                        data: {
+                            stato: 'ANNULLATO',
+                            motivoAnnullamento: deletionReason.trim(),
+                            deletedAt: now
+                        }
+                    });
+                    await tx.movimentoContabile.updateMany({
+                        where: {
+                            documentoCompilatoId: { in: documentoCompilatoIds },
+                            tenantId,
+                            deletedAt: null,
+                            stato: { in: ['BOZZA', 'DA_FATTURARE'] }
+                        },
+                        data: {
+                            stato: 'ANNULLATO',
+                            deletedAt: now,
+                            updatedBy: deletedBy || null,
+                            note: 'Annullato automaticamente per annullamento visita'
+                        }
+                    });
+                }
+
+                await tx.movimentoContabile.updateMany({
+                    where: {
+                        visitaId: { in: visiteIdsToDelete },
+                        tenantId,
+                        deletedAt: null,
+                        stato: { in: ['BOZZA', 'DA_FATTURARE'] },
+                        OR: [
+                            { appPrestazioneId: null },
+                            ...(appPrestazioneIdsToClose.length > 0
+                                ? [{ appPrestazioneId: { in: appPrestazioneIdsToClose } }]
+                                : [])
+                        ]
+                    },
+                    data: {
+                        stato: 'ANNULLATO',
+                        deletedAt: now,
+                        updatedBy: deletedBy || null,
+                        note: 'Annullato automaticamente per annullamento visita'
+                    }
+                });
+
+                // Soft delete with reason stored in audit
+                await tx.visita.update({
+                    where: { id },
+                    data: { stato: 'ANNULLATA', deletedAt: now }
+                });
             });
 
             // P58: Log deletion in GdprAuditLog with reason
@@ -1652,7 +2208,7 @@ export class VisitaService {
 
             // P72_16: Cascade soft-delete ScadenzaPrestazioneProtocollo linked to this visit
             await prisma.scadenzaPrestazioneProtocollo.updateMany({
-                where: { visitaId: id, tenantId, deletedAt: null },
+                where: { visitaId: { in: visiteIdsToDelete }, tenantId, deletedAt: null },
                 data: { deletedAt: now }
             });
 
@@ -1661,6 +2217,20 @@ export class VisitaService {
                 await prisma.scadenzaPrestazioneProtocollo.updateMany({
                     where: { appuntamentoId: existing.appuntamentoId, tenantId, deletedAt: null },
                     data: { appuntamentoId: null, dataEsecuzione: null },
+                });
+            }
+
+            for (const appPrestazioneId of appPrestazioneIdsToClose) {
+                await MovimentoContabileGenerator.annullaPerAppuntamentoPrestazione(
+                    appPrestazioneId,
+                    tenantId,
+                    deletedBy || 'system'
+                ).catch(err => {
+                    logger.warn('Movimenti contabili non annullati per visita secondaria eliminata', {
+                        component: 'VisitaService',
+                        appPrestazioneId,
+                        error: err.message
+                    });
                 });
             }
 

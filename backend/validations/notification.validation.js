@@ -184,7 +184,7 @@ export const validateNotification = [
 ];
 
 /**
- * Validazione per broadcast
+ * Validazione per broadcast / announce
  */
 export const validateBroadcast = [
     body('title')
@@ -208,6 +208,70 @@ export const validateBroadcast = [
         .optional()
         .isIn(['LOW', 'NORMAL', 'HIGH', 'URGENT', 'CRITICAL_P'])
         .withMessage('Priorità non valida'),
+
+    body('category')
+        .optional()
+        .isIn(['SYSTEM', 'APPOINTMENT', 'VISIT', 'DOCUMENT', 'INVOICE', 'TRAINING', 'GDPR', 'SECURITY', 'MARKETING', 'CUSTOM'])
+        .withMessage('Categoria non valida'),
+
+    body('forcePopup')
+        .optional()
+        .isBoolean()
+        .withMessage('forcePopup deve essere booleano'),
+
+    body('requiresConfirmation')
+        .optional()
+        .isBoolean()
+        .withMessage('requiresConfirmation deve essere booleano'),
+
+    body('scheduledAt')
+        .optional()
+        .isISO8601()
+        .withMessage('scheduledAt deve essere una data ISO 8601 valida'),
+
+    body('timing')
+        .optional()
+        .isIn(['IMMEDIATE', 'NEXT_LOGIN', 'WEEK_START', 'MONTH_START', 'CUSTOM'])
+        .withMessage('timing non valido'),
+
+    body('targetType')
+        .optional()
+        .isIn(['ALL_TENANT', 'ROLES', 'INDIVIDUAL', 'COMPANY_EMPLOYEES'])
+        .withMessage('targetType non valido'),
+
+    body('targetRoles')
+        .optional()
+        .isArray()
+        .withMessage('targetRoles deve essere un array'),
+
+    body('targetRoles.*')
+        .optional()
+        .isIn([
+            'EMPLOYEE', 'MANAGER', 'HR_MANAGER', 'DEPARTMENT_HEAD',
+            'TRAINER', 'SENIOR_TRAINER', 'TRAINER_COORDINATOR', 'EXTERNAL_TRAINER',
+            'SUPER_ADMIN', 'ADMIN', 'COMPANY_ADMIN', 'TENANT_ADMIN',
+            'VIEWER', 'OPERATOR', 'COORDINATOR', 'SUPERVISOR',
+            'GUEST', 'CONSULTANT', 'AUDITOR', 'TRAINING_ADMIN',
+            'CLINIC_ADMIN', 'COMPANY_MANAGER',
+            'MEDICO', 'PAZIENTE', 'INFERMIERE', 'SEGRETERIA_CLINICA',
+            'MEDICO_COMPETENTE', 'RSPP', 'ASPP', 'TECNICO_SICUREZZA', 'CONSULENTE_SICUREZZA'
+        ])
+        .withMessage('roleType non valido'),
+
+    body('targetPersonIds')
+        .optional()
+        .isArray()
+        .withMessage('targetPersonIds deve essere un array'),
+
+    body('targetPersonIds.*')
+        .optional()
+        .isUUID()
+        .withMessage('targetPersonIds deve contenere UUID validi'),
+
+    body('targetCompanyTenantProfileId')
+        .optional()
+        .isUUID()
+        .withMessage('targetCompanyTenantProfileId deve essere un UUID valido'),
 
     handleValidationErrors
 ];

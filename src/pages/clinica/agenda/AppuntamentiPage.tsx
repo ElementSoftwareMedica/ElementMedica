@@ -26,22 +26,33 @@ import {
 } from 'lucide-react';
 import { ActionButton } from '../../../components/ui';
 import { CRUDPrimaryButton } from '../../../components/shared/CRUDButton';
+import { DatePickerElegante } from '../../../components/ui/DatePickerElegante';
+import { TimePickerElegante } from '../../../components/ui/TimePickerElegante';
 import { DateRangeCalendar, DateRange } from '../../../components/ui/DateRangeCalendar';
 import { TimeRangePicker, TimeRange } from '../../../components/ui/TimeRangePicker';
+import ElegantSelect from '../../../components/ui/ElegantSelect';
 import {
     appuntamentiApi,
     appuntamentoPrestazioniApi,
     ambulatoriApi,
+    prestazioniApi,
+    mediciApi,
+    convenzioniApi,
     poliambulatoriApi,
     sediApi,
+    slotsApi,
     StatoAppuntamento,
-    Appuntamento
+    Appuntamento,
+    SlotDisponibilita
 } from '../../../services/clinicaApi';
 import { formatDate, formatTime, toISODateString } from '../../../utils/dateUtils';
 import { useTenantFilter } from '../../../context/TenantFilterContext';
 import { getDoctorTitle } from '../../../utils/codiceFiscale';
 import { getPersonDisplayName } from '../../../utils/personDisplayUtils';
 import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
+import { useToast } from '../../../hooks/useToast';
+import { AccettazionePazienteModal, type PatientFormData } from './components/AccettazionePazienteModal';
+import AvailabilitySlotTimeline from './components/AvailabilitySlotTimeline';
 
 // ============================================
 // PERSISTENCE (VisiteListPage pattern)
@@ -58,6 +69,30 @@ function fromLocalDateStr(s: string): Date {
     const [y, m, d] = s.split('-').map(Number);
     return new Date(y, m - 1, d);
 }
+
+function startOfWeek(date: Date): Date {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    const day = d.getDay() || 7;
+    d.setDate(d.getDate() - day + 1);
+    return d;
+}
+
+function getTimeFromDateTime(value?: string | Date | null): string {
+    if (!value) return '';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '';
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function timeToMinutes(time?: string | null): number {
+    if (!time) return 0;
+    const [hours = 0, minutes = 0] = time.split(':').map(Number);
+    return (hours * 60) + minutes;
+}
+
+const activeAppointmentStates = 'PRENOTATO,CONFERMATO,IN_ATTESA,IN_CORSO';
+const elegantInputClass = 'mt-1 h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm font-medium text-gray-800 shadow-sm outline-none transition-all hover:border-teal-300 focus:border-teal-500 focus:ring-4 focus:ring-teal-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:focus:ring-teal-900/30';
 
 function readPrefs(): Record<string, unknown> {
     try { return JSON.parse(localStorage.getItem(LS_KEY) ?? '{}'); }
@@ -98,7 +133,7 @@ type ViewMode = 'list' | 'kanban';
 type SortField = 'dataOra' | 'paziente' | 'prestazione' | 'ambulatorio' | 'stato' | 'durata' | 'costo' | 'coda' | 'note' | 'noteInterne';
 type SortOrder = 'asc' | 'desc';
 
-type OptionalCol = 'prestazione' | 'medico' | 'ambulatorio' | 'durata' | 'costo' | 'coda' | 'note' | 'noteInterne' | 'numero' | 'convenzione' | 'tipoVisitaMDL' | 'pagamentoAnticipato';
+type OptionalCol = 'prestazione' | 'medico' | 'ambulatorio' | 'durata' | 'costo' | 'coda' | 'note' | 'noteInterne' | 'numero' | 'convenzione' | 'tipoVisitaMDL' | 'pagamentoAnticipato' | 'aziendaMdl' | 'protocolloMansione' | 'rischiMdl' | 'accertamentiMdl' | 'ultimaVisitaMdl';
 const ALL_OPTIONAL_COLS: { key: OptionalCol; label: string }[] = [
     { key: 'numero', label: 'Numero' },
     { key: 'prestazione', label: 'Prestazione' },
@@ -109,10 +144,72 @@ const ALL_OPTIONAL_COLS: { key: OptionalCol; label: string }[] = [
     { key: 'coda', label: 'Coda' },
     { key: 'convenzione', label: 'Convenzione' },
     { key: 'tipoVisitaMDL', label: 'Tipo Visita MDL' },
+    { key: 'aziendaMdl', label: 'Azienda' },
+    { key: 'protocolloMansione', label: 'Protocollo / Mansione' },
+    { key: 'rischiMdl', label: 'Rischi' },
+    { key: 'accertamentiMdl', label: 'Accertamenti' },
+    { key: 'ultimaVisitaMdl', label: 'Ultima visita MdL' },
     { key: 'pagamentoAnticipato', label: 'Pagamento' },
     { key: 'note', label: 'Note' },
     { key: 'noteInterne', label: 'Note Interne' },
 ];
+
+const formatShortDateTime = (value?: string | Date | null) => {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '—';
+    return `${formatDate(date, 'short')} ${formatTime(date)}`;
+};
+
+const getMdlMansioni = (app: Appuntamento) =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (((app as any)._workerMansioni || []) as any[])
+        .map(wm => wm?.mansione?.denominazione || wm?.mansione?.codice)
+        .filter(Boolean);
+
+const getMdlRischi = (app: Appuntamento) =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (((app as any)._rischiLavorativi || []) as any[])
+        .map(r => r?.label || r?.descrizioneEsposizione || r?.codiceRischio)
+        .filter(Boolean);
+
+const getAppointmentLogRows = (app: Appuntamento) => [
+    { label: 'Prenotato', value: formatShortDateTime(app.createdAt) },
+    { label: 'Arrivato/accettato', value: formatShortDateTime((app as any).oraArrivo) },
+    { label: 'Chiamato dal medico', value: formatShortDateTime((app as any).oraChiamata) },
+    { label: 'Inizio visita', value: formatShortDateTime((app as any).oraInizio) },
+    { label: 'Fine/refertazione', value: formatShortDateTime((app as any).oraFine || (app as any).visita?.updatedAt) },
+    { label: 'Fatturato/pagato', value: formatShortDateTime((app as any).pagamentoDataOra) },
+    { label: 'Ultima modifica', value: formatShortDateTime(app.updatedAt) },
+].filter(row => row.value !== '—');
+
+const canOpenVisitAction = (app: Appuntamento) =>
+    app.stato === 'IN_ATTESA' || !!(app.tipoVisitaMDL && (app as any)._consensiMdlValidi);
+
+const getAppointmentPriceInfo = (app: Appuntamento) => {
+    const raw = app as any;
+    const base = Number(
+        raw._prezzoPrestazioniBase
+        ?? raw._prezzoTariffarioPrestazione
+        ?? raw._prezzoTotaleMovimenti
+        ?? raw.prezzoBase
+        ?? app.prestazione?.prezzoBase
+        ?? raw.prezzo
+        ?? 0
+    );
+    const condizioni = app.convenzione?.condizioni as any;
+    let discounted = Number(raw.prezzoScontato ?? raw.prezzoFinale ?? raw.prezzoConvenzionato ?? 0) || 0;
+    if (!discounted && condizioni && base > 0) {
+        const scontoInfo = condizioni.scontoInfo;
+        const tipoSconto = String(scontoInfo?.tipo || '').toUpperCase();
+        if (tipoSconto.includes('PERCENT')) discounted = base * (1 - Number(scontoInfo.valore || 0) / 100);
+        else if (tipoSconto.includes('VALORE') || tipoSconto.includes('FISSO')) discounted = Math.max(0, base - Number(scontoInfo.valore || 0));
+        else if (condizioni.percentualeSconto || condizioni.scontoPercentuale) discounted = base * (1 - Number(condizioni.percentualeSconto ?? condizioni.scontoPercentuale) / 100);
+        else if (condizioni.scontoFisso) discounted = Math.max(0, base - Number(condizioni.scontoFisso));
+    }
+    const finalPrice = discounted > 0 ? Math.round(discounted * 100) / 100 : base;
+    return { base, finalPrice, hasDiscount: discounted > 0 && base > 0 && Math.abs(discounted - base) >= 0.01 };
+};
 
 // ============================================
 // STATO CONFIG
@@ -132,7 +229,7 @@ const STATO_CONFIG: Record<StatoAppuntamento, {
         bgColor: 'bg-blue-100 dark:bg-blue-900/40',
         textColor: 'text-blue-700 dark:text-blue-300',
         icon: Calendar,
-        nextStates: ['CONFERMATO', 'ANNULLATO']
+        nextStates: ['CONFERMATO']
     },
     CONFERMATO: {
         label: 'Confermato',
@@ -140,7 +237,7 @@ const STATO_CONFIG: Record<StatoAppuntamento, {
         bgColor: 'bg-green-100 dark:bg-green-900/40',
         textColor: 'text-green-700 dark:text-green-300',
         icon: CheckCircle,
-        nextStates: ['IN_ATTESA', 'ANNULLATO', 'NO_SHOW']
+        nextStates: ['IN_ATTESA', 'NO_SHOW']
     },
     IN_ATTESA: {
         label: 'In Attesa',
@@ -167,12 +264,12 @@ const STATO_CONFIG: Record<StatoAppuntamento, {
         nextStates: []
     },
     ANNULLATO: {
-        label: 'Annullato',
+        label: 'Eliminato',
         color: 'red',
         bgColor: 'bg-red-100 dark:bg-red-900/40',
         textColor: 'text-red-700 dark:text-red-300',
         icon: XCircle,
-        nextStates: ['PRENOTATO']
+        nextStates: []
     },
     NO_SHOW: {
         label: 'No Show',
@@ -199,6 +296,8 @@ const STATO_CONFIG: Record<StatoAppuntamento, {
         nextStates: ['PRENOTATO', 'CONFERMATO']
     }
 };
+
+const ALL_STATES = Object.keys(STATO_CONFIG) as StatoAppuntamento[];
 
 // ============================================
 // SUB-COMPONENTS
@@ -229,9 +328,12 @@ const StatoCell: React.FC<{
     onChangeStato: (stato: StatoAppuntamento) => void;
 }> = ({ appuntamento, onChangeStato }) => {
     const [showMenu, setShowMenu] = useState(false);
+    const [showLogTooltip, setShowLogTooltip] = useState(false);
     const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
+    const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
     const menuRef = useRef<HTMLDivElement>(null);
     const buttonRef = useRef<HTMLButtonElement>(null);
+    const tooltipTimerRef = useRef<number | null>(null);
 
     useEffect(() => {
         if (!showMenu) return;
@@ -243,34 +345,67 @@ const StatoCell: React.FC<{
         return () => document.removeEventListener('mousedown', handler);
     }, [showMenu]);
 
-    const config = STATO_CONFIG[appuntamento.stato];
+    const states = ALL_STATES.filter(stato => stato !== appuntamento.stato);
+
+    const getFloatingPosition = (rect: DOMRect, width: number, height: number, gap = 8) => {
+        const margin = 12;
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        const left = Math.min(Math.max(rect.left, margin), Math.max(margin, viewportWidth - width - margin));
+        const below = rect.bottom + gap;
+        const above = rect.top - height - gap;
+        const top = below + height <= viewportHeight - margin
+            ? below
+            : Math.max(margin, above);
+        return { top, left };
+    };
+
+    const scheduleTooltip = () => {
+        if (buttonRef.current) {
+            const rect = buttonRef.current.getBoundingClientRect();
+            setTooltipPosition(getFloatingPosition(rect, 320, 360, 8));
+        }
+        if (tooltipTimerRef.current) window.clearTimeout(tooltipTimerRef.current);
+        tooltipTimerRef.current = window.setTimeout(() => setShowLogTooltip(true), 2000);
+    };
+
+    const cancelTooltip = () => {
+        if (tooltipTimerRef.current) window.clearTimeout(tooltipTimerRef.current);
+        tooltipTimerRef.current = null;
+        setShowLogTooltip(false);
+    };
+
+    useEffect(() => () => {
+        if (tooltipTimerRef.current) window.clearTimeout(tooltipTimerRef.current);
+    }, []);
 
     return (
         <div className="relative">
             <button
                 ref={buttonRef}
+                onMouseEnter={scheduleTooltip}
+                onMouseLeave={cancelTooltip}
                 onClick={(e) => {
                     e.stopPropagation();
+                    cancelTooltip();
                     if (buttonRef.current) {
                         const rect = buttonRef.current.getBoundingClientRect();
-                        setMenuPosition({ top: rect.bottom + window.scrollY + 4, left: rect.left + window.scrollX });
+                        setMenuPosition(getFloatingPosition(rect, 180, 320, 4));
                     }
                     setShowMenu(!showMenu);
                 }}
                 className="flex items-center gap-1"
             >
                 <StatusBadge stato={appuntamento.stato} />
-                {config.nextStates.length > 0 && (
-                    <ChevronDown className="h-4 w-4 text-gray-400" />
-                )}
+                <ChevronDown className="h-4 w-4 text-gray-400" />
             </button>
-            {showMenu && config.nextStates.length > 0 && createPortal(
+            {showMenu && createPortal(
                 <div
                     ref={menuRef}
                     className="fixed bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl py-1 min-w-[160px]"
                     style={{ top: menuPosition.top, left: menuPosition.left, zIndex: 9999 }}
                 >
-                    {config.nextStates.map(nextStato => {
+                    {states.map(nextStato => {
                         const nextConfig = STATO_CONFIG[nextStato];
                         const NextIcon = nextConfig.icon;
                         return (
@@ -288,6 +423,36 @@ const StatoCell: React.FC<{
                             </button>
                         );
                     })}
+                </div>,
+                document.body
+            )}
+            {showLogTooltip && createPortal(
+                <div
+                    className="fixed w-80 rounded-xl border border-gray-200 bg-white p-3 text-xs shadow-2xl dark:border-gray-700 dark:bg-gray-800"
+                    style={{ top: tooltipPosition.top, left: tooltipPosition.left, zIndex: 9998 }}
+                    onMouseEnter={() => setShowLogTooltip(true)}
+                    onMouseLeave={cancelTooltip}
+                >
+                    <div className="mb-2 flex items-center gap-2 border-b border-gray-100 pb-2 dark:border-gray-700">
+                        <Clock className="h-4 w-4 text-teal-600" />
+                        <div>
+                            <p className="font-semibold text-gray-900 dark:text-gray-100">Log appuntamento</p>
+                            <p className="text-gray-500">{getPersonDisplayName(appuntamento.paziente, 'Paziente')}</p>
+                        </div>
+                    </div>
+                    <div className="space-y-1.5">
+                        {getAppointmentLogRows(appuntamento).map(row => (
+                            <div key={row.label} className="flex items-center justify-between gap-3">
+                                <span className="text-gray-500 dark:text-gray-400">{row.label}</span>
+                                <span className="font-medium text-gray-800 dark:text-gray-200">{row.value}</span>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="mt-2 border-t border-gray-100 pt-2 text-gray-500 dark:border-gray-700">
+                        <p>Prestazione: {appuntamento.prestazione?.nome || '—'}</p>
+                        <p>Medico: {getPersonDisplayName(appuntamento.medico, '—')}</p>
+                        <p>Note: {[appuntamento.note, appuntamento.noteInterne].filter(Boolean).join(' / ') || '—'}</p>
+                    </div>
                 </div>,
                 document.body
             )}
@@ -391,7 +556,7 @@ const KanbanCard: React.FC<{
                             </button>
                         </>
                     )}
-                    {app.stato === 'IN_ATTESA' && (
+                    {canOpenVisitAction(app) && (
                         app.numeroCoda != null ? (
                             <button
                                 disabled={isBusy}
@@ -408,7 +573,7 @@ const KanbanCard: React.FC<{
                                 className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 transition-colors"
                             >
                                 {isBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
-                                Visita
+                                Visita Paziente
                             </button>
                         )
                     )}
@@ -494,10 +659,28 @@ export const AppuntamentiPage: React.FC = () => {
     const [searchParams] = useSearchParams();
     const { getTenantFilterParams, isReady, tenantFilterKey } = useTenantFilter();
     const { confirmDelete: confirmDeleteDialog } = useConfirmDialog();
+    const { showToast } = useToast();
 
     // View mode — persisted permanently (never resets at midnight)
     const [view, setView] = useState<ViewMode>(() => (readPrefs().view as ViewMode) || 'list');
     const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
+    const [accettazioneAppuntamento, setAccettazioneAppuntamento] = useState<Appuntamento | null>(null);
+    const [accettazioneInitialTab, setAccettazioneInitialTab] = useState<'anagrafica' | 'residenza' | 'appuntamento' | 'fatturazione'>('anagrafica');
+    const [editingAppuntamento, setEditingAppuntamento] = useState<Appuntamento | null>(null);
+    const [editForm, setEditForm] = useState({
+        data: '',
+        ora: '',
+        durataMinuti: 30,
+        medicoId: '',
+        prestazioneId: '',
+        ambulatorioId: '',
+        stato: 'PRENOTATO' as StatoAppuntamento,
+        convenzioneId: '',
+        note: '',
+        noteInterne: '',
+    });
+    const [editWeekStart, setEditWeekStart] = useState(() => startOfWeek(new Date()));
+    const [showSameBranchDoctors, setShowSameBranchDoctors] = useState(false);
 
     // Filters — reset at midnight via readFilterPref
     const [searchTerm, setSearchTerm] = useState('');
@@ -634,7 +817,6 @@ export const AppuntamentiPage: React.FC = () => {
         // Handle merged stato filters
         let effectiveStato = statoFilter;
         if (statoFilter === 'PRENOTATO_CONFERMATO') effectiveStato = 'PRENOTATO,CONFERMATO';
-        else if (statoFilter === 'NO_SHOW_ANNULLATO') effectiveStato = 'NO_SHOW,ANNULLATO';
 
         // "Da fatturare" quickfilter → forza stato=COMPLETATO (completato ma non fatturato)
         if (soloNonFatturate) effectiveStato = 'COMPLETATO';
@@ -685,6 +867,133 @@ export const AppuntamentiPage: React.FC = () => {
         enabled: isReady,
         staleTime: 5 * 60_000,
     });
+
+    const { data: prestazioniData } = useQuery({
+        queryKey: ['prestazioni-appuntamenti-edit', tenantFilterKey],
+        queryFn: () => prestazioniApi.getAll({ limit: 300, filters: { isActive: true } }),
+        enabled: isReady,
+        staleTime: 5 * 60_000,
+    });
+
+    const { data: mediciData } = useQuery({
+        queryKey: ['medici-appuntamenti-edit', tenantFilterKey],
+        queryFn: () => mediciApi.getAll({ limit: 300 }),
+        enabled: isReady,
+        staleTime: 5 * 60_000,
+    });
+
+    const { data: convenzioniData } = useQuery({
+        queryKey: ['convenzioni-appuntamenti-edit', tenantFilterKey],
+        queryFn: () => convenzioniApi.getAll({ limit: 200 }),
+        enabled: isReady,
+        staleTime: 5 * 60_000,
+    });
+
+    const allMedici = useMemo(() => ((mediciData?.data || []) as any[]), [mediciData?.data]);
+    const selectedEditMedico = useMemo(
+        () => allMedici.find(m => m.id === editForm.medicoId),
+        [allMedici, editForm.medicoId]
+    );
+    const selectedEditSpecialties = useMemo(() => {
+        const raw = [
+            selectedEditMedico?.specialty,
+            selectedEditMedico?.specialita,
+            selectedEditMedico?.specializzazione,
+            ...(Array.isArray(selectedEditMedico?.specialties) ? selectedEditMedico.specialties : []),
+            ...(Array.isArray(selectedEditMedico?.specializzazioni) ? selectedEditMedico.specializzazioni : []),
+        ].filter(Boolean);
+        return new Set(raw.map((value: unknown) => String(value).trim().toLowerCase()).filter(Boolean));
+    }, [selectedEditMedico]);
+    const editCandidateMedici = useMemo(() => {
+        if (!showSameBranchDoctors || selectedEditSpecialties.size === 0) {
+            return selectedEditMedico ? [selectedEditMedico] : [];
+        }
+        return allMedici.filter(m => {
+            const values = [
+                m.specialty,
+                m.specialita,
+                m.specializzazione,
+                ...(Array.isArray(m.specialties) ? m.specialties : []),
+                ...(Array.isArray(m.specializzazioni) ? m.specializzazioni : []),
+            ].filter(Boolean).map((value: unknown) => String(value).trim().toLowerCase());
+            return values.some(value => selectedEditSpecialties.has(value));
+        });
+    }, [allMedici, selectedEditMedico, selectedEditSpecialties, showSameBranchDoctors]);
+    const editCandidateMedicoIds = useMemo(
+        () => new Set(editCandidateMedici.map(m => m.id).filter(Boolean)),
+        [editCandidateMedici]
+    );
+    const editSlotRange = useMemo(() => {
+        const start = new Date(editWeekStart);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(start);
+        end.setDate(start.getDate() + 6);
+        return { start, end };
+    }, [editWeekStart]);
+    const { data: editSlotsResponse, isFetching: loadingEditSlots } = useQuery({
+        queryKey: ['appuntamenti-edit-slots', editForm.medicoId, editForm.prestazioneId, showSameBranchDoctors, editSlotRange.start.toISOString()],
+        queryFn: () => slotsApi.getAll({
+            filters: {
+                dataInizio: toLocalDateStr(editSlotRange.start),
+                dataFine: toLocalDateStr(editSlotRange.end),
+                disponibile: true,
+                ...(editForm.prestazioneId && { prestazioneId: editForm.prestazioneId }),
+                ...(!showSameBranchDoctors && editForm.medicoId && { medicoId: editForm.medicoId }),
+            },
+            limit: 500,
+        }),
+        enabled: !!editingAppuntamento && !!editForm.medicoId,
+        staleTime: 15_000,
+    });
+    const { data: editOccupiedResponse, isFetching: loadingEditOccupied } = useQuery({
+        queryKey: ['appuntamenti-edit-occupied', editForm.medicoId, showSameBranchDoctors, editSlotRange.start.toISOString()],
+        queryFn: () => appuntamentiApi.getAll({
+            page: 1,
+            limit: 500,
+            filters: {
+                dataInizio: toLocalDateStr(editSlotRange.start),
+                dataFine: toLocalDateStr(editSlotRange.end),
+                stato: activeAppointmentStates,
+                ...(!showSameBranchDoctors && editForm.medicoId && { medicoId: editForm.medicoId }),
+            },
+        }),
+        enabled: !!editingAppuntamento && !!editForm.medicoId,
+        staleTime: 15_000,
+    });
+    const editDays = useMemo(() => {
+        const rawSlots = ((editSlotsResponse?.data || []) as SlotDisponibilita[])
+            .filter(slot => !editCandidateMedicoIds.size || (slot.medicoId && editCandidateMedicoIds.has(slot.medicoId)));
+        const occupied = ((editOccupiedResponse?.data || []) as Appuntamento[])
+            .filter(app => app.id !== editingAppuntamento?.id)
+            .filter(app => !editCandidateMedicoIds.size || (app.medicoId && editCandidateMedicoIds.has(app.medicoId)));
+        const days = Array.from({ length: 7 }, (_, index) => {
+            const date = new Date(editSlotRange.start);
+            date.setDate(editSlotRange.start.getDate() + index);
+            return { key: toLocalDateStr(date), date, slots: [] as SlotDisponibilita[], occupied: [] as Appuntamento[] };
+        });
+        rawSlots.forEach(slot => {
+            const day = days.find(item => item.key === String(slot.data).split('T')[0]);
+            if (day) day.slots.push(slot);
+        });
+        occupied.forEach(app => {
+            const day = days.find(item => item.key === String(app.dataOra).split('T')[0]);
+            if (day) day.occupied.push(app);
+        });
+        return days;
+    }, [editCandidateMedicoIds, editOccupiedResponse?.data, editSlotRange.start, editSlotsResponse?.data, editingAppuntamento?.id]);
+    const editSelectedSlotWindow = useMemo(() => {
+        if (!editForm.data) return null;
+        const day = editDays.find(item => item.key === editForm.data);
+        if (!day) return null;
+        const selectedTime = timeToMinutes(editForm.ora);
+        return day.slots.find(slot => {
+            if (editForm.medicoId && slot.medicoId !== editForm.medicoId) return false;
+            if (editForm.ambulatorioId && slot.ambulatorioId !== editForm.ambulatorioId) return false;
+            const start = timeToMinutes(slot.oraInizio);
+            const end = timeToMinutes(slot.oraFine);
+            return selectedTime >= start && selectedTime <= end;
+        }) || day.slots.find(slot => !editForm.medicoId || slot.medicoId === editForm.medicoId) || null;
+    }, [editDays, editForm.ambulatorioId, editForm.data, editForm.medicoId, editForm.ora]);
 
     // Poliambulatori for advanced filters
     const { data: poliambulatoriData } = useQuery({
@@ -820,6 +1129,15 @@ export const AppuntamentiPage: React.FC = () => {
         }
     });
 
+    const updateAppointmentMutation = useMutation({
+        mutationFn: ({ id, data }: { id: string; data: Partial<Appuntamento> }) =>
+            appuntamentiApi.update(id, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['appuntamenti'] });
+            setEditingAppuntamento(null);
+        }
+    });
+
     const accettaMutation = useMutation({
         mutationFn: (id: string) => appuntamentiApi.accetta(id),
         onSuccess: (_, id) => {
@@ -855,7 +1173,9 @@ export const AppuntamentiPage: React.FC = () => {
         setBusyIds(prev => new Set(prev).add(app.id));
         switch (action) {
             case 'accetta':
-                accettaMutation.mutate(app.id);
+                setBusyIds(prev => { const s = new Set(prev); s.delete(app.id); return s; });
+                setAccettazioneInitialTab('anagrafica');
+                setAccettazioneAppuntamento(app);
                 break;
             case 'noshow':
                 changeStatoMutation.mutate({ id: app.id, stato: 'NO_SHOW' });
@@ -882,11 +1202,8 @@ export const AppuntamentiPage: React.FC = () => {
                 break;
             case 'fattura':
                 setBusyIds(prev => { const s = new Set(prev); s.delete(app.id); return s; });
-                if (app.visita?.id) {
-                    navigate(`/poliambulatorio/fatture/nuova?visitaId=${app.visita.id}`);
-                } else {
-                    navigate(`/poliambulatorio/fatture/nuova?appuntamentoId=${app.id}`);
-                }
+                setAccettazioneInitialTab('fatturazione');
+                setAccettazioneAppuntamento(app);
                 break;
             case 'vedi-referto':
                 setBusyIds(prev => { const s = new Set(prev); s.delete(app.id); return s; });
@@ -906,6 +1223,86 @@ export const AppuntamentiPage: React.FC = () => {
             await deleteMutation.mutateAsync(id);
         }
     };
+
+    const openEditModal = (app: Appuntamento) => {
+        const date = new Date(app.dataOra);
+        setEditForm({
+            data: toLocalDateStr(date),
+            ora: `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`,
+            durataMinuti: app.durataMinuti || 30,
+            medicoId: app.medicoId || '',
+            prestazioneId: app.prestazioneId || '',
+            ambulatorioId: app.ambulatorioId || '',
+            stato: app.stato,
+            convenzioneId: app.convenzioneId || '',
+            note: app.note || '',
+            noteInterne: app.noteInterne || '',
+        });
+        setEditWeekStart(startOfWeek(date));
+        setShowSameBranchDoctors(false);
+        setEditingAppuntamento(app);
+    };
+
+    const shiftEditWeek = (days: number) => {
+        setEditWeekStart(prev => {
+            const next = new Date(prev);
+            next.setDate(prev.getDate() + days);
+            return startOfWeek(next);
+        });
+    };
+
+    const selectEditSlot = (slot: SlotDisponibilita, time = slot.oraInizio) => {
+        setEditForm(f => ({
+            ...f,
+            data: String(slot.data).split('T')[0],
+            ora: time,
+            medicoId: slot.medicoId || f.medicoId,
+            ambulatorioId: slot.ambulatorioId || f.ambulatorioId,
+            prestazioneId: slot.prestazioneId || f.prestazioneId,
+        }));
+    };
+
+    const saveEditModal = () => {
+        if (!editingAppuntamento || !editForm.data || !editForm.ora) return;
+        updateAppointmentMutation.mutate({
+            id: editingAppuntamento.id,
+            data: {
+                dataOra: `${editForm.data}T${editForm.ora}:00`,
+                durataMinuti: editForm.durataMinuti,
+                medicoId: editForm.medicoId,
+                prestazioneId: editForm.prestazioneId || null,
+                ambulatorioId: editForm.ambulatorioId,
+                convenzioneId: editForm.convenzioneId || null,
+                stato: editForm.stato,
+                note: editForm.note,
+                noteInterne: editForm.noteInterne,
+            } as Partial<Appuntamento>,
+        });
+    };
+
+    const handleAccettazioneConfirm = async (patientData: PatientFormData) => {
+        if (!accettazioneAppuntamento) return;
+        const app = accettazioneAppuntamento;
+        await appuntamentiApi.accetta(app.id, {
+            convenzioneId: patientData.convenzioneId || undefined,
+            pazienteId: patientData.pazienteId || undefined,
+            note: patientData.note || undefined,
+            noteInterne: patientData.noteInterne || undefined,
+            stato: patientData.stato || undefined,
+        }, app.tenantId);
+        setAccettazioneAppuntamento(null);
+        queryClient.invalidateQueries({ queryKey: ['appuntamenti'] });
+    };
+
+    const openVisitForAppointment = (app: Appuntamento) => {
+        if (app.visita?.id) {
+            navigate(`/poliambulatorio/visite/${app.visita.id}`);
+        } else {
+            navigate(`/poliambulatorio/agenda/appuntamenti/${app.id}`);
+        }
+    };
+
+    const canVisitDirectly = canOpenVisitAction;
 
     // === SORTED DATA ===
 
@@ -935,7 +1332,7 @@ export const AppuntamentiPage: React.FC = () => {
             } else if (sortField === 'durata') {
                 cmp = (a.durataMinuti ?? 0) - (b.durataMinuti ?? 0);
             } else if (sortField === 'costo') {
-                cmp = (a.prestazione?.prezzoBase ?? 0) - (b.prestazione?.prezzoBase ?? 0);
+                cmp = getAppointmentPriceInfo(a).finalPrice - getAppointmentPriceInfo(b).finalPrice;
             } else if (sortField === 'coda') {
                 cmp = (a.numeroCoda ?? 9999) - (b.numeroCoda ?? 9999);
             } else if (sortField === 'note') {
@@ -1088,20 +1485,18 @@ export const AppuntamentiPage: React.FC = () => {
                         clearable
                     />
                     {/* Medici filter */}
-                    <div className="relative">
+                    <div className="relative min-w-[220px]">
                         <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none z-10" />
-                        <select
+                        <ElegantSelect
                             value={medicoFilter}
-                            onChange={(e) => { setMedicoFilter(e.target.value); setPage(1); }}
-                            className="w-full pl-10 pr-4 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-gradient-to-r from-white to-gray-50 dark:from-gray-800 dark:to-gray-700 shadow-sm hover:border-teal-400 hover:shadow-md focus:ring-2 focus:ring-teal-500 focus:border-teal-500 focus:ring-offset-1 appearance-none text-sm h-10 transition-all duration-300 dark:text-gray-100"
-                        >
-                            <option value="">Tutti i medici</option>
-                            {medici.map((medico) => (
-                                <option key={medico.id} value={medico.id}>
-                                    {medico.firstName} {medico.lastName}
-                                </option>
-                            ))}
-                        </select>
+                            onChange={(value) => { setMedicoFilter(value); setPage(1); }}
+                            placeholder="Tutti i medici"
+                            triggerClassName="pl-10"
+                            options={[
+                                { value: '', label: 'Tutti i medici' },
+                                ...medici.map((medico) => ({ value: medico.id, label: `${medico.firstName} ${medico.lastName}` }))
+                            ]}
+                        />
                     </div>
                     {/* Column selector + Advanced filters */}
                     <div className="flex items-center gap-2">
@@ -1298,26 +1693,28 @@ export const AppuntamentiPage: React.FC = () => {
                         );
                     })}
 
-                    {/* Merged: No Show + Annullato */}
+                    {/* No Show resta uno stato visibile; annullato passa da eliminazione soft-delete */}
                     {(() => {
-                        const isActive = statoFilter === 'NO_SHOW_ANNULLATO';
-                        const countMerged = (statoCounts['NO_SHOW'] ?? 0) + (statoCounts['ANNULLATO'] ?? 0);
+                        const statoKey: StatoAppuntamento = 'NO_SHOW';
+                        const config = STATO_CONFIG[statoKey];
+                        const isActive = statoFilter === statoKey;
+                        const count = statoCounts[statoKey] ?? 0;
                         return (
                             <button
-                                onClick={() => { setStatoFilter(isActive ? '' : 'NO_SHOW_ANNULLATO'); setPage(1); }}
+                                onClick={() => { setStatoFilter(isActive ? '' : statoKey); setPage(1); }}
                                 className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all flex items-center gap-1 ${isActive
                                     ? 'bg-teal-600 text-white border-teal-600 shadow-sm'
                                     : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
                                     }`}
                             >
-                                <XCircle className="w-3 h-3" />
-                                No Show / Annullato
-                                {countMerged > 0 && (
+                                <AlertCircle className="w-3 h-3" />
+                                {config.label}
+                                {count > 0 && (
                                     <span className={`ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold leading-none ${isActive
                                         ? 'bg-white/20 text-white'
                                         : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
                                         }`}>
-                                        {countMerged}
+                                        {count}
                                     </span>
                                 )}
                             </button>
@@ -1353,60 +1750,58 @@ export const AppuntamentiPage: React.FC = () => {
                         {/* Poliambulatorio */}
                         <div className="relative">
                             <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                            <select
+                            <ElegantSelect
                                 value={poliambulatorioFilter}
-                                onChange={(e) => {
-                                    setPoliambulatorioFilter(e.target.value);
+                                onChange={(value) => {
+                                    setPoliambulatorioFilter(value);
                                     setSedeFilter('');
                                     setAmbulatorioFilter('');
                                     setPage(1);
                                 }}
-                                className="w-full h-10 pl-9 pr-3 rounded-lg border border-gray-300 dark:border-gray-600 text-sm bg-white dark:bg-gray-800 dark:text-gray-100 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 appearance-none"
-                            >
-                                <option value="">Tutti i poliambulatori</option>
-                                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                                {(poliambulatoriData as any)?.data?.map((p: { id: string; nome: string }) => (
-                                    <option key={p.id} value={p.id}>{p.nome}</option>
-                                ))}
-                            </select>
+                                triggerClassName="pl-9"
+                                placeholder="Tutti i poliambulatori"
+                                options={[
+                                    { value: '', label: 'Tutti i poliambulatori' },
+                                    ...(((poliambulatoriData as any)?.data || []).map((p: { id: string; nome: string }) => ({ value: p.id, label: p.nome })))
+                                ]}
+                            />
                         </div>
 
                         {/* Sede */}
                         <div className="relative">
                             <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                            <select
+                            <ElegantSelect
                                 value={sedeFilter}
-                                onChange={(e) => {
-                                    setSedeFilter(e.target.value);
+                                onChange={(value) => {
+                                    setSedeFilter(value);
                                     setAmbulatorioFilter('');
                                     setPage(1);
                                 }}
-                                className="w-full h-10 pl-9 pr-3 rounded-lg border border-gray-300 dark:border-gray-600 text-sm bg-white dark:bg-gray-800 dark:text-gray-100 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 appearance-none"
-                            >
-                                <option value="">Tutte le sedi</option>
-                                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                                {(sediData as any)?.data?.map((s: { id: string; nome: string }) => (
-                                    <option key={s.id} value={s.id}>{s.nome}</option>
-                                ))}
-                            </select>
+                                triggerClassName="pl-9"
+                                placeholder="Tutte le sedi"
+                                options={[
+                                    { value: '', label: 'Tutte le sedi' },
+                                    ...(((sediData as any)?.data || []).map((s: { id: string; nome: string }) => ({ value: s.id, label: s.nome })))
+                                ]}
+                            />
                         </div>
 
                         {/* Ambulatorio */}
                         <div className="relative">
                             <Stethoscope className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                            <select
+                            <ElegantSelect
                                 value={ambulatorioFilter}
-                                onChange={(e) => {
-                                    setAmbulatorioFilter(e.target.value);
+                                onChange={(value) => {
+                                    setAmbulatorioFilter(value);
                                     setPage(1);
                                 }}
-                                className="w-full h-10 pl-9 pr-3 rounded-lg border border-gray-300 dark:border-gray-600 text-sm bg-white dark:bg-gray-800 dark:text-gray-100 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 appearance-none"
-                            >
-                                <option value="">Tutti gli ambulatori</option>
-                                {ambulatoriData?.data?.map((a: { id: string; nome: string }) => (
-                                    <option key={a.id} value={a.id}>{a.nome}</option>
-                                ))}
-                            </select>
+                                triggerClassName="pl-9"
+                                placeholder="Tutti gli ambulatori"
+                                options={[
+                                    { value: '', label: 'Tutti gli ambulatori' },
+                                    ...((ambulatoriData?.data || []).map((a: { id: string; nome: string }) => ({ value: a.id, label: a.nome })))
+                                ]}
+                            />
                         </div>
                     </div>
                 </div>
@@ -1534,6 +1929,10 @@ export const AppuntamentiPage: React.FC = () => {
                         <table className="w-full">
                             <thead className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
                                 <tr>
+                                    {/* Fixed: Azioni */}
+                                    <th className="sticky left-0 z-10 bg-gray-50 dark:bg-gray-700/50 px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                                        Azioni
+                                    </th>
                                     {/* Fixed: Data/Ora */}
                                     <th
                                         className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide cursor-pointer select-none hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
@@ -1581,10 +1980,6 @@ export const AppuntamentiPage: React.FC = () => {
                                             <SortIcon field="stato" />
                                         </span>
                                     </th>
-                                    {/* Fixed: Azioni */}
-                                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                                        Azioni
-                                    </th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -1619,6 +2014,55 @@ export const AppuntamentiPage: React.FC = () => {
                                                 className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer"
                                                 onClick={() => navigate(`/poliambulatorio/agenda/appuntamenti/${app.id}`)}
                                             >
+                                                {/* Actions */}
+                                                <td className="sticky left-0 z-10 bg-white px-4 py-3 text-left dark:bg-gray-800" onClick={(e) => e.stopPropagation()}>
+                                                    <ActionButton
+                                                        theme="teal"
+                                                        actions={[
+                                                            ...((app.stato === 'PRENOTATO' || app.stato === 'CONFERMATO') ? [{
+                                                                label: 'Accetta Paziente',
+                                                                icon: <UserCheck className="h-4 w-4" />,
+                                                                onClick: () => { setAccettazioneInitialTab('anagrafica'); setAccettazioneAppuntamento(app); }
+                                                            }] : []),
+                                                            ...(app.stato === 'COMPLETATO' ? [{
+                                                                label: 'Fattura',
+                                                                icon: <FilePlus className="h-4 w-4" />,
+                                                                onClick: () => { setAccettazioneInitialTab('fatturazione'); setAccettazioneAppuntamento(app); }
+                                                            }] : []),
+                                                            ...(canVisitDirectly(app) ? [{
+                                                                label: 'Visita Paziente',
+                                                                icon: <Play className="h-4 w-4" />,
+                                                                onClick: () => openVisitForAppointment(app)
+                                                            }] : []),
+                                                            ...(canVisitDirectly(app) ? [{
+                                                                label: 'Chiama e Visita Paziente',
+                                                                icon: <PhoneCall className="h-4 w-4" />,
+                                                                onClick: () => {
+                                                                    chiamaMutation.mutate(app.id);
+                                                                    setTimeout(() => openVisitForAppointment(app), 300);
+                                                                }
+                                                            }] : []),
+                                                            { label: 'Visualizza', icon: <Eye className="h-4 w-4" />, onClick: () => navigate(`/poliambulatorio/agenda/appuntamenti/${app.id}`) },
+                                                            { label: 'Modifica', icon: <Edit className="h-4 w-4" />, onClick: () => openEditModal(app) },
+                                                            ...(app.paziente ? [{
+                                                                label: 'Anagrafica paziente',
+                                                                icon: <User className="h-4 w-4" />,
+                                                                onClick: () => navigate(`/poliambulatorio/pazienti/${app.pazienteId}`)
+                                                            }] : []),
+                                                            ...(app.medico ? [{
+                                                                label: 'Anagrafica medico',
+                                                                icon: <Stethoscope className="h-4 w-4" />,
+                                                                onClick: () => navigate(`/poliambulatorio/personale/medici/${app.medicoId}`)
+                                                            }] : []),
+                                                            ...(app.visita?.id ? [{
+                                                                label: 'Vai alla visita',
+                                                                icon: <ExternalLink className="h-4 w-4" />,
+                                                                onClick: () => navigate(`/poliambulatorio/visite/${app.visita!.id}`)
+                                                            }] : []),
+                                                            { label: 'Elimina', icon: <Trash2 className="h-4 w-4" />, onClick: () => handleDelete(app.id), variant: 'danger' as const }
+                                                        ]}
+                                                    />
+                                                </td>
                                                 {/* Data/Ora */}
                                                 <td className="px-4 py-3 whitespace-nowrap">
                                                     <div className="flex items-center gap-2">
@@ -1690,9 +2134,17 @@ export const AppuntamentiPage: React.FC = () => {
                                                             </span>
                                                         )}
                                                         {col === 'costo' && (
-                                                            <span className="text-sm text-gray-700 dark:text-gray-300">
-                                                                {app.prestazione?.prezzoBase != null ? `€ ${Number(app.prestazione.prezzoBase).toFixed(2)}` : '—'}
-                                                            </span>
+                                                            (() => {
+                                                                const price = getAppointmentPriceInfo(app);
+                                                                return price.finalPrice > 0 ? (
+                                                                    <span className="inline-flex flex-col text-sm text-gray-700 dark:text-gray-300">
+                                                                        {price.hasDiscount && (
+                                                                            <span className="text-[11px] text-gray-400 line-through">€ {price.base.toFixed(2)}</span>
+                                                                        )}
+                                                                        <span className="font-semibold">€ {price.finalPrice.toFixed(2)}</span>
+                                                                    </span>
+                                                                ) : <span className="text-gray-400 dark:text-gray-500 text-sm">—</span>;
+                                                            })()
                                                         )}
                                                         {col === 'coda' && (
                                                             app.numeroCoda != null ? (
@@ -1724,6 +2176,57 @@ export const AppuntamentiPage: React.FC = () => {
                                                                 </span>
                                                             ) : <span className="text-gray-400 dark:text-gray-500 text-sm">—</span>
                                                         )}
+                                                        {col === 'aziendaMdl' && (
+                                                            (app as any)._companyProfile?.ragioneSociale ? (
+                                                                <div className="flex items-center gap-1.5 max-w-[180px]">
+                                                                    <Building2 className="w-4 h-4 text-sky-500 flex-shrink-0" />
+                                                                    <span className="text-sm text-gray-700 dark:text-gray-300 truncate">{(app as any)._companyProfile.ragioneSociale}</span>
+                                                                </div>
+                                                            ) : <span className="text-gray-400 dark:text-gray-500 text-sm">—</span>
+                                                        )}
+                                                        {col === 'protocolloMansione' && (
+                                                            <div className="max-w-[220px] text-sm">
+                                                                <p className="font-medium text-gray-800 dark:text-gray-200 truncate">
+                                                                    {(app.paziente as any)?._mdlProfile?.protocolloSanitario?.nome || (app.paziente as any)?._mdlProfile?.protocolloSanitario?.denominazione || '—'}
+                                                                </p>
+                                                                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                                                                    {getMdlMansioni(app).join(', ') || (app.paziente as any)?._mdlProfile?.title || 'Nessuna mansione'}
+                                                                </p>
+                                                            </div>
+                                                        )}
+                                                        {col === 'rischiMdl' && (
+                                                            getMdlRischi(app).length ? (
+                                                                <div className="flex max-w-[240px] flex-wrap gap-1">
+                                                                    {getMdlRischi(app).slice(0, 3).map(rischio => (
+                                                                        <span key={rischio} className="rounded-full bg-orange-50 px-2 py-0.5 text-[11px] font-medium text-orange-700">
+                                                                            {rischio}
+                                                                        </span>
+                                                                    ))}
+                                                                    {getMdlRischi(app).length > 3 && (
+                                                                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-gray-600">+{getMdlRischi(app).length - 3}</span>
+                                                                    )}
+                                                                </div>
+                                                            ) : <span className="text-gray-400 dark:text-gray-500 text-sm">—</span>
+                                                        )}
+                                                        {col === 'accertamentiMdl' && (
+                                                            ((app as any)._accertamentiMdl || []).length ? (
+                                                                <div className="max-w-[240px] text-xs text-gray-600 dark:text-gray-300">
+                                                                    {((app as any)._accertamentiMdl || []).slice(0, 2).map((acc: any) => (
+                                                                        <p key={acc.id} className="truncate">
+                                                                            {acc.prestazione?.nome || 'Accertamento'} · {acc.dataScadenza ? formatDate(new Date(acc.dataScadenza), 'short') : '—'}
+                                                                        </p>
+                                                                    ))}
+                                                                </div>
+                                                            ) : <span className="text-gray-400 dark:text-gray-500 text-sm">—</span>
+                                                        )}
+                                                        {col === 'ultimaVisitaMdl' && (
+                                                            (app as any)._ultimaVisitaMdl?.dataOra ? (
+                                                                <div className="text-sm text-gray-700 dark:text-gray-300">
+                                                                    <p>{formatDate(new Date((app as any)._ultimaVisitaMdl.dataOra), 'short')}</p>
+                                                                    <p className="text-xs text-gray-500">{(app as any)._ultimaVisitaMdl.tipoVisitaMDL?.replace(/_/g, ' ')}</p>
+                                                                </div>
+                                                            ) : <span className="text-gray-400 dark:text-gray-500 text-sm">—</span>
+                                                        )}
                                                         {col === 'pagamentoAnticipato' && (
                                                             app.pagamentoAnticipato ? (
                                                                 <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300">
@@ -1732,13 +2235,13 @@ export const AppuntamentiPage: React.FC = () => {
                                                             ) : <span className="text-gray-400 dark:text-gray-500 text-sm">—</span>
                                                         )}
                                                         {col === 'note' && (
-                                                            app.note ? (
+                                                            (app.note || app.noteInterne) ? (
                                                                 <div className="group/note relative flex items-start gap-1.5 max-w-[200px]">
                                                                     <FileText className="h-4 w-4 text-amber-500 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-                                                                    <span className="text-sm text-gray-600 dark:text-gray-300 line-clamp-2">{app.note}</span>
-                                                                    {app.note.length > 50 && (
+                                                                    <span className="text-sm text-gray-600 dark:text-gray-300 line-clamp-2">{[app.note, app.noteInterne].filter(Boolean).join(' / ')}</span>
+                                                                    {[app.note, app.noteInterne].filter(Boolean).join(' / ').length > 50 && (
                                                                         <div className="hidden group-hover/note:block absolute z-50 bottom-full left-0 mb-1 px-3 py-2 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded-lg shadow-lg max-w-xs whitespace-pre-wrap pointer-events-none">
-                                                                            {app.note}
+                                                                            {[app.note, app.noteInterne].filter(Boolean).join('\n\n')}
                                                                         </div>
                                                                     )}
                                                                 </div>
@@ -1768,32 +2271,6 @@ export const AppuntamentiPage: React.FC = () => {
                                                     />
                                                 </td>
 
-                                                {/* Actions */}
-                                                <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                                                    <ActionButton
-                                                        theme="teal"
-                                                        actions={[
-                                                            { label: 'Visualizza', icon: <Eye className="h-4 w-4" />, onClick: () => navigate(`/poliambulatorio/agenda/appuntamenti/${app.id}`) },
-                                                            { label: 'Modifica', icon: <Edit className="h-4 w-4" />, onClick: () => navigate(`/poliambulatorio/agenda/appuntamenti/${app.id}/modifica`) },
-                                                            ...(app.paziente ? [{
-                                                                label: 'Anagrafica paziente',
-                                                                icon: <User className="h-4 w-4" />,
-                                                                onClick: () => navigate(`/poliambulatorio/pazienti/${app.pazienteId}`)
-                                                            }] : []),
-                                                            ...(app.medico ? [{
-                                                                label: 'Anagrafica medico',
-                                                                icon: <Stethoscope className="h-4 w-4" />,
-                                                                onClick: () => navigate(`/poliambulatorio/personale/medici/${app.medicoId}`)
-                                                            }] : []),
-                                                            ...(app.visita?.id ? [{
-                                                                label: 'Vai alla visita',
-                                                                icon: <ExternalLink className="h-4 w-4" />,
-                                                                onClick: () => navigate(`/poliambulatorio/visite/${app.visita!.id}`)
-                                                            }] : []),
-                                                            { label: 'Elimina', icon: <Trash2 className="h-4 w-4" />, onClick: () => handleDelete(app.id), variant: 'danger' as const }
-                                                        ]}
-                                                    />
-                                                </td>
                                             </tr>
                                         );
                                     })
@@ -1879,6 +2356,233 @@ export const AppuntamentiPage: React.FC = () => {
             {view === 'kanban' && isLoading && (
                 <div className="flex items-center justify-center py-12">
                     <RefreshCw className="h-8 w-8 text-teal-600 dark:text-teal-400 animate-spin" />
+                </div>
+            )}
+
+            {accettazioneAppuntamento && (
+                <AccettazionePazienteModal
+                    appuntamento={accettazioneAppuntamento}
+                    isOpen={!!accettazioneAppuntamento}
+                    initialTab={accettazioneInitialTab}
+                    onClose={() => {
+                        setAccettazioneAppuntamento(null);
+                        setAccettazioneInitialTab('anagrafica');
+                    }}
+                    onConfirm={handleAccettazioneConfirm}
+                    onSaveAppointmentOnly={async (appointmentData) => {
+                        if (!accettazioneAppuntamento) return;
+                        const updatePayload: Record<string, unknown> = {};
+                        if (appointmentData.dataOra) updatePayload.dataOra = appointmentData.dataOra;
+                        if (appointmentData.prestazioneId) updatePayload.prestazioneId = appointmentData.prestazioneId;
+                        if (appointmentData.pazienteId) updatePayload.pazienteId = appointmentData.pazienteId;
+                        if ('convenzioneId' in appointmentData) updatePayload.convenzioneId = appointmentData.convenzioneId || null;
+                        if (appointmentData.note !== undefined) updatePayload.note = appointmentData.note;
+                        if (appointmentData.noteInterne !== undefined) updatePayload.noteInterne = appointmentData.noteInterne;
+                        if (appointmentData.stato) updatePayload.stato = appointmentData.stato;
+                        if (Object.keys(updatePayload).length > 0) {
+                            await appuntamentiApi.update(accettazioneAppuntamento.id, updatePayload as Partial<Appuntamento>);
+                        }
+                        showToast({ message: 'Appuntamento aggiornato con successo', type: 'success' });
+                        setAccettazioneAppuntamento(null);
+                        queryClient.invalidateQueries({ queryKey: ['appuntamenti'], refetchType: 'all' });
+                    }}
+                    isLoading={accettaMutation.isPending}
+                />
+            )}
+
+            {editingAppuntamento && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/40" onClick={() => setEditingAppuntamento(null)} />
+                    <div className="relative w-full max-w-[98vw] overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-gray-800">
+                        <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-gray-700">
+                            <div>
+                                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Modifica appuntamento</h2>
+                                <p className="text-sm text-gray-500">{getPersonDisplayName(editingAppuntamento.paziente, 'Paziente')}</p>
+                            </div>
+                            <button onClick={() => setEditingAppuntamento(null)} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700">
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                        <div className="grid max-h-[72vh] grid-cols-1 gap-4 overflow-y-auto bg-gray-50/70 p-4 dark:bg-gray-900/40 xl:grid-cols-[18rem_minmax(0,1fr)]">
+                            <div className="space-y-3">
+                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                Data
+                                <DatePickerElegante
+                                    value={editForm.data}
+                                    onChange={date => {
+                                        const nextDate = date ? toLocalDateStr(date) : '';
+                                        setEditForm(f => ({ ...f, data: nextDate }));
+                                        if (date) setEditWeekStart(startOfWeek(date));
+                                    }}
+                                    placeholder="Seleziona data"
+                                />
+                            </label>
+                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                Ora
+                                <TimePickerElegante
+                                    value={editForm.ora}
+                                    onChange={value => setEditForm(f => ({ ...f, ora: value }))}
+                                    minuteStep={5}
+                                    minTime={editSelectedSlotWindow?.oraInizio}
+                                    maxTime={editSelectedSlotWindow?.oraFine}
+                                    placeholder="Seleziona ora"
+                                    className="mt-1"
+                                />
+                            </label>
+                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                Medico
+                                <ElegantSelect
+                                    className="mt-1"
+                                    value={editForm.medicoId}
+                                    onChange={value => setEditForm(f => ({ ...f, medicoId: value }))}
+                                    placeholder="Seleziona medico"
+                                    options={[
+                                        { value: '', label: 'Seleziona medico' },
+                                        ...(mediciData?.data || medici).map((m: any) => ({ value: m.id, label: getPersonDisplayName(m) }))
+                                    ]}
+                                />
+                            </label>
+                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                Prestazione
+                                <ElegantSelect
+                                    className="mt-1"
+                                    value={editForm.prestazioneId}
+                                    onChange={value => setEditForm(f => ({ ...f, prestazioneId: value }))}
+                                    placeholder="Seleziona prestazione"
+                                    options={[
+                                        { value: '', label: 'Seleziona prestazione' },
+                                        ...(prestazioniData?.data || []).map((p: any) => ({ value: p.id, label: p.nome }))
+                                    ]}
+                                />
+                            </label>
+                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                Ambulatorio
+                                <ElegantSelect
+                                    className="mt-1"
+                                    value={editForm.ambulatorioId}
+                                    onChange={value => setEditForm(f => ({ ...f, ambulatorioId: value }))}
+                                    placeholder="Seleziona ambulatorio"
+                                    options={[
+                                        { value: '', label: 'Seleziona ambulatorio' },
+                                        ...(ambulatoriData?.data || []).map((a: any) => ({ value: a.id, label: a.nome }))
+                                    ]}
+                                />
+                            </label>
+                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                Stato
+                                <ElegantSelect
+                                    className="mt-1"
+                                    value={editForm.stato}
+                                    onChange={value => setEditForm(f => ({ ...f, stato: value as StatoAppuntamento }))}
+                                    options={ALL_STATES.map(stato => ({ value: stato, label: STATO_CONFIG[stato].label }))}
+                                />
+                            </label>
+                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                Durata minuti
+                                <input type="number" min={5} value={editForm.durataMinuti} onChange={e => setEditForm(f => ({ ...f, durataMinuti: Number(e.target.value) || 30 }))} className={elegantInputClass} />
+                            </label>
+                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                Convenzione
+                                <ElegantSelect
+                                    className="mt-1"
+                                    value={editForm.convenzioneId}
+                                    onChange={value => setEditForm(f => ({ ...f, convenzioneId: value }))}
+                                    placeholder="Nessuna convenzione"
+                                    options={[
+                                        { value: '', label: 'Nessuna convenzione' },
+                                        ...(convenzioniData?.data || []).map((c: any) => ({ value: c.id, label: c.nome }))
+                                    ]}
+                                />
+                            </label>
+                            </div>
+                            <div className="min-w-0 space-y-4">
+                                <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                                    <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <div>
+                                            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Sposta appuntamento</p>
+                                            <p className="text-xs text-gray-500">Slot del medico selezionato, con occupati e colleghi della stessa branca.</p>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <button type="button" onClick={() => shiftEditWeek(-7)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:border-teal-300 hover:text-teal-700 dark:border-gray-700 dark:bg-gray-800" title="Settimana precedente">
+                                                <ChevronLeft className="h-4 w-4" />
+                                            </button>
+                                            <span className="text-xs font-semibold text-gray-500">
+                                                {editSlotRange.start.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })}
+                                                {' - '}
+                                                {editSlotRange.end.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })}
+                                            </span>
+                                            <button type="button" onClick={() => shiftEditWeek(7)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:border-teal-300 hover:text-teal-700 dark:border-gray-700 dark:bg-gray-800" title="Settimana successiva">
+                                                <ChevronRight className="h-4 w-4" />
+                                            </button>
+                                            {(loadingEditSlots || loadingEditOccupied) && <Loader2 className="h-4 w-4 animate-spin text-teal-600" />}
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowSameBranchDoctors(value => !value)}
+                                        className={`mb-4 inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors ${showSameBranchDoctors ? 'border-teal-200 bg-teal-50 text-teal-700' : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-teal-200 hover:text-teal-700'}`}
+                                    >
+                                        <Users className="h-3.5 w-3.5" />
+                                        {showSameBranchDoctors ? 'Mostra solo medico selezionato' : 'Mostra medici stessa branca'}
+                                    </button>
+                                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+                                        {editDays.map(day => (
+                                            <div key={day.key} className="min-h-[150px] min-w-0 rounded-xl border border-gray-200 bg-gray-50 p-2 dark:border-gray-700 dark:bg-gray-900/30">
+                                                <div className="mb-2">
+                                                    <p className="text-[11px] font-semibold uppercase text-gray-400">{day.date.toLocaleDateString('it-IT', { weekday: 'short' })}</p>
+                                                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{day.date.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })}</p>
+                                                </div>
+                                                <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+                                                    {day.slots.length === 0 ? (
+                                                        <p className="rounded-lg bg-white px-2 py-2 text-center text-[11px] text-gray-400 dark:bg-gray-800">Nessuno slot</p>
+                                                    ) : (
+                                                        <>
+                                                            {day.slots.map(slot => {
+                                                                const doctorName = getPersonDisplayName(allMedici.find(m => m.id === slot.medicoId), 'Medico');
+                                                                const ambulatorio = ambulatoriData?.data?.find((a: any) => a.id === slot.ambulatorioId)?.nome;
+                                                                return (
+                                                                    <AvailabilitySlotTimeline
+                                                                        key={slot.id}
+                                                                        slot={slot}
+                                                                        appointments={day.occupied}
+                                                                        durationMinutes={editForm.durataMinuti || 30}
+                                                                        selectedDate={editForm.data}
+                                                                        selectedTime={editForm.ora}
+                                                                        selectedMedicoId={editForm.medicoId}
+                                                                        selectedAmbulatorioId={editForm.ambulatorioId}
+                                                                        dayKey={day.key}
+                                                                        label={showSameBranchDoctors ? doctorName : ambulatorio}
+                                                                        meta={showSameBranchDoctors ? ambulatorio : undefined}
+                                                                        doctorLabel={doctorName}
+                                                                        onSelect={selectEditSlot}
+                                                                    />
+                                                                );
+                                                            })}
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                Note
+                                <textarea value={editForm.note} onChange={e => setEditForm(f => ({ ...f, note: e.target.value }))} rows={3} className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100" />
+                            </label>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                Note interne
+                                <textarea value={editForm.noteInterne} onChange={e => setEditForm(f => ({ ...f, noteInterne: e.target.value }))} rows={3} className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100" />
+                            </label>
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-3 border-t border-gray-200 px-5 py-4 dark:border-gray-700">
+                            <button onClick={() => setEditingAppuntamento(null)} className="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700">Annulla</button>
+                            <button onClick={saveEditModal} disabled={updateAppointmentMutation.isPending} className="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-60">
+                                {updateAppointmentMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                                Salva modifiche
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

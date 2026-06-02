@@ -46,7 +46,9 @@ import {
     prestazioniApi,
     mediciApi,
     type VisitTemplate,
-    type VisitTemplateInput
+    type VisitTemplateInput,
+    type Medico,
+    type Prestazione
 } from '../../../../services/clinicaApi';
 import { CRUDButton, CRUDPrimaryButton } from '../../../../components/shared/CRUDButton';
 import { ActionButton } from '../../../../components/ui';
@@ -103,6 +105,12 @@ const VisitTemplatesPage: React.FC = () => {
 
     // canViewAll: admin o tenant manager — visualizza tutti i template (con filtri)
     const canViewAll = isAdmin || isTenantManager;
+    const isBaseMedico = useMemo(() => {
+        const roles = user?.roles || [];
+        return roles.includes('MEDICO') &&
+            !roles.includes('MEDICO_COMPETENTE') &&
+            !canViewAll;
+    }, [user?.roles, canViewAll]);
 
     // Query params with tenant filter
     const queryParams = useMemo(() => {
@@ -153,12 +161,58 @@ const VisitTemplatesPage: React.FC = () => {
         enabled: isReady && canViewAll
     });
 
+    const { data: ownMedico } = useQuery({
+        queryKey: ['medici', 'current-template-owner', user?.id, tenantFilterKey],
+        queryFn: () => mediciApi.getById(user!.id),
+        enabled: isReady && isBaseMedico && !!user?.id
+    });
+
     // Lista prestazioni (per filtro)
     const { data: prestazioni } = useQuery({
         queryKey: ['prestazioni', 'for-filter', tenantFilterKey],
         queryFn: () => prestazioniApi.getAll({ limit: 100 }),
         enabled: isReady
     });
+
+    const availablePrestazioni = useMemo<Prestazione[]>(() => {
+        if (!isBaseMedico) return prestazioni?.data || [];
+        return (ownMedico?.abilitazioni || [])
+            .filter(a => a.attivo && a.prestazione)
+            .map(a => a.prestazione as Prestazione);
+    }, [isBaseMedico, prestazioni?.data, ownMedico?.abilitazioni]);
+
+    const modalMedici = useMemo<Medico[]>(() => {
+        if (canViewAll) return medici?.data || [];
+        return ownMedico ? [ownMedico] : [];
+    }, [canViewAll, medici?.data, ownMedico]);
+
+    const allowedPrestazioneIds = useMemo(
+        () => new Set(availablePrestazioni.map(p => p.id)),
+        [availablePrestazioni]
+    );
+
+    const sanitizeMedicoTemplateInput = useCallback((data: VisitTemplateInput | Partial<VisitTemplateInput>) => {
+        if (!isBaseMedico) return data;
+
+        const requestedIds = [
+            ...((data as VisitTemplateInput).prestazioneIds || []),
+            data.prestazioneId
+        ].filter(Boolean) as string[];
+        const prestazioneIds = requestedIds.filter(id => allowedPrestazioneIds.has(id));
+
+        if (requestedIds.length > 0 && prestazioneIds.length === 0) {
+            showToast({ message: 'Puoi associare il template solo alle tue prestazioni abilitate', type: 'warning' });
+        }
+
+        return {
+            ...data,
+            scope: 'PERSONAL' as const,
+            medicoId: user?.id,
+            medicoIds: undefined,
+            prestazioneId: prestazioneIds[0] || undefined,
+            prestazioneIds: prestazioneIds.length > 0 ? prestazioneIds : undefined
+        };
+    }, [isBaseMedico, allowedPrestazioneIds, user?.id, showToast]);
 
     // Default del sistema
     const { data: defaults } = useQuery({
@@ -223,7 +277,8 @@ const VisitTemplatesPage: React.FC = () => {
     // ============================================
 
     const handleCreate = useCallback(async (data: VisitTemplateInput) => {
-        const { prestazioneIds, medicoIds, ...baseData } = data;
+        const normalizedData = sanitizeMedicoTemplateInput(data) as VisitTemplateInput;
+        const { prestazioneIds, medicoIds, ...baseData } = normalizedData;
 
         // Determine lists for multi-create
         const pIds = prestazioneIds && prestazioneIds.length > 0 ? prestazioneIds : [baseData.prestazioneId];
@@ -262,11 +317,11 @@ const VisitTemplatesPage: React.FC = () => {
             // Single create (existing behavior)
             createMutation.mutate(baseData);
         }
-    }, [createMutation, queryClient, showToast]);
+    }, [createMutation, queryClient, showToast, sanitizeMedicoTemplateInput]);
 
     const handleUpdate = useCallback((id: string, data: Partial<VisitTemplateInput>) => {
-        updateMutation.mutate({ id, data });
-    }, [updateMutation]);
+        updateMutation.mutate({ id, data: sanitizeMedicoTemplateInput(data) });
+    }, [updateMutation, sanitizeMedicoTemplateInput]);
 
     const handleClone = useCallback((template: VisitTemplate) => {
         const newName = `${template.name} (copia)`;
@@ -412,7 +467,7 @@ const VisitTemplatesPage: React.FC = () => {
                                 className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500"
                             >
                                 <option value="">Tutte le prestazioni</option>
-                                {prestazioni?.data?.map((p) => (
+                                {availablePrestazioni.map((p) => (
                                     <option key={p.id} value={p.id}>
                                         {p.nome}
                                     </option>
@@ -650,8 +705,8 @@ const VisitTemplatesPage: React.FC = () => {
                     isOpen={true}
                     template={editingTemplate || undefined}
                     defaults={defaults}
-                    prestazioni={prestazioni?.data || []}
-                    medici={medici?.data || []}
+                    prestazioni={availablePrestazioni}
+                    medici={modalMedici}
                     currentUserId={user?.id}
                     isAdmin={!!isAdmin}
                     onSave={(data) => {

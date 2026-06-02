@@ -31,6 +31,7 @@ import {
     ArrowDownRight
 } from 'lucide-react';
 import { useAuth } from '../../../hooks/auth/useAuth';
+import { useTenantAccess } from '../../../hooks/useTenantAccess';
 import { apiGet } from '../../../services/api';
 
 // Report card interface
@@ -72,10 +73,20 @@ interface ReportData {
 
 const SystemReportsPage: React.FC = () => {
     const { user } = useAuth();
+    const { currentTenantId } = useTenantAccess();
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [dateRange, setDateRange] = useState('30d');
     const [reportData, setReportData] = useState<ReportData | null>(null);
+
+    // Global admin = ADMIN or SUPER_ADMIN only
+    const isGlobalAdmin = user?.role === 'Admin' ||
+        user?.globalRole === 'ADMIN' ||
+        user?.globalRole === 'SUPER_ADMIN' ||
+        user?.roles?.includes('ADMIN') ||
+        user?.roles?.includes('SUPER_ADMIN');
+
+    const tenantId = currentTenantId;
 
     // Load report data
     const loadReportData = useCallback(async () => {
@@ -83,21 +94,26 @@ const SystemReportsPage: React.FC = () => {
         setError(null);
         try {
             // Try to fetch real data from multiple endpoints
+            const personsParams: Record<string, string> = { limit: '1000' };
+            if (!isGlobalAdmin && tenantId) personsParams.tenantId = tenantId;
+
             const [personsRes, rolesRes, tenantsRes] = await Promise.allSettled([
-                apiGet<{ data: any[]; total?: number }>('/api/v1/persons', { limit: '1000' }),
+                apiGet<{ data: any[]; total?: number }>('/api/v1/persons', personsParams),
                 apiGet<{ success: boolean; data: { data: any[] } }>('/api/v1/roles'),
-                apiGet<{ success: boolean; data: any[] }>('/api/v1/tenants')
+                isGlobalAdmin
+                    ? apiGet<{ success: boolean; data: any[] }>('/api/v1/tenants')
+                    : Promise.resolve(null)
             ]);
 
             // Extract data safely with proper type narrowing
-            const persons = personsRes.status === 'fulfilled' && personsRes.value?.data 
-                ? personsRes.value.data 
+            const persons = personsRes.status === 'fulfilled' && personsRes.value?.data
+                ? personsRes.value.data
                 : [];
             const roles = rolesRes.status === 'fulfilled' && rolesRes.value
-                ? (rolesRes.value.data?.data || rolesRes.value.data || []) 
+                ? (rolesRes.value.data?.data || rolesRes.value.data || [])
                 : [];
             const tenants = tenantsRes.status === 'fulfilled' && tenantsRes.value?.data
-                ? tenantsRes.value.data 
+                ? tenantsRes.value.data
                 : [];
 
             // Calculate user distribution by role
@@ -160,7 +176,7 @@ const SystemReportsPage: React.FC = () => {
 
         } catch (err: unknown) {
             setError('Errore nel caricamento dei report');
-            
+
             // Set mock data on error
             setReportData({
                 overview: {
@@ -274,7 +290,7 @@ const SystemReportsPage: React.FC = () => {
     // Simple bar chart component
     const SimpleBarChart: React.FC<{ data: ChartData[]; title: string }> = ({ data, title }) => {
         const maxValue = Math.max(...data.map(d => d.value));
-        
+
         return (
             <div className="bg-white rounded-xl border border-gray-200 p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">{title}</h3>
@@ -285,11 +301,11 @@ const SystemReportsPage: React.FC = () => {
                                 {item.label}
                             </div>
                             <div className="flex-1 h-6 bg-gray-100 rounded-full overflow-hidden">
-                                <div 
+                                <div
                                     className="h-full rounded-full transition-all duration-500"
-                                    style={{ 
+                                    style={{
                                         width: `${(item.value / maxValue) * 100}%`,
-                                        backgroundColor: item.color 
+                                        backgroundColor: item.color
                                     }}
                                 />
                             </div>
@@ -307,7 +323,7 @@ const SystemReportsPage: React.FC = () => {
     const SimpleDonutChart: React.FC<{ data: ChartData[]; title: string }> = ({ data, title }) => {
         const total = data.reduce((sum, d) => sum + d.value, 0);
         let currentAngle = 0;
-        
+
         return (
             <div className="bg-white rounded-xl border border-gray-200 p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">{title}</h3>
@@ -319,13 +335,13 @@ const SystemReportsPage: React.FC = () => {
                             const angle = (percentage / 100) * 360;
                             const startAngle = currentAngle;
                             currentAngle += angle;
-                            
+
                             const largeArc = angle > 180 ? 1 : 0;
                             const startX = 50 + 40 * Math.cos((startAngle - 90) * Math.PI / 180);
                             const startY = 50 + 40 * Math.sin((startAngle - 90) * Math.PI / 180);
                             const endX = 50 + 40 * Math.cos((startAngle + angle - 90) * Math.PI / 180);
                             const endY = 50 + 40 * Math.sin((startAngle + angle - 90) * Math.PI / 180);
-                            
+
                             return (
                                 <path
                                     key={idx}
@@ -341,12 +357,12 @@ const SystemReportsPage: React.FC = () => {
                             {total}
                         </text>
                     </svg>
-                    
+
                     {/* Legend */}
                     <div className="space-y-2">
                         {data.map((item, idx) => (
                             <div key={idx} className="flex items-center gap-2">
-                                <div 
+                                <div
                                     className="w-3 h-3 rounded-full"
                                     style={{ backgroundColor: item.color }}
                                 />
@@ -423,7 +439,7 @@ const SystemReportsPage: React.FC = () => {
                         {overviewCards.map(card => {
                             const Icon = card.icon;
                             const isPositive = (card.change ?? 0) >= 0;
-                            
+
                             return (
                                 <div key={card.id} className="bg-white rounded-xl border border-gray-200 p-6">
                                     <div className="flex items-start justify-between">
@@ -455,13 +471,13 @@ const SystemReportsPage: React.FC = () => {
 
                     {/* Charts Grid */}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <SimpleBarChart 
-                            data={reportData.usersByRole} 
-                            title="Utenti per Ruolo" 
+                        <SimpleBarChart
+                            data={reportData.usersByRole}
+                            title="Utenti per Ruolo"
                         />
-                        <SimpleDonutChart 
-                            data={reportData.usersByTenant} 
-                            title="Distribuzione per Tenant" 
+                        <SimpleDonutChart
+                            data={reportData.usersByTenant}
+                            title="Distribuzione per Tenant"
                         />
                     </div>
 

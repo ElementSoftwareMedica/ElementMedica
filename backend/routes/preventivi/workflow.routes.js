@@ -101,14 +101,20 @@ router.put('/:id/stato',
         where: { id },
         data: updateData,
         include: {
-          azienda: true,
-          persona: true
+          companyTenantProfile: {
+            select: { id: true, company: { select: { id: true, ragioneSociale: true } } }
+          },
+          persona: { select: { id: true, firstName: true, lastName: true } }
         }
       });
 
+      // Map companyTenantProfile to azienda for frontend
+      const { companyTenantProfile, ...preventivoRest } = preventivoAggiornato;
+      const mappedPreventivo = { ...preventivoRest, azienda: companyTenantProfile?.company || null };
+
       res.json({
         success: true,
-        data: preventivoAggiornato,
+        data: mappedPreventivo,
         message: `Stato aggiornato: ${preventivo.stato} → ${nuovoStato}`
       });
 

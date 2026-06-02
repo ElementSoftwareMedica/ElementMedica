@@ -461,14 +461,11 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
         isOpen={showRegenerateModal}
         onClose={closeRegenerateModal}
         onConfirm={generateAttestati}
-        persons={selectedPersons
-          .map(id => persons.find(p => String(p.id) === String(id)))
-          .filter((p): p is typeof persons[0] => p !== undefined)
-          .map(p => ({
-            id: String(p.id),
-            firstName: p.firstName,
-            lastName: p.lastName
-          }))}
+        persons={persons.map(p => ({
+          id: String(p.id),
+          firstName: p.firstName,
+          lastName: p.lastName
+        }))}
         existingAttestati={attestatiList}
         scheduleTitle="Corso"
       />

@@ -9,15 +9,16 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Users, Search, Plus, Eye, Phone, Mail,
-    Calendar, FileText, AlertCircle, CheckCircle, Link2, Edit, Receipt
+    Calendar, FileText, AlertCircle, CheckCircle, Link2, Receipt, UserCheck, Clock
 } from 'lucide-react';
-import { useAuth } from '../../../context/AuthContext';
 import { useTenantFilter } from '../../../context/TenantFilterContext';
 import { useToast } from '../../../hooks/useToast';
 import { apiGet, apiPost } from '../../../services/api';
 import type { PersonTenantProfile } from '../../../types/personMultiTenant';
 import { DatePickerElegante } from '../../../components/ui/DatePickerElegante';
 import { ActionButton, CRUDPrimaryButton } from '../../../components/ui';
+import ListPaginationFooter from '../../../components/ui/ListPaginationFooter';
+import { DEFAULT_ETHNICITY, ETHNICITY_OPTIONS } from '../../../constants/ethnicityOptions';
 
 interface Paziente {
     id: string;
@@ -69,7 +70,6 @@ interface SearchResult {
 
 const PazientiPage: React.FC = () => {
     const navigate = useNavigate();
-    const { user } = useAuth();
     const { showToast } = useToast();
 
     // Tenant filter from global context
@@ -85,6 +85,11 @@ const PazientiPage: React.FC = () => {
         total: 0,
         totalPages: 0
     });
+    const [stats, setStats] = useState({
+        total: 0,
+        conVisite: 0,
+        conContatto: 0
+    });
 
     // Modal per nuovo paziente
     const [showNewModal, setShowNewModal] = useState(false);
@@ -95,6 +100,7 @@ const PazientiPage: React.FC = () => {
         email: '',
         phone: '',
         birthDate: '',
+        etnia: DEFAULT_ETHNICITY,
         residenceAddress: '',
         residenceCity: '',
         postalCode: '',
@@ -121,11 +127,17 @@ const PazientiPage: React.FC = () => {
                 success: boolean;
                 data: Paziente[];
                 pagination: typeof pagination;
+                stats?: typeof stats;
             }>(url);
 
             if (response.success) {
                 setPazienti(response.data);
                 setPagination(response.pagination);
+                setStats(response.stats || {
+                    total: response.pagination.total,
+                    conVisite: response.data.filter(p => (p.visiteComePaziente?.length || 0) > 0).length,
+                    conContatto: response.data.filter(p => p.email || p.phone).length
+                });
             }
         } catch (err) {
             setError('Errore nel caricamento pazienti');
@@ -221,7 +233,7 @@ const PazientiPage: React.FC = () => {
                 setShowNewModal(false);
                 setNewPaziente({
                     firstName: '', lastName: '', taxCode: '', email: '',
-                    phone: '', birthDate: '', residenceAddress: '',
+                    phone: '', birthDate: '', etnia: DEFAULT_ETHNICITY, residenceAddress: '',
                     residenceCity: '', postalCode: '', province: ''
                 });
                 setCfSearchResult(null);
@@ -245,35 +257,74 @@ const PazientiPage: React.FC = () => {
         return new Date(date).toLocaleDateString('it-IT');
     };
 
+    const handlePageSizeChange = (pageSize: number) => {
+        setPagination(p => ({ ...p, page: 1, pageSize }));
+    };
+
     return (
-        <div className="p-6">
+        <div className="min-h-screen bg-slate-50 p-6">
             {/* Header */}
-            <div className="flex justify-between items-center mb-6">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                        <Users className="w-7 h-7 text-blue-600" />
-                        Anagrafica Pazienti
-                    </h1>
-                    <p className="text-gray-600 mt-1">
-                        Gestione pazienti con integrazione anagrafica formazione
-                    </p>
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm mb-6">
+                <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="flex items-center gap-4">
+                        <div className="h-12 w-12 rounded-xl bg-teal-600 flex items-center justify-center shadow-sm">
+                            <Users className="w-6 h-6 text-white" />
+                        </div>
+                        <div>
+                            <h1 className="text-2xl font-bold text-slate-950">
+                                Anagrafica pazienti
+                            </h1>
+                            <p className="text-slate-500 mt-1">
+                                Ricerca, cartelle cliniche e contatti dei pazienti
+                            </p>
+                        </div>
+                    </div>
+                    <CRUDPrimaryButton onClick={() => setShowNewModal(true)}>
+                        <Plus className="w-5 h-5 mr-2" />
+                        Nuovo Paziente
+                    </CRUDPrimaryButton>
                 </div>
-                <CRUDPrimaryButton onClick={() => setShowNewModal(true)}>
-                    <Plus className="w-5 h-5 mr-2" />
-                    Nuovo Paziente
-                </CRUDPrimaryButton>
+                <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-3">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="flex items-center gap-3">
+                            <UserCheck className="h-5 w-5 text-teal-600" />
+                            <div>
+                                <p className="text-sm text-slate-500">Pazienti in lista</p>
+                                <p className="text-2xl font-semibold text-slate-950">{stats.total || pagination.total || pazienti.length}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="flex items-center gap-3">
+                            <Clock className="h-5 w-5 text-amber-600" />
+                            <div>
+                                <p className="text-sm text-slate-500">Con visite registrate</p>
+                                <p className="text-2xl font-semibold text-slate-950">{stats.conVisite}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="flex items-center gap-3">
+                            <Mail className="h-5 w-5 text-indigo-600" />
+                            <div>
+                                <p className="text-sm text-slate-500">Con contatto</p>
+                                <p className="text-2xl font-semibold text-slate-950">{stats.conContatto}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             {/* Search */}
-            <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 mb-6">
                 <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                     <input
                         type="text"
                         placeholder="Cerca per nome, cognome, codice fiscale, email..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-full pl-12 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-slate-50/60"
                     />
                 </div>
             </div>
@@ -288,9 +339,9 @@ const PazientiPage: React.FC = () => {
             )}
 
             {/* Table */}
-            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                 <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
+                    <thead className="bg-slate-50">
                         <tr>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Paziente</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Codice Fiscale</th>
@@ -317,13 +368,13 @@ const PazientiPage: React.FC = () => {
                             pazienti.map((paziente) => (
                                 <tr
                                     key={paziente.id}
-                                    className="hover:bg-teal-50 cursor-pointer transition-colors"
+                                    className="hover:bg-teal-50/70 cursor-pointer transition-colors"
                                     onClick={() => navigate(`/poliambulatorio/pazienti/${paziente.id}`)}
                                 >
                                     <td className="px-6 py-4">
                                         <div className="flex items-center">
-                                            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                                                <span className="text-blue-600 font-medium">
+                                            <div className="w-10 h-10 rounded-full bg-teal-100 flex items-center justify-center">
+                                                <span className="text-teal-700 font-semibold">
                                                     {paziente.firstName[0]}{paziente.lastName[0]}
                                                 </span>
                                             </div>
@@ -430,28 +481,15 @@ const PazientiPage: React.FC = () => {
                 </table>
 
                 {/* Pagination */}
-                {pagination.totalPages > 1 && (
-                    <div className="px-6 py-4 border-t flex items-center justify-between">
-                        <div className="text-sm text-gray-500">
-                            Mostrando {(pagination.page - 1) * pagination.pageSize + 1} - {Math.min(pagination.page * pagination.pageSize, pagination.total)} di {pagination.total}
-                        </div>
-                        <div className="flex gap-2">
-                            <button
-                                onClick={() => setPagination(p => ({ ...p, page: p.page - 1 }))}
-                                disabled={pagination.page === 1}
-                                className="px-3 py-1 border rounded disabled:opacity-50"
-                            >
-                                Precedente
-                            </button>
-                            <button
-                                onClick={() => setPagination(p => ({ ...p, page: p.page + 1 }))}
-                                disabled={pagination.page >= pagination.totalPages}
-                                className="px-3 py-1 border rounded disabled:opacity-50"
-                            >
-                                Successivo
-                            </button>
-                        </div>
-                    </div>
+                {pagination.total > 0 && (
+                    <ListPaginationFooter
+                        page={pagination.page}
+                        pageSize={pagination.pageSize}
+                        total={pagination.total}
+                        totalPages={pagination.totalPages || 1}
+                        onPageChange={(page) => setPagination(p => ({ ...p, page }))}
+                        onPageSizeChange={handlePageSizeChange}
+                    />
                 )}
             </div>
 
@@ -585,6 +623,19 @@ const PazientiPage: React.FC = () => {
                             </div>
 
                             <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Etnia</label>
+                                <select
+                                    value={newPaziente.etnia}
+                                    onChange={(e) => setNewPaziente(p => ({ ...p, etnia: e.target.value }))}
+                                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
+                                >
+                                    {ETHNICITY_OPTIONS.map(option => (
+                                        <option key={option.value || 'empty'} value={option.value}>{option.label}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Indirizzo</label>
                                 <input
                                     type="text"
@@ -634,7 +685,7 @@ const PazientiPage: React.FC = () => {
                                     setCfSearchResult(null);
                                     setNewPaziente({
                                         firstName: '', lastName: '', taxCode: '', email: '',
-                                        phone: '', birthDate: '', residenceAddress: '',
+                                        phone: '', birthDate: '', etnia: DEFAULT_ETHNICITY, residenceAddress: '',
                                         residenceCity: '', postalCode: '', province: ''
                                     });
                                 }}

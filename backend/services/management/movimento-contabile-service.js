@@ -210,7 +210,12 @@ class MovimentoContabileService extends BranchAwareService {
         // Applica filtri
         if (filters.direzione) where.direzione = filters.direzione;
         if (filters.tipo) where.tipo = filters.tipo;
-        if (filters.stato) where.stato = filters.stato;
+        if (filters.stato) {
+            const stati = Array.isArray(filters.stato)
+                ? filters.stato
+                : String(filters.stato).split(',').map(stato => stato.trim()).filter(Boolean);
+            where.stato = stati.length > 1 ? { in: stati } : stati[0];
+        }
         if (filters.tipoSoggetto) where.tipoSoggetto = filters.tipoSoggetto;
         if (filters.personId) where.personId = filters.personId;
         if (filters.companyTenantProfileId) where.companyTenantProfileId = filters.companyTenantProfileId;

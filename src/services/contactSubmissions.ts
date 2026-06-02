@@ -29,14 +29,16 @@ export interface ContactSubmissionResponse {
 export const submitContactForm = async (data: ContactSubmissionData): Promise<ContactSubmissionResponse> => {
   try {
     // Usa l'endpoint pubblico per le submissions dai form pubblici
-    const response = await apiPost<ContactSubmissionResponse>('/api/public/contact-submissions', {
+    const response = await apiPost<ContactSubmissionResponse>('/api/v1/public/contact-submissions', {
       requestType: 'info', // Default type
       ...data
     });
 
     return response;
   } catch (error: unknown) {
-    console.error('❌ Errore invio contact form:', error);
+    if (import.meta.env.DEV) {
+      console.error('❌ Errore invio contact form:', error);
+    }
 
     // Type guard per errori con response
     const isAxiosError = (err: unknown): err is { response?: { status?: number; data?: { message?: string } } } => {
@@ -71,7 +73,9 @@ export const getContactSubmissions = async (): Promise<ContactSubmissionResponse
     const response = await apiGet<ContactSubmissionResponse[]>('/api/v1/submissions');
     return response;
   } catch (error) {
-    console.error('Errore nel recupero delle submissions:', error);
+    if (import.meta.env.DEV) {
+      console.error('Errore nel recupero delle submissions:', error);
+    }
     throw error;
   }
 };

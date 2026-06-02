@@ -59,10 +59,12 @@ const createSubmission = async (req, res) => {
       reqTenantExists: !!req.tenant
     });
 
-    let tenantId = req.person?.tenantId || req.tenant?.id;
+    // For public submissions, prefer the brand-resolved tenant (from publicContentMiddleware)
+    let tenantId = req.person?.tenantId || req.tenant?.id || req.publicTenantId;
     logger.debug('Initial tenantId resolved', {
       component: 'contactSubmissionController',
-      tenantId: tenantId || 'none'
+      tenantId: tenantId || 'none',
+      publicTenantId: req.publicTenantId || 'none'
     });
 
     if (!tenantId) {
@@ -70,14 +72,20 @@ const createSubmission = async (req, res) => {
         component: 'contactSubmissionController'
       });
 
-      // Per le submission pubbliche, trova il primo tenant attivo
+      // For public submissions, find Element srl (the main tenant with both brands)
       const defaultTenant = await prisma.tenant.findFirst({
+        where: {
+          isActive: true,
+          deletedAt: null,
+          slug: 'element-medica' // Element srl is the main tenant
+        }
+      }) || await prisma.tenant.findFirst({
         where: {
           isActive: true,
           deletedAt: null
         },
         orderBy: {
-          createdAt: 'asc'
+          createdAt: 'desc' // Most recently created (most likely to be correct)
         }
       });
 

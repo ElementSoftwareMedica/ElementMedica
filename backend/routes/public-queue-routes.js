@@ -677,9 +677,10 @@ router.get('/:token/available-times', validateQueueToken, async (req, res) => {
         // Collect time blocks from which to generate available windows
         const timeBlocks = []; // Array of { oraInizio: "HH:mm", oraFine: "HH:mm", medicoId: string }
 
-        // STRATEGY 1: Session has a linked SlotDisponibilita → use its time range for ALL medici
+        // STRATEGY 1: Session has a linked SlotDisponibilita → use its time range
+        // PLUS query all other slots for the same medici on the same day
         if (session.slotDisponibilita?.oraInizio && session.slotDisponibilita?.oraFine) {
-            // Create a time block for EACH medico in the session (not just the slot owner)
+            // First: add the linked slot's time range for all session medici
             for (const medicoPersonId of medicoPersonIds) {
                 timeBlocks.push({
                     oraInizio: session.slotDisponibilita.oraInizio,
@@ -687,12 +688,43 @@ router.get('/:token/available-times', validateQueueToken, async (req, res) => {
                     medicoId: medicoPersonId
                 });
             }
+
+            // Then: also query ALL other slots for the same medici on the same day
+            // This ensures afternoon slots are included even when session was created from a morning slot
+            const additionalSlots = await prisma.slotDisponibilita.findMany({
+                where: {
+                    tenantId: session.tenantId,
+                    data: effectiveDateUTC,
+                    disponibile: true,
+                    deletedAt: null,
+                    medicoId: { in: medicoPersonIds },
+                    id: { not: session.slotDisponibilitaId } // Exclude the already-included linked slot
+                },
+                select: { oraInizio: true, oraFine: true, medicoId: true },
+                orderBy: { oraInizio: 'asc' }
+            });
+
+            for (const slot of additionalSlots) {
+                // Avoid duplicate time blocks (same medico + same time range)
+                const isDuplicate = timeBlocks.some(
+                    tb => tb.medicoId === slot.medicoId && tb.oraInizio === slot.oraInizio && tb.oraFine === slot.oraFine
+                );
+                if (!isDuplicate) {
+                    timeBlocks.push({
+                        oraInizio: slot.oraInizio,
+                        oraFine: slot.oraFine,
+                        medicoId: slot.medicoId
+                    });
+                }
+            }
+
             logger.debug({
                 sessionId: session.id,
-                oraInizio: session.slotDisponibilita.oraInizio,
-                oraFine: session.slotDisponibilita.oraFine,
+                linkedSlot: `${session.slotDisponibilita.oraInizio}-${session.slotDisponibilita.oraFine}`,
+                additionalSlots: additionalSlots.length,
+                totalTimeBlocks: timeBlocks.length,
                 medicoCount: medicoPersonIds.length
-            }, 'available-times: Using linked SlotDisponibilita time range for all session medici');
+            }, 'available-times: Using linked SlotDisponibilita + additional slots for all session medici');
         }
 
         // STRATEGY 2: If no time blocks yet, try pre-generated SlotDisponibilita LIBERO
@@ -1161,6 +1193,25 @@ router.post('/:token/walkin', validateQueueToken, async (req, res) => {
             return `${startOfDay.toISOString().split('T')[0]}-${String(countToday + 1).padStart(4, '0')}`;
         };
 
+        // Helper: Convert Italian local time (HH:mm from slot oraInizio) to proper UTC Date
+        // Slot times represent Europe/Rome local time; server runs in UTC
+        const italianLocalToUTC = (dateUtc, timeStr) => {
+            const [hours, minutes] = timeStr.split(':').map(Number);
+            const year = dateUtc.getUTCFullYear();
+            const month = dateUtc.getUTCMonth();
+            const day = dateUtc.getUTCDate();
+            // Determine Italy's UTC offset for this date (CET=+1, CEST=+2)
+            const refUtc = new Date(Date.UTC(year, month, day, 12, 0, 0));
+            const parts = new Intl.DateTimeFormat('en-GB', {
+                timeZone: 'Europe/Rome',
+                hour: 'numeric',
+                hour12: false
+            }).formatToParts(refUtc);
+            const romeHourAtNoon = parseInt(parts.find(p => p.type === 'hour')?.value || '13');
+            const offsetHours = romeHourAtNoon - 12;
+            return new Date(Date.UTC(year, month, day, hours - offsetHours, minutes, 0));
+        };
+
         // CRITICAL: Use slotDisponibilita.data as authoritative date (session.date may have
         // timezone offset from startOfDay). This ensures correct day, ambulatorio, and slot linking.
         const effectiveDate = session.slotDisponibilita?.data
@@ -1190,13 +1241,11 @@ router.post('/:token/walkin', validateQueueToken, async (req, res) => {
 
             await createNewPatient();
 
-            const [hours, minutes] = slot.oraInizio.split(':').map(Number);
-            // Build dataOra as local datetime string (no Z suffix) for consistent timezone handling
-            // This matches the convention used by the calendar's appointment form
+            // Build dataOra: frontend sends UTC ISO string, fallback converts Italian local time
             const { selectedDateTime: slotDateTime } = req.body;
             const dataOra = slotDateTime
                 ? new Date(slotDateTime)
-                : new Date(effectiveDate.getFullYear(), effectiveDate.getMonth(), effectiveDate.getDate(), hours, minutes, 0, 0);
+                : italianLocalToUTC(effectiveDateUTC, slot.oraInizio);
 
             const numeroPrenotazione = await generateNumeroPrenotazione(effectiveDate);
             const effectivePrestazioneId = slot.prestazioneId || prestazioneId || sessionConfig.prestazioneId;
@@ -1300,12 +1349,11 @@ router.post('/:token/walkin', validateQueueToken, async (req, res) => {
                 return res.status(400).json({ success: false, error: 'Ambulatorio non configurato per la sessione' });
             }
 
-            const [hours, minutes] = selectedTime.split(':').map(Number);
-            // Build dataOra as local datetime (no Z suffix) for consistent timezone handling
+            // Build dataOra: frontend sends UTC ISO string, fallback converts Italian local time
             const { selectedDateTime } = req.body;
             const dataOra = selectedDateTime
                 ? new Date(selectedDateTime)
-                : new Date(effectiveDate.getFullYear(), effectiveDate.getMonth(), effectiveDate.getDate(), hours, minutes, 0, 0);
+                : italianLocalToUTC(effectiveDateUTC, selectedTime);
 
             const numeroPrenotazione = await generateNumeroPrenotazione(effectiveDate);
 

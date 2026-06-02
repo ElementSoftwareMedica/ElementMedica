@@ -18,6 +18,7 @@ import { getEffectiveTenantId } from '../../utils/tenantHelper.js';
 import { personTenantAccessService } from '../../services/PersonTenantAccessService.js';
 import { validateParamId } from '../../middleware/validateUUID.js';
 import { omitSystemFields } from '../../utils/sanitizeBody.js';
+import prisma from '../../config/prisma-optimization.js';
 
 // Helper per parsare tenantIds da query string
 function parseTenantIds(tenantIdsParam) {
@@ -28,6 +29,50 @@ function parseTenantIds(tenantIdsParam) {
 
 const router = express.Router();
 router.param('id', validateParamId);
+
+const PRIVILEGED_CLINIC_ROLES = new Set(['ADMIN', 'SUPER_ADMIN', 'TENANT_ADMIN', 'COMPANY_ADMIN', 'CLINIC_ADMIN', 'SEGRETERIA_CLINICA']);
+
+function getRoleTypes(req) {
+    return (req.person?.roles || []).map(role => typeof role === 'string' ? role : role?.roleType).filter(Boolean);
+}
+
+function isBaseMedico(req) {
+    const roles = getRoleTypes(req);
+    return roles.includes('MEDICO') &&
+        !roles.includes('MEDICO_COMPETENTE') &&
+        !roles.some(role => PRIVILEGED_CLINIC_ROLES.has(role));
+}
+
+async function assertPrestazioniAbilitate(tenantId, medicoId, prestazioneIds = []) {
+    const ids = [...new Set(prestazioneIds.filter(Boolean))];
+    if (ids.length === 0) return;
+
+    const count = await prisma.medicoAbilitato.count({
+        where: {
+            tenantId,
+            medicoId,
+            prestazioneId: { in: ids },
+            attivo: true,
+            deletedAt: null
+        }
+    });
+
+    if (count !== ids.length) {
+        const error = new Error('Prestazione non abilitata per il medico');
+        error.statusCode = 403;
+        throw error;
+    }
+}
+
+function enforceBaseMedicoTemplate(req, data) {
+    if (!isBaseMedico(req)) return data;
+    return {
+        ...data,
+        scope: 'PERSONAL',
+        medicoId: req.person.id,
+        medicoIds: undefined
+    };
+}
 
 // ============================================
 // STATIC ROUTES (before :id params)
@@ -219,6 +264,13 @@ router.get('/medico/:medicoId',
             const { medicoId } = req.params;
             const { includeInactive } = req.query;
 
+            if (isBaseMedico(req) && medicoId !== req.person.id) {
+                return res.status(403).json({
+                    success: false,
+                    error: 'Non autorizzato a vedere template di altri medici'
+                });
+            }
+
             const templates = await VisitTemplateService.getByMedico(
                 medicoId,
                 tenantId,
@@ -344,6 +396,13 @@ router.get('/:id',
                 });
             }
 
+            if (isBaseMedico(req) && template.medicoId !== req.person.id) {
+                return res.status(403).json({
+                    success: false,
+                    error: 'Non autorizzato a vedere template di altri medici'
+                });
+            }
+
             // P52 Session #8: Normalize fields to ensure position/size
             const normalizedTemplate = VisitTemplateService.normalizeTemplate(template);
             res.json({ success: true, data: normalizedTemplate });
@@ -375,7 +434,7 @@ router.post('/',
         try {
             const tenantId = getEffectiveTenantId(req);
             const createdBy = req.person.id;
-            const data = { ...omitSystemFields(req.body), tenantId };
+            let data = { ...omitSystemFields(req.body), tenantId };
 
             // Cross-tenant detection: admin sta operando su un tenant diverso dal proprio
             const isCrossTenant = tenantId !== getEffectiveTenantId(req);
@@ -385,6 +444,14 @@ router.post('/',
             // Per GLOBAL: medicoId è sempre null
             if (!data.medicoId && data.scope === 'PERSONAL' && !isCrossTenant) {
                 data.medicoId = req.person.id;
+            }
+
+            data = enforceBaseMedicoTemplate(req, data);
+            if (isBaseMedico(req)) {
+                await assertPrestazioniAbilitate(tenantId, req.person.id, [
+                    data.prestazioneId,
+                    ...(data.prestazioneIds || [])
+                ]);
             }
 
             const template = await VisitTemplateService.create(data, createdBy);
@@ -412,7 +479,7 @@ router.post('/',
                 error.message.includes('non trovato') ||
                 error.message.includes('non ha accesso');
 
-            const statusCode = isConflict ? 409 : isValidation ? 400 : 500;
+            const statusCode = error.statusCode || (isConflict ? 409 : isValidation ? 400 : 500);
             res.status(statusCode).json({
                 success: false,
                 error: statusCode === 409 ? 'Template già esistente' :
@@ -452,6 +519,13 @@ router.put('/:id',
             const hasAdminAccess = req.person.roles?.includes('ADMIN') ||
                 req.person.roles?.includes('SUPER_ADMIN');
 
+            if (isBaseMedico(req) && !isOwner) {
+                return res.status(403).json({
+                    success: false,
+                    error: 'Non autorizzato a modificare template di altri medici'
+                });
+            }
+
             if (!isOwner && !hasAdminAccess) {
                 return res.status(403).json({
                     success: false,
@@ -459,7 +533,15 @@ router.put('/:id',
                 });
             }
 
-            const template = await VisitTemplateService.update(id, req.body, updatedBy, tenantId);
+            const updateData = enforceBaseMedicoTemplate(req, { ...omitSystemFields(req.body) });
+            if (isBaseMedico(req)) {
+                await assertPrestazioniAbilitate(tenantId, req.person.id, [
+                    updateData.prestazioneId,
+                    ...(updateData.prestazioneIds || [])
+                ]);
+            }
+
+            const template = await VisitTemplateService.update(id, updateData, updatedBy, tenantId);
 
             logger.info('Visit template updated via API', {
                 component: 'visit-templates-routes',
@@ -475,7 +557,7 @@ router.put('/:id',
                 templateId: req.params.id
             });
 
-            res.status(500).json({
+            res.status(error.statusCode || 500).json({
                 success: false,
                 error: 'Errore nell\'aggiornamento del template',
                 message: 'Errore interno del server'
@@ -499,9 +581,29 @@ router.post('/:id/clone',
             const createdBy = req.person.id;
             const { newName, newMedicoId, newPrestazioneId, newBundleId } = req.body;
 
+            const source = await VisitTemplateService.getById(id, tenantId);
+            if (!source) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Template non trovato'
+                });
+            }
+            if (isBaseMedico(req) && source.medicoId !== req.person.id) {
+                return res.status(403).json({
+                    success: false,
+                    error: 'Non autorizzato a clonare template di altri medici'
+                });
+            }
+
             // Cross-tenant: non auto-assegnare medicoId dell'admin
             const isCrossTenant = tenantId !== getEffectiveTenantId(req);
-            const effectiveMedicoId = newMedicoId || (!isCrossTenant ? req.person.id : null);
+            const effectiveMedicoId = isBaseMedico(req)
+                ? req.person.id
+                : newMedicoId || (!isCrossTenant ? req.person.id : null);
+
+            if (isBaseMedico(req)) {
+                await assertPrestazioniAbilitate(tenantId, req.person.id, [newPrestazioneId]);
+            }
 
             const template = await VisitTemplateService.clone(
                 id,
@@ -530,7 +632,7 @@ router.post('/:id/clone',
                 templateId: req.params.id
             });
 
-            res.status(500).json({
+            res.status(error.statusCode || 500).json({
                 success: false,
                 error: 'Errore nella clonazione del template',
                 message: 'Errore interno del server'

@@ -809,4 +809,57 @@ router.post('/logout', authenticate, async (req, res) => {
   }
 });
 
+/**
+ * POST /auth/change-password
+ * Cambio password (obbligatorio al primo accesso o su richiesta)
+ * Accessibile anche quando mustChangePassword = true
+ */
+router.post('/change-password',
+  authenticate,
+  [
+    body('currentPassword').notEmpty().withMessage('Password attuale obbligatoria'),
+    body('newPassword')
+      .isLength({ min: 8 }).withMessage('La nuova password deve avere almeno 8 caratteri')
+      .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+      .withMessage('La nuova password deve contenere almeno una maiuscola, una minuscola e un numero')
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ error: 'Errore di validazione', details: errors.array() });
+    }
+
+    try {
+      const personId = req.person.id;
+      const { currentPassword, newPassword } = req.body;
+
+      const person = await prisma.person.findUnique({
+        where: { id: personId },
+        select: { password: true }
+      });
+
+      if (!person?.password) {
+        return res.status(400).json({ error: 'Account senza password impostata' });
+      }
+
+      const isValid = await bcrypt.compare(currentPassword, person.password);
+      if (!isValid) {
+        return res.status(401).json({ error: 'Password attuale non corretta' });
+      }
+
+      const hashedNew = await bcrypt.hash(newPassword, 12);
+      await prisma.person.update({
+        where: { id: personId },
+        data: { password: hashedNew, mustChangePassword: false }
+      });
+
+      logger.info('Password changed', { personId, component: 'auth-change-password' });
+      res.json({ success: true, message: 'Password aggiornata con successo' });
+    } catch (error) {
+      logger.error('Password change error', { error: 'Operazione non riuscita', stack: error.stack, personId: req.person?.id });
+      res.status(500).json({ error: 'Errore durante il cambio password' });
+    }
+  }
+);
+
 export default router;

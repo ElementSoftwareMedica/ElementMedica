@@ -389,6 +389,9 @@ const buildActivityDescription = (log: LogEntry): string => {
         case 'ENTITY_DELETE':
             return `${userName} ha eliminato ${entityLabel((meta.entityName || meta.name || meta.title) as string | undefined)} da ${resource}`;
         case 'ENTITY_READ':
+            if (['Sistema', 'system', 'System'].includes(resource)) {
+                return `${userName} ha aperto una schermata tecnica di sistema`;
+            }
             return `${userName} ha visualizzato ${resource}${log.resourceId ? ` (${log.resourceId.substring(0, 8)}…)` : ''}`;
         case 'ENTITY_LIST':
             return `${userName} ha consultato l'elenco di ${resource}`;
@@ -450,8 +453,10 @@ const SystemLogsPage: React.FC = () => {
     const [search, setSearch] = useState('');
     const [resourceFilter, setResourceFilter] = useState('');
     const [actionFilter, setActionFilter] = useState('');
+    const [personFilter, setPersonFilter] = useState('');
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
+    const [includeLowSignal, setIncludeLowSignal] = useState(false);
     const [showFilters, setShowFilters] = useState(false);
 
     // Pagination
@@ -465,14 +470,16 @@ const SystemLogsPage: React.FC = () => {
         try {
             // Build query params
             const params: Record<string, string> = {
-                limit: pageSize.toString(),
-                offset: ((page - 1) * pageSize).toString()
+                page: page.toString(),
+                limit: pageSize.toString()
             };
 
             if (resourceFilter) params.resource = resourceFilter;
             if (actionFilter) params.action = actionFilter;
-            if (dateFrom) params.dateFrom = dateFrom;
-            if (dateTo) params.dateTo = dateTo;
+            if (personFilter) params.personSearch = personFilter;
+            if (dateFrom) params.from = dateFrom;
+            if (dateTo) params.to = dateTo;
+            if (includeLowSignal) params.includeLowSignal = 'true';
 
             // Multi-tenant support
             const tenantParams = getTenantFilterParams();
@@ -483,7 +490,7 @@ const SystemLogsPage: React.FC = () => {
                 params.allTenants = 'true';
             }
 
-            const response = await apiGet<LogsResponse>('/api/v1/logs', params);
+            const response = await apiGet<LogsResponse>('/api/v1/activity-logs', params);
 
             if (response) {
                 setLogs(response.logs || []);
@@ -504,7 +511,7 @@ const SystemLogsPage: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, [page, pageSize, resourceFilter, actionFilter, dateFrom, dateTo, getTenantFilterParams, tenantFilterKey]);
+    }, [page, pageSize, resourceFilter, actionFilter, personFilter, dateFrom, dateTo, includeLowSignal, getTenantFilterParams, tenantFilterKey]);
 
     useEffect(() => {
         if (isReady) {
@@ -603,8 +610,10 @@ const SystemLogsPage: React.FC = () => {
         setSearch('');
         setResourceFilter('');
         setActionFilter('');
+        setPersonFilter('');
         setDateFrom('');
         setDateTo('');
+        setIncludeLowSignal(false);
         setPage(1);
     };
 
@@ -720,7 +729,7 @@ const SystemLogsPage: React.FC = () => {
                             Pulisci filtri
                         </button>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-6">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Risorsa
@@ -728,7 +737,7 @@ const SystemLogsPage: React.FC = () => {
                             <select
                                 value={resourceFilter}
                                 onChange={(e) => { setResourceFilter(e.target.value); setPage(1); }}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-500"
                             >
                                 {RESOURCE_CATEGORIES.map(cat => (
                                     <option key={cat.value} value={cat.value}>{cat.label}</option>
@@ -742,12 +751,23 @@ const SystemLogsPage: React.FC = () => {
                             <select
                                 value={actionFilter}
                                 onChange={(e) => { setActionFilter(e.target.value); setPage(1); }}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-500"
                             >
                                 {ACTION_TYPES.map(action => (
                                     <option key={action.value} value={action.value}>{action.label}</option>
                                 ))}
                             </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Persona
+                            </label>
+                            <input
+                                value={personFilter}
+                                onChange={(e) => { setPersonFilter(e.target.value); setPage(1); }}
+                                placeholder="Nome, CF o email"
+                                className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-500"
+                            />
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -770,6 +790,20 @@ const SystemLogsPage: React.FC = () => {
                                 theme="blue"
                                 size="sm"
                             />
+                        </div>
+                        <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+                            <label className="flex cursor-pointer items-start gap-3">
+                                <input
+                                    type="checkbox"
+                                    checked={includeLowSignal}
+                                    onChange={(e) => { setIncludeLowSignal(e.target.checked); setPage(1); }}
+                                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                                />
+                                <span>
+                                    <span className="block text-sm font-medium text-gray-800">Mostra log tecnici</span>
+                                    <span className="mt-0.5 block text-xs text-gray-500">Include visualizzazioni generiche e log poco descrittivi.</span>
+                                </span>
+                            </label>
                         </div>
                     </div>
                 </div>

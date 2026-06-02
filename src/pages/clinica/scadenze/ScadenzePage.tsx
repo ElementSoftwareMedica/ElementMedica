@@ -20,7 +20,6 @@ import {
     AlertTriangle,
     CheckCircle2,
     Clock,
-    Search,
     Plus,
     Pill,
     Stethoscope,
@@ -28,7 +27,6 @@ import {
     FileText,
     Building2,
     Package,
-    X,
     Bell,
     TrendingUp
 } from 'lucide-react';
@@ -43,9 +41,12 @@ import {
     type DeadlineStatus,
     type DeadlinePriority,
     type DeadlineStats,
+    type FormaFarmaceutica,
     type Farmaco
 } from '../../../services/clinicaApi';
 import { CRUDButton, CRUDPrimaryButton } from '../../../components/shared/CRUDButton';
+import { PageFiltersBar, type FilterOption } from '../../../components/ui/PageFiltersBar';
+import type { DateRange } from '../../../components/ui/DateRangeCalendar';
 import {
     DeadlineEditorModal,
     FarmacoEditorModal,
@@ -75,9 +76,14 @@ interface ExtendedFilters {
     // Farmaci-specific
     inScadenza?: string;
     sottoScorta?: string;
+    formaFarmaceutica?: FormaFarmaceutica;
 }
 
 const CATEGORY_CONFIG: Record<DeadlineCategory, { label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {
+    VISITA_MEDICA: { label: 'Visite', icon: Stethoscope, color: 'text-blue-600 bg-blue-100' },
+    FORMAZIONE: { label: 'Formazione', icon: CheckCircle2, color: 'text-emerald-600 bg-emerald-100' },
+    PROTOCOLLO_MDL: { label: 'Protocolli MDL', icon: FileText, color: 'text-purple-600 bg-purple-100' },
+    SOPRALLUOGO: { label: 'Sopralluoghi', icon: Building2, color: 'text-indigo-600 bg-indigo-100' },
     VISITA: { label: 'Visite', icon: Stethoscope, color: 'text-blue-600 bg-blue-100' },
     PROTOCOLLO_SANITARIO: { label: 'Protocolli MDL', icon: FileText, color: 'text-purple-600 bg-purple-100' },
     TARIFFARIO: { label: 'Tariffari', icon: Package, color: 'text-green-600 bg-green-100' },
@@ -93,8 +99,23 @@ const PRIORITY_CONFIG: Record<DeadlinePriority, { label: string; color: string; 
     LOW: { label: 'Bassa', color: 'text-gray-600', bgColor: 'bg-gray-100' },
     NORMAL: { label: 'Normale', color: 'text-blue-600', bgColor: 'bg-blue-100' },
     HIGH: { label: 'Alta', color: 'text-orange-600', bgColor: 'bg-orange-100' },
+    CRITICAL: { label: 'Critica', color: 'text-red-700', bgColor: 'bg-red-100' },
     URGENT: { label: 'Urgente', color: 'text-red-600', bgColor: 'bg-red-100' }
 };
+
+const CATEGORY_FILTER_OPTIONS: DeadlineCategory[] = [
+    'VISITA_MEDICA',
+    'FORMAZIONE',
+    'FARMACO',
+    'MANUTENZIONE',
+    'DOCUMENTO',
+    'PROTOCOLLO_MDL',
+    'SOPRALLUOGO',
+    'TARIFFARIO',
+    'ALTRO'
+];
+
+const PRIORITY_FILTER_OPTIONS: DeadlinePriority[] = ['LOW', 'NORMAL', 'HIGH', 'CRITICAL'];
 
 const STATUS_CONFIG: Record<DeadlineStatus, { label: string; color: string; bgColor: string }> = {
     ATTIVA: { label: 'Attiva', color: 'text-green-700', bgColor: 'bg-green-100' },
@@ -103,6 +124,27 @@ const STATUS_CONFIG: Record<DeadlineStatus, { label: string; color: string; bgCo
     COMPLETATA: { label: 'Completata', color: 'text-blue-700', bgColor: 'bg-blue-100' },
     ANNULLATA: { label: 'Annullata', color: 'text-gray-700', bgColor: 'bg-gray-100' }
 };
+
+const FORMA_FARMACEUTICA_OPTIONS: Array<{ value: FormaFarmaceutica; label: string }> = [
+    { value: 'COMPRESSE', label: 'Compresse' },
+    { value: 'CAPSULE', label: 'Capsule' },
+    { value: 'FIALE', label: 'Fiale' },
+    { value: 'SOLUZIONE_ORALE', label: 'Soluzione orale' },
+    { value: 'SCIROPPO', label: 'Sciroppo' },
+    { value: 'CREMA', label: 'Crema' },
+    { value: 'POMATA', label: 'Pomata' },
+    { value: 'GEL', label: 'Gel' },
+    { value: 'COLLIRIO', label: 'Collirio' },
+    { value: 'SPRAY', label: 'Spray' },
+    { value: 'SUPPOSTE', label: 'Supposte' },
+    { value: 'AEROSOL', label: 'Aerosol' },
+    { value: 'CEROTTO', label: 'Cerotto' },
+    { value: 'ALTRO', label: 'Altro' }
+];
+
+const toApiDate = (date: Date | null) => date
+    ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+    : undefined;
 
 // ============================================
 // STAT CARD COMPONENT
@@ -158,6 +200,7 @@ const ScadenzePage: React.FC = () => {
         limit: 20
     });
     const [searchTerm, setSearchTerm] = useState('');
+    const [dateRange, setDateRange] = useState<DateRange>({ start: null, end: null });
 
     // Modals
     const [editingDeadline, setEditingDeadline] = useState<DeadlineItem | null>(null);
@@ -171,14 +214,32 @@ const ScadenzePage: React.FC = () => {
         return {
             ...tenantParams,
             ...filters,
+            dataInizio: toApiDate(dateRange.start),
+            dataFine: toApiDate(dateRange.end || dateRange.start),
             search: searchTerm || undefined
         };
-    }, [getTenantFilterParams, filters, searchTerm]);
+    }, [getTenantFilterParams, filters, dateRange, searchTerm]);
+
+    const categoryOptions = useMemo<FilterOption[]>(() => CATEGORY_FILTER_OPTIONS.map(key => ({
+        value: key,
+        label: CATEGORY_CONFIG[key].label
+    })), []);
+
+    const statusOptions = useMemo<FilterOption[]>(() => Object.entries(STATUS_CONFIG).map(([value, config]) => ({
+        value,
+        label: config.label,
+        color: `${config.bgColor} ${config.color} px-2 py-0.5 rounded-full`
+    })), []);
+
+    const formaOptions = useMemo<FilterOption[]>(() => FORMA_FARMACEUTICA_OPTIONS.map(option => ({
+        value: option.value,
+        label: option.label
+    })), []);
 
     // Queries
     const { data: statsData } = useQuery({
-        queryKey: ['scadenze-stats', tenantFilterKey],
-        queryFn: () => scadenzeApi.getStats(),
+        queryKey: ['scadenze-stats', tenantFilterKey, queryParams],
+        queryFn: () => scadenzeApi.getStats(queryParams),
         enabled: isReady
     });
 
@@ -244,6 +305,21 @@ const ScadenzePage: React.FC = () => {
         }
     });
 
+    const resolveDerivedMutation = useMutation({
+        mutationFn: (payload: { entityType: string; entityId: string; newDate?: string; note?: string }) =>
+            scadenzeApi.resolveDerived(payload),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['scadenze'] });
+            queryClient.invalidateQueries({ queryKey: ['scadenze-stats'] });
+            queryClient.invalidateQueries({ queryKey: ['farmaci'] });
+            queryClient.invalidateQueries({ queryKey: ['farmaci-stats'] });
+            showToast({ message: 'Scadenza aggiornata', type: 'success' });
+        },
+        onError: (error: Error) => {
+            showToast({ message: error.message || 'Errore aggiornamento scadenza', type: 'error' });
+        }
+    });
+
     // Handlers
     const handleFilterChange = (key: keyof ExtendedFilters, value: string | number | undefined) => {
         setFilters(prev => ({
@@ -274,6 +350,44 @@ const ScadenzePage: React.FC = () => {
         } else if (reason) {
             showToast({ message: 'Il motivo deve contenere almeno 10 caratteri', type: 'error' });
         }
+    };
+
+    const handleRenewFarmacoDeadline = (deadline: DeadlineItem) => {
+        const entityId = deadline.entityId || deadline.farmacoId;
+        if (!entityId) return;
+        const newDate = window.prompt('Nuova data di scadenza del farmaco (AAAA-MM-GG):');
+        if (!newDate) return;
+        const parsed = new Date(newDate);
+        if (Number.isNaN(parsed.getTime())) {
+            showToast({ message: 'Inserisci una data valida nel formato AAAA-MM-GG', type: 'error' });
+            return;
+        }
+        const note = window.prompt('Note rinnovo (opzionale):') || undefined;
+        resolveDerivedMutation.mutate({
+            entityType: 'FARMACO',
+            entityId,
+            newDate,
+            note
+        });
+    };
+
+    const handleResolveVisitDeadline = (deadline: DeadlineItem) => {
+        if (!deadline.entityId) return;
+        const note = window.prompt('Note contatto / risoluzione (opzionale):') || undefined;
+        resolveDerivedMutation.mutate({
+            entityType: 'VISITA_FOLLOWUP',
+            entityId: deadline.entityId,
+            note
+        });
+    };
+
+    const handleScheduleVisitDeadline = (deadline: DeadlineItem) => {
+        const personId = deadline.personId || deadline.person?.id;
+        if (!personId) {
+            showToast({ message: 'Paziente non collegato alla scadenza', type: 'error' });
+            return;
+        }
+        window.open(`/poliambulatorio/agenda/appuntamenti/nuovo?pazienteId=${personId}`, '_blank', 'noopener,noreferrer');
     };
 
     // Stats summary
@@ -341,6 +455,89 @@ const ScadenzePage: React.FC = () => {
                     ))}
                 </nav>
             </div>
+
+            <PageFiltersBar
+                searchPlaceholder={activeTab === 'farmaci' ? 'Cerca farmaci...' : 'Cerca scadenze...'}
+                searchValue={searchTerm}
+                onSearchChange={(value) => {
+                    setSearchTerm(value);
+                    setFilters(prev => ({ ...prev, page: 1 }));
+                }}
+                showDateFilter
+                dateLabel="Periodo scadenza"
+                dateRange={dateRange}
+                onDateRangeChange={(range) => {
+                    setDateRange(range);
+                    setFilters(prev => ({ ...prev, page: 1 }));
+                }}
+                categoryOptions={activeTab === 'farmaci' ? formaOptions : categoryOptions}
+                categoryValue={activeTab === 'farmaci' ? (filters.formaFarmaceutica || '') : (filters.categoria || '')}
+                categoryPlaceholder={activeTab === 'farmaci' ? 'Tutte le forme' : 'Tutte le categorie'}
+                categoryLabel={activeTab === 'farmaci' ? 'Forma' : 'Categoria'}
+                onCategoryChange={(value) => {
+                    if (activeTab === 'farmaci') {
+                        handleFilterChange('formaFarmaceutica', value ? value as FormaFarmaceutica : undefined);
+                    } else {
+                        handleFilterChange('categoria', value ? value as DeadlineCategory : undefined);
+                    }
+                }}
+                statusOptions={activeTab === 'farmaci' ? [] : statusOptions}
+                statusValue={filters.status || ''}
+                statusLabel="Stato"
+                onStatusChange={(value) => handleFilterChange('status', value ? value as DeadlineStatus : undefined)}
+                showRefresh
+                isLoading={scadenzeLoading || farmaciLoading}
+                onRefresh={() => {
+                    queryClient.invalidateQueries({ queryKey: ['scadenze'] });
+                    queryClient.invalidateQueries({ queryKey: ['farmaci'] });
+                    queryClient.invalidateQueries({ queryKey: ['scadenze-stats'] });
+                    queryClient.invalidateQueries({ queryKey: ['farmaci-stats'] });
+                }}
+                onReset={() => {
+                    setFilters({ page: 1, limit: 20 });
+                    setSearchTerm('');
+                    setDateRange({ start: null, end: null });
+                }}
+            >
+                {activeTab !== 'farmaci' ? (
+                    <div className="min-w-[160px]">
+                        <label className="block text-xs font-medium text-gray-500 mb-1">
+                            Priorità
+                        </label>
+                        <select
+                            value={filters.priorita || ''}
+                            onChange={(e) => handleFilterChange('priorita', e.target.value ? e.target.value as DeadlinePriority : undefined)}
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                        >
+                            <option value="">Tutte le priorità</option>
+                            {PRIORITY_FILTER_OPTIONS.map(key => (
+                                <option key={key} value={key}>{PRIORITY_CONFIG[key].label}</option>
+                            ))}
+                        </select>
+                    </div>
+                ) : (
+                    <div className="flex flex-wrap items-center gap-4 pb-0.5">
+                        <label className="flex items-center gap-2 cursor-pointer rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                            <input
+                                type="checkbox"
+                                checked={filters.inScadenza === 'true'}
+                                onChange={(e) => handleFilterChange('inScadenza', e.target.checked ? 'true' : undefined)}
+                                className="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500"
+                            />
+                            In scadenza
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                            <input
+                                type="checkbox"
+                                checked={filters.sottoScorta === 'true'}
+                                onChange={(e) => handleFilterChange('sottoScorta', e.target.checked ? 'true' : undefined)}
+                                className="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500"
+                            />
+                            Sotto scorta
+                        </label>
+                    </div>
+                )}
+            </PageFiltersBar>
 
             {/* Dashboard Tab */}
             {activeTab === 'dashboard' && (
@@ -482,73 +679,6 @@ const ScadenzePage: React.FC = () => {
             {/* Scadenze Tab */}
             {activeTab === 'scadenze' && (
                 <div className="space-y-4">
-                    {/* Filters */}
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-                        <div className="flex items-center gap-4 flex-wrap">
-                            {/* Search */}
-                            <div className="relative flex-1 min-w-[200px]">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                <input
-                                    type="text"
-                                    placeholder="Cerca scadenze..."
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
-                                />
-                            </div>
-
-                            {/* Category Filter */}
-                            <select
-                                value={filters.categoria || ''}
-                                onChange={(e) => handleFilterChange('categoria', e.target.value || undefined)}
-                                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
-                            >
-                                <option value="">Tutte le categorie</option>
-                                {Object.entries(CATEGORY_CONFIG).map(([key, config]) => (
-                                    <option key={key} value={key}>{config.label}</option>
-                                ))}
-                            </select>
-
-                            {/* Status Filter */}
-                            <select
-                                value={filters.status || ''}
-                                onChange={(e) => handleFilterChange('status', e.target.value || undefined)}
-                                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
-                            >
-                                <option value="">Tutti gli stati</option>
-                                {Object.entries(STATUS_CONFIG).map(([key, config]) => (
-                                    <option key={key} value={key}>{config.label}</option>
-                                ))}
-                            </select>
-
-                            {/* Priority Filter */}
-                            <select
-                                value={filters.priorita || ''}
-                                onChange={(e) => handleFilterChange('priorita', e.target.value || undefined)}
-                                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
-                            >
-                                <option value="">Tutte le priorità</option>
-                                {Object.entries(PRIORITY_CONFIG).map(([key, config]) => (
-                                    <option key={key} value={key}>{config.label}</option>
-                                ))}
-                            </select>
-
-                            {/* Clear Filters */}
-                            {(filters.categoria || filters.status || filters.priorita || searchTerm) && (
-                                <button
-                                    onClick={() => {
-                                        setFilters({ page: 1, limit: 20 });
-                                        setSearchTerm('');
-                                    }}
-                                    className="px-3 py-2 text-gray-600 hover:text-gray-800 flex items-center gap-1"
-                                >
-                                    <X className="w-4 h-4" />
-                                    Pulisci filtri
-                                </button>
-                            )}
-                        </div>
-                    </div>
-
                     {/* Table */}
                     <DeadlineTable
                         data={scadenzeData?.data || []}
@@ -557,7 +687,11 @@ const ScadenzePage: React.FC = () => {
                         onEdit={setEditingDeadline}
                         onComplete={handleCompleteDeadline}
                         onDelete={handleDeleteDeadline}
+                        onRenewFarmaco={handleRenewFarmacoDeadline}
+                        onResolveVisit={handleResolveVisitDeadline}
+                        onScheduleVisit={handleScheduleVisitDeadline}
                         onPageChange={(page: number) => setFilters(prev => ({ ...prev, page }))}
+                        onPageSizeChange={(limit: number) => setFilters(prev => ({ ...prev, limit, page: 1 }))}
                         categoryConfig={CATEGORY_CONFIG}
                         priorityConfig={PRIORITY_CONFIG}
                         statusConfig={STATUS_CONFIG}
@@ -569,59 +703,6 @@ const ScadenzePage: React.FC = () => {
             {/* Farmaci Tab */}
             {activeTab === 'farmaci' && (
                 <div className="space-y-4">
-                    {/* Filters */}
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-                        <div className="flex items-center gap-4 flex-wrap">
-                            {/* Search */}
-                            <div className="relative flex-1 min-w-[200px]">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                <input
-                                    type="text"
-                                    placeholder="Cerca farmaci..."
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
-                                />
-                            </div>
-
-                            {/* In Scadenza Filter */}
-                            <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={filters.inScadenza === 'true'}
-                                    onChange={(e) => handleFilterChange('inScadenza', e.target.checked ? 'true' : undefined)}
-                                    className="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500"
-                                />
-                                <span className="text-sm text-gray-700">In scadenza</span>
-                            </label>
-
-                            {/* Sotto Scorta Filter */}
-                            <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={filters.sottoScorta === 'true'}
-                                    onChange={(e) => handleFilterChange('sottoScorta', e.target.checked ? 'true' : undefined)}
-                                    className="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500"
-                                />
-                                <span className="text-sm text-gray-700">Sotto scorta</span>
-                            </label>
-
-                            {/* Clear Filters */}
-                            {(filters.inScadenza || filters.sottoScorta || searchTerm) && (
-                                <button
-                                    onClick={() => {
-                                        setFilters({ page: 1, limit: 20 });
-                                        setSearchTerm('');
-                                    }}
-                                    className="px-3 py-2 text-gray-600 hover:text-gray-800 flex items-center gap-1"
-                                >
-                                    <X className="w-4 h-4" />
-                                    Pulisci filtri
-                                </button>
-                            )}
-                        </div>
-                    </div>
-
                     {/* Table */}
                     <FarmacoTable
                         data={farmaciData?.data || []}
@@ -630,6 +711,7 @@ const ScadenzePage: React.FC = () => {
                         onEdit={setEditingFarmaco}
                         onDelete={handleDeleteFarmaco}
                         onPageChange={(page: number) => setFilters(prev => ({ ...prev, page }))}
+                        onPageSizeChange={(limit: number) => setFilters(prev => ({ ...prev, limit, page: 1 }))}
                         canPerformCRUD={canPerformCRUD}
                     />
                 </div>

@@ -333,4 +333,142 @@ router.get('/worker/:personId/risks', requireAuth, requirePermission('clinica.vi
   }
 });
 
+/**
+ * @route GET /api/v1/clinica/mansioni/worker/:personId/occupational-profile
+ * @desc Sincronizza e restituisce profilo MDL, rischi e storico occupazionale del lavoratore
+ * @access Private - VIEW_VISITA
+ */
+router.get('/worker/:personId/occupational-profile', requireAuth, requirePermission('clinica.visite:read'), async (req, res) => {
+  try {
+    const tenantId = getEffectiveTenantId(req);
+    const { personId } = req.params;
+
+    const syncResult = await MansioneService.ensureWorkerProtocolAssignments(personId, tenantId);
+    const risks = await MansioneService.getWorkerRisks(personId, tenantId);
+    const statoOccupazionale = await MansioneService.getOccupationalHistory(personId, tenantId);
+
+    res.json({
+      success: true,
+      data: {
+        ...risks,
+        statoOccupazionale,
+        syncResult
+      }
+    });
+  } catch (error) {
+    logger.error({ error: error.message, personId: req.params.personId }, 'Errore profilo occupazionale lavoratore');
+    res.status(500).json({ error: 'Errore nel recupero del profilo occupazionale' });
+  }
+});
+
+/**
+ * @route PUT /api/v1/clinica/mansioni/worker/:personId/occupational-profile
+ * @desc Aggiorna i dati occupazionali editabili del lavoratore
+ * @access Private - EDIT_VISITA
+ */
+router.put('/worker/:personId/occupational-profile', requireAuth, requirePermission('clinica.visite:write'), async (req, res) => {
+  try {
+    const tenantId = getEffectiveTenantId(req);
+    const { personId } = req.params;
+    const updated = await MansioneService.updateWorkerOccupationalProfile(personId, req.body || {}, tenantId);
+    res.json({ success: true, data: updated });
+  } catch (error) {
+    logger.error({ error: error.message, personId: req.params.personId }, 'Errore aggiornamento profilo occupazionale lavoratore');
+    res.status(400).json({ error: 'Errore aggiornamento profilo occupazionale' });
+  }
+});
+
+/**
+ * @route POST /api/v1/clinica/mansioni/worker/:personId/rischio-aggiuntivo
+ * @desc Aggiunge un rischio aggiuntivo specifico per lavoratore (non condiviso con altri sulla stessa mansione)
+ * @access Private - EDIT_VISITA
+ */
+router.post('/worker/:personId/rischio-aggiuntivo', requireAuth, requirePermission('clinica.visite:write'), async (req, res) => {
+  try {
+    const tenantId = getEffectiveTenantId(req);
+    const { personId } = req.params;
+    const { codiceRischio, livello, categoria, descrizioneEsposizione, fonteRischio, periodicitaMesi, note } = req.body;
+
+    if (!codiceRischio || !categoria) {
+      return res.status(400).json({ error: 'codiceRischio e categoria sono obbligatori' });
+    }
+
+    const rischio = await MansioneService.addWorkerRischio(personId, {
+      codiceRischio, livello, categoria, descrizioneEsposizione, fonteRischio, periodicitaMesi, note
+    }, tenantId);
+
+    res.status(201).json({ success: true, data: rischio });
+  } catch (error) {
+    logger.error({ error: error.message, personId: req.params.personId }, 'Errore aggiunta rischio aggiuntivo');
+    if (error.message?.includes('già assegnato')) {
+      return res.status(409).json({ error: 'Rischio già assegnato a questo lavoratore' });
+    }
+    res.status(500).json({ error: 'Errore nell\'aggiunta del rischio aggiuntivo' });
+  }
+});
+
+/**
+ * @route PUT /api/v1/clinica/mansioni/worker-rischio-aggiuntivo/:id
+ * @desc Aggiorna un rischio aggiuntivo specifico per lavoratore
+ * @access Private - EDIT_VISITA
+ */
+router.put('/worker-rischio-aggiuntivo/:id', requireAuth, requirePermission('clinica.visite:write'), async (req, res) => {
+  try {
+    const tenantId = getEffectiveTenantId(req);
+    const { id } = req.params;
+    const { livello, descrizioneEsposizione, fonteRischio, periodicitaMesi, note } = req.body;
+
+    const rischio = await MansioneService.updateWorkerRischio(id, {
+      livello, descrizioneEsposizione, fonteRischio, periodicitaMesi, note
+    }, tenantId);
+
+    res.json({ success: true, data: rischio });
+  } catch (error) {
+    logger.error({ error: error.message, id: req.params.id }, 'Errore aggiornamento rischio aggiuntivo');
+    res.status(500).json({ error: 'Errore nell\'aggiornamento del rischio aggiuntivo' });
+  }
+});
+
+/**
+ * @route DELETE /api/v1/clinica/mansioni/worker-rischio-aggiuntivo/:id
+ * @desc Rimuove (soft delete) un rischio aggiuntivo specifico per lavoratore
+ * @access Private - EDIT_VISITA
+ */
+router.delete('/worker-rischio-aggiuntivo/:id', requireAuth, requirePermission('clinica.visite:write'), async (req, res) => {
+  try {
+    const tenantId = getEffectiveTenantId(req);
+    const { id } = req.params;
+
+    await MansioneService.removeWorkerRischio(id, tenantId);
+
+    res.json({ success: true, message: 'Rischio aggiuntivo rimosso' });
+  } catch (error) {
+    logger.error({ error: error.message, id: req.params.id }, 'Errore rimozione rischio aggiuntivo');
+    res.status(500).json({ error: 'Errore nella rimozione del rischio aggiuntivo' });
+  }
+});
+
+/**
+ * @route POST /api/v1/clinica/mansioni/worker/:personId/initialize-risks
+ * @desc Inizializza i rischi personalizzati copiandoli dalle mansioni attive del lavoratore
+ * @access Private - EDIT_VISITA
+ */
+router.post('/worker/:personId/initialize-risks', requireAuth, requirePermission('clinica.visite:write'), async (req, res) => {
+  try {
+    const tenantId = getEffectiveTenantId(req);
+    const { personId } = req.params;
+
+    const result = await MansioneService.initializeWorkerRisks(personId, tenantId);
+
+    res.json({ success: true, data: result });
+  } catch (error) {
+    logger.error({ error: error.message, personId: req.params.personId }, 'Errore inizializzazione rischi lavoratore');
+    if (error.message?.includes('già rischi personalizzati')) {
+      res.status(400).json({ error: 'Il lavoratore dispone già di rischi personalizzati' });
+    } else {
+      res.status(500).json({ error: 'Errore nell\'inizializzazione dei rischi' });
+    }
+  }
+});
+
 export default router;

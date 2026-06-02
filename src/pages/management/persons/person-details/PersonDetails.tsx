@@ -57,10 +57,15 @@ import { useTenantMode } from '../../../../contexts/TenantModeContext';
 const PersonDetails: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
-    const { hasPermission } = useAuth();
+    const { user: currentUser, hasPermission } = useAuth();
     const { confirm: confirmDialog } = useConfirmDialog();
     const { getOperateHeaders } = useTenantMode();
     const operateHeaders = getOperateHeaders();
+
+    // Only ADMIN/SUPER_ADMIN can fetch the full tenant list
+    const isGlobalAdmin = currentUser?.globalRole === 'ADMIN' || currentUser?.globalRole === 'SUPER_ADMIN' ||
+        (currentUser?.roles as string[] | undefined)?.includes('ADMIN') ||
+        (currentUser?.roles as string[] | undefined)?.includes('SUPER_ADMIN');
 
     // State
     const [person, setPerson] = useState<PersonData | null>(null);
@@ -94,7 +99,9 @@ const PersonDetails: React.FC = () => {
             // Fetch companies and tenants for dropdowns
             const [companiesRes, tenantsRes] = await Promise.all([
                 apiGet<{ data: Company[] }>('/api/v1/companies?limit=100').catch(() => ({ data: [] })),
-                apiGet<{ data: Tenant[] }>('/api/v1/tenants?limit=100').catch(() => ({ data: [] }))
+                isGlobalAdmin
+                    ? apiGet<{ data: Tenant[] }>('/api/v1/tenants?limit=100').catch(() => ({ data: [] }))
+                    : Promise.resolve({ data: [] as Tenant[] })
             ]);
 
             setCompanies(companiesRes.data || []);

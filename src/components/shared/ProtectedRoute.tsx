@@ -7,15 +7,24 @@ interface ProtectedRouteProps {
   resource?: string;
   action?: string;
   requiredFeature?: string | string[];
+  /** Solo ADMIN e SUPER_ADMIN possono accedere (non TENANT_ADMIN) */
+  superAdminOnly?: boolean;
+  children?: React.ReactNode;
 }
 
 /**
  * Protegge le rotte che richiedono autenticazione e verifica i permessi
  * Se resource e action sono specificati, verifica anche i permessi specifici
+ * Se superAdminOnly=true, solo ADMIN/SUPER_ADMIN possono accedere
  */
-const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ resource, action, requiredFeature }) => {
-  const { isAuthenticated, isLoading, hasPermission } = useAuth();
+const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ resource, action, requiredFeature, superAdminOnly, children }) => {
+  const { isAuthenticated, isLoading, hasPermission, user } = useAuth();
   const { hasFeature } = useTenantAccess();
+
+  // Calcola se l'utente è global admin (ADMIN o SUPER_ADMIN) — non include TENANT_ADMIN
+  const isGlobalAdmin = user?.globalRole === 'ADMIN' || user?.globalRole === 'SUPER_ADMIN' ||
+    (user?.roles as string[] | undefined)?.includes('ADMIN') ||
+    (user?.roles as string[] | undefined)?.includes('SUPER_ADMIN');
 
   // Mostra loader durante la verifica dell'autenticazione
   if (isLoading) {
@@ -54,6 +63,11 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ resource, action, requi
     }
   }
 
+  // Verifica superAdminOnly: solo ADMIN/SUPER_ADMIN (non TENANT_ADMIN)
+  if (superAdminOnly && !isGlobalAdmin) {
+    return <Navigate to="/management" replace />;
+  }
+
   // Se sono richiesti permessi specifici, verifica
   // NOTA: NO bypass per admin - GDPR richiede permessi espliciti per TUTTI gli utenti
   if (resource && action && !hasPermission(resource, action)) {
@@ -74,7 +88,8 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ resource, action, requi
   }
 
   // Se autenticato e con i permessi corretti, mostra il contenuto
-  return <Outlet />;
+  // Renderizza children se passati come JSX, altrimenti usa Outlet per layout routes
+  return <>{children ?? <Outlet />}</>;
 };
 
 export default ProtectedRoute;

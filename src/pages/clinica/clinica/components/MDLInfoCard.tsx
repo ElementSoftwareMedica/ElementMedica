@@ -8,7 +8,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import {
     Briefcase, Shield, FileText, ChevronDown, ChevronUp,
     Edit3, X, Plus, Trash2, AlertTriangle, Loader2
@@ -94,8 +94,10 @@ interface Props {
     mansioni: Mansione[];
     /** Protocolli sanitari associati alla mansione primaria */
     protocolli: ProtocolloSanitario[] | null;
-    /** Rischi aggregati del lavoratore (da getWorkerRisks, shape runtime include mansioni[]) */
-    rischi: (MansioneRischio & { mansioni?: string[] })[];
+    /** Rischi del lavoratore (da getWorkerRisks) */
+    rischi: (MansioneRischio & { mansioni?: string[]; _isPersonalizzato?: boolean; _recordId?: string; _sourceMansioneId?: string | null })[];
+    /** Se il lavoratore ha rischi personalizzati (vs fallback mansione) */
+    hasPersonalizedRisks?: boolean;
     /** ID del paziente */
     pazienteId: string;
     /** Read-only mode */
@@ -109,6 +111,7 @@ export default function MDLInfoCard({
     mansioni,
     protocolli,
     rischi,
+    hasPersonalizedRisks = false,
     pazienteId,
     isReadonly = false,
     className = '',
@@ -120,6 +123,8 @@ export default function MDLInfoCard({
     const [showAddRischio, setShowAddRischio] = useState(false);
     const [addCodice, setAddCodice] = useState<CodiceRischio | ''>('');
     const [addLivello, setAddLivello] = useState<LivelloRischio>('MEDIO');
+    const [editingMansioni, setEditingMansioni] = useState(false);
+    const [selectedMansioneId, setSelectedMansioneId] = useState('');
 
     const activeProtocollo = useMemo(() => {
         if (!protocolli?.length) return null;
@@ -128,44 +133,49 @@ export default function MDLInfoCard({
 
     const primaryMansione = mansioni[0] ?? null;
 
+    // Fetch all available mansioni for the assignment dropdown
+    const { data: allMansioniData } = useQuery({
+        queryKey: ['mansioni-all'],
+        queryFn: () => mansioniApi.getAll({ limit: 200 }),
+        enabled: editingMansioni,
+        staleTime: 60_000,
+    });
+    const allMansioni = useMemo(() => {
+        const list = (allMansioniData as any)?.data ?? allMansioniData ?? [];
+        return Array.isArray(list) ? list : [];
+    }, [allMansioniData]);
+    const assignedMansioneIds = useMemo(() => new Set(mansioni.map(m => m.id)), [mansioni]);
+    const availableMansioni = useMemo(
+        () => allMansioni.filter((m: Mansione) => !assignedMansioneIds.has(m.id)),
+        [allMansioni, assignedMansioneIds]
+    );
+
     // Rischi già presenti (per filtrare quelli disponibili nell'add)
     const existingCodici = useMemo(() => new Set(rischi.map(r => r.codiceRischio)), [rischi]);
 
     // ── Mutations ─────────────────────────────────────────────────────────────
 
-    const updateRischioMutation = useMutation({
-        mutationFn: async ({ mansioneId, codiceRischio, newLivello }: { mansioneId: string; codiceRischio: string; newLivello: LivelloRischio }) => {
-            const mansione = mansioni.find(m => m.id === mansioneId);
-            if (!mansione) throw new Error('Mansione non trovata');
-            const currentRischi = mansione.rischiAssociati ?? mansione.rischi ?? [];
-            const updatedRischi = currentRischi.map(r => {
-                if (r.codiceRischio === codiceRischio) {
-                    return { codiceRischio: r.codiceRischio, livello: newLivello, categoria: r.categoria ?? r.categoriaRischio };
-                }
-                return { codiceRischio: r.codiceRischio, livello: r.livello ?? r.livelloRischio, categoria: r.categoria ?? r.categoriaRischio };
-            });
-            return mansioniApi.update(mansioneId, { rischi: updatedRischi });
+    // Tutti i rischi sono ora gestiti a livello per-worker (LavoratoreRischioAggiuntivo)
+    const updateWorkerRischioMutation = useMutation({
+        mutationFn: async ({ id, livello }: { id: string; livello: LivelloRischio }) => {
+            return mansioniApi.updateWorkerRischio(id, { livello });
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['worker-risks', pazienteId] });
+            queryClient.invalidateQueries({ queryKey: ['mdl-rischi-paziente', pazienteId] });
             setEditingRischio(null);
             showToast({ type: 'success', message: 'Livello rischio aggiornato' });
         },
         onError: () => showToast({ type: 'error', message: 'Errore aggiornamento rischio' }),
     });
 
-    const addRischioMutation = useMutation({
+    const addWorkerRischioMutation = useMutation({
         mutationFn: async ({ codiceRischio, livello, categoria }: { codiceRischio: CodiceRischio; livello: LivelloRischio; categoria: CategoriaRischio }) => {
-            if (!primaryMansione) throw new Error('Nessuna mansione');
-            const currentRischi = primaryMansione.rischiAssociati ?? primaryMansione.rischi ?? [];
-            const updatedRischi = [
-                ...currentRischi.map(r => ({ codiceRischio: r.codiceRischio, livello: r.livello ?? r.livelloRischio, categoria: r.categoria ?? r.categoriaRischio })),
-                { codiceRischio, livello, categoria },
-            ];
-            return mansioniApi.update(primaryMansione.id, { rischi: updatedRischi });
+            return mansioniApi.addWorkerRischio(pazienteId, { codiceRischio, livello, categoria });
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['worker-risks', pazienteId] });
+            queryClient.invalidateQueries({ queryKey: ['mdl-rischi-paziente', pazienteId] });
             setShowAddRischio(false);
             setAddCodice('');
             setAddLivello('MEDIO');
@@ -174,31 +184,57 @@ export default function MDLInfoCard({
         onError: () => showToast({ type: 'error', message: 'Errore aggiunta rischio' }),
     });
 
-    const removeRischioMutation = useMutation({
-        mutationFn: async ({ mansioneId, codiceRischio }: { mansioneId: string; codiceRischio: string }) => {
-            const mansione = mansioni.find(m => m.id === mansioneId);
-            if (!mansione) throw new Error('Mansione non trovata');
-            const currentRischi = mansione.rischiAssociati ?? mansione.rischi ?? [];
-            const updatedRischi = currentRischi
-                .filter(r => r.codiceRischio !== codiceRischio)
-                .map(r => ({ codiceRischio: r.codiceRischio, livello: r.livello ?? r.livelloRischio, categoria: r.categoria ?? r.categoriaRischio }));
-            return mansioniApi.update(mansioneId, { rischi: updatedRischi });
+    const removeWorkerRischioMutation = useMutation({
+        mutationFn: async (id: string) => {
+            return mansioniApi.removeWorkerRischio(id);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['worker-risks', pazienteId] });
+            queryClient.invalidateQueries({ queryKey: ['mdl-rischi-paziente', pazienteId] });
             showToast({ type: 'success', message: 'Rischio rimosso' });
         },
         onError: () => showToast({ type: 'error', message: 'Errore rimozione rischio' }),
     });
 
-    // Trova la mansione che contiene il rischio
-    const findMansioneForRischio = (codiceRischio: string): string | null => {
-        for (const m of mansioni) {
-            const rischiList = m.rischiAssociati ?? m.rischi ?? [];
-            if (rischiList.some(r => r.codiceRischio === codiceRischio)) return m.id;
-        }
-        return null;
-    };
+    const assignMansioneMutation = useMutation({
+        mutationFn: async (mansioneId: string) => {
+            return mansioniApi.assignWorker(mansioneId, { personId: pazienteId });
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['worker-risks', pazienteId] });
+            queryClient.invalidateQueries({ queryKey: ['mdl-rischi-paziente', pazienteId] });
+            queryClient.invalidateQueries({ queryKey: ['protocolli-mansione'] });
+            setSelectedMansioneId('');
+            showToast({ type: 'success', message: 'Mansione assegnata' });
+        },
+        onError: () => showToast({ type: 'error', message: 'Errore assegnazione mansione' }),
+    });
+
+    const removeMansioneMutation = useMutation({
+        mutationFn: async (assignmentId: string) => {
+            return mansioniApi.removeWorkerAssignment(assignmentId);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['worker-risks', pazienteId] });
+            queryClient.invalidateQueries({ queryKey: ['mdl-rischi-paziente', pazienteId] });
+            queryClient.invalidateQueries({ queryKey: ['protocolli-mansione'] });
+            showToast({ type: 'success', message: 'Mansione rimossa' });
+        },
+        onError: () => showToast({ type: 'error', message: 'Errore rimozione mansione' }),
+    });
+
+    // Inizializza rischi per lavoratori legacy (copia da mansione a per-worker)
+    const initializeRisksMutation = useMutation({
+        mutationFn: async () => {
+            return mansioniApi.initializeWorkerRisks(pazienteId);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['worker-risks', pazienteId] });
+            queryClient.invalidateQueries({ queryKey: ['mdl-rischi-paziente', pazienteId] });
+            showToast({ type: 'success', message: 'Rischi personalizzati inizializzati' });
+        },
+        onError: () => showToast({ type: 'error', message: 'Errore inizializzazione rischi' }),
+    });
 
     // Trova la categoria per un codice rischio
     const findCategoriaForCodice = (codice: string): CategoriaRischio => {
@@ -236,22 +272,78 @@ export default function MDLInfoCard({
                 <div className="p-3 space-y-3">
                     {/* Mansioni */}
                     <div>
-                        <div className="flex items-center gap-1.5 mb-1">
-                            <Shield className="h-3 w-3 text-gray-400" />
-                            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Mansioni</span>
+                        <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center gap-1.5">
+                                <Shield className="h-3 w-3 text-gray-400" />
+                                <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Mansioni</span>
+                            </div>
+                            {!isReadonly && (
+                                <button
+                                    type="button"
+                                    onClick={() => setEditingMansioni(v => !v)}
+                                    className="flex items-center gap-0.5 text-[10px] font-medium text-teal-600 hover:text-teal-700"
+                                >
+                                    {editingMansioni ? <X className="h-3 w-3" /> : <Edit3 className="h-3 w-3" />}
+                                    {editingMansioni ? 'Chiudi' : 'Modifica'}
+                                </button>
+                            )}
                         </div>
                         {mansioni.length > 0 ? (
                             <div className="space-y-0.5">
                                 {mansioni.map(m => (
-                                    <div key={m.id} className="flex items-center gap-1.5 text-xs text-gray-700">
+                                    <div key={m.id} className="flex items-center gap-1.5 text-xs text-gray-700 group">
                                         <span className="w-1.5 h-1.5 rounded-full bg-teal-400 flex-shrink-0" />
-                                        <span className="font-medium">{m.denominazione}</span>
+                                        <span className="font-medium flex-1">{m.denominazione}</span>
                                         {m.codice && <span className="text-[10px] text-gray-400">({m.codice})</span>}
+                                        {editingMansioni && (m as any)._assignmentId && (
+                                            <button
+                                                type="button"
+                                                disabled={removeMansioneMutation.isPending}
+                                                onClick={() => removeMansioneMutation.mutate((m as any)._assignmentId)}
+                                                className="hidden group-hover:flex p-0.5 text-gray-400 hover:text-red-500"
+                                                title="Rimuovi mansione"
+                                            >
+                                                {removeMansioneMutation.isPending ? (
+                                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                                ) : (
+                                                    <Trash2 className="h-3 w-3" />
+                                                )}
+                                            </button>
+                                        )}
                                     </div>
                                 ))}
                             </div>
                         ) : (
                             <p className="text-xs text-gray-400 italic">Nessuna mansione assegnata</p>
+                        )}
+                        {/* Aggiungi mansione inline */}
+                        {editingMansioni && (
+                            <div className="mt-1.5 flex items-center gap-1.5">
+                                <select
+                                    value={selectedMansioneId}
+                                    onChange={e => setSelectedMansioneId(e.target.value)}
+                                    className="flex-1 text-xs border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white"
+                                >
+                                    <option value="">Aggiungi mansione…</option>
+                                    {availableMansioni.map((m: Mansione) => (
+                                        <option key={m.id} value={m.id}>{m.denominazione}{m.codice ? ` (${m.codice})` : ''}</option>
+                                    ))}
+                                </select>
+                                <button
+                                    type="button"
+                                    disabled={!selectedMansioneId || assignMansioneMutation.isPending}
+                                    onClick={() => {
+                                        if (selectedMansioneId) assignMansioneMutation.mutate(selectedMansioneId);
+                                    }}
+                                    className="flex items-center gap-0.5 text-[10px] font-semibold px-2 py-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 transition-colors"
+                                >
+                                    {assignMansioneMutation.isPending ? (
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                        <Plus className="h-3 w-3" />
+                                    )}
+                                </button>
+                            </div>
                         )}
                     </div>
 
@@ -283,7 +375,7 @@ export default function MDLInfoCard({
                                 <AlertTriangle className="h-3 w-3 text-gray-400" />
                                 <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Rischi Lavorativi</span>
                             </div>
-                            {!isReadonly && primaryMansione && !showAddRischio && (
+                            {!isReadonly && !showAddRischio && (
                                 <button
                                     type="button"
                                     onClick={() => setShowAddRischio(true)}
@@ -295,11 +387,36 @@ export default function MDLInfoCard({
                             )}
                         </div>
 
+                        {/* Banner per lavoratori legacy senza rischi personalizzati */}
+                        {!isReadonly && !hasPersonalizedRisks && mansioni.length > 0 && rischi.length > 0 && (
+                            <div className="mb-1.5 p-1.5 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2">
+                                <AlertTriangle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
+                                <span className="text-[10px] text-amber-700 flex-1">
+                                    Rischi ereditati dalla mansione. Personalizza per gestirli individualmente.
+                                </span>
+                                <button
+                                    type="button"
+                                    disabled={initializeRisksMutation.isPending}
+                                    onClick={() => initializeRisksMutation.mutate()}
+                                    className="text-[10px] font-semibold px-2 py-0.5 bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50 transition-colors flex items-center gap-1"
+                                >
+                                    {initializeRisksMutation.isPending ? (
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                        <Shield className="h-3 w-3" />
+                                    )}
+                                    Personalizza
+                                </button>
+                            </div>
+                        )}
+
                         {rischi.length > 0 ? (
                             <ul className="space-y-1">
                                 {rischi.map(r => {
                                     const livConf = LIVELLO_CONFIG[(r.livello ?? r.livelloRischio) as string] ?? LIVELLO_CONFIG.MEDIO;
                                     const isEditing = editingRischio === r.codiceRischio;
+                                    const recordId = r._recordId;
+                                    const isMutating = updateWorkerRischioMutation.isPending;
 
                                     return (
                                         <li key={r.codiceRischio} className="flex items-center gap-1.5 text-xs group">
@@ -316,11 +433,12 @@ export default function MDLInfoCard({
                                                                 <button
                                                                     key={lv}
                                                                     type="button"
-                                                                    disabled={updateRischioMutation.isPending}
+                                                                    disabled={isMutating || !recordId}
                                                                     onClick={() => {
                                                                         if (isCurrent) { setEditingRischio(null); return; }
-                                                                        const mid = findMansioneForRischio(r.codiceRischio);
-                                                                        if (mid) updateRischioMutation.mutate({ mansioneId: mid, codiceRischio: r.codiceRischio, newLivello: lv });
+                                                                        if (recordId) {
+                                                                            updateWorkerRischioMutation.mutate({ id: recordId, livello: lv });
+                                                                        }
                                                                     }}
                                                                     className={`px-1.5 py-0.5 rounded text-[9px] font-medium border transition-colors ${isCurrent
                                                                         ? `${c.bg} ${c.text} ${c.border} ring-1 ring-offset-1 ring-teal-400`
@@ -332,7 +450,7 @@ export default function MDLInfoCard({
                                                             );
                                                         })}
                                                     </div>
-                                                    {updateRischioMutation.isPending ? (
+                                                    {isMutating ? (
                                                         <Loader2 className="h-3 w-3 text-teal-600 animate-spin" />
                                                     ) : (
                                                         <button type="button" onClick={() => setEditingRischio(null)} className="p-0.5 text-gray-400 hover:text-gray-600">
@@ -348,33 +466,39 @@ export default function MDLInfoCard({
                                                     <span className="text-gray-700 font-medium truncate flex-1">
                                                         {CODICE_RISCHIO_LABELS[r.codiceRischio] ?? r.codiceRischio}
                                                     </span>
+                                                    {r._isPersonalizzato && !r._sourceMansioneId && (
+                                                        <span className="text-[8px] bg-violet-100 text-violet-600 px-1 py-0.5 rounded border border-violet-200" title="Rischio aggiunto manualmente per questo lavoratore">
+                                                            individuale
+                                                        </span>
+                                                    )}
                                                     {r.periodicitaMesi && (
                                                         <span className="text-[9px] text-gray-400">{r.periodicitaMesi}m</span>
                                                     )}
                                                     {!isReadonly && (
-                                                        <div className="hidden group-hover:flex items-center gap-0.5">
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    setEditingRischio(r.codiceRischio);
-                                                                }}
-                                                                className="p-0.5 text-gray-400 hover:text-teal-600"
-                                                                title="Modifica livello"
-                                                            >
-                                                                <Edit3 className="h-3 w-3" />
-                                                            </button>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    const mid = findMansioneForRischio(r.codiceRischio);
-                                                                    if (mid) removeRischioMutation.mutate({ mansioneId: mid, codiceRischio: r.codiceRischio });
-                                                                }}
-                                                                className="p-0.5 text-gray-400 hover:text-red-500"
-                                                                title="Rimuovi rischio"
-                                                            >
-                                                                <Trash2 className="h-3 w-3" />
-                                                            </button>
-                                                        </div>
+                                                    <div className="hidden group-hover:flex items-center gap-0.5">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setEditingRischio(r.codiceRischio)}
+                                                            className={`p-0.5 text-gray-400 hover:text-teal-600 ${!recordId ? 'opacity-30 cursor-not-allowed' : ''}`}
+                                                            title="Modifica livello"
+                                                            disabled={!recordId}
+                                                        >
+                                                            <Edit3 className="h-3 w-3" />
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                if (recordId) {
+                                                                    removeWorkerRischioMutation.mutate(recordId);
+                                                                }
+                                                            }}
+                                                            className={`p-0.5 text-gray-400 hover:text-red-500 ${!recordId ? 'opacity-30 cursor-not-allowed' : ''}`}
+                                                            title="Rimuovi rischio"
+                                                            disabled={!recordId}
+                                                        >
+                                                            <Trash2 className="h-3 w-3" />
+                                                        </button>
+                                                    </div>
                                                     )}
                                                 </>
                                             )}
@@ -387,7 +511,7 @@ export default function MDLInfoCard({
                         )}
 
                         {/* Add rischio inline */}
-                        {showAddRischio && (
+                        {!isReadonly && showAddRischio && (
                             <div className="mt-2 p-2 bg-gray-50 rounded-lg border border-gray-200 space-y-2">
                                 <div>
                                     <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Rischio</label>
@@ -437,17 +561,16 @@ export default function MDLInfoCard({
                                     </button>
                                     <button
                                         type="button"
-                                        disabled={!addCodice || addRischioMutation.isPending}
+                                        disabled={!addCodice || addWorkerRischioMutation.isPending}
                                         onClick={() => {
-                                            if (addCodice) {
-                                                addRischioMutation.mutate({
-                                                    codiceRischio: addCodice,
-                                                    livello: addLivello,
-                                                    categoria: findCategoriaForCodice(addCodice),
-                                                });
-                                            }
+                                            if (!addCodice) return;
+                                            addWorkerRischioMutation.mutate({
+                                                codiceRischio: addCodice,
+                                                livello: addLivello,
+                                                categoria: findCategoriaForCodice(addCodice),
+                                            });
                                         }}
-                                        className="flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 transition-colors"
+                                        className="flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1 text-white rounded-lg disabled:opacity-50 transition-colors bg-teal-600 hover:bg-teal-700"
                                     >
                                         <Plus className="h-3 w-3" />
                                         Aggiungi

@@ -30,10 +30,11 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    // Log to console always (visible in browser DevTools in production)
-    console.error('[ErrorBoundary] Caught error:', error.name, error.message);
-    console.error('[ErrorBoundary] Stack:', error.stack);
-    console.error('[ErrorBoundary] Component stack:', errorInfo.componentStack);
+    if (import.meta.env.DEV) {
+      console.error('[ErrorBoundary] Caught error:', error.name, error.message);
+      console.error('[ErrorBoundary] Stack:', error.stack);
+      console.error('[ErrorBoundary] Component stack:', errorInfo.componentStack);
+    }
 
     // Auto-reload on stale chunk / dynamic import errors (deploy caused new hashes)
     if (
@@ -95,11 +96,11 @@ export class ErrorBoundary extends Component<Props, State> {
             Si è verificato un errore durante il caricamento di questo componente. Riprova.
           </p>
 
-          {this.state.error && (
+          {import.meta.env.DEV && this.state.error && (
             <details className="mb-4 p-3 bg-red-100 rounded text-sm text-red-800 max-w-full overflow-auto">
               <summary className="cursor-pointer font-medium">Dettagli errore (copia per il supporto)</summary>
               <pre className="mt-2 whitespace-pre-wrap">
-                {this.state.error.name}: {this.state.error.message}{process.env.NODE_ENV === 'development' && this.state.error.stack ? `\n${this.state.error.stack}` : ''}
+                {this.state.error.name}: {this.state.error.message}{this.state.error.stack ? `\n${this.state.error.stack}` : ''}
               </pre>
             </details>
           )}

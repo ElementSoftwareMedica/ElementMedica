@@ -36,11 +36,45 @@ const { authenticate: authenticateToken } = middleware;
 
 // Services
 import SlotDisponibilitaService from '../../services/clinical/SlotDisponibilitaService.js';
+import AvailabilityNotificationService from '../../services/clinical/AvailabilityNotificationService.js';
 
 // Validators
 import { clinicalValidators } from '../../config/validation-clinical.js';
 
 const router = express.Router();
+
+const PRIVILEGED_CLINIC_ROLES = new Set(['ADMIN', 'SUPER_ADMIN', 'TENANT_ADMIN', 'COMPANY_ADMIN', 'CLINIC_ADMIN', 'SEGRETERIA_CLINICA']);
+
+function getRoleTypes(req) {
+    return (req.person?.roles || []).map(role => typeof role === 'string' ? role : role?.roleType).filter(Boolean);
+}
+
+function isBaseMedico(req) {
+    const roles = getRoleTypes(req);
+    return roles.includes('MEDICO') &&
+        !roles.includes('MEDICO_COMPETENTE') &&
+        !roles.some(role => PRIVILEGED_CLINIC_ROLES.has(role));
+}
+
+function assertOwnMedico(req, medicoId) {
+    if (isBaseMedico(req) && medicoId && medicoId !== req.person?.id) {
+        const error = new Error('Non autorizzato a gestire disponibilita di altri medici');
+        error.statusCode = 403;
+        throw error;
+    }
+}
+
+async function assertOwnSlot(req, tenantId, slotId) {
+    if (!isBaseMedico(req)) return null;
+    const slot = await SlotDisponibilitaService.getById(slotId, tenantId);
+    if (!slot) {
+        const error = new Error('Slot non trovato');
+        error.statusCode = 404;
+        throw error;
+    }
+    assertOwnMedico(req, slot.medicoId);
+    return slot;
+}
 
 // ============================================
 // SLOT DISPONIBILITA ROUTES
@@ -360,7 +394,19 @@ router.post('/',
     async (req, res) => {
         try {
             const tenantId = getEffectiveTenantId(req);
+            assertOwnMedico(req, req.body.medicoId);
             const slot = await SlotDisponibilitaService.create(req.body, tenantId);
+
+            if (isBaseMedico(req)) {
+                await AvailabilityNotificationService.notifySecretaries({
+                    tenantId,
+                    actorId: req.person.id,
+                    medicoId: slot.medicoId,
+                    action: 'created',
+                    entityId: slot.id,
+                    actionUrl: '/poliambulatorio/calendario'
+                });
+            }
 
             res.status(201).json({
                 success: true,
@@ -374,7 +420,7 @@ router.post('/',
                 tenantId: getEffectiveTenantId(req)
             });
 
-            const statusCode = error.message.includes('sovrapposto') ? 409 : 500;
+            const statusCode = error.statusCode || (error.message.includes('sovrapposto') ? 409 : 500);
             res.status(statusCode).json({
                 success: false,
                 error: 'Errore nella creazione dello slot',
@@ -404,7 +450,21 @@ router.post('/bulk',
                 });
             }
 
+            slots.forEach(slot => assertOwnMedico(req, slot.medicoId));
+
             const result = await SlotDisponibilitaService.createBulk(slots, tenantId);
+
+            if (isBaseMedico(req) && result.created?.length) {
+                await AvailabilityNotificationService.notifySecretaries({
+                    tenantId,
+                    actorId: req.person.id,
+                    medicoId: req.person.id,
+                    action: 'created',
+                    entityId: result.created[0]?.id,
+                    count: result.created.length,
+                    actionUrl: '/poliambulatorio/calendario'
+                });
+            }
 
             res.status(201).json({
                 success: true,
@@ -418,7 +478,7 @@ router.post('/bulk',
                 tenantId: getEffectiveTenantId(req)
             });
 
-            res.status(500).json({
+            res.status(error.statusCode || 500).json({
                 success: false,
                 error: 'Errore nella creazione degli slot',
             });
@@ -440,6 +500,7 @@ router.post('/generate',
         try {
             const tenantId = getEffectiveTenantId(req);
             const { medicoId, dataInizio, dataFine, durataMinuti, ambulatorioId, prestazioneId, skipExisting } = req.body;
+            assertOwnMedico(req, medicoId);
 
             const result = await SlotDisponibilitaService.generateFromOrario(
                 medicoId,
@@ -449,6 +510,18 @@ router.post('/generate',
                 tenantId,
                 { ambulatorioId, prestazioneId, skipExisting }
             );
+
+            if (isBaseMedico(req) && result.created?.length) {
+                await AvailabilityNotificationService.notifySecretaries({
+                    tenantId,
+                    actorId: req.person.id,
+                    medicoId,
+                    action: 'generated',
+                    entityId: result.created[0]?.id,
+                    count: result.created.length,
+                    actionUrl: '/poliambulatorio/calendario'
+                });
+            }
 
             res.status(201).json({
                 success: true,
@@ -462,7 +535,7 @@ router.post('/generate',
                 tenantId: getEffectiveTenantId(req)
             });
 
-            res.status(500).json({
+            res.status(error.statusCode || 500).json({
                 success: false,
                 error: 'Errore nella generazione degli slot',
             });
@@ -484,7 +557,22 @@ router.put('/:id',
     async (req, res) => {
         try {
             const tenantId = getEffectiveTenantId(req);
+            const previousSlot = await assertOwnSlot(req, tenantId, req.params.id);
+            if (isBaseMedico(req) && req.body.medicoId && req.body.medicoId !== previousSlot?.medicoId) {
+                assertOwnMedico(req, req.body.medicoId);
+            }
             const slot = await SlotDisponibilitaService.update(req.params.id, req.body, tenantId);
+
+            if (isBaseMedico(req)) {
+                await AvailabilityNotificationService.notifySecretaries({
+                    tenantId,
+                    actorId: req.person.id,
+                    medicoId: slot.medicoId,
+                    action: 'updated',
+                    entityId: slot.id,
+                    actionUrl: '/poliambulatorio/calendario'
+                });
+            }
 
             res.json({
                 success: true,
@@ -500,7 +588,7 @@ router.put('/:id',
             });
 
             const statusCode = error.message.includes('non trovato') ? 404 :
-                error.message.includes('sovrapposto') ? 409 : 500;
+                error.message.includes('sovrapposto') ? 409 : error.statusCode || 500;
             res.status(statusCode).json({
                 success: false,
                 error: 'Errore nell\'aggiornamento dello slot',
@@ -522,6 +610,7 @@ router.post('/:id/book',
     async (req, res) => {
         try {
             const tenantId = getEffectiveTenantId(req);
+            await assertOwnSlot(req, tenantId, req.params.id);
             const slot = await SlotDisponibilitaService.book(req.params.id, req.body.appuntamentoId, tenantId);
 
             res.json({
@@ -538,7 +627,7 @@ router.post('/:id/book',
             });
 
             const statusCode = error.message.includes('non trovato') ? 404 :
-                error.message.includes('non disponibile') ? 409 : 500;
+                error.message.includes('non disponibile') ? 409 : error.statusCode || 500;
             res.status(statusCode).json({
                 success: false,
                 error: 'Errore nella prenotazione dello slot',
@@ -636,7 +725,19 @@ router.delete('/:id',
     async (req, res) => {
         try {
             const tenantId = getEffectiveTenantId(req);
+            const slot = await assertOwnSlot(req, tenantId, req.params.id);
             await SlotDisponibilitaService.delete(req.params.id, tenantId);
+
+            if (isBaseMedico(req)) {
+                await AvailabilityNotificationService.notifySecretaries({
+                    tenantId,
+                    actorId: req.person.id,
+                    medicoId: slot.medicoId,
+                    action: 'deleted',
+                    entityId: req.params.id,
+                    actionUrl: '/poliambulatorio/calendario'
+                });
+            }
 
             res.json({
                 success: true,
@@ -651,7 +752,7 @@ router.delete('/:id',
             });
 
             const statusCode = error.message.includes('non trovato') ? 404 :
-                error.message.includes('prenotato') ? 409 : 500;
+                error.message.includes('prenotato') ? 409 : error.statusCode || 500;
             res.status(statusCode).json({
                 success: false,
                 error: 'Errore nell\'eliminazione dello slot',
@@ -674,6 +775,7 @@ router.delete('/medico/:medicoId/range',
             const tenantId = getEffectiveTenantId(req);
             const { medicoId } = req.params;
             const { dataInizio, dataFine, soloLiberi = true } = req.query;
+            assertOwnMedico(req, medicoId);
 
             if (!dataInizio || !dataFine) {
                 return res.status(400).json({
@@ -690,6 +792,17 @@ router.delete('/medico/:medicoId/range',
                 soloLiberi === 'true' || soloLiberi === true
             );
 
+            if (isBaseMedico(req) && result.deleted > 0) {
+                await AvailabilityNotificationService.notifySecretaries({
+                    tenantId,
+                    actorId: req.person.id,
+                    medicoId,
+                    action: 'deleted',
+                    count: result.deleted,
+                    actionUrl: '/poliambulatorio/calendario'
+                });
+            }
+
             res.json({
                 success: true,
                 data: result,
@@ -703,7 +816,7 @@ router.delete('/medico/:medicoId/range',
                 tenantId: getEffectiveTenantId(req)
             });
 
-            res.status(500).json({
+            res.status(error.statusCode || 500).json({
                 success: false,
                 error: 'Errore nell\'eliminazione degli slot',
             });

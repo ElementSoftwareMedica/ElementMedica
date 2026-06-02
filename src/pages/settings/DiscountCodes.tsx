@@ -236,7 +236,7 @@ const DiscountCodesPage: React.FC = () => {
       resetForm();
       fetchCodes();
     } catch (err: unknown) {
-      const errorMsg = err?.response?.data?.message || 'Errore nella creazione del codice sconto';
+      const errorMsg = (err as any)?.response?.data?.message || 'Errore nella creazione del codice sconto';
       showToast({ message: errorMsg, type: 'error' });
     } finally {
       setLoading(false);
@@ -287,7 +287,7 @@ const DiscountCodesPage: React.FC = () => {
       resetForm();
       fetchCodes();
     } catch (err: unknown) {
-      const errorMsg = err?.response?.data?.message || 'Errore nell\'aggiornamento del codice sconto';
+      const errorMsg = (err as any)?.response?.data?.message || 'Errore nell\'aggiornamento del codice sconto';
       showToast({ message: errorMsg, type: 'error' });
     } finally {
       setLoading(false);

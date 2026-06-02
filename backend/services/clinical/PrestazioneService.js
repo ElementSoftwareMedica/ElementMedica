@@ -216,7 +216,7 @@ export class PrestazioneService {
                 ...tenantFilter,
                 ...(attivo !== undefined && { attivo }),
                 ...(tipo && { tipo }),
-                // Project 45: Add branchType filter if provided
+                // P45: branchType filter - il modello ha branchType con default MEDICA, non serve filtro legacy
                 ...(branchType && { branchType }),
                 ...(search && {
                     OR: [

@@ -28,21 +28,21 @@ export function useCourseVariants({
   // Fetch course variants when selected course changes
   useEffect(() => {
     let cancelled = false;
-    
+
     const rawTitle = (selectedCourse as any)?.title || (selectedCourse as any)?.name;
     const title = normalizeTextUtil(rawTitle);
-  
+
     // DEBUG: Log dettagliato per capire cosa riceve l'hook
     if (import.meta?.env?.MODE === 'development') {
     }
-  
+
     if (!title) {
       setSelectedCourseVariants([]);
       setSelectedCourseDetails(undefined);
       setError(null);
       return;
     }
-  
+
     // First, try to find variants in local trainings (exact-first on normalized title, then fuzzy group)
     const exactLocal = trainings.filter((t: Training) =>
       matchByExactNormalizedTitle((t.title || (t as any).name) as string, rawTitle, normalizeTextUtil)
@@ -53,7 +53,7 @@ export function useCourseVariants({
 
     if (import.meta?.env?.MODE === 'development') {
     }
-  
+
     // Se trovo più di una variante localmente, uso come base ma procedo comunque con il fetch remoto per arricchire i dati
     if (localVariants.length > 1) {
       setSelectedCourseVariants(localVariants);
@@ -104,7 +104,7 @@ export function useCourseVariants({
 
       // 2) Fallback: endpoint pubblico che restituisce anche i corsi pubblici
       try {
-        const pubUrl = `/api/public/courses?search=${encodeURIComponent(rawTitle as string)}&limit=200`;
+        const pubUrl = `/api/v1/public/courses?search=${encodeURIComponent(rawTitle as string)}&limit=200`;
         if (import.meta?.env?.MODE === 'development') {
         }
         const pubRes = await apiGet(pubUrl);
@@ -138,8 +138,8 @@ export function useCourseVariants({
       }
     })();
 
-    return () => { 
-      cancelled = true; 
+    return () => {
+      cancelled = true;
       setLoading(false);
     };
   }, [selectedCourse, trainings]);

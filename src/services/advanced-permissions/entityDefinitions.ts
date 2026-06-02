@@ -618,6 +618,18 @@ export const CLINICAL_ENTITY_DEFINITIONS: EntityDefinition[] = [
     ]
   },
   {
+    id: 'clinica.prestazioni',
+    name: 'clinica.prestazioni',
+    displayName: 'Prestazioni Clinica',
+    fields: [
+      { id: 'codice', name: 'codice', displayName: 'Codice', type: 'string' },
+      { id: 'nome', name: 'nome', displayName: 'Nome Prestazione', type: 'string' },
+      { id: 'categoria', name: 'categoria', displayName: 'Categoria', type: 'string' },
+      { id: 'prezzo', name: 'prezzo', displayName: 'Prezzo', type: 'number', sensitive: true },
+      { id: 'isActive', name: 'isActive', displayName: 'Attivo', type: 'boolean' }
+    ]
+  },
+  {
     id: 'medici_abilitati',
     name: 'medici_abilitati',
     displayName: 'Medici Abilitati',
@@ -641,6 +653,19 @@ export const CLINICAL_ENTITY_DEFINITIONS: EntityDefinition[] = [
       { id: 'medicoId', name: 'medicoId', displayName: 'Medico', type: 'string' },
       { id: 'ambulatorioId', name: 'ambulatorioId', displayName: 'Ambulatorio', type: 'string' },
       { id: 'note', name: 'note', displayName: 'Note', type: 'string' }
+    ]
+  },
+  {
+    id: 'clinica.appuntamenti',
+    name: 'clinica.appuntamenti',
+    displayName: 'Appuntamenti e Calendario',
+    fields: [
+      { id: 'dataOra', name: 'dataOra', displayName: 'Data e Ora', type: 'date' },
+      { id: 'durata', name: 'durata', displayName: 'Durata (min)', type: 'number' },
+      { id: 'stato', name: 'stato', displayName: 'Stato', type: 'string' },
+      { id: 'pazienteId', name: 'pazienteId', displayName: 'Paziente', type: 'string', sensitive: true },
+      { id: 'medicoId', name: 'medicoId', displayName: 'Medico', type: 'string' },
+      { id: 'ambulatorioId', name: 'ambulatorioId', displayName: 'Ambulatorio', type: 'string' }
     ]
   },
   {
@@ -671,6 +696,20 @@ export const CLINICAL_ENTITY_DEFINITIONS: EntityDefinition[] = [
       { id: 'diagnosi', name: 'diagnosi', displayName: 'Diagnosi', type: 'string', sensitive: true },
       { id: 'note', name: 'note', displayName: 'Note Cliniche', type: 'string', sensitive: true },
       { id: 'giudizio', name: 'giudizio', displayName: 'Giudizio Idoneità', type: 'string', sensitive: true }
+    ]
+  },
+  {
+    id: 'clinica.visite',
+    name: 'clinica.visite',
+    displayName: 'Visite e Referti',
+    fields: [
+      { id: 'data', name: 'data', displayName: 'Data Visita', type: 'date' },
+      { id: 'tipo', name: 'tipo', displayName: 'Tipo Visita', type: 'string' },
+      { id: 'stato', name: 'stato', displayName: 'Stato', type: 'string' },
+      { id: 'pazienteId', name: 'pazienteId', displayName: 'Paziente', type: 'string', sensitive: true },
+      { id: 'medicoId', name: 'medicoId', displayName: 'Medico', type: 'string' },
+      { id: 'medicoRefertanteId', name: 'medicoRefertanteId', displayName: 'Medico Refertante', type: 'string' },
+      { id: 'note', name: 'note', displayName: 'Note Cliniche', type: 'string', sensitive: true }
     ]
   },
   {
@@ -739,6 +778,20 @@ export const CLINICAL_ENTITY_DEFINITIONS: EntityDefinition[] = [
       { id: 'stato', name: 'stato', displayName: 'Stato', type: 'string' },
       { id: 'pazienteId', name: 'pazienteId', displayName: 'Paziente', type: 'string', sensitive: true },
       { id: 'metodoPagamento', name: 'metodoPagamento', displayName: 'Metodo Pagamento', type: 'string' }
+    ]
+  },
+  {
+    id: 'movimenti_contabili',
+    name: 'movimenti_contabili',
+    displayName: 'Movimenti Contabili',
+    fields: [
+      { id: 'direzione', name: 'direzione', displayName: 'Direzione', type: 'string' },
+      { id: 'tipo', name: 'tipo', displayName: 'Tipo', type: 'string' },
+      { id: 'stato', name: 'stato', displayName: 'Stato', type: 'string' },
+      { id: 'importoNetto', name: 'importoNetto', displayName: 'Importo Netto', type: 'number', sensitive: true },
+      { id: 'dataEsecuzione', name: 'dataEsecuzione', displayName: 'Data Esecuzione', type: 'date' },
+      { id: 'personId', name: 'personId', displayName: 'Persona', type: 'string' },
+      { id: 'companyTenantProfileId', name: 'companyTenantProfileId', displayName: 'Azienda', type: 'string' }
     ]
   },
 
@@ -825,19 +878,36 @@ export const CLINICAL_ENTITY_DEFINITIONS: EntityDefinition[] = [
   }
 ];
 
+const SUPPORTED_ENTITY_NAMES = new Set([
+  'admin', 'system', 'tenants', 'users', 'persons', 'employees', 'trainers', 'roles',
+  'companies', 'courses', 'schedules', 'enrollments', 'documents', 'templates', 'attestati',
+  'cms', 'cms.pages', 'cms.media', 'cms.navigation', 'forms', 'submissions',
+  'preventivi', 'invoices', 'movimenti_contabili', 'codici_sconto', 'notifications',
+  'settings', 'gdpr', 'consents', 'audit', 'seo', 'api_keys', 'reports', 'dashboard',
+  'hierarchy', 'imports', 'clinica', 'clinica.poliambulatori', 'clinica.poliambulatorio',
+  'clinica.ambulatori', 'clinica.prestazioni', 'clinica.appuntamenti', 'clinica.agenda',
+  'clinica.visite', 'clinica.referti', 'clinica.medici', 'clinica.signatures',
+  'clinica.strumenti', 'clinica.manutenzioni', 'clinica.ferie', 'clinica.convenzioni',
+  'clinica.tariffari', 'clinica.listini', 'clinica.cartella_paziente',
+  'clinica.offerte_bundle', 'clinica.sconti', 'clinica.pazienti', 'clinica.giudizi',
+  'clinica.fatture', 'clinica.billing', 'clinica.contabilita', 'clinica.impostazioni',
+  'clinica.email_templates', 'scadenze', 'farmaci', 'calendar', 'public_content',
+  'hr', 'hr.turni', 'hr.timbrature', 'hr.assenze', 'hr.mansioni', 'hr.cartellino',
+  'hr.report', 'cross_tenant', 'internal_documents'
+]);
+
 /**
- * Combina tutte le definizioni delle entità
+ * Combina solo le definizioni collegate a permessi realmente salvabili/verificabili.
  */
 export const ALL_ENTITY_DEFINITIONS: EntityDefinition[] = [
   ...STATIC_ENTITY_DEFINITIONS,
-  ...EXTENDED_ENTITY_DEFINITIONS,
   ...CLINICAL_ENTITY_DEFINITIONS
-];
+].filter(entity => SUPPORTED_ENTITY_NAMES.has(entity.name));
 
 /**
  * Entità critiche che devono essere sempre presenti
  */
-export const CRITICAL_ENTITIES = ['form_templates', 'form_submissions', 'public_cms'];
+export const CRITICAL_ENTITIES = ['persons', 'companies', 'clinica.visite', 'clinica.appuntamenti'];
 
 /**
  * Verifica se un'entità è virtuale (basata su Person)

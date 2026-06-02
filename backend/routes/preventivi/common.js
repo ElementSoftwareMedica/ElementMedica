@@ -14,6 +14,7 @@ import logger from '../../utils/logger.js';
 import preventiviService from '../../services/preventivi-service.js';
 import codiciScontoService from '../../services/codici-sconto-service.js';
 import movimentoContabileService from '../../services/management/movimento-contabile-service.js';
+import { isTrainerOnlyAccess, getTrainerScheduleIds } from '../../utils/trainerAccess.js';
 
 const { authenticate } = authMiddleware;
 
@@ -53,5 +54,7 @@ export {
   preventiviService,
   codiciScontoService,
   movimentoContabileService,
-  validate
+  validate,
+  isTrainerOnlyAccess,
+  getTrainerScheduleIds
 };

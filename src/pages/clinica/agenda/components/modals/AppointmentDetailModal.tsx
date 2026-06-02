@@ -58,7 +58,7 @@ export const AppointmentDetailModal: React.FC<AppointmentDetailModalProps> = ({
     };
 
     const handleDelete = async () => {
-        if (await confirmDialog({ title: 'Annulla appuntamento', message: 'Sei sicuro di voler annullare questo appuntamento?', variant: 'warning', confirmLabel: 'Annulla appuntamento' })) {
+        if (await confirmDialog({ title: 'Elimina appuntamento', message: 'Sei sicuro di voler eliminare questo appuntamento?', variant: 'danger', confirmLabel: 'Elimina appuntamento' })) {
             onDelete(event.id);
             onClose();
         }
@@ -182,7 +182,7 @@ export const AppointmentDetailModal: React.FC<AppointmentDetailModalProps> = ({
                         className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium flex items-center gap-1"
                     >
                         <Trash2 className="h-4 w-4" />
-                        Annulla
+                        Elimina
                     </button>
                     <button
                         onClick={() => {

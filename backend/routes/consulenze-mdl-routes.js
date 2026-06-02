@@ -8,6 +8,7 @@
 
 import express from 'express';
 import { authenticate, requirePermission } from '../middleware/auth.js';
+import { requireFeature } from '../middleware/featureFlags.js';
 import ConsulenzaMDLService from '../services/management/ConsulenzaMDLService.js';
 import MovimentoContabileGenerator from '../services/management/MovimentoContabileGenerator.js';
 import { logger } from '../utils/logger.js';
@@ -17,8 +18,9 @@ import { validateParamId } from '../middleware/validateUUID.js';
 const router = express.Router();
 router.param('id', validateParamId);
 
-// Tutte le route richiedono autenticazione
+// Tutte le route richiedono autenticazione + feature BRANCH_CONSULENZA
 router.use(authenticate);
+router.use(requireFeature('BRANCH_CONSULENZA'));
 
 /**
  * GET /api/v1/consulenze-mdl

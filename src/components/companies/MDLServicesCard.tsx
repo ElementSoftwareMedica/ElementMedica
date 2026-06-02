@@ -42,16 +42,19 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '../../design-system/utils';
-import { QuickActionNominaModal } from './quick-actions/QuickActionNominaModal';
+import { QuickActionNominaModal, type NominaTipo } from './quick-actions/QuickActionNominaModal';
 import { QuickActionDVRModal } from './quick-actions/QuickActionDVRModal';
 import { QuickActionSopralluogoModal } from './quick-actions/QuickActionSopralluogoModal';
 import TariffarioCompanyCard from './TariffarioCompanyCard';
 import { useToast } from '../../hooks/useToast';
 import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
-import { apiDelete } from '../../services/api';
+import { apiDelete, apiPost, apiUpload } from '../../services/api';
 import { getToken } from '../../services/auth';
 import { DatePickerElegante } from '../../components/ui/DatePickerElegante';
 import { TimePickerElegante } from '../../components/ui/TimePickerElegante';
+import ElegantSelect from '../ui/ElegantSelect';
+import SigningWorkflowModal from '../schedules/components/DocumentManager/components/SigningWorkflowModal';
+import type { SignaturePlacement } from '../schedules/components/DocumentManager/components/SigningWorkflowModal';
 import {
     consulenzeMDLApi,
     tariffariAziendaliApi,
@@ -76,12 +79,13 @@ interface PersonInfo {
 
 interface NominaInfo {
     id: string;
-    tipoRuolo: 'MEDICO_COMPETENTE' | 'RSPP' | 'ASPP' | 'RLS' | 'PREPOSTO' | 'ADDETTO_PS' | 'ADDETTO_AI' | 'DIRIGENTE_SICUREZZA';
+    tipoRuolo: 'MEDICO_COMPETENTE' | 'MEDICO_COMPETENTE_COORDINATO' | 'RSPP' | 'ASPP' | 'RLS' | 'PREPOSTO' | 'ADDETTO_PS' | 'ADDETTO_AI' | 'DIRIGENTE_SICUREZZA';
     stato: string;
     dataInizio?: string;
     dataFine?: string;
     dataScadenza?: string;
     persona?: PersonInfo;
+    site?: { id: string; siteName?: string };
     // Tracking prestazioni/fatturazione
     prestazioneId?: string;
     prestazione?: {
@@ -600,7 +604,7 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
         }
     }, [companyId]);
 
-    const [showNominaModal, setShowNominaModal] = useState<'MC' | 'RSPP' | null>(null);
+    const [showNominaModal, setShowNominaModal] = useState<NominaTipo | null>(null);
     const [editingNominaId, setEditingNominaId] = useState<string | null>(null); // P59: Per modificare nomine esistenti
     const [successorOfNomina, setSuccessorOfNomina] = useState<NominaInfo | null>(null); // Per nomina successore
     const [showStoricoMC, setShowStoricoMC] = useState(false);
@@ -614,6 +618,10 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
     const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
     const [pdfPreviewName, setPdfPreviewName] = useState<string | null>(null);
     const [pdfPreviewApiUrl, setPdfPreviewApiUrl] = useState<string | null>(null);
+    const [mdlDocumentModal, setMdlDocumentModal] = useState<'nomine' | 'tariffario' | null>(null);
+    const [mdlDocumentSigning, setMdlDocumentSigning] = useState<'nomine' | 'tariffario' | null>(null);
+    const [mdlDocumentFile, setMdlDocumentFile] = useState<File | null>(null);
+    const [mdlDocumentSaving, setMdlDocumentSaving] = useState(false);
 
     // Carica un PDF protetto via API e apre il preview con blob URL
     const openPdfPreview = async (apiUrl: string, name: string) => {
@@ -664,6 +672,91 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
             }
         } catch {
             showToast({ type: 'error', message: 'Errore durante l\'apertura del documento' });
+        }
+    };
+
+    const downloadProtectedPdf = async (apiUrl: string, name: string) => {
+        try {
+            const token = getToken();
+            const headers: Record<string, string> = { ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+            if (tenantId) headers['X-Operate-Tenant-Id'] = tenantId;
+            const response = await fetch(apiUrl, { headers });
+            if (!response.ok) {
+                showToast({ type: 'error', message: 'Impossibile scaricare il documento' });
+                return;
+            }
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = name;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+        } catch {
+            showToast({ type: 'error', message: 'Errore durante il download del documento' });
+        }
+    };
+
+    const openMdlDocumentModal = (type: 'nomine' | 'tariffario') => {
+        setMdlDocumentModal(type);
+        setMdlDocumentSigning(null);
+        setMdlDocumentFile(null);
+    };
+
+    const getMdlDocumentPreviewUrl = (type: 'nomine' | 'tariffario') => (
+        type === 'nomine'
+            ? `/api/v1/companies/${companyId}/mdl-documents/nomine.pdf`
+            : `/api/v1/tariffari-aziendali/${tariffario?.id}/pdf`
+    );
+
+    const handleMdlDocumentUpload = async () => {
+        if (!mdlDocumentModal || !mdlDocumentFile) {
+            showToast({ type: 'error', message: 'Seleziona un PDF o una foto del documento firmato' });
+            return;
+        }
+        try {
+            setMdlDocumentSaving(true);
+            const formData = new FormData();
+            formData.append('documento', mdlDocumentFile);
+            await apiUpload(`/api/v1/companies/${companyId}/mdl-documents/${mdlDocumentModal}/upload`, formData);
+            showToast({ type: 'success', message: 'Documento firmato caricato correttamente' });
+            setMdlDocumentModal(null);
+            onActionComplete?.();
+        } catch {
+            showToast({ type: 'error', message: 'Errore durante il caricamento del documento firmato' });
+        } finally {
+            setMdlDocumentSaving(false);
+        }
+    };
+
+    const handleMdlDocumentOnlineSign = async ({
+        type,
+        signatureDataUrl,
+        placement
+    }: {
+        type: 'nomine' | 'tariffario';
+        signatureDataUrl: string;
+        placement: SignaturePlacement;
+    }) => {
+        if (!type) {
+            return;
+        }
+        try {
+            setMdlDocumentSaving(true);
+            await apiPost(`/api/v1/companies/${companyId}/mdl-documents/${type}/sign`, {
+                signatureImage: signatureDataUrl,
+                placement,
+            });
+            showToast({ type: 'success', message: 'Firma acquisita e documento archiviato' });
+            setMdlDocumentModal(null);
+            setMdlDocumentSigning(null);
+            onActionComplete?.();
+        } catch {
+            showToast({ type: 'error', message: 'Errore durante la firma del documento' });
+        } finally {
+            setMdlDocumentSaving(false);
         }
     };
 
@@ -889,6 +982,13 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
         n.tipoRuolo === 'RSPP' && n.stato === 'ATTIVA' &&
         (!n.dataInizio || new Date(n.dataInizio) <= now)
     ) || nomine.find(n => n.tipoRuolo === 'RSPP' && n.stato === 'ATTIVA');
+    const nomineMCCoordinate = nomine
+        .filter(n =>
+            n.tipoRuolo === 'MEDICO_COMPETENTE_COORDINATO' &&
+            n.stato === 'ATTIVA' &&
+            (!n.dataInizio || new Date(n.dataInizio) <= now)
+        )
+        .sort((a, b) => new Date(b.dataInizio || 0).getTime() - new Date(a.dataInizio || 0).getTime());
 
     // Successore = nomina futura (dataInizio > oggi) per lo stesso tipo, che non è la corrente
     const successorMC = nomine.find(n =>
@@ -1015,9 +1115,21 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
         setExpandedSection(expandedSection === section ? null : section);
     };
 
+    const openNominaModal = (tipo: NominaTipo, options?: { editingId?: string | null; successorOf?: NominaInfo | null }) => {
+        if (!hasTariffario && !options?.editingId) {
+            showToast({
+                type: 'warning',
+                message: 'Prima della nomina associa un tariffario aziendale: servirà per recuperare automaticamente tariffe e movimenti. Puoi comunque procedere.'
+            });
+        }
+        setEditingNominaId(options?.editingId || null);
+        setSuccessorOfNomina(options?.successorOf || null);
+        setShowNominaModal(tipo);
+    };
+
     // Render singola nomina con successore e storico
     const renderNomina = (
-        tipo: 'MC' | 'RSPP',
+        tipo: NominaTipo,
         nomina: NominaInfo | undefined,
         icon: React.ReactNode,
         title: string,
@@ -1025,7 +1137,8 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
         successor?: NominaInfo,
         storico?: NominaInfo[],
         showStorico?: boolean,
-        setShowStorico?: (v: boolean) => void
+        setShowStorico?: (v: boolean) => void,
+        extraContent?: React.ReactNode
     ) => {
         const status = nomina ? getStatusBadge(nomina.dataScadenza) : null;
 
@@ -1106,8 +1219,7 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
                         <div className="mt-2 flex items-center gap-2 flex-wrap">
                             <button
                                 onClick={() => {
-                                    setEditingNominaId(nomina.id);
-                                    setShowNominaModal(tipo);
+                                    openNominaModal(tipo, { editingId: nomina.id });
                                 }}
                                 className={cn(
                                     "inline-flex items-center px-2.5 py-1 text-xs rounded-md border transition-colors",
@@ -1144,8 +1256,7 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
                             </button>
                             <button
                                 onClick={() => {
-                                    setSuccessorOfNomina(nomina);
-                                    setShowNominaModal(tipo);
+                                    openNominaModal(tipo, { successorOf: nomina });
                                 }}
                                 className={cn(
                                     "inline-flex items-center px-2.5 py-1 text-xs rounded-md border transition-colors",
@@ -1176,8 +1287,7 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
                                     <div className="flex items-center gap-1">
                                         <button
                                             onClick={() => {
-                                                setEditingNominaId(successor.id);
-                                                setShowNominaModal(tipo);
+                                                openNominaModal(tipo, { editingId: successor.id });
                                             }}
                                             className="p-1 text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300"
                                             title="Modifica successore"
@@ -1244,18 +1354,22 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
                                 )}
                             </div>
                         )}
+                        {extraContent}
                     </>
                 ) : (
-                    <button
-                        onClick={() => setShowNominaModal(tipo)}
-                        className={cn(
-                            "mt-3 w-full flex items-center justify-center px-3 py-2 rounded-lg border-2 border-dashed transition-colors",
-                            `border-${color}-300 dark:border-${color}-600 text-${color}-600 dark:text-${color}-400 hover:bg-${color}-50 dark:hover:bg-${color}-900/30 hover:border-${color}-400 dark:hover:border-${color}-500`
-                        )}
-                    >
-                        <Plus className="h-4 w-4 mr-2" />
-                        Aggiungi Nomina
-                    </button>
+                    <>
+                        <button
+                            onClick={() => openNominaModal(tipo)}
+                            className={cn(
+                                "mt-3 w-full flex items-center justify-center px-3 py-2 rounded-lg border-2 border-dashed transition-colors",
+                                `border-${color}-300 dark:border-${color}-600 text-${color}-600 dark:text-${color}-400 hover:bg-${color}-50 dark:hover:bg-${color}-900/30 hover:border-${color}-400 dark:hover:border-${color}-500`
+                            )}
+                        >
+                            <Plus className="h-4 w-4 mr-2" />
+                            Aggiungi Nomina
+                        </button>
+                        {extraContent}
+                    </>
                 )}
             </div>
         );
@@ -1298,7 +1412,7 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
                             </div>
                         </div>
                         <Link
-                            to={`/clinica/mdl/scadenze?companyId=${companyId}`}
+                            to={`/poliambulatorio/mdl/scadenze?companyId=${companyId}`}
                             className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium inline-flex items-center"
                         >
                             Scadenziario
@@ -1372,6 +1486,32 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
 
                     {expandedSection === 'nomine' && (
                         <div className="p-4 space-y-4">
+                            <div className="flex flex-wrap items-center justify-end gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => openPdfPreview(`/api/v1/companies/${companyId}/mdl-documents/nomine.pdf`, `Nomine figure sicurezza - ${companyName}.pdf`)}
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:bg-gray-800 dark:text-blue-300"
+                                >
+                                    <Eye className="h-3.5 w-3.5" />
+                                    PDF nomine
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => downloadProtectedPdf(`/api/v1/companies/${companyId}/mdl-documents/nomine.pdf`, `Nomine figure sicurezza - ${companyName}.pdf`)}
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:bg-gray-800 dark:text-blue-300"
+                                >
+                                    <Download className="h-3.5 w-3.5" />
+                                    Download
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => openMdlDocumentModal('nomine')}
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                                >
+                                    <FileText className="h-3.5 w-3.5" />
+                                    Firma / upload
+                                </button>
+                            </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {renderNomina(
                                     'MC',
@@ -1382,7 +1522,53 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
                                     successorMC,
                                     storicoMC,
                                     showStoricoMC,
-                                    setShowStoricoMC
+                                    setShowStoricoMC,
+                                    <div className="mt-4 rounded-lg border border-teal-100 bg-teal-50/40 p-3 dark:border-teal-800 dark:bg-teal-900/10">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div>
+                                                <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-50">Coordinati</h4>
+                                                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Medici competenti coordinati per azienda o sede.</p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => openNominaModal('MC_COORDINATO')}
+                                                className="inline-flex items-center gap-1 rounded-lg border border-teal-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-teal-700 hover:bg-teal-50 dark:border-teal-700 dark:bg-gray-800 dark:text-teal-300"
+                                            >
+                                                <Plus className="h-3 w-3" />
+                                                Aggiungi
+                                            </button>
+                                        </div>
+                                        {nomineMCCoordinate.length > 0 ? (
+                                            <div className="mt-3 space-y-2">
+                                                {nomineMCCoordinate.map(nomina => (
+                                                    <div key={nomina.id} className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-sm dark:bg-gray-800">
+                                                        <div className="min-w-0">
+                                                            <p className="truncate font-medium text-gray-800 dark:text-gray-100">
+                                                                {nomina.persona?.fullName || `${nomina.persona?.firstName || ''} ${nomina.persona?.lastName || ''}`.trim() || 'Medico coordinato'}
+                                                            </p>
+                                                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                                {nomina.site?.siteName ? `Sede: ${nomina.site.siteName}` : 'Tutta azienda'} · dal {formatDate(nomina.dataInizio)}
+                                                            </p>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                openNominaModal('MC_COORDINATO', { editingId: nomina.id });
+                                                            }}
+                                                            className="rounded-md p-1.5 text-teal-600 hover:bg-teal-50 dark:text-teal-300 dark:hover:bg-teal-900/30"
+                                                            title="Modifica coordinato"
+                                                        >
+                                                            <Edit className="h-3.5 w-3.5" />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <p className="mt-3 rounded-lg bg-white px-3 py-2 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                                                Nessun coordinato nominato.
+                                            </p>
+                                        )}
+                                    </div>
                                 )}
                                 {renderNomina(
                                     'RSPP',
@@ -1825,20 +2011,48 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
                     {expandedSection === 'tariffario' && (
                         <div className="p-4">
                             {tariffario ? (
-                                <TariffarioCompanyCard
-                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                    tariffario={tariffario as any}
-                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                    successoreTariffario={successoreTariffario as any}
-                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                    storicoTariffari={storicoTariffari as any}
-                                    companyId={companyId}
-                                    companyName={companyName}
-                                    onEditAssociation={() => setShowModificaAssociazioneModal(true)}
-                                    onEditSuccessore={() => setShowModificaAssociazioneModal(true)}
-                                    onDeleteSuccessore={handleDeleteSuccessore}
-                                    className="shadow-none border-0"
-                                />
+                                <div className="space-y-3">
+                                    <div className="flex flex-wrap items-center justify-end gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => openPdfPreview(`/api/v1/tariffari-aziendali/${tariffario.id}/pdf`, `Tariffario MDL - ${companyName}.pdf`)}
+                                            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:bg-gray-800 dark:text-emerald-300"
+                                        >
+                                            <Eye className="h-3.5 w-3.5" />
+                                            PDF tariffario
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => downloadProtectedPdf(`/api/v1/tariffari-aziendali/${tariffario.id}/pdf`, `Tariffario MDL - ${companyName}.pdf`)}
+                                            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:bg-gray-800 dark:text-emerald-300"
+                                        >
+                                            <Download className="h-3.5 w-3.5" />
+                                            Download
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => openMdlDocumentModal('tariffario')}
+                                            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                                        >
+                                            <FileText className="h-3.5 w-3.5" />
+                                            Firma / upload
+                                        </button>
+                                    </div>
+                                    <TariffarioCompanyCard
+                                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                        tariffario={tariffario as any}
+                                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                        successoreTariffario={successoreTariffario as any}
+                                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                        storicoTariffari={storicoTariffari as any}
+                                        companyId={companyId}
+                                        companyName={companyName}
+                                        onEditAssociation={() => setShowModificaAssociazioneModal(true)}
+                                        onEditSuccessore={() => setShowModificaAssociazioneModal(true)}
+                                        onDeleteSuccessore={handleDeleteSuccessore}
+                                        className="shadow-none border-0"
+                                    />
+                                </div>
                             ) : (
                                 <div className="text-center py-6 text-gray-500 dark:text-gray-400">
                                     <DollarSign className="h-8 w-8 mx-auto mb-2 text-gray-300 dark:text-gray-600" />
@@ -2182,16 +2396,18 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
                                 {loadingTariffari ? (
                                     <div className="flex items-center gap-2 text-sm text-gray-500"><RefreshCw className="h-4 w-4 animate-spin" /> Caricamento...</div>
                                 ) : (
-                                    <select
+                                    <ElegantSelect
                                         value={selectedTariffarioId}
-                                        onChange={e => setSelectedTariffarioId(e.target.value)}
-                                        className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-50 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                                    >
-                                        <option value="">Seleziona un tariffario...</option>
-                                        {availableTariffari.map(t => (
-                                            <option key={t.id} value={t.id}>{t.codice} - {t.nome}</option>
-                                        ))}
-                                    </select>
+                                        onChange={setSelectedTariffarioId}
+                                        placeholder="Seleziona un tariffario..."
+                                        options={[
+                                            { value: '', label: 'Seleziona un tariffario...' },
+                                            ...availableTariffari.map(t => ({
+                                                value: t.id,
+                                                label: `${t.codice ? `${t.codice} - ` : ''}${t.nome}`,
+                                            })),
+                                        ]}
+                                    />
                                 )}
                             </div>
                             <div className="grid grid-cols-2 gap-3">
@@ -2306,18 +2522,18 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
                                             Caricamento tariffari...
                                         </div>
                                     ) : (
-                                        <select
+                                        <ElegantSelect
                                             value={modAssocSuccessoreTariffarioId}
-                                            onChange={e => setModAssocSuccessoreTariffarioId(e.target.value)}
-                                            className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-50 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                                        >
-                                            <option value="">Nessun successore</option>
-                                            {modAssocAvailableTariffari.map(t => (
-                                                <option key={t.id} value={t.id}>
-                                                    {t.codice ? `${t.codice} — ` : ''}{t.nome}
-                                                </option>
-                                            ))}
-                                        </select>
+                                            onChange={setModAssocSuccessoreTariffarioId}
+                                            placeholder="Nessun successore"
+                                            options={[
+                                                { value: '', label: 'Nessun successore' },
+                                                ...modAssocAvailableTariffari.map(t => ({
+                                                    value: t.id,
+                                                    label: `${t.codice ? `${t.codice} - ` : ''}${t.nome}`,
+                                                })),
+                                            ]}
+                                        />
                                     )}
                                 </div>
                             )}
@@ -2340,6 +2556,82 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
                         </div>
                     </div>
                 </div>
+            )}
+
+            {mdlDocumentModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl dark:shadow-black/50 max-w-xl w-full">
+                        <div className="p-5 border-b dark:border-gray-700 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <FileText className="h-5 w-5 text-teal-600" />
+                                <h3 className="font-semibold text-gray-900 dark:text-gray-50">
+                                    Firma / upload {mdlDocumentModal === 'nomine' ? 'nomine' : 'tariffario'}
+                                </h3>
+                            </div>
+                            <button
+                                onClick={() => setMdlDocumentModal(null)}
+                                className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                        <div className="p-5 space-y-5">
+                            <div className="rounded-lg border border-teal-100 bg-teal-50/60 p-3 text-sm text-teal-800 dark:border-teal-800 dark:bg-teal-900/20 dark:text-teal-200">
+                                Il documento generato resta disponibile per quick-look e download. Puoi firmarlo sul PDF scegliendo liberamente la posizione della firma, oppure caricare il PDF/foto firmato in cartaceo.
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Firma online
+                                </label>
+                                <button
+                                    type="button"
+                                    onClick={() => mdlDocumentModal && setMdlDocumentSigning(mdlDocumentModal)}
+                                    disabled={mdlDocumentSaving}
+                                    className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-3 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-50"
+                                >
+                                    {mdlDocumentSaving && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
+                                    Apri PDF e firma
+                                </button>
+                            </div>
+                            <div className="border-t border-gray-100 pt-4 dark:border-gray-700">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Upload documento firmato
+                                </label>
+                                <input
+                                    type="file"
+                                    accept="application/pdf,image/jpeg,image/png"
+                                    onChange={(e) => setMdlDocumentFile(e.target.files?.[0] || null)}
+                                    className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-gray-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-gray-700 hover:file:bg-gray-200 dark:text-gray-300 dark:file:bg-gray-700 dark:file:text-gray-200"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={handleMdlDocumentUpload}
+                                    disabled={mdlDocumentSaving || !mdlDocumentFile}
+                                    className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+                                >
+                                    {mdlDocumentSaving && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
+                                    Carica firmato
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {mdlDocumentSigning && (
+                <SigningWorkflowModal
+                    isOpen={Boolean(mdlDocumentSigning)}
+                    documentId={`company-mdl-${companyId}-${mdlDocumentSigning}`}
+                    documentLabel={mdlDocumentSigning === 'nomine' ? 'Nomine figure sicurezza' : 'Tariffario MDL'}
+                    previewUrl={getMdlDocumentPreviewUrl(mdlDocumentSigning)}
+                    previewHttpHeaders={tenantId ? { 'X-Operate-Tenant-Id': tenantId } : undefined}
+                    onClose={() => setMdlDocumentSigning(null)}
+                    onConfirm={({ signatureDataUrl, placement }) => handleMdlDocumentOnlineSign({
+                        type: mdlDocumentSigning,
+                        signatureDataUrl,
+                        placement
+                    })}
+                />
             )}
         </>
     );

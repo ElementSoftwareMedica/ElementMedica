@@ -6,12 +6,14 @@
  */
 
 import express from 'express';
+import { requireFeature } from '../middleware/featureFlags.js';
 import prisma from '../config/prisma-optimization.js';
-import middleware from '../middleware/auth.js';
+import { authenticate, requirePermission } from '../middleware/auth.js';
 import { body, validationResult } from 'express-validator';
 import logger from '../utils/logger.js';
 import { DocumentService } from '../services/documentService.js';
 import { getEffectiveTenantId } from '../utils/tenantHelper.js';
+import { isTrainerOnlyAccess, getTrainerScheduleIds } from '../utils/trainerAccess.js';
 import { signDocument, signDocumentsBulk } from '../services/documentSigningService.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -23,13 +25,61 @@ const __dirname = path.dirname(__filename);
 const router = express.Router();
 const documentService = new DocumentService();
 
-const { authenticate: authenticateToken, requirePermission } = middleware;
+const isSignedRegistro = (registro) => Boolean(
+  registro.firmaFormatore ||
+  registro.firmaFormatoreAt ||
+  registro.firmaFormatoreId
+);
+
+async function auditRegistroDelete(req, registro, tenantId, deletionReason, db = prisma) {
+  if (isSignedRegistro(registro)) {
+    await db.gdprAuditLog.create({
+      data: {
+        tenantId,
+        personId: req.person.id,
+        resourceType: 'RegistroPresenze',
+        resourceId: registro.id,
+        action: 'DELETE',
+        dataAccessed: {
+          operation: 'SOFT_DELETE',
+          deletionReason,
+          signedDocument: true,
+          scheduledCourseId: registro.scheduledCourseId,
+          sessionId: registro.sessionId,
+          formatoreId: registro.formatoreId
+        },
+        ipAddress: req.ip || null,
+        userAgent: req.get?.('user-agent') || null
+      }
+    });
+    return;
+  }
+
+  await db.activityLog.create({
+    data: {
+      personId: req.person.id,
+      tenantId,
+      action: 'REGISTRO_PRESENZE_DELETE',
+      category: 'DOCUMENTS',
+      resource: 'RegistroPresenze',
+      resourceId: registro.id,
+      details: deletionReason,
+      metadata: { signedDocument: false, scheduledCourseId: registro.scheduledCourseId, sessionId: registro.sessionId },
+      ipAddress: req.ip || null,
+      userAgent: req.get?.('user-agent') || null
+    }
+  });
+}
+
+
+// Feature gate: tutte le route registri presenze richiedono BRANCH_FORMAZIONE
+router.use(authenticate, requireFeature('BRANCH_FORMAZIONE'));
 
 /**
  * GET /api/v1/registri-presenze
  * Get all attendance registers
  */
-router.get('/', authenticateToken, requirePermission('documents:read'), async (req, res) => {
+router.get('/', authenticate, requirePermission('documents:read'), async (req, res) => {
   try {
     const { scheduleId, sessionId, formatoreId } = req.query;
     const tenantId = getEffectiveTenantId(req);
@@ -42,6 +92,14 @@ router.get('/', authenticateToken, requirePermission('documents:read'), async (r
     if (scheduleId) where.scheduledCourseId = scheduleId;
     if (sessionId) where.sessionId = sessionId;
     if (formatoreId) where.formatoreId = formatoreId;
+
+    // TRAINER-only: limita ai registri dei propri corsi programmati
+    const person = req.person;
+    if (await isTrainerOnlyAccess(person.id, tenantId)) {
+      const scheduleIds = await getTrainerScheduleIds(person.id, tenantId);
+      if (scheduleIds.length === 0) return res.json([]);
+      where.scheduledCourseId = { in: scheduleIds };
+    }
 
     const registri = await prisma.registroPresenze.findMany({
       where,
@@ -96,7 +154,7 @@ router.get('/', authenticateToken, requirePermission('documents:read'), async (r
  * Accepts either sessionId (CourseSession UUID) OR scheduleId + sessionIndex + sessionDate
  */
 router.post('/generate',
-  authenticateToken,
+  authenticate,
   requirePermission('documents:create'),
   [
     body('sessionId').optional().isString(),
@@ -433,7 +491,7 @@ router.post('/generate',
  * Update attendance data
  */
 router.put('/:id/attendance',
-  authenticateToken,
+  authenticate,
   requirePermission('documents:create'),
   [
     body('attendanceData').isArray({ min: 1 }).withMessage('Attendance data is required'),
@@ -509,22 +567,27 @@ router.put('/:id/attendance',
  * DELETE /api/v1/registri-presenze/:id
  * Delete register (soft delete)
  */
-router.delete('/:id', authenticateToken, requirePermission('documents:delete'), async (req, res) => {
+router.delete('/:id', authenticate, requirePermission('documents:delete'), async (req, res) => {
   try {
     const { id } = req.params;
     const tenantId = getEffectiveTenantId(req);
 
     const registro = await prisma.registroPresenze.findFirst({
-      where: { id, tenantId }
+      where: { id, tenantId, deletedAt: null }
     });
 
     if (!registro) {
       return res.status(404).json({ error: 'Registro presenze non trovato' });
     }
 
-    await prisma.registroPresenze.update({
-      where: { id },
-      data: { deletedAt: new Date() }
+    const deletionReason = req.body?.deletionReason || 'Eliminazione registro presenze formazione';
+
+    await prisma.$transaction(async (tx) => {
+      await tx.registroPresenze.update({
+        where: { id },
+        data: { deletedAt: new Date() }
+      });
+      await auditRegistroDelete(req, registro, tenantId, deletionReason, tx);
     });
 
     logger.info('Attendance register deleted', {
@@ -550,7 +613,7 @@ router.delete('/:id', authenticateToken, requirePermission('documents:delete'), 
  * GET /api/v1/registri-presenze/:id/download
  * Download register PDF
  */
-router.get('/:id/download', authenticateToken, requirePermission('documents:read'), async (req, res) => {
+router.get('/:id/download', authenticate, requirePermission('documents:read'), async (req, res) => {
   try {
     const { id } = req.params;
     const tenantId = getEffectiveTenantId(req);
@@ -581,7 +644,7 @@ router.get('/:id/download', authenticateToken, requirePermission('documents:read
  * Download multiple registers as ZIP for a schedule
  */
 router.get('/schedule/:scheduleId/download-zip',
-  authenticateToken,
+  authenticate,
   requirePermission('documents:read'),
   async (req, res) => {
     try {
@@ -683,7 +746,7 @@ router.get('/schedule/:scheduleId/download-zip',
  * GET /api/v1/registri-presenze/:id
  * Get single attendance register
  */
-router.get('/:id', authenticateToken, requirePermission('documents:read'), async (req, res) => {
+router.get('/:id', authenticate, requirePermission('documents:read'), async (req, res) => {
   try {
     const { id } = req.params;
     const tenantId = getEffectiveTenantId(req);
@@ -747,7 +810,7 @@ router.get('/:id', authenticateToken, requirePermission('documents:read'), async
  * GET /api/v1/registri-presenze/:id/preview
  * Serve registro PDF inline for preview (used by SigningWorkflowModal)
  */
-router.get('/:id/preview', authenticateToken, requirePermission('documents:read'), async (req, res) => {
+router.get('/:id/preview', authenticate, requirePermission('documents:read'), async (req, res) => {
   try {
     const { id } = req.params;
     const tenantId = getEffectiveTenantId(req);
@@ -807,7 +870,7 @@ router.get('/:id/preview', authenticateToken, requirePermission('documents:read'
  * POST /api/v1/registri-presenze/:id/sign
  * Apply signature to registro presenze
  */
-router.post('/:id/sign', authenticateToken, requirePermission('documents:write'), async (req, res) => {
+router.post('/:id/sign', authenticate, requirePermission('documents:write'), async (req, res) => {
   try {
     const { id } = req.params;
     const tenantId = getEffectiveTenantId(req);
@@ -848,7 +911,7 @@ router.post('/:id/sign', authenticateToken, requirePermission('documents:write')
  * POST /api/v1/registri-presenze/bulk-sign
  * Apply signature to multiple registri presenze
  */
-router.post('/bulk-sign', authenticateToken, requirePermission('documents:write'), async (req, res) => {
+router.post('/bulk-sign', authenticate, requirePermission('documents:write'), async (req, res) => {
   try {
     const tenantId = getEffectiveTenantId(req);
     const { documentIds, signatureData, placement } = req.body;

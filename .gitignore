@@ -37,6 +37,16 @@ backend/prisma/*.db
 coverage/
 .cache/
 .vite/
+*.tsbuildinfo
+
+# Test / build artifacts
+playwright-report/
+test-results/
+desktop-app/playwright-report/
+desktop-app/test-results/
+desktop-app/out/
+desktop-app/dist/
+desktop-app/release/
 
 # Docker
 **/.docker/docs/10_project_managemnt/0_Progetti_passati/13_riordino_e_ottimizzazione_sistema/backend_cleanup/file_temporanei/credentials.json

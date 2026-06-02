@@ -16,7 +16,7 @@
  * @session #12b - Refactoring with integrated menus
  */
 
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     History,
@@ -49,7 +49,8 @@ import {
     Stethoscope, // S68: Firma medico icon
     FileCheck, // S68: PDF quicklook
     FlaskConical, // R20: Laboratorio analisi
-    Pencil // R21: Edit allegato
+    Pencil, // R21: Edit allegato
+    Link2
 } from 'lucide-react';
 import type { TimerState } from '../types';
 import { isQuestionarioTipo } from '@/services/questionariService';
@@ -67,6 +68,8 @@ export interface VisitaRiepilogo {
     prestazione?: { nome: string };
     medico?: { firstName: string; lastName: string };
     stato: string;
+    isVisitaSecundaria?: boolean;
+    visitaParentId?: string | null;
 }
 
 export interface AllegatoRiepilogo {
@@ -118,6 +121,9 @@ interface QuickActionsIntegratedProps {
     onViewModulistica?: () => void;
     // P61: Questionari Medici
     onViewQuestionari?: () => void;
+    showQuestionari?: boolean;
+    visitaPrincipaleId?: string | null;
+    onViewVisitaPrincipale?: () => void;
     questionariCount?: number;
     questionariCompilati?: QuestionarioRiepilogo[];
     /** Callback per applicare firme ai questionari selezionati (compilatoIds, tipo firma) */
@@ -265,6 +271,9 @@ export const QuickActionsIntegrated: React.FC<QuickActionsIntegratedProps> = ({
     onViewRevisions,
     onViewModulistica,
     onViewQuestionari,
+    showQuestionari = true,
+    visitaPrincipaleId,
+    onViewVisitaPrincipale,
     questionariCount = 0,
     questionariCompilati = [],
     onApplicaFirme,
@@ -301,6 +310,7 @@ export const QuickActionsIntegrated: React.FC<QuickActionsIntegratedProps> = ({
 }) => {
     // State for which menus are expanded
     const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set());
+    const [expandedVisitGroups, setExpandedVisitGroups] = useState<Set<string>>(new Set());
 
     // State for notes section
     const [isNotesExpanded, setIsNotesExpanded] = useState(false);
@@ -325,6 +335,27 @@ export const QuickActionsIntegrated: React.FC<QuickActionsIntegratedProps> = ({
     const inlineFileInputRef = useRef<HTMLInputElement>(null);
 
     const queryClient = useQueryClient();
+
+    const previousVisitsView = useMemo(() => {
+        const filtered = storicoVisite.filter(v => !(v.isVisitaSecundaria && v.visitaParentId === visitaId));
+        const secondarieByParent = new Map<string, VisitaRiepilogo[]>();
+        filtered
+            .filter(v => v.isVisitaSecundaria && v.visitaParentId)
+            .forEach(v => {
+                const list = secondarieByParent.get(v.visitaParentId!) || [];
+                list.push(v);
+                secondarieByParent.set(v.visitaParentId!, list);
+            });
+
+        const primarie = filtered
+            .filter(v => !v.isVisitaSecundaria)
+            .map(v => ({ ...v, visiteSecondarie: secondarieByParent.get(v.id) || [] }));
+
+        return {
+            primarie,
+            count: primarie.reduce((total, visita) => total + 1 + visita.visiteSecondarie.length, 0)
+        };
+    }, [storicoVisite, visitaId]);
 
     const handleInlineUploadComplete = useCallback(() => {
         queryClient.invalidateQueries({ queryKey: ['allegati-visita', visitaId] });
@@ -425,15 +456,17 @@ export const QuickActionsIntegrated: React.FC<QuickActionsIntegratedProps> = ({
 
     // Helper to format date
     const formatDate = (dateStr: string) => {
+        if (!dateStr) return '—';
         try {
             const date = new Date(dateStr);
+            if (isNaN(date.getTime())) return '—';
             return date.toLocaleDateString('it-IT', {
                 day: '2-digit',
                 month: 'short',
                 year: 'numeric'
             });
         } catch {
-            return dateStr;
+            return '—';
         }
     };
 
@@ -568,6 +601,19 @@ export const QuickActionsIntegrated: React.FC<QuickActionsIntegratedProps> = ({
 
                 {/* Integrated Menus */}
                 <div className="divide-y divide-gray-100">
+                    {visitaPrincipaleId && onViewVisitaPrincipale && (
+                        <button
+                            type="button"
+                            onClick={onViewVisitaPrincipale}
+                            className="w-full flex items-center justify-between gap-2 px-3 py-2.5 hover:bg-violet-50 transition-colors text-left"
+                        >
+                            <span className="flex items-center gap-3">
+                                <Link2 className="h-4.5 w-4.5 text-violet-500" />
+                                <span className="text-sm font-medium text-gray-700">Visita Principale</span>
+                            </span>
+                            <ExternalLink className="h-3.5 w-3.5 text-gray-400" />
+                        </button>
+                    )}
 
                     {/* Storico Visita Menu - Shows revisions of current visit with last modification */}
                     <MenuItem
@@ -640,32 +686,55 @@ export const QuickActionsIntegrated: React.FC<QuickActionsIntegratedProps> = ({
                         icon={FileText}
                         label="Visite Precedenti"
                         color="text-purple-500"
-                        badge={storicoVisite.length}
+                        badge={previousVisitsView.count}
                         isLoading={isLoadingStorico}
                         onOpenFull={pazienteId ? () => setShowCartellaSanitaria(true) : onViewHistory}
                     >
-                        {storicoVisite.length === 0 ? (
+                        {previousVisitsView.primarie.length === 0 ? (
                             <div className="px-3 py-3 text-center text-sm text-gray-500">
                                 Nessuna visita precedente
                             </div>
                         ) : (
-                            <div className="max-h-40 overflow-y-auto">
-                                {storicoVisite.slice(0, 5).map((v, index) => (
+                            <div className="max-h-52 overflow-y-auto">
+                                {previousVisitsView.primarie.slice(0, 5).map((v, index) => {
+                                    const children = v.visiteSecondarie;
+                                    const isGroupOpen = expandedVisitGroups.has(v.id);
+                                    return (
+                                    <div key={v.id} className={index > 0 ? 'border-t border-gray-100' : ''}>
                                     <div
-                                        key={v.id}
-                                        className={`px-3 py-2 hover:bg-gray-100/50 cursor-pointer ${index > 0 ? 'border-t border-gray-100' : ''}`}
+                                        className="px-3 py-2 hover:bg-gray-100/50 cursor-pointer"
                                         onClick={() => onViewVisita?.(v.id)}
                                     >
                                         <div className="flex items-center justify-between mb-0.5">
                                             <div className="flex items-center gap-1.5">
-                                                <Calendar className="h-3 w-3 text-gray-400" />
+                                                <GitBranch className="h-3 w-3 text-purple-500" />
                                                 <span className="text-xs font-medium text-gray-900">
                                                     {formatDate(v.dataOra)}
                                                 </span>
                                             </div>
-                                            <span className={`px-1.5 py-0.5 text-[10px] rounded ${getVisitaStatoColor(v.stato)}`}>
-                                                {v.stato.replace('_', ' ')}
-                                            </span>
+                                            <div className="flex items-center gap-1">
+                                                {children.length > 0 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={(event) => {
+                                                            event.stopPropagation();
+                                                            setExpandedVisitGroups(prev => {
+                                                                const next = new Set(prev);
+                                                                if (next.has(v.id)) next.delete(v.id);
+                                                                else next.add(v.id);
+                                                                return next;
+                                                            });
+                                                        }}
+                                                        className="rounded p-0.5 text-purple-500 hover:bg-purple-50"
+                                                        title="Mostra accertamenti collegati"
+                                                    >
+                                                        {isGroupOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                                                    </button>
+                                                )}
+                                                <span className={`px-1.5 py-0.5 text-[10px] rounded ${getVisitaStatoColor(v.stato)}`}>
+                                                    {v.stato.replace('_', ' ')}
+                                                </span>
+                                            </div>
                                         </div>
                                         <div className="text-xs text-gray-600 truncate">
                                             {v.prestazione?.nome || 'Visita'}
@@ -676,11 +745,32 @@ export const QuickActionsIntegrated: React.FC<QuickActionsIntegratedProps> = ({
                                             </div>
                                         )}
                                     </div>
-                                ))}
-                                {storicoVisite.length > 5 && (
+                                    {isGroupOpen && children.length > 0 && (
+                                        <div className="border-t border-purple-50 bg-purple-50/40 px-3 py-1.5">
+                                            {children.map(child => (
+                                                <button
+                                                    key={child.id}
+                                                    type="button"
+                                                    onClick={() => onViewVisita?.(child.id)}
+                                                    className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left hover:bg-white"
+                                                >
+                                                    <span className="flex min-w-0 items-center gap-1.5">
+                                                        <Link2 className="h-3 w-3 shrink-0 text-violet-500" />
+                                                        <span className="truncate text-[11px] font-medium text-slate-700">
+                                                            {child.prestazione?.nome || 'Accertamento'}
+                                                        </span>
+                                                    </span>
+                                                    <Eye className="h-3 w-3 shrink-0 text-slate-400" />
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                    </div>
+                                );})}
+                                {previousVisitsView.primarie.length > 5 && (
                                     <div className="px-3 py-2 text-center text-xs text-purple-600 border-t border-gray-100 cursor-pointer hover:bg-purple-50"
                                         onClick={() => pazienteId ? setShowCartellaSanitaria(true) : onViewHistory?.()}>
-                                        + altre {storicoVisite.length - 5} visite →
+                                        + altre {previousVisitsView.primarie.length - 5} visite →
                                     </div>
                                 )}
                             </div>
@@ -945,6 +1035,7 @@ export const QuickActionsIntegrated: React.FC<QuickActionsIntegratedProps> = ({
                     </MenuItem>
 
                     {/* Questionari Medici - Sezione dedicata */}
+                    {showQuestionari && (
                     <MenuItem
                         id="questionari"
                         isExpanded={expandedMenus.has('questionari')}
@@ -1086,6 +1177,7 @@ export const QuickActionsIntegrated: React.FC<QuickActionsIntegratedProps> = ({
                             );
                         })()}
                     </MenuItem>
+                    )}
 
                     {/* Modulistica - Sezione dedicata */}
                     <MenuItem

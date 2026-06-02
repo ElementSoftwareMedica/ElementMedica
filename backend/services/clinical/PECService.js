@@ -517,8 +517,8 @@ const PECService = {
         .row { display: flex; padding: 8px 0; border-bottom: 1px solid #f1f5f9; }
         .label { font-weight: 600; color: #64748b; width: 180px; flex-shrink: 0; }
         .value { flex: 1; }
-        .giudizio-box { background: ${giudizio.tipoGiudizio.includes('NON_IDONEO') ? '#fef2f2' : giudizio.tipoGiudizio === 'IDONEO' ? '#f0fdf4' : '#fffbeb'}; border: 2px solid ${giudizio.tipoGiudizio.includes('NON_IDONEO') ? '#fca5a5' : giudizio.tipoGiudizio === 'IDONEO' ? '#86efac' : '#fcd34d'}; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0; }
-        .giudizio-text { font-size: 20px; font-weight: bold; color: ${giudizio.tipoGiudizio.includes('NON_IDONEO') ? '#dc2626' : giudizio.tipoGiudizio === 'IDONEO' ? '#16a34a' : '#d97706'}; }
+        .giudizio-box { background: ${giudizio.tipoGiudizio?.includes('NON_IDONEO') ? '#fef2f2' : giudizio.tipoGiudizio === 'IDONEO' ? '#f0fdf4' : '#fffbeb'}; border: 2px solid ${giudizio.tipoGiudizio?.includes('NON_IDONEO') ? '#fca5a5' : giudizio.tipoGiudizio === 'IDONEO' ? '#86efac' : '#fcd34d'}; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0; }
+        .giudizio-text { font-size: 20px; font-weight: bold; color: ${giudizio.tipoGiudizio?.includes('NON_IDONEO') ? '#dc2626' : giudizio.tipoGiudizio === 'IDONEO' ? '#16a34a' : '#d97706'}; }
         .alert { background: #fef3c7; border: 1px solid #fcd34d; padding: 15px; border-radius: 8px; margin-top: 20px; }
         .alert-title { font-weight: bold; color: #92400e; margin-bottom: 5px; }
         .footer { text-align: center; padding: 20px; color: #64748b; font-size: 12px; border-top: 1px solid #e2e8f0; }

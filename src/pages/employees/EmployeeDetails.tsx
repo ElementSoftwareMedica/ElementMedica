@@ -29,7 +29,9 @@ import { apiGet } from '../../services/api';
 import { clinicaApi } from '../../services/clinicaApi';
 import { PersonTenantProfilesWidget } from '../../components/person/PersonTenantProfilesWidget';
 import { ProfiloSaluteCard } from '../../components/clinica/ProfiloSaluteCard';
+import OccupationalHistoryCard from '../clinica/clinica/components/OccupationalHistoryCard';
 import { PersonData, Company } from '../../types';
+import type { WorkerOccupationalProfile } from '../../services/clinicaApi';
 import { extractGenderFromTaxCode } from '../../utils/codiceFiscale';
 import { PersonCredentialsModal } from '../../components/persons/PersonCredentialsModal';
 
@@ -51,6 +53,7 @@ const EmployeeDetails: React.FC = () => {
   const [mdlGiudizi, setMdlGiudizi] = useState<any[]>([]);
   const [mdlVisite, setMdlVisite] = useState<any[]>([]);
   const [mdlProtocolli, setMdlProtocolli] = useState<any[]>([]);
+  const [mdlStatoOccupazionale, setMdlStatoOccupazionale] = useState<WorkerOccupationalProfile['statoOccupazionale'] | null>(null);
   const [mdlLoading, setMdlLoading] = useState(false);
   const [profiloSaluteExpanded, setProfiloSaluteExpanded] = useState(false);
 
@@ -86,7 +89,7 @@ const EmployeeDetails: React.FC = () => {
       setMdlLoading(true);
       try {
         const [rischiResult, giudiziResult, visiteResult] = await Promise.allSettled([
-          apiGet<any>(`/api/v1/clinica/mansioni/worker/${id}/risks`),
+          apiGet<any>(`/api/v1/clinica/mansioni/worker/${id}/occupational-profile`),
           apiGet<any>(`/api/v1/clinica/giudizi-idoneita?personId=${id}&limit=10`),
           apiGet<any>(`/api/v1/clinica/visite/paziente/${id}`)
         ]);
@@ -96,6 +99,7 @@ const EmployeeDetails: React.FC = () => {
           setMdlRischi(Array.isArray(payload?.rischi) ? payload.rischi : (Array.isArray(payload) ? payload : []));
           const mansioniList = Array.isArray(payload?.mansioni) ? payload.mansioni : [];
           setMdlMansioni(mansioniList);
+          setMdlStatoOccupazionale(payload?.statoOccupazionale || null);
 
           // Fetch protocolli per ogni mansione
           if (mansioniList.length > 0) {
@@ -352,6 +356,11 @@ const EmployeeDetails: React.FC = () => {
                 </div>
               </div>
             )}
+
+            <OccupationalHistoryCard
+              statoOccupazionale={mdlStatoOccupazionale}
+              className="lg:col-span-2"
+            />
 
             {/* Giudizi di Idoneità */}
             <div>

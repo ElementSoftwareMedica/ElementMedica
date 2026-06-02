@@ -328,6 +328,36 @@ export class VisitaRefertoService {
                 }
             });
 
+            if (visita.isVisitaSecundaria && visita.appPrestazioneId) {
+                await prisma.$transaction([
+                    prisma.appuntamentoPrestazione.updateMany({
+                        where: {
+                            id: visita.appPrestazioneId,
+                            tenantId,
+                            deletedAt: null,
+                            stato: { not: 'REFERTATA' }
+                        },
+                        data: {
+                            stato: 'REFERTATA',
+                            dataEsecuzione: new Date()
+                        }
+                    }),
+                    prisma.movimentoContabile.updateMany({
+                        where: {
+                            tenantId,
+                            appPrestazioneId: visita.appPrestazioneId,
+                            direzione: { in: ['ENTRATA', 'USCITA'] },
+                            stato: 'BOZZA',
+                            deletedAt: null
+                        },
+                        data: {
+                            stato: 'DA_FATTURARE',
+                            updatedAt: new Date()
+                        }
+                    })
+                ]);
+            }
+
             // 11. Aggiorna visita con riferimento al documento (opzionale - per accesso veloce)
             logger.info('PDF referto generato con successo', {
                 component: 'VisitaRefertoService',
@@ -1124,7 +1154,7 @@ export class VisitaRefertoService {
                 data: dataVisitaFormatted,
                 ora: oraVisitaFormatted,
                 stato: visita.stato || '',
-                durata: visita.durataEffettiva ? `${visita.durataEffettiva} min` : ''
+                durata: ''
             },
 
             // Prestazione
@@ -1254,21 +1284,13 @@ export class VisitaRefertoService {
         // Maps SELECT option values to human-readable Italian labels for Puppeteer templates
         const GIUDIZIO_LABELS = {
             'idoneo': 'IDONEO alla mansione specifica',
-            'idoneo_prescrizioni': 'IDONEO con prescrizioni',
-            'idoneo_limitazioni': 'IDONEO con limitazioni',
+            'idoneo_prescrizioni': 'IDONEO PARZIALE con prescrizioni',
+            'idoneo_limitazioni': 'IDONEO PARZIALE con limitazioni',
+            'idoneo_limitazioni_prescrizioni': 'IDONEO PARZIALE con limitazioni e prescrizioni',
             'temporaneamente_non_idoneo': 'TEMPORANEAMENTE NON IDONEO alla mansione specifica',
             'non_idoneo': 'NON IDONEO alla mansione specifica'
         };
-        const PERIODICITA_LABELS = {
-            '12': 'annuale (12 mesi)',
-            '6': 'semestrale (6 mesi)',
-            '3': 'trimestrale (3 mesi)',
-            '24': 'biennale (24 mesi)',
-            '60': 'quinquennale (60 mesi)',
-            'personalizzata': 'personalizzata (vedi note)'
-        };
         const rawGiudizio = filteredDatiStrutturati.giudizioIdoneitaMdl || datiStrutturati.giudizioIdoneitaMdl || '';
-        const rawPeriodicita = filteredDatiStrutturati.periodicitaSorveglianzaMdl || datiStrutturati.periodicitaSorveglianzaMdl || '';
         result.mdl = {
             // Giudizio di idoneità — raw value + human-readable label
             giudizioValore: rawGiudizio,
@@ -1277,15 +1299,13 @@ export class VisitaRefertoService {
             isIdoneo: rawGiudizio === 'idoneo',
             isIdoneoPrescrizioni: rawGiudizio === 'idoneo_prescrizioni',
             isIdoneoLimitazioni: rawGiudizio === 'idoneo_limitazioni',
+            isIdoneoLimitazioniPrescrizioni: rawGiudizio === 'idoneo_limitazioni_prescrizioni',
             isTemporaneamenteNonIdoneo: rawGiudizio === 'temporaneamente_non_idoneo',
             isNonIdoneo: rawGiudizio === 'non_idoneo',
-            // Periodicità sorveglianza sanitaria
-            periodicitaValore: rawPeriodicita,
-            periodicitaLabel: PERIODICITA_LABELS[rawPeriodicita] || rawPeriodicita,
             // Other MDL fields (passed through from datiStrutturati)
             prescrizioni: filteredDatiStrutturati.prescrizioniNormativaMdl || datiStrutturati.prescrizioniNormativaMdl || '',
             limitazioni: filteredDatiStrutturati.limitazioniMansioneMdl || datiStrutturati.limitazioniMansioneMdl || '',
-            notePrescrizioni: filteredDatiStrutturati.prescrizioniFollowup || datiStrutturati.prescrizioniFollowup || '',
+            tempistica: filteredDatiStrutturati.tempisticaGiudizioIdoneitaMdl || datiStrutturati.tempisticaGiudizioIdoneitaMdl || '',
             esamiProssimaVisita: filteredDatiStrutturati.esamiProssimaVisita || datiStrutturati.esamiProssimaVisita || '',
             prossimoControllo: filteredDatiStrutturati.prossimoControllo || (
                 visita.prossimoControllo ? format(new Date(visita.prossimoControllo), 'dd/MM/yyyy', { locale: it }) : ''

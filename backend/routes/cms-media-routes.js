@@ -61,7 +61,7 @@ const uploadFiles = (req, res, next) => {
 
     return res.status(400).json({
       success: false,
-      error: error.message || 'File non valido'
+      error: 'File non valido'
     });
   });
 };
@@ -149,7 +149,7 @@ router.post(
 
       res.status(isValidationError ? 400 : 500).json({
         success: false,
-        error: isValidationError ? error.message : 'Errore nel caricamento dei media'
+        error: isValidationError ? 'File non valido' : 'Errore nel caricamento dei media'
       });
     }
   }

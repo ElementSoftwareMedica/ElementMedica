@@ -76,7 +76,7 @@ interface AccessControlCardProps {
     value: AccessControlConfig;
     onChange: (config: AccessControlConfig) => void;
     disabled?: boolean;
-    medicibranca?: Array<{ id: string; nome: string; cognome: string }>;
+    medicibranca?: Array<{ id: string; firstName?: string; lastName?: string }>;
     className?: string;
 }
 
@@ -288,7 +288,7 @@ export const AccessControlCard: React.FC<AccessControlCardProps> = ({
                                                     className="h-4 w-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500"
                                                 />
                                                 <span className="text-sm text-gray-700">
-                                                    {medico.cognome} {medico.nome}
+                                                    {medico.lastName || ''} {medico.firstName || ''}
                                                 </span>
                                             </label>
                                         ))}

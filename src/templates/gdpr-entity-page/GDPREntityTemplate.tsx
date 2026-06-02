@@ -61,6 +61,7 @@ export interface GDPREntityTemplateProps<T extends Record<string, any> & { id: s
 
   // API endpoints
   apiEndpoint: string;
+  entityBasePath?: string;
 
   // Configurazione colonne
   columns: DataTableColumn<T>[];
@@ -172,6 +173,7 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
   deletePermission,
   exportPermission,
   apiEndpoint,
+  entityBasePath,
   columns,
   searchFields,
   filterOptions = [],
@@ -199,6 +201,7 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
   customBulkActions = [],
 }: GDPREntityTemplateProps<T>): JSX.Element {
   const navigate = useNavigate();
+  const basePath = entityBasePath || `/${entityNamePlural}`;
   const { isLoading: authLoading, permissions: authPermissions } = useAuth();
 
   // Controlla se i permessi sono ancora in fase di caricamento
@@ -431,13 +434,13 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
   // Memoized action handlers per evitare loop infiniti
   const handleViewEntity = useCallback((entity: T) => (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    navigate(`/${entityNamePlural}/${entity.id}`);
-  }, [navigate, entityNamePlural]);
+    navigate(`${basePath}/${entity.id}`);
+  }, [navigate, basePath]);
 
   const handleEditEntity = useCallback((entity: T) => (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    onEditEntity ? onEditEntity(entity) : navigate(`/${entityNamePlural}/${entity.id}/edit`);
-  }, [onEditEntity, navigate, entityNamePlural]);
+    onEditEntity ? onEditEntity(entity) : navigate(`${basePath}/${entity.id}/edit`);
+  }, [onEditEntity, navigate, basePath]);
 
   const handleDeleteEntity = useCallback((entity: T) => (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -555,7 +558,7 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
       options.push({
         label: `Aggiungi ${entityDisplayName.toLowerCase()}`,
         icon: <Plus className="h-4 w-4" />,
-        onClick: onCreateEntity || (() => navigate(`/${entityNamePlural}/create`))
+        onClick: onCreateEntity || (() => navigate(`${basePath}/create`))
       });
     }
 
@@ -648,7 +651,7 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
     }
 
     return options;
-  }, [entityDisplayName, entityNamePlural, enableImportExport, onCreateEntity, csvTemplateData, csvHeaders, toast, permissions, navigate, onImportEntities]);
+  }, [entityDisplayName, entityNamePlural, enableImportExport, onCreateEntity, csvTemplateData, csvHeaders, toast, permissions, navigate, onImportEntities, basePath]);
 
   // Azioni batch
   const batchActions = useMemo(() => {
@@ -712,7 +715,7 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
       icon: <Eye className="h-4 w-4" />,
       onClick: (e?: React.MouseEvent) => {
         if (e) e.stopPropagation();
-        navigate(`/${entityNamePlural}/${entity.id}`);
+        navigate(`${basePath}/${entity.id}`);
       },
       variant: 'default' as const,
     },
@@ -721,7 +724,7 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
       icon: <Edit className="h-4 w-4" />,
       onClick: (e?: React.MouseEvent) => {
         if (e) e.stopPropagation();
-        onEditEntity ? onEditEntity(entity) : navigate(`/${entityNamePlural}/${entity.id}/edit`);
+        onEditEntity ? onEditEntity(entity) : navigate(`${basePath}/${entity.id}/edit`);
       },
       variant: 'default' as const,
     }] : []),
@@ -750,7 +753,7 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
       },
       variant: 'default' as const,
     }] : [])
-  ], [entityNamePlural, navigate, permissions.canWrite, onEditEntity, permissions.canDelete, handleDelete, enableImportExport, permissions.canExport, onExportEntities, csvHeaders, entityName]);
+  ], [basePath, navigate, permissions.canWrite, onEditEntity, permissions.canDelete, handleDelete, enableImportExport, permissions.canExport, onExportEntities, csvHeaders, entityName]);
 
   // Rendering card per vista griglia
   const renderEntityCard = (entity: T) => {
@@ -773,7 +776,7 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
         className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-black/30 overflow-hidden relative flex flex-col h-full cursor-pointer hover:shadow-md dark:hover:shadow-black/40 transition-all duration-200 border border-transparent dark:border-gray-700"
         onClick={() => {
           if (!selectionMode) {
-            navigate(`/${entityNamePlural}/${entity.id}`);
+            navigate(`${basePath}/${entity.id}`);
           }
         }}
       >
@@ -1114,7 +1117,7 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
                         onClick={() => {
                           if (!selectionMode) {
                             if (onViewEntity) onViewEntity(entity as T);
-                            else navigate(`/${entityNamePlural}/${entity.id}`);
+                            else navigate(`${basePath}/${entity.id}`);
                           }
                         }}
                       >

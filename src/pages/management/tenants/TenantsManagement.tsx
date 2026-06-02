@@ -12,15 +12,13 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom';
 import {
     Building2,
     Search,
     Filter,
     Plus,
-    Edit2,
     Trash2,
-    Eye,
     Users,
     Settings,
     Globe,
@@ -34,8 +32,6 @@ import {
     Package,
     Shield,
     Activity,
-    ToggleLeft,
-    ToggleRight,
     Save
 } from 'lucide-react';
 import { useAuth } from '../../../hooks/auth/useAuth';
@@ -104,28 +100,36 @@ const BILLING_PLAN_COLORS: Record<string, string> = {
 
 const TenantsManagement: React.FC = () => {
     const { user: currentUser } = useAuth();
+    const navigate = useNavigate();
     const { getTenantFilterParams, tenantFilterKey, isReady } = useTenantFilter();
     const { confirmDelete } = useConfirmDialog();
 
-    // Check if current user is admin (for delete permission)
+    // Check if current user is admin — controlla sia roleType che globalRole
     const isAdmin = useMemo(() => {
         if (!currentUser) return false;
-        const role = currentUser.globalRole || currentUser.role;
-        return role === 'ADMIN' || role === 'SUPER_ADMIN';
+        const u = currentUser as { roleType?: string; globalRole?: string; role?: string; roles?: string[] };
+        const rt = u.roleType || '';
+        const gr = u.globalRole || '';
+        return rt === 'ADMIN' || rt === 'SUPER_ADMIN' ||
+            gr === 'ADMIN' || gr === 'SUPER_ADMIN' ||
+            (u.roles ?? []).includes('ADMIN') || (u.roles ?? []).includes('SUPER_ADMIN');
     }, [currentUser]);
 
     const [tenants, setTenants] = useState<Tenant[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
-    const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
-    const [showDetailModal, setShowDetailModal] = useState(false);
     const [showCreateModal, setShowCreateModal] = useState(false);
-    const [showEditModal, setShowEditModal] = useState(false);
-    const [showUsersModal, setShowUsersModal] = useState(false);
     const [showFilters, setShowFilters] = useState(false);
     const [filterPlan, setFilterPlan] = useState<string>('');
     const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
+
+    // Redirect non-global-admins away from this page (TENANT_ADMIN cannot see all tenants)
+    useEffect(() => {
+        if (currentUser && !isAdmin) {
+            navigate('/management', { replace: true });
+        }
+    }, [currentUser, isAdmin, navigate]);
 
     // Load tenants with filter
     // silent=true skips the loading spinner (used after create to avoid unmounting open modals)
@@ -199,13 +203,7 @@ const TenantsManagement: React.FC = () => {
     }), [tenants]);
 
     const handleViewTenant = (tenant: Tenant) => {
-        setSelectedTenant(tenant);
-        setShowDetailModal(true);
-    };
-
-    const handleEditTenant = (tenant: Tenant) => {
-        setSelectedTenant(tenant);
-        setShowEditModal(true);
+        navigate(`/management/tenants/${tenant.id}`);
     };
 
     const handleDeleteTenant = async (tenant: Tenant) => {
@@ -221,16 +219,14 @@ const TenantsManagement: React.FC = () => {
     };
 
     const handleCreateSuccess = async () => {
-        // Use silent refresh to avoid showing loading spinner (which unmounts the modal)
-        // so the user can see the success state and configure the first user
+        // Use silent refresh to avoid showing loading spinner
         await loadTenants(true);
     };
 
-    const handleEditSuccess = async () => {
-        setShowEditModal(false);
-        setSelectedTenant(null);
-        await loadTenants();
-    };
+    // Guard: solo ADMIN/SUPER_ADMIN possono accedere a questa pagina
+    if (currentUser && !isAdmin) {
+        return <Navigate to="/management" replace />;
+    }
 
     if (loading) {
         return (
@@ -247,7 +243,7 @@ const TenantsManagement: React.FC = () => {
                 <h3 className="text-lg font-semibold text-red-700 mb-2">Errore</h3>
                 <p className="text-red-600 text-center">{error}</p>
                 <button
-                    onClick={loadTenants}
+                    onClick={() => loadTenants()}
                     className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
                 >
                     <RefreshCw className="w-4 h-4" />
@@ -272,7 +268,7 @@ const TenantsManagement: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-3">
                     <button
-                        onClick={loadTenants}
+                        onClick={() => loadTenants()}
                         className="px-3 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
                         title="Aggiorna"
                     >
@@ -445,7 +441,7 @@ const TenantsManagement: React.FC = () => {
                             <div className="flex items-center justify-between mb-3">
                                 <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${BILLING_PLAN_COLORS[tenant.billingPlan] || BILLING_PLAN_COLORS.basic
                                     }`}>
-                                    {tenant.billingPlan?.charAt(0).toUpperCase() + tenant.billingPlan?.slice(1) || 'Basic'}
+                                    Piano {tenant.billingPlan ? tenant.billingPlan.charAt(0).toUpperCase() + tenant.billingPlan.slice(1) : 'Basic'}
                                 </span>
                                 {tenant.accessLevel && (
                                     <span className="text-xs text-gray-500">
@@ -490,21 +486,10 @@ const TenantsManagement: React.FC = () => {
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        setSelectedTenant(tenant);
-                                        setShowUsersModal(true);
-                                    }}
-                                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                    title="Visualizza Utenti"
-                                >
-                                    <Users className="w-4 h-4" />
-                                </button>
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleEditTenant(tenant);
+                                        handleViewTenant(tenant);
                                     }}
                                     className="p-1.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
-                                    title="Modifica Tenant"
+                                    title="Impostazioni Tenant"
                                 >
                                     <Settings className="w-4 h-4" />
                                 </button>
@@ -534,25 +519,6 @@ const TenantsManagement: React.FC = () => {
                 )}
             </div>
 
-            {/* Detail Modal */}
-            {showDetailModal && selectedTenant && (
-                <TenantDetailModal
-                    tenant={selectedTenant}
-                    onClose={() => {
-                        setShowDetailModal(false);
-                        setSelectedTenant(null);
-                    }}
-                    onEdit={() => {
-                        setShowDetailModal(false);
-                        setShowEditModal(true);
-                    }}
-                    onShowUsers={() => {
-                        setShowDetailModal(false);
-                        setShowUsersModal(true);
-                    }}
-                />
-            )}
-
             {/* Create Tenant Modal */}
             {showCreateModal && (
                 <CreateTenantModal
@@ -561,183 +527,6 @@ const TenantsManagement: React.FC = () => {
                 />
             )}
 
-            {/* Edit Tenant Modal */}
-            {showEditModal && selectedTenant && (
-                <EditTenantModal
-                    tenant={selectedTenant}
-                    onClose={() => {
-                        setShowEditModal(false);
-                        setSelectedTenant(null);
-                    }}
-                    onSuccess={handleEditSuccess}
-                />
-            )}
-
-            {/* Users Modal */}
-            {showUsersModal && selectedTenant && (
-                <TenantUsersModal
-                    tenant={selectedTenant}
-                    onClose={() => {
-                        setShowUsersModal(false);
-                        setSelectedTenant(null);
-                    }}
-                />
-            )}
-        </div>
-    );
-};
-
-/**
- * Tenant Detail Modal
- */
-const TenantDetailModal: React.FC<{
-    tenant: Tenant;
-    onClose: () => void;
-    onEdit: () => void;
-    onShowUsers: () => void;
-}> = ({ tenant, onClose, onEdit, onShowUsers }) => {
-    return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
-                {/* Header */}
-                <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-purple-600 to-purple-700">
-                    <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-                            <Building2 className="w-6 h-6 text-white" />
-                        </div>
-                        <div>
-                            <h2 className="text-lg font-semibold text-white">{tenant.name}</h2>
-                            <p className="text-purple-200 text-sm">{tenant.slug}</p>
-                        </div>
-                    </div>
-                    <button
-                        onClick={onClose}
-                        className="p-2 text-white/80 hover:text-white rounded-lg hover:bg-white/10"
-                    >
-                        <X className="w-5 h-5" />
-                    </button>
-                </div>
-
-                {/* Content */}
-                <div className="p-6 overflow-y-auto max-h-[calc(90vh-180px)]">
-                    {/* Status */}
-                    <div className="flex items-center gap-4 mb-6">
-                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${tenant.isActive
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-red-100 text-red-800'
-                            }`}>
-                            {tenant.isActive ? (
-                                <>
-                                    <ToggleRight className="w-4 h-4 mr-1" />
-                                    Attivo
-                                </>
-                            ) : (
-                                <>
-                                    <ToggleLeft className="w-4 h-4 mr-1" />
-                                    Inattivo
-                                </>
-                            )}
-                        </span>
-                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${BILLING_PLAN_COLORS[tenant.billingPlan] || BILLING_PLAN_COLORS.basic
-                            }`}>
-                            Piano {tenant.billingPlan?.charAt(0).toUpperCase() + tenant.billingPlan?.slice(1) || 'Basic'}
-                        </span>
-                        {tenant.isPrimary && (
-                            <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800">
-                                <Star className="w-4 h-4 mr-1 fill-current" />
-                                Primario
-                            </span>
-                        )}
-                    </div>
-
-                    {/* Info Grid */}
-                    <div className="grid grid-cols-2 gap-4 mb-6">
-                        <div className="bg-gray-50 rounded-lg p-4">
-                            <div className="text-sm text-gray-500 mb-1">ID Tenant</div>
-                            <div className="font-mono text-sm text-gray-900 break-all">{tenant.id}</div>
-                        </div>
-                        <div className="bg-gray-50 rounded-lg p-4">
-                            <div className="text-sm text-gray-500 mb-1">Dominio</div>
-                            <div className="font-medium text-gray-900">{tenant.domain || 'Non configurato'}</div>
-                        </div>
-                        <div className="bg-gray-50 rounded-lg p-4">
-                            <div className="text-sm text-gray-500 mb-1">Livello Accesso</div>
-                            <div className="font-medium text-gray-900">{tenant.accessLevel || 'N/A'}</div>
-                        </div>
-                        <div className="bg-gray-50 rounded-lg p-4">
-                            <div className="text-sm text-gray-500 mb-1">Admin Access</div>
-                            <div className="font-medium text-gray-900">
-                                {tenant.isAdminAccess ? 'Sì' : 'No'}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Features */}
-                    <div className="mb-6">
-                        <h4 className="text-sm font-medium text-gray-700 mb-3">Funzionalità Abilitate</h4>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                            {FEATURE_LIST.map(feature => {
-                                const isEnabled = tenant.enabledFeatures?.includes(feature.id);
-                                return (
-                                    <div
-                                        key={feature.id}
-                                        className={`flex items-center gap-2 p-2 rounded-lg ${isEnabled
-                                            ? 'bg-purple-50 border border-purple-200'
-                                            : 'bg-gray-50 border border-gray-200 opacity-50'
-                                            }`}
-                                    >
-                                        <feature.icon className={`w-4 h-4 ${isEnabled ? 'text-purple-600' : 'text-gray-400'
-                                            }`} />
-                                        <span className={`text-sm ${isEnabled ? 'text-purple-900' : 'text-gray-500'
-                                            }`}>
-                                            {feature.name}
-                                        </span>
-                                        {isEnabled && (
-                                            <Check className="w-4 h-4 text-purple-600 ml-auto" />
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-
-                    {/* Settings JSON (if available) */}
-                    {tenant.settings && Object.keys(tenant.settings).length > 0 && (
-                        <div>
-                            <h4 className="text-sm font-medium text-gray-700 mb-3">Impostazioni</h4>
-                            <pre className="bg-gray-900 text-green-400 p-4 rounded-lg text-sm overflow-x-auto">
-                                {JSON.stringify(tenant.settings, null, 2)}
-                            </pre>
-                        </div>
-                    )}
-                </div>
-
-                {/* Footer */}
-                <div className="px-6 py-4 border-t border-gray-200 flex justify-between">
-                    <button
-                        onClick={onClose}
-                        className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                    >
-                        Chiudi
-                    </button>
-                    <div className="flex gap-2">
-                        <button
-                            onClick={onShowUsers}
-                            className="px-4 py-2 border border-purple-600 text-purple-600 rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-2"
-                        >
-                            <Users className="w-4 h-4" />
-                            Vedi Utenti
-                        </button>
-                        <button
-                            onClick={onEdit}
-                            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
-                        >
-                            <Edit2 className="w-4 h-4" />
-                            Modifica
-                        </button>
-                    </div>
-                </div>
-            </div>
         </div>
     );
 };
@@ -1209,352 +998,6 @@ const CreateTenantModal: React.FC<{
                         </div>
                     </div>
                 </form>
-            </div>
-        </div>
-    );
-};
-
-/**
- * Edit Tenant Modal Component
- */
-const EditTenantModal: React.FC<{
-    tenant: Tenant;
-    onClose: () => void;
-    onSuccess: () => Promise<void>;
-}> = ({ tenant, onClose, onSuccess }) => {
-    const [formData, setFormData] = useState<Partial<TenantData>>({
-        name: tenant.name,
-        slug: tenant.slug,
-        domain: tenant.domain,
-        billingPlan: tenant.billingPlan,
-        isActive: tenant.isActive
-    });
-    const [selectedFeatures, setSelectedFeatures] = useState<Set<string>>(
-        new Set(tenant.enabledFeatures || [])
-    );
-    const [saving, setSaving] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-
-    const toggleFeature = (featureId: string) => {
-        setSelectedFeatures(prev => {
-            const newSet = new Set(prev);
-            if (newSet.has(featureId)) {
-                newSet.delete(featureId);
-            } else {
-                newSet.add(featureId);
-            }
-            return newSet;
-        });
-    };
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-
-        setSaving(true);
-        setError(null);
-
-        try {
-            await managementApi.updateTenant(tenant.id, {
-                ...formData,
-                settings: {
-                    ...tenant.settings,
-                    enabledFeatures: Array.from(selectedFeatures)
-                }
-            });
-            await onSuccess();
-        } catch (err: unknown) {
-            setError('Errore nell\'aggiornamento del tenant');
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-hidden">
-                {/* Header */}
-                <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                    <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                        <Edit2 className="w-5 h-5 text-purple-600" />
-                        Modifica Tenant
-                    </h2>
-                    <button
-                        onClick={onClose}
-                        className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
-                    >
-                        <X className="w-5 h-5" />
-                    </button>
-                </div>
-
-                {/* Content */}
-                <form onSubmit={handleSubmit}>
-                    <div className="p-6 overflow-y-auto max-h-[calc(90vh-180px)] space-y-4">
-                        {error && (
-                            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-center gap-2">
-                                <AlertCircle className="w-4 h-4" />
-                                {error}
-                            </div>
-                        )}
-
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Nome Tenant
-                            </label>
-                            <input
-                                type="text"
-                                value={formData.name || ''}
-                                onChange={(e) => setFormData(f => ({ ...f, name: e.target.value }))}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Slug
-                            </label>
-                            <input
-                                type="text"
-                                value={formData.slug || ''}
-                                onChange={(e) => setFormData(f => ({ ...f, slug: e.target.value }))}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Dominio
-                            </label>
-                            <input
-                                type="text"
-                                value={formData.domain || ''}
-                                onChange={(e) => setFormData(f => ({ ...f, domain: e.target.value }))}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Piano
-                            </label>
-                            <select
-                                value={formData.billingPlan || 'basic'}
-                                onChange={(e) => setFormData(f => ({ ...f, billingPlan: e.target.value }))}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                            >
-                                <option value="free">Free</option>
-                                <option value="basic">Basic</option>
-                                <option value="professional">Professional</option>
-                                <option value="enterprise">Enterprise</option>
-                            </select>
-                        </div>
-
-                        {/* Features */}
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Funzionalità
-                            </label>
-                            <div className="grid grid-cols-2 gap-2">
-                                {FEATURE_LIST.map(feature => (
-                                    <label
-                                        key={feature.id}
-                                        className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${selectedFeatures.has(feature.id)
-                                            ? 'bg-purple-50 border border-purple-200'
-                                            : 'bg-gray-50 border border-gray-200 hover:bg-gray-100'
-                                            }`}
-                                    >
-                                        <input
-                                            type="checkbox"
-                                            checked={selectedFeatures.has(feature.id)}
-                                            onChange={() => toggleFeature(feature.id)}
-                                            className="sr-only"
-                                        />
-                                        <feature.icon className={`w-4 h-4 ${selectedFeatures.has(feature.id) ? 'text-purple-600' : 'text-gray-400'
-                                            }`} />
-                                        <span className={`text-sm ${selectedFeatures.has(feature.id) ? 'text-purple-900' : 'text-gray-700'
-                                            }`}>
-                                            {feature.name}
-                                        </span>
-                                    </label>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={formData.isActive ?? true}
-                                    onChange={(e) => setFormData(f => ({ ...f, isActive: e.target.checked }))}
-                                    className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
-                                />
-                                <span className="text-sm text-gray-700">Tenant attivo</span>
-                            </label>
-                        </div>
-                    </div>
-
-                    {/* Footer */}
-                    <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                        >
-                            Annulla
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={saving}
-                            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center gap-2"
-                        >
-                            {saving ? (
-                                <>
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                    Salvataggio...
-                                </>
-                            ) : (
-                                <>
-                                    <Save className="w-4 h-4" />
-                                    Salva Modifiche
-                                </>
-                            )}
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    );
-};
-
-/**
- * Tenant Users Modal
- * Shows users with access to this tenant
- */
-const TenantUsersModal: React.FC<{
-    tenant: Tenant;
-    onClose: () => void;
-}> = ({ tenant, onClose }) => {
-    const [users, setUsers] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-
-    useEffect(() => {
-        loadUsers();
-    }, [tenant.id]);
-
-    const loadUsers = async () => {
-        try {
-            setLoading(true);
-            setError(null);
-            // Load persons directly by tenantId instead of using PersonTenantAccess
-            const response = await apiGet<{ data: any[]; total: number }>(
-                `/api/v1/persons?tenantId=${tenant.id}&limit=500`
-            );
-            setUsers(response.data || []);
-        } catch (err: unknown) {
-            setError('Errore nel caricamento utenti');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden">
-                {/* Header */}
-                <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-blue-600 to-blue-700">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                            <Users className="w-5 h-5 text-white" />
-                        </div>
-                        <div>
-                            <h2 className="text-lg font-semibold text-white">Utenti del Tenant</h2>
-                            <p className="text-blue-200 text-sm">{tenant.name}</p>
-                        </div>
-                    </div>
-                    <button
-                        onClick={onClose}
-                        className="p-2 text-white/80 hover:text-white rounded-lg hover:bg-white/10"
-                    >
-                        <X className="w-5 h-5" />
-                    </button>
-                </div>
-
-                {/* Content */}
-                <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
-                    {loading ? (
-                        <div className="flex items-center justify-center py-12">
-                            <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-                        </div>
-                    ) : error ? (
-                        <div className="text-center py-8">
-                            <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
-                            <p className="text-red-600">{error}</p>
-                            <button
-                                onClick={loadUsers}
-                                className="mt-4 text-blue-600 hover:text-blue-800"
-                            >
-                                Riprova
-                            </button>
-                        </div>
-                    ) : users.length === 0 ? (
-                        <div className="text-center py-12">
-                            <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                            <h3 className="text-lg font-medium text-gray-700 mb-1">Nessun utente</h3>
-                            <p className="text-gray-500 text-sm">Non ci sono persone in questo tenant</p>
-                        </div>
-                    ) : (
-                        <div className="space-y-3">
-                            <div className="text-sm text-gray-500 mb-4">
-                                {users.length} person{users.length === 1 ? 'a' : 'e'} nel tenant
-                            </div>
-                            {users.map((person: any) => (
-                                <div
-                                    key={person.id}
-                                    className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                                            <span className="text-blue-600 font-medium">
-                                                {(person.firstName?.[0] || '?').toUpperCase()}
-                                            </span>
-                                        </div>
-                                        <div>
-                                            <div className="font-medium text-gray-900">
-                                                {person.firstName} {person.lastName}
-                                            </div>
-                                            <div className="text-sm text-gray-500">
-                                                {person.email}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <span className={`px-2 py-1 rounded text-xs font-medium ${person.globalRole === 'ADMIN' || person.globalRole === 'SUPER_ADMIN'
-                                            ? 'bg-purple-100 text-purple-800'
-                                            : person.globalRole === 'MANAGER'
-                                                ? 'bg-blue-100 text-blue-800'
-                                                : 'bg-gray-100 text-gray-800'
-                                            }`}>
-                                            {person.globalRole || 'USER'}
-                                        </span>
-                                        {person.status === 'ACTIVE' && (
-                                            <span className="w-2 h-2 bg-green-500 rounded-full" title="Attivo" />
-                                        )}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                {/* Footer */}
-                <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
-                    <button
-                        onClick={onClose}
-                        className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                    >
-                        Chiudi
-                    </button>
-                </div>
             </div>
         </div>
     );

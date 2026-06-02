@@ -254,6 +254,22 @@ const isSameDay = (date1: Date, date2: Date): boolean => {
         date1.getDate() === date2.getDate();
 };
 
+type ListResponse<T> = T[] | { data?: T[] | { data?: T[]; items?: T[] }; items?: T[]; results?: T[] } | null | undefined;
+
+const asList = <T,>(value: ListResponse<T>): T[] => {
+    if (Array.isArray(value)) return value;
+    if (!value || typeof value !== 'object') return [];
+    const data = value.data;
+    if (Array.isArray(data)) return data;
+    if (data && typeof data === 'object') {
+        if (Array.isArray(data.data)) return data.data;
+        if (Array.isArray(data.items)) return data.items;
+    }
+    if (Array.isArray(value.items)) return value.items;
+    if (Array.isArray(value.results)) return value.results;
+    return [];
+};
+
 // ============================================
 // MAIN COMPONENT
 // ============================================
@@ -336,8 +352,8 @@ const AgendaDashboardContent: React.FC = () => {
 
     // Calculate stats - based on selected date data and week data
     const stats: DashboardStats = useMemo(() => {
-        const dayData = dayAppuntamenti || [];
-        const weekData = weekAppuntamenti?.data || [];
+        const dayData = asList(dayAppuntamenti);
+        const weekData = asList(weekAppuntamenti);
 
         // Week totals from dedicated week query
         const weekConfermati = weekData.filter(a => a.stato === 'CONFERMATO').length;
@@ -369,7 +385,7 @@ const AgendaDashboardContent: React.FC = () => {
 
     // All appointments for the day, sorted chronologically
     const dayAppuntamentiSorted = useMemo(() => {
-        const dayData = dayAppuntamenti || [];
+        const dayData = asList(dayAppuntamenti);
         return [...dayData].sort((a, b) =>
             new Date(a.dataOra).getTime() - new Date(b.dataOra).getTime()
         );
@@ -378,7 +394,7 @@ const AgendaDashboardContent: React.FC = () => {
     // Upcoming appointments (next 5 from now, across all dates)
     const upcomingAppuntamenti = useMemo(() => {
         const now = new Date();
-        const all = upcomingData?.data || [];
+        const all = asList(upcomingData);
 
         // From upcoming appointments, find next 5 future ones (PRENOTATO/CONFERMATO/IN_ATTESA)
         return [...all]

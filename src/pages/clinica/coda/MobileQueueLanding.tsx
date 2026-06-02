@@ -599,13 +599,14 @@ const MobileQueueLanding: React.FC = () => {
 
             // Pass slot selection: pre-generated slotId OR computed time+medico
             if (selectedSlot) {
-                // Build local datetime string from session date + slot time
-                // Uses "YYYY-MM-DDTHH:mm:00" format (no Z suffix) so it's interpreted as local time,
-                // matching the convention used by AppuntamentoForm for consistent timezone handling.
+                // Build proper UTC ISO string from session date + slot time (Italian local)
+                // The browser is in Italian timezone, so new Date("YYYY-MM-DDTHH:mm:00") correctly
+                // interprets the naive string as Italian local time, then .toISOString() converts to UTC.
+                // This matches the convention used by AppuntamentoForm (appointmentDate.toISOString()).
                 if (sessionInfo?.date && selectedSlot.oraInizio) {
                     const sessionDate = new Date(sessionInfo.date);
                     const dateStr = `${sessionDate.getUTCFullYear()}-${String(sessionDate.getUTCMonth() + 1).padStart(2, '0')}-${String(sessionDate.getUTCDate()).padStart(2, '0')}`;
-                    body.selectedDateTime = `${dateStr}T${selectedSlot.oraInizio}:00`;
+                    body.selectedDateTime = new Date(`${dateStr}T${selectedSlot.oraInizio}:00`).toISOString();
                 }
 
                 if (selectedSlot.slotId) {
@@ -885,7 +886,7 @@ const MobileQueueLanding: React.FC = () => {
                         </p>
                     </CardHeader>
 
-                    <CardContent className="flex-1 overflow-y-auto space-y-4 pb-6">
+                    <CardContent className="flex-1 overflow-y-auto space-y-4 pb-4">
                         {questionarioCampi.map((campo) => {
                             if (!isFieldVisible(campo)) return null;
 
@@ -1074,38 +1075,38 @@ const MobileQueueLanding: React.FC = () => {
                                 </div>
                             );
                         })}
-
-                        {/* Actions */}
-                        <div className="pt-4 space-y-3 flex-shrink-0">
-                            <Button
-                                onClick={handleSubmitQuestionario}
-                                disabled={isSubmittingQuestionario}
-                                className="w-full bg-teal-600 hover:bg-teal-700"
-                            >
-                                {isSubmittingQuestionario ? (
-                                    <>
-                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                        Invio in corso...
-                                    </>
-                                ) : (
-                                    <>
-                                        <CheckCircle className="w-4 h-4 mr-2" />
-                                        Invia questionario
-                                    </>
-                                )}
-                            </Button>
-
-                            {questionarioPendingData?.mode !== 'ALL' && (
-                                <Button
-                                    variant="ghost"
-                                    onClick={handleSkipQuestionario}
-                                    className="w-full text-gray-500"
-                                >
-                                    Salta questionario
-                                </Button>
-                            )}
-                        </div>
                     </CardContent>
+
+                    {/* Sticky footer - always visible */}
+                    <div className="flex-shrink-0 border-t border-gray-200 p-4 space-y-3">
+                        <Button
+                            onClick={handleSubmitQuestionario}
+                            disabled={isSubmittingQuestionario}
+                            className="w-full bg-teal-600 hover:bg-teal-700"
+                        >
+                            {isSubmittingQuestionario ? (
+                                <>
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                    Invio in corso...
+                                </>
+                            ) : (
+                                <>
+                                    <CheckCircle className="w-4 h-4 mr-2" />
+                                    Invia questionario
+                                </>
+                            )}
+                        </Button>
+
+                        {questionarioPendingData?.mode !== 'ALL' && (
+                            <Button
+                                variant="ghost"
+                                onClick={handleSkipQuestionario}
+                                className="w-full text-gray-500"
+                            >
+                                Salta questionario
+                            </Button>
+                        )}
+                    </div>
                 </Card>
             </div>
         );

@@ -22,7 +22,9 @@ import {
   auditLog,
   logger,
   preventiviService,
-  validate
+  validate,
+  isTrainerOnlyAccess,
+  getTrainerScheduleIds
 } from './common.js';
 import movimentoContabileService from '../../services/management/movimento-contabile-service.js';
 
@@ -48,10 +50,10 @@ const CLIENTE_TYPE_TO_SOGGETTO = {
 /**
  * GET /api/preventivi
  * Lista preventivi con filtri e paginazione
+ * TRAINER access: allowed — filtered to own schedules only
  */
 router.get('/',
   authenticate,
-  requirePermissions(['preventivi:read']),
   [
     query('page').optional().isInt({ min: 1 }).toInt(),
     query('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
@@ -62,21 +64,44 @@ router.get('/',
     query('scheduleId').optional().isUUID(),
     query('dataInizio').optional().isISO8601().toDate(),
     query('dataFine').optional().isISO8601().toDate(),
-    query('search').optional().isString().trim()
+    query('search').optional().isString().trim(),
+    query('tenantIds').optional().isString(),
+    query('allTenants').optional().isString()
   ],
   validate,
   async (req, res) => {
     try {
-      const { tenantId } = req.person;
+      const { tenantId, globalRole, roles } = req.person;
       const page = req.query.page || 1;
       const limit = req.query.limit || 20;
       const skip = (page - 1) * limit;
 
+      // Multi-tenant support for admin cross-tenant viewing
+      const isCrossTenantAdmin = (globalRole === 'ADMIN' || globalRole === 'SUPER_ADMIN' ||
+        (roles || []).includes('ADMIN') || (roles || []).includes('SUPER_ADMIN'));
+
+      let tenantFilter;
+      if (isCrossTenantAdmin && req.query.tenantIds) {
+        const ids = req.query.tenantIds.split(',').map(id => id.trim()).filter(Boolean);
+        tenantFilter = ids.length === 1 ? { tenantId: ids[0] } : { tenantId: { in: ids } };
+      } else if (isCrossTenantAdmin && req.query.allTenants === 'true') {
+        tenantFilter = {}; // No tenantId filter for super admin all-tenant view
+      } else {
+        tenantFilter = { tenantId };
+      }
+
       // Build where clause
       const where = {
-        tenantId,
+        ...tenantFilter,
         deletedAt: null
       };
+
+      // TRAINER-only: restrict to own schedules' preventivi (hide COMPENSO_FORMATORE)
+      if (await isTrainerOnlyAccess(req.person.id, tenantId)) {
+        const trainerScheduleIds = await getTrainerScheduleIds(req.person.id, tenantId);
+        where.scheduledCourseId = { in: trainerScheduleIds };
+        where.tipoServizio = { not: 'COMPENSO_FORMATORE' };
+      }
 
       if (req.query.stato) {
         where.stato = req.query.stato;
@@ -166,8 +191,9 @@ router.get('/',
 
       res.json({
         success: true,
-        data: {
-          preventivi: mappedPreventivi,
+        data: mappedPreventivi,
+        pagination: {
+          page,
           currentPage: page,
           totalPages: Math.ceil(total / limit),
           total,
@@ -646,12 +672,25 @@ router.delete('/:id',
   authenticate,
   requirePermissions(['preventivi:delete']),
   auditLog('preventivi', 'DELETE'),
-  [param('id').isUUID()],
+  [
+    param('id').isUUID(),
+    body('deletionReason')
+      .isString()
+      .trim()
+      .isLength({ min: 10 })
+      .withMessage('deletionReason obbligatorio (minimo 10 caratteri)'),
+    body('stornaMovimentiFatturati')
+      .optional()
+      .custom(value => typeof value === 'boolean')
+      .withMessage('stornaMovimentiFatturati deve essere booleano')
+  ],
   validate,
   async (req, res) => {
     try {
       const { tenantId, id: userId } = req.person;
       const { id } = req.params;
+      const deletionReason = req.body.deletionReason.trim();
+      const stornaMovimentiFatturati = req.body.stornaMovimentiFatturati;
 
       const existing = await prisma.preventivo.findFirst({
         where: { id, tenantId, deletedAt: null }
@@ -664,17 +703,73 @@ router.delete('/:id',
         });
       }
 
-      // Non permettere eliminazione se fatturato
-      if (existing.stato === 'FATTURATO') {
-        return res.status(400).json({
+      const movimentiFatturati = await prisma.movimentoContabile.findMany({
+        where: {
+          preventivoId: id,
+          tenantId,
+          deletedAt: null,
+          stato: { in: ['FATTURATO', 'PAGATO'] }
+        },
+        select: {
+          id: true,
+          stato: true,
+          importoLordo: true,
+          fatturaElettronicaId: true
+        }
+      });
+
+      if (movimentiFatturati.length > 0 && stornaMovimentiFatturati === undefined) {
+        return res.status(409).json({
           success: false,
-          error: 'Impossibile eliminare preventivo fatturato'
+          code: 'PREVENTIVO_MOVIMENTI_FATTURATI',
+          error: 'Preventivo collegato a movimenti contabili fatturati',
+          message: 'Scegli se stornare i movimenti contabili fatturati collegati prima di eliminare il preventivo.',
+          requiresStornoDecision: true,
+          movimentiCount: movimentiFatturati.length
         });
       }
 
-      await prisma.preventivo.update({
-        where: { id },
-        data: { deletedAt: new Date() }
+      await prisma.$transaction(async (tx) => {
+        if (movimentiFatturati.length > 0 && stornaMovimentiFatturati === true) {
+          await tx.movimentoContabile.updateMany({
+            where: {
+              id: { in: movimentiFatturati.map(m => m.id) },
+              tenantId,
+              deletedAt: null
+            },
+            data: {
+              stato: 'STORNATO',
+              updatedBy: userId,
+              note: `Stornato per eliminazione preventivo ${existing.numero}: ${deletionReason}`
+            }
+          });
+        }
+
+        await tx.preventivo.update({
+          where: { id },
+          data: { deletedAt: new Date() }
+        });
+
+        await tx.gdprAuditLog.create({
+          data: {
+            tenantId,
+            personId: userId,
+            resourceType: 'Preventivo',
+            resourceId: id,
+            action: 'DELETE',
+            dataAccessed: {
+              deletionReason,
+              numero: existing.numero,
+              stato: existing.stato,
+              tipoServizio: existing.tipoServizio,
+              movimentiFatturati: movimentiFatturati.map(m => ({ id: m.id, stato: m.stato, fatturaElettronicaId: m.fatturaElettronicaId })),
+              stornaMovimentiFatturati: movimentiFatturati.length > 0 ? stornaMovimentiFatturati === true : null,
+              operation: 'SOFT_DELETE'
+            },
+            ipAddress: req.ip || null,
+            userAgent: req.get?.('user-agent') || null
+          }
+        });
       });
 
       res.json({
@@ -688,6 +783,7 @@ router.delete('/:id',
         preventivoId: id,
         numero: existing.numero,
         userId,
+        deletionReason,
         tenantId
       });
 

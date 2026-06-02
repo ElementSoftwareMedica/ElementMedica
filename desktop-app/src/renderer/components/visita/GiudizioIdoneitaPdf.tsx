@@ -39,8 +39,9 @@ export interface GiudizioIdoneitaPdfProps {
 
 const GIUDIZIO_LABELS: Record<string, string> = {
     IDONEO: 'IDONEO',
-    IDONEO_CON_PRESCRIZIONI: 'IDONEO CON PRESCRIZIONI',
-    IDONEO_CON_LIMITAZIONI: 'IDONEO CON LIMITAZIONI',
+    IDONEO_CON_PRESCRIZIONI: 'IDONEO PARZIALE CON PRESCRIZIONI',
+    IDONEO_CON_LIMITAZIONI: 'IDONEO PARZIALE CON LIMITAZIONI',
+    IDONEO_CON_LIMITAZIONI_PRESCRIZIONI: 'IDONEO PARZIALE CON LIMITAZIONI E PRESCRIZIONI',
     NON_IDONEO_TEMPORANEO: 'TEMPORANEAMENTE NON IDONEO',
     NON_IDONEO_PERMANENTE: 'NON IDONEO',
 }
@@ -231,6 +232,7 @@ function GiudizioIdoneitaDocument({
             case 'IDONEO': return { backgroundColor: '#dcfce7', color: '#166534' }
             case 'IDONEO_CON_PRESCRIZIONI': return { backgroundColor: '#fef9c3', color: '#854d0e' }
             case 'IDONEO_CON_LIMITAZIONI': return { backgroundColor: '#ffedd5', color: '#9a3412' }
+            case 'IDONEO_CON_LIMITAZIONI_PRESCRIZIONI': return { backgroundColor: '#fff7ed', color: '#9a3412' }
             case 'NON_IDONEO_TEMPORANEO': return { backgroundColor: '#fee2e2', color: '#991b1b' }
             case 'NON_IDONEO_PERMANENTE': return { backgroundColor: '#fce7f3', color: '#9d174d' }
             default: return { backgroundColor: '#f3f4f6', color: '#374151' }

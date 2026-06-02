@@ -19,6 +19,175 @@ import { RBACService } from '../../services/RBACService.js';
 import { PERMISSIONS } from '../../constants/permissions.js';
 import { formatDateYMD } from '../../utils/dateUtils.js';
 
+const PRIVILEGED_CLINIC_ROLES = new Set(['ADMIN', 'SUPER_ADMIN', 'TENANT_ADMIN', 'COMPANY_ADMIN', 'CLINIC_ADMIN', 'SEGRETERIA_CLINICA']);
+
+function isDirectSorveglianzaMdlCreate(data) {
+    return !!(
+        data?.createdFromSorveglianzaSanitaria === true &&
+        data?.tipoVisitaMDL &&
+        data?.companyTenantProfileId
+    );
+}
+
+function getRoleTypes(req) {
+    return (req.person?.roles || []).map(role => typeof role === 'string' ? role : role?.roleType).filter(Boolean);
+}
+
+function isBaseMedico(req) {
+    const roles = getRoleTypes(req);
+    return roles.includes('MEDICO') &&
+        !roles.includes('MEDICO_COMPETENTE') &&
+        !roles.some(role => PRIVILEGED_CLINIC_ROLES.has(role));
+}
+
+function getItalianTimeHHMM(date) {
+    return new Intl.DateTimeFormat('it-IT', {
+        timeZone: 'Europe/Rome',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    }).format(date);
+}
+
+async function assertBaseMedicoCanBook(req, tenantId, data) {
+    if (!isBaseMedico(req)) return;
+    const targetMedicoId = data.medicoId;
+    const isOwnBooking = targetMedicoId === req.person.id;
+
+    if (isOwnBooking && !(await hasPermission(req, PERMISSIONS.APPUNTAMENTI_CREATE_SELF, tenantId))) {
+        const error = new Error('Non autorizzato a creare appuntamenti per se stesso');
+        error.statusCode = 403;
+        throw error;
+    }
+
+    if (!isOwnBooking && !(await hasPermission(req, PERMISSIONS.APPUNTAMENTI_CREATE_OTHERS, tenantId))) {
+        const error = new Error('Non autorizzato a prenotare appuntamenti per altri medici');
+        error.statusCode = 403;
+        throw error;
+    }
+
+    if (!isOwnBooking) return;
+
+    if (data.tipoVisitaMDL && data.companyTenantProfileId && data.isOverbooking === true) {
+        logger.info('Creazione appuntamento MdL senza slot consentita come overbooking controllato', {
+            component: 'appuntamenti-controller',
+            action: 'assertBaseMedicoCanBook',
+            personId: req.person.id,
+            tenantId
+        });
+        return;
+    }
+
+    const appointmentDate = new Date(data.dataOra);
+    const startOfDay = new Date(appointmentDate);
+    startOfDay.setUTCHours(0, 0, 0, 0);
+    const endOfDay = new Date(appointmentDate);
+    endOfDay.setUTCHours(23, 59, 59, 999);
+    const time = getItalianTimeHHMM(appointmentDate);
+
+    const ownSlot = await prisma.slotDisponibilita.findFirst({
+        where: {
+            tenantId,
+            deletedAt: null,
+            medicoId: req.person.id,
+            ambulatorioId: data.ambulatorioId,
+            disponibile: true,
+            data: { gte: startOfDay, lte: endOfDay },
+            oraInizio: { lte: time },
+            oraFine: { gt: time }
+        },
+        select: { id: true }
+    });
+
+    if (!ownSlot) {
+        const error = new Error('Appuntamento consentito solo su uno slot disponibilita del medico corrente');
+        error.statusCode = 403;
+        throw error;
+    }
+}
+
+async function hasPermission(req, permission, tenantId) {
+    const perms = req.person?.permissions;
+    if (Array.isArray(perms) && perms.includes(permission)) return true;
+    if (perms && typeof perms === 'object' && perms[permission] === true) return true;
+    return RBACService.hasPermission(req.person.id, permission, null, tenantId);
+}
+
+async function getSameBranchMedicoIds(personId, tenantId) {
+    const profile = await prisma.personTenantProfile.findFirst({
+        where: { personId, tenantId, deletedAt: null, isActive: true },
+        select: { specialties: true }
+    });
+    const specialties = profile?.specialties || [];
+    if (specialties.length === 0) return [personId];
+
+    const medici = await prisma.person.findMany({
+        where: {
+            deletedAt: null,
+            personRoles: {
+                some: { tenantId, roleType: 'MEDICO', isActive: true, deletedAt: null }
+            },
+            tenantProfiles: {
+                some: {
+                    tenantId,
+                    deletedAt: null,
+                    isActive: true,
+                    specialties: { hasSome: specialties }
+                }
+            }
+        },
+        select: { id: true }
+    });
+    return medici.map(m => m.id);
+}
+
+async function resolveAppointmentVisibility(req, tenantId) {
+    if (!isBaseMedico(req)) {
+        return { canViewOtherMedici: true, medicoIds: null };
+    }
+
+    const [legacyAll, all, sameBranch, createOthers, editOthers] = await Promise.all([
+        hasPermission(req, PERMISSIONS.APPUNTAMENTI_VIEW_OTHERS, tenantId),
+        hasPermission(req, PERMISSIONS.APPUNTAMENTI_VIEW_OTHERS_ALL, tenantId),
+        hasPermission(req, PERMISSIONS.APPUNTAMENTI_VIEW_OTHERS_SAME_BRANCH, tenantId),
+        hasPermission(req, PERMISSIONS.APPUNTAMENTI_CREATE_OTHERS, tenantId),
+        hasPermission(req, PERMISSIONS.APPUNTAMENTI_EDIT_OTHERS, tenantId)
+    ]);
+
+    if (legacyAll || all || createOthers || editOthers) return { canViewOtherMedici: true, medicoIds: null };
+    if (sameBranch) {
+        return {
+            canViewOtherMedici: true,
+            medicoIds: await getSameBranchMedicoIds(req.person.id, tenantId)
+        };
+    }
+    return { canViewOtherMedici: false, medicoIds: [req.person.id] };
+}
+
+async function assertBaseMedicoCanOpenAppointment(req, tenantId, appuntamento, mode = 'read') {
+    if (!isBaseMedico(req)) return;
+    if (appuntamento?.medicoId === req.person.id) return;
+
+    if (mode === 'read') {
+        const visibility = await resolveAppointmentVisibility(req, tenantId);
+        if (!visibility.medicoIds || visibility.medicoIds.includes(appuntamento?.medicoId)) return;
+    }
+    if (mode === 'edit' && await hasPermission(req, PERMISSIONS.APPUNTAMENTI_EDIT_OTHERS, tenantId)) return;
+
+    const error = new Error('Non autorizzato ad aprire questo appuntamento');
+    error.statusCode = 403;
+    throw error;
+}
+
+function respondControllerError(res, error, fallbackError) {
+    const statusCode = error?.statusCode || 500;
+    res.status(statusCode).json({
+        success: false,
+        error: statusCode === 403 ? error.message : fallbackError,
+        message: statusCode === 403 ? error.message : 'Errore interno del server'
+    });
+}
+
 /**
  * Lista appuntamenti con filtri e paginazione (supporta multi-tenant)
  * Gestisce il permesso VIEW_OTHERS: se l'utente è un medico senza questo permesso,
@@ -81,22 +250,10 @@ export const getAll = async (req, res) => {
         const filters = req.query.filters || {};
 
         // === VIEW_OTHERS PERMISSION CHECK ===
-        // Se l'utente è un medico senza permesso VIEW_OTHERS, filtra solo i propri appuntamenti
+        // Se l'utente è un medico base, filtra per propri appuntamenti, stessa branca o tutti
         let effectiveMedicoId = medicoId || filters.medicoId;
-        const hasViewOthersPermission = await RBACService.hasPermission(
-            personId,
-            PERMISSIONS.APPUNTAMENTI_VIEW_OTHERS
-        );
-
-        if (!hasViewOthersPermission && !effectiveMedicoId) {
-            // Utente senza permesso VIEW_OTHERS: mostra solo i propri appuntamenti
-            effectiveMedicoId = personId;
-            logger.debug('VIEW_OTHERS permission denied - filtering by current user medicoId', {
-                component: 'appuntamenti-controller',
-                personId,
-                effectiveMedicoId
-            });
-        }
+        const visibility = await resolveAppointmentVisibility(req, tenantId);
+        const effectiveMedicoIds = !effectiveMedicoId ? visibility.medicoIds : null;
 
         const result = await AppuntamentoService.getAll(tenantId, {
             page: parseInt(page),
@@ -114,6 +271,7 @@ export const getAll = async (req, res) => {
             search,
             orderBy,
             orderDir,
+            medicoIds: effectiveMedicoIds,
             // Multi-tenant support
             tenantIds: effectiveTenantIds
         });
@@ -124,7 +282,7 @@ export const getAll = async (req, res) => {
             data: result.data,
             pagination: result.pagination,
             meta: {
-                canViewOtherMedici: hasViewOthersPermission
+                canViewOtherMedici: visibility.canViewOtherMedici
             }
         });
     } catch (error) {
@@ -157,28 +315,15 @@ export const getToday = async (req, res) => {
         // avoiding timezone discrepancies between /agenda and /calendario
         const todayStr = formatDateYMD(new Date());
 
-        // === VIEW_OTHERS PERMISSION CHECK ===
-        let medicoId = null;
-        const hasViewOthersPermission = await RBACService.hasPermission(
-            personId,
-            PERMISSIONS.APPUNTAMENTI_VIEW_OTHERS
-        );
-
-        if (!hasViewOthersPermission) {
-            // Utente senza permesso VIEW_OTHERS: mostra solo i propri appuntamenti
-            medicoId = personId;
-            logger.debug('getToday: VIEW_OTHERS permission denied - filtering by current user', {
-                component: 'appuntamenti-controller',
-                personId
-            });
-        }
+        const visibility = await resolveAppointmentVisibility(req, tenantId);
 
         const result = await AppuntamentoService.getAll(tenantId, {
             page: 1,
             limit: 100,
             dateFrom: todayStr,
             dateTo: todayStr,
-            medicoId,
+            medicoId: visibility.medicoIds?.length === 1 ? visibility.medicoIds[0] : null,
+            medicoIds: visibility.medicoIds?.length > 1 ? visibility.medicoIds : null,
             orderBy: 'dataOra',
             orderDir: 'asc'
         });
@@ -188,7 +333,7 @@ export const getToday = async (req, res) => {
             data: result.data,
             count: result.data.length,
             meta: {
-                canViewOtherMedici: hasViewOthersPermission
+                canViewOtherMedici: visibility.canViewOtherMedici
             }
         });
     } catch (error) {
@@ -222,6 +367,7 @@ export const getById = async (req, res) => {
                 error: 'Appuntamento non trovato'
             });
         }
+        await assertBaseMedicoCanOpenAppointment(req, tenantId, appuntamento, 'read');
 
         res.json({
             success: true,
@@ -235,11 +381,7 @@ export const getById = async (req, res) => {
             tenantId: getEffectiveTenantId(req)
         });
 
-        res.status(500).json({
-            success: false,
-            error: 'Errore nel recupero dell\'appuntamento',
-            message: 'Errore interno del server'
-        });
+        respondControllerError(res, error, 'Errore nel recupero dell\'appuntamento');
     }
 };
 
@@ -298,8 +440,16 @@ export const create = async (req, res) => {
     try {
         const tenantId = getEffectiveTenantId(req);
         const createdBy = req.person.id;
+        const payload = { ...req.body };
 
-        const appuntamento = await AppuntamentoService.create(req.body, tenantId, createdBy);
+        if (isDirectSorveglianzaMdlCreate(payload)) {
+            payload.medicoId = req.person.id;
+            payload.isOverbooking = payload.isOverbooking ?? !payload.ambulatorioId;
+        }
+
+        await assertBaseMedicoCanBook(req, tenantId, payload);
+
+        const appuntamento = await AppuntamentoService.create(payload, tenantId, createdBy);
 
         res.status(201).json({
             success: true,
@@ -325,14 +475,11 @@ export const create = async (req, res) => {
 
         logger.error('Failed to create appuntamento', {
             component: 'appuntamenti-controller',
-            error: 'Errore interno del server',
+            error: error?.message || 'Errore interno del server',
+            stack: error?.stack,
             tenantId
         });
-        res.status(500).json({
-            success: false,
-            error: 'Errore nella creazione dell\'appuntamento',
-            message: 'Errore interno del server'
-        });
+        respondControllerError(res, error, 'Errore nella creazione dell\'appuntamento');
     }
 };
 
@@ -345,6 +492,14 @@ export const update = async (req, res) => {
     try {
         const tenantId = getEffectiveTenantId(req);
         const updatedBy = req.person.id;
+        const existing = await AppuntamentoService.getById(req.params.id, tenantId);
+        if (!existing) {
+            return res.status(404).json({
+                success: false,
+                error: 'Appuntamento non trovato'
+            });
+        }
+        await assertBaseMedicoCanOpenAppointment(req, tenantId, existing, 'edit');
 
         const appuntamento = await AppuntamentoService.update(
             req.params.id,
@@ -373,11 +528,7 @@ export const update = async (req, res) => {
             tenantId: getEffectiveTenantId(req)
         });
 
-        res.status(500).json({
-            success: false,
-            error: 'Errore nell\'aggiornamento dell\'appuntamento',
-            message: 'Errore interno del server'
-        });
+        respondControllerError(res, error, 'Errore nell\'aggiornamento dell\'appuntamento');
     }
 };
 
@@ -389,7 +540,7 @@ export const update = async (req, res) => {
 export const updateStato = async (req, res) => {
     try {
         const tenantId = getEffectiveTenantId(req);
-        const { stato } = req.body;
+        const { stato, motivo, motivoAnnullamento } = req.body;
 
         if (!stato) {
             return res.status(400).json({
@@ -397,11 +548,26 @@ export const updateStato = async (req, res) => {
                 error: 'Stato è obbligatorio'
             });
         }
+        const existing = await AppuntamentoService.getById(req.params.id, tenantId);
+        if (!existing) {
+            return res.status(404).json({
+                success: false,
+                error: 'Appuntamento non trovato'
+            });
+        }
+        await assertBaseMedicoCanOpenAppointment(req, tenantId, existing, 'edit');
 
         const appuntamento = await AppuntamentoService.updateStato(
             req.params.id,
             stato,
-            tenantId
+            tenantId,
+            {
+                motivo,
+                motivoAnnullamento,
+                updatedBy: req.person.id,
+                ipAddress: req.ip || null,
+                userAgent: req.get?.('user-agent') || null
+            }
         );
 
         if (!appuntamento) {
@@ -433,11 +599,7 @@ export const updateStato = async (req, res) => {
             tenantId: getEffectiveTenantId(req)
         });
 
-        res.status(500).json({
-            success: false,
-            error: 'Errore nell\'aggiornamento dello stato',
-            message: 'Errore interno del server'
-        });
+        respondControllerError(res, error, 'Errore nell\'aggiornamento dello stato');
     }
 };
 
@@ -449,8 +611,31 @@ export const updateStato = async (req, res) => {
 export const remove = async (req, res) => {
     try {
         const tenantId = getEffectiveTenantId(req);
+        const { deletionReason } = req.body || {};
+        const normalizedDeletionReason = typeof deletionReason === 'string' ? deletionReason.trim() : '';
 
-        const deleted = await AppuntamentoService.delete(req.params.id, tenantId);
+        if (normalizedDeletionReason.length < 10) {
+            return res.status(400).json({
+                success: false,
+                error: 'deletionReason obbligatorio (minimo 10 caratteri)'
+            });
+        }
+
+        const existing = await AppuntamentoService.getById(req.params.id, tenantId);
+        if (!existing) {
+            return res.status(404).json({
+                success: false,
+                error: 'Appuntamento non trovato'
+            });
+        }
+        await assertBaseMedicoCanOpenAppointment(req, tenantId, existing, 'edit');
+
+        const deleted = await AppuntamentoService.delete(req.params.id, tenantId, {
+            deletionReason: normalizedDeletionReason,
+            deletedBy: req.person.id,
+            ipAddress: req.ip || null,
+            userAgent: req.get?.('user-agent') || null
+        });
 
         if (!deleted) {
             return res.status(404).json({
@@ -477,11 +662,7 @@ export const remove = async (req, res) => {
             tenantId: getEffectiveTenantId(req)
         });
 
-        res.status(500).json({
-            success: false,
-            error: 'Errore nell\'eliminazione dell\'appuntamento',
-            message: 'Errore interno del server'
-        });
+        respondControllerError(res, error, 'Errore nell\'eliminazione dell\'appuntamento');
     }
 };
 
@@ -495,6 +676,14 @@ export const accetta = async (req, res) => {
     try {
         const tenantId = getEffectiveTenantId(req);
         const accettatoDaId = req.person.id;
+        const existing = await AppuntamentoService.getById(req.params.id, tenantId);
+        if (!existing) {
+            return res.status(404).json({
+                success: false,
+                error: 'Appuntamento non trovato'
+            });
+        }
+        await assertBaseMedicoCanOpenAppointment(req, tenantId, existing, 'edit');
 
         // Dati opzionali dal body (P61: aggiunto noteInterne)
         const { convenzioneId, pazienteId, note, noteInterne, stato: statoRichiesto } = req.body || {};
@@ -684,11 +873,7 @@ export const accetta = async (req, res) => {
             tenantId: getEffectiveTenantId(req)
         });
 
-        res.status(500).json({
-            success: false,
-            error: 'Errore nell\'accettazione del paziente',
-            message: 'Errore interno del server'
-        });
+        respondControllerError(res, error, 'Errore nell\'accettazione del paziente');
     }
 };
 
@@ -700,6 +885,14 @@ export const accetta = async (req, res) => {
 export const chiama = async (req, res) => {
     try {
         const tenantId = getEffectiveTenantId(req);
+        const existing = await AppuntamentoService.getById(req.params.id, tenantId);
+        if (!existing) {
+            return res.status(404).json({
+                success: false,
+                error: 'Appuntamento non trovato'
+            });
+        }
+        await assertBaseMedicoCanOpenAppointment(req, tenantId, existing, 'edit');
 
         const appuntamento = await AppuntamentoService.updateStato(
             req.params.id,
@@ -734,11 +927,7 @@ export const chiama = async (req, res) => {
             tenantId: getEffectiveTenantId(req)
         });
 
-        res.status(500).json({
-            success: false,
-            error: 'Errore nella chiamata del paziente',
-            message: 'Errore interno del server'
-        });
+        respondControllerError(res, error, 'Errore nella chiamata del paziente');
     }
 };
 
@@ -751,6 +940,14 @@ export const chiama = async (req, res) => {
 export const registraPagamento = async (req, res) => {
     try {
         const tenantId = getEffectiveTenantId(req);
+        const existing = await AppuntamentoService.getById(req.params.id, tenantId);
+        if (!existing) {
+            return res.status(404).json({
+                success: false,
+                error: 'Appuntamento non trovato'
+            });
+        }
+        await assertBaseMedicoCanOpenAppointment(req, tenantId, existing, 'edit');
 
         const appuntamento = await AppuntamentoService.registraPagamento(
             req.params.id,
@@ -786,11 +983,7 @@ export const registraPagamento = async (req, res) => {
             tenantId: getEffectiveTenantId(req)
         });
 
-        res.status(500).json({
-            success: false,
-            error: 'Errore nella registrazione del pagamento',
-            message: 'Errore interno del server'
-        });
+        respondControllerError(res, error, 'Errore nella registrazione del pagamento');
     }
 };
 

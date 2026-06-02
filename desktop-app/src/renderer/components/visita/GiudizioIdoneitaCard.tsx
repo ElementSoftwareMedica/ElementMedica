@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Scale, ChevronDown, ChevronRight, Save, FileDown, Mail, Loader2 } from 'lucide-react'
 import DatePickerElegante from '@/components/ui/DatePickerElegante'
+import { ElegantSelect } from '../ElegantControls'
 
 // Dynamic import: @react-pdf/renderer is ~2MB and only needed on PDF download
 const loadPdfDownloader = () => import('./GiudizioIdoneitaPdf').then(m => m.downloadGiudizioPdf)
@@ -35,8 +36,9 @@ const TIPI_VISITA: Array<{ value: string; label: string }> = [
 
 const ESITI: Array<{ value: string; label: string; color: string }> = [
     { value: 'IDONEO', label: 'Idoneo', color: 'bg-green-100 text-green-800 border-green-300' },
-    { value: 'IDONEO_CON_PRESCRIZIONI', label: 'Idoneo con prescrizioni', color: 'bg-blue-100 text-blue-800 border-blue-300' },
-    { value: 'IDONEO_CON_LIMITAZIONI', label: 'Idoneo con limitazioni', color: 'bg-yellow-100 text-yellow-800 border-yellow-300' },
+    { value: 'IDONEO_CON_PRESCRIZIONI', label: 'Idoneo parziale con prescrizioni', color: 'bg-blue-100 text-blue-800 border-blue-300' },
+    { value: 'IDONEO_CON_LIMITAZIONI', label: 'Idoneo parziale con limitazioni', color: 'bg-yellow-100 text-yellow-800 border-yellow-300' },
+    { value: 'IDONEO_CON_LIMITAZIONI_PRESCRIZIONI', label: 'Idoneo parziale con limitazioni e prescrizioni', color: 'bg-amber-100 text-amber-800 border-amber-300' },
     { value: 'NON_IDONEO_TEMPORANEO', label: 'Non idoneo temporaneo', color: 'bg-orange-100 text-orange-800 border-orange-300' },
     { value: 'NON_IDONEO_PERMANENTE', label: 'Non idoneo permanente', color: 'bg-red-100 text-red-800 border-red-300' },
 ]
@@ -113,6 +115,22 @@ export function GiudizioIdoneitaCard({ visitId, personId, medicoId, tenantId, is
     // Save giudizio
     const handleSave = useCallback(async () => {
         if (!window.desktopApi || isSaving) return
+        if (esito === 'IDONEO_CON_PRESCRIZIONI' && !prescrizioni.trim()) {
+            setWorkflowState('error')
+            setWorkflowMessage('Inserisci almeno una prescrizione per il giudizio selezionato')
+            return
+        }
+        if (esito === 'IDONEO_CON_LIMITAZIONI' && !limitazioni.trim()) {
+            setWorkflowState('error')
+            setWorkflowMessage('Inserisci almeno una limitazione per il giudizio selezionato')
+            return
+        }
+        if (esito === 'IDONEO_CON_LIMITAZIONI_PRESCRIZIONI' && (!limitazioni.trim() || !prescrizioni.trim())) {
+            setWorkflowState('error')
+            setWorkflowMessage('Inserisci almeno una limitazione e una prescrizione per il giudizio selezionato')
+            return
+        }
+        setWorkflowMessage(null)
         setIsSaving(true)
 
         try {
@@ -263,17 +281,12 @@ export function GiudizioIdoneitaCard({ visitId, personId, medicoId, tenantId, is
                     {/* Tipo */}
                     <div>
                         <label className="block text-[10px] font-medium text-gray-600 mb-1">Tipo Visita</label>
-                        <select
+                        <ElegantSelect
                             value={tipo}
-                            onChange={(e) => setTipo(e.target.value)}
+                            onChange={setTipo}
                             disabled={isReadOnly}
-                            className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:bg-gray-50"
-                        >
-                            <option value="">Seleziona...</option>
-                            {TIPI_VISITA.map(t => (
-                                <option key={t.value} value={t.value}>{t.label}</option>
-                            ))}
-                        </select>
+                            options={[{ value: '', label: 'Seleziona...' }, ...TIPI_VISITA.map(t => ({ value: t.value, label: t.label }))]}
+                        />
                     </div>
 
                     {/* Esito — selection buttons */}
@@ -297,9 +310,11 @@ export function GiudizioIdoneitaCard({ visitId, personId, medicoId, tenantId, is
                     </div>
 
                     {/* Limitazioni & Prescrizioni — shown when relevant */}
-                    {(esito === 'IDONEO_CON_LIMITAZIONI' || esito === 'NON_IDONEO_TEMPORANEO') && (
+                    {(esito === 'IDONEO_CON_LIMITAZIONI' || esito === 'IDONEO_CON_LIMITAZIONI_PRESCRIZIONI' || esito === 'NON_IDONEO_TEMPORANEO') && (
                         <div>
-                            <label className="block text-[10px] font-medium text-gray-600 mb-1">Limitazioni</label>
+                            <label className="block text-[10px] font-medium text-gray-600 mb-1">
+                                Limitazioni {(esito === 'IDONEO_CON_LIMITAZIONI' || esito === 'IDONEO_CON_LIMITAZIONI_PRESCRIZIONI') && <span className="text-red-500">*</span>}
+                            </label>
                             <textarea
                                 value={limitazioni}
                                 onChange={(e) => setLimitazioni(e.target.value)}
@@ -311,9 +326,11 @@ export function GiudizioIdoneitaCard({ visitId, personId, medicoId, tenantId, is
                         </div>
                     )}
 
-                    {(esito === 'IDONEO_CON_PRESCRIZIONI' || esito === 'IDONEO_CON_LIMITAZIONI') && (
+                    {(esito === 'IDONEO_CON_PRESCRIZIONI' || esito === 'IDONEO_CON_LIMITAZIONI_PRESCRIZIONI') && (
                         <div>
-                            <label className="block text-[10px] font-medium text-gray-600 mb-1">Prescrizioni</label>
+                            <label className="block text-[10px] font-medium text-gray-600 mb-1">
+                                Prescrizioni {(esito === 'IDONEO_CON_PRESCRIZIONI' || esito === 'IDONEO_CON_LIMITAZIONI_PRESCRIZIONI') && <span className="text-red-500">*</span>}
+                            </label>
                             <textarea
                                 value={prescrizioni}
                                 onChange={(e) => setPrescrizioni(e.target.value)}

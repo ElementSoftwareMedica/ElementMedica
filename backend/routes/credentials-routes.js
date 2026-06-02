@@ -19,6 +19,7 @@ import { requirePermissions } from '../middleware/rbac.js';
 import logger from '../utils/logger.js';
 import prisma from '../config/prisma-optimization.js';
 import { getEffectiveTenantId } from '../utils/tenantHelper.js';
+import { isTrainerOnlyAccess, getTrainerEnrolledPersonIds } from '../utils/trainerAccess.js';
 
 const router = express.Router();
 const authenticateToken = authenticate; // Catena A: direct middleware
@@ -415,11 +416,11 @@ router.post(
  * POST /api/v1/credentials/participants-status
  * Ottiene lo stato login di un gruppo di partecipanti
  * Body: { personIds: string[] }
+ * TRAINER access: allowed — filtered to enrolled persons only
  */
 router.post(
     '/participants-status',
     authenticateToken,
-    requirePermission('users:read'),
     [
         body('personIds').isArray({ min: 1 }).withMessage('Almeno un ID persona richiesto'),
         body('personIds.*').isUUID().withMessage('ID persona non valido')
@@ -427,9 +428,18 @@ router.post(
     validateRequest,
     async (req, res) => {
         try {
-            const { personIds } = req.body;
+            let { personIds } = req.body;
             // P57/P59: use getEffectiveTenantId so super-admin cross-tenant operations work
             const tenantId = getEffectiveTenantId(req);
+
+            // TRAINER-only: filter personIds to enrolled persons only
+            if (await isTrainerOnlyAccess(req.person.id, tenantId)) {
+                const enrolledIds = await getTrainerEnrolledPersonIds(req.person.id, tenantId);
+                personIds = personIds.filter(id => enrolledIds.includes(id));
+                if (personIds.length === 0) {
+                    return res.json({ success: true, data: [] });
+                }
+            }
 
             logger.info('[participants-status] Starting query', { personIds: personIds.length, tenantId });
 

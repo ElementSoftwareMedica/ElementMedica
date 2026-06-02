@@ -22,7 +22,7 @@ export class PersonTenantProfileService {
             const response = await apiGet(`/api/v1/person-profiles/${personId}/tenant/${tenantId}`) as PersonTenantProfile;
             return response;
         } catch (error: unknown) {
-            if (error?.status === 404) {
+            if ((error as any)?.status === 404) {
                 return null;
             }
             throw error;
@@ -107,7 +107,7 @@ export class PersonTenantProfileService {
         try {
             return await apiGet(`/api/v1/person-profiles/${personId}/primary`) as PersonTenantProfile;
         } catch (error: unknown) {
-            if (error?.status === 404) {
+            if ((error as any)?.status === 404) {
                 return null;
             }
             throw error;

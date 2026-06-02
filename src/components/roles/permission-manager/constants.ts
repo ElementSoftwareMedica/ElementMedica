@@ -44,6 +44,96 @@ export const PERMISSION_ACTIONS = [
     color: 'text-red-600',
     bgColor: 'bg-red-50',
     borderColor: 'border-red-200'
+  },
+  {
+    id: 'write',
+    name: 'write',
+    displayName: 'Scrittura',
+    icon: Edit,
+    color: 'text-amber-600',
+    bgColor: 'bg-amber-50',
+    borderColor: 'border-amber-200'
+  },
+  {
+    id: 'manage',
+    name: 'manage',
+    displayName: 'Gestione completa',
+    icon: Settings,
+    color: 'text-violet-600',
+    bgColor: 'bg-violet-50',
+    borderColor: 'border-violet-200'
+  },
+  {
+    id: 'view_others_same_branch',
+    name: 'view_others_same_branch',
+    displayName: 'Vedi stessa branca',
+    icon: Calendar,
+    color: 'text-cyan-600',
+    bgColor: 'bg-cyan-50',
+    borderColor: 'border-cyan-200'
+  },
+  {
+    id: 'view_others_all',
+    name: 'view_others_all',
+    displayName: 'Vedi tutti i medici',
+    icon: Users,
+    color: 'text-sky-600',
+    bgColor: 'bg-sky-50',
+    borderColor: 'border-sky-200'
+  },
+  {
+    id: 'create_self',
+    name: 'create_self',
+    displayName: 'Crea propri',
+    icon: Plus,
+    color: 'text-green-600',
+    bgColor: 'bg-green-50',
+    borderColor: 'border-green-200'
+  },
+  {
+    id: 'create_others',
+    name: 'create_others',
+    displayName: 'Crea per altri',
+    icon: Users,
+    color: 'text-emerald-600',
+    bgColor: 'bg-emerald-50',
+    borderColor: 'border-emerald-200'
+  },
+  {
+    id: 'edit_others',
+    name: 'edit_others',
+    displayName: 'Modifica altri',
+    icon: Edit,
+    color: 'text-orange-600',
+    bgColor: 'bg-orange-50',
+    borderColor: 'border-orange-200'
+  },
+  {
+    id: 'change_refertante',
+    name: 'change_refertante',
+    displayName: 'Cambia refertante',
+    icon: Stethoscope,
+    color: 'text-teal-600',
+    bgColor: 'bg-teal-50',
+    borderColor: 'border-teal-200'
+  },
+  {
+    id: 'view_prices',
+    name: 'view_prices',
+    displayName: 'Vedi prezzi',
+    icon: Receipt,
+    color: 'text-indigo-600',
+    bgColor: 'bg-indigo-50',
+    borderColor: 'border-indigo-200'
+  },
+  {
+    id: 'manage_convenzioni',
+    name: 'manage_convenzioni',
+    displayName: 'Gestisci convenzioni',
+    icon: Percent,
+    color: 'text-rose-600',
+    bgColor: 'bg-rose-50',
+    borderColor: 'border-rose-200'
   }
 ] as const;
 
@@ -155,28 +245,28 @@ export const RELATION_TYPES = [
     name: 'MEDICO_AMBULATORIO',
     displayName: 'Medico - Ambulatori',
     description: 'Appuntamenti e visite degli ambulatori assegnati al medico',
-    applicableTo: ['appuntamenti', 'visite', 'ambulatori', 'slot_disponibilita', 'coda_pazienti']
+    applicableTo: ['appuntamenti', 'clinica.appuntamenti', 'visite', 'clinica.visite', 'ambulatori', 'slot_disponibilita', 'coda_pazienti']
   },
   {
     id: 'MEDICO_PAZIENTI',
     name: 'MEDICO_PAZIENTI',
     displayName: 'Medico - Pazienti',
     description: 'Visite, referti e documenti dei pazienti assegnati al medico',
-    applicableTo: ['visite', 'referti', 'documenti_clinici', 'appuntamenti', 'fatture_sanitarie', 'persons']
+    applicableTo: ['visite', 'clinica.visite', 'referti', 'documenti_clinici', 'appuntamenti', 'clinica.appuntamenti', 'fatture_sanitarie', 'persons']
   },
   {
     id: 'MEDICO_PRESTAZIONI',
     name: 'MEDICO_PRESTAZIONI',
     displayName: 'Medico - Prestazioni',
     description: 'Prestazioni a cui il medico è abilitato e relativi appuntamenti',
-    applicableTo: ['prestazioni', 'medici_abilitati', 'appuntamenti']
+    applicableTo: ['prestazioni', 'clinica.prestazioni', 'medici_abilitati', 'appuntamenti', 'clinica.appuntamenti']
   },
   {
     id: 'CLINIC_ADMIN_POLIAMBULATORIO',
     name: 'CLINIC_ADMIN_POLIAMBULATORIO',
     displayName: 'Admin Clinica - Poliambulatorio',
     description: 'Gestione completa di tutte le risorse del poliambulatorio',
-    applicableTo: ['poliambulatori', 'sedi_cliniche', 'ambulatori', 'prestazioni', 'appuntamenti', 'visite', 'referti', 'convenzioni', 'tariffari', 'fatture_sanitarie', 'strumenti', 'coda_pazienti']
+    applicableTo: ['poliambulatori', 'sedi_cliniche', 'ambulatori', 'prestazioni', 'clinica.prestazioni', 'appuntamenti', 'clinica.appuntamenti', 'visite', 'clinica.visite', 'referti', 'convenzioni', 'tariffari', 'fatture_sanitarie', 'movimenti_contabili', 'strumenti', 'coda_pazienti']
   },
   {
     id: 'AMBULATORIO_STRUMENTI',
@@ -273,14 +363,19 @@ export const ENTITY_ICON_MAP: Record<string, React.ComponentType<{ className?: s
   sedi_cliniche: MapPin,
   ambulatori: Stethoscope,
   prestazioni: Heart,
+  'clinica.prestazioni': Heart,
   medici_abilitati: UserCog,
   appuntamenti: Calendar,
+  'clinica.appuntamenti': Calendar,
   slot_disponibilita: Clock,
   visite: Stethoscope,
+  'clinica.visite': Stethoscope,
   referti: FileHeart,
   documenti_clinici: FileText,
   convenzioni: HandCoins,
   tariffari: Receipt,
+  movimenti_contabili: HandCoins,
+  'clinica.compensi': HandCoins,
   fatture_sanitarie: CreditCard,
   strumenti: Wrench,
   coda_pazienti: ListOrdered,

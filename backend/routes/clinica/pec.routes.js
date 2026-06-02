@@ -15,6 +15,7 @@
 import express from 'express';
 import { authenticate } from '../../middleware/auth.js';
 import { requirePermission } from '../../middleware/rbac.js';
+import { requireFeature } from '../../middleware/featureFlags.js';
 import PECService from '../../services/clinical/PECService.js';
 import IdoneityNotificationService from '../../services/clinical/IdoneityNotificationService.js';
 import logger from '../../utils/logger.js';
@@ -28,8 +29,9 @@ router.param('id', validateParamId);
 // MIDDLEWARE
 // ============================================
 
-// Tutte le routes richiedono autenticazione
+// Tutte le routes richiedono autenticazione + feature PEC_INTEGRATION
 router.use(authenticate);
+router.use(requireFeature('PEC_INTEGRATION'));
 
 // ============================================
 // ROUTES

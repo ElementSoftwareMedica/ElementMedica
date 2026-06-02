@@ -9,7 +9,7 @@
  * - SEO: Physician JSON-LD schema
  * 
  * Route: /medici/:medicoId
- * API: GET /api/public/doctors/:id
+ * API: GET /api/v1/public/doctors/:id
  * 
  * @module pages/public/DoctorProfilePage
  */
@@ -70,7 +70,7 @@ export const DoctorProfilePage: React.FC = () => {
     const fetchDoctor = async () => {
       try {
         setLoading(true);
-        const res = await fetch(`/api/public/doctors/${medicoId}`, {
+        const res = await fetch(`/api/v1/public/doctors/${medicoId}`, {
           headers: { 'X-Frontend-Id': BRAND_ID }
         });
         if (!res.ok) {
@@ -119,7 +119,7 @@ export const DoctorProfilePage: React.FC = () => {
   }
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('it-IT', {
+    return new Date(String(dateStr).split('T')[0] + 'T12:00:00').toLocaleDateString('it-IT', {
       weekday: 'short', day: 'numeric', month: 'short'
     });
   };

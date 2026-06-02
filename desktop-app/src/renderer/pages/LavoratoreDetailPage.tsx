@@ -19,7 +19,8 @@ import {
   AlertTriangle,
   ActivitySquare
 } from 'lucide-react'
-import { formatProtocolloPeriodicity, parseProtocolloPrestazioni } from '../utils/protocolloSanitario'
+import { formatProtocolloPeriodicity, normalizeProtocolloPrestazioni, type ProtocolloPrestazioneRow } from '../utils/protocolloSanitario'
+import { ElegantSelect } from '../components/ElegantControls'
 
 interface Paziente {
   id: string
@@ -86,7 +87,6 @@ interface Protocollo {
   mansioneNome: string | null
   mansioneId: string | null
   isActive: number
-  prestazioni: string | null
 }
 
 const CATEGORIE_RISCHIO = ['CHIMICO', 'FISICO', 'BIOLOGICO', 'ERGONOMICO', 'PSICOSOCIALE', 'MOVIMENTAZIONE', 'ALTRO'] as const
@@ -125,6 +125,7 @@ export function LavoratoreDetailPage(): JSX.Element {
   const [mansioneCatalog, setMansioneCatalog] = useState<Map<string, string>>(new Map())
   const [movimenti, setMovimenti] = useState<Movimento[]>([])
   const [protocolli, setProtocolli] = useState<Protocollo[]>([])
+  const [protocolloPrestazioni, setProtocolloPrestazioni] = useState<Map<string, ProtocolloPrestazioneRow[]>>(new Map())
   const [rischi, setRischi] = useState<RischioAggiuntivo[]>([])
   const [showAddRischio, setShowAddRischio] = useState(false)
   const [nuovoRischio, setNuovoRischio] = useState<NuovoRischioForm>({
@@ -206,6 +207,19 @@ export function LavoratoreDetailPage(): JSX.Element {
         (p.mansioneId && workerMansioniIds.has(p.mansioneId))
       )
       setProtocolli(linked)
+      const linkedProtocolloIds = new Set(linked.map(p => p.id))
+      const protocolloPrestazioniRows = await window.desktopApi.db.query({
+        table: 'protocollo_prestazioni',
+        where: { _isDeleted: 0 }
+      }).catch(() => []) as Array<ProtocolloPrestazioneRow & { protocolloId: string }>
+      const grouped = new Map<string, ProtocolloPrestazioneRow[]>()
+      for (const row of protocolloPrestazioniRows) {
+        if (!linkedProtocolloIds.has(row.protocolloId)) continue
+        const rows = grouped.get(row.protocolloId) || []
+        rows.push(row)
+        grouped.set(row.protocolloId, rows)
+      }
+      setProtocolloPrestazioni(grouped)
 
       // Load rischi aggiuntivi for this worker
       if (window.desktopApi.rischi) {
@@ -765,7 +779,7 @@ export function LavoratoreDetailPage(): JSX.Element {
             ) : (
               <div className="space-y-3">
                 {protocolli.map(p => {
-                  const prestazioni = parseProtocolloPrestazioni(p.prestazioni)
+                  const prestazioni = normalizeProtocolloPrestazioni(protocolloPrestazioni.get(p.id) || [])
                   return (
                     <div key={p.id} className="border border-gray-100 rounded-xl overflow-hidden">
                       <div className="px-3 py-2.5 bg-gray-50 flex items-center justify-between">
@@ -843,23 +857,19 @@ export function LavoratoreDetailPage(): JSX.Element {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Livello</label>
-                  <select
+                  <ElegantSelect
                     value={nuovoRischio.livello}
-                    onChange={e => setNuovoRischio(p => ({ ...p, livello: e.target.value }))}
-                    className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
-                  >
-                    {LIVELLI_RISCHIO.map(l => <option key={l} value={l}>{l}</option>)}
-                  </select>
+                    onChange={livello => setNuovoRischio(p => ({ ...p, livello }))}
+                    options={LIVELLI_RISCHIO.map(l => ({ value: l, label: l }))}
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Categoria</label>
-                  <select
+                  <ElegantSelect
                     value={nuovoRischio.categoria}
-                    onChange={e => setNuovoRischio(p => ({ ...p, categoria: e.target.value }))}
-                    className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
-                  >
-                    {CATEGORIE_RISCHIO.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
+                    onChange={categoria => setNuovoRischio(p => ({ ...p, categoria }))}
+                    options={CATEGORIE_RISCHIO.map(c => ({ value: c, label: c }))}
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Fonte rischio</label>
@@ -914,17 +924,16 @@ export function LavoratoreDetailPage(): JSX.Element {
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-xs font-semibold text-gray-800">{r.codiceRischio}</p>
                         {editingRischioId === r.id ? (
-                          <select
-                            autoFocus
+                          <div className="w-28" onClick={e => e.stopPropagation()}>
+                          <ElegantSelect
                             value={editingLivello}
-                            onChange={e => setEditingLivello(e.target.value)}
-                            onBlur={() => handleUpdateLivello(r.id, editingLivello)}
-                            onKeyDown={e => { if (e.key === 'Enter') handleUpdateLivello(r.id, editingLivello); if (e.key === 'Escape') setEditingRischioId(null) }}
-                            className="text-[10px] px-1.5 py-0.5 rounded-full border border-gray-300 bg-white text-gray-700 cursor-pointer"
-                            onClick={e => e.stopPropagation()}
-                          >
-                            {LIVELLI_RISCHIO.map(l => <option key={l} value={l}>{l}</option>)}
-                          </select>
+                            onChange={value => {
+                              setEditingLivello(value)
+                              void handleUpdateLivello(r.id, value)
+                            }}
+                            options={LIVELLI_RISCHIO.map(l => ({ value: l, label: l }))}
+                          />
+                          </div>
                         ) : (
                           <span
                             className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${livelloColor} cursor-pointer hover:opacity-75 transition-opacity`}

@@ -22,6 +22,7 @@ import { formatTime } from '../../../../../utils/dateUtils';
 import { useToast } from '../../../../../hooks/useToast';
 import type { EditDisponibilitaModalProps } from './types';
 import { DatePickerElegante } from '../../../../../components/ui/DatePickerElegante';
+import { TimePickerElegante } from '../../../../../components/ui/TimePickerElegante';
 
 export const EditDisponibilitaModal: React.FC<EditDisponibilitaModalProps> = ({
     isOpen,
@@ -140,11 +141,11 @@ export const EditDisponibilitaModal: React.FC<EditDisponibilitaModalProps> = ({
                                 <Clock className="h-4 w-4 inline mr-1" />
                                 Ora Inizio
                             </label>
-                            <input
-                                type="time"
+                            <TimePickerElegante
                                 value={startTime}
-                                onChange={(e) => setStartTime(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                                onChange={setStartTime}
+                                minuteStep={5}
+                                placeholder="Ora inizio"
                             />
                         </div>
                         <div>
@@ -152,11 +153,11 @@ export const EditDisponibilitaModal: React.FC<EditDisponibilitaModalProps> = ({
                                 <Clock className="h-4 w-4 inline mr-1" />
                                 Ora Fine
                             </label>
-                            <input
-                                type="time"
+                            <TimePickerElegante
                                 value={endTime}
-                                onChange={(e) => setEndTime(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                                onChange={setEndTime}
+                                minuteStep={5}
+                                placeholder="Ora fine"
                             />
                         </div>
                     </div>

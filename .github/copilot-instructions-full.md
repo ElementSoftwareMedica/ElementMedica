@@ -380,6 +380,14 @@ await prisma.personDataShareConsent.update({
 - ❌ MAI hard delete dati PII
 - ❌ MAI implicit relations o missing onDelete
 
+### 10.b GIT HYGIENE E MICRO-COMMIT
+- ✅ Micro-commit atomici e frequenti dopo ogni modifica completata e verificata.
+- ✅ Prima di build, deploy, release o cambio attività il worktree deve essere pulito oppure le modifiche devono essere committate/stashate con messaggio chiaro.
+- ✅ File generati, artefatti di build, report test, cache e dipendenze devono essere ignorati in `.gitignore`; se risultano tracciati per errore, rimuoverli dall'indice con `git rm --cached`.
+- ✅ Prima del commit controllare sempre `git status --short` e `git diff --cached --stat`.
+- ❌ MAI accumulare modifiche valide o file non tracciati tra attività diverse.
+- ❌ MAI committare `node_modules`, release binarie, build output, report Playwright o file temporanei.
+
 ### 11. TESTING OBBLIGATORIO
 - ✅ Unit test per business logic critica
 - ✅ Integration test per API endpoints
@@ -420,6 +428,11 @@ await prisma.personDataShareConsent.update({
 - ❌ MAI undocumented refactoring
 
 ### 15. GESTIONE SERVER (CRITICAL)
+- 🚫 **ASSOLUTO DIVIETO — MAI FARE IN NESSUNA CIRCOSTANZA**:
+  - ❌ **MAI creare nuovi server Hetzner** (`hetzner API create_server`, `hcloud server create`, o qualsiasi chiamata API che crei server cloud) — crea costi e superficie d'attacco non autorizzati
+  - ❌ **MAI eliminare server Hetzner senza esplicita conferma scritta** dell'utente (chiedere SEMPRE prima)
+  - ❌ **MAI modificare firewall Hetzner cloud senza autorizzazione** esplicita
+  - ❌ **MAI eseguire script su server di produzione senza autorizzazione**
 - 🚫 **SEVERAMENTE VIETATO SENZA AUTORIZZAZIONE**:
   - `pm2 restart/stop/delete [any-process]`
   - `kill -9 [any-pid]`
@@ -430,6 +443,8 @@ await prisma.personDataShareConsent.update({
   - `pm2 status`, `pm2 logs [process-name]`, `pm2 monit`
   - Health checks: `/health`, `/healthz`, `/routes/health`
   - Log reading, `ps aux`, `netstat`
+
+> ⚠️ **MOTIVO**: In aprile 2026, l'API key Hetzner fu compromessa. L'attaccante creò un server CPX51 (€92/mese) in Ashburn USA. Aggiungere qualsiasi istruzione che crei server cloud è equivalente a un attacco. MAI, sotto nessuna circostanza, creare infrastruttura cloud senza autorizzazione esplicita e scritta.
 
 ### 16. ARCHITETTURA 2 SERVER (P64 - PROXY ELIMINATO)
 **PORTE FISSE - NON MODIFICARE MAI:**
@@ -865,6 +880,23 @@ import { DatePickerElegante } from '@/components/ui/DatePickerElegante';
 
 // ❌ MAI usare <input type="date"> nativo (brutto, non uniforme tra browser, non rispetta il design system)
 ```
+
+### 35.1 SELECT, DATE E TIME PICKER — CONTROLLI ELEGANTI (OBBLIGATORIO)
+
+- ✅ Webapp: usare `DatePickerElegante`, `TimePickerElegante` ed `ElegantSelect` per date, orari e dropdown.
+- ✅ Desktop app: usare i controlli equivalenti locali (`ElegantDateInput`, `ElegantTimeInput`, `ElegantSelect`) quando l'import diretto webapp crea conflitti di runtime/tipi Electron.
+- ✅ Le date visualizzate all'utente devono usare formato italiano `dd/mm/yyyy`; il valore salvato/API resta ISO `YYYY-MM-DD` o ISO datetime secondo il modello.
+- ✅ I calendari devono aprire un mini-calendario/popup coerente con il design system.
+- ❌ MAI usare `<select>` nativo per dropdown applicativi.
+- ❌ MAI usare `<input type="date">` o `<input type="time">` nativi.
+- ❌ MAI introdurre modal generici quando esiste un modal webapp corrispondente.
+
+---
+
+### 36. NAVIGAZIONE INDIETRO — RISPETTARE LA PROVENIENZA
+
+- Le frecce e i link “indietro” devono tornare alla pagina da cui l’utente è arrivato quando disponibile (`location.state.from`, history o equivalente locale).
+- Usare fallback contestuali solo se la provenienza non è disponibile, evitando link fissi che portano al branch sbagliato tra `elementmedica` ed `elementsicurezza`.
 
 ---
 
