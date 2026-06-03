@@ -1,102 +1,39 @@
 #!/bin/bash
-# =============================================================================
-# Deploy Cartella Backend - ElementMedica
-# =============================================================================
-# Uso: ./deploy-backend-folder.sh routes
-# =============================================================================
+# Deploy mirato di una cartella backend.
+# Uso: ./scripts/deploy-backend-folder.sh routes [--yes] [--dry-run] [--restart|--no-restart]
 
-set -e
+set -euo pipefail
 
-# Colori
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-NC='\033[0m'
-
-# Configurazione
-SSH_KEY="$HOME/.ssh/id_ed25519"
-SERVER="root@178.104.197.134"
-REMOTE_BASE="/var/www/elementsicurezza/backend"
-
-# Directory base
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$BASE_DIR"
+source "$BASE_DIR/scripts/deploy-config.sh"
 
-# Verifica argomento
-if [ -z "$1" ]; then
-    echo -e "${RED}❌ Specificare la cartella da deployare${NC}"
-    echo ""
-    echo "Uso: $0 <nome-cartella>"
-    echo ""
-    echo "Cartelle disponibili:"
-    ls -d backend/*/ | sed 's|backend/||g' | sed 's|/||g' | while read dir; do
-        echo "  • $dir"
-    done
+if [ $# -lt 1 ]; then
+    echo "Uso: $0 <cartella-backend> [--yes] [--dry-run] [--restart|--no-restart]"
     exit 1
 fi
 
 FOLDER="$1"
-LOCAL_FOLDER="backend/$FOLDER"
+shift
+deploy_parse_common_flags "$@"
 
-# Verifica esistenza cartella
+LOCAL_FOLDER="backend/$FOLDER"
 if [ ! -d "$LOCAL_FOLDER" ]; then
-    echo -e "${RED}❌ Cartella non trovata: $LOCAL_FOLDER${NC}"
+    echo "Cartella non trovata: $LOCAL_FOLDER"
     exit 1
 fi
 
-echo -e "${BLUE}🚀 Deploy Backend Folder${NC}"
-echo "========================================"
+echo "Deploy cartella backend"
 echo "Folder: $FOLDER/"
-echo "Server: $SERVER"
-echo ""
+echo "Target: $DEPLOY_SERVER:$DEPLOY_BACKEND_PATH/$FOLDER/"
+echo "Mode:   $([ "$DEPLOY_DRY_RUN" = "true" ] && echo dry-run || echo apply)"
 
-# Mostra diff
-echo -e "${BLUE}📊 File da sincronizzare:${NC}"
-rsync -avzn \
-    --exclude 'node_modules' \
-    --exclude '*.log' \
-    --exclude '.DS_Store' \
-    -e "ssh -i $SSH_KEY" \
-    "$LOCAL_FOLDER/" \
-    "$SERVER:$REMOTE_BASE/$FOLDER/" 2>/dev/null | grep -E "^[<>]|\.js$" | head -20
-
-echo ""
-read -p "Procedere? (Y/n): " CONFIRM
-if [[ "$CONFIRM" =~ ^[Nn]$ ]]; then
-    echo "Deploy annullato."
+if [ "$DEPLOY_DRY_RUN" != "true" ] && ! deploy_confirm "Sincronizzare la cartella backend?"; then
+    echo "Deploy annullato"
     exit 0
 fi
 
-# Sync
-echo ""
-echo -e "${BLUE}📤 Sincronizzazione in corso...${NC}"
+deploy_rsync_backend "$LOCAL_FOLDER/" "$DEPLOY_BACKEND_PATH/$FOLDER/"
+deploy_maybe_restart "$DEPLOY_PM2_SERVICE"
 
-rsync -avz \
-    --exclude 'node_modules' \
-    --exclude '*.log' \
-    --exclude '.DS_Store' \
-    -e "ssh -i $SSH_KEY" \
-    "$LOCAL_FOLDER/" \
-    "$SERVER:$REMOTE_BASE/$FOLDER/"
-
-echo -e "${GREEN}✅ Folder synced!${NC}"
-
-# Restart
-echo ""
-echo -e "${YELLOW}⚠️  Riavviare api-server per applicare le modifiche?${NC}"
-read -p "(Y/n): " RESTART
-
-if [[ ! "$RESTART" =~ ^[Nn]$ ]]; then
-    echo -e "${BLUE}🔄 Riavvio api-server...${NC}"
-    ssh -i $SSH_KEY $SERVER "pm2 restart api-server"
-    echo -e "${GREEN}✅ api-server riavviato!${NC}"
-    
-    # Mostra status
-    echo ""
-    echo -e "${BLUE}📋 PM2 Status:${NC}"
-    ssh -i $SSH_KEY $SERVER "pm2 status"
-fi
-
-echo ""
-echo -e "${GREEN}✅ Deploy completato!${NC}"
+echo "Deploy completato"

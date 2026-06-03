@@ -388,6 +388,17 @@ await prisma.personDataShareConsent.update({
 - ❌ MAI accumulare modifiche valide o file non tracciati tra attività diverse.
 - ❌ MAI committare `node_modules`, release binarie, build output, report Playwright o file temporanei.
 
+### 10.c DEPLOY TOKEN-SAFE E NON INTERATTIVO
+- ✅ Tutti gli script di deploy locali devono usare `scripts/deploy-config.sh` come unica fonte per host, utente, chiave SSH e path server.
+- ✅ I path canonici sono: `dist/` → `$DEPLOY_DIST_PATH`, `dist-public/` → `$DEPLOY_PUBLIC_PATH`, `backend/` → `$DEPLOY_BACKEND_PATH`.
+- ✅ Preferire deploy delta con `rsync` o file singolo; usare rebuild/deploy completi solo quando indispensabile.
+- ✅ Ogni script deve supportare `--dry-run` e `--yes` oppure variabili env equivalenti per esecuzione CI/non interattiva.
+- ✅ Le opzioni ad alto impatto (backend, nginx, seed, restart) devono essere abilitate esplicitamente con flag/env dedicati; `--yes` conferma soltanto operazioni già selezionate.
+- ✅ In debug post-deploy usare log mirati: `pm2 logs <service> --lines 20 --nostream`, `tail -n 20`, `grep` o query filtrate.
+- ❌ MAI hardcodare host/path alternativi nei singoli script.
+- ❌ MAI usare `cat` su log grandi o produrre dump completi in terminale.
+- ❌ MAI fare deploy production con worktree sporco o test richiesti non eseguiti.
+
 ### 11. TESTING OBBLIGATORIO
 - ✅ Unit test per business logic critica
 - ✅ Integration test per API endpoints

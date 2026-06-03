@@ -137,6 +137,6 @@ echo "📊 Build sizes:"
 du -sh dist dist-public 2>/dev/null || true
 echo ""
 echo "🚀 Prossimi passi:"
-echo "   1. Upload su server: scp -r dist dist-public elementmedica@178.104.44.177:/var/www/elementmedica/"
+echo "   1. Upload su server: ./scripts/deploy-frontend.sh --all --yes"
 echo "   2. Oppure usa lo script: ./scripts/deploy-production.sh"
 echo ""

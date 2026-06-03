@@ -18,15 +18,21 @@ BLUE='\033[0;34m'
 PURPLE='\033[0;35m'
 NC='\033[0m' # No Color
 
-# Configurazione Hetzner
-SERVER_IP="178.104.197.134"
-SERVER_USER="elementmedica"
-SERVER_PATH="/var/www/elementmedica"
-SSH_KEY="$HOME/.ssh/id_ed25519"
-
 # Directory base
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$BASE_DIR"
+source "$BASE_DIR/scripts/deploy-config.sh"
+deploy_parse_common_flags "$@"
+
+SERVER_IP="$DEPLOY_SERVER_IP"
+SERVER_USER="$DEPLOY_SERVER_USER"
+SERVER_PATH="$DEPLOY_BASE_PATH"
+SSH_KEY="$DEPLOY_SSH_KEY"
+UPDATE_BACKEND="${UPDATE_BACKEND:-false}"
+RESTART_PM2="${RESTART_PM2:-false}"
+RUN_CMS_SEED="${RUN_CMS_SEED:-false}"
+UPDATE_NGINX="${UPDATE_NGINX:-false}"
+RELOAD_NGINX="${RELOAD_NGINX:-true}"
 
 # Functions
 log_info() {
@@ -174,9 +180,11 @@ log_success "Permissions OK (files=644, dirs=755)"
 # UPLOAD BACKEND (opzionale)
 # =============================================================================
 echo ""
-read -p "Vuoi aggiornare anche il backend? (y/N): " UPDATE_BACKEND
+if [ "$UPDATE_BACKEND" != "true" ] && [ "$DEPLOY_YES" != "true" ] && deploy_confirm "Aggiornare anche il backend?"; then
+    UPDATE_BACKEND="true"
+fi
 
-if [[ "$UPDATE_BACKEND" =~ ^[Yy]$ ]]; then
+if [ "$UPDATE_BACKEND" = "true" ]; then
     log_deploy "Uploading Backend..."
     
     if [ -n "$CONTROL_SOCKET" ] && [ -S "$CONTROL_SOCKET" ]; then
@@ -209,15 +217,19 @@ if [[ "$UPDATE_BACKEND" =~ ^[Yy]$ ]]; then
     log_success "Backend updated"
     
     # Riavvio PM2 (con autorizzazione)
-    read -p "Vuoi riavviare i servizi PM2? (y/N): " RESTART_PM2
-    if [[ "$RESTART_PM2" =~ ^[Yy]$ ]]; then
+    if [ "$RESTART_PM2" != "true" ] && [ "$DEPLOY_YES" != "true" ] && deploy_confirm "Riavviare i servizi PM2?"; then
+        RESTART_PM2="true"
+    fi
+    if [ "$RESTART_PM2" = "true" ]; then
         SSH_CMD "pm2 restart all"
         log_success "PM2 services restarted"
     fi
 
     # Seed CMS pages (idempotente - upsert, sicuro da ripetere)
-    read -p "Vuoi eseguire il seed CMS pages? (y/N): " RUN_CMS_SEED
-    if [[ "$RUN_CMS_SEED" =~ ^[Yy]$ ]]; then
+    if [ "$RUN_CMS_SEED" != "true" ] && [ "$DEPLOY_YES" != "true" ] && deploy_confirm "Eseguire il seed CMS pages?"; then
+        RUN_CMS_SEED="true"
+    fi
+    if [ "$RUN_CMS_SEED" = "true" ]; then
         log_info "Running CMS pages seed (idempotent upsert)..."
         SSH_CMD "cd $SERVER_PATH/backend && node scripts/seeds/seed-cms-pages-production.js"
         log_success "CMS pages seed completed"
@@ -228,9 +240,11 @@ fi
 # RELOAD NGINX
 # =============================================================================
 echo ""
-read -p "Vuoi aggiornare anche la configurazione Nginx? (y/N): " UPDATE_NGINX
+if [ "$UPDATE_NGINX" != "true" ] && [ "$DEPLOY_YES" != "true" ] && deploy_confirm "Aggiornare anche la configurazione Nginx?"; then
+    UPDATE_NGINX="true"
+fi
 
-if [[ "$UPDATE_NGINX" =~ ^[Yy]$ ]]; then
+if [ "$UPDATE_NGINX" = "true" ]; then
     log_deploy "Deploying Nginx config..."
     
     if [ -n "$CONTROL_SOCKET" ] && [ -S "$CONTROL_SOCKET" ]; then
@@ -248,9 +262,11 @@ if [[ "$UPDATE_NGINX" =~ ^[Yy]$ ]]; then
     log_success "Nginx config valid"
 fi
 
-log_info "Reloading Nginx..."
-SSH_CMD "sudo nginx -t && sudo systemctl reload nginx"
-log_success "Nginx ricaricato"
+if [ "$RELOAD_NGINX" = "true" ]; then
+    log_info "Reloading Nginx..."
+    SSH_CMD "sudo nginx -t && sudo systemctl reload nginx"
+    log_success "Nginx ricaricato"
+fi
 
 # =============================================================================
 # HEALTH CHECKS
@@ -305,10 +321,10 @@ echo ""
 echo "📋 Prossimi passi:"
 echo "   1. Verifica i siti nel browser"
 echo "   2. Testa il login con le credenziali salvate in modo sicuro"
-echo "   3. Controlla i logs: ssh $SERVER_USER@$SERVER_IP 'pm2 logs'"
+echo "   3. Controlla i log mirati: ssh $SERVER_USER@$SERVER_IP 'pm2 logs --lines 20 --nostream'"
 echo ""
 echo "📞 Per problemi:"
-echo "   • Logs: ssh $SERVER_USER@$SERVER_IP 'pm2 logs --lines 100'"
+echo "   • Logs: ssh $SERVER_USER@$SERVER_IP 'pm2 logs --lines 20 --nostream'"
 echo "   • Health: curl http://$SERVER_IP/health"
 echo ""
 
