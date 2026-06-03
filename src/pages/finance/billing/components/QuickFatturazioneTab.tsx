@@ -17,7 +17,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
     FileText, Plus, Euro, AlertTriangle, ExternalLink,
     CheckCircle2, Clock, Send, Loader2, Brain, BookmarkCheck, Play, Pencil,
-    Building2, CreditCard, Banknote, Landmark, Trash2, Printer, Mail
+    Building2, CreditCard, Banknote, Landmark, Trash2, Printer, Mail, UserRound
 } from 'lucide-react';
 import { CRUDButton, CRUDPrimaryButton } from '../../../../components/ui';
 import {
@@ -83,6 +83,8 @@ export interface QuickFatturazioneTabProps {
     autoCreateBozza?: boolean;
 }
 
+type PagamentoSenzaFatturaMode = 'STANDARD' | 'SOLO_POLIAMBULATORIO' | 'SOLO_MEDICO';
+
 // ─── Stato badge compatto ─────────────────────────────────────────────────────
 
 const STATO_BADGE: Record<StatoFattura, { label: string; cls: string; icon: React.ReactNode }> = {
@@ -124,7 +126,7 @@ const QuickFatturazioneTab: React.FC<QuickFatturazioneTabProps> = ({
     const [printingId, setPrintingId] = useState<string | null>(null);
     const [emailingId, setEmailingId] = useState<string | null>(null);
     const [creditingId, setCreditingId] = useState<string | null>(null);
-    const [payingWithoutInvoice, setPayingWithoutInvoice] = useState(false);
+    const [payingWithoutInvoiceMode, setPayingWithoutInvoiceMode] = useState<PagamentoSenzaFatturaMode | null>(null);
     const [editFatturaId, setEditFatturaId] = useState<string | null>(null);
     const [fattureReady, setFattureReady] = useState(false);
 
@@ -414,12 +416,15 @@ const QuickFatturazioneTab: React.FC<QuickFatturazioneTabProps> = ({
         }
     }, [showToast]);
 
-    const handlePagamentoSenzaFattura = useCallback(async (bozzaDaEliminareId?: string) => {
+    const handlePagamentoSenzaFattura = useCallback(async (
+        bozzaDaEliminareId?: string,
+        modalitaQuota: PagamentoSenzaFatturaMode = 'STANDARD',
+    ) => {
         if (!context.visitaId && !context.appuntamentoId) {
             showToast({ type: 'warning', message: 'Visita o appuntamento non disponibile per registrare il pagamento' });
             return;
         }
-        setPayingWithoutInvoice(true);
+        setPayingWithoutInvoiceMode(modalitaQuota);
         try {
             let bozzaId = bozzaDaEliminareId;
             if (!bozzaId) {
@@ -441,14 +446,20 @@ const QuickFatturazioneTab: React.FC<QuickFatturazioneTabProps> = ({
                 importoRiferimento: context.prezzoDefault ?? 0,
                 descrizione: context.descrizioneDefault,
                 bozzaFatturaId: bozzaId,
-                metodoPagamento: 'MP08'
+                metodoPagamento: 'MP08',
+                modalitaQuota,
             });
-            showToast({ type: 'success', message: 'Prestazione segnata come pagata senza fattura. Documento interno e compenso medico generati.' });
+            const successMessage = modalitaQuota === 'SOLO_POLIAMBULATORIO'
+                ? 'Registrata solo la quota poliambulatorio senza compenso medico.'
+                : modalitaQuota === 'SOLO_MEDICO'
+                    ? "Registrata solo la quota medico con compenso passivo pari all'incasso."
+                    : 'Prestazione segnata come pagata senza fattura. Documento interno e compenso medico generati.';
+            showToast({ type: 'success', message: successMessage });
             fetchFatture(fetchParams);
         } catch {
             showToast({ type: 'error', message: 'Errore registrazione pagamento senza fattura' });
         } finally {
-            setPayingWithoutInvoice(false);
+            setPayingWithoutInvoiceMode(null);
         }
     }, [buildQuickDraftInput, context.appuntamentoId, context.descrizioneDefault, context.prezzoDefault, context.visitaId, creaFatturaBozza, entiEmittenti, fattureAppuntamento, fetchFatture, fetchParams, showToast]);
 
@@ -480,6 +491,36 @@ const QuickFatturazioneTab: React.FC<QuickFatturazioneTabProps> = ({
         { code: 'MP08', label: 'Carta', icon: CreditCard },
         { code: 'MP05', label: 'Bonifico', icon: Landmark },
     ] as const;
+
+    const QUICK_PAYMENT_MODES = [
+        {
+            mode: 'STANDARD',
+            label: 'Pagata senza fattura',
+            title: 'Registra pagamento senza emettere fattura e genera compenso medico',
+            icon: CheckCircle2,
+            className: 'border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100',
+        },
+        {
+            mode: 'SOLO_POLIAMBULATORIO',
+            label: 'Solo quota poliambulatorio',
+            title: 'Incassa solo la quota del poliambulatorio e non genera compenso medico',
+            icon: Building2,
+            className: 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100',
+        },
+        {
+            mode: 'SOLO_MEDICO',
+            label: 'Solo quota medico',
+            title: 'Incassa solo la quota medico e genera compenso passivo dello stesso importo',
+            icon: UserRound,
+            className: 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100',
+        },
+    ] as const satisfies ReadonlyArray<{
+        mode: PagamentoSenzaFatturaMode;
+        label: string;
+        title: string;
+        icon: React.ComponentType<{ className?: string }>;
+        className: string;
+    }>;
 
     const handleQuickUpdate = useCallback(async (fatturaId: string, field: string, value: string) => {
         setUpdatingId(fatturaId);
@@ -595,10 +636,10 @@ const QuickFatturazioneTab: React.FC<QuickFatturazioneTabProps> = ({
                         <button
                             type="button"
                             onClick={() => handlePagamentoSenzaFattura()}
-                            disabled={payingWithoutInvoice}
+                            disabled={!!payingWithoutInvoiceMode}
                             className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700 hover:bg-teal-100 disabled:opacity-50"
                         >
-                            {payingWithoutInvoice ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                            {payingWithoutInvoiceMode === 'STANDARD' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
                             Pagata senza fattura
                         </button>
                     )}
@@ -796,18 +837,23 @@ const QuickFatturazioneTab: React.FC<QuickFatturazioneTabProps> = ({
                                                 );
                                             })}
                                         </div>
-                                        {(context.visitaId || context.appuntamentoId) && (
-                                            <button
-                                                type="button"
-                                                onClick={() => handlePagamentoSenzaFattura(f.id)}
-                                                disabled={payingWithoutInvoice}
-                                                className="inline-flex items-center gap-1 rounded-lg border border-teal-200 bg-teal-50 px-2 py-1 text-xs font-semibold text-teal-700 hover:bg-teal-100 disabled:opacity-50"
-                                                title="Registra pagamento senza emettere fattura e genera compenso medico"
-                                            >
-                                                {payingWithoutInvoice ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
-                                                <span className="hidden sm:inline">Pagata senza fattura</span>
-                                            </button>
-                                        )}
+                                        {(context.visitaId || context.appuntamentoId) && QUICK_PAYMENT_MODES.map(action => {
+                                            const Icon = action.icon;
+                                            const isLoadingMode = payingWithoutInvoiceMode === action.mode;
+                                            return (
+                                                <button
+                                                    key={action.mode}
+                                                    type="button"
+                                                    onClick={() => handlePagamentoSenzaFattura(f.id, action.mode)}
+                                                    disabled={!!payingWithoutInvoiceMode}
+                                                    className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-semibold disabled:opacity-50 ${action.className}`}
+                                                    title={action.title}
+                                                >
+                                                    {isLoadingMode ? <Loader2 className="h-3 w-3 animate-spin" /> : <Icon className="h-3 w-3" />}
+                                                    <span className="hidden lg:inline">{action.label}</span>
+                                                </button>
+                                            );
+                                        })}
 
                                         {isUpdating && <Loader2 className="h-3 w-3 animate-spin text-teal-500" />}
                                     </div>

@@ -316,10 +316,22 @@ router.post('/pagata-senza-fattura',
   async (req, res) => {
     try {
       const tenantId = getEffectiveTenantId(req);
-      const { visitaId, appPrestazioneId, appuntamentoId, importoRiferimento, descrizione, metodoPagamento, bozzaFatturaId } = req.body || {};
+      const {
+        visitaId,
+        appPrestazioneId,
+        appuntamentoId,
+        importoRiferimento,
+        descrizione,
+        metodoPagamento,
+        bozzaFatturaId,
+        modalitaQuota = 'STANDARD',
+      } = req.body || {};
 
       if (!visitaId && !appPrestazioneId && !appuntamentoId) {
         return res.status(400).json({ error: 'visitaId, appuntamentoId o appPrestazioneId obbligatorio' });
+      }
+      if (!['STANDARD', 'SOLO_POLIAMBULATORIO', 'SOLO_MEDICO'].includes(modalitaQuota)) {
+        return res.status(400).json({ error: 'modalitaQuota non valida' });
       }
 
       const result = await MovimentoContabileGenerator.generaPagamentoSenzaFattura({
@@ -330,7 +342,15 @@ router.post('/pagata-senza-fattura',
         descrizione,
         bozzaFatturaId: bozzaFatturaId || null,
         metodoPagamento: metodoPagamento || null,
+        modalitaQuota,
       }, tenantId, req.person?.id);
+
+      if (modalitaQuota !== 'STANDARD' && !result?.movimenti?.some(m => m.direzione === 'ENTRATA')) {
+        return res.status(422).json({
+          error: 'Quota non calcolabile con i dati tariffari disponibili',
+          warnings: result?.warnings || [],
+        });
+      }
 
       return res.json({
         success: true,

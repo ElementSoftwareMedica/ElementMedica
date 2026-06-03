@@ -3061,21 +3061,58 @@ const MovimentoContabileGenerator = {
         const prezzoDaMovimento = existingEntrata ? Number(existingEntrata.importoNetto || 0) : 0;
         const prezzoDaVoce = voceTariffario ? Number(voceTariffario.prezzoBase || 0) : 0;
         const prezzoDaPrestazione = Number(source.prestazione?.prezzoBase || 0);
-        const importoNetto = prezzoInput > 0
+        const importoRiferimentoNetto = prezzoInput > 0
             ? prezzoInput
             : (prezzoDaMovimento || prezzoDaVoce || prezzoDaPrestazione || 0);
         const isMedicalAesthetic = /estetic/i.test(source.prestazione?.nome || '');
         const aliquotaIva = isMedicalAesthetic ? 22 : 0;
-        const importi = calcolaImporti(importoNetto, aliquotaIva);
+        const modalitaQuota = ['SOLO_POLIAMBULATORIO', 'SOLO_MEDICO'].includes(params.modalitaQuota)
+            ? params.modalitaQuota
+            : 'STANDARD';
+        const compenso = source.medicoId
+            ? await getCompensoProfessionista(
+                voceTariffario,
+                source.medicoId,
+                prestazioneId,
+                importoRiferimentoNetto,
+                tenantId
+            )
+            : null;
+        const compensoBaseNetto = Number(compenso?.compensoNetto || 0);
+        if (modalitaQuota !== 'STANDARD' && (!source.medicoId || compensoBaseNetto <= 0)) {
+            result.warnings.push({
+                type: 'MISSING_COMPENSO',
+                message: 'Compenso medico non disponibile: impossibile calcolare la quota da incassare.',
+                solutionUrl: '/tariffario-medico',
+                field: 'compenso',
+            });
+            return result;
+        }
+        const importoIncassoNetto = modalitaQuota === 'SOLO_POLIAMBULATORIO'
+            ? Math.max(importoRiferimentoNetto - compensoBaseNetto, 0)
+            : modalitaQuota === 'SOLO_MEDICO'
+                ? compensoBaseNetto
+                : importoRiferimentoNetto;
+        const compensoPassivoNetto = modalitaQuota === 'SOLO_POLIAMBULATORIO'
+            ? 0
+            : modalitaQuota === 'SOLO_MEDICO'
+                ? importoIncassoNetto
+                : compensoBaseNetto;
+        const importi = calcolaImporti(importoIncassoNetto, aliquotaIva);
         const tipoMovimento = source.tipoVisitaMDL ? 'VISITA_MDL' : 'PRESTAZIONE_CLINICA';
         const tipoSoggettoEntrata = source.tipoVisitaMDL && companyId ? 'AZIENDA' : 'PAZIENTE';
         const descrizioneBase = params.descrizione
             || source.prestazione?.nome
             || (source.tipoVisitaMDL ? 'Visita medica del lavoro' : 'Prestazione clinica');
         const contextNote = source.appuntamentoId ? `AUTO_ACCETTAZIONE:${source.appuntamentoId}` : null;
+        const quotaNote = modalitaQuota === 'SOLO_POLIAMBULATORIO'
+            ? 'QUOTA_POLIAMBULATORIO - incasso limitato alla quota struttura'
+            : modalitaQuota === 'SOLO_MEDICO'
+                ? 'QUOTA_MEDICO - incasso limitato alla quota medico'
+                : null;
         const senzaFatturaNote = contextNote
-            ? `${contextNote}\nSENZA_FATTURA - incasso registrato senza emissione fattura`
-            : 'SENZA_FATTURA - incasso registrato senza emissione fattura';
+            ? `${contextNote}\nSENZA_FATTURA - incasso registrato senza emissione fattura${quotaNote ? `\n${quotaNote}` : ''}`
+            : `SENZA_FATTURA - incasso registrato senza emissione fattura${quotaNote ? `\n${quotaNote}` : ''}`;
 
         let movEntrata = existingEntrata;
         if (movEntrata) {
@@ -3253,14 +3290,26 @@ const MovimentoContabileGenerator = {
             orderBy: { updatedAt: 'desc' },
         });
 
-        const compenso = await getCompensoProfessionista(
-            voceTariffario,
-            source.medicoId,
-            prestazioneId,
-            importi.importoNetto,
-            tenantId
-        );
-        if (!compenso?.compensoNetto || compenso.compensoNetto <= 0) {
+        if (modalitaQuota === 'SOLO_POLIAMBULATORIO') {
+            if (movUscita && ['BOZZA', 'DA_FATTURARE'].includes(movUscita.stato)) {
+                movUscita = await prisma.movimentoContabile.update({
+                    where: { id: movUscita.id },
+                    data: {
+                        stato: 'ANNULLATO',
+                        importoNetto: 0,
+                        importoLordo: 0,
+                        importoIva: 0,
+                        importoRiferimento: importi.importoNetto,
+                        note: 'Quota poliambulatorio: compenso medico non dovuto',
+                        updatedBy: createdBy || null,
+                    },
+                });
+                result.movimenti.push(movUscita);
+            }
+            return result;
+        }
+
+        if (!compensoPassivoNetto || compensoPassivoNetto <= 0) {
             result.warnings.push({
                 type: 'MISSING_COMPENSO',
                 message: `Nessun compenso definito per il medico su "${descrizioneBase}".`,
@@ -3275,13 +3324,15 @@ const MovimentoContabileGenerator = {
                 where: { id: movUscita.id },
                 data: {
                     stato: 'DA_FATTURARE',
-                    importoNetto: compenso.compensoNetto,
-                    importoLordo: compenso.compensoNetto,
+                    importoNetto: compensoPassivoNetto,
+                    importoLordo: compensoPassivoNetto,
                     importoIva: 0,
                     importoRiferimento: importi.importoNetto,
                     compensoTipo: compenso.tipo,
                     voceTariffarioId: voceTariffario?.id || movUscita.voceTariffarioId || null,
-                    note: 'Compenso da incasso senza fattura',
+                    note: modalitaQuota === 'SOLO_MEDICO'
+                        ? "Quota medico: compenso pari all'intero incasso senza fattura"
+                        : 'Compenso da incasso senza fattura',
                     updatedBy: createdBy || null,
                 },
             });
@@ -3301,11 +3352,13 @@ const MovimentoContabileGenerator = {
                 appuntamentoId: source.appuntamentoId || null,
                 appPrestazioneId: source.appPrestazioneId || null,
                 voceTariffarioId: voceTariffario?.id || null,
-                compensoNetto: compenso.compensoNetto,
+                compensoNetto: compensoPassivoNetto,
                 compensoTipo: compenso.tipo,
                 importoRiferimento: importi.importoNetto,
                 dataEsecuzione: source.dataEsecuzione,
-                descrizione: `Compenso medico - ${descrizioneBase} - pagata senza fattura`,
+                descrizione: modalitaQuota === 'SOLO_MEDICO'
+                    ? `Quota medico - ${descrizioneBase} - pagata senza fattura`
+                    : `Compenso medico - ${descrizioneBase} - pagata senza fattura`,
                 stato: 'DA_FATTURARE',
                 tenantId,
                 createdBy,
@@ -3316,7 +3369,11 @@ const MovimentoContabileGenerator = {
             });
             await prisma.movimentoContabile.update({
                 where: { id: movUscita.id },
-                data: { note: 'Compenso da incasso senza fattura' },
+                data: {
+                    note: modalitaQuota === 'SOLO_MEDICO'
+                        ? "Quota medico: compenso pari all'intero incasso senza fattura"
+                        : 'Compenso da incasso senza fattura',
+                },
             });
         }
 

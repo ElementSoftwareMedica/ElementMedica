@@ -1650,8 +1650,8 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
         });
     }, [appuntamento.paziente, formData]);
 
-    // Detect if appointment or patient editable fields changed (for "Salva appuntamento" button)
-    const hasAppointmentOnlyChanges = useMemo(() => {
+    // Detect if appointment editable fields changed (for "Salva appuntamento" button)
+    const hasAppointmentFieldChanges = useMemo(() => {
         const hasDateChange = !!formData.dataOraModificata && formData.dataOraModificata !== appuntamento.dataOra;
         const hasPrestChange = !!formData.prestazioneModificataId && formData.prestazioneModificataId !== appuntamento.prestazioneId;
         const hasNoteChange = (formData.note || '') !== (appuntamento.note || '');
@@ -1666,9 +1666,8 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
             || hasNoteInterneChange
             || hasStatoChange
             || hasConvenzioneChange
-            || hasPriceChange
-            || hasPatientDataChanges;
-    }, [formData, appuntamento, hasPatientDataChanges]);
+            || hasPriceChange;
+    }, [formData, appuntamento]);
 
     // Handler: save only appointment changes (no patient validation)
     const handleSaveAppointmentOnly = useCallback(async () => {
@@ -3070,8 +3069,8 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
                 </div>
 
                 {/* Footer */}
-                <div className="shrink-0 flex items-center justify-between px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
-                    <div className="flex items-center gap-2">
+                <div className="shrink-0 flex flex-col gap-3 px-4 py-4 border-t border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/50 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="flex flex-wrap items-center gap-2">
                         {/* Navigation buttons */}
                         <Button
                             variant="outline"
@@ -3095,11 +3094,11 @@ export const AccettazionePazienteModal: React.FC<AccettazionePazienteModalProps>
                             <ChevronRight className="h-4 w-4" />
                         </Button>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
                         {/* P61: Rimosso pulsante Chiudi ridondante - c'è già la X in alto a dx */}
 
                         {/* Salva solo modifiche appuntamento (data/ora, note, stato) */}
-                        {onSaveAppointmentOnly && hasAppointmentOnlyChanges && (
+                        {onSaveAppointmentOnly && hasAppointmentFieldChanges && (
                             <Button
                                 onClick={handleSaveAppointmentOnly}
                                 disabled={isLoading}
