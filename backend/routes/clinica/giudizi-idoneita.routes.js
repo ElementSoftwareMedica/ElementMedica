@@ -138,6 +138,28 @@ router.get('/worker/:personId', requireAuth, requirePermission('clinica.visite:r
   }
 });
 
+/**
+ * @route GET /api/v1/clinica/giudizi-idoneita/form-data
+ * @desc Dati filtrati per creare giudizi collegati a visite MDL
+ * @access Private - VIEW_VISITA
+ */
+router.get('/form-data', requireAuth, requirePermission('clinica.visite:read'), async (req, res) => {
+  try {
+    const tenantId = getEffectiveTenantId(req);
+    const { companyTenantProfileId, personId, search } = req.query;
+    const data = await GiudizioIdoneitaService.getFormData(tenantId, {
+      companyTenantProfileId,
+      personId,
+      search
+    });
+
+    res.json({ success: true, data });
+  } catch (error) {
+    logger.error({ error: error.message }, 'Errore form-data giudizi idoneità');
+    res.status(error.statusCode || 500).json({ error: error.message || 'Errore nel caricamento dei dati' });
+  }
+});
+
 // ===== BATCH ROUTES (MUST be before /:id to avoid parameter matching) =====
 
 /**
@@ -460,9 +482,9 @@ router.post('/', requireAuth, requirePermission('clinica.visite:create'), async 
     const data = req.body;
 
     // Validazione base
-    if (!data.personId || !data.tipoGiudizio) {
+    if (!data.personId || !data.tipoGiudizio || !data.visitaId) {
       return res.status(400).json({
-        error: 'Lavoratore e tipo giudizio sono obbligatori'
+        error: 'Lavoratore, visita MDL e tipo giudizio sono obbligatori'
       });
     }
 
@@ -518,7 +540,7 @@ router.post('/', requireAuth, requirePermission('clinica.visite:create'), async 
     res.status(201).json(giudizio);
   } catch (error) {
     logger.error({ error: error.message }, 'Errore emissione giudizio');
-    res.status(500).json({ error: 'Errore nell\'emissione del giudizio' });
+    res.status(error.statusCode || 500).json({ error: error.message || 'Errore nell\'emissione del giudizio' });
   }
 });
 
@@ -549,7 +571,7 @@ router.put('/:id', requireAuth, requirePermission('clinica.visite:update'), asyn
     res.json(giudizio);
   } catch (error) {
     logger.error({ error: 'Operazione non riuscita', id: req.params.id }, 'Errore aggiornamento giudizio');
-    res.status(500).json({ error: 'Errore nell\'aggiornamento del giudizio' });
+    res.status(error.statusCode || 500).json({ error: error.message || 'Errore nell\'aggiornamento del giudizio' });
   }
 });
 

@@ -20,6 +20,7 @@ import { useNewSubmissionsCount } from '../../hooks/useNewSubmissionsCount';
 import { ModuleSwitcher } from '../shared/ModuleSwitcher';
 import { getCurrentBrand } from '../../config/brands.config';
 import { getTenantBranding } from '../../utils/tenantBranding';
+import TenantLogoImage from './TenantLogoImage';
 import {
   Building2,
   Calendar,
@@ -304,8 +305,9 @@ const Sidebar: React.FC<SidebarProps> = ({ open, setOpen, collapsed = false, onC
       {/* Logo */}
       <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200 dark:border-gray-700">
         <Link to="/dashboard" className="flex items-center gap-3">
-          <img
-            src={tenantBranding.logoUrl || brand.logoIcon}
+          <TenantLogoImage
+            src={tenantBranding.logoUrl}
+            fallbackSrc={brand.logoIcon}
             alt={tenantBranding.displayName}
             className="w-10 h-10 rounded-lg object-contain"
           />

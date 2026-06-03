@@ -374,9 +374,9 @@ export const validateQueryMovimenti = [
 
     query('pageSize')
         .optional()
-        .isInt({ min: 1, max: 100 })
+        .isInt({ min: 1, max: 5000 })
         .toInt()
-        .withMessage('pageSize deve essere un intero tra 1 e 100'),
+        .withMessage('pageSize deve essere un intero tra 1 e 5000'),
 
     handleValidationErrors
 ];

@@ -27,6 +27,7 @@ import { TenantModeSelector } from '../shared/TenantModeSelector';
 import Notifications from '../shared/Notifications';
 import NotificationBell from '../notifications/NotificationBell';
 import NotificationPopup from '../notifications/NotificationPopup';
+import TenantLogoImage from './TenantLogoImage';
 import { SidebarProvider, useSidebar } from '../../contexts/SidebarContext';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
 
@@ -594,8 +595,9 @@ const ClinicaLayoutContent: React.FC<ClinicaLayoutProps> = ({ children }) => {
                 {/* Logo */}
                 <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200 dark:border-gray-700">
                     <Link to="/poliambulatorio" className="flex items-center gap-3">
-                        <img
-                            src={tenantBranding.logoUrl || getCurrentBrand().logoIcon}
+                        <TenantLogoImage
+                            src={tenantBranding.logoUrl}
+                            fallbackSrc={getCurrentBrand().logoIcon}
                             alt={tenantBranding.displayName}
                             className="w-10 h-10 rounded-lg object-contain"
                         />

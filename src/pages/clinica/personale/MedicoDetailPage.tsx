@@ -884,15 +884,25 @@ const getPreviousMonthRange = (): DateRange => {
     };
 };
 
+const getNextMonthRange = (): DateRange => {
+    const now = new Date();
+    return {
+        start: new Date(now.getFullYear(), now.getMonth() + 1, 1),
+        end: new Date(now.getFullYear(), now.getMonth() + 2, 0)
+    };
+};
+
 const getYearToDateRange = (): DateRange => {
     const now = new Date();
     return { start: new Date(now.getFullYear(), 0, 1), end: now };
 };
 
 const COMPENSI_DATE_PRESETS: Array<{ label: string; getRange: () => DateRange }> = [
+    { label: 'Mese corrente', getRange: getCurrentMonthRange },
+    { label: 'Mese precedente', getRange: getPreviousMonthRange },
+    { label: 'Prossimo mese', getRange: getNextMonthRange },
     { label: '1 mese', getRange: () => getRollingRange(1) },
     { label: '1 anno', getRange: () => getRollingRange(12) },
-    { label: 'Mese precedente', getRange: getPreviousMonthRange },
     { label: 'Da inizio anno', getRange: getYearToDateRange },
 ];
 

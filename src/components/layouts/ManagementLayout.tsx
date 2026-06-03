@@ -24,6 +24,7 @@ import { TenantModeSelector } from '../shared/TenantModeSelector';
 import { useNewPublicSubmissionsCount } from '../../hooks/useNewPublicSubmissionsCount';
 import NotificationBell from '../notifications/NotificationBell';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
+import TenantLogoImage from './TenantLogoImage';
 
 // Import Management theme
 import '../../styles/management-theme.css';
@@ -479,8 +480,9 @@ const ManagementLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
                 {/* Logo */}
                 <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200 dark:border-gray-700">
                     <Link to="/management" className="flex items-center gap-3">
-                        <img
-                            src={tenantBranding.logoUrl || currentBrand.logoIcon}
+                        <TenantLogoImage
+                            src={tenantBranding.logoUrl}
+                            fallbackSrc={currentBrand.logoIcon}
                             alt={tenantBranding.displayName}
                             className="w-10 h-10 rounded-lg object-contain"
                         />
