@@ -161,10 +161,13 @@ const Allegato3APage: React.FC = () => {
         enabled: isReady
     });
 
-    const companyOptions = useMemo(() => (companiesResponse || []).map((company: Allegato3ACompany) => ({
-        value: company.id,
-        label: `${company.ragioneSociale}${company.medicoCompetente ? ` · MC ${company.medicoCompetente}` : ''}${company.piva ? ` · P.IVA ${company.piva}` : ''}`
-    })), [companiesResponse]);
+    const companyOptions = useMemo(() => (companiesResponse || [])
+        .slice()
+        .sort((a, b) => a.ragioneSociale.localeCompare(b.ragioneSociale, 'it', { sensitivity: 'base' }))
+        .map((company: Allegato3ACompany) => ({
+            value: company.id,
+            label: `${company.ragioneSociale}${company.medicoCompetente ? ` · MC ${company.medicoCompetente}` : ''}${company.piva ? ` · P.IVA ${company.piva}` : ''}`
+        })), [companiesResponse]);
 
     // Fetch stats for selected company
     const { data: stats } = useQuery({
