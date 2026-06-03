@@ -1643,22 +1643,27 @@ export async function uploadBatch(req, res) {
                 'firstName', 'lastName', 'taxCode', 'birthDate', 'birthPlace',
                 'birthProvince', 'gender', 'profileImage', 'gdprConsentDate'
             ];
+            const profileFieldNames = [
+                'tenantId', 'email', 'phone', 'pec', 'residenceAddress', 'residenceCity',
+                'postalCode', 'province', 'status', 'title', 'hiredDate', 'endDate',
+                'companyTenantProfileId', 'siteId', 'repartoId', 'protocolloSanitarioId',
+                'notes', 'disagioPsicologico'
+            ];
             const personData = {};
-            const profileData = { ...data };
+            const profileData = {};
 
             for (const field of personFieldNames) {
-                if (field in profileData) {
-                    personData[field] = profileData[field];
-                    delete profileData[field];
-                }
+                if (field in data) personData[field] = data[field];
             }
-
-            delete profileData.id;
-            delete profileData.companyName;
+            for (const field of profileFieldNames) {
+                if (field in data) profileData[field] = data[field];
+            }
 
             if (personData.birthDate) personData.birthDate = new Date(personData.birthDate);
             if (personData.gdprConsentDate) personData.gdprConsentDate = new Date(personData.gdprConsentDate);
             if (personData.birthProvince) personData.birthProvince = String(personData.birthProvince).trim().toUpperCase().slice(0, 2);
+            if (profileData.hiredDate) profileData.hiredDate = new Date(profileData.hiredDate);
+            if (profileData.endDate) profileData.endDate = new Date(profileData.endDate);
 
             return { personData, profileData };
         };
@@ -1724,6 +1729,21 @@ export async function uploadBatch(req, res) {
                                     gdprConsentDate: personData.gdprConsentDate || null,
                                 }
                             });
+                        } else {
+                            const missingPersonData = Object.fromEntries(
+                                Object.entries(personData).filter(([field, value]) =>
+                                    value !== null &&
+                                    value !== undefined &&
+                                    value !== '' &&
+                                    (person[field] === null || person[field] === undefined || person[field] === '')
+                                )
+                            );
+                            if (Object.keys(missingPersonData).length > 0) {
+                                person = await prisma.person.update({
+                                    where: { id: person.id },
+                                    data: missingPersonData
+                                });
+                            }
                         }
                         result = await prisma.personTenantProfile.create({
                             data: { ...profileData, personId: person.id }
