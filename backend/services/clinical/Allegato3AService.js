@@ -19,6 +19,15 @@ const PRIVILEGED_ALLEGATO_3A_ROLES = new Set([
     'CLINIC_ADMIN',
     'SEGRETERIA_CLINICA'
 ]);
+const ITALIAN_PROVINCES = new Set([
+    'AG', 'AL', 'AN', 'AO', 'AP', 'AQ', 'AR', 'AT', 'AV', 'BA', 'BG', 'BI', 'BL', 'BN', 'BO', 'BR', 'BS', 'BT',
+    'BZ', 'CA', 'CB', 'CE', 'CH', 'CI', 'CL', 'CN', 'CO', 'CR', 'CS', 'CT', 'CZ', 'EN', 'FC', 'FE', 'FG', 'FI',
+    'FM', 'FR', 'GE', 'GO', 'GR', 'IM', 'IS', 'KR', 'LC', 'LE', 'LI', 'LO', 'LT', 'LU', 'MB', 'MC', 'ME', 'MI',
+    'MN', 'MO', 'MS', 'MT', 'NA', 'NO', 'NU', 'OG', 'OR', 'OT', 'PA', 'PC', 'PD', 'PE', 'PG', 'PI', 'PN', 'PO',
+    'PR', 'PT', 'PU', 'PV', 'PZ', 'RA', 'RC', 'RE', 'RG', 'RI', 'RM', 'RN', 'RO', 'SA', 'SI', 'SO', 'SP', 'SR',
+    'SS', 'SU', 'SV', 'TA', 'TE', 'TN', 'TO', 'TP', 'TR', 'TS', 'TV', 'UD', 'VA', 'VB', 'VC', 'VE', 'VI', 'VR',
+    'VS', 'VT', 'VV'
+]);
 
 function isActiveNominaWindow() {
     const now = new Date();
@@ -44,6 +53,19 @@ function firstValue(source, keys) {
         const value = source[key];
         if (value !== null && value !== undefined && String(value).trim() !== '') return value;
     }
+    return null;
+}
+
+function deriveNationalityFromBirthPlace(lavoratore) {
+    const explicitProvince = String(lavoratore?.birthProvince || '').trim().toUpperCase();
+    const provinceFromPlace = String(lavoratore?.birthPlace || '').match(/\(([A-Z]{2})\)/)?.[1];
+    const province = explicitProvince || provinceFromPlace || '';
+    if (ITALIAN_PROVINCES.has(province)) return 'Italia';
+
+    const fiscalBirthCode = String(lavoratore?.taxCode || '').trim().toUpperCase().slice(11, 15);
+    if (/^Z\d{3}$/.test(fiscalBirthCode)) return 'Estero';
+    if (/^[A-Z]\d{3}$/.test(fiscalBirthCode)) return 'Italia';
+
     return null;
 }
 
@@ -297,7 +319,7 @@ class Allegato3AService {
                 birthDate: lavoratore.birthDate,
                 birthPlace: lavoratore.birthPlace,
                 birthProvince: lavoratore.birthProvince,
-                nationality: null,
+                nationality: deriveNationalityFromBirthPlace(lavoratore),
                 residenza: {
                     indirizzo: lavoratore.profile?.residenceAddress,
                     citta: lavoratore.profile?.residenceCity,

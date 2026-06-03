@@ -457,6 +457,7 @@ function initializeSchema(database: Database.Database): void {
       taxCode TEXT,
       birthDate TEXT,
       birthPlace TEXT,
+      birthProvince TEXT,
       gender TEXT,
 
       email TEXT,
@@ -1836,6 +1837,7 @@ function initializeSchema(database: Database.Database): void {
   // patients: companyName (denormalized) + protocolloSanitarioId added
   tryAlter(`ALTER TABLE patients ADD COLUMN companyName TEXT`)
   tryAlter(`ALTER TABLE patients ADD COLUMN protocolloSanitarioId TEXT`)
+  tryAlter(`ALTER TABLE patients ADD COLUMN birthProvince TEXT`)
 
   // ── FSE 2.0 (Fascicolo Sanitario Elettronico) fields ── S25
   // patients: FSE consent tracking

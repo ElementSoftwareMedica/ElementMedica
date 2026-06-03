@@ -666,6 +666,7 @@ export function setupIpcHandlers(): void {
                         taxCode: p.taxCode,
                         birthDate: p.birthDate,
                         birthPlace: p.birthPlace,
+                        birthProvince: p.birthProvince,
                         gender: p.gender,
                         profileImage: p.profileImage,
                         email: profile.email,

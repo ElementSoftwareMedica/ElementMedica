@@ -9,7 +9,7 @@ import { safeStorage } from 'electron'
 
 // PII columns that MUST be encrypted at-rest per GDPR
 const PII_FIELDS: Record<string, Set<string>> = {
-  patients: new Set(['firstName', 'lastName', 'taxCode', 'email', 'phone', 'birthDate', 'birthPlace', 'residenceAddress', 'residenceCity', 'postalCode', 'province']),
+  patients: new Set(['firstName', 'lastName', 'taxCode', 'email', 'phone', 'birthDate', 'birthPlace', 'birthProvince', 'residenceAddress', 'residenceCity', 'postalCode', 'province']),
   companies: new Set(['pec', 'emailGenerale', 'telefonoGenerale', 'noteCommerciali', 'noteOperative', 'noteInterne']),
   nomine_ruolo: new Set(['firstName', 'lastName', 'nome', 'taxCode', 'note']),
   visits: new Set(['anamnesi', 'esameObiettivo', 'diagnosi', 'terapia', 'noteInterne', 'notePazienti', 'firmaMedico', 'firmaPaziente']),

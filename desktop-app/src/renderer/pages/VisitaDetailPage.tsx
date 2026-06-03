@@ -391,6 +391,7 @@ export function VisitaDetailPage(): JSX.Element {
         taxCode: '',
         birthDate: '',
         birthPlace: '',
+        birthProvince: '',
         gender: '',
         title: '',
         status: '',
@@ -553,6 +554,7 @@ export function VisitaDetailPage(): JSX.Element {
             taxCode: patient.taxCode || '',
             birthDate: patient.birthDate ? patient.birthDate.split('T')[0] : '',
             birthPlace: patient.birthPlace || '',
+            birthProvince: patient.birthProvince || '',
             gender: patient.gender || '',
             title: patient.title || '',
             status: patient.status || '',
@@ -1532,6 +1534,7 @@ export function VisitaDetailPage(): JSX.Element {
             taxCode: patientForm.taxCode.trim() || null,
             birthDate: patientForm.birthDate || null,
             birthPlace: patientForm.birthPlace.trim() || null,
+            birthProvince: patientForm.birthProvince.trim().toUpperCase().slice(0, 2) || null,
             gender: patientForm.gender || null,
             title: patientForm.title.trim() || null,
             status: patientForm.status || null,
@@ -3397,6 +3400,7 @@ export function VisitaDetailPage(): JSX.Element {
                         <FormInput label="Codice fiscale" value={patientForm.taxCode} onChange={v => setPatientForm(prev => ({ ...prev, taxCode: v.toUpperCase() }))} />
                         <FormInput label="Data nascita" type="date" value={patientForm.birthDate} onChange={v => setPatientForm(prev => ({ ...prev, birthDate: v }))} />
                         <FormInput label="Luogo nascita" value={patientForm.birthPlace} onChange={v => setPatientForm(prev => ({ ...prev, birthPlace: v }))} />
+                        <FormInput label="Provincia nascita" value={patientForm.birthProvince} onChange={v => setPatientForm(prev => ({ ...prev, birthProvince: v.toUpperCase().slice(0, 2) }))} />
                         <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1">Genere</label>
                             <ElegantSelect value={patientForm.gender} onChange={gender => setPatientForm(prev => ({ ...prev, gender }))} options={[

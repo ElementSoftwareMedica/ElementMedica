@@ -1638,6 +1638,31 @@ export async function uploadBatch(req, res) {
             return d;
         };
 
+        const splitPersonTenantProfilePayload = (data) => {
+            const personFieldNames = [
+                'firstName', 'lastName', 'taxCode', 'birthDate', 'birthPlace',
+                'birthProvince', 'gender', 'profileImage', 'gdprConsentDate'
+            ];
+            const personData = {};
+            const profileData = { ...data };
+
+            for (const field of personFieldNames) {
+                if (field in profileData) {
+                    personData[field] = profileData[field];
+                    delete profileData[field];
+                }
+            }
+
+            delete profileData.id;
+            delete profileData.companyName;
+
+            if (personData.birthDate) personData.birthDate = new Date(personData.birthDate);
+            if (personData.gdprConsentDate) personData.gdprConsentDate = new Date(personData.gdprConsentDate);
+            if (personData.birthProvince) personData.birthProvince = String(personData.birthProvince).trim().toUpperCase().slice(0, 2);
+
+            return { personData, profileData };
+        };
+
         for (const op of operations) {
             try {
                 // Validate operation
@@ -1679,21 +1704,24 @@ export async function uploadBatch(req, res) {
                 if (op.action === 'create') {
                     // Special handling for personTenantProfile: need to create Person first
                     if (op.entityType === 'personTenantProfile') {
-                        const { firstName, lastName, taxCode, birthDate, birthPlace, gender, profileImage, companyName, ...profileData } = sanitizedData;
+                        const { personData, profileData } = splitPersonTenantProfilePayload(sanitizedData);
                         // Find or create Person record
-                        let person = taxCode
-                            ? await prisma.person.findFirst({ where: { taxCode, deletedAt: null } })
+                        let person = personData.taxCode
+                            ? await prisma.person.findFirst({ where: { taxCode: personData.taxCode, deletedAt: null } })
                             : null;
                         if (!person) {
                             person = await prisma.person.create({
                                 data: {
                                     id: op.entityId, // Use local UUID so visits can reference personId
-                                    firstName: firstName || '',
-                                    lastName: lastName || '',
-                                    taxCode: taxCode || null,
-                                    birthDate: birthDate ? new Date(birthDate) : null,
-                                    birthPlace: birthPlace || null,
-                                    gender: gender || null,
+                                    firstName: personData.firstName || '',
+                                    lastName: personData.lastName || '',
+                                    taxCode: personData.taxCode || null,
+                                    birthDate: personData.birthDate || null,
+                                    birthPlace: personData.birthPlace || null,
+                                    birthProvince: personData.birthProvince || null,
+                                    gender: personData.gender || null,
+                                    profileImage: personData.profileImage || null,
+                                    gdprConsentDate: personData.gdprConsentDate || null,
                                 }
                             });
                         }
@@ -1711,6 +1739,44 @@ export async function uploadBatch(req, res) {
                         });
                     }
                 } else if (op.action === 'update') {
+                    if (op.entityType === 'personTenantProfile') {
+                        const existingProfile = await prisma.personTenantProfile.findFirst({
+                            where: {
+                                tenantId,
+                                deletedAt: null,
+                                OR: [
+                                    { id: op.entityId },
+                                    { personId: op.entityId }
+                                ]
+                            },
+                            select: { id: true, personId: true }
+                        });
+
+                        if (!existingProfile) {
+                            results.push({
+                                operationId: op.id,
+                                status: 'conflict',
+                                error: 'Profilo persona non trovato o non appartenente al tenant'
+                            });
+                            continue;
+                        }
+
+                        const { personData, profileData } = splitPersonTenantProfilePayload(sanitizedData);
+                        if (Object.keys(personData).length > 0) {
+                            await prisma.person.update({
+                                where: { id: existingProfile.personId },
+                                data: personData
+                            });
+                        }
+
+                        delete profileData.tenantId;
+                        result = Object.keys(profileData).length > 0
+                            ? await prisma.personTenantProfile.update({
+                                where: { id: existingProfile.id },
+                                data: profileData
+                            })
+                            : await prisma.personTenantProfile.findUnique({ where: { id: existingProfile.id } });
+                    } else {
                     // Verify entity belongs to tenant before updating
                     const existing = await prisma[op.entityType].findFirst({
                         where: {
@@ -1733,6 +1799,7 @@ export async function uploadBatch(req, res) {
                         where: { id: op.entityId },
                         data: sanitizedData
                     });
+                    }
                 } else if (op.action === 'delete') {
                     // Verify entity belongs to tenant before soft-deleting
                     const existing = await prisma[op.entityType].findFirst({
