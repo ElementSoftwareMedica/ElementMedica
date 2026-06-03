@@ -13,7 +13,13 @@ const TenantLogoImage: React.FC<TenantLogoImageProps> = ({
   alt,
   className,
 }) => {
-  const resolvedSrc = src || fallbackSrc;
+  const resolvedSrc = React.useMemo(() => {
+    if (!src) return fallbackSrc;
+    if (!src.includes('/uploads/')) return src;
+
+    const separator = src.includes('?') ? '&' : '?';
+    return `${src}${separator}v=20260603`;
+  }, [fallbackSrc, src]);
   const [currentSrc, setCurrentSrc] = React.useState(resolvedSrc);
 
   React.useEffect(() => {
