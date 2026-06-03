@@ -42,6 +42,16 @@ function renderAddress(obj) {
   return esc(parts.join(', ') || '—');
 }
 
+function renderTextBlock(value) {
+  if (!value) return '<p class="empty">Non registrato</p>';
+  return `<p>${esc(value)}</p>`;
+}
+
+function renderList(items, empty = 'Nessun dato registrato') {
+  if (!items?.length) return `<p class="empty">${esc(empty)}</p>`;
+  return `<ul>${items.map(item => `<li>${esc(item)}</li>`).join('')}</ul>`;
+}
+
 function genderLabel(g) {
   if (g === 'MALE' || g === 'M') return 'Maschile';
   if (g === 'FEMALE' || g === 'F') return 'Femminile';
@@ -93,7 +103,10 @@ function livelloRischioLabel(livello) {
 function buildHtml(data) {
   const { lavoratore, azienda, datiLavorativi, rischiProfessionali = [],
     accertamentiSanitari = [], giudizioAttuale, medicoCompetente,
-    generatedAt, riferimentoNormativo } = data;
+    generatedAt, riferimentoNormativo, istituzione, anamnesi,
+    programmaSorveglianzaSanitaria, esameObiettivo,
+    provvedimentiMedicoCompetente, visiteMediche = [],
+    comunicazioneGiudizio, allegatiCartella = [] } = data;
 
   const sezioneRischi = rischiProfessionali.length > 0
     ? rischiProfessionali.map(r => `
@@ -115,13 +128,44 @@ function buildHtml(data) {
             </tr>`).join('')
     : '<tr><td colspan="4" class="empty">Nessun accertamento sanitario registrato</td></tr>';
 
+  const sezioneVisite = visiteMediche.length > 0
+    ? visiteMediche.map(v => `
+            <tr>
+                <td class="center">${formatDate(v.dataOra || v.data)}</td>
+                <td>${esc(v.tipoVisitaLabel || tipoVisitaLabel(v.tipoVisitaMDL))}</td>
+                <td>${esc(v.prestazione?.nome)}</td>
+                <td>${esc(v.esameObiettivo || v.diagnosi || v.note)}</td>
+                <td>${esc(v.giudizio?.esito)}</td>
+            </tr>`).join('')
+    : '<tr><td colspan="5" class="empty">Nessuna visita medica del lavoro registrata</td></tr>';
+
+  const accertamentiPrevisti = programmaSorveglianzaSanitaria?.accertamentiPrevisti || [];
+  const sezioneProtocollo = accertamentiPrevisti.length > 0
+    ? accertamentiPrevisti.map(p => `
+            <tr>
+                <td>${esc(p.nome)}</td>
+                <td class="center">${p.obbligatoria ? 'Obbligatorio' : 'Facoltativo'}</td>
+                <td>${esc(p.periodicitaCustomMesi ? `Ogni ${p.periodicitaCustomMesi} mesi` : p.periodicita)}</td>
+            </tr>`).join('')
+    : '<tr><td colspan="3" class="empty">Nessun accertamento previsto dal protocollo</td></tr>';
+
+  const sezioneAllegati = allegatiCartella.length > 0
+    ? allegatiCartella.map(a => `
+            <tr>
+                <td>${formatDate(a.data || a.visitaData)}</td>
+                <td>${esc(a.tipo)}</td>
+                <td>${esc(a.titolo || a.fileName)}</td>
+                <td>${esc(a.origine)}</td>
+            </tr>`).join('')
+    : '<tr><td colspan="4" class="empty">Nessun allegato collegato alla cartella</td></tr>';
+
   const giudizioBlock = giudizioAttuale
     ? `
         <div class="giudizio-box ${giudizioAttuale.esito ? 'giudizio-' + giudizioAttuale.esito.toLowerCase().replace(/_/g, '-') : ''}">
             <div class="giudizio-esito">${idoneitaLabel(giudizioAttuale.esito)}</div>
             ${giudizioAttuale.mansione ? `<div class="giudizio-detail"><strong>Mansione/i:</strong> ${esc(giudizioAttuale.mansione)}</div>` : ''}
-            ${giudizioAttuale.dataEmissione ? `<div class="giudizio-detail"><strong>Data emissione:</strong> ${formatDate(giudizioAttuale.dataEmissione)}</div>` : ''}
-            ${giudizioAttuale.dataScadenza ? `<div class="giudizio-detail"><strong>Scadenza:</strong> ${formatDate(giudizioAttuale.dataScadenza)}</div>` : ''}
+            ${giudizioAttuale.dataEmissione || giudizioAttuale.data ? `<div class="giudizio-detail"><strong>Data emissione:</strong> ${formatDate(giudizioAttuale.dataEmissione || giudizioAttuale.data)}</div>` : ''}
+            ${giudizioAttuale.dataScadenza || giudizioAttuale.validoFino ? `<div class="giudizio-detail"><strong>Scadenza:</strong> ${formatDate(giudizioAttuale.dataScadenza || giudizioAttuale.validoFino)}</div>` : ''}
             ${giudizioAttuale.prescrizioniIdoneita ? `<div class="giudizio-detail"><strong>Prescrizioni:</strong> ${esc(giudizioAttuale.prescrizioniIdoneita)}</div>` : ''}
             ${giudizioAttuale.limitazioni ? `<div class="giudizio-detail"><strong>Limitazioni:</strong> ${esc(giudizioAttuale.limitazioni)}</div>` : ''}
         </div>`
@@ -129,8 +173,9 @@ function buildHtml(data) {
 
   const medicoBlock = medicoCompetente
     ? `<div class="field-row">
-            <div class="field"><span class="label">Nominativo</span> ${esc(medicoCompetente.nome)}</div>
-            ${medicoCompetente.codice ? `<div class="field"><span class="label">Codice iscrizione</span> ${esc(medicoCompetente.codice)}</div>` : ''}
+            <div class="field"><span class="label">Nominativo</span> ${esc(medicoCompetente.nomeCompleto || `${medicoCompetente.cognome || ''} ${medicoCompetente.nome || ''}`.trim())}</div>
+            ${medicoCompetente.alboMedici ? `<div class="field"><span class="label">Codice iscrizione albo</span> ${esc(medicoCompetente.alboMedici)}</div>` : ''}
+            ${medicoCompetente.codiceFiscale ? `<div class="field"><span class="label">Codice fiscale</span> ${esc(medicoCompetente.codiceFiscale)}</div>` : ''}
             ${medicoCompetente.email ? `<div class="field"><span class="label">Email</span> ${esc(medicoCompetente.email)}</div>` : ''}
         </div>`
     : '<p class="empty">Medico competente non disponibile.</p>';
@@ -161,6 +206,8 @@ function buildHtml(data) {
   .field { min-width: 160px; flex: 1 1 180px; }
   .field .label { font-weight: 600; font-size: 8pt; text-transform: uppercase; color: #555; display: block; margin-bottom: 1px; }
   .field .value { font-size: 10pt; }
+  ul { padding-left: 16px; margin: 4px 0; }
+  li { margin-bottom: 2px; }
 
   /* Tables */
   table { width: 100%; border-collapse: collapse; font-size: 9pt; }
@@ -213,7 +260,8 @@ function buildHtml(data) {
   </div>
   <div class="field-row">
     <div class="field"><span class="label">Data di nascita</span>${formatDate(lavoratore?.birthDate)}</div>
-    <div class="field"><span class="label">Luogo di nascita</span>${esc(lavoratore?.birthPlace)}</div>
+    <div class="field"><span class="label">Luogo di nascita</span>${esc([lavoratore?.birthPlace, lavoratore?.birthProvince].filter(Boolean).join(' (').replace(/\(([^)]*)$/, '($1)'))}</div>
+    <div class="field"><span class="label">Nazionalità</span>${esc(lavoratore?.nationality || 'Non registrata')}</div>
     <div class="field"><span class="label">Residenza</span>${renderAddress(lavoratore?.residenza)}</div>
   </div>
   <div class="field-row">
@@ -232,8 +280,19 @@ function buildHtml(data) {
   </div>
   <div class="field-row">
     <div class="field"><span class="label">Sede Legale</span>${renderAddress(azienda?.sedeLegale)}</div>
+    <div class="field"><span class="label">Unità produttiva / sede lavoro</span>${renderAddress(azienda?.sedeLavoro) || esc(azienda?.sedeLavoro?.nome)}</div>
     <div class="field"><span class="label">Codice ATECO</span>${esc(azienda?.codiceAteco)}</div>
-    <div class="field"><span class="label">Settore</span>${esc(azienda?.settore)}</div>
+    <div class="field"><span class="label">Attività svolta</span>${esc(azienda?.attivitaSvolta || azienda?.settore)}</div>
+  </div>
+</div>
+
+<!-- SEZIONE 2B: Istituzione Cartella -->
+<div class="section">
+  <div class="section-title"><span class="num">2B</span> Dati di Istituzione</div>
+  <div class="field-row">
+    <div class="field"><span class="label">Motivo istituzione</span>${esc(istituzione?.motivo)}</div>
+    <div class="field"><span class="label">Data istituzione / aggiornamento</span>${formatDate(istituzione?.data)}</div>
+    <div class="field"><span class="label">Firma medico competente</span>${esc(istituzione?.firmaMedicoCompetente)}</div>
   </div>
 </div>
 
@@ -243,6 +302,7 @@ function buildHtml(data) {
   <div class="field-row">
     <div class="field"><span class="label">Mansione attuale</span>${esc(datiLavorativi?.mansioneAttuale)}</div>
     ${datiLavorativi?.mansioneCodice ? `<div class="field"><span class="label">Codice mansione</span>${esc(datiLavorativi.mansioneCodice)}</div>` : ''}
+    <div class="field"><span class="label">Profilo professionale</span>${esc(datiLavorativi?.profiloProfessionale)}</div>
     <div class="field"><span class="label">Reparto / Sede</span>${esc(datiLavorativi?.reparto)}</div>
     <div class="field"><span class="label">Unità produttiva</span>${esc(datiLavorativi?.unitaProduttiva)}</div>
   </div>
@@ -250,6 +310,21 @@ function buildHtml(data) {
     <div class="field"><span class="label">Data assunzione</span>${formatDate(datiLavorativi?.dataAssunzione)}</div>
     <div class="field"><span class="label">Inizio mansione attuale</span>${formatDate(datiLavorativi?.dataInizioMansione)}</div>
   </div>
+</div>
+
+<!-- SEZIONE 3B: Programma Sorveglianza Sanitaria -->
+<div class="section">
+  <div class="section-title"><span class="num">3B</span> Programma di Sorveglianza Sanitaria</div>
+  <div class="field-row">
+    <div class="field"><span class="label">Protocollo sanitario</span>${esc(programmaSorveglianzaSanitaria?.protocollo?.denominazione || datiLavorativi?.protocolloSanitario?.denominazione)}</div>
+    <div class="field"><span class="label">Periodicità visite</span>${esc(programmaSorveglianzaSanitaria?.protocollo?.periodicitaVisiteMesi ? `Ogni ${programmaSorveglianzaSanitaria.protocollo.periodicitaVisiteMesi} mesi` : null)}</div>
+  </div>
+  <table>
+    <thead>
+      <tr><th>Accertamento previsto</th><th class="center">Obbligatorietà</th><th>Periodicità</th></tr>
+    </thead>
+    <tbody>${sezioneProtocollo}</tbody>
+  </table>
 </div>
 
 <!-- SEZIONE 4: Rischi Professionali -->
@@ -270,6 +345,24 @@ function buildHtml(data) {
   </table>
 </div>
 
+<!-- SEZIONE 4B: Anamnesi ed Esame Obiettivo -->
+<div class="section">
+  <div class="section-title"><span class="num">4B</span> Anamnesi Completa ed Esame Obiettivo</div>
+  <div class="field-row">
+    <div class="field"><span class="label">Anamnesi lavorativa</span>${renderTextBlock(anamnesi?.lavorativa)}</div>
+    <div class="field"><span class="label">Anamnesi familiare</span>${renderTextBlock(anamnesi?.familiare)}</div>
+  </div>
+  <div class="field-row">
+    <div class="field"><span class="label">Anamnesi fisiologica</span>${renderTextBlock(anamnesi?.fisiologica)}</div>
+    <div class="field"><span class="label">Patologica remota</span>${renderTextBlock(anamnesi?.patologicaRemota)}</div>
+    <div class="field"><span class="label">Patologica prossima</span>${renderTextBlock(anamnesi?.patologicaProssima)}</div>
+  </div>
+  <div class="field-row">
+    <div class="field"><span class="label">Esame obiettivo orientato</span>${renderTextBlock(esameObiettivo)}</div>
+    <div class="field"><span class="label">Provvedimenti del medico competente</span>${renderTextBlock(provvedimentiMedicoCompetente)}</div>
+  </div>
+</div>
+
 <!-- SEZIONE 5: Accertamenti Sanitari -->
 <div class="section">
   <div class="section-title"><span class="num">5</span> Storico Accertamenti Sanitari (ultimi 5 anni)</div>
@@ -288,10 +381,40 @@ function buildHtml(data) {
   </table>
 </div>
 
+<!-- SEZIONE 5B: Visite Mediche del Lavoro -->
+<div class="section">
+  <div class="section-title"><span class="num">5B</span> Visite Preventive, Periodiche e Successive</div>
+  <table>
+    <thead>
+      <tr>
+        <th class="center" style="width:90px">Data</th>
+        <th>Tipo visita</th>
+        <th>Prestazione</th>
+        <th>Esame obiettivo / variazioni</th>
+        <th>Giudizio</th>
+      </tr>
+    </thead>
+    <tbody>${sezioneVisite}</tbody>
+  </table>
+</div>
+
 <!-- SEZIONE 6: Giudizio di Idoneità -->
 <div class="section">
   <div class="section-title"><span class="num">6</span> Giudizio di Idoneità Attuale</div>
   ${giudizioBlock}
+</div>
+
+<!-- SEZIONE 6B: Comunicazione Giudizio -->
+<div class="section">
+  <div class="section-title"><span class="num">6B</span> Comunicazione del Giudizio di Idoneità</div>
+  ${comunicazioneGiudizio ? `
+    <div class="field-row">
+      <div class="field"><span class="label">Destinatari</span>${esc(comunicazioneGiudizio.destinatari)}</div>
+      <div class="field"><span class="label">Notifica lavoratore</span>${formatDate(comunicazioneGiudizio.dataNotificaLavoratore)}</div>
+      <div class="field"><span class="label">Notifica datore di lavoro</span>${formatDate(comunicazioneGiudizio.dataNotificaDatoreLavoro)}</div>
+    </div>
+    <div class="field-row"><div class="field"><span class="label">Contenuti minimi</span>${esc(comunicazioneGiudizio.contenutoMinimo)}</div></div>
+  ` : '<p class="empty">Nessun giudizio comunicabile registrato.</p>'}
 </div>
 
 <!-- SEZIONE 7: Medico Competente e Firma -->
@@ -303,6 +426,17 @@ function buildHtml(data) {
     <div class="firma-block">Firma Medico Competente<br><br>_______________</div>
     <div class="firma-block">Firma Lavoratore<br><br>_______________</div>
   </div>
+</div>
+
+<!-- SEZIONE 8: Allegati Cartella -->
+<div class="section">
+  <div class="section-title"><span class="num">8</span> Referti, Accertamenti, Documenti e Allegati</div>
+  <table>
+    <thead>
+      <tr><th style="width:90px">Data</th><th>Tipologia</th><th>Documento</th><th>Origine</th></tr>
+    </thead>
+    <tbody>${sezioneAllegati}</tbody>
+  </table>
 </div>
 
 <div class="doc-footer">

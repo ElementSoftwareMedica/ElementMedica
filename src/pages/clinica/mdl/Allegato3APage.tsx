@@ -20,7 +20,7 @@
 
 import React, { useState, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import {
     FileText,
     User,
@@ -42,19 +42,17 @@ import {
     Printer,
     RefreshCw,
     AlertCircle,
-    Filter,
     Users,
     Archive
 } from 'lucide-react';
 import {
     clinicaApi,
-    type Allegato3AData,
-    type Allegato3AStats
+    type Allegato3ACompany
 } from '../../../services/clinicaApi';
-import { apiGet, apiDownloadWithFilename } from '../../../services/api';
+import { apiDownloadWithFilename } from '../../../services/api';
 import { useToast } from '../../../hooks/useToast';
 import { useTenantFilter } from '../../../context/TenantFilterContext';
-import Modal from '../../../design-system/molecules/Modal/Modal';
+import ElegantSelect from '../../../components/ui/ElegantSelect';
 import { formatMedicoName } from '../../../utils/textFormatters';
 
 // Import Element Medica theme
@@ -65,12 +63,11 @@ import '../../../styles/clinica-theme.css';
 // =====================================================
 
 const Allegato3APage: React.FC = () => {
-    const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const { showToast } = useToast();
 
     // Tenant filter from global context
-    const { isReady, tenantFilterKey, getTenantFilterParams } = useTenantFilter();
+    const { isReady, tenantFilterKey } = useTenantFilter();
 
     // State
     const [selectedCompanyId, setSelectedCompanyId] = useState<string>(searchParams.get('companyId') || '');
@@ -78,6 +75,7 @@ const Allegato3APage: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [viewMode, setViewMode] = useState<'list' | 'detail'>('list');
     const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+    const [isDownloadingCompletePdf, setIsDownloadingCompletePdf] = useState(false);
     const [isDownloadingZip, setIsDownloadingZip] = useState(false);
 
     // ---------------------------------------------------------------------------
@@ -108,6 +106,30 @@ const Allegato3APage: React.FC = () => {
         }
     }, [selectedWorkerId, selectedCompanyId, showToast]);
 
+    /** Scarica PDF completo con allegati clinici disponibili */
+    const handleDownloadCompletePdf = useCallback(async () => {
+        if (!selectedWorkerId || !selectedCompanyId) return;
+        setIsDownloadingCompletePdf(true);
+        try {
+            const { blob, filename } = await apiDownloadWithFilename(
+                `/api/v1/clinica/allegato-3a/${selectedWorkerId}/${selectedCompanyId}/pdf-completo`
+            );
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename || `allegato3a_completo_${selectedWorkerId}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            showToast({ type: 'success', message: 'PDF completo scaricato con successo' });
+        } catch {
+            showToast({ type: 'error', message: 'Errore durante la generazione del PDF completo' });
+        } finally {
+            setIsDownloadingCompletePdf(false);
+        }
+    }, [selectedWorkerId, selectedCompanyId, showToast]);
+
     /** Scarica ZIP con tutti i PDF dei lavoratori dell'azienda */
     const handleDownloadZip = useCallback(async () => {
         if (!selectedCompanyId) return;
@@ -132,27 +154,20 @@ const Allegato3APage: React.FC = () => {
         }
     }, [selectedCompanyId, showToast]);
 
-    // Fetch companies for selection - using companies API (P49 pattern)
+    // Fetch companies visible for Allegato 3A: only companies with MC nomination
     const { data: companiesResponse } = useQuery({
         queryKey: ['companies-for-allegato3a', tenantFilterKey],
-        queryFn: async () => {
-            const tenantParams = getTenantFilterParams();
-            const params = new URLSearchParams();
-            params.append('limit', '100');
-            if (tenantParams.tenantIds) {
-                params.append('tenantIds', tenantParams.tenantIds.join(','));
-            }
-            if (tenantParams.allTenants) {
-                params.append('allTenants', 'true');
-            }
-            const response = await apiGet<{ id: string; ragioneSociale: string; piva?: string }[]>(`/api/v1/companies?${params.toString()}`);
-            return response;
-        },
+        queryFn: () => clinicaApi.allegato3A.getCompanies(),
         enabled: isReady
     });
 
+    const companyOptions = useMemo(() => (companiesResponse || []).map((company: Allegato3ACompany) => ({
+        value: company.id,
+        label: `${company.ragioneSociale}${company.medicoCompetente ? ` · MC ${company.medicoCompetente}` : ''}${company.piva ? ` · P.IVA ${company.piva}` : ''}`
+    })), [companiesResponse]);
+
     // Fetch stats for selected company
-    const { data: stats, isLoading: statsLoading } = useQuery({
+    const { data: stats } = useQuery({
         queryKey: ['allegato3a-stats', selectedCompanyId, tenantFilterKey],
         queryFn: () => clinicaApi.allegato3A.getStats(selectedCompanyId),
         enabled: isReady && !!selectedCompanyId
@@ -213,26 +228,33 @@ const Allegato3APage: React.FC = () => {
     // =====================================================
 
     const renderCompanySelection = () => (
-        <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-                Seleziona Azienda
-            </label>
-            <select
+        <div className="mb-6 rounded-2xl border border-teal-100 bg-white p-5 shadow-sm">
+            <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                    <h2 className="text-base font-semibold text-gray-900">Aziende con nomina attiva</h2>
+                    <p className="mt-1 max-w-3xl text-sm text-gray-500">
+                        Sono incluse solo le aziende con Medico Competente o Medico Competente coordinato.
+                        I medici vedono solo le proprie nomine; tenant admin e segreteria vedono l'intero perimetro nominato.
+                    </p>
+                </div>
+                <div className="inline-flex items-center gap-2 rounded-full border border-teal-100 bg-teal-50 px-3 py-1 text-xs font-medium text-teal-700">
+                    <Shield className="h-3.5 w-3.5" />
+                    Dati filtrati per ruolo e tenant
+                </div>
+            </div>
+            <div className="max-w-3xl">
+                <ElegantSelect
                 value={selectedCompanyId}
-                onChange={(e) => {
-                    setSelectedCompanyId(e.target.value);
+                    onChange={(value) => {
+                    setSelectedCompanyId(value);
                     setSelectedWorkerId('');
                     setViewMode('list');
                 }}
-                className="w-full md:w-96 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
-            >
-                <option value="">-- Seleziona un'azienda --</option>
-                {companiesResponse?.map((company: { id: string; ragioneSociale: string; piva?: string }) => (
-                    <option key={company.id} value={company.id}>
-                        {company.ragioneSociale}{company.piva ? ` (${company.piva})` : ''}
-                    </option>
-                ))}
-            </select>
+                    options={companyOptions}
+                    placeholder="Seleziona azienda con medico competente..."
+                    triggerClassName="h-11 rounded-xl"
+                />
+            </div>
         </div>
     );
 
@@ -391,7 +413,27 @@ const Allegato3APage: React.FC = () => {
             );
         }
 
-        const { lavoratore, azienda, datiLavorativi, rischiProfessionali, accertamentiSanitari, giudizioAttuale, medicoCompetente } = workerData;
+        const {
+            lavoratore,
+            azienda,
+            istituzione,
+            datiLavorativi,
+            rischiProfessionali,
+            accertamentiSanitari,
+            visiteMediche,
+            programmaSorveglianzaSanitaria,
+            allegatiCartella,
+            giudizioAttuale,
+            medicoCompetente
+        } = workerData;
+        const completenessItems = [
+            { label: 'Frontespizio lavoratore/azienda', ok: Boolean(lavoratore?.taxCode && azienda?.ragioneSociale) },
+            { label: 'Mansione, reparto, profilo e rischi', ok: Boolean(datiLavorativi?.mansioneAttuale && rischiProfessionali?.length) },
+            { label: 'Protocollo sanitario applicato', ok: Boolean(programmaSorveglianzaSanitaria?.protocollo?.denominazione || datiLavorativi?.protocolloSanitario?.denominazione) },
+            { label: 'Visite MDL e accertamenti', ok: Boolean(visiteMediche?.length || accertamentiSanitari?.length) },
+            { label: 'Giudizio di idoneità corrente', ok: Boolean(giudizioAttuale) },
+            { label: 'Allegati clinici collegati', ok: Boolean(allegatiCartella?.length) }
+        ];
 
         return (
             <div className="space-y-6">
@@ -421,7 +463,28 @@ const Allegato3APage: React.FC = () => {
                                 : <Download className="h-4 w-4" />}
                             {isDownloadingPdf ? 'Generazione...' : 'Scarica PDF'}
                         </button>
+                        <button
+                            onClick={handleDownloadCompletePdf}
+                            disabled={isDownloadingCompletePdf}
+                            className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                            {isDownloadingCompletePdf
+                                ? <RefreshCw className="h-4 w-4 animate-spin" />
+                                : <Archive className="h-4 w-4" />}
+                            {isDownloadingCompletePdf ? 'Generazione...' : 'PDF con allegati'}
+                        </button>
                     </div>
+                </div>
+
+                <div className="grid gap-3 rounded-2xl border border-teal-100 bg-teal-50/50 p-4 md:grid-cols-2 xl:grid-cols-3">
+                    {completenessItems.map(item => (
+                        <div key={item.label} className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm shadow-sm">
+                            {item.ok
+                                ? <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                                : <AlertCircle className="h-4 w-4 text-amber-500" />}
+                            <span className={item.ok ? 'text-gray-700' : 'text-amber-700'}>{item.label}</span>
+                        </div>
+                    ))}
                 </div>
 
                 {/* Section 1: Dati Anagrafici Lavoratore */}
@@ -453,7 +516,11 @@ const Allegato3APage: React.FC = () => {
                         </div>
                         <div>
                             <label className="text-xs text-gray-500 uppercase">Sesso</label>
-                            <p className="font-medium">{lavoratore.gender === 'MALE' ? 'M' : lavoratore.gender === 'FEMALE' ? 'F' : 'N/D'}</p>
+                            <p className="font-medium">{lavoratore.gender === 'MALE' ? 'Maschio' : lavoratore.gender === 'FEMALE' ? 'Femmina' : 'N/D'}</p>
+                        </div>
+                        <div>
+                            <label className="text-xs text-gray-500 uppercase">Nazionalità</label>
+                            <p className="font-medium">{lavoratore.nationality || 'Non registrata'}</p>
                         </div>
                         {lavoratore.residenza && (
                             <>
@@ -514,6 +581,10 @@ const Allegato3APage: React.FC = () => {
                             <label className="text-xs text-gray-500 uppercase">Settore</label>
                             <p className="font-medium">{azienda.settore || 'N/D'}</p>
                         </div>
+                        <div>
+                            <label className="text-xs text-gray-500 uppercase">Attività svolta</label>
+                            <p className="font-medium">{azienda.attivitaSvolta || 'N/D'}</p>
+                        </div>
                         {azienda.sedeLegale && (
                             <div className="md:col-span-3">
                                 <label className="text-xs text-gray-500 uppercase">Sede Legale</label>
@@ -523,6 +594,37 @@ const Allegato3APage: React.FC = () => {
                                 </p>
                             </div>
                         )}
+                        {azienda.sedeLavoro && (
+                            <div className="md:col-span-3">
+                                <label className="text-xs text-gray-500 uppercase">Unità produttiva / sede di lavoro</label>
+                                <p className="font-medium flex items-center gap-1">
+                                    <MapPin className="h-4 w-4 text-gray-400" />
+                                    {[azienda.sedeLavoro.nome, azienda.sedeLavoro.indirizzo, azienda.sedeLavoro.citta, azienda.sedeLavoro.provincia].filter(Boolean).join(' · ')}
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Section 2B: Istituzione */}
+                <div className="bg-white border border-gray-200 rounded-xl p-6">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                        <FileText className="h-5 w-5 text-teal-600" />
+                        Dati di Istituzione della Cartella
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label className="text-xs text-gray-500 uppercase">Motivo istituzione</label>
+                            <p className="font-medium">{istituzione?.motivo || 'N/D'}</p>
+                        </div>
+                        <div>
+                            <label className="text-xs text-gray-500 uppercase">Data</label>
+                            <p className="font-medium">{formatDate(istituzione?.data)}</p>
+                        </div>
+                        <div>
+                            <label className="text-xs text-gray-500 uppercase">Firma Medico Competente</label>
+                            <p className="font-medium">{istituzione?.firmaMedicoCompetente || 'N/D'}</p>
+                        </div>
                     </div>
                 </div>
 
@@ -542,6 +644,10 @@ const Allegato3APage: React.FC = () => {
                             <p className="font-medium">{datiLavorativi.mansioneAttuale || 'N/D'}</p>
                         </div>
                         <div>
+                            <label className="text-xs text-gray-500 uppercase">Profilo professionale</label>
+                            <p className="font-medium">{datiLavorativi.profiloProfessionale || 'N/D'}</p>
+                        </div>
+                        <div>
                             <label className="text-xs text-gray-500 uppercase">Codice Mansione</label>
                             <p className="font-medium font-mono">{datiLavorativi.mansioneCodice || 'N/D'}</p>
                         </div>
@@ -557,6 +663,37 @@ const Allegato3APage: React.FC = () => {
                                 <p className="font-medium">{datiLavorativi.turno}</p>
                             </div>
                         )}
+                    </div>
+
+                    <div className="mt-4 rounded-xl border border-teal-100 bg-teal-50/40 p-4">
+                        <div className="mb-3 flex items-center justify-between gap-3">
+                            <div>
+                                <h4 className="text-sm font-semibold text-teal-900">Programma di Sorveglianza Sanitaria</h4>
+                                <p className="text-xs text-teal-700">
+                                    {programmaSorveglianzaSanitaria?.protocollo?.denominazione
+                                        || datiLavorativi.protocolloSanitario?.denominazione
+                                        || 'Protocollo non registrato'}
+                                </p>
+                            </div>
+                            {programmaSorveglianzaSanitaria?.protocollo?.periodicitaVisiteMesi && (
+                                <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-teal-700">
+                                    Ogni {programmaSorveglianzaSanitaria.protocollo.periodicitaVisiteMesi} mesi
+                                </span>
+                            )}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            {(programmaSorveglianzaSanitaria?.accertamentiPrevisti || []).map(acc => (
+                                <span
+                                    key={acc.id || acc.nome}
+                                    className="rounded-full border border-teal-100 bg-white px-3 py-1 text-xs text-gray-700"
+                                >
+                                    {acc.nome || 'Accertamento'} · {acc.obbligatoria ? 'obbligatorio' : 'facoltativo'}
+                                </span>
+                            ))}
+                            {!(programmaSorveglianzaSanitaria?.accertamentiPrevisti || []).length && (
+                                <span className="text-sm text-gray-500">Nessun accertamento previsto registrato</span>
+                            )}
+                        </div>
                     </div>
 
                     {/* Storico Mansioni */}

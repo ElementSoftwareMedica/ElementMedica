@@ -1211,9 +1211,28 @@ export interface NominaStats {
 export interface Allegato3AData {
     lavoratore: Allegato3ALavoratore;
     azienda: Allegato3AAzienda;
+    istituzione?: {
+        motivo?: string;
+        data?: string;
+        firmaMedicoCompetente?: string;
+    };
     datiLavorativi: Allegato3ADatiLavorativi;
     rischiProfessionali: Allegato3ARischio[];
     accertamentiSanitari: Allegato3AAccertamento[];
+    visiteMediche?: Array<{
+        id: string;
+        data?: string;
+        dataOra?: string;
+        tipoVisitaLabel?: string;
+        prestazione?: { nome?: string; codice?: string };
+        giudizio?: { esito?: string; dataScadenza?: string };
+    }>;
+    anamnesi?: Record<string, string | null | undefined>;
+    programmaSorveglianzaSanitaria?: {
+        protocollo?: { denominazione?: string; periodicitaVisiteMesi?: number };
+        accertamentiPrevisti?: Array<{ id?: string; nome?: string; obbligatoria?: boolean; periodicita?: string; periodicitaCustomMesi?: number }>;
+    };
+    allegatiCartella?: Array<{ id: string; tipo?: string; titolo?: string; fileName?: string; mimeType?: string; data?: string }>;
     giudizioAttuale: Allegato3AGiudizio | null;
     medicoCompetente: Allegato3AMedicoCompetente | null;
     generatedAt: string;
@@ -1228,6 +1247,8 @@ export interface Allegato3ALavoratore {
     gender?: string;
     birthDate?: string;
     birthPlace?: string;
+    birthProvince?: string;
+    nationality?: string | null;
     residenza?: {
         indirizzo?: string;
         citta?: string;
@@ -1253,6 +1274,9 @@ export interface Allegato3AAzienda {
     };
     codiceAteco?: string;
     settore?: string;
+    attivitaSvolta?: string;
+    unitaProduttive?: Array<{ id?: string; nome?: string; indirizzo?: string; citta?: string; cap?: string; provincia?: string }>;
+    sedeLavoro?: { id?: string; nome?: string; indirizzo?: string; citta?: string; cap?: string; provincia?: string };
     sede?: {
         id?: string;
         nome?: string;
@@ -1265,9 +1289,11 @@ export interface Allegato3ADatiLavorativi {
     dataAssunzione?: string;
     mansioneAttuale?: string;
     mansioneCodice?: string;
+    profiloProfessionale?: string;
     reparto?: string;
     turno?: string;
     contratto?: string;
+    protocolloSanitario?: { id?: string; codice?: string; denominazione?: string; periodicitaVisiteMesi?: number };
     storicoMansioni: Array<{
         mansioneNome?: string;
         mansioneCodice?: string;
@@ -1328,6 +1354,18 @@ export interface Allegato3AStats {
     pendingVisits: number;
     byMansione: Record<string, number>;
     byEsitoGiudizio: Record<string, number>;
+}
+
+export interface Allegato3ACompany {
+    id: string;
+    ragioneSociale: string;
+    piva?: string;
+    codiceFiscale?: string;
+    sede?: string | null;
+    medicoCompetente?: string | null;
+    mediciCoordinati?: string[];
+    nomineCount?: number;
+    canViewAll?: boolean;
 }
 
 // =====================================================
@@ -5556,6 +5594,11 @@ export const nomineRuoloApi = {
 // =====================================================
 
 export const allegato3AApi = {
+    // Elenco aziende visibili con nomina medico competente/coordinato
+    getCompanies: () =>
+        apiGet<ApiResponse<Allegato3ACompany[]>>(`${CLINICA_BASE}/allegato-3a/companies`)
+            .then(extractData),
+
     // Genera dati cartella sanitaria per un lavoratore
     generate: (personId: string, companyTenantProfileId: string) =>
         apiGet<ApiResponse<Allegato3AData>>(`${CLINICA_BASE}/allegato-3a/${personId}/${companyTenantProfileId}`)

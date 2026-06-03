@@ -16,6 +16,7 @@ import { clinicalValidators } from '../../config/validation-clinical.js';
 import { VisitaService } from '../../services/clinical/VisitaService.js';
 import { VisitaRefertoService } from '../../services/clinical/VisitaRefertoService.js';
 import VisitaSecondariaService from '../../services/clinical/VisitaSecondariaService.js';
+import Allegato3AService from '../../services/clinical/Allegato3AService.js';
 import MovimentoContabileGenerator from '../../services/management/MovimentoContabileGenerator.js';
 import prisma from '../../config/prisma-optimization.js';
 import { getEffectiveTenantId } from '../../utils/tenantHelper.js';
@@ -789,6 +790,7 @@ router.post('/:id/termina',
                     } else if (visitaFull.tipoVisitaMDL) {
                         // aggiornaPerVisitaMDL: invalida BOZZA da prenotazione → crea DA_FATTURARE → finalizza accertamenti
                         await MovimentoContabileGenerator.aggiornaPerVisitaMDL(visitaFull, tenantId, updatedBy);
+                        await Allegato3AService.refreshFromCompletedVisit(visitaFull, tenantId);
                     } else {
                         await MovimentoContabileGenerator.aggiornaPerVisita(visitaFull, tenantId, updatedBy);
                     }

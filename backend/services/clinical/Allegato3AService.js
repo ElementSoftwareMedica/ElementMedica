@@ -11,6 +11,41 @@
 import prisma from '../../config/prisma-optimization.js';
 import logger from '../../utils/logger.js';
 
+const MC_NOMINA_TYPES = ['MEDICO_COMPETENTE', 'MEDICO_COMPETENTE_COORDINATO'];
+const PRIVILEGED_ALLEGATO_3A_ROLES = new Set([
+    'SUPER_ADMIN',
+    'ADMIN',
+    'TENANT_ADMIN',
+    'CLINIC_ADMIN',
+    'SEGRETERIA_CLINICA'
+]);
+
+function isActiveNominaWindow() {
+    const now = new Date();
+    return {
+        OR: [
+            { dataFine: null },
+            { dataFine: { gte: now } }
+        ],
+        AND: [
+            {
+                OR: [
+                    { dataScadenza: null },
+                    { dataScadenza: { gte: now } }
+                ]
+            }
+        ]
+    };
+}
+
+function firstValue(source, keys) {
+    if (!source || typeof source !== 'object') return null;
+    for (const key of keys) {
+        const value = source[key];
+        if (value !== null && value !== undefined && String(value).trim() !== '') return value;
+    }
+    return null;
+}
 
 /**
  * Struttura Allegato 3A secondo D.Lgs 81/08:
@@ -25,6 +60,151 @@ import logger from '../../utils/logger.js';
  */
 
 class Allegato3AService {
+    static async getRoleTypesForPerson(person, tenantId) {
+        const roles = new Set();
+        if (person?.roleType) roles.add(String(person.roleType));
+        if (person?.globalRole) roles.add(String(person.globalRole));
+        if (Array.isArray(person?.roles)) {
+            person.roles.forEach(role => {
+                if (typeof role === 'string') roles.add(role);
+                if (role?.roleType) roles.add(String(role.roleType));
+            });
+        }
+
+        if (person?.id) {
+            const dbRoles = await prisma.personRole.findMany({
+                where: {
+                    personId: person.id,
+                    tenantId,
+                    isActive: true,
+                    deletedAt: null,
+                    OR: [
+                        { validUntil: null },
+                        { validUntil: { gte: new Date() } }
+                    ]
+                },
+                select: { roleType: true }
+            });
+            dbRoles.forEach(role => {
+                if (role.roleType) roles.add(String(role.roleType));
+            });
+        }
+
+        return [...roles];
+    }
+
+    static async getVisibleCompanies(tenantId, person) {
+        const roleTypes = await this.getRoleTypesForPerson(person, tenantId);
+        const canViewAll = roleTypes.some(role => PRIVILEGED_ALLEGATO_3A_ROLES.has(role));
+        const nominaWindow = isActiveNominaWindow();
+
+        const profiles = await prisma.companyTenantProfile.findMany({
+            where: {
+                tenantId,
+                deletedAt: null,
+                isActive: true,
+                OR: [
+                    {
+                        nomine: {
+                            some: {
+                                tenantId,
+                                deletedAt: null,
+                                stato: 'ATTIVA',
+                                tipoRuolo: { in: MC_NOMINA_TYPES },
+                                ...nominaWindow,
+                                ...(canViewAll ? {} : { personId: person.id })
+                            }
+                        }
+                    },
+                    {
+                        sites: {
+                            some: {
+                                tenantId,
+                                deletedAt: null,
+                                medicoCompetenteId: canViewAll ? { not: null } : person.id
+                            }
+                        }
+                    }
+                ]
+            },
+            select: {
+                id: true,
+                company: {
+                    select: {
+                        ragioneSociale: true,
+                        piva: true,
+                        codiceFiscale: true,
+                        sedeLegaleCitta: true,
+                        sedeLegaleProvincia: true
+                    }
+                },
+                sites: {
+                    where: {
+                        tenantId,
+                        deletedAt: null,
+                        ...(canViewAll ? { medicoCompetenteId: { not: null } } : { medicoCompetenteId: person.id })
+                    },
+                    select: {
+                        id: true,
+                        siteName: true,
+                        citta: true,
+                        provincia: true,
+                        medicoCompetente: {
+                            select: { id: true, firstName: true, lastName: true }
+                        }
+                    }
+                },
+                nomine: {
+                    where: {
+                        tenantId,
+                        deletedAt: null,
+                        stato: 'ATTIVA',
+                        tipoRuolo: { in: MC_NOMINA_TYPES },
+                        ...nominaWindow,
+                        ...(canViewAll ? {} : { personId: person.id })
+                    },
+                    select: {
+                        id: true,
+                        tipoRuolo: true,
+                        dataInizio: true,
+                        dataScadenza: true,
+                        person: {
+                            select: { id: true, firstName: true, lastName: true }
+                        }
+                    },
+                    orderBy: [{ tipoRuolo: 'asc' }, { dataInizio: 'desc' }]
+                }
+            },
+            take: 1000
+        });
+
+        return profiles
+            .map(profile => {
+                const nomine = profile.nomine || [];
+                const mcNomina = nomine.find(n => n.tipoRuolo === 'MEDICO_COMPETENTE');
+                const coordinated = nomine.filter(n => n.tipoRuolo === 'MEDICO_COMPETENTE_COORDINATO');
+                const siteMc = profile.sites?.find(site => site.medicoCompetente)?.medicoCompetente;
+                const medicoCompetente = mcNomina?.person || siteMc || null;
+
+                return {
+                    id: profile.id,
+                    ragioneSociale: profile.company?.ragioneSociale || 'Azienda senza denominazione',
+                    piva: profile.company?.piva,
+                    codiceFiscale: profile.company?.codiceFiscale,
+                    sede: [profile.company?.sedeLegaleCitta, profile.company?.sedeLegaleProvincia].filter(Boolean).join(' · ') || null,
+                    medicoCompetente: medicoCompetente
+                        ? `${medicoCompetente.lastName || ''} ${medicoCompetente.firstName || ''}`.trim()
+                        : null,
+                    mediciCoordinati: coordinated
+                        .map(n => `${n.person?.lastName || ''} ${n.person?.firstName || ''}`.trim())
+                        .filter(Boolean),
+                    nomineCount: nomine.length + (siteMc && !mcNomina ? 1 : 0),
+                    canViewAll
+                };
+            })
+            .sort((a, b) => a.ragioneSociale.localeCompare(b.ragioneSociale, 'it'));
+    }
+
     static async resolveCompanyTenantProfileId(companyTenantProfileId, tenantId) {
         const profile = await prisma.companyTenantProfile.findFirst({
             where: {
@@ -75,13 +255,32 @@ class Allegato3AService {
         const datiLavorativi = await this.getDatiLavorativi(personId, companyTenantProfileId, tenantId);
 
         // 4. Storico accertamenti sanitari
-        const accertamenti = await this.getAccertamentiSanitari(personId, tenantId);
+        const accertamenti = await this.getAccertamentiSanitari(personId, tenantId, companyTenantProfileId);
 
         // 5. Giudizio idoneità attuale
         const giudizio = await this.getGiudizioAttuale(personId, tenantId);
 
         // 6. Dati Medico Competente
         const medicoCompetente = await this.getMedicoCompetente(companyTenantProfileId, tenantId);
+        const visiteMediche = await this.getVisiteMediche(personId, companyTenantProfileId, tenantId);
+        const allegatiCartella = await this.getAllegatiCartella(personId, companyTenantProfileId, tenantId);
+        const ultimaVisita = visiteMediche[0] || null;
+        const datiStrutturati = ultimaVisita?.datiStrutturati || {};
+        const anamnesi = {
+            lavorativa: firstValue(datiStrutturati, ['anamnesi_lavorativa', 'anamnesiLavorativa', 'anamnesi.lavorativa']) || ultimaVisita?.anamnesi || null,
+            familiare: firstValue(datiStrutturati, ['anamnesi_familiare', 'anamnesiFamiliare', 'anamnesi.familiare']),
+            fisiologica: firstValue(datiStrutturati, ['anamnesi_fisiologica', 'anamnesiFisiologica', 'anamnesi.fisiologica']),
+            patologicaRemota: firstValue(datiStrutturati, ['anamnesi_patologica_remota', 'anamnesiPatologicaRemota', 'anamnesi.patologica_remota']),
+            patologicaProssima: firstValue(datiStrutturati, ['anamnesi_patologica_prossima', 'anamnesiPatologicaProssima', 'anamnesi.patologica_prossima'])
+        };
+        const istituzione = {
+            motivo: visiteMediche.length <= 1
+                ? 'Prima istituzione della cartella sanitaria e di rischio'
+                : 'Aggiornamento cartella sanitaria e di rischio',
+            data: visiteMediche.at(-1)?.dataOra || lavoratore.profile?.hiredDate || new Date(),
+            numeroProgressivoPagine: null,
+            firmaMedicoCompetente: medicoCompetente?.nomeCompleto || null
+        };
 
         // Map to Allegato3AData shape expected by frontend/clinicaApi
         return {
@@ -97,6 +296,8 @@ class Allegato3AService {
                 gender: lavoratore.gender,
                 birthDate: lavoratore.birthDate,
                 birthPlace: lavoratore.birthPlace,
+                birthProvince: lavoratore.birthProvince,
+                nationality: null,
                 residenza: {
                     indirizzo: lavoratore.profile?.residenceAddress,
                     citta: lavoratore.profile?.residenceCity,
@@ -122,18 +323,32 @@ class Allegato3AService {
                     provincia: azienda.company?.sedeLegaleProvincia
                 },
                 codiceAteco: azienda.company?.codiceAteco,
-                settore: azienda.company?.settore
+                settore: azienda.company?.settore,
+                attivitaSvolta: azienda.company?.settore || azienda.company?.codiceAteco,
+                unitaProduttive: (azienda.sites || []).map(site => ({
+                    id: site.id,
+                    nome: site.siteName,
+                    indirizzo: site.indirizzo,
+                    citta: site.citta,
+                    cap: site.cap,
+                    provincia: site.provincia
+                })),
+                sedeLavoro: datiLavorativi.sedeLavoro
             },
+
+            istituzione,
 
             // Sezione 3: Dati Lavorativi
             datiLavorativi: {
                 dataAssunzione: lavoratore.profile?.hiredDate || null,
                 mansioneAttuale: datiLavorativi.mansione,
-                mansioneCodice: datiLavorativi.codiceManisone,
+                mansioneCodice: datiLavorativi.codiceMansione,
+                profiloProfessionale: lavoratore.profile?.title || datiLavorativi.profiloProfessionale,
                 reparto: datiLavorativi.reparto,
                 unitaProduttiva: datiLavorativi.unitaProduttiva,
                 dataInizioMansione: datiLavorativi.dataInizioMansione,
-                storicoMansioni: []
+                protocolloSanitario: datiLavorativi.protocolloSanitario,
+                storicoMansioni: datiLavorativi.storicoMansioni || []
             },
 
             // Sezione 4: Rischi Professionali
@@ -147,12 +362,27 @@ class Allegato3AService {
 
             // Sezione 5: Accertamenti Sanitari
             accertamentiSanitari: accertamenti,
+            visiteMediche,
+            anamnesi,
+            programmaSorveglianzaSanitaria: {
+                protocollo: datiLavorativi.protocolloSanitario,
+                accertamentiPrevisti: datiLavorativi.accertamentiPrevisti || []
+            },
+            esameObiettivo: ultimaVisita?.esamiObiettivo || firstValue(datiStrutturati, ['esame_obiettivo', 'esameObiettivo']) || null,
+            provvedimentiMedicoCompetente: firstValue(datiStrutturati, ['provvedimenti_mc', 'provvedimentiMedicoCompetente']) || ultimaVisita?.prescrizioni || null,
 
             // Sezione 6: Giudizio Idoneità
             giudizioAttuale: giudizio,
+            comunicazioneGiudizio: giudizio ? {
+                destinatari: 'Datore di lavoro e lavoratore',
+                contenutoMinimo: 'Generalità, ragione sociale azienda, mansione/rischi, esito del giudizio, scadenza e termini di ricorso all’organo di vigilanza entro 30 giorni.',
+                dataNotificaLavoratore: giudizio.dataNotificaLavoratore,
+                dataNotificaDatoreLavoro: giudizio.dataNotificaDatoreLavoro
+            } : null,
 
             // Sezione 7: Medico Competente
-            medicoCompetente: medicoCompetente
+            medicoCompetente: medicoCompetente,
+            allegatiCartella
         };
     }
 
@@ -172,6 +402,7 @@ class Allegato3AService {
                 taxCode: true,
                 birthDate: true,
                 birthPlace: true,
+                birthProvince: true,
                 gender: true,
                 tenantProfiles: {
                     where: {
@@ -187,7 +418,12 @@ class Allegato3AService {
                         phone: true,
                         hiredDate: true,
                         endDate: true,
-                        status: true
+                        status: true,
+                        title: true,
+                        companyTenantProfileId: true,
+                        siteId: true,
+                        repartoId: true,
+                        protocolloSanitarioId: true
                     },
                     take: 1
                 }
@@ -274,6 +510,42 @@ class Allegato3AService {
             }
         };
 
+        const profile = await prisma.personTenantProfile.findFirst({
+            where: { personId, tenantId, companyTenantProfileId, deletedAt: null },
+            include: {
+                reparto: { select: { nome: true, codice: true } },
+                site: {
+                    select: {
+                        id: true,
+                        siteName: true,
+                        indirizzo: true,
+                        citta: true,
+                        cap: true,
+                        provincia: true
+                    }
+                },
+                protocolloSanitario: {
+                    select: {
+                        id: true,
+                        codice: true,
+                        denominazione: true,
+                        periodicitaVisiteMesi: true,
+                        prestazioni: {
+                            where: { deletedAt: null },
+                            select: {
+                                isObbligatoria: true,
+                                periodicita: true,
+                                periodicitaCustomMesi: true,
+                                prestazione: {
+                                    select: { id: true, nome: true, codice: true }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
         // Tentativo 1: mansione con site appartenente all'azienda
         let assegnazione = await prisma.lavoratoreMansione.findFirst({
             where: {
@@ -303,24 +575,89 @@ class Allegato3AService {
             });
         }
 
+        const storico = await prisma.lavoratoreMansione.findMany({
+            where: {
+                personId,
+                tenantId,
+                deletedAt: null,
+                mansione: {
+                    deletedAt: null,
+                    OR: [
+                        { site: { companyTenantProfileId } },
+                        { siteId: null }
+                    ]
+                }
+            },
+            include: mansioneInclude,
+            orderBy: [{ isAttiva: 'desc' }, { dataInizio: 'desc' }],
+            take: 100
+        });
+
+        const protocolloSanitario = profile?.protocolloSanitario ? {
+            id: profile.protocolloSanitario.id,
+            codice: profile.protocolloSanitario.codice,
+            denominazione: profile.protocolloSanitario.denominazione,
+            periodicitaVisiteMesi: profile.protocolloSanitario.periodicitaVisiteMesi
+        } : null;
+        const accertamentiPrevisti = profile?.protocolloSanitario?.prestazioni?.map(p => ({
+            id: p.prestazione?.id,
+            nome: p.prestazione?.nome,
+            codice: p.prestazione?.codice,
+            obbligatoria: p.isObbligatoria,
+            periodicita: p.periodicita,
+            periodicitaCustomMesi: p.periodicitaCustomMesi
+        })) || [];
+        const sedeLavoro = profile?.site ? {
+            id: profile.site.id,
+            nome: profile.site.siteName,
+            indirizzo: profile.site.indirizzo,
+            citta: profile.site.citta,
+            cap: profile.site.cap,
+            provincia: profile.site.provincia
+        } : null;
+        const storicoMansioni = storico.map(item => ({
+            mansioneNome: item.mansione?.denominazione,
+            mansioneCodice: item.mansione?.codice,
+            reparto: item.mansione?.site?.siteName,
+            dataInizio: item.dataInizio,
+            dataFine: item.dataFine,
+            isAttiva: item.isAttiva,
+            isPrimaria: item.isPrimaria
+        }));
+
         if (!assegnazione) {
             return {
                 mansione: null,
+                codiceMansione: null,
                 reparto: null,
                 dataInizioMansione: null,
                 unitaProduttiva: null,
+                sedeLavoro,
+                profiloProfessionale: profile?.title,
+                protocolloSanitario,
+                accertamentiPrevisti,
+                storicoMansioni,
                 rischi: []
             };
         }
 
         return {
             mansione: assegnazione.mansione?.denominazione,
-            codiceManisone: assegnazione.mansione?.codice,
-            descrizioneManisone: assegnazione.mansione?.descrizione,
-            reparto: assegnazione.mansione?.site?.siteName,
-            unitaProduttiva: assegnazione.mansione?.site?.citta,
+            codiceMansione: assegnazione.mansione?.codice,
+            descrizioneMansione: assegnazione.mansione?.descrizione,
+            reparto: profile?.reparto?.nome || assegnazione.mansione?.site?.siteName,
+            unitaProduttiva: profile?.site?.siteName || assegnazione.mansione?.site?.siteName || assegnazione.mansione?.site?.citta,
+            sedeLavoro: sedeLavoro || {
+                id: assegnazione.mansione?.site?.id,
+                nome: assegnazione.mansione?.site?.siteName,
+                citta: assegnazione.mansione?.site?.citta
+            },
             dataInizioMansione: assegnazione.dataInizio,
-            dataFineManisone: assegnazione.dataFine,
+            dataFineMansione: assegnazione.dataFine,
+            profiloProfessionale: profile?.title,
+            protocolloSanitario,
+            accertamentiPrevisti,
+            storicoMansioni,
             rischi: assegnazione.mansione?.rischiAssociati?.map(r => ({
                 codice: r.codiceRischio,
                 livello: r.livello,
@@ -335,13 +672,19 @@ class Allegato3AService {
     /**
      * Recupera storico accertamenti sanitari (visite ed esami)
      */
-    static async getAccertamentiSanitari(personId, tenantId) {
+    static async getAccertamentiSanitari(personId, tenantId, companyTenantProfileId = null) {
         const visite = await prisma.visita.findMany({
             where: {
                 pazienteId: personId,
                 tenantId,
                 deletedAt: null,
-                tipoVisitaMDL: { not: null }
+                tipoVisitaMDL: { not: null },
+                ...(companyTenantProfileId ? {
+                    OR: [
+                        { appuntamento: { companyTenantProfileId } },
+                        { scadenzePrestazioni: { some: { personId, tenantId, deletedAt: null } } }
+                    ]
+                } : {})
             },
             orderBy: { dataOra: 'desc' },
             select: {
@@ -349,6 +692,10 @@ class Allegato3AService {
                 dataOra: true,
                 tipoVisitaMDL: true,
                 noteClinico: true,
+                diagnosiPrincipale: true,
+                prestazione: {
+                    select: { id: true, nome: true, codice: true }
+                },
                 medico: {
                     select: {
                         firstName: true,
@@ -383,9 +730,13 @@ class Allegato3AService {
             id: v.id,
             tipo: this.getTipoVisitaLabel(v.tipoVisitaMDL),
             data: v.dataOra,
-            note: v.noteClinico,
+            note: v.noteClinico || v.diagnosiPrincipale,
             medicoEsecutore: v.medico ? `${v.medico.lastName} ${v.medico.firstName}` : null,
-            prestazioniEseguite: []
+            prestazioniEseguite: v.prestazione ? [{
+                id: v.prestazione.id,
+                nome: v.prestazione.nome,
+                codice: v.prestazione.codice
+            }] : []
         }));
 
         const esamiAccertamenti = esami.map(e => ({
@@ -450,8 +801,12 @@ class Allegato3AService {
             prescrizioniIdoneita: giudizio.prescrizioniIdoneita,
             motivazioni: giudizio.motivazioni,
             validoFino: giudizio.dataScadenza,
+            dataEmissione: giudizio.dataEmissione,
+            dataScadenza: giudizio.dataScadenza,
             dataDecorrenza: giudizio.dataDecorrenza,
             prossimaVisita: giudizio.dataScadenza,
+            dataNotificaLavoratore: giudizio.dataNotificaLavoratore,
+            dataNotificaDatoreLavoro: giudizio.dataNotificaDatoreLavoro,
             mansione: giudizio.mansioni?.map(m => m.mansione?.denominazione).filter(Boolean).join(', ') || null,
             medicoCompetente: giudizio.medicoCompetente ?
                 `${giudizio.medicoCompetente.lastName} ${giudizio.medicoCompetente.firstName}` : null,
@@ -484,7 +839,8 @@ class Allegato3AService {
                             where: { tenantId, deletedAt: null },
                             select: {
                                 email: true,
-                                phone: true
+                                phone: true,
+                                registerCode: true
                             },
                             take: 1
                         }
@@ -493,23 +849,225 @@ class Allegato3AService {
             }
         });
 
-        if (!nomina?.person) {
+        let person = nomina?.person;
+        let dataInizioNomina = nomina?.dataInizio;
+        let dataScadenzaNomina = nomina?.dataScadenza;
+
+        if (!person) {
+            const site = await prisma.companySite.findFirst({
+                where: {
+                    companyTenantProfileId,
+                    tenantId,
+                    deletedAt: null,
+                    medicoCompetenteId: { not: null }
+                },
+                include: {
+                    medicoCompetente: {
+                        select: {
+                            id: true,
+                            firstName: true,
+                            lastName: true,
+                            taxCode: true,
+                            tenantProfiles: {
+                                where: { tenantId, deletedAt: null },
+                                select: { email: true, phone: true, registerCode: true },
+                                take: 1
+                            }
+                        }
+                    }
+                }
+            });
+            person = site?.medicoCompetente;
+        }
+
+        if (!person) {
             return null;
         }
 
-        const profile = nomina.person.tenantProfiles?.[0];
+        const profile = person.tenantProfiles?.[0];
 
         return {
-            id: nomina.person.id,
-            nome: nomina.person.firstName,
-            cognome: nomina.person.lastName,
-            nomeCompleto: `${nomina.person.lastName} ${nomina.person.firstName}`,
-            codiceFiscale: nomina.person.taxCode,
+            id: person.id,
+            nome: person.firstName,
+            cognome: person.lastName,
+            nomeCompleto: `${person.lastName} ${person.firstName}`,
+            codiceFiscale: person.taxCode,
+            alboMedici: profile?.registerCode,
             email: profile?.email,
             telefono: profile?.phone,
-            dataInizioNomina: nomina.dataInizio,
-            dataScadenzaNomina: nomina.dataScadenza
+            dataInizioNomina,
+            dataScadenzaNomina
         };
+    }
+
+    static async getVisiteMediche(personId, companyTenantProfileId, tenantId) {
+        const visite = await prisma.visita.findMany({
+            where: {
+                pazienteId: personId,
+                tenantId,
+                deletedAt: null,
+                tipoVisitaMDL: { not: null },
+                ...(companyTenantProfileId ? {
+                    OR: [
+                        { appuntamento: { companyTenantProfileId } },
+                        { giudizioIdoneita: { mansioni: { some: { mansione: { site: { companyTenantProfileId } } } } } }
+                    ]
+                } : {})
+            },
+            orderBy: { dataOra: 'desc' },
+            select: {
+                id: true,
+                dataOra: true,
+                stato: true,
+                tipoVisitaMDL: true,
+                anamnesi: true,
+                esamiObiettivo: true,
+                diagnosiPrincipale: true,
+                noteClinico: true,
+                datiStrutturati: true,
+                prescrizioni: true,
+                noteFollowup: true,
+                prestazione: { select: { id: true, nome: true, codice: true } },
+                medico: { select: { firstName: true, lastName: true } },
+                scadenzePrestazioni: {
+                    where: { tenantId, deletedAt: null },
+                    select: {
+                        dataScadenza: true,
+                        periodicitaMesi: true,
+                        prestazioneId: true,
+                        eseguita: true
+                    }
+                },
+                giudizioIdoneita: {
+                    select: {
+                        tipoGiudizio: true,
+                        dataEmissione: true,
+                        dataScadenza: true,
+                        prescrizioniIdoneita: true,
+                        limitazioni: true,
+                        motivazioni: true
+                    }
+                }
+            },
+            take: 500
+        });
+
+        return visite.map(v => ({
+            id: v.id,
+            data: v.dataOra,
+            dataOra: v.dataOra,
+            stato: v.stato,
+            tipoVisitaMDL: v.tipoVisitaMDL,
+            tipoVisitaLabel: this.getTipoVisitaLabel(v.tipoVisitaMDL),
+            anamnesi: v.anamnesi,
+            esameObiettivo: v.esamiObiettivo,
+            diagnosi: v.diagnosiPrincipale,
+            note: v.noteClinico,
+            datiStrutturati: v.datiStrutturati || {},
+            prescrizioni: v.prescrizioni,
+            followUp: v.noteFollowup,
+            prestazione: v.prestazione,
+            medicoEsecutore: v.medico ? `${v.medico.lastName} ${v.medico.firstName}` : null,
+            scadenzePrestazioni: v.scadenzePrestazioni || [],
+            giudizio: v.giudizioIdoneita ? {
+                esito: v.giudizioIdoneita.tipoGiudizio,
+                dataEmissione: v.giudizioIdoneita.dataEmissione,
+                dataScadenza: v.giudizioIdoneita.dataScadenza,
+                prescrizioni: v.giudizioIdoneita.prescrizioniIdoneita,
+                limitazioni: v.giudizioIdoneita.limitazioni,
+                motivazioni: v.giudizioIdoneita.motivazioni
+            } : null
+        }));
+    }
+
+    static async getAllegatiCartella(personId, companyTenantProfileId, tenantId) {
+        const visite = await prisma.visita.findMany({
+            where: {
+                pazienteId: personId,
+                tenantId,
+                deletedAt: null,
+                tipoVisitaMDL: { not: null },
+                ...(companyTenantProfileId ? {
+                    OR: [
+                        { appuntamento: { companyTenantProfileId } },
+                        { giudizioIdoneita: { mansioni: { some: { mansione: { site: { companyTenantProfileId } } } } } }
+                    ]
+                } : {})
+            },
+            select: {
+                id: true,
+                dataOra: true,
+                allegatiVisite: {
+                    where: { tenantId, deletedAt: null },
+                    select: { id: true, tipo: true, nome: true, fileName: true, fileUrl: true, mimeType: true, dataCaricamento: true, tipologiaClinica: true }
+                },
+                documenti: {
+                    where: { tenantId, deletedAt: null },
+                    select: { id: true, tipo: true, titolo: true, fileName: true, fileUrl: true, mimeType: true, dataDocumento: true }
+                },
+                esamiStrumentali: {
+                    where: { tenantId, deletedAt: null },
+                    select: { id: true, tipoDispositivo: true, tipoEsame: true, pdfPath: true, pdfFilename: true, dataEsame: true }
+                }
+            },
+            orderBy: { dataOra: 'desc' },
+            take: 500
+        });
+
+        return visite.flatMap(v => [
+            ...(v.allegatiVisite || []).map(a => ({
+                id: a.id,
+                visitaId: v.id,
+                visitaData: v.dataOra,
+                origine: 'allegato_visita',
+                tipo: a.tipologiaClinica || a.tipo,
+                titolo: a.nome || a.fileName,
+                fileName: a.fileName,
+                fileUrl: a.fileUrl,
+                mimeType: a.mimeType,
+                data: a.dataCaricamento
+            })),
+            ...(v.documenti || []).map(d => ({
+                id: d.id,
+                visitaId: v.id,
+                visitaData: v.dataOra,
+                origine: 'documento_clinico',
+                tipo: d.tipo,
+                titolo: d.titolo || d.fileName,
+                fileName: d.fileName,
+                fileUrl: d.fileUrl,
+                mimeType: d.mimeType,
+                data: d.dataDocumento
+            })),
+            ...(v.esamiStrumentali || []).filter(e => e.pdfPath).map(e => ({
+                id: e.id,
+                visitaId: v.id,
+                visitaData: v.dataOra,
+                origine: 'esame_strumentale',
+                tipo: e.tipoDispositivo || e.tipoEsame,
+                titolo: e.pdfFilename || e.tipoEsame,
+                fileName: e.pdfFilename,
+                fileUrl: e.pdfPath,
+                mimeType: 'application/pdf',
+                data: e.dataEsame
+            }))
+        ]);
+    }
+
+    static async refreshFromCompletedVisit(visita, tenantId) {
+        if (!visita?.tipoVisitaMDL || !visita?.pazienteId) return null;
+        const companyTenantProfileId = visita.appuntamento?.companyTenantProfileId
+            || (await this.findCompanyForWorker(visita.pazienteId, tenantId));
+        if (!companyTenantProfileId) return null;
+        return this.generateData(visita.pazienteId, companyTenantProfileId, tenantId);
+    }
+
+    static async findCompanyForWorker(personId, tenantId) {
+        const profile = await prisma.personTenantProfile.findFirst({
+            where: { personId, tenantId, deletedAt: null, companyTenantProfileId: { not: null } },
+            select: { companyTenantProfileId: true }
+        });
+        return profile?.companyTenantProfileId || null;
     }
 
     /**
