@@ -53,11 +53,20 @@ deploy_rsync_backend() {
     local src="$1"
     local dest="$2"
     shift 2
-    local dry_args=()
     if [ "$DEPLOY_DRY_RUN" = "true" ]; then
-        dry_args=(--dry-run)
+        rsync -avz --dry-run \
+            --exclude 'node_modules' \
+            --exclude '.git' \
+            --exclude '.env' \
+            --exclude 'logs/*' \
+            --exclude '*.log' \
+            --exclude 'uploads/' \
+            --exclude '.DS_Store' \
+            -e "ssh -i $DEPLOY_SSH_KEY" \
+            "$src" "$DEPLOY_SERVER:$dest" "$@"
+        return
     fi
-    rsync -avz "${dry_args[@]}" \
+    rsync -avz \
         --exclude 'node_modules' \
         --exclude '.git' \
         --exclude '.env' \
@@ -72,11 +81,16 @@ deploy_rsync_backend() {
 deploy_rsync_frontend() {
     local src="$1"
     local dest="$2"
-    local dry_args=()
     if [ "$DEPLOY_DRY_RUN" = "true" ]; then
-        dry_args=(--dry-run)
+        rsync -avz --delete --dry-run \
+            --no-perms \
+            --exclude '.DS_Store' \
+            --exclude '*.map' \
+            -e "ssh -i $DEPLOY_SSH_KEY" \
+            "$src" "$DEPLOY_SERVER:$dest"
+        return
     fi
-    rsync -avz --delete "${dry_args[@]}" \
+    rsync -avz --delete \
         --no-perms \
         --exclude '.DS_Store' \
         --exclude '*.map' \
