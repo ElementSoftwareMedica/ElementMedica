@@ -11,6 +11,27 @@
 import prisma from '../../config/prisma-optimization.js';
 import logger from '../../utils/logger.js';
 
+const MC_NOMINA_TYPES = ['MEDICO_COMPETENTE', 'MEDICO_COMPETENTE_COORDINATO'];
+const PRIVILEGED_ALLEGATO_3B_ROLES = new Set(['ADMIN', 'TENANT_ADMIN', 'SUPER_ADMIN', 'SEGRETERIA']);
+const STAT_FIELDS = [
+    'totLavoratoriSorvegliati', 'totVisiteEffettuate', 'totGiudiziIdoneita',
+    'totGiudiziConLimitazioni', 'totGiudiziConPrescrizioni', 'totInidoneita',
+    'statistichePerRischio', 'malattieProf', 'lavoratoriPerGenere',
+    'lavoratoriPerFasciaEta', 'visitePerTipologia', 'giudiziPerTipologia',
+    'giudiziPerRischio', 'accertamentiIntegrativi'
+];
+
+const getRoleTypesForPerson = (person) => {
+    const roles = new Set();
+    (person?.roles || []).forEach(role => roles.add(typeof role === 'string' ? role : role?.roleType || role?.name));
+    return [...roles].filter(Boolean);
+};
+
+const normalizeNumber = (value) => {
+    const num = Number(value);
+    return Number.isFinite(num) && num >= 0 ? Math.round(num) : 0;
+};
+
 
 /**
  * Struttura Allegato 3B secondo D.Lgs 81/08 Art. 40:
@@ -26,6 +47,127 @@ import logger from '../../utils/logger.js';
  */
 
 class Allegato3BService {
+    static toPersistableStatistics(stats = {}) {
+        const data = {};
+        for (const field of STAT_FIELDS) {
+            if (stats[field] !== undefined) data[field] = stats[field];
+        }
+        return {
+            ...data,
+            totLavoratoriSorvegliati: normalizeNumber(stats.totLavoratoriSorvegliati),
+            totVisiteEffettuate: normalizeNumber(stats.totVisiteEffettuate),
+            totGiudiziIdoneita: normalizeNumber(stats.totGiudiziIdoneita),
+            totGiudiziConLimitazioni: normalizeNumber(stats.totGiudiziConLimitazioni),
+            totGiudiziConPrescrizioni: normalizeNumber(stats.totGiudiziConPrescrizioni),
+            totInidoneita: normalizeNumber(stats.totInidoneita),
+        };
+    }
+
+    static applyStatisticOverrides(stats = {}, overrides = {}) {
+        if (!overrides || typeof overrides !== 'object') return stats;
+        const merged = { ...stats };
+        for (const field of STAT_FIELDS) {
+            if (overrides[field] !== undefined) {
+                merged[field] = typeof stats[field] === 'number'
+                    ? normalizeNumber(overrides[field])
+                    : overrides[field];
+            }
+        }
+        return merged;
+    }
+
+    static async getEligibleCompanies(tenantId, person) {
+        const roles = getRoleTypesForPerson(person);
+        const canViewAll = roles.some(role => PRIVILEGED_ALLEGATO_3B_ROLES.has(role));
+
+        const nomine = await prisma.nominaRuolo.findMany({
+            where: {
+                tenantId,
+                deletedAt: null,
+                stato: 'ATTIVA',
+                tipoRuolo: { in: MC_NOMINA_TYPES },
+                OR: [
+                    { dataScadenza: null },
+                    { dataScadenza: { gte: new Date() } }
+                ],
+                ...(canViewAll ? {} : { personId: person.id })
+            },
+            select: {
+                personId: true,
+                tipoRuolo: true,
+                dataInizio: true,
+                dataScadenza: true,
+                person: { select: { id: true, firstName: true, lastName: true } },
+                companyTenantProfileId: true,
+                companyTenantProfile: {
+                    select: {
+                        id: true,
+                        company: {
+                            select: {
+                                ragioneSociale: true,
+                                piva: true,
+                                codiceFiscale: true,
+                                codiceAteco: true
+                            }
+                        }
+                    }
+                },
+                site: {
+                    select: {
+                        companyTenantProfileId: true,
+                        companyTenantProfile: {
+                            select: {
+                                id: true,
+                                company: {
+                                    select: {
+                                        ragioneSociale: true,
+                                        piva: true,
+                                        codiceFiscale: true,
+                                        codiceAteco: true
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            orderBy: [{ tipoRuolo: 'asc' }, { dataInizio: 'desc' }]
+        });
+
+        const companies = new Map();
+        for (const nomina of nomine) {
+            const profile = nomina.companyTenantProfile || nomina.site?.companyTenantProfile;
+            const companyTenantProfileId = nomina.companyTenantProfileId || nomina.site?.companyTenantProfileId;
+            if (!profile || !companyTenantProfileId) continue;
+            const existing = companies.get(companyTenantProfileId);
+            const doctor = nomina.person
+                ? `${nomina.person.lastName || ''} ${nomina.person.firstName || ''}`.trim()
+                : null;
+            if (!existing) {
+                companies.set(companyTenantProfileId, {
+                    id: companyTenantProfileId,
+                    companyTenantProfileId,
+                    ragioneSociale: profile.company?.ragioneSociale || 'Azienda senza denominazione',
+                    piva: profile.company?.piva,
+                    codiceFiscale: profile.company?.codiceFiscale,
+                    codiceAteco: profile.company?.codiceAteco,
+                    medicoCompetenteId: nomina.personId,
+                    medicoCompetente: doctor,
+                    nomineCount: 1,
+                    canViewAll
+                });
+            } else {
+                existing.nomineCount += 1;
+                if (nomina.tipoRuolo === 'MEDICO_COMPETENTE') {
+                    existing.medicoCompetenteId = nomina.personId;
+                    existing.medicoCompetente = doctor;
+                }
+            }
+        }
+
+        return [...companies.values()].sort((a, b) => a.ragioneSociale.localeCompare(b.ragioneSociale, 'it'));
+    }
+
     /**
      * Crea o aggiorna un Allegato 3B per un'azienda/anno
      * 
@@ -431,6 +573,10 @@ class Allegato3BService {
                 case 'IDONEO_CON_PRESCRIZIONI':
                     conPrescrizioni += g._count.id;
                     break;
+                case 'IDONEO_CON_LIMITAZIONI_PRESCRIZIONI':
+                    conLimitazioni += g._count.id;
+                    conPrescrizioni += g._count.id;
+                    break;
                 case 'NON_IDONEO_TEMPORANEO':
                 case 'NON_IDONEO_PERMANENTE':
                     inidoneita += g._count.id;
@@ -693,6 +839,10 @@ class Allegato3BService {
                     case 'IDONEO_CON_PRESCRIZIONI':
                         perRischio[codice].conPrescrizioni++;
                         break;
+                    case 'IDONEO_CON_LIMITAZIONI_PRESCRIZIONI':
+                        perRischio[codice].conLimitazioni++;
+                        perRischio[codice].conPrescrizioni++;
+                        break;
                     case 'NON_IDONEO_TEMPORANEO':
                     case 'NON_IDONEO_PERMANENTE':
                         perRischio[codice].nonIdonei++;
@@ -833,6 +983,14 @@ class Allegato3BService {
             throw new Error(`Allegato 3B non trovato: ${allegato3bId}`);
         }
 
+        const diagnostics = this.buildXmlDiagnostics(allegato);
+        if (diagnostics.errors.length > 0) {
+            const error = new Error(`Allegato 3B incompleto: ${diagnostics.errors.join('; ')}`);
+            error.code = 'ALLEGATO_3B_XML_INVALID';
+            error.details = diagnostics.errors;
+            throw error;
+        }
+
         // Genera XML strutturato utilizzando i dati pre-compilati
         const xml = this.buildXML(allegato);
 
@@ -845,6 +1003,111 @@ class Allegato3BService {
         });
 
         return xml;
+    }
+
+    static buildXmlPreviewFromStats({ company, medicoCompetente, anno, stats }) {
+        const allegato = {
+            anno,
+            medicoCompetente,
+            companyTenantProfile: {
+                company,
+                sites: company?.sites || []
+            },
+            ...this.toPersistableStatistics(stats),
+            dataCompilazione: new Date(),
+            note: ''
+        };
+        return this.buildXmlDiagnostics(allegato);
+    }
+
+    static buildXmlDiagnostics(allegato) {
+        const mc = allegato.medicoCompetente;
+        const mcProfile = mc?.tenantProfiles?.[0] || mc?.tenantProfile || {};
+        const company = allegato.companyTenantProfile?.company;
+        const stats = allegato.statistichePerRischio || {};
+        const totaliSorveglianza = stats._totali || {};
+        const lavoratoriPerGenere = allegato.lavoratoriPerGenere || {};
+        const lavoratoriPerFasciaEta = allegato.lavoratoriPerFasciaEta || {};
+        const visitePerTipologia = allegato.visitePerTipologia || {};
+        const giudiziPerTipologia = allegato.giudiziPerTipologia || {};
+        const malattieProf = allegato.malattieProf || {};
+        const errors = [];
+        const warnings = [];
+
+        const requireField = (value, label) => {
+            if (value === null || value === undefined || String(value).trim() === '') {
+                errors.push(label);
+            }
+        };
+
+        requireField(allegato.anno, 'Anno di riferimento mancante');
+        requireField(mc?.taxCode, 'Codice fiscale medico competente mancante');
+        requireField(mc?.lastName, 'Cognome medico competente mancante');
+        requireField(mc?.firstName, 'Nome medico competente mancante');
+        requireField(mcProfile?.registerCode, 'Numero iscrizione albo medico competente mancante');
+        requireField(company?.ragioneSociale, 'Ragione sociale azienda mancante');
+        if (!company?.piva && !company?.codiceFiscale) errors.push('P.IVA o codice fiscale azienda mancante');
+        requireField(company?.codiceAteco, 'Codice ATECO azienda mancante');
+        if (!company?.sedeLegaleIndirizzo || !company?.sedeLegaleCitta || !company?.sedeLegaleProvincia) {
+            warnings.push('Sede legale azienda incompleta');
+        }
+
+        const fieldGroups = [
+            {
+                title: 'Intestazione',
+                fields: [
+                    { label: 'Anno riferimento', value: allegato.anno, required: true },
+                    { label: 'Data compilazione', value: allegato.dataCompilazione || new Date(), type: 'date', required: true }
+                ]
+            },
+            {
+                title: 'Medico competente',
+                fields: [
+                    { label: 'Codice fiscale', value: mc?.taxCode, required: true },
+                    { label: 'Cognome', value: mc?.lastName, required: true },
+                    { label: 'Nome', value: mc?.firstName, required: true },
+                    { label: 'Numero albo', value: mcProfile?.registerCode, required: true },
+                    { label: 'Specializzazione', value: Array.isArray(mcProfile?.specialties) ? mcProfile.specialties.join(', ') : mcProfile?.specialties }
+                ]
+            },
+            {
+                title: 'Azienda',
+                fields: [
+                    { label: 'Ragione sociale', value: company?.ragioneSociale, required: true },
+                    { label: 'Partita IVA', value: company?.piva },
+                    { label: 'Codice fiscale', value: company?.codiceFiscale },
+                    { label: 'Codice ATECO', value: company?.codiceAteco, required: true },
+                    { label: 'Sede legale', value: [company?.sedeLegaleIndirizzo, company?.sedeLegaleCitta, company?.sedeLegaleCap, company?.sedeLegaleProvincia].filter(Boolean).join(', ') }
+                ]
+            },
+            {
+                title: 'Dati statistici',
+                fields: [
+                    { key: 'totLavoratoriSorvegliati', label: 'Lavoratori soggetti a sorveglianza', value: allegato.totLavoratoriSorvegliati || 0, editable: true },
+                    { key: 'lavoratoriVisitati', label: 'Lavoratori visitati', value: totaliSorveglianza.lavoratoriVisitati || 0 },
+                    { key: 'totVisiteEffettuate', label: 'Visite effettuate', value: allegato.totVisiteEffettuate || 0, editable: true },
+                    { key: 'totGiudiziIdoneita', label: 'Giudizi di idoneità', value: allegato.totGiudiziIdoneita || 0, editable: true },
+                    { key: 'totGiudiziConLimitazioni', label: 'Giudizi con limitazioni', value: allegato.totGiudiziConLimitazioni || 0, editable: true },
+                    { key: 'totGiudiziConPrescrizioni', label: 'Giudizi con prescrizioni', value: allegato.totGiudiziConPrescrizioni || 0, editable: true },
+                    { key: 'totInidoneita', label: 'Inidoneità', value: allegato.totInidoneita || 0, editable: true }
+                ]
+            },
+            {
+                title: 'Disaggregazioni XML',
+                fields: [
+                    { label: 'Lavoratori per genere', value: lavoratoriPerGenere, type: 'json' },
+                    { label: 'Lavoratori per fascia età', value: lavoratoriPerFasciaEta, type: 'json' },
+                    { label: 'Visite per tipologia', value: visitePerTipologia, type: 'json' },
+                    { label: 'Giudizi per tipologia', value: giudiziPerTipologia, type: 'json' },
+                    { label: 'Rischi lavorativi', value: Object.fromEntries(Object.entries(stats).filter(([key]) => !key.startsWith('_'))), type: 'json' },
+                    { label: 'Malattie professionali', value: malattieProf, type: 'json' },
+                    { label: 'Giudizi per rischio', value: allegato.giudiziPerRischio || {}, type: 'json' },
+                    { label: 'Accertamenti integrativi', value: allegato.accertamentiIntegrativi || {}, type: 'json' }
+                ]
+            }
+        ];
+
+        return { valid: errors.length === 0, errors, warnings, fieldGroups };
     }
 
     /**

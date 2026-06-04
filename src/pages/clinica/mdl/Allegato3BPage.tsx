@@ -51,9 +51,9 @@ import {
     type Allegato3B,
     type Allegato3BStatistiche,
     type Allegato3BCreateInput,
-    type NominaRuolo
+    type Allegato3BEligibleCompany,
+    type Allegato3BPreviewResponse
 } from '../../../services/clinicaApi';
-import { apiGet } from '../../../services/api';
 import { useToast } from '../../../hooks/useToast';
 import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 import { useTenantFilter } from '../../../context/TenantFilterContext';
@@ -91,7 +91,7 @@ const Allegato3BPage: React.FC = () => {
     const [searchParams, setSearchParams] = useSearchParams();
 
     // Tenant filter from global context
-    const { isReady, tenantFilterKey, getTenantFilterParams } = useTenantFilter();
+    const { isReady, tenantFilterKey } = useTenantFilter();
     const { canPerformCRUD } = useTenantMode();
 
     // State
@@ -110,6 +110,7 @@ const Allegato3BPage: React.FC = () => {
     const [newMedicoId, setNewMedicoId] = useState('');
     const [companySearch, setCompanySearch] = useState('');
     const [isCompanyDropdownOpen, setIsCompanyDropdownOpen] = useState(false);
+    const [statisticheOverride, setStatisticheOverride] = useState<NonNullable<Allegato3BCreateInput['statisticheOverride']>>({});
     const companyDropdownRef = useRef<HTMLDivElement>(null);
 
     // P59: Leggi query params per apertura automatica modale o dettaglio
@@ -141,37 +142,6 @@ const Allegato3BPage: React.FC = () => {
         }
     }, [searchParams, setSearchParams]);
 
-    // Fetch nomine azienda per auto-selezionare medico competente nel modal creazione
-    const { data: nomineAzienda, isLoading: nomineLoading } = useQuery({
-        queryKey: ['nomine-by-company', newCompanyId],
-        queryFn: () => clinicaApi.nomineRuolo.getByCompany(newCompanyId),
-        enabled: !!newCompanyId && isCreateModalOpen,
-        staleTime: 60_000
-    });
-
-    // Auto-selezione medico competente attivo quando cambia azienda
-    const medicoCompetenteNomina: NominaRuolo | null = useMemo(() => {
-        if (!nomineAzienda) return null;
-        const list = Array.isArray(nomineAzienda) ? nomineAzienda : (nomineAzienda as any)?.data ?? [];
-        // Preferisci ATTIVA, ma accetta anche SOSPESA come fallback
-        const attiva = list.find((n: NominaRuolo) =>
-            (n.tipoRuolo as string) === 'MEDICO_COMPETENTE' && n.stato === 'ATTIVA' && !n.deletedAt
-        );
-        if (attiva) return attiva;
-        return list.find((n: NominaRuolo) =>
-            (n.tipoRuolo as string) === 'MEDICO_COMPETENTE' && n.stato === 'SOSPESA' && !n.deletedAt
-        ) ?? null;
-    }, [nomineAzienda]);
-
-    useEffect(() => {
-        if (medicoCompetenteNomina?.personId) {
-            setNewMedicoId(medicoCompetenteNomina.personId);
-        } else if (newCompanyId && nomineAzienda !== undefined) {
-            // Company changed but no active MC found — reset
-            setNewMedicoId('');
-        }
-    }, [medicoCompetenteNomina, newCompanyId, nomineAzienda]);
-
     // Years for filter (last 5 years)
     const years = useMemo(() => {
         const currentYear = new Date().getFullYear();
@@ -189,28 +159,16 @@ const Allegato3BPage: React.FC = () => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    // Fetch companies for selection - using companies API (P49 pattern)
+    // Fetch companies eligible for Allegato 3B: active MC/MC coordinated nomination only.
     const { data: companiesResponse } = useQuery({
         queryKey: ['companies-for-allegato3b', tenantFilterKey],
-        queryFn: async () => {
-            const tenantParams = getTenantFilterParams();
-            const params = new URLSearchParams();
-            params.append('limit', '100');
-            if (tenantParams.tenantIds) {
-                params.append('tenantIds', tenantParams.tenantIds.join(','));
-            }
-            if (tenantParams.allTenants) {
-                params.append('allTenants', 'true');
-            }
-            const response = await apiGet<{ id: string; ragioneSociale: string; piva?: string; companyTenantProfileId?: string }[]>(`/api/v1/companies?${params.toString()}`);
-            return response;
-        },
+        queryFn: () => clinicaApi.allegato3B.getEligibleCompanies(),
         enabled: isReady
     });
 
     // Sorted + filtered companies for searchable dropdown (must be after companiesResponse declaration)
     const sortedFilteredCompanies = useMemo(() => {
-        const list = (companiesResponse || []) as { id: string; ragioneSociale?: string; piva?: string; companyTenantProfileId?: string }[];
+        const list = (companiesResponse || []) as Allegato3BEligibleCompany[];
         const sorted = [...list].sort((a, b) =>
             (a.ragioneSociale || '').localeCompare(b.ragioneSociale || '', 'it')
         );
@@ -223,15 +181,21 @@ const Allegato3BPage: React.FC = () => {
     }, [companiesResponse, companySearch]);
 
     const selectedCreateCompany = useMemo(() => {
-        const list = (companiesResponse || []) as Array<{
-            id: string;
-            ragioneSociale?: string;
-            piva?: string;
-            codiceFiscale?: string;
-            companyTenantProfileId?: string;
-        }>;
+        const list = (companiesResponse || []) as Allegato3BEligibleCompany[];
         return list.find(company => (company.companyTenantProfileId || company.id) === newCompanyId) || null;
     }, [companiesResponse, newCompanyId]);
+
+    useEffect(() => {
+        setNewMedicoId(selectedCreateCompany?.medicoCompetenteId || '');
+        setStatisticheOverride({});
+    }, [selectedCreateCompany?.medicoCompetenteId, newCompanyId, newAnno]);
+
+    const { data: createPreview, isFetching: isPreviewLoading } = useQuery<Allegato3BPreviewResponse | undefined>({
+        queryKey: ['allegato3b-create-preview', newCompanyId, newAnno],
+        queryFn: () => clinicaApi.allegato3B.preview({ anno: newAnno, companyTenantProfileId: newCompanyId }),
+        enabled: isCreateModalOpen && !!newCompanyId && !!newAnno,
+        staleTime: 30_000
+    });
 
     // Fetch list of Allegato 3B records
     const { data: recordsResponse, isLoading: recordsLoading, refetch: refetchRecords } = useQuery({
@@ -898,7 +862,8 @@ const Allegato3BPage: React.FC = () => {
             createMutation.mutate({
                 anno: newAnno,
                 companyTenantProfileId: newCompanyId,
-                medicoCompetenteId: newMedicoId
+                medicoCompetenteId: newMedicoId,
+                statisticheOverride
             });
         };
 
@@ -909,12 +874,11 @@ const Allegato3BPage: React.FC = () => {
             setNewMedicoId('');
             setNewAnno(new Date().getFullYear() - 1);
             setCompanySearch('');
+            setStatisticheOverride({});
             setIsCompanyDropdownOpen(false);
         };
 
-        const medicoName = medicoCompetenteNomina?.person
-            ? `${medicoCompetenteNomina.person.lastName} ${medicoCompetenteNomina.person.firstName}`
-            : null;
+        const medicoName = selectedCreateCompany?.medicoCompetente || null;
         const hasFiscalData = Boolean(selectedCreateCompany?.piva || selectedCreateCompany?.codiceFiscale);
         const checks = [
             {
@@ -1030,23 +994,14 @@ const Allegato3BPage: React.FC = () => {
                                 Medico Competente
                             </label>
 
-                            {nomineLoading ? (
-                                <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-500 dark:text-gray-400">
-                                    <RefreshCw className="h-4 w-4 animate-spin" />
-                                    Ricerca nomina attiva…
-                                </div>
-                            ) : medicoName ? (
+                            {medicoName ? (
                                 <div className="flex items-start gap-3 px-3 py-3 bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800 rounded-lg">
                                     <CheckCircle2 className="h-5 w-5 text-teal-600 dark:text-teal-400 mt-0.5 shrink-0" />
                                     <div className="flex-1 min-w-0">
                                         <p className="font-medium text-teal-800 dark:text-teal-200 text-sm">{medicoName}</p>
                                         <p className="text-xs text-teal-600 dark:text-teal-400 mt-0.5">
                                             Auto-selezionato dalla nomina attiva
-                                            {medicoCompetenteNomina?.dataScadenza && (
-                                                <span className="ml-1">
-                                                    · scad. {new Date(medicoCompetenteNomina.dataScadenza).toLocaleDateString('it-IT')}
-                                                </span>
-                                            )}
+                                            · {selectedCreateCompany?.nomineCount || 1} nomina/e attiva/e
                                         </p>
                                     </div>
                                 </div>
@@ -1062,6 +1017,74 @@ const Allegato3BPage: React.FC = () => {
                                         </p>
                                     </div>
                                 </div>
+                            )}
+                        </div>
+                    )}
+
+                    {newCompanyId && (
+                        <div className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                            <div className="flex items-center justify-between px-3 py-2 bg-teal-50 dark:bg-teal-900/20 border-b border-teal-100 dark:border-teal-800">
+                                <div>
+                                    <p className="text-sm font-semibold text-teal-900 dark:text-teal-100">Preview campi XML INAIL</p>
+                                    <p className="text-xs text-teal-700 dark:text-teal-300">Controlla i dati aggregati prima di creare il file.</p>
+                                </div>
+                                {isPreviewLoading && <Loader2 className="h-4 w-4 animate-spin text-teal-600" />}
+                            </div>
+                            {createPreview?.xmlPreview ? (
+                                <div className="space-y-3 p-3">
+                                    {createPreview.xmlPreview.errors.length > 0 && (
+                                        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                                            {createPreview.xmlPreview.errors.map(error => <p key={error}>{error}</p>)}
+                                        </div>
+                                    )}
+                                    {createPreview.xmlPreview.warnings.length > 0 && (
+                                        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                                            {createPreview.xmlPreview.warnings.map(warning => <p key={warning}>{warning}</p>)}
+                                        </div>
+                                    )}
+                                    {createPreview.xmlPreview.fieldGroups.map(group => (
+                                        <div key={group.title} className="rounded-lg border border-gray-100 dark:border-gray-700">
+                                            <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700">
+                                                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{group.title}</p>
+                                            </div>
+                                            <div className="grid gap-2 p-3 sm:grid-cols-2">
+                                                {group.fields.map(field => {
+                                                    const overrideKey = field.key as keyof NonNullable<Allegato3BCreateInput['statisticheOverride']> | undefined;
+                                                    const value = overrideKey && field.editable
+                                                        ? (statisticheOverride[overrideKey] ?? field.value ?? 0)
+                                                        : field.value;
+                                                    return (
+                                                        <label key={`${group.title}-${field.label}`} className="min-w-0 rounded-lg bg-gray-50 dark:bg-gray-800 px-3 py-2">
+                                                            <span className="block text-[10px] font-medium uppercase tracking-wide text-gray-400">
+                                                                {field.label}{field.required ? ' *' : ''}
+                                                            </span>
+                                                            {field.editable && overrideKey ? (
+                                                                <input
+                                                                    type="number"
+                                                                    min={0}
+                                                                    value={Number(value) || 0}
+                                                                    onChange={(event) => setStatisticheOverride(prev => ({
+                                                                        ...prev,
+                                                                        [overrideKey]: Number(event.target.value) || 0
+                                                                    }))}
+                                                                    className="mt-1 w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-50"
+                                                                />
+                                                            ) : (
+                                                                <span className="mt-1 block truncate text-sm text-gray-800 dark:text-gray-100">
+                                                                    {field.type === 'json'
+                                                                        ? JSON.stringify(value ?? {})
+                                                                        : String(value ?? '—')}
+                                                                </span>
+                                                            )}
+                                                        </label>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="p-3 text-sm text-gray-500">Seleziona azienda e anno per generare la preview.</div>
                             )}
                         </div>
                     )}
@@ -1110,7 +1133,7 @@ const Allegato3BPage: React.FC = () => {
                         </button>
                         <CRUDPrimaryButton
                             onClick={handleCreate}
-                            disabled={createMutation.isPending || !newCompanyId || !newMedicoId}
+                            disabled={createMutation.isPending || !newCompanyId || !newMedicoId || createPreview?.xmlPreview?.valid === false}
                         >
                             {createMutation.isPending ? (
                                 <>

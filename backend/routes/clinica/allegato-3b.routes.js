@@ -144,6 +144,25 @@ router.get('/', requireAuth, requirePermission('clinica.visite:read'), async (re
 });
 
 /**
+ * @route GET /api/v1/clinica/allegato-3b/eligible-companies
+ * @desc Aziende con nomina MC/MC coordinato attiva e visibili all'utente
+ * @access Private - VIEW_VISITA
+ */
+router.get('/eligible-companies', requireAuth, requirePermission('clinica.visite:read'), async (req, res) => {
+    try {
+        const tenantId = getEffectiveTenantId(req);
+        const companies = await Allegato3BService.getEligibleCompanies(tenantId, req.person);
+        res.json({ success: true, data: companies });
+    } catch (error) {
+        logger.error({ error: error.message }, 'Errore elenco aziende Allegato 3B');
+        res.status(500).json({
+            success: false,
+            error: 'Errore nel recupero delle aziende con medico competente'
+        });
+    }
+});
+
+/**
  * @route GET /api/v1/clinica/allegato-3b/dashboard/:anno
  * @desc Dashboard aggregata annuale - Relazione Sanitaria Annuale
  * @access Private - VIEW_VISITA
@@ -253,45 +272,8 @@ router.post('/generate-all', requireAuth, requirePermission('clinica.visite:upda
             return res.status(400).json({ success: false, error: 'Anno non valido' });
         }
 
-        // Find all companies with active MC nomination in this tenant
-        const nomine = await prisma.nominaRuolo.findMany({
-            where: {
-                tenantId,
-                deletedAt: null,
-                stato: 'ATTIVA',
-                tipoRuolo: 'MEDICO_COMPETENTE'
-            },
-            select: {
-                personId: true,
-                companyTenantProfileId: true,
-                companyTenantProfile: {
-                    select: { company: { select: { ragioneSociale: true } } }
-                },
-                site: {
-                    select: {
-                        companyTenantProfileId: true,
-                        companyTenantProfile: {
-                            select: { company: { select: { ragioneSociale: true } } }
-                        }
-                    }
-                }
-            }
-        });
-
-        // Deduplicate by companyTenantProfileId → pick one MC per company
-        const companyMap = new Map();
-        for (const n of nomine) {
-            const cpId = n.companyTenantProfileId || n.site?.companyTenantProfileId;
-            const ragioneSociale = n.companyTenantProfile?.company?.ragioneSociale
-                || n.site?.companyTenantProfile?.company?.ragioneSociale;
-            if (cpId && !companyMap.has(cpId)) {
-                companyMap.set(cpId, {
-                    companyTenantProfileId: cpId,
-                    medicoCompetenteId: n.personId,
-                    ragioneSociale
-                });
-            }
-        }
+        const companies = await Allegato3BService.getEligibleCompanies(tenantId, req.person);
+        const companyMap = new Map(companies.map(company => [company.companyTenantProfileId, company]));
 
         let created = 0;
         let compiled = 0;
@@ -314,20 +296,7 @@ router.post('/generate-all', requireAuth, requirePermission('clinica.visite:upda
                     medicoCompetenteId: info.medicoCompetenteId,
                     companyTenantProfileId: cpId,
                     anno: parseInt(anno),
-                    totLavoratoriSorvegliati: stats.totLavoratoriSorvegliati,
-                    totVisiteEffettuate: stats.totVisiteEffettuate,
-                    totGiudiziIdoneita: stats.totGiudiziIdoneita,
-                    totGiudiziConLimitazioni: stats.totGiudiziConLimitazioni,
-                    totGiudiziConPrescrizioni: stats.totGiudiziConPrescrizioni,
-                    totInidoneita: stats.totInidoneita,
-                    statistichePerRischio: stats.statistichePerRischio,
-                    malattieProf: stats.malattieProf,
-                    lavoratoriPerGenere: stats.lavoratoriPerGenere,
-                    lavoratoriPerFasciaEta: stats.lavoratoriPerFasciaEta,
-                    visitePerTipologia: stats.visitePerTipologia,
-                    giudiziPerTipologia: stats.giudiziPerTipologia,
-                    giudiziPerRischio: stats.giudiziPerRischio,
-                    accertamentiIntegrativi: stats.accertamentiIntegrativi,
+                    ...Allegato3BService.toPersistableStatistics(stats),
                     dataCompilazione: new Date(),
                     stato: 'PRONTO'
                 }, tenantId);
@@ -394,7 +363,7 @@ router.get('/:id', requireAuth, requirePermission('clinica.visite:read'), async 
 router.post('/', requireAuth, requirePermission('clinica.visite:update'), async (req, res) => {
     try {
         const tenantId = getEffectiveTenantId(req);
-        const { medicoCompetenteId, companyTenantProfileId, anno } = req.body;
+        const { medicoCompetenteId, companyTenantProfileId, anno, statisticheOverride } = req.body;
 
         if (!medicoCompetenteId || !companyTenantProfileId || !anno) {
             return res.status(400).json({
@@ -408,29 +377,17 @@ router.post('/', requireAuth, requirePermission('clinica.visite:update'), async 
         // Auto-compile: calcola statistiche immediatamente dopo la creazione
         let compiled = allegato;
         try {
-            const stats = await Allegato3BService.compileStatistics(
+            const calculatedStats = await Allegato3BService.compileStatistics(
                 allegato.companyTenantProfileId,
                 allegato.anno,
                 tenantId
             );
+            const stats = Allegato3BService.applyStatisticOverrides(calculatedStats, statisticheOverride);
             compiled = await Allegato3BService.createOrUpdate({
                 medicoCompetenteId: allegato.medicoCompetenteId,
                 companyTenantProfileId: allegato.companyTenantProfileId,
                 anno: allegato.anno,
-                totLavoratoriSorvegliati: stats.totLavoratoriSorvegliati,
-                totVisiteEffettuate: stats.totVisiteEffettuate,
-                totGiudiziIdoneita: stats.totGiudiziIdoneita,
-                totGiudiziConLimitazioni: stats.totGiudiziConLimitazioni,
-                totGiudiziConPrescrizioni: stats.totGiudiziConPrescrizioni,
-                totInidoneita: stats.totInidoneita,
-                statistichePerRischio: stats.statistichePerRischio,
-                malattieProf: stats.malattieProf,
-                lavoratoriPerGenere: stats.lavoratoriPerGenere,
-                lavoratoriPerFasciaEta: stats.lavoratoriPerFasciaEta,
-                visitePerTipologia: stats.visitePerTipologia,
-                giudiziPerTipologia: stats.giudiziPerTipologia,
-                giudiziPerRischio: stats.giudiziPerRischio,
-                accertamentiIntegrativi: stats.accertamentiIntegrativi,
+                ...Allegato3BService.toPersistableStatistics(stats),
                 dataCompilazione: new Date(),
                 stato: 'PRONTO'
             }, tenantId);
@@ -485,20 +442,7 @@ router.post('/:id/compile', requireAuth, requirePermission('clinica.visite:updat
             medicoCompetenteId: allegato.medicoCompetenteId,
             companyTenantProfileId: allegato.companyTenantProfileId,
             anno: allegato.anno,
-            totLavoratoriSorvegliati: stats.totLavoratoriSorvegliati,
-            totVisiteEffettuate: stats.totVisiteEffettuate,
-            totGiudiziIdoneita: stats.totGiudiziIdoneita,
-            totGiudiziConLimitazioni: stats.totGiudiziConLimitazioni,
-            totGiudiziConPrescrizioni: stats.totGiudiziConPrescrizioni,
-            totInidoneita: stats.totInidoneita,
-            statistichePerRischio: stats.statistichePerRischio,
-            malattieProf: stats.malattieProf,
-            lavoratoriPerGenere: stats.lavoratoriPerGenere,
-            lavoratoriPerFasciaEta: stats.lavoratoriPerFasciaEta,
-            visitePerTipologia: stats.visitePerTipologia,
-            giudiziPerTipologia: stats.giudiziPerTipologia,
-            giudiziPerRischio: stats.giudiziPerRischio,
-            accertamentiIntegrativi: stats.accertamentiIntegrativi,
+            ...Allegato3BService.toPersistableStatistics(stats),
             dataCompilazione: new Date(),
             stato: 'PRONTO'
         }, tenantId);
@@ -537,9 +481,11 @@ router.get('/:id/xml', requireAuth, requirePermission('clinica.visite:read'), as
         res.send(xml);
     } catch (error) {
         logger.error({ error: 'Operazione non riuscita', id: req.params.id }, 'Errore generazione XML Allegato 3B');
-        res.status(500).json({
+        const isInvalidXml = error.code === 'ALLEGATO_3B_XML_INVALID';
+        res.status(isInvalidXml ? 400 : 500).json({
             success: false,
-            error: 'Errore nella generazione dell\'XML',
+            error: isInvalidXml ? 'Dati obbligatori mancanti per XML INAIL' : 'Errore nella generazione dell\'XML',
+            details: isInvalidXml ? error.details : undefined,
             message: 'Errore interno del server'
         });
     }
@@ -568,9 +514,87 @@ router.post('/preview', requireAuth, requirePermission('clinica.visite:read'), a
             tenantId
         );
 
+        const [companyProfile, nomina] = await Promise.all([
+            prisma.companyTenantProfile.findFirst({
+                where: { id: companyTenantProfileId, tenantId, deletedAt: null },
+                include: {
+                    company: {
+                        select: {
+                            ragioneSociale: true,
+                            piva: true,
+                            codiceFiscale: true,
+                            codiceAteco: true,
+                            sedeLegaleIndirizzo: true,
+                            sedeLegaleCitta: true,
+                            sedeLegaleCap: true,
+                            sedeLegaleProvincia: true,
+                            settore: true,
+                            dimensione: true
+                        }
+                    },
+                    sites: {
+                        where: { deletedAt: null },
+                        select: {
+                            id: true,
+                            siteName: true,
+                            numeroPAT: true,
+                            indirizzo: true,
+                            citta: true,
+                            cap: true,
+                            provincia: true
+                        }
+                    }
+                }
+            }),
+            prisma.nominaRuolo.findFirst({
+                where: {
+                    tenantId,
+                    deletedAt: null,
+                    stato: 'ATTIVA',
+                    tipoRuolo: { in: ['MEDICO_COMPETENTE', 'MEDICO_COMPETENTE_COORDINATO'] },
+                    OR: [
+                        { companyTenantProfileId },
+                        { site: { companyTenantProfileId } }
+                    ]
+                },
+                orderBy: [{ tipoRuolo: 'asc' }, { dataInizio: 'desc' }],
+                select: {
+                    person: {
+                        select: {
+                            id: true,
+                            firstName: true,
+                            lastName: true,
+                            taxCode: true,
+                            tenantProfiles: {
+                                where: { tenantId, deletedAt: null },
+                                select: { registerCode: true, specialties: true }
+                            }
+                        }
+                    }
+                }
+            })
+        ]);
+
+        if (!companyProfile || !nomina?.person) {
+            return res.status(400).json({
+                success: false,
+                error: 'Azienda non valida o priva di medico competente attivo'
+            });
+        }
+
+        const preview = Allegato3BService.buildXmlPreviewFromStats({
+            company: { ...companyProfile.company, sites: companyProfile.sites },
+            medicoCompetente: nomina.person,
+            anno: parseInt(anno),
+            stats
+        });
+
         res.json({
             success: true,
-            data: stats
+            data: {
+                ...stats,
+                xmlPreview: preview
+            }
         });
     } catch (error) {
         logger.error({ error: error.message }, 'Errore preview Allegato 3B');

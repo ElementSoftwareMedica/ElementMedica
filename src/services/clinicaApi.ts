@@ -1490,6 +1490,49 @@ export interface Allegato3BCreateInput {
     companyTenantProfileId: string;
     medicoCompetenteId: string;
     note?: string;
+    statisticheOverride?: Partial<Pick<Allegato3B,
+        'totLavoratoriSorvegliati' |
+        'totVisiteEffettuate' |
+        'totGiudiziIdoneita' |
+        'totGiudiziConLimitazioni' |
+        'totGiudiziConPrescrizioni' |
+        'totInidoneita'
+    >>;
+}
+
+export interface Allegato3BEligibleCompany {
+    id: string;
+    companyTenantProfileId: string;
+    ragioneSociale: string;
+    piva?: string;
+    codiceFiscale?: string;
+    codiceAteco?: string;
+    medicoCompetenteId: string;
+    medicoCompetente?: string;
+    nomineCount: number;
+}
+
+export interface Allegato3BXmlPreviewField {
+    key?: keyof NonNullable<Allegato3BCreateInput['statisticheOverride']> | string;
+    label: string;
+    value: unknown;
+    required?: boolean;
+    editable?: boolean;
+    type?: 'date' | 'json' | string;
+}
+
+export interface Allegato3BXmlPreviewGroup {
+    title: string;
+    fields: Allegato3BXmlPreviewField[];
+}
+
+export interface Allegato3BPreviewResponse extends Allegato3BStatistiche {
+    xmlPreview?: {
+        valid: boolean;
+        errors: string[];
+        warnings: string[];
+        fieldGroups: Allegato3BXmlPreviewGroup[];
+    };
 }
 
 export interface Allegato3BUpdateInput {
@@ -2974,11 +3017,11 @@ export const sediApi = {
         apiGet<ApiResponse<SedePoliambulatorio[]>>(`${CLINICA_BASE}/poliambulatori/${poliambulatorioId}/sedi`)
             .then(extractData),
 
-    create: (poliambulatorioId: string, data: Partial<SedePoliambulatorio>) =>
+    create: (poliambulatorioId: string, data: SedePoliambulatorioInput) =>
         apiPost<ApiResponse<SedePoliambulatorio>>(`${CLINICA_BASE}/poliambulatori/${poliambulatorioId}/sedi`, data)
             .then(extractData),
 
-    update: (id: string, data: Partial<SedePoliambulatorio>) =>
+    update: (id: string, data: SedePoliambulatorioInput) =>
         apiPut<ApiResponse<SedePoliambulatorio>>(`${CLINICA_BASE}/sedi/${id}`, data)
             .then(extractData),
 
@@ -5645,6 +5688,11 @@ export const allegato3BApi = {
         apiPost<ApiResponse<Allegato3B>>(`${CLINICA_BASE}/allegato-3b`, data)
             .then(extractData),
 
+    // Aziende eleggibili: solo aziende con MC/MC coordinato attivo
+    getEligibleCompanies: () =>
+        apiGet<ApiResponse<Allegato3BEligibleCompany[]>>(`${CLINICA_BASE}/allegato-3b/eligible-companies`)
+            .then(extractData),
+
     // Compila statistiche allegato 3B
     compile: (id: string) =>
         apiPost<ApiResponse<Allegato3B>>(`${CLINICA_BASE}/allegato-3b/${id}/compile`, {})
@@ -5660,7 +5708,7 @@ export const allegato3BApi = {
 
     // Preview statistiche (senza salvare)
     preview: (data: { anno: number; companyTenantProfileId: string }) =>
-        apiPost<ApiResponse<Allegato3BStatistiche>>(`${CLINICA_BASE}/allegato-3b/preview`, data)
+        apiPost<ApiResponse<Allegato3BPreviewResponse>>(`${CLINICA_BASE}/allegato-3b/preview`, data)
             .then(extractData),
 
     // Aggiorna stato invio

@@ -1203,7 +1203,7 @@ export const AppuntamentoForm: React.FC = () => {
                                     <ElegantSelect
                                         value={form.etnia}
                                         onChange={value => set('etnia', value)}
-                                        options={ETHNICITY_OPTIONS}
+                                        options={[...ETHNICITY_OPTIONS]}
                                     />
                                 </div>
                             </div>

@@ -32,7 +32,7 @@ import {
     Plus,
     X
 } from 'lucide-react';
-import { clinicaApi } from '../../../services/clinicaApi';
+import { clinicaApi, type ChiusuraSpecialeSedeInput } from '../../../services/clinicaApi';
 import { formatMedicoName } from '../../../utils/textFormatters';
 import { DatePickerElegante } from '../../../components/ui/DatePickerElegante';
 import { TimePickerElegante } from '../../../components/ui/TimePickerElegante';
@@ -71,7 +71,7 @@ const SedeDetailPage: React.FC = () => {
             if (!id || !sede) throw new Error('Sede non disponibile');
             if (!chiusuraForm.nome || !chiusuraForm.dataInizio) throw new Error('Nome e data inizio sono obbligatori');
             const normalizeDate = (value: string) => value ? value.split('T')[0] : '';
-            const existingChiusure = (sede.chiusureSpeciali || []).map(c => ({
+            const existingChiusure: ChiusuraSpecialeSedeInput[] = (sede.chiusureSpeciali || []).map(c => ({
                 id: c.id,
                 tipo: c.tipo,
                 nome: c.nome,

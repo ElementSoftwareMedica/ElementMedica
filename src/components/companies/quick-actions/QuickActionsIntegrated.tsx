@@ -40,7 +40,7 @@ import { QuickActionSiteModal } from './QuickActionSiteModal';
 
 interface NominaInfo {
     id: string;
-    tipoRuolo: 'MEDICO_COMPETENTE' | 'RSPP' | 'ASPP' | 'RLS' | 'PREPOSTO' | 'ADDETTO_PS' | 'ADDETTO_AI' | 'DIRIGENTE_SICUREZZA';
+    tipoRuolo: 'MEDICO_COMPETENTE' | 'MEDICO_COMPETENTE_COORDINATO' | 'RSPP' | 'ASPP' | 'RLS' | 'PREPOSTO' | 'ADDETTO_PS' | 'ADDETTO_AI' | 'DIRIGENTE_SICUREZZA';
     stato: string;
     dataScadenza?: string;
 }

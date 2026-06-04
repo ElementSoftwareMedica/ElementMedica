@@ -792,24 +792,52 @@ interface CompensoProfessionista {
     person?: { firstName?: string | null; lastName?: string | null } | null;
     paziente?: { firstName?: string | null; lastName?: string | null } | null;
     prestazioni?: Array<{ nome?: string | null; prestazione?: { nome?: string | null } | null }> | null;
-    site?: { nome?: string | null } | null;
-    sede?: { nome?: string | null } | null;
+    site?: { nome?: string | null; siteName?: string | null } | null;
+    sede?: { nome?: string | null; siteName?: string | null } | null;
+    fatturaElettronica?: {
+        totale?: number | null;
+        clientePersona?: { firstName?: string | null; lastName?: string | null } | null;
+        clienteAzienda?: { company?: { ragioneSociale?: string | null } | null } | null;
+        linee?: Array<{ descrizione?: string | null }> | null;
+    } | null;
+    appuntamentoPrestazione?: {
+        prestazione?: { nome?: string | null } | null;
+        appuntamento?: {
+            paziente?: { firstName?: string | null; lastName?: string | null } | null;
+            companyTenantProfile?: { company?: { ragioneSociale?: string | null } | null } | null;
+            ambulatorio?: { nome?: string | null; sede?: { nome?: string | null } | null } | null;
+        } | null;
+    } | null;
     visita?: {
+        paziente?: { firstName?: string | null; lastName?: string | null } | null;
+        prestazione?: { nome?: string | null } | null;
+        ambulatorio?: { nome?: string | null; sede?: { nome?: string | null } | null } | null;
         person?: { firstName?: string | null; lastName?: string | null } | null;
         prestazioni?: Array<{ nome?: string | null; prestazione?: { nome?: string | null } | null }> | null;
         appuntamento?: {
-            ambulatorio?: { nome?: string | null } | null;
-            site?: { nome?: string | null } | null;
+            paziente?: { firstName?: string | null; lastName?: string | null } | null;
+            prestazione?: { nome?: string | null } | null;
+            companyTenantProfile?: { company?: { ragioneSociale?: string | null } | null } | null;
+            ambulatorio?: { nome?: string | null; sede?: { nome?: string | null } | null } | null;
+            site?: { nome?: string | null; siteName?: string | null } | null;
             prestazioni?: Array<{ nome?: string | null; prestazione?: { nome?: string | null } | null }> | null;
         } | null;
     } | null;
     appuntamento?: {
-        ambulatorio?: { nome?: string | null } | null;
-        site?: { nome?: string | null } | null;
+        paziente?: { firstName?: string | null; lastName?: string | null } | null;
+        prestazione?: { nome?: string | null } | null;
+        companyTenantProfile?: { company?: { ragioneSociale?: string | null } | null } | null;
+        ambulatorio?: { nome?: string | null; sede?: { nome?: string | null } | null } | null;
+        site?: { nome?: string | null; siteName?: string | null } | null;
         prestazioni?: Array<{ nome?: string | null; prestazione?: { nome?: string | null } | null }> | null;
     } | null;
     // enriched: controparte ENTRATA (per USCITA) che porta info sulla company
     controparteCollegata?: {
+        importoNetto?: number;
+        importoLordo?: number;
+        fatturaElettronica?: CompensoProfessionista['fatturaElettronica'];
+        appuntamento?: CompensoProfessionista['appuntamento'];
+        visita?: CompensoProfessionista['visita'];
         companyTenantProfile?: {
             company?: { ragioneSociale: string } | null;
         } | null;
@@ -912,6 +940,26 @@ const formatPrestazioniExport = (items?: Array<{ nome?: string | null; prestazio
         .filter(Boolean)
         .join(', ');
 
+const formatPersonExport = (person?: { firstName?: string | null; lastName?: string | null } | null) =>
+    person ? `${person.lastName || ''} ${person.firstName || ''}`.trim() : '';
+
+const formatInvoiceLinesExport = (lines?: Array<{ descrizione?: string | null }> | null) =>
+    (lines || []).map(line => line.descrizione).filter(Boolean).join(', ');
+
+const formatPercentExport = (compenso: number, paid: number, tipo?: string | null, valore?: number | null) => {
+    if (tipo === 'PERCENTUALE' && valore != null) return `${Number(valore).toFixed(2)}%`;
+    if (paid > 0 && compenso > 0) return `${((compenso / paid) * 100).toFixed(2)}%`;
+    return '';
+};
+
+const formatExecutionSite = (...sources: Array<{ nome?: string | null; siteName?: string | null; sede?: { nome?: string | null } | null } | null | undefined>) => {
+    for (const source of sources) {
+        const value = source?.sede?.nome || source?.nome || source?.siteName;
+        if (value) return value;
+    }
+    return '';
+};
+
 const TabCompensiMedico: React.FC<{ medicoId: string }> = ({ medicoId }) => {
     const { showToast } = useToast();
     const { hasPermission } = useAuth();
@@ -1001,29 +1049,72 @@ const TabCompensiMedico: React.FC<{ medicoId: string }> = ({ medicoId }) => {
                 total: number;
             }>('/api/v1/movimenti-contabili', buildCompensiParams('5000'));
             const rows = (resp.data || []).map(c => {
-                const patient = c.person || c.paziente || c.visita?.person || null;
-                const prestazioni = formatPrestazioniExport(c.prestazioni)
+                const patient = c.fatturaElettronica?.clientePersona
+                    || c.controparteCollegata?.fatturaElettronica?.clientePersona
+                    || c.appuntamentoPrestazione?.appuntamento?.paziente
+                    || c.appuntamento?.paziente
+                    || c.visita?.paziente
+                    || c.visita?.appuntamento?.paziente
+                    || c.controparteCollegata?.appuntamento?.paziente
+                    || c.controparteCollegata?.visita?.paziente
+                    || c.paziente
+                    || null;
+                const prestazioni = c.appuntamentoPrestazione?.prestazione?.nome
+                    || formatPrestazioniExport(c.prestazioni)
+                    || c.appuntamento?.prestazione?.nome
                     || formatPrestazioniExport(c.visita?.prestazioni)
+                    || c.visita?.prestazione?.nome
                     || formatPrestazioniExport(c.appuntamento?.prestazioni)
+                    || c.visita?.appuntamento?.prestazione?.nome
                     || formatPrestazioniExport(c.visita?.appuntamento?.prestazioni)
+                    || c.controparteCollegata?.appuntamento?.prestazione?.nome
+                    || formatPrestazioniExport(c.controparteCollegata?.appuntamento?.prestazioni)
+                    || c.controparteCollegata?.visita?.prestazione?.nome
+                    || formatPrestazioniExport(c.controparteCollegata?.visita?.appuntamento?.prestazioni)
+                    || formatInvoiceLinesExport(c.fatturaElettronica?.linee)
+                    || formatInvoiceLinesExport(c.controparteCollegata?.fatturaElettronica?.linee)
                     || c.descrizione
                     || '';
-                const sede = c.site?.nome
-                    || c.sede?.nome
-                    || c.appuntamento?.ambulatorio?.nome
-                    || c.appuntamento?.site?.nome
-                    || c.visita?.appuntamento?.ambulatorio?.nome
-                    || c.visita?.appuntamento?.site?.nome
+                const paid = Number(
+                    c.importoRiferimento
+                    ?? c.controparteCollegata?.fatturaElettronica?.totale
+                    ?? c.fatturaElettronica?.totale
+                    ?? c.controparteCollegata?.importoLordo
+                    ?? c.controparteCollegata?.importoNetto
+                    ?? c.movimentoCollegato?.importoLordo
+                    ?? c.movimentoCollegato?.importoNetto
+                    ?? 0
+                );
+                const compenso = Number(c.importoNetto || 0);
+                const sede = formatExecutionSite(
+                    c.appuntamentoPrestazione?.appuntamento?.ambulatorio,
+                    c.appuntamento?.ambulatorio,
+                    c.visita?.ambulatorio,
+                    c.visita?.appuntamento?.ambulatorio,
+                    c.controparteCollegata?.appuntamento?.ambulatorio,
+                    c.controparteCollegata?.visita?.ambulatorio,
+                    c.controparteCollegata?.visita?.appuntamento?.ambulatorio,
+                    c.site,
+                    c.sede
+                );
+                const azienda = c.appuntamentoPrestazione?.appuntamento?.companyTenantProfile?.company?.ragioneSociale
+                    || c.appuntamento?.companyTenantProfile?.company?.ragioneSociale
+                    || c.visita?.appuntamento?.companyTenantProfile?.company?.ragioneSociale
+                    || c.controparteCollegata?.appuntamento?.companyTenantProfile?.company?.ragioneSociale
+                    || c.controparteCollegata?.visita?.appuntamento?.companyTenantProfile?.company?.ragioneSociale
                     || c.controparteCollegata?.companyTenantProfile?.company?.ragioneSociale
+                    || c.fatturaElettronica?.clienteAzienda?.company?.ragioneSociale
+                    || c.controparteCollegata?.fatturaElettronica?.clienteAzienda?.company?.ragioneSociale
                     || '';
                 return {
-                    Paziente: patient ? `${patient.lastName || ''} ${patient.firstName || ''}`.trim() : '',
+                    Paziente: formatPersonExport(patient),
                     Prestazioni: prestazioni,
-                    'Percentuale spettante': c.compensoTipo === 'PERCENTUALE' && c.compensoValore != null ? `${c.compensoValore}%` : '',
-                    'Compenso medico': Number(c.importoNetto || 0),
-                    'Quanto ha pagato il pz': Number(c.importoRiferimento ?? c.movimentoCollegato?.importoLordo ?? c.movimentoCollegato?.importoNetto ?? 0),
+                    'Percentuale spettante': formatPercentExport(compenso, paid, c.compensoTipo, c.compensoValore),
+                    'Compenso medico': compenso,
+                    'Quanto ha pagato il pz': paid,
                     'Giorno esecuzione': c.dataEsecuzione ? new Date(c.dataEsecuzione).toLocaleDateString('it-IT') : '',
                     'Sede esecuzione': sede,
+                    Azienda: azienda,
                     Stato: STATO_COMPENSO_CONFIG[c.stato]?.label || c.stato,
                     Descrizione: c.descrizione || '',
                 };

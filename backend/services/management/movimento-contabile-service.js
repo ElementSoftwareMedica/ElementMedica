@@ -655,6 +655,81 @@ class MovimentoContabileService extends BranchAwareService {
             nominaRuolo: {
                 select: { id: true, tipoRuolo: true, dataInizio: true }
             },
+            appuntamentoPrestazione: {
+                select: {
+                    id: true,
+                    prestazione: { select: { nome: true } },
+                    appuntamento: {
+                        select: {
+                            paziente: { select: { id: true, firstName: true, lastName: true } },
+                            companyTenantProfile: { select: { id: true, company: { select: { ragioneSociale: true } } } },
+                            ambulatorio: {
+                                select: {
+                                    nome: true,
+                                    sede: { select: { nome: true } }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            appuntamento: {
+                select: {
+                    id: true,
+                    paziente: { select: { id: true, firstName: true, lastName: true } },
+                    prestazione: { select: { nome: true } },
+                    prestazioni: {
+                        where: { deletedAt: null },
+                        select: { prestazione: { select: { nome: true } } }
+                    },
+                    companyTenantProfile: { select: { id: true, company: { select: { ragioneSociale: true } } } },
+                    ambulatorio: {
+                        select: {
+                            nome: true,
+                            sede: { select: { nome: true } }
+                        }
+                    }
+                }
+            },
+            visita: {
+                select: {
+                    id: true,
+                    paziente: { select: { id: true, firstName: true, lastName: true } },
+                    prestazione: { select: { nome: true } },
+                    ambulatorio: {
+                        select: {
+                            nome: true,
+                            sede: { select: { nome: true } }
+                        }
+                    },
+                    appuntamento: {
+                        select: {
+                            paziente: { select: { id: true, firstName: true, lastName: true } },
+                            prestazione: { select: { nome: true } },
+                            prestazioni: {
+                                where: { deletedAt: null },
+                                select: { prestazione: { select: { nome: true } } }
+                            },
+                            companyTenantProfile: { select: { id: true, company: { select: { ragioneSociale: true } } } },
+                            ambulatorio: {
+                                select: {
+                                    nome: true,
+                                    sede: { select: { nome: true } }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            fatturaElettronica: {
+                select: {
+                    numero: true,
+                    totale: true,
+                    clientePersona: { select: { id: true, firstName: true, lastName: true } },
+                    clienteAzienda: { select: { id: true, company: { select: { ragioneSociale: true } } } },
+                    linee: { select: { descrizione: true } }
+                }
+            },
             // Movimento collegato (per ENTRATA): l'USCITA generata insieme
             movimentoCollegato: {
                 select: { id: true, direzione: true, importoNetto: true, importoLordo: true, stato: true }
@@ -667,6 +742,61 @@ class MovimentoContabileService extends BranchAwareService {
                     importoNetto: true,
                     importoLordo: true,
                     stato: true,
+                    appuntamento: {
+                        select: {
+                            paziente: { select: { id: true, firstName: true, lastName: true } },
+                            prestazione: { select: { nome: true } },
+                            prestazioni: {
+                                where: { deletedAt: null },
+                                select: { prestazione: { select: { nome: true } } }
+                            },
+                            companyTenantProfile: { select: { id: true, company: { select: { ragioneSociale: true } } } },
+                            ambulatorio: {
+                                select: {
+                                    nome: true,
+                                    sede: { select: { nome: true } }
+                                }
+                            }
+                        }
+                    },
+                    visita: {
+                        select: {
+                            paziente: { select: { id: true, firstName: true, lastName: true } },
+                            prestazione: { select: { nome: true } },
+                            ambulatorio: {
+                                select: {
+                                    nome: true,
+                                    sede: { select: { nome: true } }
+                                }
+                            },
+                            appuntamento: {
+                                select: {
+                                    paziente: { select: { id: true, firstName: true, lastName: true } },
+                                    prestazione: { select: { nome: true } },
+                                    prestazioni: {
+                                        where: { deletedAt: null },
+                                        select: { prestazione: { select: { nome: true } } }
+                                    },
+                                    companyTenantProfile: { select: { id: true, company: { select: { ragioneSociale: true } } } },
+                                    ambulatorio: {
+                                        select: {
+                                            nome: true,
+                                            sede: { select: { nome: true } }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    fatturaElettronica: {
+                        select: {
+                            numero: true,
+                            totale: true,
+                            clientePersona: { select: { id: true, firstName: true, lastName: true } },
+                            clienteAzienda: { select: { id: true, company: { select: { ragioneSociale: true } } } },
+                            linee: { select: { descrizione: true } }
+                        }
+                    },
                     companyTenantProfile: {
                         select: { id: true, company: { select: { ragioneSociale: true } } }
                     }

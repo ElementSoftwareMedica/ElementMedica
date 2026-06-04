@@ -50,6 +50,7 @@ import '../../../styles/clinica-theme.css';
 // Role type labels and colors
 const RUOLO_CONFIG: Record<TipoNominaRuolo, { label: string; bg: string; text: string }> = {
     MEDICO_COMPETENTE: { label: 'Medico Competente', bg: 'bg-teal-100', text: 'text-teal-700' },
+    MEDICO_COMPETENTE_COORDINATO: { label: 'Medico Competente Coordinato', bg: 'bg-cyan-100', text: 'text-cyan-700' },
     RSPP: { label: 'RSPP', bg: 'bg-blue-100', text: 'text-blue-700' },
     ASPP: { label: 'ASPP', bg: 'bg-indigo-100', text: 'text-indigo-700' },
     RLS: { label: 'RLS', bg: 'bg-purple-100', text: 'text-purple-700' },
