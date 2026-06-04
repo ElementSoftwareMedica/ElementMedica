@@ -493,6 +493,39 @@ export function setupIpcHandlers(): void {
             }
         }
 
+        const hasColumn = (table: string, column: string): boolean => {
+            validateTableName(table)
+            return (db.prepare(`PRAGMA table_info("${table}")`).all() as Array<{ name: string }>)
+                .some(info => info.name === column)
+        }
+
+        const applyTombstones = (records: Record<string, unknown>[]) => {
+            if (!records || records.length === 0) return
+
+            for (const tombstone of records) {
+                const table = String(tombstone.table || '')
+                const id = String(tombstone.id || '')
+                if (!table || !id) continue
+                validateTableName(table)
+
+                const updates = [
+                    '"_isDeleted" = 1',
+                    '"_syncStatus" = \'SYNCED\'',
+                    '"_lastSyncAt" = ?',
+                    '"_localUpdatedAt" = ?'
+                ]
+                const values: unknown[] = [now, now]
+
+                if (hasColumn(table, 'deletedAt')) {
+                    updates.push('"deletedAt" = ?')
+                    values.push(tombstone.deletedAt || now)
+                }
+
+                values.push(id)
+                db.prepare(`UPDATE "${table}" SET ${updates.join(', ')} WHERE id = ?`).run(...values)
+            }
+        }
+
         // Run all data insertions atomically in a single SQLite transaction
         const result = db.transaction((): Record<string, unknown> => {
 
@@ -1666,6 +1699,10 @@ export function setupIpcHandlers(): void {
                 bulkUpsert('convenzioni', flat)
             }
 
+            if (data.tombstones && Array.isArray(data.tombstones)) {
+                applyTombstones(data.tombstones)
+            }
+
             // ---- 15. Update sync state ----
             db.prepare(
                 `INSERT OR REPLACE INTO sync_state (key, value, updatedAt) VALUES (?, ?, ?)`
@@ -1706,7 +1743,8 @@ export function setupIpcHandlers(): void {
                     convenzioni: data.convenzioni?.length || 0,
                     sopralluoghi: data.sopralluoghi?.length || 0,
                     dvrs: data.dvrs?.length || 0,
-                    consulenzeMDL: data.consulenzeMDL?.length || 0
+                    consulenzeMDL: data.consulenzeMDL?.length || 0,
+                    tombstones: data.tombstones?.length || 0
                 }
             }
         })()

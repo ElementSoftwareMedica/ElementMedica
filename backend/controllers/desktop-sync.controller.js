@@ -158,6 +158,81 @@ function splitDocumentTemplatesForDesktop(documentTemplates = []) {
     return { documentTemplatesBase, questionariMediciConfig };
 }
 
+const DESKTOP_TOMBSTONE_SOURCES = [
+    { model: 'person', table: 'patients', where: tenantId => ({ tenantProfiles: { some: { tenantId } } }) },
+    { model: 'personTenantProfile', table: 'patients', idField: 'personId' },
+    { model: 'companyTenantProfile', table: 'companies' },
+    { model: 'companySite', table: 'company_sites' },
+    { model: 'nominaRuolo', table: 'nomine_ruolo' },
+    { model: 'appuntamento', table: 'appointments' },
+    { model: 'appuntamentoPrestazione', table: 'appointment_prestazioni' },
+    { model: 'visita', table: 'visits' },
+    { model: 'allegatoVisita', table: 'allegati' },
+    { model: 'mansione', table: 'mansioni' },
+    { model: 'mansioneRischio', table: 'mansione_rischi' },
+    { model: 'lavoratoreMansione', table: 'lavoratore_mansioni' },
+    { model: 'lavoratoreRischioAggiuntivo', table: 'lavoratore_rischi_aggiuntivi' },
+    { model: 'protocolloSanitario', table: 'protocolli' },
+    { model: 'protocolloPrestazione', table: 'protocollo_prestazioni' },
+    { model: 'scadenzaPrestazioneProtocollo', table: 'scadenze' },
+    { model: 'giudizioIdoneita', table: 'giudizi_idoneita' },
+    { model: 'movimentoContabile', table: 'movimenti_contabili' },
+    { model: 'prestazione', table: 'prestazioni' },
+    { model: 'tariffarioAziendale', table: 'tariffari' },
+    { model: 'voceTariffario', table: 'tariffario_voci' },
+    { model: 'tariffarioCompanyAssociation', table: 'tariffario_company_associations' },
+    { model: 'convenzione', table: 'convenzioni' },
+    { model: 'ambulatorio', table: 'ambulatori' },
+    { model: 'slotDisponibilita', table: 'slot_disponibilita' },
+    { model: 'visitTemplate', table: 'visit_templates' },
+    { model: 'documentoTemplate', table: 'document_templates' },
+    { model: 'documentoCompilato', table: 'documenti_compilati' },
+    { model: 'profiloDiSalutePersona', table: 'profili_salute' },
+    { model: 'documentoClinico', table: 'documenti_clinici' },
+    { model: 'personDocument', table: 'person_documents' },
+    { model: 'referto', table: 'referti' },
+    { model: 'firmaDigitale', table: 'firme_digitali' },
+    { model: 'sopralluogo', table: 'sopralluoghi' },
+    { model: 'dVR', table: 'dvr' },
+    { model: 'consulenzaMDL', table: 'consulenze_mdl' },
+    { model: 'allegato3B', table: 'allegati_3b' }
+];
+
+export async function getDesktopTombstones(tenantId, lastSyncAt) {
+    if (!lastSyncAt) return [];
+
+    const rows = await Promise.all(DESKTOP_TOMBSTONE_SOURCES.map(async source => {
+        const model = prisma[source.model];
+        if (!model?.findMany) return [];
+
+        const tenantWhere = source.where ? source.where(tenantId) : { tenantId };
+        const select = {
+            id: true,
+            deletedAt: true,
+            updatedAt: true,
+            ...(source.idField ? { [source.idField]: true } : {})
+        };
+        const deletedRows = await model.findMany({
+            where: {
+                ...tenantWhere,
+                deletedAt: { gte: lastSyncAt }
+            },
+            select,
+            take: 5000
+        });
+
+        return deletedRows.map(row => ({
+            table: source.table,
+            id: source.idField ? row[source.idField] : row.id,
+            tenantId,
+            deletedAt: row.deletedAt || row.updatedAt,
+            updatedAt: row.updatedAt
+        })).filter(row => row.id);
+    }));
+
+    return rows.flat();
+}
+
 /**
  * GET /api/v1/desktop-sync/download-day
  * Scarica tutti i dati necessari per una giornata MDL.
@@ -913,10 +988,30 @@ export async function downloadFullDb(req, res) {
             orderBy: [{ data: 'asc' }, { oraInizio: 'asc' }]
         });
 
-        // 7. ALL active scadenze
-        const scadenze = await prisma.deadlineItem.findMany({
-            where: { tenantId, deletedAt: null, status: { in: ['ATTIVA', 'IN_PREAVVISO', 'SCADUTA'] }, ...updatedFilter },
-            orderBy: { dataScadenza: 'asc' }
+        // 7. ALL active MDL protocol deadlines for desktop sorveglianza sanitaria
+        const scadenze = await prisma.scadenzaPrestazioneProtocollo.findMany({
+            where: { tenantId, deletedAt: null, ...updatedFilter },
+            orderBy: { dataScadenza: 'asc' },
+            take: 20000,
+            select: {
+                id: true,
+                tenantId: true,
+                personId: true,
+                mansioneId: true,
+                prestazioneId: true,
+                protocolloId: true,
+                dataScadenza: true,
+                periodicitaMesi: true,
+                isPrimaVisita: true,
+                eseguita: true,
+                dataEsecuzione: true,
+                visitaId: true,
+                appuntamentoId: true,
+                documentoTemplateId: true,
+                createdAt: true,
+                updatedAt: true,
+                deletedAt: true
+            }
         });
 
         // 8. ALL lavoratore-mansione assignments
@@ -1180,6 +1275,7 @@ export async function downloadFullDb(req, res) {
                 riferimentoPagamento: true, tenantId: true, createdAt: true, updatedAt: true
             }
         });
+        const tombstones = await getDesktopTombstones(tenantId, lastSyncAt);
 
         const payload = {
             meta: {
@@ -1224,7 +1320,8 @@ export async function downloadFullDb(req, res) {
                     allegati3B: allegati3B.length,
                     convenzioni: convenzioni.length,
                     giudizi: giudiziPrecedenti.length,
-                    movimenti: movimentiContabili.length
+                    movimenti: movimentiContabili.length,
+                    tombstones: tombstones.length
                 }
             },
             pazienti,
@@ -1262,7 +1359,8 @@ export async function downloadFullDb(req, res) {
             allegati3B,
             convenzioni,
             giudiziPrecedenti,
-            movimentiContabili
+            movimentiContabili,
+            tombstones
         };
 
         logger.info({ tenantId, counts: payload.meta.counts }, '[P98] Download full DB completed');

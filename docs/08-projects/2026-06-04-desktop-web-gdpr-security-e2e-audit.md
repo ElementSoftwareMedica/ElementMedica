@@ -15,6 +15,8 @@ Controlli implementati/verificati:
 - Upload documenti MDL e allegati visita desktop protetti da hash SHA-256 e scansione malware opzionale tramite `CLAMAV_SCAN_COMMAND`/`FILE_SCAN_COMMAND`.
 - Export XML Allegato 3B tracciato in `GdprAuditLog` con hash SHA-256 del payload XML e validazione strutturale prima del download.
 - App desktop: sync incrementale gia presente via `lastSyncAt` su `GET /api/v1/desktop-sync/download-full-db`.
+- App desktop: sync incrementale estesa con tombstone soft-delete per le tabelle desktop sincronizzate; i record cancellati online vengono marcati `_isDeleted=1` localmente senza cancellazione fisica.
+- App desktop: scadenze MDL riallineate a `ScadenzaPrestazioneProtocollo` per alimentare correttamente la card Sorveglianza Sanitaria offline.
 - App desktop: cifratura field-level dei principali campi PII/sanitari via Electron `safeStorage`; resta necessario requisito operativo BitLocker/FileVault o cifratura integrale DB per protezione completa.
 - Packaging Windows desktop verificato con `better-sqlite3` nativo `win32-x64`.
 
@@ -22,7 +24,7 @@ Controlli ancora non chiusi al 100%:
 
 - Validazione XSD ufficiale Allegato 3B: manca nel repository lo schema INAIL versionato da usare come fonte di verita.
 - Scansione malware in produzione: codice pronto, ma deve essere configurato il comando scanner sul server.
-- Test cross-tenant automatici specifici sulle nuove route `company-mdl-documents`: da aggiungere con fixture multi-tenant stabile.
+- Test cross-tenant automatici specifici sulle nuove route `company-mdl-documents`: le guardie route sono presenti tramite risoluzione `CompanyTenantProfile` nel tenant corrente; manca fixture E2E multi-tenant stabile.
 - Cifratura completa del file SQLite: non implementata; oggi e presente cifratura field-level piu requisito operativo di cifratura disco.
 - DPIA/ROPA: richiede validazione DPO/legale fuori dal codice.
 
@@ -124,7 +126,8 @@ Mitigazioni richieste:
 - Ogni tabella sync deve avere `updatedAt`, `deletedAt`, `tenantId`, `remoteId/localId` e mapping ID verificabile.
 - Upload deve essere idempotente e non creare duplicati per movimenti/documenti/visite.
 - Errori di remap devono bloccare solo il record interessato e produrre coda retry, non perdere batch interi.
-- Il full download e affiancato da sync incrementale basata su `lastSyncAt`; resta da verificare copertura di tutte le tabelle e gestione soft-delete tombstone.
+- Il full download e affiancato da sync incrementale basata su `lastSyncAt`; dal 2026-06-04 include tombstone soft-delete per le tabelle desktop e applicazione locale `_isDeleted=1`.
+- La tabella locale `scadenze` riceve ora `ScadenzaPrestazioneProtocollo`, non `DeadlineItem`, evitando divergenze nella Sorveglianza Sanitaria offline.
 
 Priorita: alta.
 
@@ -207,13 +210,19 @@ Priorita: media-alta.
 - Smoke HTTP su frontend dopo deploy.
 - Log produzione letti solo con `tail -n 20`, `pm2 logs --lines 20 --nostream` o filtri mirati.
 
+## Verifiche Tecniche Eseguite 2026-06-04
+
+- `node --check backend/controllers/desktop-sync.controller.js`: OK.
+- `cd desktop-app && npm run typecheck`: OK.
+- `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/unit/desktop-sync-tombstones.test.js tests/unit/file-security.test.js`: OK.
+
 ## Gap Da Chiudere Prima Di Dichiarare Conformita Piena
 
 1. Cifratura integrale del DB locale oppure requisito tecnico obbligatorio di cifratura disco verificato in onboarding device.
 2. Validazione XSD Allegato 3B integrata prima dell'export definitivo quando lo schema ufficiale viene versionato nel repository.
 3. Antivirus/malware scanning da abilitare sul server impostando `CLAMAV_SCAN_COMMAND` o `FILE_SCAN_COMMAND`.
 4. Test automatici cross-tenant per ogni nuova route documentale.
-5. Sync incrementale: copertura soft-delete/tombstone e test tabella-per-tabella.
+5. Sync incrementale: tombstone implementati e coperti da test unitario mapping; resta test E2E tabella-per-tabella con fixture reale.
 6. Registro DPIA/ROPA aggiornato con trattamento offline desktop.
 
 ## Valutazione Finale
