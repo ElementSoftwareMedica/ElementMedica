@@ -150,6 +150,7 @@ export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
     const [queriedFrom, setQueriedFrom] = useState<string | null>(null);
     const [queriedTo, setQueriedTo] = useState<string | null>(null);
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+    const [isPdfGenerated, setIsPdfGenerated] = useState(false);
     const [uploadFile, setUploadFile] = useState<File | null>(null);
     const [isUploading, setIsUploading] = useState(false);
     const [isSigning, setIsSigning] = useState(false);
@@ -193,6 +194,7 @@ export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
             showToast({ type: 'warning', message: 'La data di inizio deve essere prima della data di fine' });
             return;
         }
+        setIsPdfGenerated(false);
         setQueriedFrom(dateFrom);
         setQueriedTo(dateTo);
     };
@@ -212,6 +214,7 @@ export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
             a.click();
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
+            setIsPdfGenerated(true);
             showToast({ type: 'success', message: 'PDF generato con successo' });
         } catch {
             showToast({ type: 'error', message: 'Errore nella generazione del PDF' });
@@ -648,6 +651,7 @@ export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
                                         </p>
                                     </div>
 
+                                    {isPdfGenerated && (
                                     <div className="rounded-xl border border-gray-100 p-3 dark:border-gray-700">
                                         <div className="mb-3 flex items-center justify-between gap-3">
                                             <div>
@@ -706,6 +710,7 @@ export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
                                             ))}
                                         </div>
                                     </div>
+                                    )}
                                 </>
                             )}
                         </>

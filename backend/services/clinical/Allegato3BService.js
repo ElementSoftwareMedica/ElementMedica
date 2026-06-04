@@ -345,6 +345,40 @@ class Allegato3BService {
         };
     }
 
+    static mergeWorkerGroups(...groups) {
+        const byPersonId = new Map();
+        for (const group of groups) {
+            for (const worker of group || []) {
+                const personId = worker.personId || worker.pazienteId || worker.person?.id || worker.paziente?.id;
+                if (!personId || byPersonId.has(personId)) continue;
+                byPersonId.set(personId, {
+                    personId,
+                    person: worker.person || worker.paziente || null,
+                    paziente: worker.paziente || worker.person || null
+                });
+            }
+        }
+        return [...byPersonId.values()];
+    }
+
+    static companyVisitWhere(companyTenantProfileId) {
+        return {
+            OR: [
+                { appuntamento: { companyTenantProfileId } },
+                {
+                    paziente: {
+                        tenantProfiles: {
+                            some: {
+                                companyTenantProfileId,
+                                deletedAt: null
+                            }
+                        }
+                    }
+                }
+            ]
+        };
+    }
+
     static async getOccupatiAtDate(companyTenantProfileId, tenantId, referenceDate) {
         const workers = await prisma.personTenantProfile.findMany({
             where: {
@@ -406,40 +440,90 @@ class Allegato3BService {
         const inizioAnno = new Date(anno, 0, 1);
         const fineAnno = new Date(anno, 11, 31, 23, 59, 59);
 
-        const assegnazioni = await prisma.lavoratoreMansione.findMany({
-            where: {
-                tenantId,
-                isAttiva: true,
-                deletedAt: null,
-                dataInizio: { lte: fineAnno },
-                OR: [
-                    { dataFine: null },
-                    { dataFine: { gte: inizioAnno } }
-                ],
-                mansione: {
+        const [assegnazioni, profiliConProtocollo, visitati] = await Promise.all([
+            prisma.lavoratoreMansione.findMany({
+                where: {
+                    tenantId,
+                    isAttiva: true,
                     deletedAt: null,
-                    site: {
-                        companyTenantProfileId,
-                        deletedAt: null
+                    dataInizio: { lte: fineAnno },
+                    OR: [
+                        { dataFine: null },
+                        { dataFine: { gte: inizioAnno } }
+                    ],
+                    mansione: {
+                        deletedAt: null,
+                        site: {
+                            companyTenantProfileId,
+                            deletedAt: null
+                        }
+                    }
+                },
+                select: {
+                    personId: true,
+                    person: {
+                        select: {
+                            id: true,
+                            gender: true,
+                            birthDate: true
+                        }
+                    }
+                },
+                distinct: ['personId']
+            }),
+            prisma.personTenantProfile.findMany({
+                where: {
+                    tenantId,
+                    companyTenantProfileId,
+                    deletedAt: null,
+                    isActive: true,
+                    protocolloSanitarioId: { not: null },
+                    OR: [
+                        { hiredDate: null },
+                        { hiredDate: { lte: fineAnno } }
+                    ],
+                    AND: {
+                        OR: [
+                            { endDate: null },
+                            { endDate: { gte: inizioAnno } }
+                        ]
                     },
-                    rischiAssociati: {
-                        some: { deletedAt: null }
+                },
+                select: {
+                    personId: true,
+                    person: {
+                        select: {
+                            id: true,
+                            gender: true,
+                            birthDate: true
+                        }
                     }
-                }
-            },
-            select: {
-                personId: true,
-                person: {
-                    select: {
-                        gender: true,
-                        birthDate: true
+                },
+                distinct: ['personId']
+            }),
+            prisma.visita.findMany({
+                where: {
+                    tenantId,
+                    deletedAt: null,
+                    tipoVisitaMDL: { not: null },
+                    dataOra: { gte: inizioAnno, lte: fineAnno },
+                    ...this.companyVisitWhere(companyTenantProfileId)
+                },
+                select: {
+                    pazienteId: true,
+                    paziente: {
+                        select: {
+                            id: true,
+                            gender: true,
+                            birthDate: true
+                        }
                     }
-                }
-            },
-            distinct: ['personId']
-        });
+                },
+                distinct: ['pazienteId']
+            })
+        ]);
 
-        return this.aggregateWorkers(assegnazioni, fineAnno);
+        return this.aggregateWorkers(this.mergeWorkerGroups(assegnazioni, profiliConProtocollo, visitati), fineAnno);
     }
 
     /**
@@ -459,14 +543,7 @@ class Allegato3BService {
                     gte: inizioAnno,
                     lte: fineAnno
                 },
-                paziente: {
-                    tenantProfiles: {
-                        some: {
-                            companyTenantProfileId,
-                            deletedAt: null
-                        }
-                    }
-                }
+                ...this.companyVisitWhere(companyTenantProfileId)
             },
             select: {
                 pazienteId: true,
@@ -500,14 +577,7 @@ class Allegato3BService {
                     gte: inizioAnno,
                     lte: fineAnno
                 },
-                paziente: {
-                    tenantProfiles: {
-                        some: {
-                            companyTenantProfileId,
-                            deletedAt: null
-                        }
-                    }
-                }
+                ...this.companyVisitWhere(companyTenantProfileId)
             },
             _count: { id: true }
         });
@@ -544,14 +614,36 @@ class Allegato3BService {
                     gte: inizioAnno,
                     lte: fineAnno
                 },
-                person: {
-                    tenantProfiles: {
-                        some: {
-                            companyTenantProfileId,
-                            deletedAt: null
+                OR: [
+                    {
+                        person: {
+                            tenantProfiles: {
+                                some: {
+                                    companyTenantProfileId,
+                                    deletedAt: null
+                                }
+                            }
+                        }
+                    },
+                    {
+                        visita: {
+                            appuntamento: { companyTenantProfileId }
+                        }
+                    },
+                    {
+                        mansioni: {
+                            some: {
+                                mansione: {
+                                    site: {
+                                        companyTenantProfileId,
+                                        deletedAt: null
+                                    },
+                                    deletedAt: null
+                                }
+                            }
                         }
                     }
-                }
+                ]
             },
             _count: { id: true }
         });
@@ -875,14 +967,23 @@ class Allegato3BService {
                     gte: inizioAnno,
                     lte: fineAnno
                 },
-                paziente: {
-                    tenantProfiles: {
-                        some: {
-                            companyTenantProfileId,
-                            deletedAt: null
+                OR: [
+                    {
+                        visita: {
+                            appuntamento: { companyTenantProfileId }
+                        }
+                    },
+                    {
+                        paziente: {
+                            tenantProfiles: {
+                                some: {
+                                    companyTenantProfileId,
+                                    deletedAt: null
+                                }
+                            }
                         }
                     }
-                }
+                ]
             },
             select: {
                 tipoDispositivo: true,

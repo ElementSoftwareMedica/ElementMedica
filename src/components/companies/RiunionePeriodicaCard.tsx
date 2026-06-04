@@ -178,6 +178,7 @@ export const RiunionePeriodicaCard: React.FC<RiunionePeriodicaCardProps> = ({
     const [selectedYear, setSelectedYear] = useState(defaultYear);
     const [queriedYear, setQueriedYear] = useState<number | null>(null);
     const [isDownloading, setIsDownloading] = useState(false);
+    const [isPdfGenerated, setIsPdfGenerated] = useState(false);
     const [delibereConclusioni, setDelibereConclusioni] = useState('');
     const [uploadFile, setUploadFile] = useState<File | null>(null);
     const [isUploading, setIsUploading] = useState(false);
@@ -220,6 +221,7 @@ export const RiunionePeriodicaCard: React.FC<RiunionePeriodicaCardProps> = ({
     });
 
     const handleGenera = () => {
+        setIsPdfGenerated(false);
         setQueriedYear(selectedYear);
     };
 
@@ -237,6 +239,7 @@ export const RiunionePeriodicaCard: React.FC<RiunionePeriodicaCardProps> = ({
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
+            setIsPdfGenerated(true);
             showToast({ type: 'success', message: 'PDF scaricato con successo' });
         } catch {
             showToast({ type: 'error', message: 'Errore nel download del PDF' });
@@ -620,6 +623,7 @@ export const RiunionePeriodicaCard: React.FC<RiunionePeriodicaCardProps> = ({
                                         </p>
                                     </div>
 
+                                    {isPdfGenerated && (
                                     <div className="rounded-xl border border-gray-100 p-3 dark:border-gray-700">
                                         <div className="mb-3 flex items-center justify-between gap-3">
                                             <div>
@@ -678,6 +682,7 @@ export const RiunionePeriodicaCard: React.FC<RiunionePeriodicaCardProps> = ({
                                             ))}
                                         </div>
                                     </div>
+                                    )}
                                 </>
                             )}
                         </>

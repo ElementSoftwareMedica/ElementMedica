@@ -6,7 +6,7 @@
  * @project P44 - ElementSicurezza
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -32,6 +32,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import ElegantSelect from '@/components/ui/ElegantSelect';
 import ResizableTable from '../../components/shared/ResizableTable';
 import { ActionButton } from '@/components/ui';
 import { CRUDPrimaryButton } from '../../components/shared/CRUDButton';
@@ -338,6 +339,16 @@ export default function OT23Page() {
 
     // Anno selector
     const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i);
+    const yearOptions = useMemo(() => years.map(year => ({ value: String(year), label: String(year) })), [years]);
+    const statusOptions = useMemo(() => [
+        { value: '', label: 'Tutti gli stati' },
+        { value: 'BOZZA', label: 'Bozza' },
+        { value: 'PRONTO', label: 'Pronto per invio' },
+        { value: 'INVIATO', label: 'Inviato' },
+        { value: 'IN_VALUTAZIONE', label: 'In valutazione' },
+        { value: 'APPROVATO', label: 'Approvato' },
+        { value: 'RESPINTO', label: 'Respinto' },
+    ], []);
 
     return (
         <div className="container mx-auto p-6">
@@ -375,32 +386,27 @@ export default function OT23Page() {
                         {/* Anno selector */}
                         <div className="flex items-center gap-2">
                             <Calendar className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                            <select
-                                value={anno}
-                                onChange={(e) => setAnno(Number(e.target.value))}
-                                className="border rounded-md px-3 py-2 bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-50"
-                            >
-                                {years.map(y => (
-                                    <option key={y} value={y}>{y}</option>
-                                ))}
-                            </select>
+                            <div className="w-32">
+                                <ElegantSelect
+                                    value={String(anno)}
+                                    onChange={(value) => setAnno(Number(value))}
+                                    options={yearOptions}
+                                    triggerClassName="rounded-md"
+                                />
+                            </div>
                         </div>
 
                         {/* Stato filter */}
                         <div className="flex items-center gap-2">
-                            <select
-                                value={statoFilter}
-                                onChange={(e) => setStatoFilter(e.target.value as StatoOT23 | '')}
-                                className="border rounded-md px-3 py-2 bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-50"
-                            >
-                                <option value="">Tutti gli stati</option>
-                                <option value="BOZZA">Bozza</option>
-                                <option value="PRONTO">Pronto per invio</option>
-                                <option value="INVIATO">Inviato</option>
-                                <option value="IN_VALUTAZIONE">In valutazione</option>
-                                <option value="APPROVATO">Approvato</option>
-                                <option value="RESPINTO">Respinto</option>
-                            </select>
+                            <div className="w-56">
+                                <ElegantSelect
+                                    value={statoFilter}
+                                    onChange={(value) => setStatoFilter(value as StatoOT23 | '')}
+                                    options={statusOptions}
+                                    placeholder="Tutti gli stati"
+                                    triggerClassName="rounded-md"
+                                />
+                            </div>
                         </div>
 
                         {/* Search */}

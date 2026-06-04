@@ -6,7 +6,7 @@
  * @project P44 - ElementSicurezza
  */
 
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Building2, Calendar, FileText, Hash, Euro, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 
@@ -23,6 +23,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/useToast';
 import { useTenantMode } from '@/contexts/TenantModeContext';
+import ElegantSelect from '@/components/ui/ElegantSelect';
 
 import { ot23Api, type OT23CatalogoIntervento, type OT23CreateData } from '@/services/sicurezzaApi';
 import { apiGet } from '@/services/api';
@@ -69,6 +70,9 @@ export default function OT23CreateModal({
 
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [selectedInterventi, setSelectedInterventi] = useState<Record<string, OT23CatalogoIntervento>>({});
+    const [companySearch, setCompanySearch] = useState('');
+    const [isCompanyDropdownOpen, setIsCompanyDropdownOpen] = useState(false);
+    const companyDropdownRef = useRef<HTMLDivElement>(null);
 
     // Query - Company profiles (tenant-filtered via X-Operate-Tenant-Id)
     const { data: companies, isLoading: loadingCompanies } = useQuery({
@@ -89,6 +93,46 @@ export default function OT23CreateModal({
         queryFn: () => ot23Api.getCatalogo(),
         enabled: isOpen
     });
+
+    const sortedCompanies = useMemo(() => (
+        [...(companies || [])].sort((a, b) =>
+            (a.company?.ragioneSociale || '').localeCompare(b.company?.ragioneSociale || '', 'it')
+        )
+    ), [companies]);
+
+    const filteredCompanies = useMemo(() => {
+        const search = companySearch.trim().toLowerCase();
+        if (!search) return sortedCompanies;
+        return sortedCompanies.filter(profile =>
+            (profile.company?.ragioneSociale || '').toLowerCase().includes(search) ||
+            (profile.company?.piva || '').toLowerCase().includes(search)
+        );
+    }, [companySearch, sortedCompanies]);
+
+    const selectedCompany = useMemo(() => (
+        sortedCompanies.find(profile => profile.id === formData.companyTenantProfileId) || null
+    ), [formData.companyTenantProfileId, sortedCompanies]);
+
+    const yearOptions = useMemo(() => (
+        Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i)
+            .map(year => ({ value: String(year), label: String(year) }))
+    ), []);
+
+    useEffect(() => {
+        if (selectedCompany) {
+            setCompanySearch(`${selectedCompany.company.ragioneSociale}${selectedCompany.company.piva ? ` (${selectedCompany.company.piva})` : ''}`);
+        }
+    }, [selectedCompany]);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (companyDropdownRef.current && !companyDropdownRef.current.contains(event.target as Node)) {
+                setIsCompanyDropdownOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     // Create mutation
     const createMutation = useMutation({
@@ -167,8 +211,6 @@ export default function OT23CreateModal({
     const selectedBF = selectedValues.filter(i => i.sezione !== 'A').length;
     const hasOt23Requirement = selectedA >= 1 || selectedBF >= 2;
 
-    const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i);
-
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
             <DialogContent className="max-w-5xl max-h-[92vh] overflow-y-auto">
@@ -181,25 +223,44 @@ export default function OT23CreateModal({
 
                 <form onSubmit={handleSubmit} className="space-y-4 mt-4">
                     {/* Azienda */}
-                    <div>
+                    <div ref={companyDropdownRef} className="relative">
                         <Label className="flex items-center gap-2 mb-2">
                             <Building2 className="w-4 h-4" />
                             Azienda *
                         </Label>
-                        <select
-                            value={formData.companyTenantProfileId}
-                            onChange={(e) => handleChange('companyTenantProfileId', e.target.value)}
-                            className={`w-full border rounded-md px-3 py-2 bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-50 ${errors.companyTenantProfileId ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
-                                }`}
+                        <Input
+                            value={companySearch}
+                            onChange={(event) => {
+                                setCompanySearch(event.target.value);
+                                setIsCompanyDropdownOpen(true);
+                                if (!event.target.value) handleChange('companyTenantProfileId', '');
+                            }}
+                            onFocus={() => !preselectedCompanyProfileId && setIsCompanyDropdownOpen(true)}
+                            placeholder={loadingCompanies ? 'Caricamento aziende...' : 'Cerca azienda per nome o P.IVA...'}
                             disabled={loadingCompanies || !!preselectedCompanyProfileId}
-                        >
-                            <option value="">Seleziona azienda...</option>
-                            {companies?.map((profile: CompanyProfile) => (
-                                <option key={profile.id} value={profile.id}>
-                                    {profile.company.ragioneSociale} ({profile.company.piva})
-                                </option>
-                            ))}
-                        </select>
+                            className={errors.companyTenantProfileId ? 'border-red-500' : ''}
+                        />
+                        {isCompanyDropdownOpen && !preselectedCompanyProfileId && (
+                            <div className="absolute z-[10000] mt-1 max-h-72 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white py-1 shadow-xl dark:border-gray-700 dark:bg-gray-900">
+                                {filteredCompanies.length === 0 ? (
+                                    <div className="px-3 py-2 text-sm text-gray-500">Nessuna azienda trovata</div>
+                                ) : filteredCompanies.map(profile => (
+                                    <button
+                                        key={profile.id}
+                                        type="button"
+                                        onClick={() => {
+                                            handleChange('companyTenantProfileId', profile.id);
+                                            setCompanySearch(`${profile.company.ragioneSociale}${profile.company.piva ? ` (${profile.company.piva})` : ''}`);
+                                            setIsCompanyDropdownOpen(false);
+                                        }}
+                                        className={`w-full px-3 py-2 text-left text-sm hover:bg-blue-50 dark:hover:bg-blue-900/30 ${profile.id === formData.companyTenantProfileId ? 'bg-blue-50 font-medium text-blue-700 dark:bg-blue-900/20 dark:text-blue-300' : 'text-gray-800 dark:text-gray-100'}`}
+                                    >
+                                        <span className="block truncate">{profile.company.ragioneSociale}</span>
+                                        {profile.company.piva && <span className="block text-xs text-gray-400">P.IVA {profile.company.piva}</span>}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                         {errors.companyTenantProfileId && (
                             <p className="text-red-500 text-sm mt-1">{errors.companyTenantProfileId}</p>
                         )}
@@ -211,16 +272,12 @@ export default function OT23CreateModal({
                             <Calendar className="w-4 h-4" />
                             Anno di riferimento *
                         </Label>
-                        <select
-                            value={formData.anno}
-                            onChange={(e) => handleChange('anno', Number(e.target.value))}
-                            className={`w-full border rounded-md px-3 py-2 bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-50 ${errors.anno ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
-                                }`}
-                        >
-                            {years.map(y => (
-                                <option key={y} value={y}>{y}</option>
-                            ))}
-                        </select>
+                        <ElegantSelect
+                            value={String(formData.anno)}
+                            onChange={(value) => handleChange('anno', Number(value))}
+                            options={yearOptions}
+                            triggerClassName={errors.anno ? 'border-red-500' : ''}
+                        />
                         {errors.anno && (
                             <p className="text-red-500 text-sm mt-1">{errors.anno}</p>
                         )}

@@ -61,6 +61,7 @@ import { useTenantMode } from '../../../contexts/TenantModeContext';
 import { CRUDButton, CRUDPrimaryButton } from '../../../components/shared/CRUDButton';
 import { ActionButton } from '../../../components/ui';
 import Modal from '../../../design-system/molecules/Modal/Modal';
+import ElegantSelect from '../../../components/ui/ElegantSelect';
 import { formatMedicoName } from '../../../utils/textFormatters';
 
 // Import Element Medica theme
@@ -148,6 +149,19 @@ const Allegato3BPage: React.FC = () => {
         return Array.from({ length: 5 }, (_, i) => currentYear - 1 - i);
     }, []);
 
+    const yearOptions = useMemo(() => years.map(year => ({
+        value: String(year),
+        label: String(year)
+    })), [years]);
+
+    const statusFilterOptions = useMemo(() => [
+        { value: '', label: 'Tutti' },
+        ...Object.entries(STATUS_CONFIG).map(([key, config]) => ({
+            value: key,
+            label: config.label
+        }))
+    ], []);
+
     // Close company dropdown on outside click
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
@@ -165,6 +179,16 @@ const Allegato3BPage: React.FC = () => {
         queryFn: () => clinicaApi.allegato3B.getEligibleCompanies(),
         enabled: isReady
     });
+
+    const companyFilterOptions = useMemo(() => [
+        { value: '', label: 'Tutte le aziende' },
+        ...[...(companiesResponse || [])]
+            .sort((a: any, b: any) => (a.ragioneSociale || '').localeCompare(b.ragioneSociale || '', 'it'))
+            .map((company: { id: string; ragioneSociale?: string; piva?: string; companyTenantProfileId?: string }) => ({
+                value: company.companyTenantProfileId || company.id,
+                label: company.ragioneSociale || company.piva || company.id
+            }))
+    ], [companiesResponse]);
 
     // Sorted + filtered companies for searchable dropdown (must be after companiesResponse declaration)
     const sortedFilteredCompanies = useMemo(() => {
@@ -377,49 +401,36 @@ const Allegato3BPage: React.FC = () => {
             {/* Year Filter */}
             <div>
                 <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Anno</label>
-                <select
-                    value={selectedYear}
-                    onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                    className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-teal-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-50"
-                >
-                    {years.map(year => (
-                        <option key={year} value={year}>{year}</option>
-                    ))}
-                </select>
+                <ElegantSelect
+                    value={String(selectedYear)}
+                    onChange={(value) => setSelectedYear(parseInt(value, 10))}
+                    options={yearOptions}
+                    triggerClassName="rounded-lg"
+                />
             </div>
 
             {/* Company Filter */}
             <div className="flex-1 max-w-xs">
                 <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Azienda</label>
-                <select
+                <ElegantSelect
                     value={selectedCompanyId}
-                    onChange={(e) => setSelectedCompanyId(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-teal-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-50"
-                >
-                    <option value="">Tutte le aziende</option>
-                    {[...(companiesResponse || [])].sort((a: any, b: any) =>
-                        (a.ragioneSociale || '').localeCompare(b.ragioneSociale || '', 'it')
-                    ).map((company: { id: string; ragioneSociale?: string; piva?: string; companyTenantProfileId?: string }) => (
-                        <option key={company.companyTenantProfileId || company.id} value={company.companyTenantProfileId || company.id}>
-                            {company.ragioneSociale || company.piva || company.id}
-                        </option>
-                    ))}
-                </select>
+                    onChange={setSelectedCompanyId}
+                    options={companyFilterOptions}
+                    placeholder="Tutte le aziende"
+                    triggerClassName="rounded-lg"
+                />
             </div>
 
             {/* Status Filter */}
             <div>
                 <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Stato</label>
-                <select
+                <ElegantSelect
                     value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                    className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-teal-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-50"
-                >
-                    <option value="">Tutti</option>
-                    {Object.entries(STATUS_CONFIG).map(([key, config]) => (
-                        <option key={key} value={key}>{config.label}</option>
-                    ))}
-                </select>
+                    onChange={setStatusFilter}
+                    options={statusFilterOptions}
+                    placeholder="Tutti"
+                    triggerClassName="rounded-lg"
+                />
             </div>
 
             {/* Search */}
@@ -921,15 +932,12 @@ const Allegato3BPage: React.FC = () => {
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                             Anno di Riferimento
                         </label>
-                        <select
-                            value={newAnno}
-                            onChange={(e) => setNewAnno(parseInt(e.target.value))}
-                            className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-50"
-                        >
-                            {years.map(year => (
-                                <option key={year} value={year}>{year}</option>
-                            ))}
-                        </select>
+                        <ElegantSelect
+                            value={String(newAnno)}
+                            onChange={(value) => setNewAnno(parseInt(value, 10))}
+                            options={yearOptions}
+                            triggerClassName="rounded-lg"
+                        />
                     </div>
 
                     {/* Azienda — ricerca con dropdown */}
