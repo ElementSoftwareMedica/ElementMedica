@@ -2981,4 +2981,9 @@ router.get('/:companyTenantProfileId/riunione-periodica/pdf',
   }
 );
 
-export { router as default };
+export {
+  router as default,
+  resolveCompanyTenantProfile,
+  safeDocumentType,
+  sanitizeStoredFilename
+};

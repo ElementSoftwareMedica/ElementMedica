@@ -17,14 +17,14 @@ Controlli implementati/verificati:
 - App desktop: sync incrementale gia presente via `lastSyncAt` su `GET /api/v1/desktop-sync/download-full-db`.
 - App desktop: sync incrementale estesa con tombstone soft-delete per le tabelle desktop sincronizzate; i record cancellati online vengono marcati `_isDeleted=1` localmente senza cancellazione fisica.
 - App desktop: scadenze MDL riallineate a `ScadenzaPrestazioneProtocollo` per alimentare correttamente la card Sorveglianza Sanitaria offline.
-- App desktop: cifratura field-level dei principali campi PII/sanitari via Electron `safeStorage`; resta necessario requisito operativo BitLocker/FileVault o cifratura integrale DB per protezione completa.
+- App desktop: cifratura field-level dei principali campi PII/sanitari via Electron `safeStorage`; mappa estesa a campi denormalizzati, documentali, scadenze, servizi MDL e profilo salute. Resta necessario requisito operativo BitLocker/FileVault o cifratura integrale DB per protezione completa.
 - Packaging Windows desktop verificato con `better-sqlite3` nativo `win32-x64`.
 
 Controlli ancora non chiusi al 100%:
 
 - Validazione XSD ufficiale Allegato 3B: manca nel repository lo schema INAIL versionato da usare come fonte di verita.
 - Scansione malware in produzione: codice pronto, ma deve essere configurato il comando scanner sul server.
-- Test cross-tenant automatici specifici sulle nuove route `company-mdl-documents`: le guardie route sono presenti tramite risoluzione `CompanyTenantProfile` nel tenant corrente; manca fixture E2E multi-tenant stabile.
+- Test automatici helper documenti MDL: aggiunto test su risoluzione `CompanyTenantProfile` tenant-scoped, tipologie consentite e sanitizzazione filename. Resta utile fixture E2E multi-tenant reale per l'intera route HTTP.
 - Cifratura completa del file SQLite: non implementata; oggi e presente cifratura field-level piu requisito operativo di cifratura disco.
 - DPIA/ROPA: richiede validazione DPO/legale fuori dal codice.
 
@@ -86,6 +86,7 @@ Rischio residuo: medio. Serve retention policy documentale esplicita. La scansio
 - Il DB locale e in `app.getPath('userData')`, separato dall'installazione.
 - WAL e PRAGMA prestazionali sono configurati.
 - I campi PII/sanitari principali sono cifrati a livello applicativo con Electron `safeStorage` prima della scrittura su SQLite.
+- La mappa PII desktop include anche nomi/codici fiscali denormalizzati, note appuntamento/visita, `datiStrutturati`, referti, documenti, scadenze, servizi MDL e profilo salute.
 - La licenza consente uso offline con grace period limitato.
 - Il packaging Windows ora forza rebuild/install native deps `win32-x64` e unpack esplicito di `better-sqlite3`, evitando il bundle di un `.node` non Windows.
 
@@ -100,7 +101,7 @@ Rischio: perdita/furto laptop o profilo Windows compromesso con accesso al DB SQ
 Mitigazioni richieste:
 - Obbligare cifratura disco: BitLocker su Windows, FileVault su macOS.
 - Auto-lock app gia presente: verificare timeout e blocco dopo sospensione.
-- Mantenere aggiornata la mappa `PII_FIELDS` desktop per ogni nuova tabella/campo sanitario sincronizzato.
+- Mantenere aggiornata la mappa `PII_FIELDS` desktop per ogni nuova tabella/campo sanitario sincronizzato; dal 2026-06-04 la mappa copre anche i campi denormalizzati e documentali sincronizzati.
 - Valutare cifratura integrale SQLite con chiave derivata da credenziale locale o secure storage.
 - Disabilitare export massivi non autorizzati e tracciare ogni export in audit log.
 
@@ -213,15 +214,16 @@ Priorita: media-alta.
 ## Verifiche Tecniche Eseguite 2026-06-04
 
 - `node --check backend/controllers/desktop-sync.controller.js`: OK.
+- `node --check backend/routes/companies-routes.js`: OK.
 - `cd desktop-app && npm run typecheck`: OK.
-- `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/unit/desktop-sync-tombstones.test.js tests/unit/file-security.test.js`: OK.
+- `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/unit/company-mdl-documents.test.js tests/unit/desktop-sync-tombstones.test.js tests/unit/file-security.test.js`: OK.
 
 ## Gap Da Chiudere Prima Di Dichiarare Conformita Piena
 
 1. Cifratura integrale del DB locale oppure requisito tecnico obbligatorio di cifratura disco verificato in onboarding device.
 2. Validazione XSD Allegato 3B integrata prima dell'export definitivo quando lo schema ufficiale viene versionato nel repository.
 3. Antivirus/malware scanning da abilitare sul server impostando `CLAMAV_SCAN_COMMAND` o `FILE_SCAN_COMMAND`.
-4. Test automatici cross-tenant per ogni nuova route documentale.
+4. Test automatici cross-tenant: helper documentali MDL coperti; resta fixture E2E HTTP multi-tenant per tutta la route.
 5. Sync incrementale: tombstone implementati e coperti da test unitario mapping; resta test E2E tabella-per-tabella con fixture reale.
 6. Registro DPIA/ROPA aggiornato con trattamento offline desktop.
 
