@@ -30,16 +30,16 @@
 #   ./scripts/deploy-desktop-updates.sh --check  # verify what would be uploaded (dry-run)
 # =============================================================================
 
-set -e
+set -euo pipefail
 
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-SERVER_IP="178.104.197.134"
-SERVER_USER="root"
-SSH_KEY="$HOME/.ssh/id_ed25519"
-REMOTE_UPDATES_PATH="/var/www/elementmedica/desktop-updates"
-RELEASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../desktop-app/release" && pwd)"
+BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$BASE_DIR/scripts/deploy-config.sh"
+
+REMOTE_UPDATES_PATH="${DEPLOY_DESKTOP_UPDATES_PATH:-$DEPLOY_BASE_PATH/desktop-updates}"
+RELEASE_DIR="$(cd "$BASE_DIR/desktop-app/release" && pwd)"
 
 # ---------------------------------------------------------------------------
 # Colors
@@ -68,7 +68,8 @@ for arg in "$@"; do
         --mac)   PLATFORM="mac"  ;;
         --win)   PLATFORM="win"  ;;
         --linux) PLATFORM="linux" ;;
-        --check) DRY_RUN=true    ;;
+        --check|--dry-run) DRY_RUN=true ;;
+        -y|--yes) DEPLOY_YES=true ;;
         --help)
             echo "Usage: $0 [--mac|--win|--linux|--check]"
             exit 0
@@ -80,7 +81,7 @@ echo -e "${BLUE}=================================================${NC}"
 echo -e "${BLUE}🖥  ElementMedica Desktop — Update Deploy${NC}"
 echo -e "${BLUE}=================================================${NC}"
 echo ""
-echo "📡 Server:  $SERVER_USER@$SERVER_IP"
+echo "📡 Server:  $DEPLOY_SERVER"
 echo "📁 Source:  $RELEASE_DIR"
 echo "📁 Remote:  $REMOTE_UPDATES_PATH"
 echo "🌐 URL:     https://www.elementmedica.com/desktop-updates"
@@ -117,9 +118,7 @@ echo ""
 # ---------------------------------------------------------------------------
 if [ "$DRY_RUN" = false ]; then
     log_info "Ensuring remote directory exists..."
-    ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no \
-        "$SERVER_USER@$SERVER_IP" \
-        "mkdir -p $REMOTE_UPDATES_PATH && chmod 755 $REMOTE_UPDATES_PATH"
+    deploy_ssh "mkdir -p $REMOTE_UPDATES_PATH && chmod 755 $REMOTE_UPDATES_PATH"
     log_success "Remote directory ready"
 fi
 
@@ -177,9 +176,9 @@ case $PLATFORM in
 esac
 
 rsync $RSYNC_OPTS \
-    -e "ssh -i $SSH_KEY -o StrictHostKeyChecking=no" \
+    -e "ssh -i $DEPLOY_SSH_KEY -o StrictHostKeyChecking=no" \
     "${FILES_TO_SYNC[@]}" \
-    "$SERVER_USER@$SERVER_IP:$REMOTE_UPDATES_PATH/"
+    "$DEPLOY_SERVER:$REMOTE_UPDATES_PATH/"
 
 if [ "$DRY_RUN" = true ]; then
     log_warning "Dry run complete. Run without --check to upload for real."
@@ -190,17 +189,13 @@ fi
 # Verify remote files
 # ---------------------------------------------------------------------------
 log_info "Verifying remote files..."
-ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no \
-    "$SERVER_USER@$SERVER_IP" \
-    "ls -lh $REMOTE_UPDATES_PATH/ 2>/dev/null | tail -20"
+deploy_ssh "ls -lh $REMOTE_UPDATES_PATH/ 2>/dev/null | tail -20"
 
 # ---------------------------------------------------------------------------
 # Set correct permissions
 # ---------------------------------------------------------------------------
 log_info "Setting file permissions..."
-ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no \
-    "$SERVER_USER@$SERVER_IP" \
-    "find $REMOTE_UPDATES_PATH -type f -exec chmod 644 {} \; && find $REMOTE_UPDATES_PATH -type d -exec chmod 755 {} \;"
+deploy_ssh "find $REMOTE_UPDATES_PATH -type f -exec chmod 644 {} \; && find $REMOTE_UPDATES_PATH -type d -exec chmod 755 {} \;"
 
 log_success "File permissions set"
 
