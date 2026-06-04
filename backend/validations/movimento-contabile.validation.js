@@ -35,6 +35,8 @@ const STATI_VALIDI = ['BOZZA', 'DA_FATTURARE', 'CONFERMATO', 'FATTURATO', 'PAGAT
 const TIPI_SOGGETTO_VALIDI = ['PAZIENTE', 'AZIENDA', 'DIPENDENTE', 'MEDICO', 'FORMATORE', 'RSPP', 'FORNITORE'];
 
 const BRANCH_TYPES = ['MEDICA', 'FORMAZIONE'];
+const SORT_FIELDS_VALIDI = ['dataEsecuzione', 'dataScadenza', 'createdAt', 'updatedAt', 'importoLordo', 'importoNetto', 'stato'];
+const SORT_ORDERS_VALIDI = ['asc', 'desc'];
 
 // ============================================
 // VALIDATION HANDLER
@@ -377,6 +379,16 @@ export const validateQueryMovimenti = [
         .isInt({ min: 1, max: 5000 })
         .toInt()
         .withMessage('pageSize deve essere un intero tra 1 e 5000'),
+
+    query('sortBy')
+        .optional()
+        .isIn(SORT_FIELDS_VALIDI)
+        .withMessage(`sortBy deve essere uno tra: ${SORT_FIELDS_VALIDI.join(', ')}`),
+
+    query('sortOrder')
+        .optional()
+        .isIn(SORT_ORDERS_VALIDI)
+        .withMessage(`sortOrder deve essere uno tra: ${SORT_ORDERS_VALIDI.join(', ')}`),
 
     handleValidationErrors
 ];

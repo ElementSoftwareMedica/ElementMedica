@@ -73,6 +73,20 @@ const isSoloMedico = (req) => {
     return roles.length === 1 && roles.includes('MEDICO');
 };
 
+const parseDateStart = (value) => {
+    if (!value) return undefined;
+    return new Date(value);
+};
+
+const parseDateEnd = (value) => {
+    if (!value) return undefined;
+    const date = new Date(value);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(value))) {
+        date.setHours(23, 59, 59, 999);
+    }
+    return date;
+};
+
 // ============================================
 // MIDDLEWARE: Audit Logger
 // ============================================
@@ -181,10 +195,10 @@ router.get('/',
                 nominaRuoloId: req.query.nominaRuoloId, // Filtro per nomina
                 siteId: req.query.siteId, // Filtro per sede
                 // Date range filters
-                dataEsecuzioneDa: req.query.dataEsecuzioneDa ? new Date(req.query.dataEsecuzioneDa) : undefined,
-                dataEsecuzioneA: req.query.dataEsecuzioneA ? new Date(req.query.dataEsecuzioneA) : undefined,
-                dataScadenzaDa: req.query.dataScadenzaDa ? new Date(req.query.dataScadenzaDa) : undefined,
-                dataScadenzaA: req.query.dataScadenzaA ? new Date(req.query.dataScadenzaA) : undefined
+                dataEsecuzioneDa: parseDateStart(req.query.dataEsecuzioneDa),
+                dataEsecuzioneA: parseDateEnd(req.query.dataEsecuzioneA),
+                dataScadenzaDa: parseDateStart(req.query.dataScadenzaDa),
+                dataScadenzaA: parseDateEnd(req.query.dataScadenzaA)
             };
 
             if (isSoloMedico(req)) {

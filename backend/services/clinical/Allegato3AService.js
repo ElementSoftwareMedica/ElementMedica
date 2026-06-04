@@ -397,7 +397,7 @@ class Allegato3AService {
             giudizioAttuale: giudizio,
             comunicazioneGiudizio: giudizio ? {
                 destinatari: 'Datore di lavoro e lavoratore',
-                contenutoMinimo: 'Generalità, ragione sociale azienda, mansione/rischi, esito del giudizio, scadenza e termini di ricorso all’organo di vigilanza entro 30 giorni.',
+                contenutoMinimo: 'Generalità del lavoratore, ragione sociale azienda, mansione specifica e rischi correlati, esito del giudizio, eventuali prescrizioni/limitazioni, scadenza della sorveglianza sanitaria e termini di ricorso all’organo di vigilanza territorialmente competente entro 30 giorni.',
                 dataNotificaLavoratore: giudizio.dataNotificaLavoratore,
                 dataNotificaDatoreLavoro: giudizio.dataNotificaDatoreLavoro
             } : null,

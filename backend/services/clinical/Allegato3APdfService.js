@@ -52,6 +52,86 @@ function renderList(items, empty = 'Nessun dato registrato') {
   return `<ul>${items.map(item => `<li>${esc(item)}</li>`).join('')}</ul>`;
 }
 
+const PRESCRIZIONI_CODE_MAP = {
+  uso_dpi_guanti: 'Uso obbligatorio DPI: guanti protettivi',
+  uso_dpi_scarpe: 'Uso obbligatorio DPI: scarpe antinfortunistiche',
+  uso_dpi_cuffie: 'Uso obbligatorio DPI: cuffie / tappi antirumore',
+  uso_dpi_mascherina: 'Uso obbligatorio DPI: mascherina FFP2/FFP3',
+  uso_dpi_visiera: 'Uso obbligatorio DPI: visiera / occhiali protettivi',
+  uso_dpi_imbracatura: 'Uso obbligatorio DPI: imbracatura di sicurezza',
+  divieto_mmc_20: 'Divieto movimentazione manuale carichi > 20 kg',
+  divieto_mmc_10: 'Divieto movimentazione manuale carichi > 10 kg',
+  pause_vdt: 'Pause obbligatorie VDT: 15 minuti ogni 2 ore',
+  limitazione_notturno: 'Limitazione turni notturni',
+  controllo_oft_annuale: 'Controllo oftalmologico annuale',
+  sorveg_rafforzata_semestrale: 'Sorveglianza sanitaria rafforzata semestrale',
+  formazione_rischio_chimico: 'Formazione specifica rischio chimico',
+  formazione_rischio_biologico: 'Formazione specifica rischio biologico',
+  evitare_cancerogeni: 'Evitare esposizione a sostanze cancerogene / mutagene',
+  esposizione_rumore_limitata: 'Limitazione esposizione a rumore',
+};
+
+const LIMITAZIONI_CODE_MAP = {
+  no_lavoro_quota: 'Non idoneo a lavori in quota',
+  no_piattaforme_elevabili: 'Non idoneo a piattaforme elevabili / cestelli',
+  no_guida_mezzi: 'Non idoneo alla conduzione di mezzi operativi',
+  no_spazi_confinati: 'Non idoneo a lavori in spazi confinati',
+  limitazione_notturno_mansione: 'Limitata idoneità ai turni notturni',
+  no_vibrazioni: 'Non idoneo a mansioni con esposizione a vibrazioni',
+  no_rumore_85db: 'Non idoneo a mansioni con esposizione a rumore > 85 dB',
+  limitazione_mmc: 'Limitata movimentazione manuale di carichi',
+  no_cancerogeni: 'Non idoneo a esposizione a cancerogeni / mutageni',
+  limitazione_chimici: 'Limitata esposizione a sostanze chimiche pericolose',
+  no_stress_termico: 'Non idoneo a lavori con stress termico',
+  no_vdt_prolungato: 'Uso VDT limitato',
+};
+
+function humanizeToken(value) {
+  return String(value || '')
+    .replace(/_/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, char => char.toUpperCase());
+}
+
+function splitStoredCodes(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.map(item => String(item).trim()).filter(Boolean);
+  if (typeof value === 'object') {
+    return Object.values(value).flat().map(item => String(item).trim()).filter(Boolean);
+  }
+  const text = String(value).trim();
+  if (!text) return [];
+  try {
+    const parsed = JSON.parse(text);
+    return splitStoredCodes(parsed);
+  } catch {
+    return text.split(/[,;\n]+/).map(item => item.trim()).filter(Boolean);
+  }
+}
+
+function formatClinicalCodes(value, codeMap = {}) {
+  const items = splitStoredCodes(value);
+  if (!items.length) return '—';
+  return items.map(item => codeMap[item] || humanizeToken(item)).join('; ');
+}
+
+function periodicitaLabel(periodicita, customMesi) {
+  if (customMesi) return `Ogni ${customMesi} mesi`;
+  const MAP = {
+    UNA_TANTUM: 'Una tantum',
+    SU_INDICAZIONE: 'Su indicazione del medico competente',
+    MESI_3: 'Ogni 3 mesi',
+    MESI_6: 'Ogni 6 mesi',
+    MESI_12: 'Ogni 12 mesi',
+    MESI_24: 'Ogni 24 mesi',
+    MESI_36: 'Ogni 36 mesi',
+    MESI_48: 'Ogni 48 mesi',
+    MESI_60: 'Ogni 60 mesi',
+  };
+  return MAP[periodicita] || humanizeToken(periodicita) || '—';
+}
+
 function genderLabel(g) {
   if (g === 'MALE' || g === 'M') return 'Maschile';
   if (g === 'FEMALE' || g === 'F') return 'Femminile';
@@ -61,8 +141,9 @@ function genderLabel(g) {
 function idoneitaLabel(esito) {
   const MAP = {
     IDONEO: 'Idoneo',
-    IDONEO_CON_PRESCRIZIONI: 'Idoneo con prescrizioni',
-    IDONEO_CON_LIMITAZIONI: 'Idoneo con limitazioni',
+    IDONEO_CON_PRESCRIZIONI: 'Idoneo parziale con prescrizioni',
+    IDONEO_CON_LIMITAZIONI: 'Idoneo parziale con limitazioni',
+    IDONEO_CON_LIMITAZIONI_PRESCRIZIONI: 'Idoneo parziale con limitazioni e prescrizioni',
     PARZIALMENTE_IDONEO: 'Parzialmente idoneo',
     NON_IDONEO_TEMPORANEO: 'Non idoneo temporaneo',
     NON_IDONEO_PERMANENTE: 'Non idoneo permanente',
@@ -145,7 +226,7 @@ function buildHtml(data) {
             <tr>
                 <td>${esc(p.nome)}</td>
                 <td class="center">${p.obbligatoria ? 'Obbligatorio' : 'Facoltativo'}</td>
-                <td>${esc(p.periodicitaCustomMesi ? `Ogni ${p.periodicitaCustomMesi} mesi` : p.periodicita)}</td>
+                <td>${esc(periodicitaLabel(p.periodicita, p.periodicitaCustomMesi))}</td>
             </tr>`).join('')
     : '<tr><td colspan="3" class="empty">Nessun accertamento previsto dal protocollo</td></tr>';
 
@@ -166,8 +247,8 @@ function buildHtml(data) {
             ${giudizioAttuale.mansione ? `<div class="giudizio-detail"><strong>Mansione/i:</strong> ${esc(giudizioAttuale.mansione)}</div>` : ''}
             ${giudizioAttuale.dataEmissione || giudizioAttuale.data ? `<div class="giudizio-detail"><strong>Data emissione:</strong> ${formatDate(giudizioAttuale.dataEmissione || giudizioAttuale.data)}</div>` : ''}
             ${giudizioAttuale.dataScadenza || giudizioAttuale.validoFino ? `<div class="giudizio-detail"><strong>Scadenza:</strong> ${formatDate(giudizioAttuale.dataScadenza || giudizioAttuale.validoFino)}</div>` : ''}
-            ${giudizioAttuale.prescrizioniIdoneita ? `<div class="giudizio-detail"><strong>Prescrizioni:</strong> ${esc(giudizioAttuale.prescrizioniIdoneita)}</div>` : ''}
-            ${giudizioAttuale.limitazioni ? `<div class="giudizio-detail"><strong>Limitazioni:</strong> ${esc(giudizioAttuale.limitazioni)}</div>` : ''}
+            ${giudizioAttuale.prescrizioniIdoneita ? `<div class="giudizio-detail"><strong>Prescrizioni:</strong> ${esc(formatClinicalCodes(giudizioAttuale.prescrizioniIdoneita, PRESCRIZIONI_CODE_MAP))}</div>` : ''}
+            ${giudizioAttuale.limitazioni ? `<div class="giudizio-detail"><strong>Limitazioni:</strong> ${esc(formatClinicalCodes(giudizioAttuale.limitazioni, LIMITAZIONI_CODE_MAP))}</div>` : ''}
         </div>`
     : '<p class="empty">Nessun giudizio di idoneità emesso.</p>';
 
@@ -187,50 +268,53 @@ function buildHtml(data) {
 <title>Allegato 3A — Cartella Sanitaria e di Rischio</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 10pt; color: #1a1a1a; background: #fff; }
+  body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 10pt; color: #233747; background: #fff; }
   @page { size: A4; margin: 18mm 18mm 22mm 18mm; }
 
   /* Header */
-  .doc-header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 10px; border-bottom: 2px solid #0d6efd; margin-bottom: 16px; }
-  .doc-title h1 { font-size: 13pt; font-weight: 700; color: #0d6efd; }
-  .doc-title h2 { font-size: 9pt; font-weight: 400; color: #555; margin-top: 2px; }
-  .doc-meta { text-align: right; font-size: 8pt; color: #666; }
+  .doc-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border: 1px solid #cfe7e4; border-left: 5px solid #0f766e; border-radius: 8px; margin-bottom: 16px; background: #f7fbfa; }
+  .doc-title h1 { font-size: 13pt; font-weight: 700; color: #0f766e; letter-spacing: 0; }
+  .doc-title h2 { font-size: 9pt; font-weight: 400; color: #52666f; margin-top: 2px; }
+  .doc-meta { text-align: right; font-size: 8pt; color: #647980; }
 
   /* Sections */
   .section { margin-bottom: 18px; page-break-inside: avoid; }
-  .section-title { font-size: 10pt; font-weight: 700; color: #fff; background: #0d6efd; padding: 5px 10px; border-radius: 3px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
-  .section-title .num { background: rgba(255,255,255,0.25); border-radius: 50%; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; font-size: 8pt; font-weight: 700; }
+  .section-title { font-size: 10pt; font-weight: 700; color: #fff; background: #0f766e; padding: 6px 10px; border-radius: 6px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .section-title .num { background: rgba(255,255,255,0.22); border-radius: 999px; min-width: 20px; height: 20px; padding: 0 6px; display: inline-flex; align-items: center; justify-content: center; font-size: 8pt; font-weight: 700; }
 
   /* Field layout */
   .field-row { display: flex; flex-wrap: wrap; gap: 6px 20px; padding: 6px 0; }
   .field { min-width: 160px; flex: 1 1 180px; }
-  .field .label { font-weight: 600; font-size: 8pt; text-transform: uppercase; color: #555; display: block; margin-bottom: 1px; }
+  .field .label { font-weight: 700; font-size: 8pt; text-transform: uppercase; color: #52666f; display: block; margin-bottom: 1px; }
   .field .value { font-size: 10pt; }
   ul { padding-left: 16px; margin: 4px 0; }
   li { margin-bottom: 2px; }
 
   /* Tables */
   table { width: 100%; border-collapse: collapse; font-size: 9pt; }
-  th { background: #e8f0fe; color: #1a1a1a; font-weight: 600; padding: 6px 8px; text-align: left; border: 1px solid #c8d4f0; }
-  td { padding: 5px 8px; border: 1px solid #dde3ef; vertical-align: top; }
-  tr:nth-child(even) td { background: #f8f9ff; }
+  th { background: #edf7f6; color: #233747; font-weight: 700; padding: 6px 8px; text-align: left; border: 1px solid #cfe7e4; }
+  td { padding: 5px 8px; border: 1px solid #dce9e7; vertical-align: top; }
+  tr:nth-child(even) td { background: #f8fbfb; }
   td.center, th.center { text-align: center; }
   td.empty { color: #888; font-style: italic; text-align: center; padding: 10px; }
 
   /* Giudizio box */
-  .giudizio-box { border-radius: 4px; padding: 10px 14px; border: 1px solid #c8d4f0; background: #f4f8ff; }
-  .giudizio-esito { font-size: 12pt; font-weight: 700; color: #0d6efd; margin-bottom: 6px; }
-  .giudizio-idoneo .giudizio-esito { color: #198754; }
-  .giudizio-non-idoneo-permanente .giudizio-esito { color: #dc3545; }
-  .giudizio-non-idoneo-temporaneo .giudizio-esito { color: #fd7e14; }
+  .giudizio-box { border-radius: 8px; padding: 10px 14px; border: 1px solid #cfe7e4; background: #f7fbfa; }
+  .giudizio-esito { font-size: 12pt; font-weight: 700; color: #0f766e; margin-bottom: 6px; }
+  .giudizio-idoneo .giudizio-esito { color: #15803d; }
+  .giudizio-non-idoneo-permanente .giudizio-esito { color: #b91c1c; }
+  .giudizio-non-idoneo-temporaneo .giudizio-esito { color: #c2410c; }
   .giudizio-detail { font-size: 9pt; margin-top: 3px; }
 
   /* Firma */
-  .firma-row { display: flex; justify-content: space-between; margin-top: 30px; gap: 20px; }
-  .firma-block { flex: 1; border-top: 1px solid #333; padding-top: 4px; font-size: 8pt; text-align: center; }
+  .signature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 34px; align-items: end; }
+  .signature-cell { min-height: 52px; text-align: center; }
+  .signature-line { height: 1px; background: #233747; width: 100%; margin-bottom: 6px; }
+  .signature-label { font-size: 8.5pt; font-weight: 600; color: #233747; }
+  .signature-value { min-height: 14px; margin-top: 8px; font-size: 8pt; color: #647980; }
 
   /* Footer */
-  .doc-footer { font-size: 7.5pt; color: #888; border-top: 1px solid #dde; margin-top: 20px; padding-top: 6px; }
+  .doc-footer { font-size: 7.5pt; color: #647980; border-top: 1px solid #dce9e7; margin-top: 20px; padding-top: 6px; }
 
   .empty { color: #888; font-style: italic; font-size: 9pt; }
   .text-muted { color: #888; }
@@ -421,10 +505,22 @@ function buildHtml(data) {
 <div class="section">
   <div class="section-title"><span class="num">7</span> Medico Competente</div>
   ${medicoBlock}
-  <div class="firma-row">
-    <div class="firma-block">Data<br><br>_______________</div>
-    <div class="firma-block">Firma Medico Competente<br><br>_______________</div>
-    <div class="firma-block">Firma Lavoratore<br><br>_______________</div>
+  <div class="signature-grid">
+    <div class="signature-cell">
+      <div class="signature-line"></div>
+      <div class="signature-label">Data</div>
+      <div class="signature-value">${formatDate(generatedAt)}</div>
+    </div>
+    <div class="signature-cell">
+      <div class="signature-line"></div>
+      <div class="signature-label">Firma Medico Competente</div>
+      <div class="signature-value">${esc(medicoCompetente?.nomeCompleto || '')}</div>
+    </div>
+    <div class="signature-cell">
+      <div class="signature-line"></div>
+      <div class="signature-label">Firma Lavoratore</div>
+      <div class="signature-value">${esc([lavoratore?.lastName, lavoratore?.firstName].filter(Boolean).join(' '))}</div>
+    </div>
   </div>
 </div>
 

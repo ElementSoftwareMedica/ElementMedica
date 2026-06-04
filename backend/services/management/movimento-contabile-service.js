@@ -236,14 +236,18 @@ class MovimentoContabileService extends BranchAwareService {
             if (filters.dataScadenzaA) where.dataScadenza.lte = new Date(filters.dataScadenzaA);
         }
 
-        const { page, pageSize } = pagination;
+        const allowedSortFields = new Set(['dataEsecuzione', 'dataScadenza', 'createdAt', 'updatedAt', 'importoLordo', 'importoNetto', 'stato']);
+        const page = Math.max(Number(pagination.page) || 1, 1);
+        const pageSize = Math.min(Math.max(Number(pagination.pageSize) || 20, 1), 5000);
+        const sortBy = allowedSortFields.has(pagination.sortBy) ? pagination.sortBy : 'dataEsecuzione';
+        const sortOrder = pagination.sortOrder === 'asc' ? 'asc' : 'desc';
         const skip = (page - 1) * pageSize;
 
         const [data, total] = await Promise.all([
             prisma.movimentoContabile.findMany({
                 where,
                 include: this._getDefaultIncludes(),
-                orderBy: { dataEsecuzione: 'desc' },
+                orderBy: { [sortBy]: sortOrder },
                 skip,
                 take: pageSize
             }),
