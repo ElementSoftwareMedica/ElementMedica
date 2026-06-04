@@ -244,6 +244,7 @@ export const RiunionePeriodicaCard: React.FC<RiunionePeriodicaCardProps> = ({
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
             setIsPdfGenerated(true);
+            await refetchDocumenti();
             showToast({ type: 'success', message: 'PDF scaricato con successo' });
         } catch {
             showToast({ type: 'error', message: 'Errore nel download del PDF' });

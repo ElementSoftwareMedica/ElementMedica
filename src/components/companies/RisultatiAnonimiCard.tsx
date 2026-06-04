@@ -219,6 +219,7 @@ export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
             setIsPdfGenerated(true);
+            await refetchDocumenti();
             showToast({ type: 'success', message: 'PDF generato con successo' });
         } catch {
             showToast({ type: 'error', message: 'Errore nella generazione del PDF' });

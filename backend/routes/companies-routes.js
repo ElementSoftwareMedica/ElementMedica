@@ -96,6 +96,33 @@ function listMdlDocumentFiles(tenantId, profileId, documentType) {
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 
+function archiveMdlDocumentBuffer({
+  tenantId,
+  profileId,
+  documentType,
+  buffer,
+  originalName,
+  note = null,
+  generatedBy = null,
+  extraMetadata = {}
+}) {
+  const dir = ensureMdlDocumentDir(tenantId, profileId, documentType);
+  const storedName = `${documentType}-${Date.now()}-${sanitizeStoredFilename(originalName || 'documento.pdf')}`;
+  const targetPath = path.join(dir, storedName);
+  fs.writeFileSync(targetPath, buffer);
+  fs.writeFileSync(`${targetPath}.json`, JSON.stringify({
+    originalName: originalName || storedName,
+    mimeType: 'application/pdf',
+    note,
+    signedOnline: false,
+    generatedOnline: true,
+    uploadedBy: generatedBy,
+    createdAt: new Date().toISOString(),
+    ...extraMetadata
+  }, null, 2));
+  return storedName;
+}
+
 function resolveTenantLogo(profile) {
   const settings = profile?.tenant?.settings || {};
   return settings?.branches?.MEDICA?.logo || settings?.branches?.MDL?.logo || settings?.logoUrl || settings?.logo || '';
@@ -2779,9 +2806,20 @@ router.get('/:companyTenantProfileId/risultati-anonimi/pdf',
         String(dateTo),
         tenantId
       );
+      const originalName = `risultati-anonimi-${String(dateFrom)}-${String(dateTo)}.pdf`;
+      archiveMdlDocumentBuffer({
+        tenantId,
+        profileId: companyTenantProfileId,
+        documentType: 'risultati-anonimi',
+        buffer: pdfBuffer,
+        originalName,
+        note: `Risultati anonimi collettivi ${String(dateFrom)} - ${String(dateTo)}`,
+        generatedBy: req.person?.id || null,
+        extraMetadata: { dateFrom: String(dateFrom), dateTo: String(dateTo) }
+      });
 
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename=risultati-anonimi-${companyTenantProfileId}.pdf`);
+      res.setHeader('Content-Disposition', `attachment; filename=${originalName}`);
       res.send(pdfBuffer);
     } catch (error) {
       logger.error({ error: 'Operazione non riuscita' }, 'Errore generazione PDF risultati anonimi');
@@ -2850,9 +2888,23 @@ router.get('/:companyTenantProfileId/riunione-periodica/pdf',
         tenantId,
         { delibereConclusioni: String(req.query.delibereConclusioni || '').slice(0, 5000) }
       );
+      const originalName = `verbale-riunione-periodica-${annoNum}.pdf`;
+      archiveMdlDocumentBuffer({
+        tenantId,
+        profileId: companyTenantProfileId,
+        documentType: 'riunione-periodica',
+        buffer: pdfBuffer,
+        originalName,
+        note: `Verbale riunione periodica ${annoNum}`,
+        generatedBy: req.person?.id || null,
+        extraMetadata: {
+          anno: annoNum,
+          delibereConclusioni: String(req.query.delibereConclusioni || '').slice(0, 5000)
+        }
+      });
 
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename=verbale-riunione-periodica-${anno}.pdf`);
+      res.setHeader('Content-Disposition', `attachment; filename=${originalName}`);
       res.send(pdfBuffer);
     } catch (error) {
       logger.error({ error: 'Operazione non riuscita' }, 'Errore generazione PDF verbale riunione periodica');

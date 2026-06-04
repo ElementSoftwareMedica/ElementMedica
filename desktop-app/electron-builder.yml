@@ -10,6 +10,9 @@ files:
   - out/**/*
   - "!out/**/*.map"
 
+asarUnpack:
+  - node_modules/better-sqlite3/**/*
+
 # ========== Medical Device Bridge — bundled binaries ==========
 # Windows: self-contained .exe built with pkg (node18-win-x64)
 # macOS:   arm64 + x64 binaries (pkg node18-macos-*), bridge-process.ts picks the right one
