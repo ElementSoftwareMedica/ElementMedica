@@ -3,6 +3,29 @@
 Data: 2026-06-04  
 Ambito: ElementMedica webapp, API `/api/v1`, app desktop offline-first, sincronizzazione online/offline, documenti MDL, licenze desktop, bridge dispositivi.
 
+## Stato Avanzamento
+
+Ultimo aggiornamento tecnico: 2026-06-04.
+
+Controlli implementati/verificati:
+
+- Documenti MDL generati da Risultati Anonimi Collettivi e Verbale Riunione Periodica archiviati nello stesso storico dei documenti firmabili.
+- Metadati documentali MDL estesi con hash SHA-256 del file, hash del documento origine quando si firma da storico, stato scansione e origine generata/upload.
+- Download documenti MDL con header `X-Document-SHA256` e `X-Content-Type-Options: nosniff`.
+- Upload documenti MDL e allegati visita desktop protetti da hash SHA-256 e scansione malware opzionale tramite `CLAMAV_SCAN_COMMAND`/`FILE_SCAN_COMMAND`.
+- Export XML Allegato 3B tracciato in `GdprAuditLog` con hash SHA-256 del payload XML e validazione strutturale prima del download.
+- App desktop: sync incrementale gia presente via `lastSyncAt` su `GET /api/v1/desktop-sync/download-full-db`.
+- App desktop: cifratura field-level dei principali campi PII/sanitari via Electron `safeStorage`; resta necessario requisito operativo BitLocker/FileVault o cifratura integrale DB per protezione completa.
+- Packaging Windows desktop verificato con `better-sqlite3` nativo `win32-x64`.
+
+Controlli ancora non chiusi al 100%:
+
+- Validazione XSD ufficiale Allegato 3B: manca nel repository lo schema INAIL versionato da usare come fonte di verita.
+- Scansione malware in produzione: codice pronto, ma deve essere configurato il comando scanner sul server.
+- Test cross-tenant automatici specifici sulle nuove route `company-mdl-documents`: da aggiungere con fixture multi-tenant stabile.
+- Cifratura completa del file SQLite: non implementata; oggi e presente cifratura field-level piu requisito operativo di cifratura disco.
+- DPIA/ROPA: richiede validazione DPO/legale fuori dal codice.
+
 ## Obiettivo
 
 Verificare che webapp e app desktop lavorino sugli stessi dati sanitari e amministrativi con controlli coerenti di riservatezza, integrita, disponibilita, tracciabilita e isolamento tenant. Questo documento e un audit tecnico-operativo: non sostituisce una valutazione formale DPO/legale, ma identifica controlli implementati, rischi residui e verifiche obbligatorie prima di considerare il flusso conforme in produzione.
@@ -18,6 +41,12 @@ Verificare che webapp e app desktop lavorino sugli stessi dati sanitari e ammini
 - Autorizzazioni tenant e ruoli.
 - Gestione PII/dati sanitari, audit trail, soft delete.
 - Deploy e release frontend/backend/desktop.
+
+## Riferimenti Normativi/Operativi
+
+- INAIL, pagina "Medico competente": conferma obbligo art. 40 D.Lgs. 81/08, trasmissione telematica e dati aggregati evidenziando differenze di genere.
+- INAIL, Manuale Utente Medico Competente v2.2 del 12/05/2025: conferma aggiornamento del tracciato record per invio da file in v2.1 del 19/12/2024, workflow comunicazione via file e obbligo di compilare anche valori pari a 0 nelle sezioni statistiche.
+- Stato repo: non e presente uno schema XSD ufficiale INAIL versionato; l'export usa quindi validazione strutturale applicativa e hash/audit, ma la validazione XSD resta un requisito aperto.
 
 ## Controlli Forti Presenti
 
@@ -43,19 +72,22 @@ Rischio residuo: medio. Ogni nuova route di documenti o sync deve avere test aut
 - I documenti MDL aziendali sono separati per tipologia: `nomine`, `tariffario`, `riunione-periodica`, `risultati-anonimi`.
 - I filename ricevuti dal client vengono normalizzati con basename e whitelist caratteri.
 - Il download risolve il path dentro la directory attesa e verifica che il path finale resti nel perimetro della directory.
+- Ogni documento archiviato o firmato contiene metadati con hash SHA-256 e, per firme da storico, hash del documento sorgente.
+- Il download restituisce `X-Document-SHA256` per permettere verifica integrita lato client/log operativo.
 - La firma online puo firmare un documento sorgente gia archiviato, evitando di rigenerare un PDF diverso da quello visto dall'utente.
 - I PDF generati per riunione periodica e risultati anonimi collettivi vengono archiviati nei documenti MDL, rendendo possibile storico, firma e upload firmato.
 
-Rischio residuo: medio. Serve retention policy documentale esplicita e verifica malware/antivirus sugli upload PDF/immagini.
+Rischio residuo: medio. Serve retention policy documentale esplicita. La scansione malware e disponibile via configurazione server, ma va abilitata in produzione.
 
 ### Desktop offline-first
 
 - Il DB locale e in `app.getPath('userData')`, separato dall'installazione.
 - WAL e PRAGMA prestazionali sono configurati.
+- I campi PII/sanitari principali sono cifrati a livello applicativo con Electron `safeStorage` prima della scrittura su SQLite.
 - La licenza consente uso offline con grace period limitato.
 - Il packaging Windows ora forza rebuild/install native deps `win32-x64` e unpack esplicito di `better-sqlite3`, evitando il bundle di un `.node` non Windows.
 
-Rischio residuo: alto se il dispositivo non e cifrato a livello OS. Il DB locale contiene dati sanitari: BitLocker/FileVault o cifratura applicativa del DB devono essere requisiti operativi.
+Rischio residuo: medio-alto se il dispositivo non e cifrato a livello OS. La cifratura field-level protegge molti campi sensibili, ma indici, chiavi, metadati e campi non marcati PII restano nel file SQLite. BitLocker/FileVault o cifratura integrale DB devono essere requisiti operativi.
 
 ## Rischi Critici e Mitigazioni
 
@@ -66,7 +98,8 @@ Rischio: perdita/furto laptop o profilo Windows compromesso con accesso al DB SQ
 Mitigazioni richieste:
 - Obbligare cifratura disco: BitLocker su Windows, FileVault su macOS.
 - Auto-lock app gia presente: verificare timeout e blocco dopo sospensione.
-- Valutare cifratura applicativa SQLite con chiave derivata da credenziale locale o secure storage.
+- Mantenere aggiornata la mappa `PII_FIELDS` desktop per ogni nuova tabella/campo sanitario sincronizzato.
+- Valutare cifratura integrale SQLite con chiave derivata da credenziale locale o secure storage.
 - Disabilitare export massivi non autorizzati e tracciare ogni export in audit log.
 
 Priorita: alta.
@@ -77,7 +110,7 @@ Rischio: caricamento file malevoli o PDF con contenuto attivo.
 
 Mitigazioni richieste:
 - Limitare MIME e dimensione, gia presente.
-- Aggiungere scansione antivirus/ClamAV o servizio equivalente prima della pubblicazione.
+- Abilitare in produzione scansione antivirus/ClamAV o servizio equivalente via `CLAMAV_SCAN_COMMAND`/`FILE_SCAN_COMMAND`.
 - Forzare download/preview con header sicuri (`Content-Type`, `Content-Disposition`, `X-Content-Type-Options: nosniff`).
 - Evitare rendering inline di formati non PDF/immagine sicuri.
 
@@ -91,7 +124,7 @@ Mitigazioni richieste:
 - Ogni tabella sync deve avere `updatedAt`, `deletedAt`, `tenantId`, `remoteId/localId` e mapping ID verificabile.
 - Upload deve essere idempotente e non creare duplicati per movimenti/documenti/visite.
 - Errori di remap devono bloccare solo il record interessato e produrre coda retry, non perdere batch interi.
-- Il full download deve essere affiancato da sync incrementale basata su `updatedAt`/cursor per ridurre payload e rischi di timeout.
+- Il full download e affiancato da sync incrementale basata su `lastSyncAt`; resta da verificare copertura di tutte le tabelle e gestione soft-delete tombstone.
 
 Priorita: alta.
 
@@ -102,8 +135,9 @@ Rischio: XML errato inviato a INAIL o statistiche non allineate.
 Mitigazioni richieste:
 - Ricalcolo statistiche al momento dell'export XML, non affidarsi a snapshot obsoleti.
 - Preview modificabile con evidenza dei campi calcolati vs manuali.
-- Validazione XSD ufficiale prima del download definitivo.
-- Audit log di generazione, modifica manuale, export e invio.
+- Validazione strutturale obbligatoria prima del download definitivo.
+- Validazione XSD ufficiale da integrare appena disponibile lo schema INAIL versionato.
+- Audit log di export XML con hash SHA-256; da estendere a modifica manuale/invio quando il flusso di invio sara definitivo.
 
 Priorita: alta.
 
@@ -175,13 +209,12 @@ Priorita: media-alta.
 
 ## Gap Da Chiudere Prima Di Dichiarare Conformita Piena
 
-1. Cifratura forte del DB locale o requisito tecnico obbligatorio di cifratura disco.
-2. Validazione XSD Allegato 3B integrata prima dell'export definitivo.
-3. Antivirus/malware scanning sugli upload.
-4. Hash SHA-256 e catena di custodia per PDF regolatori firmati.
-5. Test automatici cross-tenant per ogni nuova route documentale.
-6. Sync incrementale con cursor per ridurre full download e superficie di errore.
-7. Registro DPIA/ROPA aggiornato con trattamento offline desktop.
+1. Cifratura integrale del DB locale oppure requisito tecnico obbligatorio di cifratura disco verificato in onboarding device.
+2. Validazione XSD Allegato 3B integrata prima dell'export definitivo quando lo schema ufficiale viene versionato nel repository.
+3. Antivirus/malware scanning da abilitare sul server impostando `CLAMAV_SCAN_COMMAND` o `FILE_SCAN_COMMAND`.
+4. Test automatici cross-tenant per ogni nuova route documentale.
+5. Sync incrementale: copertura soft-delete/tombstone e test tabella-per-tabella.
+6. Registro DPIA/ROPA aggiornato con trattamento offline desktop.
 
 ## Valutazione Finale
 

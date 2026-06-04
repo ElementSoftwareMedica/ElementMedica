@@ -19,6 +19,11 @@ const prisma = new PrismaClient({
 
 // Global test setup
 beforeAll(async () => {
+  if (process.env.SKIP_DB_SETUP === 'true') {
+    console.log('⏭️ Test database setup skipped');
+    return;
+  }
+
   try {
     // Connect to database
     await prisma.$connect();
@@ -35,6 +40,11 @@ beforeAll(async () => {
 
 // Global test teardown
 afterAll(async () => {
+  if (process.env.SKIP_DB_SETUP === 'true') {
+    console.log('⏭️ Test database teardown skipped');
+    return;
+  }
+
   try {
     // Only disconnect from database, don't clean up data aggressively
     // Individual tests should handle their own cleanup

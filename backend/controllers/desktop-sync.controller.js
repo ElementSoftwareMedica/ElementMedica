@@ -11,6 +11,8 @@ import { logger } from '../utils/logger.js';
 import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 import prisma from '../config/prisma-optimization.js';
 import { createMulterConfig } from '../config/multer.js';
+import { assertUploadedFileIsSafe } from '../utils/fileSecurity.js';
+import fs from 'fs';
 import path from 'path';
 
 // Multer instance for attachment uploads (clinical files, max 50MB)
@@ -2182,6 +2184,7 @@ export async function uploadAttachment(req, res) {
             return res.status(404).json({ error: 'Visita non trovata' });
         }
 
+        const security = await assertUploadedFileIsSafe(req.file.path);
         // Build server URL (relative path served by the static file server)
         const relativeUrl = `/uploads/allegati-visite/${req.file.filename}`;
 
@@ -2199,12 +2202,13 @@ export async function uploadAttachment(req, res) {
                 fileUrl: relativeUrl,
                 fileSize: req.file.size || (dimensione ? parseInt(dimensione, 10) : null),
                 mimeType: mimeType || req.file.mimetype,
+                hashFile: security.sha256,
                 caricatoDa: personId
             }
         });
 
         logger.info({
-            tenantId, visitaId, allegatoId: allegato.id, allegatoLocalId, fileName: req.file.filename
+            tenantId, visitaId, allegatoId: allegato.id, allegatoLocalId, fileName: req.file.filename, scanStatus: security.scan.status
         }, '[P98] Allegato visita caricato da client desktop');
 
         res.json({
@@ -2215,6 +2219,16 @@ export async function uploadAttachment(req, res) {
             fileName: req.file.filename
         });
     } catch (error) {
+        if (req.file?.path) {
+            try {
+                if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+            } catch {
+                // Best-effort cleanup only.
+            }
+        }
+        if (error.code === 'MALWARE_SCAN_FAILED') {
+            return res.status(400).json({ error: 'File rifiutato dalla scansione sicurezza' });
+        }
         logger.error({ error: error.message, stack: error.stack }, '[P98] Errore upload allegato desktop');
         res.status(500).json({ error: 'Errore nel caricamento del file' });
     }

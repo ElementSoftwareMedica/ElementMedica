@@ -548,6 +548,11 @@ AWS_S3_BUCKET="elementmedica-documents"
 UPLOAD_DIR="/var/www/elementmedica/uploads"
 UPLOAD_MAX_SIZE="10mb"
 
+# Scansione malware upload regolatori/clinici (opzionale ma raccomandata)
+# Esempio ClamAV: CLAMAV_SCAN_COMMAND="clamscan --no-summary"
+# Se non impostata, il backend calcola comunque SHA-256 ma non blocca via antivirus.
+CLAMAV_SCAN_COMMAND=""
+
 # ===========================================
 # PDF GENERATION
 # ===========================================

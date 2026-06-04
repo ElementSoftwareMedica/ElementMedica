@@ -15,6 +15,7 @@ import Allegato3BService from '../../services/clinical/Allegato3BService.js';
 import logger from '../../utils/logger.js';
 import { validateParamId } from '../../middleware/validateUUID.js';
 import { getEffectiveTenantId } from '../../utils/tenantHelper.js';
+import { computeSha256Buffer } from '../../utils/fileSecurity.js';
 
 const router = express.Router();
 router.param('id', validateParamId);
@@ -475,8 +476,30 @@ router.get('/:id/xml', requireAuth, requirePermission('clinica.visite:read'), as
         const { id } = req.params;
 
         const xml = await Allegato3BService.generateXML(id, tenantId);
+        const xmlSha256 = computeSha256Buffer(Buffer.from(xml, 'utf8'));
+
+        await prisma.gdprAuditLog.create({
+            data: {
+                personId: req.person?.id || null,
+                tenantId,
+                action: 'EXPORT',
+                resourceType: 'Allegato3B',
+                resourceId: id,
+                dataAccessed: {
+                    format: 'XML',
+                    sha256: xmlSha256,
+                    validation: 'STRUCTURAL_DIAGNOSTICS'
+                },
+                ipAddress: req.ip,
+                userAgent: req.get('user-agent')
+            }
+        }).catch(auditErr => {
+            logger.warn({ error: auditErr.message, allegato3bId: id }, 'GdprAuditLog export XML Allegato 3B non salvato');
+        });
 
         res.set('Content-Type', 'application/xml');
+        res.set('X-Content-Type-Options', 'nosniff');
+        res.set('X-Document-SHA256', xmlSha256);
         res.set('Content-Disposition', `attachment; filename="allegato3b_${id}.xml"`);
         res.send(xml);
     } catch (error) {

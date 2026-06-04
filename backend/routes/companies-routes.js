@@ -14,6 +14,7 @@ import { createSingleUpload, multerErrorHandler } from '../config/multer.js';
 import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 import { personTenantAccessService } from '../services/PersonTenantAccessService.js';
 import { isTrainerOnlyAccess, getTrainerCompanyProfileIds } from '../utils/trainerAccess.js';
+import { assertUploadedFileIsSafe, computeSha256Buffer, computeSha256File } from '../utils/fileSecurity.js';
 import { PDFDocument } from 'pdf-lib';
 
 const router = express.Router();
@@ -87,6 +88,10 @@ function listMdlDocumentFiles(tenantId, profileId, documentType) {
         originalName: metadata.originalName || name,
         note: metadata.note || null,
         signedOnline: metadata.signedOnline === true,
+        generatedOnline: metadata.generatedOnline === true,
+        sha256: metadata.sha256 || null,
+        sourceSha256: metadata.sourceSha256 || null,
+        scanStatus: metadata.scanStatus || null,
         createdAt: metadata.createdAt || stat.birthtime.toISOString(),
         uploadedBy: metadata.uploadedBy || null,
         size: stat.size,
@@ -109,6 +114,7 @@ function archiveMdlDocumentBuffer({
   const dir = ensureMdlDocumentDir(tenantId, profileId, documentType);
   const storedName = `${documentType}-${Date.now()}-${sanitizeStoredFilename(originalName || 'documento.pdf')}`;
   const targetPath = path.join(dir, storedName);
+  const sha256 = computeSha256Buffer(buffer);
   fs.writeFileSync(targetPath, buffer);
   fs.writeFileSync(`${targetPath}.json`, JSON.stringify({
     originalName: originalName || storedName,
@@ -116,6 +122,9 @@ function archiveMdlDocumentBuffer({
     note,
     signedOnline: false,
     generatedOnline: true,
+    sha256,
+    sourceSha256: null,
+    scanStatus: 'GENERATED',
     uploadedBy: generatedBy,
     createdAt: new Date().toISOString(),
     ...extraMetadata
@@ -918,7 +927,15 @@ router.get('/:id/mdl-documents/:documentType/files/:filename',
       if (!filePath.startsWith(dir + path.sep) || !fs.existsSync(filePath)) {
         return res.status(404).json({ success: false, error: 'Documento non trovato' });
       }
+      let metadata = {};
+      try {
+        metadata = JSON.parse(fs.readFileSync(`${filePath}.json`, 'utf8'));
+      } catch {
+        metadata = {};
+      }
 
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      if (metadata.sha256) res.setHeader('X-Document-SHA256', metadata.sha256);
       return res.sendFile(filePath);
     } catch (error) {
       logger.error({ error: error.message, companyOrProfileId: req.params.id }, 'Errore download documento MDL azienda');
@@ -946,6 +963,7 @@ router.post('/:id/mdl-documents/:documentType/upload',
       const profile = await resolveCompanyTenantProfile(req.params.id, tenantId);
       if (!profile) return res.status(404).json({ success: false, error: 'Azienda non trovata' });
 
+      const security = await assertUploadedFileIsSafe(req.file.path);
       const dir = ensureMdlDocumentDir(tenantId, profile.id, documentType);
       const storedName = `${documentType}-${Date.now()}-${sanitizeStoredFilename(req.file.originalname)}`;
       const targetPath = path.join(dir, storedName);
@@ -955,6 +973,11 @@ router.post('/:id/mdl-documents/:documentType/upload',
         mimeType: req.file.mimetype,
         note: req.body?.note || null,
         signedOnline: false,
+        generatedOnline: false,
+        sha256: security.sha256,
+        sourceSha256: null,
+        scanStatus: security.scan.status,
+        scanned: security.scan.scanned,
         uploadedBy: req.person?.id || null,
         createdAt: new Date().toISOString()
       };
@@ -968,7 +991,7 @@ router.post('/:id/mdl-documents/:documentType/upload',
           category: 'companies',
           resource: 'CompanyTenantProfile',
           resourceId: profile.id,
-          details: JSON.stringify({ documentType, filename: storedName, originalName: req.file.originalname }),
+          details: JSON.stringify({ documentType, filename: storedName, originalName: req.file.originalname, sha256: security.sha256, scanStatus: security.scan.status }),
           timestamp: new Date(),
           ipAddress: req.ip,
           userAgent: req.get('user-agent')
@@ -980,6 +1003,12 @@ router.post('/:id/mdl-documents/:documentType/upload',
         data: listMdlDocumentFiles(tenantId, profile.id, documentType)[0]
       });
     } catch (error) {
+      if (req.file?.path && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      if (error.code === 'MALWARE_SCAN_FAILED') {
+        return res.status(400).json({ success: false, error: 'File rifiutato dalla scansione sicurezza' });
+      }
       logger.error({ error: error.message, companyOrProfileId: req.params.id }, 'Errore upload documento MDL azienda');
       return res.status(500).json({ success: false, error: 'Errore nel caricamento del documento' });
     }
@@ -1006,6 +1035,7 @@ router.post('/:id/mdl-documents/:documentType/sign',
 
       const companyName = profile.company?.ragioneSociale || 'Azienda';
       let buffer;
+      let sourceSha256 = null;
       const sourceFilename = req.body?.sourceFilename ? sanitizeStoredFilename(String(req.body.sourceFilename)) : null;
       if (sourceFilename) {
         const dir = ensureMdlDocumentDir(tenantId, profile.id, documentType);
@@ -1014,6 +1044,7 @@ router.post('/:id/mdl-documents/:documentType/sign',
           return res.status(404).json({ success: false, error: 'Documento da firmare non trovato' });
         }
         buffer = fs.readFileSync(sourcePath);
+        sourceSha256 = computeSha256File(sourcePath);
       } else if (documentType === 'nomine') {
         buffer = await generateNominePdfBuffer(profile);
       } else if (documentType === 'riunione-periodica') {
@@ -1049,6 +1080,7 @@ router.post('/:id/mdl-documents/:documentType/sign',
         });
       }
       buffer = await stampSignatureOnPdf(buffer, signatureImage, req.body?.placement || {});
+      const signedSha256 = computeSha256Buffer(buffer);
       const dir = ensureMdlDocumentDir(tenantId, profile.id, documentType);
       const storedName = `${documentType}-firmato-online-${Date.now()}.pdf`;
       const targetPath = path.join(dir, storedName);
@@ -1059,6 +1091,9 @@ router.post('/:id/mdl-documents/:documentType/sign',
         note: req.body?.note || null,
         signedOnline: true,
         signatureMode: signatureImage ? 'DRAWN' : 'TEXT',
+        sha256: signedSha256,
+        sourceSha256,
+        scanStatus: 'GENERATED',
         signerName: firma || null,
         uploadedBy: req.person?.id || null,
         createdAt: new Date().toISOString()
@@ -1072,7 +1107,7 @@ router.post('/:id/mdl-documents/:documentType/sign',
           category: 'companies',
           resource: 'CompanyTenantProfile',
           resourceId: profile.id,
-          details: JSON.stringify({ documentType, filename: storedName }),
+          details: JSON.stringify({ documentType, filename: storedName, sha256: signedSha256, sourceSha256 }),
           timestamp: new Date(),
           ipAddress: req.ip,
           userAgent: req.get('user-agent')
@@ -2817,6 +2852,23 @@ router.get('/:companyTenantProfileId/risultati-anonimi/pdf',
         generatedBy: req.person?.id || null,
         extraMetadata: { dateFrom: String(dateFrom), dateTo: String(dateTo) }
       });
+      await prisma.gdprAuditLog.create({
+        data: {
+          personId: req.person?.id || null,
+          tenantId,
+          action: 'GENERATE',
+          resourceType: 'CompanyMdlDocument',
+          resourceId: companyTenantProfileId,
+          dataAccessed: {
+            documentType: 'risultati-anonimi',
+            dateFrom: String(dateFrom),
+            dateTo: String(dateTo),
+            originalName
+          },
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent')
+        }
+      }).catch(err => logger.warn('GdprAuditLog risultati anonimi non salvato', { error: err.message }));
 
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename=${originalName}`);
@@ -2902,6 +2954,22 @@ router.get('/:companyTenantProfileId/riunione-periodica/pdf',
           delibereConclusioni: String(req.query.delibereConclusioni || '').slice(0, 5000)
         }
       });
+      await prisma.gdprAuditLog.create({
+        data: {
+          personId: req.person?.id || null,
+          tenantId,
+          action: 'GENERATE',
+          resourceType: 'CompanyMdlDocument',
+          resourceId: companyTenantProfileId,
+          dataAccessed: {
+            documentType: 'riunione-periodica',
+            anno: annoNum,
+            originalName
+          },
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent')
+        }
+      }).catch(err => logger.warn('GdprAuditLog riunione periodica non salvato', { error: err.message }));
 
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename=${originalName}`);
