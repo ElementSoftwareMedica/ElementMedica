@@ -31,7 +31,9 @@ import {
     Loader2,
     ExternalLink,
     Play,
-    RefreshCw
+    RefreshCw,
+    Trash2,
+    X
 } from 'lucide-react';
 import { Button } from '../../design-system/atoms/Button';
 import { Badge } from '../../design-system/atoms/Badge';
@@ -109,6 +111,8 @@ const Allegato3BCard: React.FC<Allegato3BCardProps> = ({
     const [downloadingId, setDownloadingId] = useState<string | null>(null);
     const [compilingId, setCompilingId] = useState<string | null>(null);
     const [creatingNew, setCreatingNew] = useState(false);
+    const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
     const currentYear = new Date().getFullYear();
 
@@ -237,6 +241,21 @@ const Allegato3BCard: React.FC<Allegato3BCardProps> = ({
             showToast({ message: 'Errore nella compilazione', type: 'error' });
         } finally {
             setCompilingId(null);
+        }
+    };
+
+    const handleDelete = async (allegatoId: string) => {
+        try {
+            setDeletingId(allegatoId);
+            await clinicaApi.allegato3B.delete(allegatoId);
+            setAllegati(prev => prev.filter(a => a.id !== allegatoId));
+            setConfirmDeleteId(null);
+            onActionComplete?.();
+            showToast({ message: 'Allegato 3B eliminato. Ora può essere rigenerato.', type: 'success' });
+        } catch {
+            showToast({ message: 'Errore durante l\'eliminazione dell\'Allegato 3B', type: 'error' });
+        } finally {
+            setDeletingId(null);
         }
     };
 
@@ -493,6 +512,47 @@ const Allegato3BCard: React.FC<Allegato3BCardProps> = ({
                                                     <FileCode className="h-4 w-4" />
                                                 )}
                                             </Button>
+                                        )}
+                                        {confirmDeleteId === allegato.id ? (
+                                            <div className="flex items-center gap-1 rounded-lg border border-red-100 bg-red-50 px-1.5 py-1 dark:border-red-900/50 dark:bg-red-950/30">
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        void handleDelete(allegato.id);
+                                                    }}
+                                                    disabled={deletingId === allegato.id}
+                                                    className="rounded-md px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-900/40"
+                                                >
+                                                    {deletingId === allegato.id ? 'Elimino...' : 'Conferma'}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setConfirmDeleteId(null);
+                                                    }}
+                                                    className="rounded-md p-1 text-gray-500 hover:bg-white dark:hover:bg-gray-800"
+                                                    title="Annulla eliminazione"
+                                                >
+                                                    <X className="h-3.5 w-3.5" />
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            (allegato.stato !== 'INVIATO' && allegato.stato !== 'CONFERMATO') && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setConfirmDeleteId(allegato.id);
+                                                    }}
+                                                    title="Elimina Allegato 3B"
+                                                    className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            )
                                         )}
                                     </div>
                                 </div>

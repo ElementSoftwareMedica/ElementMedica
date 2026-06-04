@@ -979,7 +979,15 @@ router.post('/:id/mdl-documents/:documentType/sign',
 
       const companyName = profile.company?.ragioneSociale || 'Azienda';
       let buffer;
-      if (documentType === 'nomine') {
+      const sourceFilename = req.body?.sourceFilename ? sanitizeStoredFilename(String(req.body.sourceFilename)) : null;
+      if (sourceFilename) {
+        const dir = ensureMdlDocumentDir(tenantId, profile.id, documentType);
+        const sourcePath = path.resolve(dir, sourceFilename);
+        if (!sourcePath.startsWith(dir + path.sep) || !fs.existsSync(sourcePath)) {
+          return res.status(404).json({ success: false, error: 'Documento da firmare non trovato' });
+        }
+        buffer = fs.readFileSync(sourcePath);
+      } else if (documentType === 'nomine') {
         buffer = await generateNominePdfBuffer(profile);
       } else if (documentType === 'riunione-periodica') {
         const anno = parseInt(String(req.body?.anno || new Date().getFullYear()), 10);

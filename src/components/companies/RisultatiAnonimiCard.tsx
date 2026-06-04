@@ -29,7 +29,9 @@ import {
     Info,
     ClipboardList,
     Activity,
-    Upload
+    Upload,
+    ChevronDown,
+    ChevronUp
 } from 'lucide-react';
 import { cn } from '../../design-system/utils';
 import { useToast } from '../../hooks/useToast';
@@ -154,6 +156,8 @@ export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
     const [uploadFile, setUploadFile] = useState<File | null>(null);
     const [isUploading, setIsUploading] = useState(false);
     const [isSigning, setIsSigning] = useState(false);
+    const [historyExpanded, setHistoryExpanded] = useState(false);
+    const [signingFile, setSigningFile] = useState<MdlDocumentFile | null>(null);
 
     // =============================================
     // QUERY — fires only when user clicks "Genera"
@@ -181,7 +185,7 @@ export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
             );
             return resp.data || [];
         },
-        enabled: isModalOpen,
+        enabled: !!companyTenantProfileId,
         staleTime: 60_000
     });
 
@@ -249,6 +253,22 @@ export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
         }
     };
 
+    const handleUploadFirmatoForFile = async (file: File, source: MdlDocumentFile) => {
+        setIsUploading(true);
+        try {
+            const formData = new FormData();
+            formData.append('documento', file);
+            formData.append('note', `Documento firmato collegato a ${source.originalName}`);
+            await apiUpload(`/api/v1/companies/${companyTenantProfileId}/mdl-documents/risultati-anonimi/upload`, formData);
+            await refetchDocumenti();
+            showToast({ type: 'success', message: 'Documento firmato caricato' });
+        } catch {
+            showToast({ type: 'error', message: 'Errore durante il caricamento del documento firmato' });
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
     const getPreviewPdfUrl = () => (
         `/api/v1/companies/${companyTenantProfileId}/risultati-anonimi/pdf?dateFrom=${queriedFrom || dateFrom}&dateTo=${queriedTo || dateTo}`
     );
@@ -265,10 +285,12 @@ export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
             await apiPost(`/api/v1/companies/${companyTenantProfileId}/mdl-documents/risultati-anonimi/sign`, {
                 signatureImage: signatureDataUrl,
                 placement,
+                sourceFilename: signingFile?.filename,
                 dateFrom: queriedFrom || dateFrom,
                 dateTo: queriedTo || dateTo,
             });
             setIsSigning(false);
+            setSigningFile(null);
             await refetchDocumenti();
             showToast({ type: 'success', message: 'Documento firmato e archiviato' });
         } catch {
@@ -276,6 +298,11 @@ export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
         } finally {
             setIsUploading(false);
         }
+    };
+
+    const openSignatureForFile = (file?: MdlDocumentFile) => {
+        setSigningFile(file || null);
+        setIsSigning(true);
     };
 
     // =============================================
@@ -750,6 +777,59 @@ export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
                                 Genera
                             </button>
                         </div>
+                        <div className="mt-4 rounded-xl border border-gray-100 dark:border-gray-700">
+                            <button
+                                type="button"
+                                onClick={() => setHistoryExpanded(prev => !prev)}
+                                className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700/50"
+                            >
+                                <span>Documenti pregressi ({documenti.length})</span>
+                                {historyExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                            </button>
+                            {historyExpanded && (
+                                <div className="space-y-2 border-t border-gray-100 p-3 dark:border-gray-700">
+                                    {documenti.length === 0 ? (
+                                        <p className="text-xs text-gray-500 dark:text-gray-400">Nessun documento generato o firmato.</p>
+                                    ) : documenti.map(file => (
+                                        <div key={file.filename} className="flex items-center justify-between gap-3 rounded-lg bg-gray-50 px-3 py-2 text-xs dark:bg-gray-900">
+                                            <span className="min-w-0 flex-1 truncate text-gray-700 dark:text-gray-200">{file.originalName}</span>
+                                            <div className="flex items-center gap-1">
+                                                <button type="button" onClick={() => handleOpenDocument(file)} className="rounded-md p-1.5 text-blue-600 hover:bg-blue-50" title="Quick-look">
+                                                    <Eye className="h-3.5 w-3.5" />
+                                                </button>
+                                                <button type="button" onClick={() => apiDownload(file.url).then(blob => {
+                                                    const url = URL.createObjectURL(blob);
+                                                    const a = document.createElement('a');
+                                                    a.href = url;
+                                                    a.download = file.originalName;
+                                                    a.click();
+                                                    URL.revokeObjectURL(url);
+                                                })} className="rounded-md p-1.5 text-teal-600 hover:bg-teal-50" title="Download">
+                                                    <Download className="h-3.5 w-3.5" />
+                                                </button>
+                                                <button type="button" onClick={() => openSignatureForFile(file)} className="rounded-md p-1.5 text-violet-600 hover:bg-violet-50" title="Firma online">
+                                                    <FileText className="h-3.5 w-3.5" />
+                                                </button>
+                                                <label className="cursor-pointer rounded-md p-1.5 text-amber-600 hover:bg-amber-50" title="Upload firmato">
+                                                    <Upload className="h-3.5 w-3.5" />
+                                                    <input
+                                                        type="file"
+                                                        accept="application/pdf,image/jpeg,image/png"
+                                                        className="hidden"
+                                                        disabled={isUploading}
+                                                        onChange={(event) => {
+                                                            const selected = event.target.files?.[0];
+                                                            if (selected) void handleUploadFirmatoForFile(selected, file);
+                                                            event.target.value = '';
+                                                        }}
+                                                    />
+                                                </label>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -758,10 +838,13 @@ export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
             {isSigning && (
                 <SigningWorkflowModal
                     isOpen={isSigning}
-                    documentId={`risultati-anonimi-${companyTenantProfileId}-${queriedFrom || dateFrom}-${queriedTo || dateTo}`}
-                    documentLabel="Risultati Anonimi Collettivi"
-                    previewUrl={getPreviewPdfUrl()}
-                    onClose={() => setIsSigning(false)}
+                    documentId={signingFile?.filename || `risultati-anonimi-${companyTenantProfileId}-${queriedFrom || dateFrom}-${queriedTo || dateTo}`}
+                    documentLabel={signingFile?.originalName || 'Risultati Anonimi Collettivi'}
+                    previewUrl={signingFile?.url || getPreviewPdfUrl()}
+                    onClose={() => {
+                        setIsSigning(false);
+                        setSigningFile(null);
+                    }}
                     onConfirm={({ signatureDataUrl, placement }) => handleOnlineSign({ signatureDataUrl, placement })}
                 />
             )}

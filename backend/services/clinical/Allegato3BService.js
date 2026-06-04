@@ -1084,7 +1084,11 @@ class Allegato3BService {
             throw new Error(`Allegato 3B non trovato: ${allegato3bId}`);
         }
 
-        const diagnostics = this.buildXmlDiagnostics(allegato);
+        const freshStats = await this.compileStatistics(allegato.companyTenantProfileId, allegato.anno, tenantId);
+        const freshData = this.toPersistableStatistics(freshStats);
+        const allegatoForXml = { ...allegato, ...freshData };
+
+        const diagnostics = this.buildXmlDiagnostics(allegatoForXml);
         if (diagnostics.errors.length > 0) {
             const error = new Error(`Allegato 3B incompleto: ${diagnostics.errors.join('; ')}`);
             error.code = 'ALLEGATO_3B_XML_INVALID';
@@ -1093,12 +1097,14 @@ class Allegato3BService {
         }
 
         // Genera XML strutturato utilizzando i dati pre-compilati
-        const xml = this.buildXML(allegato);
+        const xml = this.buildXML(allegatoForXml);
 
         // Salva XML nel record
         await prisma.allegato3B.update({
             where: { id: allegato3bId },
             data: {
+                ...freshData,
+                dataCompilazione: allegato.dataCompilazione || new Date(),
                 stato: 'PRONTO'
             }
         });
@@ -1145,10 +1151,14 @@ class Allegato3BService {
         requireField(mc?.taxCode, 'Codice fiscale medico competente mancante');
         requireField(mc?.lastName, 'Cognome medico competente mancante');
         requireField(mc?.firstName, 'Nome medico competente mancante');
-        requireField(mcProfile?.registerCode, 'Numero iscrizione albo medico competente mancante');
+        if (!mcProfile?.registerCode) {
+            warnings.push('Numero iscrizione albo medico competente mancante');
+        }
         requireField(company?.ragioneSociale, 'Ragione sociale azienda mancante');
         if (!company?.piva && !company?.codiceFiscale) errors.push('P.IVA o codice fiscale azienda mancante');
-        requireField(company?.codiceAteco, 'Codice ATECO azienda mancante');
+        if (!company?.codiceAteco) {
+            warnings.push('Codice ATECO azienda mancante');
+        }
         if (!company?.sedeLegaleIndirizzo || !company?.sedeLegaleCitta || !company?.sedeLegaleProvincia) {
             warnings.push('Sede legale azienda incompleta');
         }
@@ -1167,7 +1177,7 @@ class Allegato3BService {
                     { label: 'Codice fiscale', value: mc?.taxCode, required: true },
                     { label: 'Cognome', value: mc?.lastName, required: true },
                     { label: 'Nome', value: mc?.firstName, required: true },
-                    { label: 'Numero albo', value: mcProfile?.registerCode, required: true },
+                    { label: 'Numero albo', value: mcProfile?.registerCode },
                     { label: 'Specializzazione', value: Array.isArray(mcProfile?.specialties) ? mcProfile.specialties.join(', ') : mcProfile?.specialties }
                 ]
             },
@@ -1177,7 +1187,7 @@ class Allegato3BService {
                     { label: 'Ragione sociale', value: company?.ragioneSociale, required: true },
                     { label: 'Partita IVA', value: company?.piva },
                     { label: 'Codice fiscale', value: company?.codiceFiscale },
-                    { label: 'Codice ATECO', value: company?.codiceAteco, required: true },
+                    { label: 'Codice ATECO', value: company?.codiceAteco },
                     { label: 'Sede legale', value: [company?.sedeLegaleIndirizzo, company?.sedeLegaleCitta, company?.sedeLegaleCap, company?.sedeLegaleProvincia].filter(Boolean).join(', ') }
                 ]
             },

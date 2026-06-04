@@ -119,6 +119,12 @@ export default function OT23CreateModal({
     ), []);
 
     useEffect(() => {
+        if (preselectedCompanyProfileId) {
+            setFormData(prev => ({ ...prev, companyTenantProfileId: preselectedCompanyProfileId }));
+        }
+    }, [preselectedCompanyProfileId]);
+
+    useEffect(() => {
         if (selectedCompany) {
             setCompanySearch(`${selectedCompany.company.ragioneSociale}${selectedCompany.company.piva ? ` (${selectedCompany.company.piva})` : ''}`);
         }
@@ -223,6 +229,20 @@ export default function OT23CreateModal({
 
                 <form onSubmit={handleSubmit} className="space-y-4 mt-4">
                     {/* Azienda */}
+                    {preselectedCompanyProfileId ? (
+                        <div className="rounded-xl border border-blue-100 bg-blue-50/70 px-4 py-3 dark:border-blue-900/50 dark:bg-blue-950/30">
+                            <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">
+                                <Building2 className="h-4 w-4" />
+                                Azienda
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                                {selectedCompany?.company?.ragioneSociale || 'Azienda selezionata'}
+                            </p>
+                            {selectedCompany?.company?.piva && (
+                                <p className="text-xs text-blue-700/80 dark:text-blue-300/80">P.IVA {selectedCompany.company.piva}</p>
+                            )}
+                        </div>
+                    ) : (
                     <div ref={companyDropdownRef} className="relative">
                         <Label className="flex items-center gap-2 mb-2">
                             <Building2 className="w-4 h-4" />
@@ -265,6 +285,7 @@ export default function OT23CreateModal({
                             <p className="text-red-500 text-sm mt-1">{errors.companyTenantProfileId}</p>
                         )}
                     </div>
+                    )}
 
                     {/* Anno */}
                     <div>
