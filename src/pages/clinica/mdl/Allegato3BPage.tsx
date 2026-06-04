@@ -910,8 +910,12 @@ const Allegato3BPage: React.FC = () => {
                 isOpen={isCreateModalOpen}
                 onClose={handleClose}
                 title="Nuovo Allegato 3B"
+                size="full"
+                overlayClassName="items-start pt-8"
+                className="max-w-7xl max-h-[92vh]"
+                bodyClassName="max-h-[calc(92vh-96px)] overflow-y-auto p-0"
             >
-                <div className="space-y-5 p-4">
+                <div className="space-y-5 p-5">
                     {/* Anno */}
                     <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -1031,7 +1035,7 @@ const Allegato3BPage: React.FC = () => {
                                 {isPreviewLoading && <Loader2 className="h-4 w-4 animate-spin text-teal-600" />}
                             </div>
                             {createPreview?.xmlPreview ? (
-                                <div className="space-y-3 p-3">
+                                <div className="max-h-[58vh] space-y-3 overflow-y-auto p-3 pr-4">
                                     {createPreview.xmlPreview.errors.length > 0 && (
                                         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
                                             {createPreview.xmlPreview.errors.map(error => <p key={error}>{error}</p>)}
@@ -1042,6 +1046,7 @@ const Allegato3BPage: React.FC = () => {
                                             {createPreview.xmlPreview.warnings.map(warning => <p key={warning}>{warning}</p>)}
                                         </div>
                                     )}
+                                    <div className="grid gap-3 xl:grid-cols-2">
                                     {createPreview.xmlPreview.fieldGroups.map(group => (
                                         <div key={group.title} className="rounded-lg border border-gray-100 dark:border-gray-700">
                                             <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700">
@@ -1082,6 +1087,7 @@ const Allegato3BPage: React.FC = () => {
                                             </div>
                                         </div>
                                     ))}
+                                    </div>
                                 </div>
                             ) : (
                                 <div className="p-3 text-sm text-gray-500">Seleziona azienda e anno per generare la preview.</div>

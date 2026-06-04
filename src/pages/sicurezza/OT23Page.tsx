@@ -7,7 +7,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
     Calculator,
@@ -155,6 +155,8 @@ function DashboardCards({ data, anno }: DashboardCardsProps) {
 
 export default function OT23Page() {
     const navigate = useNavigate();
+    const location = useLocation();
+    const [searchParams] = useSearchParams();
     const { showToast } = useToast();
     const queryClient = useQueryClient();
     const { confirmDelete } = useConfirmDialog();
@@ -169,6 +171,13 @@ export default function OT23Page() {
     const [page, setPage] = useState(1);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
+    const preselectedCompanyProfileId = searchParams.get('companyId') || undefined;
+
+    useEffect(() => {
+        if (location.pathname.endsWith('/sicurezza/ot23/nuovo')) {
+            setIsCreateModalOpen(true);
+        }
+    }, [location.pathname]);
 
     // Query - Lista OT23
     const { data, isLoading, refetch } = useQuery({
@@ -514,12 +523,21 @@ export default function OT23Page() {
             {isCreateModalOpen && (
                 <OT23CreateModal
                     isOpen={isCreateModalOpen}
-                    onClose={() => setIsCreateModalOpen(false)}
+                    onClose={() => {
+                        setIsCreateModalOpen(false);
+                        if (location.pathname.endsWith('/sicurezza/ot23/nuovo')) {
+                            navigate('/sicurezza/ot23', { replace: true });
+                        }
+                    }}
                     onSuccess={() => {
                         setIsCreateModalOpen(false);
+                        if (location.pathname.endsWith('/sicurezza/ot23/nuovo')) {
+                            navigate('/sicurezza/ot23', { replace: true });
+                        }
                         refetch();
                     }}
                     defaultAnno={anno}
+                    preselectedCompanyProfileId={preselectedCompanyProfileId}
                 />
             )}
 

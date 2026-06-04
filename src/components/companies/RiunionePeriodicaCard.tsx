@@ -20,14 +20,18 @@ import {
     Loader2,
     AlertCircle,
     Download,
+    Eye,
     Info,
     ClipboardList,
     Activity,
     AlertTriangle,
+    Upload,
 } from 'lucide-react';
 import { cn } from '../../design-system/utils';
 import { useToast } from '../../hooks/useToast';
-import { apiGet, apiDownload } from '../../services/api';
+import { apiGet, apiDownload, apiPost, apiUpload } from '../../services/api';
+import SigningWorkflowModal from '../schedules/components/DocumentManager/components/SigningWorkflowModal';
+import type { SignaturePlacement } from '../schedules/components/DocumentManager/components/SigningWorkflowModal';
 
 // =============================================
 // TYPES
@@ -96,6 +100,7 @@ interface RiunioneData {
         conLimitazioni: number;
         esamiAggregati: EsameItem[];
         prestazioniEseguite: PrestazioneItem[];
+        healthAggregates?: Record<string, number>;
     };
     partecipanti: {
         datoreLavoro: PartecipanteItem[];
@@ -106,6 +111,14 @@ interface RiunioneData {
     protocolliSanitari: ProtocolloItem[];
     mansioni: Array<{ denominazione: string; rischi: Array<{ codice: string; livello: string; categoria: string }> }>;
     rischiAggregati: RischioItem[];
+}
+
+interface MdlDocumentFile {
+    filename: string;
+    originalName: string;
+    createdAt: string;
+    signedOnline?: boolean;
+    url: string;
 }
 
 interface RiunionePeriodicaCardProps {
@@ -165,6 +178,10 @@ export const RiunionePeriodicaCard: React.FC<RiunionePeriodicaCardProps> = ({
     const [selectedYear, setSelectedYear] = useState(defaultYear);
     const [queriedYear, setQueriedYear] = useState<number | null>(null);
     const [isDownloading, setIsDownloading] = useState(false);
+    const [delibereConclusioni, setDelibereConclusioni] = useState('');
+    const [uploadFile, setUploadFile] = useState<File | null>(null);
+    const [isUploading, setIsUploading] = useState(false);
+    const [isSigning, setIsSigning] = useState(false);
 
     // Years for selection (last 5 years)
     const years = useMemo(() => {
@@ -190,6 +207,18 @@ export const RiunionePeriodicaCard: React.FC<RiunionePeriodicaCardProps> = ({
         staleTime: 5 * 60 * 1000
     });
 
+    const { data: documenti = [], refetch: refetchDocumenti } = useQuery<MdlDocumentFile[]>({
+        queryKey: ['company-mdl-documents', companyTenantProfileId, 'riunione-periodica'],
+        queryFn: async () => {
+            const resp = await apiGet<{ success: boolean; data: MdlDocumentFile[] }>(
+                `/api/v1/companies/${companyTenantProfileId}/mdl-documents/riunione-periodica/files`
+            );
+            return resp.data || [];
+        },
+        enabled: isModalOpen,
+        staleTime: 60_000
+    });
+
     const handleGenera = () => {
         setQueriedYear(selectedYear);
     };
@@ -198,7 +227,7 @@ export const RiunionePeriodicaCard: React.FC<RiunionePeriodicaCardProps> = ({
         setIsDownloading(true);
         try {
             const blob = await apiDownload(
-                `/api/v1/companies/${companyTenantProfileId}/riunione-periodica/pdf?anno=${queriedYear}`
+                `/api/v1/companies/${companyTenantProfileId}/riunione-periodica/pdf?anno=${queriedYear}&delibereConclusioni=${encodeURIComponent(delibereConclusioni)}`
             );
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -213,6 +242,61 @@ export const RiunionePeriodicaCard: React.FC<RiunionePeriodicaCardProps> = ({
             showToast({ type: 'error', message: 'Errore nel download del PDF' });
         } finally {
             setIsDownloading(false);
+        }
+    };
+
+    const handleOpenDocument = async (file: MdlDocumentFile) => {
+        const blob = await apiDownload(file.url);
+        window.open(URL.createObjectURL(blob), '_blank', 'noopener,noreferrer');
+    };
+
+    const handleUploadFirmato = async () => {
+        if (!uploadFile) {
+            showToast({ type: 'warning', message: 'Seleziona un PDF o una foto firmata' });
+            return;
+        }
+        setIsUploading(true);
+        try {
+            const formData = new FormData();
+            formData.append('documento', uploadFile);
+            formData.append('note', `Verbale riunione periodica ${selectedYear}`);
+            await apiUpload(`/api/v1/companies/${companyTenantProfileId}/mdl-documents/riunione-periodica/upload`, formData);
+            setUploadFile(null);
+            await refetchDocumenti();
+            showToast({ type: 'success', message: 'Verbale firmato caricato' });
+        } catch {
+            showToast({ type: 'error', message: 'Errore durante il caricamento del verbale firmato' });
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
+    const getPreviewPdfUrl = () => (
+        `/api/v1/companies/${companyTenantProfileId}/riunione-periodica/pdf?anno=${queriedYear || selectedYear}&delibereConclusioni=${encodeURIComponent(delibereConclusioni)}`
+    );
+
+    const handleOnlineSign = async ({
+        signatureDataUrl,
+        placement
+    }: {
+        signatureDataUrl: string;
+        placement: SignaturePlacement;
+    }) => {
+        try {
+            setIsUploading(true);
+            await apiPost(`/api/v1/companies/${companyTenantProfileId}/mdl-documents/riunione-periodica/sign`, {
+                signatureImage: signatureDataUrl,
+                placement,
+                anno: queriedYear || selectedYear,
+                delibereConclusioni,
+            });
+            setIsSigning(false);
+            await refetchDocumenti();
+            showToast({ type: 'success', message: 'Verbale firmato e archiviato' });
+        } catch {
+            showToast({ type: 'error', message: 'Errore durante la firma del verbale' });
+        } finally {
+            setIsUploading(false);
         }
     };
 
@@ -320,8 +404,8 @@ export const RiunionePeriodicaCard: React.FC<RiunionePeriodicaCardProps> = ({
 
                     {data && !isLoading && ss && (
                         <>
-                            {/* Header with download button */}
-                            <div className="flex items-center justify-between">
+                                    {/* Header with download button */}
+                            <div className="flex items-center justify-between gap-3">
                                 <div className="flex items-center gap-2">
                                     <Calendar className="h-4 w-4 text-teal-500" />
                                     <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -339,6 +423,19 @@ export const RiunionePeriodicaCard: React.FC<RiunionePeriodicaCardProps> = ({
                                     }
                                     Scarica PDF
                                 </button>
+                            </div>
+
+                            <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800/50">
+                                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300">
+                                    Delibere e Conclusioni
+                                </label>
+                                <textarea
+                                    value={delibereConclusioni}
+                                    onChange={(event) => setDelibereConclusioni(event.target.value)}
+                                    rows={4}
+                                    className="mt-2 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+                                    placeholder="Inserisci il testo da riportare nel verbale..."
+                                />
                             </div>
 
                             {ss.totaleVisite === 0 ? (
@@ -384,6 +481,22 @@ export const RiunionePeriodicaCard: React.FC<RiunionePeriodicaCardProps> = ({
                                             <p className="text-2xl font-bold text-orange-700 dark:text-orange-300">{ss.conLimitazioni}</p>
                                         </div>
                                     </div>
+
+                                    {ss.healthAggregates && (
+                                        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                                            {[
+                                                ['Obesi', ss.healthAggregates.obesi],
+                                                ['Sottopeso', ss.healthAggregates.sottopeso],
+                                                ['Invalidità', ss.healthAggregates.invalidita],
+                                                ['Fumatori', ss.healthAggregates.fumatori],
+                                            ].map(([label, value]) => (
+                                                <div key={String(label)} className="rounded-xl border border-gray-100 bg-white p-3 text-center dark:border-gray-700 dark:bg-gray-900">
+                                                    <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">{label}</p>
+                                                    <p className="mt-1 text-xl font-bold text-gray-800 dark:text-gray-100">{Number(value || 0)}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
 
                                     {/* Partecipanti */}
                                     {allPartecipanti.length > 0 && (
@@ -506,6 +619,65 @@ export const RiunionePeriodicaCard: React.FC<RiunionePeriodicaCardProps> = ({
                                             Il verbale include i dati dell'attività di sorveglianza sanitaria e i risultati anonimi collettivi.
                                         </p>
                                     </div>
+
+                                    <div className="rounded-xl border border-gray-100 p-3 dark:border-gray-700">
+                                        <div className="mb-3 flex items-center justify-between gap-3">
+                                            <div>
+                                                <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Documenti generati / firmati</p>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400">Quick-look, download e upload del verbale firmato.</p>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="file"
+                                                    accept="application/pdf,image/jpeg,image/png"
+                                                    onChange={(event) => setUploadFile(event.target.files?.[0] || null)}
+                                                    className="max-w-[210px] text-xs text-gray-500 file:mr-2 file:rounded-md file:border-0 file:bg-gray-100 file:px-2 file:py-1 file:text-xs file:font-semibold"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setIsSigning(true)}
+                                                    disabled={!queriedYear}
+                                                    className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                                                >
+                                                    <FileText className="h-3.5 w-3.5" />
+                                                    Firma online
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleUploadFirmato}
+                                                    disabled={isUploading || !uploadFile}
+                                                    className="inline-flex items-center gap-1.5 rounded-lg border border-teal-200 px-3 py-1.5 text-xs font-semibold text-teal-700 hover:bg-teal-50 disabled:opacity-50"
+                                                >
+                                                    <Upload className="h-3.5 w-3.5" />
+                                                    Upload firmato
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-2">
+                                            {documenti.length === 0 ? (
+                                                <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400">Nessun documento firmato caricato.</p>
+                                            ) : documenti.map(file => (
+                                                <div key={file.filename} className="flex items-center justify-between gap-3 rounded-lg bg-gray-50 px-3 py-2 text-xs dark:bg-gray-800">
+                                                    <span className="min-w-0 flex-1 truncate text-gray-700 dark:text-gray-200">{file.originalName}</span>
+                                                    <div className="flex items-center gap-1">
+                                                        <button type="button" onClick={() => handleOpenDocument(file)} className="rounded-md p-1.5 text-blue-600 hover:bg-blue-50" title="Quick-look">
+                                                            <Eye className="h-3.5 w-3.5" />
+                                                        </button>
+                                                        <button type="button" onClick={() => apiDownload(file.url).then(blob => {
+                                                            const url = URL.createObjectURL(blob);
+                                                            const a = document.createElement('a');
+                                                            a.href = url;
+                                                            a.download = file.originalName;
+                                                            a.click();
+                                                            URL.revokeObjectURL(url);
+                                                        })} className="rounded-md p-1.5 text-teal-600 hover:bg-teal-50" title="Download">
+                                                            <Download className="h-3.5 w-3.5" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
                                 </>
                             )}
                         </>
@@ -550,6 +722,16 @@ export const RiunionePeriodicaCard: React.FC<RiunionePeriodicaCardProps> = ({
             </div>
 
             {modal}
+            {isSigning && (
+                <SigningWorkflowModal
+                    isOpen={isSigning}
+                    documentId={`riunione-periodica-${companyTenantProfileId}-${queriedYear || selectedYear}`}
+                    documentLabel="Verbale Riunione Periodica"
+                    previewUrl={getPreviewPdfUrl()}
+                    onClose={() => setIsSigning(false)}
+                    onConfirm={({ signatureDataUrl, placement }) => handleOnlineSign({ signatureDataUrl, placement })}
+                />
+            )}
         </>
     );
 };

@@ -23,15 +23,19 @@ import {
     AlertCircle,
     ChevronRight,
     Download,
+    Eye,
     CheckCircle2,
     AlertTriangle,
     Info,
     ClipboardList,
-    Activity
+    Activity,
+    Upload
 } from 'lucide-react';
 import { cn } from '../../design-system/utils';
 import { useToast } from '../../hooks/useToast';
-import { apiGet, apiDownload } from '../../services/api';
+import { apiGet, apiDownload, apiPost, apiUpload } from '../../services/api';
+import SigningWorkflowModal from '../schedules/components/DocumentManager/components/SigningWorkflowModal';
+import type { SignaturePlacement } from '../schedules/components/DocumentManager/components/SigningWorkflowModal';
 import { DatePickerElegante } from '../ui/DatePickerElegante';
 
 // =============================================
@@ -72,12 +76,21 @@ interface RisultatiAnonimiStats {
         normali: number;
         alterati: number;
     }>;
+    healthAggregates?: Record<string, number>;
 }
 
 interface RisultatiAnonimiCardProps {
     companyTenantProfileId: string;
     companyName: string;
     onActionComplete?: () => void;
+}
+
+interface MdlDocumentFile {
+    filename: string;
+    originalName: string;
+    createdAt: string;
+    signedOnline?: boolean;
+    url: string;
 }
 
 // =============================================
@@ -137,6 +150,9 @@ export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
     const [queriedFrom, setQueriedFrom] = useState<string | null>(null);
     const [queriedTo, setQueriedTo] = useState<string | null>(null);
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+    const [uploadFile, setUploadFile] = useState<File | null>(null);
+    const [isUploading, setIsUploading] = useState(false);
+    const [isSigning, setIsSigning] = useState(false);
 
     // =============================================
     // QUERY — fires only when user clicks "Genera"
@@ -154,6 +170,18 @@ export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
         enabled: !!queriedFrom && !!queriedTo,
         retry: false,
         staleTime: 5 * 60 * 1000
+    });
+
+    const { data: documenti = [], refetch: refetchDocumenti } = useQuery<MdlDocumentFile[]>({
+        queryKey: ['company-mdl-documents', companyTenantProfileId, 'risultati-anonimi'],
+        queryFn: async () => {
+            const resp = await apiGet<{ success: boolean; data: MdlDocumentFile[] }>(
+                `/api/v1/companies/${companyTenantProfileId}/mdl-documents/risultati-anonimi/files`
+            );
+            return resp.data || [];
+        },
+        enabled: isModalOpen,
+        staleTime: 60_000
     });
 
     const handleGenera = () => {
@@ -189,6 +217,61 @@ export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
             showToast({ type: 'error', message: 'Errore nella generazione del PDF' });
         } finally {
             setIsGeneratingPdf(false);
+        }
+    };
+
+    const handleOpenDocument = async (file: MdlDocumentFile) => {
+        const blob = await apiDownload(file.url);
+        window.open(URL.createObjectURL(blob), '_blank', 'noopener,noreferrer');
+    };
+
+    const handleUploadFirmato = async () => {
+        if (!uploadFile) {
+            showToast({ type: 'warning', message: 'Seleziona un PDF o una foto firmata' });
+            return;
+        }
+        setIsUploading(true);
+        try {
+            const formData = new FormData();
+            formData.append('documento', uploadFile);
+            formData.append('note', `Risultati anonimi collettivi ${dateFrom} - ${dateTo}`);
+            await apiUpload(`/api/v1/companies/${companyTenantProfileId}/mdl-documents/risultati-anonimi/upload`, formData);
+            setUploadFile(null);
+            await refetchDocumenti();
+            showToast({ type: 'success', message: 'Documento firmato caricato' });
+        } catch {
+            showToast({ type: 'error', message: 'Errore durante il caricamento del documento firmato' });
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
+    const getPreviewPdfUrl = () => (
+        `/api/v1/companies/${companyTenantProfileId}/risultati-anonimi/pdf?dateFrom=${queriedFrom || dateFrom}&dateTo=${queriedTo || dateTo}`
+    );
+
+    const handleOnlineSign = async ({
+        signatureDataUrl,
+        placement
+    }: {
+        signatureDataUrl: string;
+        placement: SignaturePlacement;
+    }) => {
+        try {
+            setIsUploading(true);
+            await apiPost(`/api/v1/companies/${companyTenantProfileId}/mdl-documents/risultati-anonimi/sign`, {
+                signatureImage: signatureDataUrl,
+                placement,
+                dateFrom: queriedFrom || dateFrom,
+                dateTo: queriedTo || dateTo,
+            });
+            setIsSigning(false);
+            await refetchDocumenti();
+            showToast({ type: 'success', message: 'Documento firmato e archiviato' });
+        } catch {
+            showToast({ type: 'error', message: 'Errore durante la firma del documento' });
+        } finally {
+            setIsUploading(false);
         }
     };
 
@@ -391,6 +474,22 @@ export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
                                         </div>
                                     </div>
 
+                                    {stats.healthAggregates && (
+                                        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                                            {[
+                                                ['Obesi', stats.healthAggregates.obesi],
+                                                ['Sottopeso', stats.healthAggregates.sottopeso],
+                                                ['Invalidità', stats.healthAggregates.invalidita],
+                                                ['Fumatori', stats.healthAggregates.fumatori],
+                                            ].map(([label, value]) => (
+                                                <div key={String(label)} className="rounded-xl border border-gray-100 bg-white p-3 text-center dark:border-gray-700 dark:bg-gray-900">
+                                                    <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">{label}</p>
+                                                    <p className="mt-1 text-xl font-bold text-gray-800 dark:text-gray-100">{Number(value || 0)}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
                                     {/* Giudizi idoneità */}
                                     {stats.giudizi.length > 0 && (
                                         <div>
@@ -548,6 +647,65 @@ export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
                                             Non contengono dati personali identificabili dei lavoratori.
                                         </p>
                                     </div>
+
+                                    <div className="rounded-xl border border-gray-100 p-3 dark:border-gray-700">
+                                        <div className="mb-3 flex items-center justify-between gap-3">
+                                            <div>
+                                                <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Documenti generati / firmati</p>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400">Quick-look, download e upload del documento firmato.</p>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="file"
+                                                    accept="application/pdf,image/jpeg,image/png"
+                                                    onChange={(event) => setUploadFile(event.target.files?.[0] || null)}
+                                                    className="max-w-[210px] text-xs text-gray-500 file:mr-2 file:rounded-md file:border-0 file:bg-gray-100 file:px-2 file:py-1 file:text-xs file:font-semibold"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setIsSigning(true)}
+                                                    disabled={!queriedFrom || !queriedTo}
+                                                    className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                                                >
+                                                    <FileText className="h-3.5 w-3.5" />
+                                                    Firma online
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleUploadFirmato}
+                                                    disabled={isUploading || !uploadFile}
+                                                    className="inline-flex items-center gap-1.5 rounded-lg border border-teal-200 px-3 py-1.5 text-xs font-semibold text-teal-700 hover:bg-teal-50 disabled:opacity-50"
+                                                >
+                                                    <Upload className="h-3.5 w-3.5" />
+                                                    Upload firmato
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-2">
+                                            {documenti.length === 0 ? (
+                                                <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400">Nessun documento firmato caricato.</p>
+                                            ) : documenti.map(file => (
+                                                <div key={file.filename} className="flex items-center justify-between gap-3 rounded-lg bg-gray-50 px-3 py-2 text-xs dark:bg-gray-800">
+                                                    <span className="min-w-0 flex-1 truncate text-gray-700 dark:text-gray-200">{file.originalName}</span>
+                                                    <div className="flex items-center gap-1">
+                                                        <button type="button" onClick={() => handleOpenDocument(file)} className="rounded-md p-1.5 text-blue-600 hover:bg-blue-50" title="Quick-look">
+                                                            <Eye className="h-3.5 w-3.5" />
+                                                        </button>
+                                                        <button type="button" onClick={() => apiDownload(file.url).then(blob => {
+                                                            const url = URL.createObjectURL(blob);
+                                                            const a = document.createElement('a');
+                                                            a.href = url;
+                                                            a.download = file.originalName;
+                                                            a.click();
+                                                            URL.revokeObjectURL(url);
+                                                        })} className="rounded-md p-1.5 text-teal-600 hover:bg-teal-50" title="Download">
+                                                            <Download className="h-3.5 w-3.5" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
                                 </>
                             )}
                         </>
@@ -592,6 +750,16 @@ export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
             </div>
 
             {modal}
+            {isSigning && (
+                <SigningWorkflowModal
+                    isOpen={isSigning}
+                    documentId={`risultati-anonimi-${companyTenantProfileId}-${queriedFrom || dateFrom}-${queriedTo || dateTo}`}
+                    documentLabel="Risultati Anonimi Collettivi"
+                    previewUrl={getPreviewPdfUrl()}
+                    onClose={() => setIsSigning(false)}
+                    onConfirm={({ signatureDataUrl, placement }) => handleOnlineSign({ signatureDataUrl, placement })}
+                />
+            )}
         </>
     );
 };

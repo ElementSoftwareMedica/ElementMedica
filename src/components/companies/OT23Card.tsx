@@ -46,6 +46,7 @@ import {
 import { formatDate } from '../../utils/dateUtils';
 import { formatCurrency } from '../../utils/formatters';
 import { cn } from '../../design-system/utils';
+import OT23CreateModal from '../../pages/sicurezza/components/OT23CreateModal';
 
 interface OT23CardProps {
     companyTenantProfileId: string;
@@ -112,6 +113,7 @@ const OT23Card: React.FC<OT23CardProps> = ({
     const [expanded, setExpanded] = useState(false);
     const [downloadingId, setDownloadingId] = useState<string | null>(null);
     const [calculatingRisparmio, setCalculatingRisparmio] = useState(false);
+    const [createModalOpen, setCreateModalOpen] = useState(false);
     const [risparmioStimato, setRisparmioStimato] = useState<{
         percentualeRiduzione: number;
         risparmioAnnuale: number;
@@ -195,7 +197,7 @@ const OT23Card: React.FC<OT23CardProps> = ({
 
     // Crea nuova domanda per anno corrente
     const handleCreateNew = () => {
-        navigate(`/sicurezza/ot23/nuovo?companyId=${companyTenantProfileId}`);
+        setCreateModalOpen(true);
     };
 
     // Rendering stato badge
@@ -224,6 +226,7 @@ const OT23Card: React.FC<OT23CardProps> = ({
     }
 
     return (
+        <>
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm dark:shadow-black/30 overflow-hidden">
             {/* Header */}
             <div
@@ -473,6 +476,19 @@ const OT23Card: React.FC<OT23CardProps> = ({
                 </div>
             )}
         </div>
+        {createModalOpen && (
+            <OT23CreateModal
+                isOpen={createModalOpen}
+                onClose={() => setCreateModalOpen(false)}
+                onSuccess={() => {
+                    setCreateModalOpen(false);
+                    onActionComplete?.();
+                }}
+                defaultAnno={currentYear}
+                preselectedCompanyProfileId={companyTenantProfileId}
+            />
+        )}
+        </>
     );
 };
 

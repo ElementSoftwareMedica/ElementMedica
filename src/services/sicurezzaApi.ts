@@ -33,6 +33,7 @@ export interface OT23Intervento {
     codice: string;
     descrizione: string;
     punteggio: number;
+    sezione?: 'A' | 'B' | 'C' | 'D' | 'E' | 'F';
     categoria?: string;
     documentazione?: string[];
     note?: string;
@@ -98,14 +99,27 @@ export interface OT23CatalogoIntervento {
     codice: string;
     descrizione: string;
     punteggio: number;
+    sezione?: 'A' | 'B' | 'C' | 'D' | 'E' | 'F';
     categoria?: string;
     documentazione?: string[];
     note?: string;
 }
 
 export interface OT23Catalogo {
+    annoModello?: number;
+    regolaAmmissibilita?: string;
+    sezioni?: Array<{
+        codice: 'A' | 'B' | 'C' | 'D' | 'E' | 'F';
+        titolo: string;
+        requisito: string;
+        interventi: OT23CatalogoIntervento[];
+    }>;
     sezioneA: OT23CatalogoIntervento[];
     sezioneB: {
+        rischioStradale?: OT23CatalogoIntervento[];
+        malattieProfessionali?: OT23CatalogoIntervento[];
+        formazioneInformazione?: OT23CatalogoIntervento[];
+        emergenzeDpi?: OT23CatalogoIntervento[];
         organizzative: OT23CatalogoIntervento[];
         tecniche: OT23CatalogoIntervento[];
         formazione: OT23CatalogoIntervento[];
@@ -247,7 +261,7 @@ export const ot23Api = {
      * Aggiunge un intervento alla domanda
      * P51: Supporta headers opzionali per multi-tenant
      */
-    async addIntervento(id: string, sezione: 'A' | 'B', intervento: OT23CatalogoIntervento, options?: ApiOptions): Promise<OT23> {
+    async addIntervento(id: string, sezione: 'A' | 'B' | 'C' | 'D' | 'E' | 'F', intervento: OT23CatalogoIntervento, options?: ApiOptions): Promise<OT23> {
         const response = await apiPost<ApiResponse<OT23>>(`${SICUREZZA_BASE}/ot23/${id}/interventi`, {
             sezione,
             intervento
@@ -259,7 +273,7 @@ export const ot23Api = {
      * Rimuove un intervento dalla domanda
      * P51: Supporta headers opzionali per multi-tenant
      */
-    async removeIntervento(id: string, sezione: 'A' | 'B', codice: string, options?: ApiOptions): Promise<OT23> {
+    async removeIntervento(id: string, sezione: 'A' | 'B' | 'C' | 'D' | 'E' | 'F', codice: string, options?: ApiOptions): Promise<OT23> {
         const response = await apiDelete<ApiResponse<OT23>>(`${SICUREZZA_BASE}/ot23/${id}/interventi/${codice}?sezione=${sezione}`, options);
         return response.data;
     },

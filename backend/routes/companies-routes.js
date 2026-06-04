@@ -25,7 +25,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const BACKEND_ROOT = path.resolve(__dirname, '..');
 const COMPANY_MDL_UPLOAD_ROOT = path.resolve(BACKEND_ROOT, 'uploads', 'company-mdl-documents');
-const MDL_DOCUMENT_TYPES = new Set(['nomine', 'tariffario']);
+const MDL_DOCUMENT_TYPES = new Set(['nomine', 'tariffario', 'riunione-periodica', 'risultati-anonimi']);
 
 function escapeHtml(value = '') {
   return String(value)
@@ -981,6 +981,15 @@ router.post('/:id/mdl-documents/:documentType/sign',
       let buffer;
       if (documentType === 'nomine') {
         buffer = await generateNominePdfBuffer(profile);
+      } else if (documentType === 'riunione-periodica') {
+        const anno = parseInt(String(req.body?.anno || new Date().getFullYear()), 10);
+        buffer = await RiunioniPeriodicheService.generatePdf(profile.id, anno, tenantId, {
+          delibereConclusioni: String(req.body?.delibereConclusioni || '').slice(0, 5000)
+        });
+      } else if (documentType === 'risultati-anonimi') {
+        const dateFrom = String(req.body?.dateFrom || `${new Date().getFullYear() - 1}-01-01`);
+        const dateTo = String(req.body?.dateTo || `${new Date().getFullYear() - 1}-12-31`);
+        buffer = await RisultatiAnonimiService.generatePdf(profile.id, dateFrom, dateTo, tenantId);
       } else {
         const html = `
           <!doctype html>
@@ -2830,7 +2839,8 @@ router.get('/:companyTenantProfileId/riunione-periodica/pdf',
       const pdfBuffer = await RiunioniPeriodicheService.generatePdf(
         companyTenantProfileId,
         annoNum,
-        tenantId
+        tenantId,
+        { delibereConclusioni: String(req.query.delibereConclusioni || '').slice(0, 5000) }
       );
 
       res.setHeader('Content-Type', 'application/pdf');

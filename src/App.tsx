@@ -742,6 +742,13 @@ function App() {
                       </Suspense>
                     </Layout>
                   } />
+                  <Route path="nuovo" element={
+                    <Layout>
+                      <Suspense fallback={<LoadingFallback />}>
+                        <OT23PageLazy />
+                      </Suspense>
+                    </Layout>
+                  } />
                   <Route path=":id" element={
                     <Layout>
                       <Suspense fallback={<LoadingFallback />}>

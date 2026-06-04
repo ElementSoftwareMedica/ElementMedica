@@ -81,6 +81,15 @@ function resolveFirstValidLogo(...paths) {
     return '';
 }
 
+function escapeHtml(value = '') {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
 // =============================================
 // LABELS
 // =============================================
@@ -117,6 +126,36 @@ const TIPO_ESAME_LABELS = {
     RX_TORACE: 'RX Torace',
     ALTRO: 'Altro',
 };
+
+function buildHealthAggregates(profili = []) {
+    const stats = {
+        bmiDisponibili: 0,
+        sottopeso: 0,
+        normopeso: 0,
+        sovrappeso: 0,
+        obesi: 0,
+        invalidita: 0,
+        legge104: 0,
+        fumatori: 0,
+        sedentarieta: 0
+    };
+
+    for (const profilo of profili) {
+        const bmi = Number(profilo.bmi);
+        if (Number.isFinite(bmi) && bmi > 0) {
+            stats.bmiDisponibili++;
+            if (bmi < 18.5) stats.sottopeso++;
+            else if (bmi < 25) stats.normopeso++;
+            else if (bmi < 30) stats.sovrappeso++;
+            else stats.obesi++;
+        }
+        if (profilo.hasInvalidita || profilo.gradoInvaliditaCivile || profilo.gradoInvaliditaInail || profilo.gradoInvaliditaInps) stats.invalidita++;
+        if (profilo.legge104) stats.legge104++;
+        if (String(profilo.fumatore || '').toUpperCase().includes('SI')) stats.fumatori++;
+        if (['NESSUNA', 'SEDENTARIO', 'SEDENTARIA'].includes(String(profilo.attivitaFisica || '').toUpperCase())) stats.sedentarieta++;
+    }
+    return stats;
+}
 
 // =============================================
 // SERVICE
@@ -244,6 +283,23 @@ const RiunioniPeriodicheService = {
         // Lavoratori distinti
         const lavoratoriDistintiSet = new Set(visite.map(v => v.pazienteId));
         const lavoratoriDistinti = lavoratoriDistintiSet.size;
+        const profiliSalute = lavoratoriDistintiSet.size > 0 ? await prisma.profiloDiSalutePersona.findMany({
+            where: {
+                tenantId,
+                personId: { in: Array.from(lavoratoriDistintiSet).filter(Boolean) }
+            },
+            select: {
+                bmi: true,
+                hasInvalidita: true,
+                legge104: true,
+                fumatore: true,
+                attivitaFisica: true,
+                gradoInvaliditaCivile: true,
+                gradoInvaliditaInail: true,
+                gradoInvaliditaInps: true
+            }
+        }) : [];
+        const healthAggregates = buildHealthAggregates(profiliSalute);
 
         // Tipi di visita
         const tipiVisitaMap = {};
@@ -381,6 +437,7 @@ const RiunioniPeriodicheService = {
                 conLimitazioni,
                 esamiAggregati,
                 prestazioniEseguite,
+                healthAggregates,
             },
             partecipanti,
             protocolliSanitari: protocolli.map(p => ({
@@ -403,7 +460,7 @@ const RiunioniPeriodicheService = {
     /**
      * Genera il PDF del verbale della riunione periodica.
      */
-    async generatePdf(companyTenantProfileId, annoRiferimento, tenantId) {
+    async generatePdf(companyTenantProfileId, annoRiferimento, tenantId, options = {}) {
         const data = await this.getAggregateData(companyTenantProfileId, annoRiferimento, tenantId);
 
         // Load tenant info for header
@@ -434,7 +491,7 @@ const RiunioniPeriodicheService = {
 
         const html = buildVerbaleHtml(data, {
             tenantName, logoUrl, tenantAddress, tenantPhone, tenantEmail, tenantPiva, tenantPec,
-            mcName, today
+            mcName, today, delibereConclusioni: options.delibereConclusioni || ''
         });
 
         const pdfBuffer = await pdfService.generatePDF(html, {
@@ -451,7 +508,7 @@ const RiunioniPeriodicheService = {
 // =============================================
 
 function buildVerbaleHtml(data, opts) {
-    const { tenantName, logoUrl, tenantAddress, tenantPhone, tenantEmail, tenantPiva, tenantPec, mcName, today } = opts;
+    const { tenantName, logoUrl, tenantAddress, tenantPhone, tenantEmail, tenantPiva, tenantPec, mcName, today, delibereConclusioni } = opts;
     const az = data.azienda;
     const ss = data.sorveglianzaSanitaria;
 
@@ -521,6 +578,17 @@ function buildVerbaleHtml(data, opts) {
             <td style="text-align:center;">${p.periodicitaMesi ? p.periodicitaMesi + ' mesi' : '-'}</td>
         </tr>
     `).join('');
+    const health = ss.healthAggregates || {};
+    const healthRows = [
+        ['BMI disponibili', health.bmiDisponibili],
+        ['Sottopeso', health.sottopeso],
+        ['Sovrappeso', health.sovrappeso],
+        ['Obesi', health.obesi],
+        ['Invalidità registrata', health.invalidita],
+        ['Legge 104', health.legge104],
+        ['Fumatori', health.fumatori],
+        ['Sedentarietà dichiarata', health.sedentarieta],
+    ].map(([label, value]) => `<tr><td>${label}</td><td style="text-align:center;font-weight:600;">${value || 0}</td></tr>`).join('');
 
     // Sedi
     const sediList = az.sedi.map(s => `<li>${s.siteName} — ${s.indirizzo || ''}, ${s.citta || ''}</li>`).join('');
@@ -722,6 +790,15 @@ ${data.protocolliSanitari.length > 0 ? `
     </table>
 </div>` : ''}
 
+<!-- INDICATORI SANITARI AGGREGATI -->
+<div class="section">
+    <div class="section-title">&#x1F4CA; Indicatori Sanitari Aggregati</div>
+    <table>
+        <thead><tr><th>Indicatore</th><th style="text-align:center;">N°</th></tr></thead>
+        <tbody>${healthRows}</tbody>
+    </table>
+</div>
+
 <!-- ORDINE DEL GIORNO Art. 35 -->
 <div class="section">
     <div class="section-title">&#x1F4DD; Ordine del Giorno (Art. 35 c.2 D.Lgs 81/08)</div>
@@ -739,7 +816,7 @@ ${data.protocolliSanitari.length > 0 ? `
 <div class="section">
     <div class="section-title">&#x1F4DC; Delibere e Conclusioni</div>
     <div class="company-box" style="min-height:60px;">
-        <p style="font-size:8.5pt;color:#94a3b8;">Spazio per annotare le delibere adottate durante la riunione.</p>
+        <p style="font-size:8.5pt;color:#1e293b;white-space:pre-line;">${delibereConclusioni ? escapeHtml(delibereConclusioni) : 'Spazio per annotare le delibere adottate durante la riunione.'}</p>
     </div>
 </div>
 

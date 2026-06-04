@@ -93,6 +93,36 @@ const TIPO_ESAME_LABELS = {
     ALTRO: 'Altro',
 };
 
+function buildHealthAggregates(profili = []) {
+    const stats = {
+        bmiDisponibili: 0,
+        sottopeso: 0,
+        normopeso: 0,
+        sovrappeso: 0,
+        obesi: 0,
+        invalidita: 0,
+        legge104: 0,
+        fumatori: 0,
+        sedentarieta: 0
+    };
+
+    for (const profilo of profili) {
+        const bmi = Number(profilo.bmi);
+        if (Number.isFinite(bmi) && bmi > 0) {
+            stats.bmiDisponibili++;
+            if (bmi < 18.5) stats.sottopeso++;
+            else if (bmi < 25) stats.normopeso++;
+            else if (bmi < 30) stats.sovrappeso++;
+            else stats.obesi++;
+        }
+        if (profilo.hasInvalidita || profilo.gradoInvaliditaCivile || profilo.gradoInvaliditaInail || profilo.gradoInvaliditaInps) stats.invalidita++;
+        if (profilo.legge104) stats.legge104++;
+        if (String(profilo.fumatore || '').toUpperCase().includes('SI')) stats.fumatori++;
+        if (['NESSUNA', 'SEDENTARIO', 'SEDENTARIA'].includes(String(profilo.attivitaFisica || '').toUpperCase())) stats.sedentarieta++;
+    }
+    return stats;
+}
+
 // =============================================
 // SERVICE
 // =============================================
@@ -167,7 +197,8 @@ const RisultatiAnonimiService = {
                 tipiVisita: [],
                 giudizi: [],
                 prestazioniEseguite: [],
-                giudiziRegistratiPercentuale: 0
+                giudiziRegistratiPercentuale: 0,
+                healthAggregates: buildHealthAggregates([])
             };
         }
 
@@ -189,6 +220,23 @@ const RisultatiAnonimiService = {
             }
         });
         const lavoratoriDistinti = distinctPazienti.length;
+        const profiliSalute = distinctPazienti.length > 0 ? await prisma.profiloDiSalutePersona.findMany({
+            where: {
+                tenantId,
+                personId: { in: distinctPazienti.map(p => p.pazienteId).filter(Boolean) }
+            },
+            select: {
+                bmi: true,
+                hasInvalidita: true,
+                legge104: true,
+                fumatore: true,
+                attivitaFisica: true,
+                gradoInvaliditaCivile: true,
+                gradoInvaliditaInail: true,
+                gradoInvaliditaInps: true
+            }
+        }) : [];
+        const healthAggregates = buildHealthAggregates(profiliSalute);
 
         // 3. Tipi di visita aggregati
         const tipiVisitaMap = {};
@@ -301,7 +349,8 @@ const RisultatiAnonimiService = {
             tipiVisita,
             giudizi,
             prestazioniEseguite,
-            esamiAggregati
+            esamiAggregati,
+            healthAggregates
         };
     },
 
@@ -372,6 +421,17 @@ function buildRisultatiAnonimiHtml(data, opts) {
     const esamiRows = (data.esamiAggregati || []).map(e => `
         <tr><td>${e.label}</td><td style="text-align:center;font-weight:600;">${e.eseguiti}</td><td style="text-align:center;">${e.normali || '-'}</td><td style="text-align:center;">${e.alterati || '-'}</td></tr>
     `).join('');
+    const health = data.healthAggregates || {};
+    const healthRows = [
+        ['BMI disponibili', health.bmiDisponibili],
+        ['Sottopeso', health.sottopeso],
+        ['Sovrappeso', health.sovrappeso],
+        ['Obesi', health.obesi],
+        ['Invalidità registrata', health.invalidita],
+        ['Legge 104', health.legge104],
+        ['Fumatori', health.fumatori],
+        ['Sedentarietà dichiarata', health.sedentarieta],
+    ].map(([label, value]) => `<tr><td>${label}</td><td style="text-align:center;font-weight:600;">${value || 0}</td></tr>`).join('');
 
     return `<!DOCTYPE html>
 <html lang="it">
@@ -463,6 +523,14 @@ ${data.giudizi.length > 0 ? `
             <tbody>${esamiRows}</tbody>
         </table>
     </div>` : ''}
+</div>
+
+<div class="section">
+    <div class="section-title">Indicatori sanitari aggregati</div>
+    <table>
+        <thead><tr><th>Indicatore</th><th style="text-align:center;">N°</th></tr></thead>
+        <tbody>${healthRows}</tbody>
+    </table>
 </div>
 
 ${data.prestazioniEseguite.length > 0 ? `

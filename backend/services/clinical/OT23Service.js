@@ -238,7 +238,94 @@ export const TABELLA_RIDUZIONI = [
     { da: 201, a: Infinity, percentuale: 5, label: 'Grande (201+)' }
 ];
 
+export const SEZIONI_OT23_2026 = [
+    {
+        codice: 'A',
+        titolo: 'Prevenzione degli infortuni mortali',
+        requisito: 'Un intervento di sezione A è sufficiente per il requisito OT23 2026.',
+        interventi: [
+            { codice: 'A-1.1', descrizione: 'Interventi per la prevenzione del rischio di caduta dall’alto', categoria: 'INFORTUNI_MORTALI', documentazione: ['Relazione tecnica', 'Evidenze fotografiche', 'Fatture o verbali di installazione'] },
+            { codice: 'A-2.1', descrizione: 'Interventi per la prevenzione del rischio di seppellimento/sprofondamento', categoria: 'INFORTUNI_MORTALI', documentazione: ['DVR aggiornato', 'Procedure operative', 'Documentazione tecnica'] },
+            { codice: 'A-3.1', descrizione: 'Interventi per la prevenzione del rischio elettrico', categoria: 'INFORTUNI_MORTALI', documentazione: ['Dichiarazioni di conformità', 'Verbali verifiche', 'Registro manutenzioni'] },
+            { codice: 'A-4.1', descrizione: 'Interventi per la prevenzione di incendi/esplosioni', categoria: 'INFORTUNI_MORTALI', documentazione: ['Valutazione rischio incendio/esplosione', 'Certificazioni impianti', 'Verbali prove'] }
+        ]
+    },
+    {
+        codice: 'B',
+        titolo: 'Prevenzione del rischio stradale',
+        requisito: 'Concorre al requisito se combinato con almeno un altro intervento B-F.',
+        interventi: [
+            { codice: 'B-1.1', descrizione: 'Corso di guida sicura per lavoratori che usano veicoli aziendali', categoria: 'RISCHIO_STRADALE', documentazione: ['Programma corso', 'Registro presenze', 'Attestati'] },
+            { codice: 'B-2.1', descrizione: 'Sistemi di monitoraggio e assistenza alla guida sui mezzi aziendali', categoria: 'RISCHIO_STRADALE', documentazione: ['Schede tecniche', 'Contratti/installazioni', 'Report uso'] },
+            { codice: 'B-3.1', descrizione: 'Piano di mobilità sicura casa-lavoro e lavoro-lavoro', categoria: 'RISCHIO_STRADALE', documentazione: ['Piano mobilità', 'Comunicazioni ai lavoratori', 'Monitoraggio attuazione'] }
+        ]
+    },
+    {
+        codice: 'C',
+        titolo: 'Prevenzione delle malattie professionali',
+        requisito: 'Concorre al requisito se combinato con almeno un altro intervento B-F.',
+        interventi: [
+            { codice: 'C-1.1', descrizione: 'Riduzione dell’esposizione ad agenti chimici, cancerogeni o mutageni', categoria: 'MALATTIE_PROFESSIONALI', documentazione: ['Valutazione esposizione', 'Misure ambientali', 'Procedure aggiornate'] },
+            { codice: 'C-2.1', descrizione: 'Riduzione del rischio da sovraccarico biomeccanico', categoria: 'MALATTIE_PROFESSIONALI', documentazione: ['Valutazione ergonomica', 'Evidenze attrezzature', 'Formazione/addestramento'] },
+            { codice: 'C-3.1', descrizione: 'Riduzione esposizione a rumore o vibrazioni', categoria: 'MALATTIE_PROFESSIONALI', documentazione: ['Misurazioni strumentali', 'Schede DPI/attrezzature', 'Piano miglioramento'] },
+            { codice: 'C-4.1', descrizione: 'Programmi di promozione della salute e prevenzione cardiovascolare/metabolica', categoria: 'MALATTIE_PROFESSIONALI', documentazione: ['Programma sanitario', 'Materiali informativi', 'Report aggregati anonimi'] }
+        ]
+    },
+    {
+        codice: 'D',
+        titolo: 'Formazione, addestramento, informazione',
+        requisito: 'Concorre al requisito se combinato con almeno un altro intervento B-F.',
+        interventi: [
+            { codice: 'D-1.1', descrizione: 'Formazione aggiuntiva rispetto agli obblighi normativi', categoria: 'FORMAZIONE', documentazione: ['Piano formativo', 'Registri presenze', 'Attestati'] },
+            { codice: 'D-2.1', descrizione: 'Addestramento pratico documentato su attrezzature e procedure critiche', categoria: 'FORMAZIONE', documentazione: ['Procedure', 'Verbali addestramento', 'Valutazioni apprendimento'] },
+            { codice: 'D-3.1', descrizione: 'Campagne informative strutturate su salute e sicurezza', categoria: 'FORMAZIONE', documentazione: ['Materiali campagna', 'Calendario attività', 'Evidenze diffusione'] }
+        ]
+    },
+    {
+        codice: 'E',
+        titolo: 'Misure organizzative per la gestione della salute e sicurezza',
+        requisito: 'Concorre al requisito se combinato con almeno un altro intervento B-F.',
+        interventi: [
+            { codice: 'E-1.1', descrizione: 'Sistema di gestione UNI EN ISO 45001 certificato o mantenuto', categoria: 'ORGANIZZATIVE', documentazione: ['Certificato in corso di validità', 'Audit', 'Riesame direzione'] },
+            { codice: 'E-2.1', descrizione: 'Modello organizzativo ex art. 30 D.Lgs 81/08', categoria: 'ORGANIZZATIVE', documentazione: ['Modello adottato', 'Verbale approvazione', 'Sistema disciplinare'] },
+            { codice: 'E-3.1', descrizione: 'Sistema strutturato di segnalazione near miss e miglioramenti', categoria: 'ORGANIZZATIVE', documentazione: ['Procedura', 'Registro segnalazioni', 'Azioni correttive'] },
+            { codice: 'E-4.1', descrizione: 'Audit periodici interni con piano di miglioramento verificato', categoria: 'ORGANIZZATIVE', documentazione: ['Report audit', 'Piano azioni', 'Verifica chiusura'] }
+        ]
+    },
+    {
+        codice: 'F',
+        titolo: 'Gestione emergenze e DPI',
+        requisito: 'Concorre al requisito se combinato con almeno un altro intervento B-F.',
+        interventi: [
+            { codice: 'F-1.1', descrizione: 'Piano emergenze con esercitazioni aggiuntive documentate', categoria: 'EMERGENZE_DPI', documentazione: ['Piano emergenza', 'Verbali prove', 'Azioni migliorative'] },
+            { codice: 'F-2.1', descrizione: 'DPI o dispositivi collettivi superiori agli obblighi minimi', categoria: 'EMERGENZE_DPI', documentazione: ['Schede tecniche', 'Consegna DPI', 'Valutazione efficacia'] },
+            { codice: 'F-3.1', descrizione: 'DAE con formazione BLSD e manutenzione documentata', categoria: 'EMERGENZE_DPI', documentazione: ['Registro DAE', 'Attestati BLSD', 'Contratto manutenzione'] }
+        ]
+    }
+].map(section => ({
+    ...section,
+    interventi: section.interventi.map(intervento => ({
+        ...intervento,
+        sezione: section.codice,
+        punteggio: section.codice === 'A' ? 100 : 50
+    }))
+}));
+
 class OT23Service {
+    static getAllInterventi(interventiA = [], interventiB = []) {
+        return [
+            ...(Array.isArray(interventiA) ? interventiA.map(i => ({ ...i, sezione: i.sezione || 'A' })) : []),
+            ...(Array.isArray(interventiB) ? interventiB.map(i => ({ ...i, sezione: i.sezione || 'B' })) : [])
+        ];
+    }
+
+    static hasRequisitiBeneficio(interventiA = [], interventiB = []) {
+        const all = this.getAllInterventi(interventiA, interventiB);
+        const hasA = all.some(i => String(i.sezione || i.codice?.charAt(0)).toUpperCase() === 'A');
+        const countBF = all.filter(i => ['B', 'C', 'D', 'E', 'F'].includes(String(i.sezione || i.codice?.charAt(0)).toUpperCase())).length;
+        return hasA || countBF >= 2;
+    }
+
     /**
      * Lista tutte le domande OT23 con filtri
      */
@@ -337,7 +424,7 @@ class OT23Service {
 
         // Ottieni dati azienda per calcolare riduzione
         const profile = await prisma.companyTenantProfile.findFirst({
-            where: { id: companyTenantProfileId, deletedAt: null },
+            where: { id: companyTenantProfileId, tenantId, deletedAt: null },
             include: {
                 company: true,
                 // Conta dipendenti per dimensione azienda
@@ -396,7 +483,7 @@ class OT23Service {
             updateData.punteggioSezioneA = this.calcolaPunteggioSezione(interventiA);
             updateData.punteggioSezioneB = this.calcolaPunteggioSezione(interventiB);
             updateData.punteggioTotale = updateData.punteggioSezioneA + updateData.punteggioSezioneB;
-            updateData.haRequisitiBeneficio = updateData.punteggioTotale >= 100;
+            updateData.haRequisitiBeneficio = this.hasRequisitiBeneficio(interventiA, interventiB);
         }
 
         // Calcola risparmio se aggiornato premio
@@ -425,7 +512,8 @@ class OT23Service {
             throw new Error('Domanda OT23 non trovata');
         }
 
-        const field = sezione === 'A' ? 'interventiA' : 'interventiB';
+        const normalizedSection = String(sezione || intervento.sezione || '').toUpperCase();
+        const field = normalizedSection === 'A' ? 'interventiA' : 'interventiB';
         const interventi = domanda[field] || [];
 
         // Verifica non duplicato
@@ -435,15 +523,16 @@ class OT23Service {
 
         interventi.push({
             ...intervento,
+            sezione: normalizedSection || intervento.sezione || (field === 'interventiA' ? 'A' : 'B'),
             dataAggiunta: new Date().toISOString(),
             documentiCaricati: []
         });
 
         // Ricalcola punteggi
-        const punteggioSezioneA = sezione === 'A'
+        const punteggioSezioneA = field === 'interventiA'
             ? this.calcolaPunteggioSezione(interventi)
             : domanda.punteggioSezioneA;
-        const punteggioSezioneB = sezione === 'B'
+        const punteggioSezioneB = field === 'interventiB'
             ? this.calcolaPunteggioSezione(interventi)
             : domanda.punteggioSezioneB;
         const punteggioTotale = punteggioSezioneA + punteggioSezioneB;
@@ -455,7 +544,10 @@ class OT23Service {
                 punteggioSezioneA,
                 punteggioSezioneB,
                 punteggioTotale,
-                haRequisitiBeneficio: punteggioTotale >= 100
+                haRequisitiBeneficio: this.hasRequisitiBeneficio(
+                    field === 'interventiA' ? interventi : domanda.interventiA,
+                    field === 'interventiB' ? interventi : domanda.interventiB
+                )
             }
         });
     }
@@ -488,7 +580,10 @@ class OT23Service {
                 punteggioSezioneA,
                 punteggioSezioneB,
                 punteggioTotale,
-                haRequisitiBeneficio: punteggioTotale >= 100
+                haRequisitiBeneficio: this.hasRequisitiBeneficio(
+                    sezione === 'A' ? interventi : domanda.interventiA,
+                    sezione === 'B' ? interventi : domanda.interventiB
+                )
             }
         });
     }
@@ -602,7 +697,14 @@ class OT23Service {
 
         const company = domanda.companyTenantProfile?.company;
 
-        // Genera XML semplificato (in produzione: usare schema XSD INAIL)
+        const interventi = this.getAllInterventi(domanda.interventiA, domanda.interventiB);
+        const interventiXml = interventi.map(i => `
+            <Intervento sezione="${escapeXml(i.sezione || '')}" codice="${escapeXml(i.codice)}" categoria="${escapeXml(i.categoria || '')}">
+                <Descrizione>${escapeXml(i.descrizione)}</Descrizione>
+                <Documentazione>${(i.documentazione || []).map(d => `<Documento>${escapeXml(d)}</Documento>`).join('')}</Documentazione>
+            </Intervento>`).join('');
+
+        // XML strutturato per precompilazione interna; l'invio resta tramite servizio telematico INAIL.
         const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <DomandaOT23 xmlns="http://inail.it/ot23">
     <Intestazione>
@@ -616,21 +718,12 @@ class OT23Service {
         <CodiceFiscale>${company?.codiceFiscale || ''}</CodiceFiscale>
     </DatiAzienda>
     <Interventi>
-        <SezioneA Punteggio="${domanda.punteggioSezioneA}">
-            ${(domanda.interventiA || []).map(i => `
-            <Intervento Codice="${i.codice}" Punteggio="${i.punteggio}">
-                <Descrizione>${i.descrizione}</Descrizione>
-            </Intervento>`).join('')}
-        </SezioneA>
-        <SezioneB Punteggio="${domanda.punteggioSezioneB}">
-            ${(domanda.interventiB || []).map(i => `
-            <Intervento Codice="${i.codice}" Punteggio="${i.punteggio}">
-                <Descrizione>${i.descrizione}</Descrizione>
-            </Intervento>`).join('')}
-        </SezioneB>
+        ${interventiXml}
     </Interventi>
     <Riepilogo>
-        <PunteggioTotale>${domanda.punteggioTotale}</PunteggioTotale>
+        <RegolaAmmissibilita>Almeno un intervento sezione A oppure almeno due interventi sezioni B-F</RegolaAmmissibilita>
+        <InterventiSezioneA>${(domanda.interventiA || []).length}</InterventiSezioneA>
+        <InterventiSezioniBF>${(domanda.interventiB || []).length}</InterventiSezioniBF>
         <RequisitiBeneficio>${domanda.haRequisitiBeneficio ? 'SI' : 'NO'}</RequisitiBeneficio>
         <PercentualeRiduzione>${domanda.percentualeRiduzione}%</PercentualeRiduzione>
         <RisparmioStimato>${domanda.risparmioStimato || 0} EUR</RisparmioStimato>
@@ -680,20 +773,37 @@ class OT23Service {
      * Ottiene catalogo interventi disponibili
      */
     static getCatalogoInterventi() {
+        const byCode = Object.fromEntries(SEZIONI_OT23_2026.map(section => [section.codice, section.interventi]));
         return {
-            sezioneA: INTERVENTI_SEZIONE_A,
+            annoModello: 2026,
+            regolaAmmissibilita: 'Almeno un intervento sezione A oppure almeno due interventi sezioni B-F.',
+            sezioni: SEZIONI_OT23_2026,
+            sezioneA: byCode.A || [],
             sezioneB: {
-                organizzative: INTERVENTI_SEZIONE_B.B1_ORGANIZZATIVE,
-                tecniche: INTERVENTI_SEZIONE_B.B2_TECNICHE,
-                formazione: INTERVENTI_SEZIONE_B.B3_FORMAZIONE,
-                sorveglianza: INTERVENTI_SEZIONE_B.B4_SORVEGLIANZA,
-                emergenze: INTERVENTI_SEZIONE_B.B5_EMERGENZE,
-                altro: INTERVENTI_SEZIONE_B.B6_ALTRO
+                rischioStradale: byCode.B || [],
+                malattieProfessionali: byCode.C || [],
+                formazioneInformazione: byCode.D || [],
+                organizzative: byCode.E || [],
+                emergenzeDpi: byCode.F || [],
+                tecniche: [],
+                formazione: byCode.D || [],
+                sorveglianza: byCode.C || [],
+                emergenze: byCode.F || [],
+                altro: []
             },
             tabellaRiduzioni: TABELLA_RIDUZIONI,
-            puntiMinimiBeneficio: 100
+            puntiMinimiBeneficio: null
         };
     }
+}
+
+function escapeXml(value = '') {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
 }
 
 export default OT23Service;
