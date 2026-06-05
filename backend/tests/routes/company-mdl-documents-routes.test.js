@@ -20,6 +20,9 @@ const mockPrisma = {
   },
   activityLog: {
     create: jest.fn()
+  },
+  gdprAuditLog: {
+    create: jest.fn()
   }
 };
 
@@ -113,6 +116,8 @@ describe('company MDL document routes', () => {
       scanStatus: 'GENERATED',
       createdAt: '2026-06-05T08:00:00.000Z'
     }));
+    mockPrisma.activityLog.create.mockResolvedValue({});
+    mockPrisma.gdprAuditLog.create.mockResolvedValue({});
   });
 
   afterAll(() => {
@@ -177,5 +182,21 @@ describe('company MDL document routes', () => {
     expect(response.headers['x-content-type-options']).toBe('nosniff');
     expect(response.headers['x-document-sha256']).toBe('hash-atteso');
     expect(Buffer.from(response.body).toString('utf8')).toContain('%PDF-1.4');
+    expect(mockPrisma.gdprAuditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        personId: 'person-a',
+        tenantId: 'tenant-a',
+        action: 'DOWNLOAD',
+        resourceType: 'CompanyMdlDocument',
+        resourceId: 'profile-a',
+        dataAccessed: expect.objectContaining({
+          documentType: 'riunione-periodica',
+          filename: 'verbale.pdf',
+          originalName: 'Verbale.pdf',
+          sha256: 'hash-atteso',
+          scanStatus: 'GENERATED'
+        })
+      })
+    });
   });
 });

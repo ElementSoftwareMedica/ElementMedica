@@ -132,6 +132,40 @@ function archiveMdlDocumentBuffer({
   return storedName;
 }
 
+async function logCompanyMdlDocumentAudit(req, {
+  tenantId,
+  action,
+  profileId,
+  documentType,
+  filename = null,
+  originalName = null,
+  sha256 = null,
+  sourceSha256 = null,
+  scanStatus = null,
+  extra = {}
+}) {
+  await prisma.gdprAuditLog.create({
+    data: {
+      personId: req.person?.id || null,
+      tenantId,
+      action,
+      resourceType: 'CompanyMdlDocument',
+      resourceId: profileId,
+      dataAccessed: {
+        documentType,
+        filename,
+        originalName,
+        sha256,
+        sourceSha256,
+        scanStatus,
+        ...extra
+      },
+      ipAddress: req.ip || null,
+      userAgent: req.get?.('user-agent') || null
+    }
+  }).catch(err => logger.warn('GdprAuditLog documento MDL non salvato', { error: err.message, action, documentType }));
+}
+
 function resolveTenantLogo(profile) {
   const settings = profile?.tenant?.settings || {};
   return settings?.branches?.MEDICA?.logo || settings?.branches?.MDL?.logo || settings?.logoUrl || settings?.logo || '';
@@ -936,6 +970,17 @@ router.get('/:id/mdl-documents/:documentType/files/:filename',
 
       res.setHeader('X-Content-Type-Options', 'nosniff');
       if (metadata.sha256) res.setHeader('X-Document-SHA256', metadata.sha256);
+      await logCompanyMdlDocumentAudit(req, {
+        tenantId,
+        action: 'DOWNLOAD',
+        profileId: profile.id,
+        documentType,
+        filename: path.basename(filePath),
+        originalName: metadata.originalName || path.basename(filePath),
+        sha256: metadata.sha256 || null,
+        sourceSha256: metadata.sourceSha256 || null,
+        scanStatus: metadata.scanStatus || null
+      });
       return res.sendFile(filePath);
     } catch (error) {
       logger.error({ error: error.message, companyOrProfileId: req.params.id }, 'Errore download documento MDL azienda');
@@ -997,6 +1042,16 @@ router.post('/:id/mdl-documents/:documentType/upload',
           userAgent: req.get('user-agent')
         }
       }).catch(err => logger.warn('ActivityLog upload documento MDL non salvato', { error: err.message }));
+      await logCompanyMdlDocumentAudit(req, {
+        tenantId,
+        action: 'UPLOAD',
+        profileId: profile.id,
+        documentType,
+        filename: storedName,
+        originalName: req.file.originalname,
+        sha256: security.sha256,
+        scanStatus: security.scan.status
+      });
 
       return res.status(201).json({
         success: true,
@@ -1113,6 +1168,21 @@ router.post('/:id/mdl-documents/:documentType/sign',
           userAgent: req.get('user-agent')
         }
       }).catch(err => logger.warn('ActivityLog firma documento MDL non salvato', { error: err.message }));
+      await logCompanyMdlDocumentAudit(req, {
+        tenantId,
+        action: 'SIGN',
+        profileId: profile.id,
+        documentType,
+        filename: storedName,
+        originalName: `${documentType}-firmato-online.pdf`,
+        sha256: signedSha256,
+        sourceSha256,
+        scanStatus: 'GENERATED',
+        extra: {
+          signatureMode: signatureImage ? 'DRAWN' : 'TEXT',
+          sourceFilename
+        }
+      });
 
       return res.status(201).json({
         success: true,

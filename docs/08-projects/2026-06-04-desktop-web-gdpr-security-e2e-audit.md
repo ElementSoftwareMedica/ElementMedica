@@ -12,6 +12,7 @@ Controlli implementati/verificati:
 - Documenti MDL generati da Risultati Anonimi Collettivi e Verbale Riunione Periodica archiviati nello stesso storico dei documenti firmabili.
 - Metadati documentali MDL estesi con hash SHA-256 del file, hash del documento origine quando si firma da storico, stato scansione e origine generata/upload.
 - Download documenti MDL con header `X-Document-SHA256` e `X-Content-Type-Options: nosniff`.
+- Download, upload e firma online dei documenti MDL aziendali tracciati in `GdprAuditLog` con tipologia documento, filename, hash SHA-256 e hash sorgente quando presente.
 - Upload documenti MDL e allegati visita desktop protetti da hash SHA-256 e scansione malware. In produzione gli upload sono fail-closed se manca `CLAMAV_SCAN_COMMAND`/`FILE_SCAN_COMMAND`, salvo override esplicito `ALLOW_UNSCANNED_UPLOADS=true`.
 - Export XML Allegato 3B tracciato in `GdprAuditLog` con hash SHA-256 del payload XML e validazione strutturale prima del download.
 - App desktop: sync incrementale gia presente via `lastSyncAt` su `GET /api/v1/desktop-sync/download-full-db`.
@@ -99,6 +100,7 @@ Rischio residuo: medio-basso sulle route documentali MDL coperte. Ogni nuova rou
 - Il download risolve il path dentro la directory attesa e verifica che il path finale resti nel perimetro della directory.
 - Ogni documento archiviato o firmato contiene metadati con hash SHA-256 e, per firme da storico, hash del documento sorgente.
 - Il download restituisce `X-Document-SHA256` per permettere verifica integrita lato client/log operativo.
+- Download, upload e firma online dei documenti MDL aziendali scrivono audit GDPR non bloccante con metadati di integrita e perimetro tenant.
 - La firma online puo firmare un documento sorgente gia archiviato, evitando di rigenerare un PDF diverso da quello visto dall'utente.
 - I PDF generati per riunione periodica e risultati anonimi collettivi vengono archiviati nei documenti MDL, rendendo possibile storico, firma e upload firmato.
 
@@ -277,6 +279,8 @@ Priorita: media-alta.
 - `cd desktop-app && npm run typecheck`: OK dopo rimozione IPC backup SQLite raw.
 - `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/unit/desktop-sync-tombstones.test.js tests/unit/desktop-routes-registration.test.js tests/unit/file-security.test.js tests/unit/company-mdl-documents.test.js tests/unit/desktop-sync-attachment.test.js`: OK, 20 test.
 - `cd desktop-app && npm run typecheck`: OK verifica aggregata post hardening sync/sicurezza.
+- `node --check backend/routes/companies-routes.js && node --check backend/tests/routes/company-mdl-documents-routes.test.js`: OK.
+- `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/routes/company-mdl-documents-routes.test.js`: OK, 4 test, incluso audit GDPR su download documento MDL tenant-scoped.
 
 ## Gap Da Chiudere Prima Di Dichiarare Conformita Piena
 
