@@ -29,6 +29,7 @@ Controlli implementati/verificati:
 - App desktop: cifratura field-level dei principali campi PII/sanitari via Electron `safeStorage`; mappa estesa a campi denormalizzati, documentali, scadenze, servizi MDL e profilo salute. Resta necessario requisito operativo BitLocker/FileVault o cifratura integrale DB per protezione completa.
 - App desktop: la cifratura PII locale e ora fail-closed in runtime produzione se `safeStorage` non e disponibile; il fallback in chiaro resta ammesso solo in sviluppo/test o con override esplicito `ALLOW_PLAINTEXT_PII_STORAGE=true`. La mappa PII include anche Allegato 3B, protocolli, voci tariffario e note associazioni tariffario sincronizzate.
 - App desktop: Impostazioni mostra stato sicurezza locale con cifratura PII, backup cifrato e verifica best-effort FileVault/BitLocker per supportare onboarding device e audit operativo.
+- App desktop: rimossi gli IPC legacy `db:exportBackup`/`db:importBackup` che permettevano export/import raw `.db`; resta esposto solo il flusso backup cifrato `.embak` basato su `safeStorage`.
 - App desktop: auto-lock rafforzato con controllo tempo inattivita al ritorno da visibility/focus/pageshow, cosi dopo sospensione o resume oltre timeout la sessione viene bloccata.
 - Packaging Windows desktop verificato con `better-sqlite3` nativo `win32-x64`.
 
@@ -103,6 +104,7 @@ Rischio residuo: medio. Serve retention policy documentale esplicita. La scansio
 - La mappa PII desktop include anche nomi/codici fiscali denormalizzati, note appuntamento/visita, `datiStrutturati`, referti, documenti, scadenze, servizi MDL e profilo salute.
 - Se `safeStorage` non e disponibile in runtime produzione, la scrittura di PII viene bloccata invece di salvare dati in chiaro; il fallback non cifrato e limitato a sviluppo/test o override operativo esplicito.
 - Le Impostazioni desktop espongono uno stato sicurezza locale non invasivo: disponibilita cifratura PII, disponibilita backup cifrato e rilevazione best-effort di FileVault/BitLocker. Se il disco risulta non cifrato o non verificabile, il requisito operativo resta da chiudere prima del rollout del device.
+- Il canale IPC legacy per esportare o importare backup SQLite raw `.db` e stato rimosso; il backup supportato dal desktop resta quello cifrato `.embak`, con chiave protetta da `safeStorage`.
 - La licenza consente uso offline con grace period limitato.
 - Il packaging Windows ora forza rebuild/install native deps `win32-x64` e unpack esplicito di `better-sqlite3`, evitando il bundle di un `.node` non Windows.
 
@@ -263,6 +265,8 @@ Priorita: media-alta.
 - `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/unit/desktop-sync-attachment.test.js`: OK, 2 test.
 - `cd desktop-app && npm run typecheck`: OK dopo isolamento errori remap ID.
 - `cd desktop-app && npm run typecheck`: OK dopo hardening auto-lock post sospensione/focus.
+- `rg -n "exportBackup|importBackup|db:exportBackup|db:importBackup|SQLite Database|elementmedica-backup.*\\.db" desktop-app/src -S`: OK, nessun IPC legacy backup raw rimasto.
+- `cd desktop-app && npm run typecheck`: OK dopo rimozione IPC backup SQLite raw.
 
 ## Gap Da Chiudere Prima Di Dichiarare Conformita Piena
 

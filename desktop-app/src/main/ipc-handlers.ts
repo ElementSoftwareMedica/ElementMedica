@@ -2137,42 +2137,6 @@ export function setupIpcHandlers(): void {
         return rows.map(row => decryptRecord('patients', row))
     })
 
-    // ========== BACKUP / RESTORE ==========
-
-    ipcMain.handle('db:exportBackup', async () => {
-        const db = getDatabase()
-        const dateStr = new Date().toISOString().slice(0, 10)
-        const result = await dialog.showSaveDialog({
-            title: 'Salva backup database',
-            defaultPath: `elementmedica-backup-${dateStr}.db`,
-            filters: [{ name: 'SQLite Database', extensions: ['db'] }]
-        })
-        if (result.canceled || !result.filePath) return { success: false }
-
-        // Use better-sqlite3 backup API — safe on open databases
-        await db.backup(result.filePath)
-        return { success: true, path: result.filePath }
-    })
-
-    ipcMain.handle('db:importBackup', async () => {
-        const result = await dialog.showOpenDialog({
-            title: 'Seleziona backup da ripristinare',
-            filters: [{ name: 'SQLite Database', extensions: ['db'] }],
-            properties: ['openFile']
-        })
-        if (result.canceled || !result.filePaths[0]) return { success: false }
-
-        const srcPath = result.filePaths[0]
-        const dbPath = join(app.getPath('userData'), 'data', 'elementmedica.db')
-        const safetyPath = dbPath + '.pre-restore-' + Date.now()
-
-        // Keep a safety copy before overwriting
-        copyFileSync(dbPath, safetyPath)
-        copyFileSync(srcPath, dbPath)
-
-        return { success: true, needsRestart: true }
-    })
-
     // ========== UPDATER ACTIONS ==========
 
     ipcMain.handle('updater:downloadUpdate', async () => {

@@ -21,11 +21,7 @@ const desktopApi = {
         clearTable: (params: { table: string }) =>
             ipcRenderer.invoke('db:clearTable', params),
         searchPatients: (params: { query: string }) =>
-            ipcRenderer.invoke('db:searchPatients', params),
-        exportBackup: () =>
-            ipcRenderer.invoke('db:exportBackup'),
-        importBackup: () =>
-            ipcRenderer.invoke('db:importBackup')
+            ipcRenderer.invoke('db:searchPatients', params)
     },
 
     // ========== SYNC ==========
