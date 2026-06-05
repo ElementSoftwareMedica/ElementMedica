@@ -313,6 +313,18 @@ Priorita: media-alta.
 - `node --check backend/controllers/desktop-sync.controller.js && node --check backend/tests/unit/desktop-sync-tombstones.test.js`: OK.
 - `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/unit/desktop-sync-tombstones.test.js`: OK, 8 test incluso tombstone pagination oltre 1000 record per sorgente.
 
+## Deploy E Release 2026-06-05
+
+- Backend produzione aggiornato con delta mirato: `backend/controllers/desktop-sync.controller.js` e dipendenza mancante `backend/utils/fileSecurity.js`.
+- Restart mirato solo processo `api-server`; nessun rebuild completo server.
+- Smoke API produzione: `GET /api/v1/desktop-sync/download-full-db` senza token restituisce `401`, route montata e protetta.
+- Smoke licenze desktop: `POST /api/v1/desktop-licenses/heartbeat` senza token restituisce `401`, route montata e protetta.
+- App desktop aggiornata a `0.1.44`, build Windows x64 e macOS arm64/x64 completate.
+- Manifest pubblici desktop update:
+  - `https://www.elementmedica.com/desktop-updates/latest.yml`: HTTP `200`, version `0.1.44`.
+  - `https://www.elementmedica.com/desktop-updates/latest-mac.yml`: HTTP `200`, version `0.1.44`.
+- Residuo non chiudibile automaticamente: test E2E manuale su installazione reale desktop/web con tenant e dati produttivi anonimizzati.
+
 ## Gap Da Chiudere Prima Di Dichiarare Conformita Piena
 
 1. Cifratura integrale del DB locale oppure requisito tecnico obbligatorio di cifratura disco: controllo best-effort FileVault/BitLocker ora visibile in Impostazioni desktop, ma il rollout deve bloccare/gestire manualmente device non cifrati o non verificabili.
