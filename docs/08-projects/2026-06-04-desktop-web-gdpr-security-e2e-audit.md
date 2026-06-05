@@ -24,7 +24,7 @@ Controlli ancora non chiusi al 100%:
 
 - Validazione XSD ufficiale Allegato 3B: manca nel repository lo schema INAIL versionato da usare come fonte di verita.
 - Scansione malware in produzione: il codice richiede scanner configurato e rifiuta upload non scansionati; resta attivare sul server `CLAMAV_SCAN_COMMAND` o `FILE_SCAN_COMMAND`.
-- Test automatici helper documenti MDL: aggiunto test su risoluzione `CompanyTenantProfile` tenant-scoped, tipologie consentite e sanitizzazione filename. Resta utile fixture E2E multi-tenant reale per l'intera route HTTP.
+- Test automatici documenti MDL: coperti helper e route HTTP per risoluzione `CompanyTenantProfile` tenant-scoped, rifiuto tipologie non ammesse, download con header integrita e mancata esposizione cross-tenant.
 - Cifratura completa del file SQLite: non implementata; oggi e presente cifratura field-level piu requisito operativo di cifratura disco.
 - DPIA/ROPA: richiede validazione DPO/legale fuori dal codice.
 
@@ -67,7 +67,7 @@ Rischio residuo: medio-basso. Va mantenuta la regola Bearer-only e va evitato qu
 - Le query su documenti MDL risolvono l'azienda tramite `CompanyTenantProfile` nel tenant corrente.
 - Le directory documentali sono segmentate per `tenantId/companyTenantProfileId/documentType`.
 
-Rischio residuo: medio. Ogni nuova route di documenti o sync deve avere test automatico che provi accesso cross-tenant negato.
+Rischio residuo: medio-basso sulle route documentali MDL coperte. Ogni nuova route di documenti o sync deve avere test automatico che provi accesso cross-tenant negato.
 
 ### Documenti MDL e firma
 
@@ -217,6 +217,7 @@ Priorita: media-alta.
 - `node --check backend/routes/companies-routes.js`: OK.
 - `cd desktop-app && npm run typecheck`: OK.
 - `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/unit/company-mdl-documents.test.js tests/unit/desktop-sync-tombstones.test.js tests/unit/file-security.test.js`: OK.
+- `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/routes/company-mdl-documents-routes.test.js`: OK.
 
 ## Verifiche Tecniche Eseguite 2026-06-05
 
@@ -230,7 +231,7 @@ Priorita: media-alta.
 1. Cifratura integrale del DB locale oppure requisito tecnico obbligatorio di cifratura disco verificato in onboarding device.
 2. Validazione XSD Allegato 3B integrata prima dell'export definitivo quando lo schema ufficiale viene versionato nel repository.
 3. Antivirus/malware scanning: fail-closed implementato; resta configurare il comando scanner sul server per permettere upload in produzione senza override.
-4. Test automatici cross-tenant: helper documentali MDL coperti; resta fixture E2E HTTP multi-tenant per tutta la route.
+4. Test automatici cross-tenant: helper documentali MDL e route HTTP lista/download coperti; estendere lo stesso pattern a ogni nuova route documentale o sync.
 5. Sync incrementale: tombstone implementati e coperti da test unitario mapping/allineamento tabelle; resta test E2E con fixture reale.
 6. Registro DPIA/ROPA aggiornato con trattamento offline desktop.
 
