@@ -287,6 +287,8 @@ Priorita: media-alta.
 - `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/routes/company-mdl-documents-routes.test.js`: OK, 4 test, incluso audit GDPR su download documento MDL tenant-scoped.
 - `node --check backend/services/clinical/VisitaRefertoService.js && node --check backend/tests/unit/visita-referto-signature-tenant.test.js`: OK.
 - `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/unit/visita-referto-signature-tenant.test.js`: OK, 3 test anti-regressione su isolamento tenant firme referto e assenza di frammenti firma/snippet HTML nei log.
+- `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/unit/desktop-sync-tombstones.test.js tests/unit/desktop-routes-registration.test.js tests/unit/file-security.test.js tests/unit/company-mdl-documents.test.js tests/unit/desktop-sync-attachment.test.js tests/routes/company-mdl-documents-routes.test.js tests/unit/visita-referto-signature-tenant.test.js`: OK, 27 test.
+- `cd desktop-app && npm run typecheck`: OK verifica aggregata finale.
 
 ## Gap Da Chiudere Prima Di Dichiarare Conformita Piena
 
