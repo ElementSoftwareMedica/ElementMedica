@@ -376,15 +376,34 @@ export async function downloadDay(req, res) {
             }
         }) : [];
 
-        // 6. Scadenze attive per i pazienti della giornata
-        const scadenze = pazienteIds.length > 0 ? await prisma.deadlineItem.findMany({
+        // 6. Scadenze protocollo MDL per i pazienti della giornata.
+        // Keep day-sync aligned with full-db sync and the desktop `scadenze` table.
+        const scadenze = pazienteIds.length > 0 ? await prisma.scadenzaPrestazioneProtocollo.findMany({
             where: {
                 tenantId,
                 deletedAt: null,
-                personId: { in: pazienteIds },
-                status: { in: ['ATTIVA', 'IN_PREAVVISO', 'SCADUTA'] }
+                personId: { in: pazienteIds }
             },
-            orderBy: { dataScadenza: 'asc' }
+            orderBy: { dataScadenza: 'asc' },
+            select: {
+                id: true,
+                tenantId: true,
+                personId: true,
+                mansioneId: true,
+                prestazioneId: true,
+                protocolloId: true,
+                dataScadenza: true,
+                periodicitaMesi: true,
+                isPrimaVisita: true,
+                eseguita: true,
+                dataEsecuzione: true,
+                visitaId: true,
+                appuntamentoId: true,
+                documentoTemplateId: true,
+                createdAt: true,
+                updatedAt: true,
+                deletedAt: true
+            }
         }) : [];
 
         // 7. Giudizi di idoneità precedenti per i pazienti
@@ -819,13 +838,21 @@ export async function downloadFullDb(req, res) {
 
         const updatedFilter = lastSyncAt ? { updatedAt: { gte: lastSyncAt } } : {};
 
+        const patientWhere = lastSyncAt ? {
+            deletedAt: null,
+            tenantProfiles: { some: { tenantId, deletedAt: null } },
+            OR: [
+                { updatedAt: { gte: lastSyncAt } },
+                { tenantProfiles: { some: { tenantId, deletedAt: null, updatedAt: { gte: lastSyncAt } } } }
+            ]
+        } : {
+            deletedAt: null,
+            tenantProfiles: { some: { tenantId, deletedAt: null } }
+        };
+
         // 1. ALL patients (Person + TenantProfile) for this tenant
         const pazienti = await prisma.person.findMany({
-            where: {
-                deletedAt: null,
-                tenantProfiles: { some: { tenantId, deletedAt: null } },
-                ...updatedFilter
-            },
+            where: patientWhere,
             select: {
                 id: true, firstName: true, lastName: true, birthDate: true, birthPlace: true,
                 birthProvince: true, gender: true, taxCode: true, profileImage: true,
@@ -846,6 +873,7 @@ export async function downloadFullDb(req, res) {
             deletedAt: null,
             OR: [
                 { updatedAt: { gte: lastSyncAt } },
+                { company: { is: { deletedAt: null, updatedAt: { gte: lastSyncAt } } } },
                 { sites: { some: { deletedAt: null, updatedAt: { gte: lastSyncAt } } } },
                 { nomine: { some: { tenantId, deletedAt: null, updatedAt: { gte: lastSyncAt } } } }
             ]

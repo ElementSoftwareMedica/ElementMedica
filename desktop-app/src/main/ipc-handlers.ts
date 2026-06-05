@@ -521,8 +521,18 @@ export function setupIpcHandlers(): void {
                     values.push(tombstone.deletedAt || now)
                 }
 
+                const whereClauses = hasColumn(table, '_serverId')
+                    ? ['("id" = ? OR "_serverId" = ?)']
+                    : ['"id" = ?']
                 values.push(id)
-                db.prepare(`UPDATE "${table}" SET ${updates.join(', ')} WHERE id = ?`).run(...values)
+                if (hasColumn(table, '_serverId')) values.push(id)
+
+                if (hasColumn(table, 'tenantId') && tombstone.tenantId) {
+                    whereClauses.push('"tenantId" = ?')
+                    values.push(tombstone.tenantId)
+                }
+
+                db.prepare(`UPDATE "${table}" SET ${updates.join(', ')} WHERE ${whereClauses.join(' AND ')}`).run(...values)
             }
         }
 

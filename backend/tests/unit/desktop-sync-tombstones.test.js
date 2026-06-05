@@ -1,9 +1,38 @@
 import { describe, expect, jest, test, beforeEach } from '@jest/globals';
 
 const mockPrisma = {
+  appuntamento: { findMany: jest.fn() },
   person: { findMany: jest.fn() },
   personTenantProfile: { findMany: jest.fn() },
-  scadenzaPrestazioneProtocollo: { findMany: jest.fn() }
+  lavoratoreMansione: { findMany: jest.fn() },
+  visita: { findMany: jest.fn() },
+  deadlineItem: { findMany: jest.fn() },
+  scadenzaPrestazioneProtocollo: { findMany: jest.fn() },
+  giudizioIdoneita: { findMany: jest.fn() },
+  prestazione: { findMany: jest.fn() },
+  ambulatorio: { findMany: jest.fn() },
+  slotDisponibilita: { findMany: jest.fn() },
+  movimentoContabile: { findMany: jest.fn() },
+  mansione: { findMany: jest.fn() },
+  lavoratoreRischioAggiuntivo: { findMany: jest.fn() },
+  companyTenantProfile: { findMany: jest.fn() },
+  protocolloSanitario: { findMany: jest.fn() },
+  visitTemplate: { findMany: jest.fn() },
+  documentoTemplate: { findMany: jest.fn() },
+  documentoCompilato: { findMany: jest.fn() },
+  profiloDiSalutePersona: { findMany: jest.fn() },
+  documentoClinico: { findMany: jest.fn() },
+  personDocument: { findMany: jest.fn() },
+  referto: { findMany: jest.fn() },
+  visitRevision: { findMany: jest.fn() },
+  visitAccessLog: { findMany: jest.fn() },
+  firmaDigitale: { findMany: jest.fn() },
+  tariffarioAziendale: { findMany: jest.fn() },
+  convenzione: { findMany: jest.fn() },
+  sopralluogo: { findMany: jest.fn() },
+  dVR: { findMany: jest.fn() },
+  consulenzaMDL: { findMany: jest.fn() },
+  allegato3B: { findMany: jest.fn() }
 };
 
 jest.unstable_mockModule('../../config/prisma-optimization.js', () => ({
@@ -15,7 +44,7 @@ jest.unstable_mockModule('../../utils/logger.js', () => ({
   default: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() }
 }));
 
-const { DESKTOP_TOMBSTONE_SOURCES, getDesktopTombstones } = await import('../../controllers/desktop-sync.controller.js');
+const { DESKTOP_TOMBSTONE_SOURCES, downloadDay, downloadFullDb, getDesktopTombstones } = await import('../../controllers/desktop-sync.controller.js');
 
 const VALID_DESKTOP_TABLES = new Set([
   'visits', 'appointments', 'appointment_prestazioni',
@@ -34,9 +63,9 @@ const VALID_DESKTOP_TABLES = new Set([
 describe('desktop sync tombstones', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockPrisma.person.findMany.mockResolvedValue([]);
-    mockPrisma.personTenantProfile.findMany.mockResolvedValue([]);
-    mockPrisma.scadenzaPrestazioneProtocollo.findMany.mockResolvedValue([]);
+    for (const model of Object.values(mockPrisma)) {
+      if (model.findMany) model.findMany.mockResolvedValue([]);
+    }
   });
 
   test('does not query tombstones during initial full sync', async () => {
@@ -102,5 +131,115 @@ describe('desktop sync tombstones', () => {
       'consulenze_mdl',
       'allegati_3b'
     ]));
+  });
+
+  test('downloadDay syncs ScadenzaPrestazioneProtocollo records, not legacy DeadlineItem', async () => {
+    const scadenza = {
+      id: 'scadenza-protocollo-1',
+      tenantId: 'tenant-a',
+      personId: 'patient-a',
+      mansioneId: 'mansione-a',
+      prestazioneId: 'prestazione-a',
+      protocolloId: 'protocollo-a',
+      dataScadenza: new Date('2026-06-20T00:00:00.000Z'),
+      periodicitaMesi: 12,
+      isPrimaVisita: false,
+      eseguita: false,
+      dataEsecuzione: null,
+      visitaId: null,
+      appuntamentoId: null,
+      documentoTemplateId: null,
+      createdAt: new Date('2026-06-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-05T00:00:00.000Z'),
+      deletedAt: null
+    };
+
+    mockPrisma.appuntamento.findMany.mockResolvedValue([{
+      id: 'appointment-a',
+      pazienteId: 'patient-a',
+      tenantId: 'tenant-a',
+      dataOra: new Date('2026-06-05T08:00:00.000Z'),
+      prestazioni: []
+    }]);
+    mockPrisma.person.findMany
+      .mockResolvedValueOnce([{
+        id: 'patient-a',
+        firstName: 'Paziente',
+        lastName: 'Test',
+        tenantProfiles: [{ id: 'profile-a', companyTenantProfileId: 'company-a' }]
+      }])
+      .mockResolvedValueOnce([]);
+    mockPrisma.scadenzaPrestazioneProtocollo.findMany.mockResolvedValue([scadenza]);
+
+    const req = {
+      person: { id: 'doctor-a', tenantId: 'tenant-a' },
+      query: { date: '2026-06-05' }
+    };
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn()
+    };
+
+    await downloadDay(req, res);
+
+    expect(res.status).not.toHaveBeenCalled();
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      scadenze: [scadenza],
+      meta: expect.objectContaining({
+        counts: expect.objectContaining({ scadenze: 1 })
+      })
+    }));
+    expect(mockPrisma.deadlineItem.findMany).not.toHaveBeenCalled();
+    expect(mockPrisma.scadenzaPrestazioneProtocollo.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        tenantId: 'tenant-a',
+        deletedAt: null,
+        personId: { in: ['patient-a'] }
+      },
+      select: expect.objectContaining({
+        id: true,
+        prestazioneId: true,
+        periodicitaMesi: true,
+        isPrimaVisita: true
+      })
+    }));
+  });
+
+  test('downloadFullDb incremental includes tenant profile and company master-data changes', async () => {
+    const lastSyncAt = '2026-06-05T07:00:00.000Z';
+    const req = {
+      person: { id: 'doctor-a', tenantId: 'tenant-a' },
+      query: { lastSyncAt }
+    };
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn()
+    };
+
+    await downloadFullDb(req, res);
+
+    const patientCall = mockPrisma.person.findMany.mock.calls[0][0];
+    expect(patientCall.where).toEqual(expect.objectContaining({
+      deletedAt: null,
+      tenantProfiles: { some: { tenantId: 'tenant-a', deletedAt: null } },
+      OR: expect.arrayContaining([
+        { updatedAt: { gte: new Date(lastSyncAt) } },
+        { tenantProfiles: { some: { tenantId: 'tenant-a', deletedAt: null, updatedAt: { gte: new Date(lastSyncAt) } } } }
+      ])
+    }));
+
+    const companyCall = mockPrisma.companyTenantProfile.findMany.mock.calls[0][0];
+    expect(companyCall.where).toEqual(expect.objectContaining({
+      tenantId: 'tenant-a',
+      deletedAt: null,
+      OR: expect.arrayContaining([
+        { updatedAt: { gte: new Date(lastSyncAt) } },
+        { company: { is: { deletedAt: null, updatedAt: { gte: new Date(lastSyncAt) } } } }
+      ])
+    }));
+    expect(res.status).not.toHaveBeenCalled();
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      meta: expect.objectContaining({ isFullSync: false, lastSyncAt })
+    }));
   });
 });

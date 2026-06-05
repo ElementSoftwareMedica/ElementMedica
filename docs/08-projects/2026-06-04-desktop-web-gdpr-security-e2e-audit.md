@@ -17,6 +17,9 @@ Controlli implementati/verificati:
 - App desktop: sync incrementale gia presente via `lastSyncAt` su `GET /api/v1/desktop-sync/download-full-db`.
 - App desktop: sync incrementale estesa con tombstone soft-delete per le tabelle desktop sincronizzate; i record cancellati online vengono marcati `_isDeleted=1` localmente senza cancellazione fisica.
 - App desktop: scadenze MDL riallineate a `ScadenzaPrestazioneProtocollo` per alimentare correttamente la card Sorveglianza Sanitaria offline.
+- App desktop: download giornaliero riallineato al full DB per usare `ScadenzaPrestazioneProtocollo`, evitando divergenze tra "scarica giornata" e "scarica tutto il database".
+- App desktop: tombstone locali applicati anche su `_serverId`, non solo su `id`, cosi le righe create offline e poi rimappate vengono marcate eliminate quando il server invia il tombstone.
+- App desktop: sync incrementale full DB esteso ai layer multi-tenant `PersonTenantProfile` e anagrafica globale `Company`, cosi modifiche a profili paziente/azienda arrivano offline anche se il record padre non cambia `updatedAt`.
 - App desktop: cifratura field-level dei principali campi PII/sanitari via Electron `safeStorage`; mappa estesa a campi denormalizzati, documentali, scadenze, servizi MDL e profilo salute. Resta necessario requisito operativo BitLocker/FileVault o cifratura integrale DB per protezione completa.
 - Packaging Windows desktop verificato con `better-sqlite3` nativo `win32-x64`.
 
@@ -128,7 +131,9 @@ Mitigazioni richieste:
 - Upload deve essere idempotente e non creare duplicati per movimenti/documenti/visite.
 - Errori di remap devono bloccare solo il record interessato e produrre coda retry, non perdere batch interi.
 - Il full download e affiancato da sync incrementale basata su `lastSyncAt`; dal 2026-06-04 include tombstone soft-delete per le tabelle desktop e applicazione locale `_isDeleted=1`. Dal 2026-06-05 il mapping delle tabelle tombstone e coperto da test unitario di allineamento con le tabelle SQLite desktop.
-- La tabella locale `scadenze` riceve ora `ScadenzaPrestazioneProtocollo`, non `DeadlineItem`, evitando divergenze nella Sorveglianza Sanitaria offline.
+- La tabella locale `scadenze` riceve ora `ScadenzaPrestazioneProtocollo`, non `DeadlineItem`, sia nel full DB sia nel download giornata, evitando divergenze nella Sorveglianza Sanitaria offline.
+- I tombstone applicati dal desktop cercano sia `id` sia `_serverId` e rispettano `tenantId` quando presente, coprendo i record creati offline e successivamente rimappati.
+- Il delta full DB include modifiche a `PersonTenantProfile` e alla `Company` globale collegata al `CompanyTenantProfile`, coprendo i layer multi-tenant P48/P49.
 
 Priorita: alta.
 
@@ -226,13 +231,20 @@ Priorita: media-alta.
 - `node --check backend/routes/companies-routes.js`: OK.
 - `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/unit/desktop-sync-tombstones.test.js tests/unit/file-security.test.js tests/unit/company-mdl-documents.test.js`: OK.
 
+## Verifiche Tecniche Eseguite 2026-06-05 Sync
+
+- `node --check backend/controllers/desktop-sync.controller.js`: OK.
+- `node --check backend/tests/unit/desktop-sync-tombstones.test.js`: OK.
+- `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/unit/desktop-sync-tombstones.test.js`: OK, 5 test.
+- `cd desktop-app && npm run typecheck`: OK.
+
 ## Gap Da Chiudere Prima Di Dichiarare Conformita Piena
 
 1. Cifratura integrale del DB locale oppure requisito tecnico obbligatorio di cifratura disco verificato in onboarding device.
 2. Validazione XSD Allegato 3B integrata prima dell'export definitivo quando lo schema ufficiale viene versionato nel repository.
 3. Antivirus/malware scanning: fail-closed implementato; resta configurare il comando scanner sul server per permettere upload in produzione senza override.
 4. Test automatici cross-tenant: helper documentali MDL e route HTTP lista/download coperti; estendere lo stesso pattern a ogni nuova route documentale o sync.
-5. Sync incrementale: tombstone implementati e coperti da test unitario mapping/allineamento tabelle; resta test E2E con fixture reale.
+5. Sync incrementale: tombstone implementati e coperti da test unitario mapping/allineamento tabelle, day-sync riallineato a `ScadenzaPrestazioneProtocollo`, delta full DB esteso ai layer multi-tenant e tombstone locale applicato anche su `_serverId`; resta test E2E manuale su installazione reale desktop/web con dati produttivi anonimizzati.
 6. Registro DPIA/ROPA aggiornato con trattamento offline desktop.
 
 ## Valutazione Finale
