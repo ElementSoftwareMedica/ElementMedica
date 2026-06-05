@@ -22,6 +22,7 @@ Controlli implementati/verificati:
 - App desktop: sync incrementale full DB esteso ai layer multi-tenant `PersonTenantProfile` e anagrafica globale `Company`, cosi modifiche a profili paziente/azienda arrivano offline anche se il record padre non cambia `updatedAt`.
 - App desktop: `checkConflicts` usa allowlist condivisa `DESKTOP_SYNC_ENTITY_TYPES` e non accede piu dinamicamente a modelli Prisma fuori dal perimetro sync.
 - App desktop: cifratura field-level dei principali campi PII/sanitari via Electron `safeStorage`; mappa estesa a campi denormalizzati, documentali, scadenze, servizi MDL e profilo salute. Resta necessario requisito operativo BitLocker/FileVault o cifratura integrale DB per protezione completa.
+- App desktop: la cifratura PII locale e ora fail-closed in runtime produzione se `safeStorage` non e disponibile; il fallback in chiaro resta ammesso solo in sviluppo/test o con override esplicito `ALLOW_PLAINTEXT_PII_STORAGE=true`. La mappa PII include anche Allegato 3B, protocolli, voci tariffario e note associazioni tariffario sincronizzate.
 - Packaging Windows desktop verificato con `better-sqlite3` nativo `win32-x64`.
 
 Controlli ancora non chiusi al 100%:
@@ -29,7 +30,7 @@ Controlli ancora non chiusi al 100%:
 - Validazione XSD ufficiale Allegato 3B: manca nel repository lo schema INAIL versionato da usare come fonte di verita.
 - Scansione malware in produzione: il codice richiede scanner configurato e rifiuta upload non scansionati; resta attivare sul server `CLAMAV_SCAN_COMMAND` o `FILE_SCAN_COMMAND`.
 - Test automatici documenti MDL: coperti helper e route HTTP per risoluzione `CompanyTenantProfile` tenant-scoped, rifiuto tipologie non ammesse, download con header integrita e mancata esposizione cross-tenant.
-- Cifratura completa del file SQLite: non implementata; oggi e presente cifratura field-level piu requisito operativo di cifratura disco.
+- Cifratura completa del file SQLite: non implementata; oggi e presente cifratura field-level fail-closed per i campi PII piu requisito operativo di cifratura disco.
 - DPIA/ROPA: richiede validazione DPO/legale fuori dal codice.
 
 ## Obiettivo
@@ -91,6 +92,7 @@ Rischio residuo: medio. Serve retention policy documentale esplicita. La scansio
 - WAL e PRAGMA prestazionali sono configurati.
 - I campi PII/sanitari principali sono cifrati a livello applicativo con Electron `safeStorage` prima della scrittura su SQLite.
 - La mappa PII desktop include anche nomi/codici fiscali denormalizzati, note appuntamento/visita, `datiStrutturati`, referti, documenti, scadenze, servizi MDL e profilo salute.
+- Se `safeStorage` non e disponibile in runtime produzione, la scrittura di PII viene bloccata invece di salvare dati in chiaro; il fallback non cifrato e limitato a sviluppo/test o override operativo esplicito.
 - La licenza consente uso offline con grace period limitato.
 - Il packaging Windows ora forza rebuild/install native deps `win32-x64` e unpack esplicito di `better-sqlite3`, evitando il bundle di un `.node` non Windows.
 
@@ -105,7 +107,7 @@ Rischio: perdita/furto laptop o profilo Windows compromesso con accesso al DB SQ
 Mitigazioni richieste:
 - Obbligare cifratura disco: BitLocker su Windows, FileVault su macOS.
 - Auto-lock app gia presente: verificare timeout e blocco dopo sospensione.
-- Mantenere aggiornata la mappa `PII_FIELDS` desktop per ogni nuova tabella/campo sanitario sincronizzato; dal 2026-06-04 la mappa copre anche i campi denormalizzati e documentali sincronizzati.
+- Mantenere aggiornata la mappa `PII_FIELDS` desktop per ogni nuova tabella/campo sanitario sincronizzato; dal 2026-06-05 la mappa copre anche Allegato 3B, protocolli, voci tariffario e note di associazione tariffario.
 - Valutare cifratura integrale SQLite con chiave derivata da credenziale locale o secure storage.
 - Disabilitare export massivi non autorizzati e tracciare ogni export in audit log.
 
@@ -232,6 +234,7 @@ Priorita: media-alta.
 - `node --check backend/utils/fileSecurity.js`: OK.
 - `node --check backend/routes/companies-routes.js`: OK.
 - `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/unit/desktop-sync-tombstones.test.js tests/unit/file-security.test.js tests/unit/company-mdl-documents.test.js`: OK.
+- `cd desktop-app && npm run typecheck`: OK dopo hardening cifratura PII locale fail-closed.
 
 ## Verifiche Tecniche Eseguite 2026-06-05 Sync
 

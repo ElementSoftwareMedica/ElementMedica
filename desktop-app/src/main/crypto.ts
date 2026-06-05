@@ -33,12 +33,31 @@ export const PII_FIELDS: Record<string, Set<string>> = {
   slot_disponibilita: new Set(['motivoBlocco', 'note']),
   document_templates: new Set(['contenutoHtml', 'contenutoPdf', 'campi']),
   questionari_medici_config: new Set(['istruzioniPaziente', 'istruzioniMedico', 'scoringConfig', 'validazioniCustom']),
+  protocolli: new Set(['descrizione', 'mansioneNome']),
+  protocollo_prestazioni: new Set(['condizioniApplicazione', 'note']),
+  tariffari: new Set(['descrizione']),
+  tariffario_voci: new Set(['descrizione', 'note']),
+  tariffario_company_associations: new Set(['note']),
   sopralluoghi: new Set(['valutazione', 'esito', 'note', 'documentoUrl', 'documentoNome']),
   dvr: new Set(['rischiRilevati', 'note', 'documentoUrl', 'documentoNome']),
-  consulenze_mdl: new Set(['oggetto', 'note'])
+  consulenze_mdl: new Set(['oggetto', 'note']),
+  allegati_3b: new Set(['statistichePerRischio', 'malattieProf', 'lavoratoriPerGenere', 'lavoratoriPerFasciaEta', 'visitePerTipologia', 'giudiziPerTipologia', 'giudiziPerRischio', 'accertamentiIntegrativi', 'protocolloInvio', 'ricevutaInvio', 'note'])
 }
 
 const ENCRYPTION_PREFIX = 'enc::' // Prefix to identify encrypted values
+
+function canStorePlaintextPiiFallback(): boolean {
+  const runtime = process.env.NODE_ENV || 'production'
+  return runtime === 'development' || runtime === 'test' || process.env.E2E_TEST_MODE === '1' || process.env.ALLOW_PLAINTEXT_PII_STORAGE === 'true'
+}
+
+export function isLocalPiiEncryptionAvailable(): boolean {
+  return safeStorage.isEncryptionAvailable()
+}
+
+export function isPlaintextPiiFallbackActive(): boolean {
+  return !safeStorage.isEncryptionAvailable() && canStorePlaintextPiiFallback()
+}
 
 export function isPiiField(table: string, column: string): boolean {
   return PII_FIELDS[table]?.has(column) ?? false
@@ -50,7 +69,9 @@ export function encryptValue(value: string): string {
   }
 
   if (!safeStorage.isEncryptionAvailable()) {
-    console.warn('[GDPR] safeStorage non disponibile — campo PII salvato in chiaro')
+    if (!canStorePlaintextPiiFallback()) {
+      throw new Error('Crittografia locale non disponibile: impossibile salvare dati PII in chiaro')
+    }
     return value
   }
 
@@ -70,8 +91,7 @@ export function decryptValue(value: string): string {
   try {
     const buffer = Buffer.from(value.slice(ENCRYPTION_PREFIX.length), 'base64')
     return safeStorage.decryptString(buffer)
-  } catch (e) {
-    console.error('[crypto] Decifratura fallita:', e)
+  } catch {
     return value // Restituisce il blob crittografato in caso di errore
   }
 }
