@@ -29,6 +29,7 @@ Controlli implementati/verificati:
 - App desktop: cifratura field-level dei principali campi PII/sanitari via Electron `safeStorage`; mappa estesa a campi denormalizzati, documentali, scadenze, servizi MDL e profilo salute. Resta necessario requisito operativo BitLocker/FileVault o cifratura integrale DB per protezione completa.
 - App desktop: la cifratura PII locale e ora fail-closed in runtime produzione se `safeStorage` non e disponibile; il fallback in chiaro resta ammesso solo in sviluppo/test o con override esplicito `ALLOW_PLAINTEXT_PII_STORAGE=true`. La mappa PII include anche Allegato 3B, protocolli, voci tariffario e note associazioni tariffario sincronizzate.
 - App desktop: Impostazioni mostra stato sicurezza locale con cifratura PII, backup cifrato e verifica best-effort FileVault/BitLocker per supportare onboarding device e audit operativo.
+- App desktop: auto-lock rafforzato con controllo tempo inattivita al ritorno da visibility/focus/pageshow, cosi dopo sospensione o resume oltre timeout la sessione viene bloccata.
 - Packaging Windows desktop verificato con `better-sqlite3` nativo `win32-x64`.
 
 Controlli ancora non chiusi al 100%:
@@ -115,7 +116,7 @@ Rischio: perdita/furto laptop o profilo Windows compromesso con accesso al DB SQ
 
 Mitigazioni richieste:
 - Obbligare cifratura disco: BitLocker su Windows, FileVault su macOS; dal 2026-06-05 lo stato e visibile in Impostazioni desktop per onboarding e supporto.
-- Auto-lock app gia presente: verificare timeout e blocco dopo sospensione.
+- Auto-lock app presente con timeout inattivita e verifica elapsed-time al ritorno da sospensione/focus.
 - Mantenere aggiornata la mappa `PII_FIELDS` desktop per ogni nuova tabella/campo sanitario sincronizzato; dal 2026-06-05 la mappa copre anche Allegato 3B, protocolli, voci tariffario e note di associazione tariffario.
 - Valutare cifratura integrale SQLite con chiave derivata da credenziale locale o secure storage.
 - Disabilitare export massivi non autorizzati e tracciare ogni export in audit log.
@@ -261,6 +262,7 @@ Priorita: media-alta.
 - `node --check backend/controllers/desktop-sync.controller.js && node --check backend/tests/unit/desktop-sync-attachment.test.js`: OK.
 - `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/unit/desktop-sync-attachment.test.js`: OK, 2 test.
 - `cd desktop-app && npm run typecheck`: OK dopo isolamento errori remap ID.
+- `cd desktop-app && npm run typecheck`: OK dopo hardening auto-lock post sospensione/focus.
 
 ## Gap Da Chiudere Prima Di Dichiarare Conformita Piena
 

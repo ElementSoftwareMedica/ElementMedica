@@ -35,17 +35,33 @@ export function AutoLockProvider({ children }: { children: ReactNode }): JSX.Ele
     const [isUnlocking, setIsUnlocking] = useState(false)
     const [cooldownLeft, setCooldownLeft] = useState(0)
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const lastActivityRef = useRef(Date.now())
     const failedAttemptsRef = useRef(0)
     const lockedUntilRef = useRef<number>(0)
     const cooldownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
     const resetTimer = useCallback(() => {
         if (!isAuthenticated) return
+        lastActivityRef.current = Date.now()
         if (timerRef.current) clearTimeout(timerRef.current)
         timerRef.current = setTimeout(() => {
             setIsLocked(true)
         }, AUTO_LOCK_TIMEOUT_MS)
     }, [isAuthenticated])
+
+    const lockIfInactiveTooLong = useCallback(() => {
+        if (!isAuthenticated || isLocked) return
+        const elapsed = Date.now() - lastActivityRef.current
+        if (elapsed >= AUTO_LOCK_TIMEOUT_MS) {
+            if (timerRef.current) clearTimeout(timerRef.current)
+            setIsLocked(true)
+        } else {
+            if (timerRef.current) clearTimeout(timerRef.current)
+            timerRef.current = setTimeout(() => {
+                setIsLocked(true)
+            }, AUTO_LOCK_TIMEOUT_MS - elapsed)
+        }
+    }, [isAuthenticated, isLocked])
 
     // Wire activity listeners
     useEffect(() => {
@@ -57,14 +73,23 @@ export function AutoLockProvider({ children }: { children: ReactNode }): JSX.Ele
         for (const evt of ACTIVITY_EVENTS) {
             window.addEventListener(evt, resetTimer, true)
         }
+        const handleVisibilityOrResume = () => {
+            if (document.visibilityState === 'visible') lockIfInactiveTooLong()
+        }
+        document.addEventListener('visibilitychange', handleVisibilityOrResume, true)
+        window.addEventListener('focus', lockIfInactiveTooLong, true)
+        window.addEventListener('pageshow', lockIfInactiveTooLong, true)
 
         return () => {
             for (const evt of ACTIVITY_EVENTS) {
                 window.removeEventListener(evt, resetTimer, true)
             }
+            document.removeEventListener('visibilitychange', handleVisibilityOrResume, true)
+            window.removeEventListener('focus', lockIfInactiveTooLong, true)
+            window.removeEventListener('pageshow', lockIfInactiveTooLong, true)
             if (timerRef.current) clearTimeout(timerRef.current)
         }
-    }, [isAuthenticated, resetTimer])
+    }, [isAuthenticated, resetTimer, lockIfInactiveTooLong])
 
     // Reset lock on logout
     useEffect(() => {
@@ -72,6 +97,7 @@ export function AutoLockProvider({ children }: { children: ReactNode }): JSX.Ele
             setIsLocked(false)
             failedAttemptsRef.current = 0
             lockedUntilRef.current = 0
+            lastActivityRef.current = Date.now()
             if (timerRef.current) clearTimeout(timerRef.current)
             if (cooldownTimerRef.current) clearInterval(cooldownTimerRef.current)
         }
