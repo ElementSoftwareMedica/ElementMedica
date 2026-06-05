@@ -41,6 +41,14 @@ Controlli ancora non chiusi al 100%:
 - Cifratura completa del file SQLite: non implementata; oggi e presente cifratura field-level fail-closed per i campi PII piu requisito operativo di cifratura disco.
 - DPIA/ROPA: richiede validazione DPO/legale fuori dal codice.
 
+Residui non chiudibili solo da codice in questa sessione:
+
+- XSD ufficiale INAIL Allegato 3B: serve importare e versionare lo schema ufficiale.
+- Scanner malware produzione: serve configurazione server/operativa del comando scanner.
+- Cifratura disco device: richiede policy e verifica su ogni PC/macOS reale.
+- Test E2E manuale desktop/web con dati produttivi anonimizzati: richiede installazione reale e credenziali operative controllate.
+- DPIA/ROPA e retention policy finale: richiedono validazione DPO/legale.
+
 ## Obiettivo
 
 Verificare che webapp e app desktop lavorino sugli stessi dati sanitari e amministrativi con controlli coerenti di riservatezza, integrita, disponibilita, tracciabilita e isolamento tenant. Questo documento e un audit tecnico-operativo: non sostituisce una valutazione formale DPO/legale, ma identifica controlli implementati, rischi residui e verifiche obbligatorie prima di considerare il flusso conforme in produzione.
@@ -267,6 +275,8 @@ Priorita: media-alta.
 - `cd desktop-app && npm run typecheck`: OK dopo hardening auto-lock post sospensione/focus.
 - `rg -n "exportBackup|importBackup|db:exportBackup|db:importBackup|SQLite Database|elementmedica-backup.*\\.db" desktop-app/src -S`: OK, nessun IPC legacy backup raw rimasto.
 - `cd desktop-app && npm run typecheck`: OK dopo rimozione IPC backup SQLite raw.
+- `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/unit/desktop-sync-tombstones.test.js tests/unit/desktop-routes-registration.test.js tests/unit/file-security.test.js tests/unit/company-mdl-documents.test.js tests/unit/desktop-sync-attachment.test.js`: OK, 20 test.
+- `cd desktop-app && npm run typecheck`: OK verifica aggregata post hardening sync/sicurezza.
 
 ## Gap Da Chiudere Prima Di Dichiarare Conformita Piena
 
