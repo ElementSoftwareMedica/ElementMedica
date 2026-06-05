@@ -94,15 +94,60 @@ describe('desktop sync tombstones', () => {
     ]));
     expect(mockPrisma.person.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: {
-        tenantProfiles: { some: { tenantId: 'tenant-a' } },
-        deletedAt: { gte: lastSyncAt }
-      }
+        AND: expect.arrayContaining([
+          { tenantProfiles: { some: { tenantId: 'tenant-a' } } },
+          { deletedAt: { gte: lastSyncAt } }
+        ])
+      },
+      orderBy: [{ deletedAt: 'asc' }, { id: 'asc' }],
+      take: 1000
     }));
     expect(mockPrisma.personTenantProfile.findMany).toHaveBeenCalledWith(expect.objectContaining({
       select: expect.objectContaining({ personId: true }),
       where: {
-        tenantId: 'tenant-a',
-        deletedAt: { gte: lastSyncAt }
+        AND: expect.arrayContaining([
+          { tenantId: 'tenant-a' },
+          { deletedAt: { gte: lastSyncAt } }
+        ])
+      },
+      orderBy: [{ deletedAt: 'asc' }, { id: 'asc' }],
+      take: 1000
+    }));
+  });
+
+  test('paginates tombstones beyond a single page per source table', async () => {
+    const lastSyncAt = new Date('2026-06-04T07:00:00.000Z');
+    const deletedAt = new Date('2026-06-04T08:00:00.000Z');
+    const firstPage = Array.from({ length: 1000 }, (_, index) => ({
+      id: `visit-${String(index).padStart(4, '0')}`,
+      deletedAt,
+      updatedAt: deletedAt
+    }));
+    const secondPage = [{
+      id: 'visit-1000',
+      deletedAt: new Date('2026-06-04T08:01:00.000Z'),
+      updatedAt: new Date('2026-06-04T08:01:00.000Z')
+    }];
+    mockPrisma.visita.findMany
+      .mockResolvedValueOnce(firstPage)
+      .mockResolvedValueOnce(secondPage);
+
+    const tombstones = await getDesktopTombstones('tenant-a', lastSyncAt);
+
+    expect(tombstones.filter(row => row.table === 'visits')).toHaveLength(1001);
+    expect(mockPrisma.visita.findMany).toHaveBeenCalledTimes(2);
+    expect(mockPrisma.visita.findMany.mock.calls[1][0]).toEqual(expect.objectContaining({
+      where: {
+        AND: expect.arrayContaining([
+          { tenantId: 'tenant-a' },
+          { deletedAt: { gte: lastSyncAt } },
+          {
+            OR: [
+              { deletedAt: { gt: deletedAt } },
+              { deletedAt, id: { gt: 'visit-0999' } }
+            ]
+          }
+        ])
       }
     }));
   });

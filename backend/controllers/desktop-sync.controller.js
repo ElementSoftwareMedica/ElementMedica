@@ -218,6 +218,8 @@ export const DESKTOP_SYNC_ENTITY_TYPES = [
     'sopralluogo', 'dVR', 'consulenzaMDL', 'allegato3B'
 ];
 
+const DESKTOP_TOMBSTONE_PAGE_SIZE = 1000;
+
 export async function getDesktopTombstones(tenantId, lastSyncAt) {
     if (!lastSyncAt) return [];
 
@@ -232,14 +234,34 @@ export async function getDesktopTombstones(tenantId, lastSyncAt) {
             updatedAt: true,
             ...(source.idField ? { [source.idField]: true } : {})
         };
-        const deletedRows = await model.findMany({
-            where: {
-                ...tenantWhere,
-                deletedAt: { gte: lastSyncAt }
-            },
-            select,
-            take: 5000
-        });
+        const deletedRows = [];
+        let cursor = null;
+
+        while (true) {
+            const andFilters = [
+                tenantWhere,
+                { deletedAt: { gte: lastSyncAt } }
+            ];
+            if (cursor) {
+                andFilters.push({
+                    OR: [
+                        { deletedAt: { gt: cursor.deletedAt } },
+                        { deletedAt: cursor.deletedAt, id: { gt: cursor.id } }
+                    ]
+                });
+            }
+            const page = await model.findMany({
+                where: {
+                    AND: andFilters
+                },
+                select,
+                orderBy: [{ deletedAt: 'asc' }, { id: 'asc' }],
+                take: DESKTOP_TOMBSTONE_PAGE_SIZE
+            });
+            deletedRows.push(...page);
+            if (page.length < DESKTOP_TOMBSTONE_PAGE_SIZE) break;
+            cursor = page[page.length - 1];
+        }
 
         return deletedRows.map(row => ({
             table: source.table,
