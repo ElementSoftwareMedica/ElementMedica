@@ -11,6 +11,7 @@ import type { BridgeExamResult } from './bridge-callback-server'
 import { sendNotification } from './notifications'
 import { generateFhirBundle } from './fse-export'
 import type { FhirPatient, FhirVisit, FhirGiudizio } from './fse-export'
+import { getLocalSecurityStatus } from './security-status'
 
 /**
  * IPC Handlers — Main Process
@@ -2036,6 +2037,10 @@ export function setupIpcHandlers(): void {
 
     ipcMain.handle('app:isPackaged', async () => {
         return app.isPackaged
+    })
+
+    ipcMain.handle('app:getSecurityStatus', async () => {
+        return getLocalSecurityStatus()
     })
 
     /**

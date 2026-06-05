@@ -33,6 +33,15 @@ interface AppInfo {
     isPackaged: boolean
 }
 
+interface LocalSecurityStatus {
+    platform: string
+    piiEncryptionAvailable: boolean
+    plaintextPiiFallbackActive: boolean
+    piiWritesFailClosed: boolean
+    backupEncryptionAvailable: boolean
+    diskEncryption: { status: 'enabled' | 'disabled' | 'unknown' | 'unsupported'; detail: string; checkedAt: string }
+}
+
 type UpdateState =
     | { status: 'idle' }
     | { status: 'checking' }
@@ -44,6 +53,7 @@ type UpdateState =
 
 export function SettingsPage(): JSX.Element {
     const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
+    const [securityStatus, setSecurityStatus] = useState<LocalSecurityStatus | null>(null)
     const [autoSyncEnabled, setAutoSyncEnabled] = useState(isAutoSyncRunning())
     const [clearConfirm, setClearConfirm] = useState(false)
     const [updateState, setUpdateState] = useState<UpdateState>({ status: 'idle' })
@@ -186,16 +196,18 @@ export function SettingsPage(): JSX.Element {
     const loadAppInfo = async (): Promise<void> => {
         if (!window.desktopApi) return
         try {
-            const [version, dbPath, isPackaged] = await Promise.all([
+            const [version, dbPath, isPackaged, security] = await Promise.all([
                 window.desktopApi.app.getVersion(),
                 window.desktopApi.app.getPath('userData'),
-                window.desktopApi.app.isPackaged()
+                window.desktopApi.app.isPackaged(),
+                window.desktopApi.app.getSecurityStatus()
             ])
             setAppInfo({
                 version: version as string,
                 dbPath: dbPath as string,
                 isPackaged: isPackaged as boolean
             })
+            setSecurityStatus(security as LocalSecurityStatus)
         } catch {
             // silent
         }
@@ -351,6 +363,35 @@ export function SettingsPage(): JSX.Element {
                                 <p className="text-sm font-medium text-gray-800">Percorso database</p>
                                 <p className="text-xs text-gray-500 font-mono truncate max-w-md">{appInfo.dbPath}/data/elementmedica.db</p>
                             </div>
+                        </div>
+                    )}
+                    {securityStatus && (
+                        <div className="border-t border-gray-100 pt-3">
+                            <div className="mb-3 flex items-center gap-2">
+                                <Shield className="h-4 w-4 text-teal-600" />
+                                <p className="text-sm font-semibold text-gray-900">Stato sicurezza locale</p>
+                            </div>
+                            <div className="grid gap-3 sm:grid-cols-3">
+                                <div>
+                                    <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">PII SQLite</p>
+                                    <p className={`mt-1 text-xs font-semibold ${securityStatus.piiEncryptionAvailable ? 'text-green-700' : securityStatus.piiWritesFailClosed ? 'text-amber-700' : 'text-red-700'}`}>
+                                        {securityStatus.piiEncryptionAvailable ? 'Cifrata' : securityStatus.piiWritesFailClosed ? 'Blocco scrittura' : 'Fallback in chiaro'}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">Backup</p>
+                                    <p className={`mt-1 text-xs font-semibold ${securityStatus.backupEncryptionAvailable ? 'text-green-700' : 'text-red-700'}`}>
+                                        {securityStatus.backupEncryptionAvailable ? 'Cifrato' : 'Non disponibile'}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">Disco</p>
+                                    <p className={`mt-1 text-xs font-semibold ${securityStatus.diskEncryption.status === 'enabled' ? 'text-green-700' : securityStatus.diskEncryption.status === 'disabled' ? 'text-red-700' : 'text-amber-700'}`}>
+                                        {securityStatus.diskEncryption.status === 'enabled' ? 'Cifrato' : securityStatus.diskEncryption.status === 'disabled' ? 'Non cifrato' : 'Da verificare'}
+                                    </p>
+                                </div>
+                            </div>
+                            <p className="mt-2 text-xs text-gray-500">{securityStatus.diskEncryption.detail}</p>
                         </div>
                     )}
                     <div className="flex items-center justify-between">

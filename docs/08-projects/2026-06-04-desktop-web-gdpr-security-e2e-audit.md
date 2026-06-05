@@ -26,6 +26,7 @@ Controlli implementati/verificati:
 - Backend: mount `/api/v1/desktop-sync`, `/api/v1/desktop-licenses`, upload allegati desktop e fallback upload documenti visita coperti da test statico anti-regressione per prevenire nuovi 404 da route rimosse/non montate.
 - App desktop: cifratura field-level dei principali campi PII/sanitari via Electron `safeStorage`; mappa estesa a campi denormalizzati, documentali, scadenze, servizi MDL e profilo salute. Resta necessario requisito operativo BitLocker/FileVault o cifratura integrale DB per protezione completa.
 - App desktop: la cifratura PII locale e ora fail-closed in runtime produzione se `safeStorage` non e disponibile; il fallback in chiaro resta ammesso solo in sviluppo/test o con override esplicito `ALLOW_PLAINTEXT_PII_STORAGE=true`. La mappa PII include anche Allegato 3B, protocolli, voci tariffario e note associazioni tariffario sincronizzate.
+- App desktop: Impostazioni mostra stato sicurezza locale con cifratura PII, backup cifrato e verifica best-effort FileVault/BitLocker per supportare onboarding device e audit operativo.
 - Packaging Windows desktop verificato con `better-sqlite3` nativo `win32-x64`.
 
 Controlli ancora non chiusi al 100%:
@@ -97,6 +98,7 @@ Rischio residuo: medio. Serve retention policy documentale esplicita. La scansio
 - I campi PII/sanitari principali sono cifrati a livello applicativo con Electron `safeStorage` prima della scrittura su SQLite.
 - La mappa PII desktop include anche nomi/codici fiscali denormalizzati, note appuntamento/visita, `datiStrutturati`, referti, documenti, scadenze, servizi MDL e profilo salute.
 - Se `safeStorage` non e disponibile in runtime produzione, la scrittura di PII viene bloccata invece di salvare dati in chiaro; il fallback non cifrato e limitato a sviluppo/test o override operativo esplicito.
+- Le Impostazioni desktop espongono uno stato sicurezza locale non invasivo: disponibilita cifratura PII, disponibilita backup cifrato e rilevazione best-effort di FileVault/BitLocker. Se il disco risulta non cifrato o non verificabile, il requisito operativo resta da chiudere prima del rollout del device.
 - La licenza consente uso offline con grace period limitato.
 - Il packaging Windows ora forza rebuild/install native deps `win32-x64` e unpack esplicito di `better-sqlite3`, evitando il bundle di un `.node` non Windows.
 
@@ -109,7 +111,7 @@ Rischio residuo: medio-alto se il dispositivo non e cifrato a livello OS. La cif
 Rischio: perdita/furto laptop o profilo Windows compromesso con accesso al DB SQLite locale.
 
 Mitigazioni richieste:
-- Obbligare cifratura disco: BitLocker su Windows, FileVault su macOS.
+- Obbligare cifratura disco: BitLocker su Windows, FileVault su macOS; dal 2026-06-05 lo stato e visibile in Impostazioni desktop per onboarding e supporto.
 - Auto-lock app gia presente: verificare timeout e blocco dopo sospensione.
 - Mantenere aggiornata la mappa `PII_FIELDS` desktop per ogni nuova tabella/campo sanitario sincronizzato; dal 2026-06-05 la mappa copre anche Allegato 3B, protocolli, voci tariffario e note di associazione tariffario.
 - Valutare cifratura integrale SQLite con chiave derivata da credenziale locale o secure storage.
@@ -250,10 +252,11 @@ Priorita: media-alta.
 - `cd desktop-app && npm run typecheck`: OK dopo riallineamento upload `scadenze -> scadenzaPrestazioneProtocollo`.
 - `node --check backend/tests/unit/desktop-routes-registration.test.js`: OK.
 - `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/unit/desktop-routes-registration.test.js`: OK, 4 test.
+- `cd desktop-app && npm run typecheck`: OK dopo stato sicurezza locale FileVault/BitLocker.
 
 ## Gap Da Chiudere Prima Di Dichiarare Conformita Piena
 
-1. Cifratura integrale del DB locale oppure requisito tecnico obbligatorio di cifratura disco verificato in onboarding device.
+1. Cifratura integrale del DB locale oppure requisito tecnico obbligatorio di cifratura disco: controllo best-effort FileVault/BitLocker ora visibile in Impostazioni desktop, ma il rollout deve bloccare/gestire manualmente device non cifrati o non verificabili.
 2. Validazione XSD Allegato 3B integrata prima dell'export definitivo quando lo schema ufficiale viene versionato nel repository.
 3. Antivirus/malware scanning: fail-closed implementato; resta configurare il comando scanner sul server per permettere upload in produzione senza override.
 4. Test automatici cross-tenant: helper documentali MDL e route HTTP lista/download coperti; estendere lo stesso pattern a ogni nuova route documentale o sync.

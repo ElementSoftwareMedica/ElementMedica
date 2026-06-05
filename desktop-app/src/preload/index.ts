@@ -57,6 +57,14 @@ const desktopApi = {
         getVersion: () => ipcRenderer.invoke('app:getVersion'),
         getPath: (name: string) => ipcRenderer.invoke('app:getPath', name),
         isPackaged: () => ipcRenderer.invoke('app:isPackaged'),
+        getSecurityStatus: () => ipcRenderer.invoke('app:getSecurityStatus') as Promise<{
+            platform: NodeJS.Platform
+            piiEncryptionAvailable: boolean
+            plaintextPiiFallbackActive: boolean
+            piiWritesFailClosed: boolean
+            backupEncryptionAvailable: boolean
+            diskEncryption: { status: 'enabled' | 'disabled' | 'unknown' | 'unsupported'; detail: string; checkedAt: string }
+        }>,
         showNotification: (params: { title: string; body: string }) =>
             ipcRenderer.invoke('app:showNotification', params),
         updateBadge: () => ipcRenderer.invoke('app:updateBadge'),
