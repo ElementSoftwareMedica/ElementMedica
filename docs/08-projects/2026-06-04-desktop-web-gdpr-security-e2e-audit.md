@@ -253,6 +253,8 @@ Priorita: media-alta.
 - `node --check backend/tests/unit/desktop-routes-registration.test.js`: OK.
 - `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/unit/desktop-routes-registration.test.js`: OK, 4 test.
 - `cd desktop-app && npm run typecheck`: OK dopo stato sicurezza locale FileVault/BitLocker.
+- `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/unit/desktop-sync-tombstones.test.js tests/unit/desktop-routes-registration.test.js tests/unit/file-security.test.js tests/unit/company-mdl-documents.test.js`: OK, 18 test.
+- `cd desktop-app && npm run typecheck`: OK verifica aggregata finale.
 
 ## Gap Da Chiudere Prima Di Dichiarare Conformita Piena
 
