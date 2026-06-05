@@ -191,9 +191,7 @@ export class VisitaRefertoService {
             const firmaPazienteImgLen = context.firma?.pazienteImg?.length || 0;
             logger.info(`[FIRMA-DIAG] Step 3: Context firma — medico: ${firmaMedicoLen > 0 ? `${firmaMedicoLen} chars` : 'EMPTY'}, paziente: ${firmaPazienteLen > 0 ? `${firmaPazienteLen} chars` : 'EMPTY'}, medicoImg: ${firmaMedicoImgLen > 0 ? 'YES' : 'EMPTY'}, pazienteImg: ${firmaPazienteImgLen > 0 ? 'YES' : 'EMPTY'}`, {
                 component: 'VisitaRefertoService',
-                visitaId,
-                'firma.medicoNome': context.firma?.medicoNome || '(empty)',
-                'firma.pazienteNome': context.firma?.pazienteNome || '(empty)',
+                visitaId
             });
 
             // 4. Extract raw HTML from template content
@@ -271,13 +269,7 @@ export class VisitaRefertoService {
                 hasSignatureImg: hasResolvedSigImg,
                 hasDataUri: hasDataUriInResolved,
                 sigPlaceholderCount,
-                resolvedHtmlLength: resolvedHtml.length,
-                // Extract the signature section snippet for debugging
-                signatureSnippet: (() => {
-                    const idx = resolvedHtml.toLowerCase().indexOf('firma');
-                    if (idx === -1) return '(no "firma" found in resolved HTML)';
-                    return resolvedHtml.substring(Math.max(0, idx - 100), idx + 300);
-                })()
+                resolvedHtmlLength: resolvedHtml.length
             });
 
             // 7. Genera PDF
@@ -364,8 +356,7 @@ export class VisitaRefertoService {
                 visitaId,
                 documentId: document.id,
                 filepath,
-                fileSize: pdfBuffer.length,
-                displayFilename
+                fileSize: pdfBuffer.length
             });
 
             // Build signature warnings for the API response
@@ -784,7 +775,6 @@ export class VisitaRefertoService {
                     found: !!medicoFirma,
                     hasUrl: !!medicoFirma?.firmaImageUrl,
                     urlLength: medicoFirma?.firmaImageUrl?.length || 0,
-                    urlPrefix: medicoFirma?.firmaImageUrl?.substring(0, 50) || null,
                     matchedFirmatarioId: medicoFirma?.firmatarioId || null,
                     firmaId: medicoFirma?.id || null,
                     totalSignaturesInDb: medicoSignatureCount,
@@ -799,8 +789,7 @@ export class VisitaRefertoService {
                         logger.warn('[FIRMA-DIAG] Medico signature appears TRUNCATED — likely stored with bug in applyGraphometricSignature. Skipping.', {
                             component: 'VisitaRefertoService',
                             firmaId: medicoFirma.id,
-                            urlLength: medicoFirma.firmaImageUrl.length,
-                            urlSuffix: medicoFirma.firmaImageUrl.slice(-20)
+                            urlLength: medicoFirma.firmaImageUrl.length
                         });
                     } else {
                         // Normalize data URI format for Puppeteer
@@ -869,7 +858,6 @@ export class VisitaRefertoService {
                     found: !!pazienteFirma,
                     hasUrl: !!pazienteFirma?.firmaImageUrl,
                     urlLength: pazienteFirma?.firmaImageUrl?.length || 0,
-                    urlPrefix: pazienteFirma?.firmaImageUrl?.substring(0, 50) || null,
                     firmaId: pazienteFirma?.id || null,
                     totalSignaturesInDb: pazienteSignatureCount
                 });
@@ -880,8 +868,7 @@ export class VisitaRefertoService {
                         logger.warn('[FIRMA-DIAG] Paziente signature appears TRUNCATED — likely stored with bug in applyGraphometricSignature. Skipping.', {
                             component: 'VisitaRefertoService',
                             firmaId: pazienteFirma.id,
-                            urlLength: pazienteFirma.firmaImageUrl.length,
-                            urlSuffix: pazienteFirma.firmaImageUrl.slice(-20)
+                            urlLength: pazienteFirma.firmaImageUrl.length
                         });
                     } else {
                         result.pazienteImageUrl = this._normalizeDataUri(pazienteFirma.firmaImageUrl);

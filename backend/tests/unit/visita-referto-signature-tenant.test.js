@@ -35,4 +35,10 @@ describe('VisitaRefertoService signature tenant isolation', () => {
       expect(block).toContain('tenantId');
     }
   });
+
+  test('does not log signature image fragments or resolved HTML snippets', () => {
+    expect(serviceSource).not.toMatch(/urlPrefix|urlSuffix|signatureSnippet/);
+    expect(serviceSource).not.toContain("'firma.medicoNome'");
+    expect(serviceSource).not.toContain("'firma.pazienteNome'");
+  });
 });
