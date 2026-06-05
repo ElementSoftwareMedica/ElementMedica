@@ -19,6 +19,7 @@ Controlli implementati/verificati:
 - App desktop: scadenze MDL riallineate a `ScadenzaPrestazioneProtocollo` per alimentare correttamente la card Sorveglianza Sanitaria offline.
 - App desktop: download giornaliero riallineato al full DB per usare `ScadenzaPrestazioneProtocollo`, evitando divergenze tra "scarica giornata" e "scarica tutto il database".
 - App desktop: upload delle righe locali `scadenze` riallineato a `scadenzaPrestazioneProtocollo`; `deadlineItem` resta solo come alias legacy per drenare vecchie operazioni gia in coda.
+- App desktop: gli errori di remap ID dopo una CREATE sincronizzata vengono isolati sulla singola operazione, marcati `FAILED`, loggati localmente e non interrompono il resto del batch upload.
 - App desktop: tombstone locali applicati anche su `_serverId`, non solo su `id`, cosi le righe create offline e poi rimappate vengono marcate eliminate quando il server invia il tombstone.
 - App desktop: sync incrementale full DB esteso ai layer multi-tenant `PersonTenantProfile` e anagrafica globale `Company`, cosi modifiche a profili paziente/azienda arrivano offline anche se il record padre non cambia `updatedAt`.
 - App desktop: `checkConflicts` usa allowlist condivisa `DESKTOP_SYNC_ENTITY_TYPES` e non accede piu dinamicamente a modelli Prisma fuori dal perimetro sync.
@@ -140,7 +141,7 @@ Rischio: divergenza dati, conflitti non rilevati, perdita di aggiornamenti o ove
 Mitigazioni richieste:
 - Ogni tabella sync deve avere `updatedAt`, `deletedAt`, `tenantId`, `remoteId/localId` e mapping ID verificabile.
 - Upload deve essere idempotente e non creare duplicati per movimenti/documenti/visite.
-- Errori di remap devono bloccare solo il record interessato e produrre coda retry, non perdere batch interi.
+- Errori di remap bloccano solo il record interessato: l'operazione viene marcata `FAILED`, rimane nella coda retry e il batch prosegue.
 - Il full download e affiancato da sync incrementale basata su `lastSyncAt`; dal 2026-06-04 include tombstone soft-delete per le tabelle desktop e applicazione locale `_isDeleted=1`. Dal 2026-06-05 il mapping delle tabelle tombstone e coperto da test unitario che legge lo schema SQLite desktop reale.
 - La tabella locale `scadenze` riceve ora `ScadenzaPrestazioneProtocollo`, non `DeadlineItem`, sia nel full DB sia nel download giornata, evitando divergenze nella Sorveglianza Sanitaria offline.
 - L'upload desktop della tabella locale `scadenze` invia ora `scadenzaPrestazioneProtocollo`, mantenendo simmetria tra download, modifiche offline e remap ID.
@@ -259,6 +260,7 @@ Priorita: media-alta.
 - `cd desktop-app && npm run typecheck`: OK verifica aggregata finale.
 - `node --check backend/controllers/desktop-sync.controller.js && node --check backend/tests/unit/desktop-sync-attachment.test.js`: OK.
 - `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/unit/desktop-sync-attachment.test.js`: OK, 2 test.
+- `cd desktop-app && npm run typecheck`: OK dopo isolamento errori remap ID.
 
 ## Gap Da Chiudere Prima Di Dichiarare Conformita Piena
 
@@ -266,7 +268,7 @@ Priorita: media-alta.
 2. Validazione XSD Allegato 3B integrata prima dell'export definitivo quando lo schema ufficiale viene versionato nel repository.
 3. Antivirus/malware scanning: fail-closed implementato; resta configurare il comando scanner sul server per permettere upload in produzione senza override.
 4. Test automatici cross-tenant: helper documentali MDL, route HTTP lista/download e upload allegati desktop coperti; estendere lo stesso pattern a ogni nuova route documentale o sync.
-5. Sync incrementale: tombstone implementati e coperti da test unitario mapping/allineamento tabelle, day-sync riallineato a `ScadenzaPrestazioneProtocollo`, delta full DB esteso ai layer multi-tenant e tombstone locale applicato anche su `_serverId`; resta test E2E manuale su installazione reale desktop/web con dati produttivi anonimizzati.
+5. Sync incrementale: tombstone implementati e coperti da test unitario mapping/allineamento tabelle, day-sync/upload riallineati a `ScadenzaPrestazioneProtocollo`, delta full DB esteso ai layer multi-tenant, tombstone locale applicato anche su `_serverId` e remap ID isolato per singolo record; resta test E2E manuale su installazione reale desktop/web con dati produttivi anonimizzati.
 6. Registro DPIA/ROPA aggiornato con trattamento offline desktop.
 
 ## Valutazione Finale

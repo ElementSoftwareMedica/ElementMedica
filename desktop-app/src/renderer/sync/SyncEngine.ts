@@ -304,34 +304,56 @@ export async function executeUploadSync(callbacks: SyncCallbacks, options: Uploa
             )
 
             const results: UploadResult[] = response.data.results || []
+            const effectiveResults: UploadResult[] = []
 
             for (const result of results) {
-                const newStatus = result.status === 'success' ? 'SYNCED'
-                    : result.status === 'conflict' ? 'CONFLICT'
-                        : 'FAILED'
-
-                await window.desktopApi.sync.updateOperationStatus({
-                    id: result.operationId,
-                    status: newStatus,
-                    conflictData: result.status === 'conflict' ? result : undefined
-                })
+                let effectiveResult = result
 
                 // ID remapping: when a CREATE succeeds and server returns serverId
                 if (result.status === 'success' && result.serverId) {
                     const originalOp = sorted.find(op => op.id === result.operationId)
                     if (originalOp && originalOp.type === 'CREATE') {
-                        await window.desktopApi.sync.remapId({
-                            table: originalOp.entity,
-                            localId: originalOp.entityId,
-                            serverId: result.serverId
-                        })
+                        try {
+                            await window.desktopApi.sync.remapId({
+                                table: originalOp.entity,
+                                localId: originalOp.entityId,
+                                serverId: result.serverId
+                            })
+                        } catch (remapError) {
+                            effectiveResult = {
+                                ...result,
+                                status: 'error',
+                                error: remapError instanceof Error
+                                    ? `Remap ID fallito: ${remapError.message}`
+                                    : 'Remap ID fallito'
+                            }
+                            try {
+                                await window.desktopApi.app.logError({
+                                    message: effectiveResult.error || 'Remap ID fallito',
+                                    context: 'desktop-sync-remap'
+                                })
+                            } catch { /* error log is non-blocking */ }
+                        }
                     }
                 }
+
+                const newStatus = effectiveResult.status === 'success' ? 'SYNCED'
+                    : effectiveResult.status === 'conflict' ? 'CONFLICT'
+                        : 'FAILED'
+
+                await window.desktopApi.sync.updateOperationStatus({
+                    id: effectiveResult.operationId,
+                    status: newStatus,
+                    conflictData: effectiveResult.status === 'conflict' || effectiveResult.status === 'error'
+                        ? effectiveResult
+                        : undefined
+                })
+                effectiveResults.push(effectiveResult)
             }
 
-            totalSuccess += results.filter(r => r.status === 'success').length
-            totalConflict += results.filter(r => r.status === 'conflict').length
-            totalError += results.filter(r => r.status === 'error' || r.status === 'rejected').length
+            totalSuccess += effectiveResults.filter(r => r.status === 'success').length
+            totalConflict += effectiveResults.filter(r => r.status === 'conflict').length
+            totalError += effectiveResults.filter(r => r.status === 'error' || r.status === 'rejected').length
 
             callbacks.onProgress(Math.min(i + BATCH_SIZE, operations.length), operations.length)
         }
