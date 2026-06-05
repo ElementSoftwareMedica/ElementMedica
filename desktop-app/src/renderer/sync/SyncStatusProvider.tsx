@@ -35,12 +35,24 @@ interface SyncStatusContextType {
 
 const SyncStatusContext = createContext<SyncStatusContextType | null>(null)
 
+function getStoredIsoTimestamp(key: string): string | null {
+    const value = localStorage.getItem(key)
+    if (!value) return null
+    if (Number.isNaN(Date.parse(value))) {
+        localStorage.removeItem(key)
+        return null
+    }
+    return value
+}
+
 export function SyncStatusProvider({ children }: { children: ReactNode }): JSX.Element {
     const [syncState, setSyncState] = useState<SyncState>('IDLE')
     const [progress, setProgress] = useState<SyncProgress | null>(null)
-    const [lastSyncAt, setLastSyncAt] = useState<string | null>(null)
+    const [lastSyncAt, setLastSyncAtState] = useState<string | null>(
+        () => getStoredIsoTimestamp('desktop_lastSyncAt')
+    )
     const [lastDownloadAt, setLastDownloadAt] = useState<string | null>(
-        () => localStorage.getItem('desktop_lastDownloadAt')
+        () => getStoredIsoTimestamp('desktop_lastDownloadAt')
     )
     const [lastSyncSummary, setLastSyncSummary] = useState<SyncSummary | null>(null)
     const [pendingOperations, setPendingOperations] = useState(0)
@@ -48,8 +60,15 @@ export function SyncStatusProvider({ children }: { children: ReactNode }): JSX.E
     const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
     const handleSetLastDownloadAt = useCallback((ts: string) => {
+        if (Number.isNaN(Date.parse(ts))) return
         setLastDownloadAt(ts)
         localStorage.setItem('desktop_lastDownloadAt', ts)
+    }, [])
+
+    const handleSetLastSyncAt = useCallback((ts: string) => {
+        if (Number.isNaN(Date.parse(ts))) return
+        setLastSyncAtState(ts)
+        localStorage.setItem('desktop_lastSyncAt', ts)
     }, [])
 
     // Initialize pending count from queue on mount
@@ -74,7 +93,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }): JSX.E
                 errorMessage,
                 setSyncState,
                 setProgress,
-                setLastSyncAt: useCallback((ts: string) => setLastSyncAt(ts), []),
+                setLastSyncAt: handleSetLastSyncAt,
                 setLastDownloadAt: handleSetLastDownloadAt,
                 setLastSyncSummary,
                 setPendingOperations: (v: number | ((prev: number) => number)) => setPendingOperations(v as Parameters<typeof setPendingOperations>[0]),
