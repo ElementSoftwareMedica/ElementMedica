@@ -767,28 +767,6 @@ export class VisitaRefertoService {
                     });
                 }
 
-                // Fallback 3: CROSS-TENANT search — signatures may have been saved with admin's
-                // home tenantId instead of the operated tenant (pre-fix bug). Search without tenantId filter.
-                if (!medicoFirma) {
-                    medicoFirma = await prisma.firmaDigitale.findFirst({
-                        where: {
-                            firmatarioId: { in: medicoSearchIds },
-                            deletedAt: null,
-                            firmaImageUrl: { not: null }
-                        },
-                        orderBy: { createdAt: 'desc' },
-                        select: { firmaImageUrl: true, firmatarioId: true, id: true, createdAt: true }
-                    });
-                    if (medicoFirma) {
-                        logger.warn('[FIRMA-DIAG] Medico signature found via CROSS-TENANT fallback — signature was likely saved with wrong tenantId', {
-                            component: 'VisitaRefertoService',
-                            firmaId: medicoFirma.id,
-                            searchedTenantId: tenantId,
-                            searchIds: medicoSearchIds
-                        });
-                    }
-                }
-
                 // Diagnostic: count total signatures for debug
                 const medicoSignatureCount = await prisma.firmaDigitale.count({
                     where: {
@@ -874,28 +852,6 @@ export class VisitaRefertoService {
                         orderBy: { createdAt: 'desc' },
                         select: { firmaImageUrl: true, id: true }
                     });
-                }
-
-                // Fallback 3: CROSS-TENANT search — patient signature may have been saved
-                // with admin's home tenantId instead of the operated tenant (pre-fix bug)
-                if (!pazienteFirma) {
-                    pazienteFirma = await prisma.firmaDigitale.findFirst({
-                        where: {
-                            firmatarioId: visita.pazienteId,
-                            deletedAt: null,
-                            firmaImageUrl: { not: null }
-                        },
-                        orderBy: { createdAt: 'desc' },
-                        select: { firmaImageUrl: true, id: true }
-                    });
-                    if (pazienteFirma) {
-                        logger.warn('[FIRMA-DIAG] Paziente signature found via CROSS-TENANT fallback — signature was likely saved with wrong tenantId', {
-                            component: 'VisitaRefertoService',
-                            firmaId: pazienteFirma.id,
-                            searchedTenantId: tenantId,
-                            pazienteId: visita.pazienteId
-                        });
-                    }
                 }
 
                 const pazienteSignatureCount = await prisma.firmaDigitale.count({

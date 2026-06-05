@@ -33,6 +33,7 @@ Controlli implementati/verificati:
 - App desktop: rimossi gli IPC legacy `db:exportBackup`/`db:importBackup` che permettevano export/import raw `.db`; resta esposto solo il flusso backup cifrato `.embak` basato su `safeStorage`.
 - App desktop: auto-lock rafforzato con controllo tempo inattivita al ritorno da visibility/focus/pageshow, cosi dopo sospensione o resume oltre timeout la sessione viene bloccata.
 - Packaging Windows desktop verificato con `better-sqlite3` nativo `win32-x64`.
+- Webapp: generazione PDF referto visita non usa piu fallback cross-tenant per recuperare firme medico/paziente; tutte le query `FirmaDigitale` del referto restano tenant-scoped.
 
 Controlli ancora non chiusi al 100%:
 
@@ -90,6 +91,7 @@ Rischio residuo: medio-basso. Va mantenuta la regola Bearer-only e va evitato qu
 - I flussi analizzati usano `getEffectiveTenantId(req)` o `req.person.tenantId`.
 - Le query su documenti MDL risolvono l'azienda tramite `CompanyTenantProfile` nel tenant corrente.
 - Le directory documentali sono segmentate per `tenantId/companyTenantProfileId/documentType`.
+- Le firme usate nel PDF referto visita vengono ricercate solo nel tenant operativo; eventuali firme salvate con tenant errato non vengono piu recuperate tramite fallback cross-tenant.
 
 Rischio residuo: medio-basso sulle route documentali MDL coperte. Ogni nuova route di documenti o sync deve avere test automatico che provi accesso cross-tenant negato.
 
@@ -281,6 +283,8 @@ Priorita: media-alta.
 - `cd desktop-app && npm run typecheck`: OK verifica aggregata post hardening sync/sicurezza.
 - `node --check backend/routes/companies-routes.js && node --check backend/tests/routes/company-mdl-documents-routes.test.js`: OK.
 - `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/routes/company-mdl-documents-routes.test.js`: OK, 4 test, incluso audit GDPR su download documento MDL tenant-scoped.
+- `node --check backend/services/clinical/VisitaRefertoService.js && node --check backend/tests/unit/visita-referto-signature-tenant.test.js`: OK.
+- `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/unit/visita-referto-signature-tenant.test.js`: OK, 2 test anti-regressione su isolamento tenant firme referto.
 
 ## Gap Da Chiudere Prima Di Dichiarare Conformita Piena
 
