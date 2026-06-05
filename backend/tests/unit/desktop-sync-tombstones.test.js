@@ -1,4 +1,5 @@
 import { describe, expect, jest, test, beforeEach } from '@jest/globals';
+import { readFileSync } from 'node:fs';
 
 const mockPrisma = {
   appuntamento: { findMany: jest.fn() },
@@ -53,19 +54,10 @@ const {
   getDesktopTombstones
 } = await import('../../controllers/desktop-sync.controller.js');
 
-const VALID_DESKTOP_TABLES = new Set([
-  'visits', 'appointments', 'appointment_prestazioni',
-  'patients', 'companies', 'company_sites', 'nomine_ruolo',
-  'mansioni', 'mansione_rischi', 'lavoratore_mansioni', 'protocolli', 'protocollo_prestazioni',
-  'scadenze', 'giudizi_idoneita', 'movimenti_contabili',
-  'prestazioni', 'tariffari', 'convenzioni', 'ambulatori', 'slot_disponibilita', 'medici',
-  'visit_templates', 'document_templates', 'questionari_medici_config', 'esami_strumentali', 'allegati',
-  'documenti_compilati', 'questionari_risposte',
-  'profili_salute', 'documenti_clinici', 'person_documents', 'referti',
-  'visit_revisions', 'visit_access_logs', 'firme_digitali',
-  'lavoratore_rischi_aggiuntivi',
-  'tariffario_voci', 'tariffario_company_associations', 'sopralluoghi', 'dvr', 'consulenze_mdl', 'allegati_3b'
-]);
+function getDesktopSqliteTables() {
+  const databaseSource = readFileSync(new URL('../../../desktop-app/src/main/database.ts', import.meta.url), 'utf8');
+  return new Set([...databaseSource.matchAll(/CREATE TABLE IF NOT EXISTS\s+([a-zA-Z0-9_]+)/g)].map(match => match[1]));
+}
 
 describe('desktop sync tombstones', () => {
   beforeEach(() => {
@@ -115,8 +107,9 @@ describe('desktop sync tombstones', () => {
   });
 
   test('keeps tombstone source tables aligned with desktop SQLite tables', () => {
+    const validDesktopTables = getDesktopSqliteTables();
     const tables = DESKTOP_TOMBSTONE_SOURCES.map(source => source.table);
-    const invalidTables = tables.filter(table => !VALID_DESKTOP_TABLES.has(table));
+    const invalidTables = tables.filter(table => !validDesktopTables.has(table));
 
     expect(invalidTables).toEqual([]);
     const sourceKeys = DESKTOP_TOMBSTONE_SOURCES.map(source => `${source.model}:${source.table}:${source.idField || 'id'}`);

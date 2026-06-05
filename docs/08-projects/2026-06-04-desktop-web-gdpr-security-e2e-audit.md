@@ -21,6 +21,7 @@ Controlli implementati/verificati:
 - App desktop: tombstone locali applicati anche su `_serverId`, non solo su `id`, cosi le righe create offline e poi rimappate vengono marcate eliminate quando il server invia il tombstone.
 - App desktop: sync incrementale full DB esteso ai layer multi-tenant `PersonTenantProfile` e anagrafica globale `Company`, cosi modifiche a profili paziente/azienda arrivano offline anche se il record padre non cambia `updatedAt`.
 - App desktop: `checkConflicts` usa allowlist condivisa `DESKTOP_SYNC_ENTITY_TYPES` e non accede piu dinamicamente a modelli Prisma fuori dal perimetro sync.
+- App desktop/backend: il test dei tombstone sync legge direttamente `desktop-app/src/main/database.ts` per verificare che ogni tabella remota cancellabile abbia una tabella SQLite locale reale, evitando drift tra liste duplicate.
 - App desktop: cifratura field-level dei principali campi PII/sanitari via Electron `safeStorage`; mappa estesa a campi denormalizzati, documentali, scadenze, servizi MDL e profilo salute. Resta necessario requisito operativo BitLocker/FileVault o cifratura integrale DB per protezione completa.
 - App desktop: la cifratura PII locale e ora fail-closed in runtime produzione se `safeStorage` non e disponibile; il fallback in chiaro resta ammesso solo in sviluppo/test o con override esplicito `ALLOW_PLAINTEXT_PII_STORAGE=true`. La mappa PII include anche Allegato 3B, protocolli, voci tariffario e note associazioni tariffario sincronizzate.
 - Packaging Windows desktop verificato con `better-sqlite3` nativo `win32-x64`.
@@ -133,7 +134,7 @@ Mitigazioni richieste:
 - Ogni tabella sync deve avere `updatedAt`, `deletedAt`, `tenantId`, `remoteId/localId` e mapping ID verificabile.
 - Upload deve essere idempotente e non creare duplicati per movimenti/documenti/visite.
 - Errori di remap devono bloccare solo il record interessato e produrre coda retry, non perdere batch interi.
-- Il full download e affiancato da sync incrementale basata su `lastSyncAt`; dal 2026-06-04 include tombstone soft-delete per le tabelle desktop e applicazione locale `_isDeleted=1`. Dal 2026-06-05 il mapping delle tabelle tombstone e coperto da test unitario di allineamento con le tabelle SQLite desktop.
+- Il full download e affiancato da sync incrementale basata su `lastSyncAt`; dal 2026-06-04 include tombstone soft-delete per le tabelle desktop e applicazione locale `_isDeleted=1`. Dal 2026-06-05 il mapping delle tabelle tombstone e coperto da test unitario che legge lo schema SQLite desktop reale.
 - La tabella locale `scadenze` riceve ora `ScadenzaPrestazioneProtocollo`, non `DeadlineItem`, sia nel full DB sia nel download giornata, evitando divergenze nella Sorveglianza Sanitaria offline.
 - I tombstone applicati dal desktop cercano sia `id` sia `_serverId` e rispettano `tenantId` quando presente, coprendo i record creati offline e successivamente rimappati.
 - Il delta full DB include modifiche a `PersonTenantProfile` e alla `Company` globale collegata al `CompanyTenantProfile`, coprendo i layer multi-tenant P48/P49.
@@ -240,7 +241,7 @@ Priorita: media-alta.
 
 - `node --check backend/controllers/desktop-sync.controller.js`: OK.
 - `node --check backend/tests/unit/desktop-sync-tombstones.test.js`: OK.
-- `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/unit/desktop-sync-tombstones.test.js`: OK, 6 test.
+- `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/unit/desktop-sync-tombstones.test.js`: OK, 6 test, incluso controllo tombstone contro schema SQLite desktop reale.
 - `cd desktop-app && npm run typecheck`: OK.
 
 ## Gap Da Chiudere Prima Di Dichiarare Conformita Piena
