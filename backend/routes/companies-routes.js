@@ -1006,7 +1006,7 @@ router.post('/:id/mdl-documents/:documentType/upload',
       if (req.file?.path && fs.existsSync(req.file.path)) {
         fs.unlinkSync(req.file.path);
       }
-      if (error.code === 'MALWARE_SCAN_FAILED') {
+      if (error.code === 'MALWARE_SCAN_FAILED' || error.code === 'MALWARE_SCAN_NOT_CONFIGURED') {
         return res.status(400).json({ success: false, error: 'File rifiutato dalla scansione sicurezza' });
       }
       logger.error({ error: error.message, companyOrProfileId: req.params.id }, 'Errore upload documento MDL azienda');

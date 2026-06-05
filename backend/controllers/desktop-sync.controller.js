@@ -158,7 +158,7 @@ function splitDocumentTemplatesForDesktop(documentTemplates = []) {
     return { documentTemplatesBase, questionariMediciConfig };
 }
 
-const DESKTOP_TOMBSTONE_SOURCES = [
+export const DESKTOP_TOMBSTONE_SOURCES = [
     { model: 'person', table: 'patients', where: tenantId => ({ tenantProfiles: { some: { tenantId } } }) },
     { model: 'personTenantProfile', table: 'patients', idField: 'personId' },
     { model: 'companyTenantProfile', table: 'companies' },
@@ -2324,7 +2324,7 @@ export async function uploadAttachment(req, res) {
                 // Best-effort cleanup only.
             }
         }
-        if (error.code === 'MALWARE_SCAN_FAILED') {
+        if (error.code === 'MALWARE_SCAN_FAILED' || error.code === 'MALWARE_SCAN_NOT_CONFIGURED') {
             return res.status(400).json({ error: 'File rifiutato dalla scansione sicurezza' });
         }
         logger.error({ error: error.message, stack: error.stack }, '[P98] Errore upload allegato desktop');

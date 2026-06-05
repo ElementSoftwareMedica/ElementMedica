@@ -10,6 +10,8 @@ import {
 
 describe('fileSecurity', () => {
   const oldScanCommand = process.env.CLAMAV_SCAN_COMMAND;
+  const oldNodeEnv = process.env.NODE_ENV;
+  const oldAllowUnscannedUploads = process.env.ALLOW_UNSCANNED_UPLOADS;
 
   afterEach(() => {
     if (oldScanCommand === undefined) {
@@ -18,6 +20,16 @@ describe('fileSecurity', () => {
       process.env.CLAMAV_SCAN_COMMAND = oldScanCommand;
     }
     delete process.env.FILE_SCAN_COMMAND;
+    if (oldNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = oldNodeEnv;
+    }
+    if (oldAllowUnscannedUploads === undefined) {
+      delete process.env.ALLOW_UNSCANNED_UPLOADS;
+    } else {
+      process.env.ALLOW_UNSCANNED_UPLOADS = oldAllowUnscannedUploads;
+    }
   });
 
   test('calcola hash SHA-256 coerente per buffer e file', () => {
@@ -33,6 +45,7 @@ describe('fileSecurity', () => {
   });
 
   test('non blocca upload quando scanner malware non configurato', async () => {
+    process.env.NODE_ENV = 'test';
     delete process.env.CLAMAV_SCAN_COMMAND;
     delete process.env.FILE_SCAN_COMMAND;
     const tmp = path.join(os.tmpdir(), `file-security-${Date.now()}.pdf`);
@@ -41,6 +54,39 @@ describe('fileSecurity', () => {
     try {
       const result = await assertUploadedFileIsSafe(tmp);
       expect(result.sha256).toMatch(/^[a-f0-9]{64}$/);
+      expect(result.scan).toEqual({ scanned: false, status: 'NOT_CONFIGURED' });
+    } finally {
+      fs.unlinkSync(tmp);
+    }
+  });
+
+  test('blocca upload in produzione se scanner malware non configurato', async () => {
+    process.env.NODE_ENV = 'production';
+    delete process.env.CLAMAV_SCAN_COMMAND;
+    delete process.env.FILE_SCAN_COMMAND;
+    delete process.env.ALLOW_UNSCANNED_UPLOADS;
+    const tmp = path.join(os.tmpdir(), `file-security-${Date.now()}.pdf`);
+    fs.writeFileSync(tmp, Buffer.from('%PDF-1.4\n'));
+
+    try {
+      await expect(assertUploadedFileIsSafe(tmp)).rejects.toMatchObject({
+        code: 'MALWARE_SCAN_NOT_CONFIGURED'
+      });
+    } finally {
+      fs.unlinkSync(tmp);
+    }
+  });
+
+  test('consente override esplicito per upload non scansionati', async () => {
+    process.env.NODE_ENV = 'production';
+    process.env.ALLOW_UNSCANNED_UPLOADS = 'true';
+    delete process.env.CLAMAV_SCAN_COMMAND;
+    delete process.env.FILE_SCAN_COMMAND;
+    const tmp = path.join(os.tmpdir(), `file-security-${Date.now()}.pdf`);
+    fs.writeFileSync(tmp, Buffer.from('%PDF-1.4\n'));
+
+    try {
+      const result = await assertUploadedFileIsSafe(tmp);
       expect(result.scan).toEqual({ scanned: false, status: 'NOT_CONFIGURED' });
     } finally {
       fs.unlinkSync(tmp);

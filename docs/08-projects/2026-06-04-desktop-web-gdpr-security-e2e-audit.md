@@ -5,14 +5,14 @@ Ambito: ElementMedica webapp, API `/api/v1`, app desktop offline-first, sincroni
 
 ## Stato Avanzamento
 
-Ultimo aggiornamento tecnico: 2026-06-04.
+Ultimo aggiornamento tecnico: 2026-06-05.
 
 Controlli implementati/verificati:
 
 - Documenti MDL generati da Risultati Anonimi Collettivi e Verbale Riunione Periodica archiviati nello stesso storico dei documenti firmabili.
 - Metadati documentali MDL estesi con hash SHA-256 del file, hash del documento origine quando si firma da storico, stato scansione e origine generata/upload.
 - Download documenti MDL con header `X-Document-SHA256` e `X-Content-Type-Options: nosniff`.
-- Upload documenti MDL e allegati visita desktop protetti da hash SHA-256 e scansione malware opzionale tramite `CLAMAV_SCAN_COMMAND`/`FILE_SCAN_COMMAND`.
+- Upload documenti MDL e allegati visita desktop protetti da hash SHA-256 e scansione malware. In produzione gli upload sono fail-closed se manca `CLAMAV_SCAN_COMMAND`/`FILE_SCAN_COMMAND`, salvo override esplicito `ALLOW_UNSCANNED_UPLOADS=true`.
 - Export XML Allegato 3B tracciato in `GdprAuditLog` con hash SHA-256 del payload XML e validazione strutturale prima del download.
 - App desktop: sync incrementale gia presente via `lastSyncAt` su `GET /api/v1/desktop-sync/download-full-db`.
 - App desktop: sync incrementale estesa con tombstone soft-delete per le tabelle desktop sincronizzate; i record cancellati online vengono marcati `_isDeleted=1` localmente senza cancellazione fisica.
@@ -23,7 +23,7 @@ Controlli implementati/verificati:
 Controlli ancora non chiusi al 100%:
 
 - Validazione XSD ufficiale Allegato 3B: manca nel repository lo schema INAIL versionato da usare come fonte di verita.
-- Scansione malware in produzione: codice pronto, ma deve essere configurato il comando scanner sul server.
+- Scansione malware in produzione: il codice richiede scanner configurato e rifiuta upload non scansionati; resta attivare sul server `CLAMAV_SCAN_COMMAND` o `FILE_SCAN_COMMAND`.
 - Test automatici helper documenti MDL: aggiunto test su risoluzione `CompanyTenantProfile` tenant-scoped, tipologie consentite e sanitizzazione filename. Resta utile fixture E2E multi-tenant reale per l'intera route HTTP.
 - Cifratura completa del file SQLite: non implementata; oggi e presente cifratura field-level piu requisito operativo di cifratura disco.
 - DPIA/ROPA: richiede validazione DPO/legale fuori dal codice.
@@ -113,7 +113,7 @@ Rischio: caricamento file malevoli o PDF con contenuto attivo.
 
 Mitigazioni richieste:
 - Limitare MIME e dimensione, gia presente.
-- Abilitare in produzione scansione antivirus/ClamAV o servizio equivalente via `CLAMAV_SCAN_COMMAND`/`FILE_SCAN_COMMAND`.
+- Abilitare in produzione scansione antivirus/ClamAV o servizio equivalente via `CLAMAV_SCAN_COMMAND`/`FILE_SCAN_COMMAND`; il codice rifiuta gli upload se lo scanner manca.
 - Forzare download/preview con header sicuri (`Content-Type`, `Content-Disposition`, `X-Content-Type-Options: nosniff`).
 - Evitare rendering inline di formati non PDF/immagine sicuri.
 
@@ -127,7 +127,7 @@ Mitigazioni richieste:
 - Ogni tabella sync deve avere `updatedAt`, `deletedAt`, `tenantId`, `remoteId/localId` e mapping ID verificabile.
 - Upload deve essere idempotente e non creare duplicati per movimenti/documenti/visite.
 - Errori di remap devono bloccare solo il record interessato e produrre coda retry, non perdere batch interi.
-- Il full download e affiancato da sync incrementale basata su `lastSyncAt`; dal 2026-06-04 include tombstone soft-delete per le tabelle desktop e applicazione locale `_isDeleted=1`.
+- Il full download e affiancato da sync incrementale basata su `lastSyncAt`; dal 2026-06-04 include tombstone soft-delete per le tabelle desktop e applicazione locale `_isDeleted=1`. Dal 2026-06-05 il mapping delle tabelle tombstone e coperto da test unitario di allineamento con le tabelle SQLite desktop.
 - La tabella locale `scadenze` riceve ora `ScadenzaPrestazioneProtocollo`, non `DeadlineItem`, evitando divergenze nella Sorveglianza Sanitaria offline.
 
 Priorita: alta.
@@ -218,13 +218,20 @@ Priorita: media-alta.
 - `cd desktop-app && npm run typecheck`: OK.
 - `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/unit/company-mdl-documents.test.js tests/unit/desktop-sync-tombstones.test.js tests/unit/file-security.test.js`: OK.
 
+## Verifiche Tecniche Eseguite 2026-06-05
+
+- `node --check backend/controllers/desktop-sync.controller.js`: OK.
+- `node --check backend/utils/fileSecurity.js`: OK.
+- `node --check backend/routes/companies-routes.js`: OK.
+- `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/unit/desktop-sync-tombstones.test.js tests/unit/file-security.test.js tests/unit/company-mdl-documents.test.js`: OK.
+
 ## Gap Da Chiudere Prima Di Dichiarare Conformita Piena
 
 1. Cifratura integrale del DB locale oppure requisito tecnico obbligatorio di cifratura disco verificato in onboarding device.
 2. Validazione XSD Allegato 3B integrata prima dell'export definitivo quando lo schema ufficiale viene versionato nel repository.
-3. Antivirus/malware scanning da abilitare sul server impostando `CLAMAV_SCAN_COMMAND` o `FILE_SCAN_COMMAND`.
+3. Antivirus/malware scanning: fail-closed implementato; resta configurare il comando scanner sul server per permettere upload in produzione senza override.
 4. Test automatici cross-tenant: helper documentali MDL coperti; resta fixture E2E HTTP multi-tenant per tutta la route.
-5. Sync incrementale: tombstone implementati e coperti da test unitario mapping; resta test E2E tabella-per-tabella con fixture reale.
+5. Sync incrementale: tombstone implementati e coperti da test unitario mapping/allineamento tabelle; resta test E2E con fixture reale.
 6. Registro DPIA/ROPA aggiornato con trattamento offline desktop.
 
 ## Valutazione Finale

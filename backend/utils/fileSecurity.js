@@ -4,6 +4,7 @@ import { createHash } from 'crypto';
 import { promisify } from 'util';
 
 const execFileAsync = promisify(execFile);
+const TRUE_VALUES = new Set(['1', 'true', 'yes']);
 
 export function computeSha256Buffer(buffer) {
   return createHash('sha256').update(buffer).digest('hex');
@@ -16,6 +17,13 @@ export function computeSha256File(filePath) {
 export async function scanFileForMalware(filePath) {
   const rawCommand = process.env.CLAMAV_SCAN_COMMAND || process.env.FILE_SCAN_COMMAND || '';
   if (!rawCommand.trim()) {
+    const allowUnscanned = TRUE_VALUES.has(String(process.env.ALLOW_UNSCANNED_UPLOADS || '').toLowerCase());
+    if (process.env.NODE_ENV === 'production' && !allowUnscanned) {
+      const configError = new Error('Scanner malware non configurato');
+      configError.code = 'MALWARE_SCAN_NOT_CONFIGURED';
+      configError.details = { status: 'NOT_CONFIGURED' };
+      throw configError;
+    }
     return { scanned: false, status: 'NOT_CONFIGURED' };
   }
 
