@@ -24,6 +24,7 @@ Controlli implementati/verificati:
 - App desktop: `checkConflicts` usa allowlist condivisa `DESKTOP_SYNC_ENTITY_TYPES` e non accede piu dinamicamente a modelli Prisma fuori dal perimetro sync.
 - App desktop/backend: il test dei tombstone sync legge direttamente `desktop-app/src/main/database.ts` per verificare che ogni tabella remota cancellabile abbia una tabella SQLite locale reale, evitando drift tra liste duplicate.
 - Backend: mount `/api/v1/desktop-sync`, `/api/v1/desktop-licenses`, upload allegati desktop e fallback upload documenti visita coperti da test statico anti-regressione per prevenire nuovi 404 da route rimosse/non montate.
+- Backend: upload allegati desktop coperto da test cross-tenant; una visita fuori tenant viene rifiutata come non trovata, il file temporaneo viene rimosso e non vengono creati allegati.
 - App desktop: cifratura field-level dei principali campi PII/sanitari via Electron `safeStorage`; mappa estesa a campi denormalizzati, documentali, scadenze, servizi MDL e profilo salute. Resta necessario requisito operativo BitLocker/FileVault o cifratura integrale DB per protezione completa.
 - App desktop: la cifratura PII locale e ora fail-closed in runtime produzione se `safeStorage` non e disponibile; il fallback in chiaro resta ammesso solo in sviluppo/test o con override esplicito `ALLOW_PLAINTEXT_PII_STORAGE=true`. La mappa PII include anche Allegato 3B, protocolli, voci tariffario e note associazioni tariffario sincronizzate.
 - App desktop: Impostazioni mostra stato sicurezza locale con cifratura PII, backup cifrato e verifica best-effort FileVault/BitLocker per supportare onboarding device e audit operativo.
@@ -68,6 +69,7 @@ Verificare che webapp e app desktop lavorino sugli stessi dati sanitari e ammini
 - Il desktop invia `Authorization: Bearer <token>` e `X-Tenant-ID`; il backend verifica che l'utente appartenga al tenant indicato prima di usarlo.
 - La route `POST /api/v1/desktop-licenses/heartbeat` e montata: senza token risponde `401`, quindi non e una route pubblica e non espone stato licenza.
 - Le route desktop critiche sono coperte da test statico anti-regressione: mount `/desktop-sync`, mount `/desktop-licenses`, `POST /desktop-sync/upload-attachment`, `POST /desktop-licenses/heartbeat`, fallback `POST /clinica/documenti/visita/upload`.
+- `POST /desktop-sync/upload-attachment` verifica l'appartenenza tenant della visita prima della scansione/creazione allegato e rimuove il file temporaneo se la visita non e nel tenant corrente.
 
 Rischio residuo: medio-basso. Va mantenuta la regola Bearer-only e va evitato qualsiasi fallback cookie/legacy.
 
@@ -255,13 +257,15 @@ Priorita: media-alta.
 - `cd desktop-app && npm run typecheck`: OK dopo stato sicurezza locale FileVault/BitLocker.
 - `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/unit/desktop-sync-tombstones.test.js tests/unit/desktop-routes-registration.test.js tests/unit/file-security.test.js tests/unit/company-mdl-documents.test.js`: OK, 18 test.
 - `cd desktop-app && npm run typecheck`: OK verifica aggregata finale.
+- `node --check backend/controllers/desktop-sync.controller.js && node --check backend/tests/unit/desktop-sync-attachment.test.js`: OK.
+- `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/unit/desktop-sync-attachment.test.js`: OK, 2 test.
 
 ## Gap Da Chiudere Prima Di Dichiarare Conformita Piena
 
 1. Cifratura integrale del DB locale oppure requisito tecnico obbligatorio di cifratura disco: controllo best-effort FileVault/BitLocker ora visibile in Impostazioni desktop, ma il rollout deve bloccare/gestire manualmente device non cifrati o non verificabili.
 2. Validazione XSD Allegato 3B integrata prima dell'export definitivo quando lo schema ufficiale viene versionato nel repository.
 3. Antivirus/malware scanning: fail-closed implementato; resta configurare il comando scanner sul server per permettere upload in produzione senza override.
-4. Test automatici cross-tenant: helper documentali MDL e route HTTP lista/download coperti; estendere lo stesso pattern a ogni nuova route documentale o sync.
+4. Test automatici cross-tenant: helper documentali MDL, route HTTP lista/download e upload allegati desktop coperti; estendere lo stesso pattern a ogni nuova route documentale o sync.
 5. Sync incrementale: tombstone implementati e coperti da test unitario mapping/allineamento tabelle, day-sync riallineato a `ScadenzaPrestazioneProtocollo`, delta full DB esteso ai layer multi-tenant e tombstone locale applicato anche su `_serverId`; resta test E2E manuale su installazione reale desktop/web con dati produttivi anonimizzati.
 6. Registro DPIA/ROPA aggiornato con trattamento offline desktop.
 

@@ -2292,6 +2292,14 @@ export async function uploadAttachment(req, res) {
     try {
         const tenantId = getEffectiveTenantId(req);
         const personId = req.person.id;
+        const cleanupUploadedFile = () => {
+            if (!req.file?.path) return;
+            try {
+                if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+            } catch {
+                // Best-effort cleanup only.
+            }
+        };
 
         if (!req.file) {
             return res.status(400).json({ error: 'File obbligatorio' });
@@ -2300,6 +2308,7 @@ export async function uploadAttachment(req, res) {
         const { visitaId, allegatoLocalId, nome, tipo, dimensione, mimeType } = req.body;
 
         if (!visitaId || !nome) {
+            cleanupUploadedFile();
             return res.status(400).json({ error: 'visitaId e nome sono obbligatori' });
         }
 
@@ -2308,6 +2317,7 @@ export async function uploadAttachment(req, res) {
             where: { id: visitaId, tenantId, deletedAt: null }
         });
         if (!visita) {
+            cleanupUploadedFile();
             return res.status(404).json({ error: 'Visita non trovata' });
         }
 
