@@ -222,6 +222,13 @@ function sortByDependency(ops: PendingOperation[]): PendingOperation[] {
 const MAX_RETRIES = 3
 const BATCH_SIZE = 500
 
+function getRejectedOperationReason(op: PendingOperation): string | null {
+    if (!ACTION_MAP[op.type]) return `Tipo operazione sync non supportata: ${op.type}`
+    if (!ENTITY_MAP[op.entity]) return `Entita sync non supportata: ${op.entity}`
+    if (op.retryCount >= MAX_RETRIES) return `Retry massimo raggiunto (${MAX_RETRIES})`
+    return null
+}
+
 // === Main Upload Sync ===
 
 interface UploadSyncOptions {
@@ -250,11 +257,29 @@ export async function executeUploadSync(callbacks: SyncCallbacks, options: Uploa
             return
         }
 
-        // Sort by dependency graph and filter valid + retriable operations
+        // Sort by dependency graph and reject unsupported or retry-exhausted operations.
         const sorted = sortByDependency(pending)
+        const invalidOperations = sorted
+            .map(op => ({ op, reason: getRejectedOperationReason(op) }))
+            .filter((item): item is { op: PendingOperation; reason: string } => Boolean(item.reason))
+
+        for (const { op, reason } of invalidOperations) {
+            await window.desktopApi.sync.updateOperationStatus({
+                id: op.id,
+                status: 'FAILED',
+                conflictData: {
+                    operationId: op.id,
+                    status: 'rejected',
+                    error: reason,
+                    entity: op.entity,
+                    type: op.type,
+                    retryCount: op.retryCount
+                }
+            })
+        }
+
         const operations = sorted
-            .filter(op => ACTION_MAP[op.type] && ENTITY_MAP[op.entity])
-            .filter(op => op.retryCount < MAX_RETRIES)
+            .filter(op => !getRejectedOperationReason(op))
             .map(op => ({
                 id: op.id,
                 entityType: ENTITY_MAP[op.entity],
@@ -265,7 +290,7 @@ export async function executeUploadSync(callbacks: SyncCallbacks, options: Uploa
             }))
 
         if (operations.length === 0) {
-            callbacks.onComplete({ success: 0, conflict: 0, error: 0 })
+            callbacks.onComplete({ success: 0, conflict: 0, error: invalidOperations.length })
             return
         }
 
@@ -279,7 +304,7 @@ export async function executeUploadSync(callbacks: SyncCallbacks, options: Uploa
 
         let totalSuccess = 0
         let totalConflict = 0
-        let totalError = 0
+        let totalError = invalidOperations.length
 
         for (let i = 0; i < operations.length; i += BATCH_SIZE) {
             const batch = operations.slice(i, i + BATCH_SIZE)
@@ -344,7 +369,7 @@ export async function executeUploadSync(callbacks: SyncCallbacks, options: Uploa
                 await window.desktopApi.sync.updateOperationStatus({
                     id: effectiveResult.operationId,
                     status: newStatus,
-                    conflictData: effectiveResult.status === 'conflict' || effectiveResult.status === 'error'
+                    conflictData: effectiveResult.status !== 'success'
                         ? effectiveResult
                         : undefined
                 })

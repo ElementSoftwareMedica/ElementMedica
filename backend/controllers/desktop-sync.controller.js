@@ -158,6 +158,12 @@ function splitDocumentTemplatesForDesktop(documentTemplates = []) {
     return { documentTemplatesBase, questionariMediciConfig };
 }
 
+export function parseDesktopLastSyncAt(value) {
+    if (!value || typeof value !== 'string') return null;
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 export const DESKTOP_TOMBSTONE_SOURCES = [
     { model: 'person', table: 'patients', where: tenantId => ({ tenantProfiles: { some: { tenantId } } }) },
     { model: 'personTenantProfile', table: 'patients', idField: 'personId' },
@@ -846,7 +852,12 @@ export async function downloadDay(req, res) {
 export async function downloadFullDb(req, res) {
     try {
         const tenantId = getEffectiveTenantId(req);
-        const lastSyncAt = req.query.lastSyncAt ? new Date(req.query.lastSyncAt) : null;
+        const rawLastSyncAt = req.query.lastSyncAt;
+        const lastSyncAt = parseDesktopLastSyncAt(rawLastSyncAt);
+
+        if (rawLastSyncAt && !lastSyncAt) {
+            logger.warn({ tenantId }, '[P98] Ignorato lastSyncAt desktop non valido: fallback a full sync');
+        }
 
         logger.info({ tenantId, lastSyncAt }, '[P98] Download full DB request');
 

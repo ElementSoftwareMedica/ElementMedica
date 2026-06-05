@@ -51,7 +51,8 @@ const {
   checkConflicts,
   downloadDay,
   downloadFullDb,
-  getDesktopTombstones
+  getDesktopTombstones,
+  parseDesktopLastSyncAt
 } = await import('../../controllers/desktop-sync.controller.js');
 
 function getDesktopSqliteTables() {
@@ -251,6 +252,31 @@ describe('desktop sync tombstones', () => {
     expect(res.status).not.toHaveBeenCalled();
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
       meta: expect.objectContaining({ isFullSync: false, lastSyncAt })
+    }));
+  });
+
+  test('downloadFullDb ignores invalid lastSyncAt and falls back to full sync', async () => {
+    expect(parseDesktopLastSyncAt('not-a-date')).toBeNull();
+
+    const req = {
+      person: { id: 'doctor-a', tenantId: 'tenant-a' },
+      query: { lastSyncAt: 'not-a-date' }
+    };
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn()
+    };
+
+    await downloadFullDb(req, res);
+
+    const patientCall = mockPrisma.person.findMany.mock.calls[0][0];
+    expect(patientCall.where).toEqual({
+      deletedAt: null,
+      tenantProfiles: { some: { tenantId: 'tenant-a', deletedAt: null } }
+    });
+    expect(res.status).not.toHaveBeenCalled();
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      meta: expect.objectContaining({ isFullSync: true, lastSyncAt: null })
     }));
   });
 
