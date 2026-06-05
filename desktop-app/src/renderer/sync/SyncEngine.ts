@@ -703,8 +703,17 @@ export async function syncAttachments(token: string, tenantId: string): Promise<
 
 export interface DownloadCallbacks {
     onStart: () => void
-    onComplete: (recordCount: number) => void
+    onComplete: (recordCount: number, syncCursor?: string) => void
     onError: (message: string) => void
+}
+
+function getPayloadSyncCursor(data: unknown): string | undefined {
+    const meta = typeof data === 'object' && data !== null && 'meta' in data
+        ? (data as { meta?: Record<string, unknown> }).meta
+        : undefined
+    const rawCursor = meta?.syncCursor || meta?.downloadedAt
+    if (typeof rawCursor !== 'string') return undefined
+    return Number.isNaN(Date.parse(rawCursor)) ? undefined : rawCursor
 }
 
 /**
@@ -750,17 +759,18 @@ export async function executeIncrementalDownload(
         })
 
         const data = response.data
+        const syncCursor = getPayloadSyncCursor(data)
         const counts = data.meta?.counts || {}
         const totalRecords = Object.values(counts).reduce((a: number, b) => a + (b as number), 0) as number
 
         // Skip merging if server returned no changes
         if (totalRecords === 0) {
-            callbacks.onComplete(0)
+            callbacks.onComplete(0, syncCursor)
             return
         }
 
         await window.desktopApi.sync.storeDayData({ data })
-        callbacks.onComplete(totalRecords)
+        callbacks.onComplete(totalRecords, syncCursor)
     } catch (error) {
         if (axios.isAxiosError(error) && error.response?.status === 401) {
             callbacks.onError('Sessione scaduta')

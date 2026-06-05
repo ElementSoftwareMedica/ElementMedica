@@ -38,9 +38,15 @@ interface DayStats {
 }
 
 type DesktopSyncPayload = {
-    meta?: { counts?: Record<string, number>; tenantId?: string }
+    meta?: { counts?: Record<string, number>; tenantId?: string; syncCursor?: string; downloadedAt?: string }
     aziende?: Array<Record<string, unknown>>
     medici?: Array<Record<string, unknown>>
+}
+
+const getPayloadSyncCursor = (data: DesktopSyncPayload): string | null => {
+    const cursor = data.meta?.syncCursor || data.meta?.downloadedAt
+    if (!cursor || Number.isNaN(Date.parse(cursor))) return null
+    return cursor
 }
 
 const uniqueById = (items: Array<Record<string, unknown>>): Array<Record<string, unknown>> => {
@@ -296,9 +302,9 @@ export function DashboardPage(): JSX.Element {
             logInfo(`Salvataggio dati in locale…`)
             await window.desktopApi.sync.storeDayData({ data: data as unknown as Record<string, unknown[]> })
 
-            const now = new Date().toISOString()
-            setLastSyncAt(now)
-            setLastDownloadAt(now) // Attiva l'auto-sync incrementale dal server
+            const syncCursor = getPayloadSyncCursor(data) || new Date().toISOString()
+            setLastSyncAt(syncCursor)
+            setLastDownloadAt(syncCursor) // Attiva l'auto-sync incrementale dal server
             setSyncState('IDLE')
 
             const counts = data.meta?.counts || {}

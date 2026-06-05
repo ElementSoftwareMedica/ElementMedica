@@ -155,12 +155,13 @@ export function DesktopLayout({ children, licenseExpiring, showBridge }: Desktop
     // Auto-download callbacks (silent — no UI feedback on incremental updates)
     const downloadCallbacks = useMemo(() => ({
         onStart: () => { /* silent */ },
-        onComplete: (recordCount: number) => {
+        onComplete: (recordCount: number, syncCursor?: string) => {
+            const cursor = syncCursor || new Date().toISOString()
             if (recordCount > 0) {
-                setLastDownloadAt(new Date().toISOString())
+                setLastDownloadAt(cursor)
                 void refreshScadenzeCount()
             } else {
-                setLastDownloadAt(new Date().toISOString())
+                setLastDownloadAt(cursor)
             }
         },
         onError: (_message: string) => { /* silent — retry next interval */ }

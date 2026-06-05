@@ -27,6 +27,7 @@ Controlli implementati/verificati:
 - App desktop/backend: il test dei tombstone sync legge direttamente `desktop-app/src/main/database.ts` per verificare che ogni tabella remota cancellabile abbia una tabella SQLite locale reale, evitando drift tra liste duplicate.
 - App desktop: la coda upload marca come `FAILED` le operazioni non supportate o con retry esauriti, conservando diagnostica locale; evita pending infiniti che nascondono divergenze online/offline.
 - App desktop: baseline `lastSyncAt` persistito e validato in `localStorage`, cosi il download manuale resta incrementale anche dopo riavvio app e scarta timestamp corrotti.
+- App desktop/backend: il full DB restituisce `syncCursor` server catturato a inizio export e il desktop lo usa come baseline successivo, evitando salti di record modificati durante richieste lunghe.
 - Backend: `lastSyncAt` desktop non valido viene ignorato e trasformato in full sync controllato, evitando filtri Prisma con `Invalid Date` e blocchi del download incrementale.
 - Backend: mount `/api/v1/desktop-sync`, `/api/v1/desktop-licenses`, upload allegati desktop e fallback upload documenti visita coperti da test statico anti-regressione per prevenire nuovi 404 da route rimosse/non montate.
 - Backend: upload allegati desktop coperto da test cross-tenant; una visita fuori tenant viene rifiutata come non trovata, il file temporaneo viene rimosso e non vengono creati allegati.
@@ -170,6 +171,7 @@ Mitigazioni richieste:
 - `checkConflicts` rifiuta entity type non ammessi prima di toccare Prisma, riducendo probing e divergenze tra batch upload e controllo conflitti.
 - Le operazioni desktop non mappabili o con `MAX_RETRIES` raggiunto vengono rimosse dalla coda pending e marcate `FAILED` con motivo leggibile; i risultati `rejected/error/conflict` del server restano in `conflictData`.
 - Il baseline incrementale `desktop_lastSyncAt` viene persistito lato desktop e riusato dopo restart; timestamp locali non parsabili vengono rimossi prima del riuso.
+- Il cursore incrementale viene dal server (`syncCursor`) e non dall'orologio locale di fine download; se durante una richiesta lunga un record cambia dopo il cursore, resta incluso nel delta successivo.
 - Un `lastSyncAt` malformato dal client non interrompe il download: il backend lo tratta come baseline mancante e restituisce un full DB tenant-scoped.
 
 Priorita: alta.
@@ -303,6 +305,9 @@ Priorita: media-alta.
 - `node --check backend/tests/unit/desktop-sync-status-provider.test.js`: OK.
 - `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/unit/desktop-sync-status-provider.test.js`: OK, 2 test su persistenza baseline incrementale desktop.
 - `cd desktop-app && npm run typecheck`: OK dopo persistenza `desktop_lastSyncAt`.
+- `node --check backend/controllers/desktop-sync.controller.js && node --check backend/tests/unit/desktop-sync-cursor.test.js && node --check backend/tests/unit/desktop-sync-tombstones.test.js`: OK.
+- `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/unit/desktop-sync-tombstones.test.js tests/unit/desktop-sync-cursor.test.js`: OK, 10 test inclusi `syncCursor` server e fallback `lastSyncAt`.
+- `cd desktop-app && npm run typecheck`: OK dopo uso `syncCursor` nei download desktop.
 
 ## Gap Da Chiudere Prima Di Dichiarare Conformita Piena
 
@@ -310,7 +315,7 @@ Priorita: media-alta.
 2. Validazione XSD Allegato 3B integrata prima dell'export definitivo quando lo schema ufficiale viene versionato nel repository.
 3. Antivirus/malware scanning: fail-closed implementato; resta configurare il comando scanner sul server per permettere upload in produzione senza override.
 4. Test automatici cross-tenant: helper documentali MDL, route HTTP lista/download e upload allegati desktop coperti; estendere lo stesso pattern a ogni nuova route documentale o sync.
-5. Sync incrementale: tombstone implementati e coperti da test unitario mapping/allineamento tabelle, day-sync/upload riallineati a `ScadenzaPrestazioneProtocollo`, delta full DB esteso ai layer multi-tenant, tombstone locale applicato anche su `_serverId`, remap ID isolato per singolo record, coda upload ripulita da operazioni non supportate/retry-esaurite, baseline `lastSyncAt` persistito lato desktop e fallback full sync su `lastSyncAt` invalido; resta test E2E manuale su installazione reale desktop/web con dati produttivi anonimizzati.
+5. Sync incrementale: tombstone implementati e coperti da test unitario mapping/allineamento tabelle, day-sync/upload riallineati a `ScadenzaPrestazioneProtocollo`, delta full DB esteso ai layer multi-tenant, tombstone locale applicato anche su `_serverId`, remap ID isolato per singolo record, coda upload ripulita da operazioni non supportate/retry-esaurite, baseline `lastSyncAt` persistito lato desktop, cursore server anti-skip e fallback full sync su `lastSyncAt` invalido; resta test E2E manuale su installazione reale desktop/web con dati produttivi anonimizzati.
 6. Registro DPIA/ROPA aggiornato con trattamento offline desktop.
 
 ## Valutazione Finale

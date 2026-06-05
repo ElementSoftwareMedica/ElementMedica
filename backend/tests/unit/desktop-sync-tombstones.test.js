@@ -253,6 +253,9 @@ describe('desktop sync tombstones', () => {
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
       meta: expect.objectContaining({ isFullSync: false, lastSyncAt })
     }));
+    const payload = res.json.mock.calls[0][0];
+    expect(payload.meta.syncCursor).toEqual(expect.any(String));
+    expect(payload.meta.downloadedAt).toBe(payload.meta.syncCursor);
   });
 
   test('downloadFullDb ignores invalid lastSyncAt and falls back to full sync', async () => {
@@ -278,6 +281,9 @@ describe('desktop sync tombstones', () => {
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
       meta: expect.objectContaining({ isFullSync: true, lastSyncAt: null })
     }));
+    const payload = res.json.mock.calls[0][0];
+    expect(payload.meta.syncCursor).toEqual(expect.any(String));
+    expect(payload.meta.downloadedAt).toBe(payload.meta.syncCursor);
   });
 
   test('checkConflicts rejects unsupported entity types without dynamic Prisma access', async () => {

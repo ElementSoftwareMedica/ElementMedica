@@ -854,6 +854,7 @@ export async function downloadFullDb(req, res) {
         const tenantId = getEffectiveTenantId(req);
         const rawLastSyncAt = req.query.lastSyncAt;
         const lastSyncAt = parseDesktopLastSyncAt(rawLastSyncAt);
+        const syncCursor = new Date();
 
         if (rawLastSyncAt && !lastSyncAt) {
             logger.warn({ tenantId }, '[P98] Ignorato lastSyncAt desktop non valido: fallback a full sync');
@@ -1333,7 +1334,8 @@ export async function downloadFullDb(req, res) {
         const payload = {
             meta: {
                 tenantId,
-                downloadedAt: new Date().toISOString(),
+                downloadedAt: syncCursor.toISOString(),
+                syncCursor: syncCursor.toISOString(),
                 isFullSync: !lastSyncAt,
                 lastSyncAt: lastSyncAt?.toISOString() || null,
                 version: '1.0.0',
