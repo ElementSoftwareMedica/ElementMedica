@@ -55,7 +55,7 @@ const ENTITY_MAP: Record<string, string> = {
     giudizi_idoneita: 'giudizioIdoneita',
     esami_strumentali: 'esameStrumentale',
     movimenti_contabili: 'movimentoContabile',
-    scadenze: 'deadlineItem',
+    scadenze: 'scadenzaPrestazioneProtocollo',
     patients: 'personTenantProfile',
     companies: 'companyTenantProfile',
     lavoratore_mansioni: 'lavoratoreMansione',
@@ -100,7 +100,7 @@ const ENTITY_MAP: Record<string, string> = {
     mansioneRischio: 'mansioneRischio',
     protocollo_prestazioni: 'protocolloPrestazione',
     protocolloPrestazione: 'protocolloPrestazione',
-    // DeadlineItem alias (for scadenze created offline)
+    // Legacy DeadlineItem alias kept only to drain old queued operations.
     deadlineItem: 'deadlineItem',
     // ScadenzaPrestazioneProtocollo (MDL protocol deadlines)
     scadenze_prestazioni_protocollo: 'scadenzaPrestazioneProtocollo',

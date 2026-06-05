@@ -18,6 +18,7 @@ Controlli implementati/verificati:
 - App desktop: sync incrementale estesa con tombstone soft-delete per le tabelle desktop sincronizzate; i record cancellati online vengono marcati `_isDeleted=1` localmente senza cancellazione fisica.
 - App desktop: scadenze MDL riallineate a `ScadenzaPrestazioneProtocollo` per alimentare correttamente la card Sorveglianza Sanitaria offline.
 - App desktop: download giornaliero riallineato al full DB per usare `ScadenzaPrestazioneProtocollo`, evitando divergenze tra "scarica giornata" e "scarica tutto il database".
+- App desktop: upload delle righe locali `scadenze` riallineato a `scadenzaPrestazioneProtocollo`; `deadlineItem` resta solo come alias legacy per drenare vecchie operazioni gia in coda.
 - App desktop: tombstone locali applicati anche su `_serverId`, non solo su `id`, cosi le righe create offline e poi rimappate vengono marcate eliminate quando il server invia il tombstone.
 - App desktop: sync incrementale full DB esteso ai layer multi-tenant `PersonTenantProfile` e anagrafica globale `Company`, cosi modifiche a profili paziente/azienda arrivano offline anche se il record padre non cambia `updatedAt`.
 - App desktop: `checkConflicts` usa allowlist condivisa `DESKTOP_SYNC_ENTITY_TYPES` e non accede piu dinamicamente a modelli Prisma fuori dal perimetro sync.
@@ -136,6 +137,7 @@ Mitigazioni richieste:
 - Errori di remap devono bloccare solo il record interessato e produrre coda retry, non perdere batch interi.
 - Il full download e affiancato da sync incrementale basata su `lastSyncAt`; dal 2026-06-04 include tombstone soft-delete per le tabelle desktop e applicazione locale `_isDeleted=1`. Dal 2026-06-05 il mapping delle tabelle tombstone e coperto da test unitario che legge lo schema SQLite desktop reale.
 - La tabella locale `scadenze` riceve ora `ScadenzaPrestazioneProtocollo`, non `DeadlineItem`, sia nel full DB sia nel download giornata, evitando divergenze nella Sorveglianza Sanitaria offline.
+- L'upload desktop della tabella locale `scadenze` invia ora `scadenzaPrestazioneProtocollo`, mantenendo simmetria tra download, modifiche offline e remap ID.
 - I tombstone applicati dal desktop cercano sia `id` sia `_serverId` e rispettano `tenantId` quando presente, coprendo i record creati offline e successivamente rimappati.
 - Il delta full DB include modifiche a `PersonTenantProfile` e alla `Company` globale collegata al `CompanyTenantProfile`, coprendo i layer multi-tenant P48/P49.
 - `checkConflicts` rifiuta entity type non ammessi prima di toccare Prisma, riducendo probing e divergenze tra batch upload e controllo conflitti.
@@ -243,6 +245,7 @@ Priorita: media-alta.
 - `node --check backend/tests/unit/desktop-sync-tombstones.test.js`: OK.
 - `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/unit/desktop-sync-tombstones.test.js`: OK, 6 test, incluso controllo tombstone contro schema SQLite desktop reale.
 - `cd desktop-app && npm run typecheck`: OK.
+- `cd desktop-app && npm run typecheck`: OK dopo riallineamento upload `scadenze -> scadenzaPrestazioneProtocollo`.
 
 ## Gap Da Chiudere Prima Di Dichiarare Conformita Piena
 
