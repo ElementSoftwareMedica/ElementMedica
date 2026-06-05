@@ -198,6 +198,20 @@ export const DESKTOP_TOMBSTONE_SOURCES = [
     { model: 'allegato3B', table: 'allegati_3b' }
 ];
 
+export const DESKTOP_SYNC_ENTITY_TYPES = [
+    'visita', 'appuntamento', 'giudizioIdoneita', 'esameStrumentale',
+    'movimentoContabile', 'deadlineItem', 'scadenzaPrestazioneProtocollo',
+    'personTenantProfile', 'companyTenantProfile',
+    'lavoratoreRischioAggiuntivo',
+    'lavoratoreMansione', 'mansione', 'companySite', 'appuntamentoPrestazione',
+    'protocolloSanitario', 'protocolloPrestazione', 'mansioneRischio',
+    'allegatoVisita', 'documentoCompilato', 'questionarioMedicoConfig', 'nominaRuolo',
+    'questionarioRisposta', 'profiloDiSalutePersona', 'documentoClinico',
+    'referto', 'firmaDigitale',
+    'tariffarioCompanyAssociation',
+    'sopralluogo', 'dVR', 'consulenzaMDL', 'allegato3B'
+];
+
 export async function getDesktopTombstones(tenantId, lastSyncAt) {
     if (!lastSyncAt) return [];
 
@@ -1430,19 +1444,7 @@ export async function uploadBatch(req, res) {
         }, '[P98] Upload batch request');
 
         const results = [];
-        const allowedEntityTypes = [
-            'visita', 'appuntamento', 'giudizioIdoneita', 'esameStrumentale',
-            'movimentoContabile', 'deadlineItem', 'scadenzaPrestazioneProtocollo',
-            'personTenantProfile', 'companyTenantProfile',
-            'lavoratoreRischioAggiuntivo',
-            'lavoratoreMansione', 'mansione', 'companySite', 'appuntamentoPrestazione',
-            'protocolloSanitario', 'protocolloPrestazione', 'mansioneRischio',
-            'allegatoVisita', 'documentoCompilato', 'questionarioMedicoConfig', 'nominaRuolo',
-            'questionarioRisposta', 'profiloDiSalutePersona', 'documentoClinico',
-            'referto', 'firmaDigitale',
-            'tariffarioCompanyAssociation',
-            'sopralluogo', 'dVR', 'consulenzaMDL', 'allegato3B'
-        ];
+        const allowedEntityTypes = DESKTOP_SYNC_ENTITY_TYPES;
         const allowedActions = ['create', 'update', 'delete'];
 
         // Entity types that have a createdBy field in Prisma schema
@@ -2054,9 +2056,19 @@ export async function checkConflicts(req, res) {
         }
 
         const conflicts = [];
+        const allowedEntityTypes = new Set(DESKTOP_SYNC_ENTITY_TYPES);
 
         for (const entity of entities) {
             try {
+                if (!allowedEntityTypes.has(entity.entityType)) {
+                    conflicts.push({
+                        entityType: entity.entityType,
+                        entityId: entity.entityId,
+                        type: 'invalid_entity_type'
+                    });
+                    continue;
+                }
+
                 const serverEntity = await prisma[entity.entityType].findFirst({
                     where: {
                         id: entity.entityId,
@@ -2224,18 +2236,7 @@ export async function getConflictData(req, res) {
         const tenantId = getEffectiveTenantId(req);
         const { entityType, entityId } = req.query;
 
-        const allowedEntityTypes = [
-            'visita', 'appuntamento', 'giudizioIdoneita', 'esameStrumentale',
-            'movimentoContabile', 'deadlineItem', 'scadenzaPrestazioneProtocollo',
-            'personTenantProfile', 'companyTenantProfile',
-            'lavoratoreRischioAggiuntivo', 'lavoratoreMansione', 'companySite',
-            'appuntamentoPrestazione', 'protocolloSanitario', 'protocolloPrestazione', 'mansioneRischio',
-            'allegatoVisita', 'documentoCompilato', 'questionarioMedicoConfig', 'nominaRuolo',
-            'questionarioRisposta', 'profiloDiSalutePersona', 'documentoClinico',
-            'referto', 'firmaDigitale',
-            'tariffarioCompanyAssociation',
-            'sopralluogo', 'dVR', 'consulenzaMDL', 'allegato3B'
-        ];
+        const allowedEntityTypes = DESKTOP_SYNC_ENTITY_TYPES;
 
         if (!entityType || !allowedEntityTypes.includes(entityType)) {
             return res.status(400).json({ error: 'entityType non valido' });

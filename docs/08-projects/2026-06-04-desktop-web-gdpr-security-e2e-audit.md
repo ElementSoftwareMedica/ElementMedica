@@ -20,6 +20,7 @@ Controlli implementati/verificati:
 - App desktop: download giornaliero riallineato al full DB per usare `ScadenzaPrestazioneProtocollo`, evitando divergenze tra "scarica giornata" e "scarica tutto il database".
 - App desktop: tombstone locali applicati anche su `_serverId`, non solo su `id`, cosi le righe create offline e poi rimappate vengono marcate eliminate quando il server invia il tombstone.
 - App desktop: sync incrementale full DB esteso ai layer multi-tenant `PersonTenantProfile` e anagrafica globale `Company`, cosi modifiche a profili paziente/azienda arrivano offline anche se il record padre non cambia `updatedAt`.
+- App desktop: `checkConflicts` usa allowlist condivisa `DESKTOP_SYNC_ENTITY_TYPES` e non accede piu dinamicamente a modelli Prisma fuori dal perimetro sync.
 - App desktop: cifratura field-level dei principali campi PII/sanitari via Electron `safeStorage`; mappa estesa a campi denormalizzati, documentali, scadenze, servizi MDL e profilo salute. Resta necessario requisito operativo BitLocker/FileVault o cifratura integrale DB per protezione completa.
 - Packaging Windows desktop verificato con `better-sqlite3` nativo `win32-x64`.
 
@@ -134,6 +135,7 @@ Mitigazioni richieste:
 - La tabella locale `scadenze` riceve ora `ScadenzaPrestazioneProtocollo`, non `DeadlineItem`, sia nel full DB sia nel download giornata, evitando divergenze nella Sorveglianza Sanitaria offline.
 - I tombstone applicati dal desktop cercano sia `id` sia `_serverId` e rispettano `tenantId` quando presente, coprendo i record creati offline e successivamente rimappati.
 - Il delta full DB include modifiche a `PersonTenantProfile` e alla `Company` globale collegata al `CompanyTenantProfile`, coprendo i layer multi-tenant P48/P49.
+- `checkConflicts` rifiuta entity type non ammessi prima di toccare Prisma, riducendo probing e divergenze tra batch upload e controllo conflitti.
 
 Priorita: alta.
 
@@ -235,7 +237,7 @@ Priorita: media-alta.
 
 - `node --check backend/controllers/desktop-sync.controller.js`: OK.
 - `node --check backend/tests/unit/desktop-sync-tombstones.test.js`: OK.
-- `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/unit/desktop-sync-tombstones.test.js`: OK, 5 test.
+- `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/unit/desktop-sync-tombstones.test.js`: OK, 6 test.
 - `cd desktop-app && npm run typecheck`: OK.
 
 ## Gap Da Chiudere Prima Di Dichiarare Conformita Piena

@@ -44,7 +44,14 @@ jest.unstable_mockModule('../../utils/logger.js', () => ({
   default: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() }
 }));
 
-const { DESKTOP_TOMBSTONE_SOURCES, downloadDay, downloadFullDb, getDesktopTombstones } = await import('../../controllers/desktop-sync.controller.js');
+const {
+  DESKTOP_SYNC_ENTITY_TYPES,
+  DESKTOP_TOMBSTONE_SOURCES,
+  checkConflicts,
+  downloadDay,
+  downloadFullDb,
+  getDesktopTombstones
+} = await import('../../controllers/desktop-sync.controller.js');
 
 const VALID_DESKTOP_TABLES = new Set([
   'visits', 'appointments', 'appointment_prestazioni',
@@ -130,6 +137,17 @@ describe('desktop sync tombstones', () => {
       'dvr',
       'consulenze_mdl',
       'allegati_3b'
+    ]));
+    expect(DESKTOP_SYNC_ENTITY_TYPES).toEqual(expect.arrayContaining([
+      'visita',
+      'scadenzaPrestazioneProtocollo',
+      'personTenantProfile',
+      'companyTenantProfile',
+      'mansione',
+      'sopralluogo',
+      'dVR',
+      'consulenzaMDL',
+      'allegato3B'
     ]));
   });
 
@@ -241,5 +259,42 @@ describe('desktop sync tombstones', () => {
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
       meta: expect.objectContaining({ isFullSync: false, lastSyncAt })
     }));
+  });
+
+  test('checkConflicts rejects unsupported entity types without dynamic Prisma access', async () => {
+    const req = {
+      person: { id: 'doctor-a', tenantId: 'tenant-a' },
+      body: {
+        entities: [
+          { entityType: 'person', entityId: 'global-person-a', localUpdatedAt: '2026-06-05T07:00:00.000Z' },
+          { entityType: 'visita', entityId: 'visit-a', localUpdatedAt: '2026-06-05T07:00:00.000Z' }
+        ]
+      }
+    };
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn()
+    };
+
+    mockPrisma.visita.findFirst = jest.fn().mockResolvedValue({
+      id: 'visit-a',
+      updatedAt: new Date('2026-06-05T07:30:00.000Z')
+    });
+
+    await checkConflicts(req, res);
+
+    expect(res.status).not.toHaveBeenCalled();
+    expect(mockPrisma.person.findMany).not.toHaveBeenCalled();
+    expect(mockPrisma.visita.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'visit-a', tenantId: 'tenant-a', deletedAt: null },
+      select: { id: true, updatedAt: true }
+    }));
+    expect(res.json).toHaveBeenCalledWith({
+      hasConflicts: true,
+      conflicts: expect.arrayContaining([
+        { entityType: 'person', entityId: 'global-person-a', type: 'invalid_entity_type' },
+        expect.objectContaining({ entityType: 'visita', entityId: 'visit-a', type: 'modified_on_server' })
+      ])
+    });
   });
 });
