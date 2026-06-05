@@ -23,6 +23,7 @@ Controlli implementati/verificati:
 - App desktop: sync incrementale full DB esteso ai layer multi-tenant `PersonTenantProfile` e anagrafica globale `Company`, cosi modifiche a profili paziente/azienda arrivano offline anche se il record padre non cambia `updatedAt`.
 - App desktop: `checkConflicts` usa allowlist condivisa `DESKTOP_SYNC_ENTITY_TYPES` e non accede piu dinamicamente a modelli Prisma fuori dal perimetro sync.
 - App desktop/backend: il test dei tombstone sync legge direttamente `desktop-app/src/main/database.ts` per verificare che ogni tabella remota cancellabile abbia una tabella SQLite locale reale, evitando drift tra liste duplicate.
+- Backend: mount `/api/v1/desktop-sync`, `/api/v1/desktop-licenses`, upload allegati desktop e fallback upload documenti visita coperti da test statico anti-regressione per prevenire nuovi 404 da route rimosse/non montate.
 - App desktop: cifratura field-level dei principali campi PII/sanitari via Electron `safeStorage`; mappa estesa a campi denormalizzati, documentali, scadenze, servizi MDL e profilo salute. Resta necessario requisito operativo BitLocker/FileVault o cifratura integrale DB per protezione completa.
 - App desktop: la cifratura PII locale e ora fail-closed in runtime produzione se `safeStorage` non e disponibile; il fallback in chiaro resta ammesso solo in sviluppo/test o con override esplicito `ALLOW_PLAINTEXT_PII_STORAGE=true`. La mappa PII include anche Allegato 3B, protocolli, voci tariffario e note associazioni tariffario sincronizzate.
 - Packaging Windows desktop verificato con `better-sqlite3` nativo `win32-x64`.
@@ -65,6 +66,7 @@ Verificare che webapp e app desktop lavorino sugli stessi dati sanitari e ammini
 - Le route sensibili analizzate sono dietro middleware autenticato.
 - Il desktop invia `Authorization: Bearer <token>` e `X-Tenant-ID`; il backend verifica che l'utente appartenga al tenant indicato prima di usarlo.
 - La route `POST /api/v1/desktop-licenses/heartbeat` e montata: senza token risponde `401`, quindi non e una route pubblica e non espone stato licenza.
+- Le route desktop critiche sono coperte da test statico anti-regressione: mount `/desktop-sync`, mount `/desktop-licenses`, `POST /desktop-sync/upload-attachment`, `POST /desktop-licenses/heartbeat`, fallback `POST /clinica/documenti/visita/upload`.
 
 Rischio residuo: medio-basso. Va mantenuta la regola Bearer-only e va evitato qualsiasi fallback cookie/legacy.
 
@@ -246,6 +248,8 @@ Priorita: media-alta.
 - `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/unit/desktop-sync-tombstones.test.js`: OK, 6 test, incluso controllo tombstone contro schema SQLite desktop reale.
 - `cd desktop-app && npm run typecheck`: OK.
 - `cd desktop-app && npm run typecheck`: OK dopo riallineamento upload `scadenze -> scadenzaPrestazioneProtocollo`.
+- `node --check backend/tests/unit/desktop-routes-registration.test.js`: OK.
+- `cd backend && SKIP_DB_SETUP=true npm test -- --runInBand tests/unit/desktop-routes-registration.test.js`: OK, 4 test.
 
 ## Gap Da Chiudere Prima Di Dichiarare Conformita Piena
 
