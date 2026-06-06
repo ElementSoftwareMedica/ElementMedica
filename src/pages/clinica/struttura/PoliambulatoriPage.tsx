@@ -29,6 +29,7 @@ import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
 import { useTenantFilter } from '../../../context/TenantFilterContext';
 import { CRUDButton } from '../../../components/shared/CRUDButton';
 import { ActionButton } from '../../../components/ui';
+import ElegantSelect from '../../../components/ui/ElegantSelect';
 
 // Import Element Medica theme
 import '../../../styles/clinica-theme.css';
@@ -267,15 +268,16 @@ const PoliambulatoriPage: React.FC = () => {
                     </div>
                     {/* Status Filter */}
                     <div className="flex items-center gap-2">
-                        <select
+                        <ElegantSelect
                             value={filterActive}
-                            onChange={(e) => setFilterActive(e.target.value as 'all' | 'active' | 'inactive')}
-                            className="select-clinica"
-                        >
-                            <option value="all">Tutti gli stati</option>
-                            <option value="active">Solo attivi</option>
-                            <option value="inactive">Solo inattivi</option>
-                        </select>
+                            onChange={(value) => setFilterActive(value as 'all' | 'active' | 'inactive')}
+                            className="min-w-[180px]"
+                            options={[
+                                { value: 'all', label: 'Tutti gli stati' },
+                                { value: 'active', label: 'Solo attivi' },
+                                { value: 'inactive', label: 'Solo inattivi' },
+                            ]}
+                        />
                     </div>
                     {/* Nota: Il filtro tenant è ora gestito dal TenantModeSelector nel header */}
                 </div>

@@ -44,6 +44,7 @@ import type { Strumento, Ambulatorio } from '../../../services/clinicaApi';
 import { useToast } from '../../../hooks/useToast';
 import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
 import { DatePickerElegante } from '../../../components/ui/DatePickerElegante';
+import ElegantSelect from '../../../components/ui/ElegantSelect';
 
 // Import Element Medica theme
 import '../../../styles/clinica-theme.css';
@@ -294,6 +295,18 @@ const StrumentoForm: React.FC = () => {
         }
     };
 
+    const handleSelectChange = (name: keyof FormData, value: string) => {
+        setFormData(prev => ({ ...prev, [name]: value }));
+        setIsDirty(true);
+        if (errors[name]) {
+            setErrors(prev => {
+                const newErrors = { ...prev };
+                delete newErrors[name];
+                return newErrors;
+            });
+        }
+    };
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -441,18 +454,11 @@ const StrumentoForm: React.FC = () => {
 
                         <div>
                             <label className="label-clinica">Stato</label>
-                            <select
-                                name="stato"
+                            <ElegantSelect
                                 value={formData.stato}
-                                onChange={handleChange}
-                                className="select-clinica w-full"
-                            >
-                                {STATI_STRUMENTO.map(stato => (
-                                    <option key={stato.value} value={stato.value}>
-                                        {stato.label}
-                                    </option>
-                                ))}
-                            </select>
+                                onChange={(value) => handleSelectChange('stato', value as StatoStrumento)}
+                                options={STATI_STRUMENTO.map(stato => ({ value: stato.value, label: stato.label }))}
+                            />
                         </div>
 
                         <div>
@@ -460,24 +466,15 @@ const StrumentoForm: React.FC = () => {
                                 Tipologia
                                 <span className="text-gray-400 text-xs ml-1">(categoria strumento)</span>
                             </label>
-                            <select
-                                name="tipologia"
+                            <ElegantSelect
                                 value={formData.tipologia}
-                                onChange={handleChange}
-                                className="select-clinica w-full"
-                            >
-                                <option value="">-- Seleziona tipologia --</option>
-                                {/* Raggruppa per categoria */}
-                                {['Cardiologia', 'Imaging', 'Medicina Lavoro', 'Dermatologia', 'Neurologia', 'Ginecologia', 'Endoscopia', 'Chirurgia', 'Monitoraggio', 'Altro'].map(categoria => (
-                                    <optgroup key={categoria} label={categoria}>
-                                        {TIPOLOGIE_STRUMENTO.filter(t => t.categoria === categoria).map(tipo => (
-                                            <option key={tipo.value} value={tipo.value}>
-                                                {tipo.label}
-                                            </option>
-                                        ))}
-                                    </optgroup>
-                                ))}
-                            </select>
+                                onChange={(value) => handleSelectChange('tipologia', value)}
+                                placeholder="Seleziona tipologia"
+                                options={[
+                                    { value: '', label: 'Seleziona tipologia' },
+                                    ...TIPOLOGIE_STRUMENTO.map(tipo => ({ value: tipo.value, label: `${tipo.label} · ${tipo.categoria}` }))
+                                ]}
+                            />
                             <p className="text-gray-500 text-xs mt-1">
                                 La tipologia viene usata per verificare i requisiti delle prestazioni
                             </p>
@@ -485,19 +482,15 @@ const StrumentoForm: React.FC = () => {
 
                         <div>
                             <label className="label-clinica">Ambulatorio</label>
-                            <select
-                                name="ambulatorioId"
+                            <ElegantSelect
                                 value={formData.ambulatorioId}
-                                onChange={handleChange}
-                                className="select-clinica w-full"
-                            >
-                                <option value="">-- Nessun ambulatorio --</option>
-                                {ambulatori.map((amb: Ambulatorio) => (
-                                    <option key={amb.id} value={amb.id}>
-                                        {amb.nome} {amb.codice ? `(${amb.codice})` : ''}
-                                    </option>
-                                ))}
-                            </select>
+                                onChange={(value) => handleSelectChange('ambulatorioId', value)}
+                                placeholder="Nessun ambulatorio"
+                                options={[
+                                    { value: '', label: 'Nessun ambulatorio' },
+                                    ...ambulatori.map((amb: Ambulatorio) => ({ value: amb.id, label: `${amb.nome}${amb.codice ? ` (${amb.codice})` : ''}` }))
+                                ]}
+                            />
                             <p className="text-gray-500 text-xs mt-1">
                                 Ambulatorio a cui è assegnato lo strumento
                             </p>

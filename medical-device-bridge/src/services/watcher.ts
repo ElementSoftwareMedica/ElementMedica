@@ -18,6 +18,19 @@ import type { DeviceConfig, ExamSession, ExamResult } from '../types/index.js';
 
 type ResultCallback = (result: ExamResult, pdfBuffer?: Buffer, pdfFilename?: string) => Promise<void>;
 const RESULT_RECORD_TYPES = new Set(['6301', '6310']);
+const EDAN_OUTPUT_BASENAME = 'EKG_EDP';
+
+function isEdanOutputFile(filePath: string, device: DeviceConfig): boolean {
+    if (device.type !== 'edan-ecg' && device.examType !== 'ecg') return false;
+    const filename = basename(filePath);
+    const base = basename(filename, extname(filename)).toUpperCase();
+    return base === EDAN_OUTPUT_BASENAME;
+}
+
+function isGdtLikeFile(filePath: string, device: DeviceConfig): boolean {
+    const ext = extname(filePath).toLowerCase();
+    return ext === '.gdt' || ext === '.txt' || isEdanOutputFile(filePath, device);
+}
 
 /**
  * File watcher for medical device output directories
@@ -136,7 +149,7 @@ export class DeviceWatcher {
         const filename = basename(filePath);
         const ext = extname(filename).toLowerCase();
 
-        if (ext !== '.gdt' && ext !== '.txt' && ext !== '.pdf') return;
+        if (!isGdtLikeFile(filePath, device) && ext !== '.pdf') return;
 
         // Remove from processed set so it can be re-processed
         this.processedFiles.delete(filePath);
@@ -169,7 +182,7 @@ export class DeviceWatcher {
         });
 
         try {
-            if (ext === '.gdt' || ext === '.txt') {
+            if (isGdtLikeFile(filePath, device)) {
                 await this.processGdtResult(filePath, device);
             } else if (ext === '.pdf') {
                 await this.processPdfResult(filePath, device);
@@ -197,7 +210,8 @@ export class DeviceWatcher {
 
         // Ignore request/control records to avoid false positives when devices
         // use a single shared GDT folder for both inbound and outbound files.
-        if (!RESULT_RECORD_TYPES.has(record.recordType)) {
+        const knownEdanOutput = isEdanOutputFile(filePath, device);
+        if (!RESULT_RECORD_TYPES.has(record.recordType) && !knownEdanOutput) {
             logger.debug('Ignoring non-result GDT record type', {
                 device: device.type,
                 filePath,
@@ -257,7 +271,10 @@ export class DeviceWatcher {
     }
 
     private async findAssociatedPdfPath(filePath: string, device: DeviceConfig): Promise<string | undefined> {
-        const sameNameInGdtDir = filePath.replace(/\.(gdt|txt)$/i, '.pdf');
+        const ext = extname(filePath);
+        const sameNameInGdtDir = ext
+            ? filePath.replace(/\.(gdt|txt)$/i, '.pdf')
+            : `${filePath}.pdf`;
         if (await this.pathExists(sameNameInGdtDir)) {
             return sameNameInGdtDir;
         }

@@ -17,7 +17,7 @@
 
 import { writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
-import { dirname, join } from 'path';
+import { join } from 'path';
 import * as iconv from 'iconv-lite';
 import logger from '../utils/logger.js';
 import type { PatientData, DeviceConfig, BridgeConfig, GdtGender } from '../types/index.js';
@@ -33,24 +33,33 @@ const GDT_FIELDS = {
     GDT_SENDER: '8316',      // Sender ID (PVS)
     GDT_VERSION: '9218',     // GDT version
     ZEICHENSATZ: '9206',     // Character set
+    SOFTWARE_NAME: '0103',   // PVS software name
+    SOFTWARE_VERSION: '0132', // PVS software version
 
     // Patient Data
     PATIENT_ID: '3000',      // Patient number
+    ANREDE: '3100',          // Prefix/title
     NACHNAME: '3101',        // Last name
     VORNAME: '3102',         // First name
     GEBURTSDATUM: '3103',    // Date of birth (DDMMYYYY)
     TITEL: '3104',           // Title
     VERSICHERTENNR: '3105',  // Insurance number
+    WOHNORT: '3106',         // Residence/postal data
+    STRASSE: '3107',         // Street
+    VERSICHERTENSTATUS: '3108', // Insurance status
     GESCHLECHT: '3110',      // Gender (1=M, 2=F)
     GROESSE: '3622',         // Height in cm
     GEWICHT: '3623',         // Weight in kg
+    MUTTERSPRACHE: '3628',   // Language
 
     // Examination
+    AUFTRAGSNUMMER: '0102',  // Accession/request number
     TAG_ERHEBUNG: '6200',    // Date of examination
     UHRZEIT_ERHEBUNG: '6201', // Time of examination
     BEFUNDTEXT: '6220',      // Finding text
     GERAETE_KENNFELD: '6302', // Device procedure ID
     VERFAHRENSBEZEICHNUNG: '6303', // Procedure name
+    UNTERSUCHUNGSGRUPPE: '8402', // Exam item/group
 } as const;
 
 /**
@@ -120,6 +129,36 @@ function mapGender(gender: PatientData['gender']): GdtGender {
     return gender === 'MALE' ? '1' : '2';
 }
 
+function isEdanEcg(device: DeviceConfig): boolean {
+    return device.type === 'edan-ecg' || device.examType === 'ecg';
+}
+
+function resolveReceiverId(device: DeviceConfig): string {
+    if (isEdanEcg(device) && (!device.gdtId || device.gdtId === 'EDAN_ECG')) {
+        return 'EKG';
+    }
+    return device.gdtId;
+}
+
+function resolveSenderId(device: DeviceConfig, config: BridgeConfig): string {
+    if (isEdanEcg(device) && (!config.gdtSenderId || config.gdtSenderId === 'ELEM_MED')) {
+        return 'EDP';
+    }
+    return config.gdtSenderId;
+}
+
+function resolveExamItem(device: DeviceConfig): string {
+    if (isEdanEcg(device)) return 'ECG';
+    return device.examType.toUpperCase();
+}
+
+function resolveGdtFilename(device: DeviceConfig, sessionId: string): string {
+    if (isEdanEcg(device)) {
+        return 'EDP_EKG';
+    }
+    return `${device.gdtId}_${sessionId.substring(0, 8)}.gdt`;
+}
+
 /**
  * Generate a GDT 2.1 exam request file (Satzart 6300)
  * This file is written to the device's input directory
@@ -144,13 +183,16 @@ export function generateExamRequest(
     lines.push(''); // Will be replaced
 
     // GDT header
-    lines.push(gdtLine(GDT_FIELDS.GDT_EMPFAENGER, device.gdtId));
-    lines.push(gdtLine(GDT_FIELDS.GDT_SENDER, config.gdtSenderId));
+    lines.push(gdtLine(GDT_FIELDS.GDT_EMPFAENGER, resolveReceiverId(device)));
+    lines.push(gdtLine(GDT_FIELDS.GDT_SENDER, resolveSenderId(device, config)));
     lines.push(gdtLine(GDT_FIELDS.GDT_VERSION, config.gdtVersion));
     lines.push(gdtLine(GDT_FIELDS.ZEICHENSATZ, String(config.gdtCharset)));
+    lines.push(gdtLine(GDT_FIELDS.SOFTWARE_NAME, 'ElementMedica'));
+    lines.push(gdtLine(GDT_FIELDS.SOFTWARE_VERSION, 'Desktop Bridge'));
 
     // Patient data
     lines.push(gdtLine(GDT_FIELDS.PATIENT_ID, patient.patientId));
+    lines.push(gdtLine(GDT_FIELDS.ANREDE, patient.gender === 'MALE' ? 'Sig.' : patient.gender === 'FEMALE' ? 'Sig.ra' : ''));
     lines.push(gdtLine(GDT_FIELDS.NACHNAME, patient.lastName));
     lines.push(gdtLine(GDT_FIELDS.VORNAME, patient.firstName));
     lines.push(gdtLine(GDT_FIELDS.GEBURTSDATUM, toGdtDate(patient.dateOfBirth)));
@@ -169,6 +211,9 @@ export function generateExamRequest(
     if (patient.ethnicity) {
         lines.push(gdtLine(GDT_FIELDS.BEFUNDTEXT, `Etnia: ${patient.ethnicity}`));
     }
+
+    lines.push(gdtLine(GDT_FIELDS.UNTERSUCHUNGSGRUPPE, resolveExamItem(device)));
+    lines.push(gdtLine(GDT_FIELDS.AUFTRAGSNUMMER, `${patient.patientId}-${currentGdtDate()}-${currentGdtTime()}`.substring(0, 60)));
 
     // Examination date/time
     lines.push(gdtLine(GDT_FIELDS.TAG_ERHEBUNG, currentGdtDate()));
@@ -207,8 +252,7 @@ export async function writeGdtFile(
         await mkdir(device.gdtInputDir, { recursive: true });
     }
 
-    // Generate filename: deviceid_sessionid.gdt
-    const filename = `${device.gdtId}_${sessionId.substring(0, 8)}.gdt`;
+    const filename = resolveGdtFilename(device, sessionId);
     const filePath = join(device.gdtInputDir, filename);
 
     await writeFile(filePath, content);

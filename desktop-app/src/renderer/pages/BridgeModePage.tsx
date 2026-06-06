@@ -41,7 +41,7 @@ const DEFAULT_DEVICES: DeviceConfig[] = [
     {
         type: 'edan-ecg',
         enabled: false,
-        gdtId: 'EDAN_ECG',
+        gdtId: 'EKG',
         gdtInputDir: '',
         gdtOutputDir: '',
         pdfOutputDir: '',

@@ -16,11 +16,43 @@ import { checkAdvancedPermission } from '../../middleware/advanced-permissions.j
 import { clinicalValidators } from '../../config/validation-clinical.js';
 import { getEffectiveTenantId } from '../../utils/tenantHelper.js';
 import { auditClinico } from './utils/clinica-utils.js';
+import EmailService from '../../services/emailService.js';
 import medicoDocumentsRouter from './medici-documents.routes.js';
 
 const router = express.Router();
 const { authenticate: authenticateToken } = middleware;
 const MEDICO_ROLE_TYPES = ['MEDICO', 'MEDICO_COMPETENTE'];
+
+async function notifyMedicoPoliambulatorioAssignment({ medico, tenantId, email }) {
+    const targetEmail = email || medico?.tenantProfiles?.[0]?.email;
+    if (!targetEmail || !medico?.id || !tenantId) return;
+
+    try {
+        const tenant = await prisma.tenant.findFirst({
+            where: { id: tenantId, deletedAt: null },
+            select: { name: true }
+        });
+
+        await EmailService.queue({
+            to: targetEmail,
+            template: 'MEDICO_POLIAMBULATORIO_NOTIFICA',
+            tenantId,
+            branchType: 'MEDICA',
+            data: {
+                doctorName: `${medico.firstName || ''} ${medico.lastName || ''}`.trim() || 'Dottore',
+                clinicName: tenant?.name || 'il poliambulatorio',
+                loginUrl: process.env.FRONTEND_URL || process.env.APP_URL || 'https://www.elementmedica.com/poliambulatorio'
+            }
+        });
+    } catch (error) {
+        logger.warn('Failed to queue medico poliambulatorio assignment email', {
+            component: 'medici-routes',
+            medicoId: medico.id,
+            tenantId,
+            error: error.message
+        });
+    }
+}
 
 // Mount documents sub-router
 router.use('/:id/documents', medicoDocumentsRouter);
@@ -451,6 +483,8 @@ router.post('/',
                 });
             }
 
+            await notifyMedicoPoliambulatorioAssignment({ medico, tenantId, email });
+
             res.status(201).json({
                 success: true,
                 data: medico,
@@ -675,6 +709,8 @@ router.post('/enable',
                     tenantProfiles: { where: { tenantId, deletedAt: null }, take: 1 }
                 }
             });
+
+            await notifyMedicoPoliambulatorioAssignment({ medico: updatedPerson, tenantId, email });
 
             res.status(201).json({
                 success: true,

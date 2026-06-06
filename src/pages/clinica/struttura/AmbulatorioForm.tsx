@@ -37,6 +37,7 @@ import { ambulatoriApi, poliambulatoriApi, sediApi } from '../../../services/cli
 import type { Ambulatorio, Poliambulatorio, SedePoliambulatorio } from '../../../services/clinicaApi';
 import { useToast } from '../../../hooks/useToast';
 import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
+import ElegantSelect from '../../../components/ui/ElegantSelect';
 
 // Import Element Medica theme
 import '../../../styles/clinica-theme.css';
@@ -250,6 +251,22 @@ const AmbulatorioForm: React.FC = () => {
         }
     };
 
+    const handleSelectChange = (name: keyof FormData, value: string) => {
+        setFormData(prev => ({
+            ...prev,
+            [name]: value,
+            ...(name === 'poliambulatorioId' ? { sedeId: '' } : {})
+        }));
+        setIsDirty(true);
+        if (errors[name]) {
+            setErrors(prev => {
+                const newErrors = { ...prev };
+                delete newErrors[name];
+                return newErrors;
+            });
+        }
+    };
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -342,20 +359,17 @@ const AmbulatorioForm: React.FC = () => {
                             <label className="label-clinica">
                                 Poliambulatorio <span className="text-red-500">*</span>
                             </label>
-                            <select
-                                name="poliambulatorioId"
+                            <ElegantSelect
                                 value={formData.poliambulatorioId}
-                                onChange={handleChange}
+                                onChange={(value) => handleSelectChange('poliambulatorioId', value)}
                                 disabled={isEditing}
-                                className={`input-clinica ${errors.poliambulatorioId ? 'border-red-500' : ''} ${isEditing ? 'bg-gray-100' : ''}`}
-                            >
-                                <option value="">-- Seleziona Poliambulatorio --</option>
-                                {poliambulatori.map((p) => (
-                                    <option key={p.id} value={p.id}>
-                                        {p.nome} ({p.codice})
-                                    </option>
-                                ))}
-                            </select>
+                                placeholder="Seleziona poliambulatorio"
+                                triggerClassName={`${errors.poliambulatorioId ? 'border-red-500' : ''} ${isEditing ? 'bg-gray-100' : ''}`}
+                                options={[
+                                    { value: '', label: 'Seleziona poliambulatorio' },
+                                    ...poliambulatori.map((p) => ({ value: p.id, label: `${p.nome} (${p.codice})` }))
+                                ]}
+                            />
                             {errors.poliambulatorioId && (
                                 <p className="text-red-500 text-sm mt-1">{errors.poliambulatorioId}</p>
                             )}
@@ -366,20 +380,17 @@ const AmbulatorioForm: React.FC = () => {
 
                         <div>
                             <label className="label-clinica">Sede (opzionale)</label>
-                            <select
-                                name="sedeId"
+                            <ElegantSelect
                                 value={formData.sedeId}
-                                onChange={handleChange}
+                                onChange={(value) => handleSelectChange('sedeId', value)}
                                 disabled={!formData.poliambulatorioId}
-                                className={`input-clinica ${!formData.poliambulatorioId ? 'bg-gray-100' : ''}`}
-                            >
-                                <option value="">-- Nessuna sede specifica --</option>
-                                {sedi.map((s) => (
-                                    <option key={s.id} value={s.id}>
-                                        {s.nome} - {s.indirizzo}, {s.citta}
-                                    </option>
-                                ))}
-                            </select>
+                                placeholder="Nessuna sede specifica"
+                                triggerClassName={!formData.poliambulatorioId ? 'bg-gray-100' : ''}
+                                options={[
+                                    { value: '', label: 'Nessuna sede specifica' },
+                                    ...sedi.map((s) => ({ value: s.id, label: `${s.nome} - ${s.indirizzo || ''}${s.citta ? `, ${s.citta}` : ''}` }))
+                                ]}
+                            />
                             {!formData.poliambulatorioId && (
                                 <p className="text-gray-500 text-xs mt-1">Seleziona prima un poliambulatorio</p>
                             )}
@@ -428,34 +439,29 @@ const AmbulatorioForm: React.FC = () => {
 
                         <div>
                             <label className="label-clinica">Specializzazione</label>
-                            <select
-                                name="specializzazione"
+                            <ElegantSelect
                                 value={formData.specializzazione}
-                                onChange={handleChange}
-                                className="input-clinica"
-                            >
-                                <option value="">-- Nessuna specializzazione --</option>
-                                {SPECIALIZZAZIONI.map(spec => (
-                                    <option key={spec} value={spec}>
-                                        {spec}
-                                    </option>
-                                ))}
-                            </select>
+                                onChange={(value) => handleSelectChange('specializzazione', value)}
+                                placeholder="Nessuna specializzazione"
+                                options={[
+                                    { value: '', label: 'Nessuna specializzazione' },
+                                    ...SPECIALIZZAZIONI.map(spec => ({ value: spec, label: spec }))
+                                ]}
+                            />
                         </div>
 
                         <div>
                             <label className="label-clinica">Stato</label>
-                            <select
-                                name="stato"
+                            <ElegantSelect
                                 value={formData.stato}
-                                onChange={handleChange}
-                                className="input-clinica"
-                            >
-                                <option value="ATTIVO">Attivo</option>
-                                <option value="INATTIVO">Inattivo</option>
-                                <option value="MANUTENZIONE">In Manutenzione</option>
-                                <option value="CHIUSO">Chiuso</option>
-                            </select>
+                                onChange={(value) => handleSelectChange('stato', value as StatoAmbulatorio)}
+                                options={[
+                                    { value: 'ATTIVO', label: 'Attivo' },
+                                    { value: 'INATTIVO', label: 'Inattivo' },
+                                    { value: 'MANUTENZIONE', label: 'In manutenzione' },
+                                    { value: 'CHIUSO', label: 'Chiuso' },
+                                ]}
+                            />
                         </div>
 
                         <div className="md:col-span-2">
@@ -510,18 +516,12 @@ const AmbulatorioForm: React.FC = () => {
                         <div>
                             <label className="label-clinica">Colore Calendario</label>
                             <div className="flex items-center gap-2">
-                                <select
-                                    name="colore"
+                                <ElegantSelect
                                     value={formData.colore}
-                                    onChange={handleChange}
-                                    className="input-clinica flex-1"
-                                >
-                                    {COLORI_PREDEFINITI.map(c => (
-                                        <option key={c.value} value={c.value}>
-                                            {c.label}
-                                        </option>
-                                    ))}
-                                </select>
+                                    onChange={(value) => handleSelectChange('colore', value)}
+                                    className="flex-1"
+                                    options={COLORI_PREDEFINITI.map(c => ({ value: c.value, label: c.label }))}
+                                />
                                 <div
                                     className="w-10 h-10 rounded-lg border border-gray-300 flex-shrink-0"
                                     style={{ backgroundColor: formData.colore }}

@@ -191,6 +191,54 @@ const getTransporter = () => {
  * Email template definitions
  */
 const EMAIL_TEMPLATES = {
+  MEDICO_POLIAMBULATORIO_NOTIFICA: {
+    subject: 'Inserimento in {{clinicName}}',
+    html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #233747; background: #f9fafb; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #0f766e; color: white; padding: 22px; border-radius: 10px 10px 0 0; }
+    .content { background: #fff; border: 1px solid #e5e7eb; border-top: 0; padding: 22px; }
+    .box { background: #ecfdf5; border: 1px solid #99f6e4; border-radius: 8px; padding: 14px; margin: 18px 0; }
+    .footer { color: #6b7280; font-size: 12px; padding: 16px 0; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1 style="margin:0; font-size:22px;">Nuovo inserimento in poliambulatorio</h1>
+    </div>
+    <div class="content">
+      <p>Gentile {{doctorName}},</p>
+      <p>sei stato inserito tra i medici di <strong>{{clinicName}}</strong>.</p>
+      <div class="box">
+        Da questo momento, in base ai permessi assegnati, potrai operare nelle funzionalità cliniche collegate a questo poliambulatorio.
+      </div>
+      <p>Puoi accedere alla piattaforma da: <a href="{{loginUrl}}">{{loginUrl}}</a></p>
+      <p style="font-size:12px;color:#6b7280;">Se non riconosci questa operazione, contatta la segreteria del poliambulatorio.</p>
+    </div>
+    <div class="footer">Comunicazione automatica ElementMedica — Non rispondere a questa email.</div>
+  </div>
+</body>
+</html>
+    `,
+    text: `
+Gentile {{doctorName}},
+
+sei stato inserito tra i medici di {{clinicName}}.
+
+Da questo momento, in base ai permessi assegnati, potrai operare nelle funzionalità cliniche collegate a questo poliambulatorio.
+
+Accesso: {{loginUrl}}
+
+Se non riconosci questa operazione, contatta la segreteria del poliambulatorio.
+    `
+  },
+
   // Appointment confirmation
   CONFERMA_APPUNTAMENTO: {
     subject: 'Conferma Appuntamento - {{clinicName}}',

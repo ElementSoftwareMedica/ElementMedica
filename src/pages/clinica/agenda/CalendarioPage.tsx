@@ -60,6 +60,7 @@ import { getDoctorTitle } from '../../../utils/codiceFiscale';
 import { useToast } from '../../../hooks/useToast';
 import { CRUDButton } from '../../../components/shared/CRUDButton';
 import { useDailyReset } from '../../../hooks/useDailyReset';
+import ElegantSelect from '../../../components/ui/ElegantSelect';
 
 // Modular calendar components
 import {
@@ -205,7 +206,8 @@ export const CalendarioPage: React.FC = () => {
             filterMedici: [] as string[], // empty = no filter (show all)
             selectedDates: null as Date[] | null, // null = use default week
             showOnlyAvailability: false,
-            showAllSlotsGray: false
+            showAllSlotsGray: false,
+            selectedSedeId: null as string | null
         };
     }, []);
 
@@ -234,7 +236,7 @@ export const CalendarioPage: React.FC = () => {
     const [showAllSlotsGray, setShowAllSlotsGray] = useState<boolean>(savedSettings.showAllSlotsGray || false); // Show all slots in gray even if medico not selected
 
     // Sede filter state - filter ambulatori by sede and show closed hours/days in gray
-    const [selectedSedeId, setSelectedSedeId] = useState<string | null>(null);
+    const [selectedSedeId, setSelectedSedeId] = useState<string | null>(savedSettings.selectedSedeId || null);
 
     // Zoom/view state - control time range visibility (with localStorage persistence)
     const [viewStartHour, setViewStartHour] = useState(savedSettings.viewStartHour);
@@ -282,11 +284,12 @@ export const CalendarioPage: React.FC = () => {
                 filterMedici,
                 selectedDates: selectedDates.map(d => d.toISOString()),
                 showOnlyAvailability,
-                showAllSlotsGray
+                showAllSlotsGray,
+                selectedSedeId
             }));
         } catch (e) {
         }
-    }, [viewStartHour, viewEndHour, zoomMode, selectedDays, selectedAmbulatori, filterMedici, ambulatoriInitialized, selectedDates, showOnlyAvailability, showAllSlotsGray]);
+    }, [viewStartHour, viewEndHour, zoomMode, selectedDays, selectedAmbulatori, filterMedici, ambulatoriInitialized, selectedDates, showOnlyAvailability, showAllSlotsGray, selectedSedeId]);
 
     const [dragState, setDragState] = useState<DragState>({
         isDragging: false,
@@ -469,6 +472,17 @@ export const CalendarioPage: React.FC = () => {
             }
         }
     }, [sediData, selectedSedeId]);
+
+    const handleSedeChange = useCallback((value: string) => {
+        const nextSedeId = value || null;
+        setSelectedSedeId(nextSedeId);
+        const allAmbulatori = ambulatoriData?.data || [];
+        const scopedAmbulatori = nextSedeId
+            ? allAmbulatori.filter(ambulatorio => ambulatorio.sedeId === nextSedeId)
+            : allAmbulatori;
+        setSelectedAmbulatori((scopedAmbulatori.length > 0 ? scopedAmbulatori : allAmbulatori).map(ambulatorio => ambulatorio.id));
+        setAmbulatoriInitialized(true);
+    }, [ambulatoriData]);
 
     // Calculate date range for queries - based ONLY on selectedDates
     // The calendar shows only the days explicitly selected in the mini calendar
@@ -842,7 +856,8 @@ export const CalendarioPage: React.FC = () => {
 
         // Filter by sede if selected
         if (selectedSedeId) {
-            all = all.filter(a => a.sedeId === selectedSedeId);
+            const scoped = all.filter(a => a.sedeId === selectedSedeId);
+            if (scoped.length > 0) all = scoped;
         }
 
         if (selectedAmbulatori.length === 0) return all; // Show all if nothing selected
@@ -1671,18 +1686,20 @@ export const CalendarioPage: React.FC = () => {
                         {/* Sede Selector */}
                         <div className="flex items-center gap-2">
                             <MapPin className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                            <select
+                            <ElegantSelect
                                 value={selectedSedeId || ''}
-                                onChange={(e) => setSelectedSedeId(e.target.value || null)}
-                                className="text-sm border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 bg-white dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
-                            >
-                                <option value="">Tutte le sedi</option>
-                                {(sediData?.data || []).map(sede => (
-                                    <option key={sede.id} value={sede.id}>
-                                        {sede.nome} {sede.isPrincipale ? '(Principale)' : ''}
-                                    </option>
-                                ))}
-                            </select>
+                                onChange={handleSedeChange}
+                                className="min-w-[220px]"
+                                triggerClassName="h-9 rounded-lg text-sm"
+                                placeholder="Tutte le sedi"
+                                options={[
+                                    { value: '', label: 'Tutte le sedi' },
+                                    ...(sediData?.data || []).map(sede => ({
+                                        value: sede.id,
+                                        label: `${sede.nome}${sede.isPrincipale ? ' (Principale)' : ''}`
+                                    }))
+                                ]}
+                            />
                             {selectedSede && hasOrariConfigured && (
                                 <span className="text-xs text-gray-500 dark:text-gray-400" title="Orari configurati per questa sede">
                                     <Clock className="h-3 w-3 inline mr-1" />

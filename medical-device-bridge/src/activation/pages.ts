@@ -645,7 +645,7 @@ export function deviceSetupPageHtml(currentDevices?: Array<Record<string, unknow
                 devices.push({
                     type: 'edan-ecg',
                     enabled: true,
-                    gdtId: 'EDAN_ECG',
+                    gdtId: 'EKG',
                     gdtInputDir: document.getElementById('edanInput').value,
                     gdtOutputDir: document.getElementById('edanOutput').value,
                     pdfOutputDir: document.getElementById('edanPdfOutput').value || document.getElementById('edanOutput').value,

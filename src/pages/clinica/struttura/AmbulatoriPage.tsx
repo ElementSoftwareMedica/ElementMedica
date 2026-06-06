@@ -32,6 +32,7 @@ import { useViewMode } from '../../../hooks/useViewMode';
 import { ViewModeToggle } from '../../../components/clinica/ViewModeToggle';
 import { ActionMenu, createCrudActions } from '@/components/ui/ActionMenu';
 import { CRUDButton } from '../../../components/shared/CRUDButton';
+import ElegantSelect from '../../../components/ui/ElegantSelect';
 
 // Import Element Medica theme
 import '../../../styles/clinica-theme.css';
@@ -264,29 +265,30 @@ const AmbulatoriPage: React.FC = () => {
                     {/* Poliambulatorio Filter */}
                     <div className="flex items-center gap-2">
                         <Filter className="h-4 w-4 text-gray-400" />
-                        <select
+                        <ElegantSelect
                             value={selectedPoliambulatorioId}
-                            onChange={(e) => handlePoliambulatorioFilter(e.target.value)}
-                            className="select-clinica"
-                        >
-                            <option value="">Tutti i poliambulatori</option>
-                            {poliambulatori.map((p: Poliambulatorio) => (
-                                <option key={p.id} value={p.id}>{p.nome}</option>
-                            ))}
-                        </select>
+                            onChange={handlePoliambulatorioFilter}
+                            className="min-w-[220px]"
+                            placeholder="Tutti i poliambulatori"
+                            options={[
+                                { value: '', label: 'Tutti i poliambulatori' },
+                                ...poliambulatori.map((p: Poliambulatorio) => ({ value: p.id, label: p.nome }))
+                            ]}
+                        />
                     </div>
 
                     {/* Status Filter */}
                     <div className="flex items-center gap-2">
-                        <select
+                        <ElegantSelect
                             value={filterActive}
-                            onChange={(e) => setFilterActive(e.target.value as 'all' | 'active' | 'inactive')}
-                            className="select-clinica"
-                        >
-                            <option value="all">Tutti gli stati</option>
-                            <option value="active">Solo attivi</option>
-                            <option value="inactive">Solo inattivi</option>
-                        </select>
+                            onChange={(value) => setFilterActive(value as 'all' | 'active' | 'inactive')}
+                            className="min-w-[180px]"
+                            options={[
+                                { value: 'all', label: 'Tutti gli stati' },
+                                { value: 'active', label: 'Solo attivi' },
+                                { value: 'inactive', label: 'Solo inattivi' },
+                            ]}
+                        />
                     </div>
                 </div>
             </div>

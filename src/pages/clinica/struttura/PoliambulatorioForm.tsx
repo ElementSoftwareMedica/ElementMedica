@@ -24,6 +24,7 @@ import { poliambulatoriApi } from '../../../services/clinicaApi';
 import type { Poliambulatorio } from '../../../services/clinicaApi';
 import { useToast } from '../../../hooks/useToast';
 import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
+import ElegantSelect from '../../../components/ui/ElegantSelect';
 
 // Import Element Medica theme
 import '../../../styles/clinica-theme.css';
@@ -213,6 +214,18 @@ const PoliambulatorioForm: React.FC = () => {
         }
     };
 
+    const handleSelectChange = (name: keyof FormData, value: string) => {
+        setFormData(prev => ({ ...prev, [name]: value }));
+        setIsDirty(true);
+        if (errors[name]) {
+            setErrors(prev => {
+                const newErrors = { ...prev };
+                delete newErrors[name];
+                return newErrors;
+            });
+        }
+    };
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -324,16 +337,15 @@ const PoliambulatorioForm: React.FC = () => {
 
                         <div>
                             <label className="label-clinica">Stato</label>
-                            <select
-                                name="stato"
+                            <ElegantSelect
                                 value={formData.stato}
-                                onChange={handleChange}
-                                className="input-clinica"
-                            >
-                                <option value="ATTIVO">Attivo</option>
-                                <option value="INATTIVO">Inattivo</option>
-                                <option value="SOSPESO">Sospeso</option>
-                            </select>
+                                onChange={(value) => handleSelectChange('stato', value)}
+                                options={[
+                                    { value: 'ATTIVO', label: 'Attivo' },
+                                    { value: 'INATTIVO', label: 'Inattivo' },
+                                    { value: 'SOSPESO', label: 'Sospeso' },
+                                ]}
+                            />
                         </div>
                     </div>
                 </div>

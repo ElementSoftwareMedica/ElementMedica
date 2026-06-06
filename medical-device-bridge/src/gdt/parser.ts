@@ -151,8 +151,8 @@ export function extractFindings(record: GdtRecord): string[] {
  * Extract examination date/time
  */
 export function extractExamDateTime(record: GdtRecord): { date?: string; time?: string } {
-    const dateField = record.fields.find(f => f.fieldId === '6200');
-    const timeField = record.fields.find(f => f.fieldId === '6201');
+    const dateField = record.fields.find(f => f.fieldId === '6200') || record.fields.find(f => f.fieldId === '8432');
+    const timeField = record.fields.find(f => f.fieldId === '6201') || record.fields.find(f => f.fieldId === '8439');
 
     let date: string | undefined;
     let time: string | undefined;

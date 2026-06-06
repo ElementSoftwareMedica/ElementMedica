@@ -32,6 +32,7 @@ import { useToast } from '../../../hooks/useToast';
 import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
 import OrariAperturaEditor, { type OrarioGiornaliero } from '../../../components/clinica/OrariAperturaEditor';
 import ChiusureSpecialiEditor, { type ChiusuraSpeciale } from '../../../components/clinica/ChiusureSpecialiEditor';
+import ElegantSelect from '../../../components/ui/ElegantSelect';
 
 // Import Element Medica theme
 import '../../../styles/clinica-theme.css';
@@ -305,6 +306,18 @@ const SedeForm: React.FC = () => {
         }
     };
 
+    const handlePoliambulatorioSelect = (value: string) => {
+        setSelectedPoliambulatorioId(value);
+        setIsDirty(true);
+        if (errors.poliambulatorioId) {
+            setErrors(prev => {
+                const newErrors = { ...prev };
+                delete newErrors.poliambulatorioId;
+                return newErrors;
+            });
+        }
+    };
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -456,18 +469,16 @@ const SedeForm: React.FC = () => {
                             <label className="label-clinica">
                                 Seleziona Poliambulatorio <span className="text-red-500">*</span>
                             </label>
-                            <select
+                            <ElegantSelect
                                 value={selectedPoliambulatorioId}
-                                onChange={(e) => setSelectedPoliambulatorioId(e.target.value)}
-                                className={`input-clinica ${errors.poliambulatorioId ? 'border-red-500' : ''}`}
-                            >
-                                <option value="">-- Seleziona --</option>
-                                {poliambulatoriOptions.map((p: Poliambulatorio) => (
-                                    <option key={p.id} value={p.id}>
-                                        {p.nome} ({p.codice})
-                                    </option>
-                                ))}
-                            </select>
+                                onChange={handlePoliambulatorioSelect}
+                                placeholder="Seleziona poliambulatorio"
+                                triggerClassName={errors.poliambulatorioId ? 'border-red-500' : ''}
+                                options={[
+                                    { value: '', label: 'Seleziona poliambulatorio' },
+                                    ...poliambulatoriOptions.map((p: Poliambulatorio) => ({ value: p.id, label: `${p.nome} (${p.codice})` }))
+                                ]}
+                            />
                             {errors.poliambulatorioId && (
                                 <p className="text-red-500 text-sm mt-1">{errors.poliambulatorioId}</p>
                             )}

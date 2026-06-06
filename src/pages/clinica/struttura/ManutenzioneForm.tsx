@@ -30,6 +30,7 @@ import { manutenzioniApi, strumentiApi } from '../../../services/clinicaApi';
 import type { ManutenzioneStrumento, Strumento } from '../../../services/clinicaApi';
 import { useToast } from '../../../hooks/useToast';
 import { DatePickerElegante } from '../../../components/ui/DatePickerElegante';
+import { ElegantSelect } from '../../../components/ui/ElegantSelect';
 
 // Import Element Medica theme
 import '../../../styles/clinica-theme.css';
@@ -311,19 +312,20 @@ const ManutenzioneForm: React.FC = () => {
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Strumento <span className="text-red-500">*</span>
                             </label>
-                            <select
+                            <ElegantSelect
                                 value={formData.strumentoId}
-                                onChange={(e) => handleChange('strumentoId', e.target.value)}
-                                className={`input-clinica w-full ${errors.strumentoId ? 'border-red-300' : ''}`}
+                                onChange={(value) => handleChange('strumentoId', value)}
+                                placeholder="Seleziona strumento"
+                                triggerClassName={errors.strumentoId ? 'border-red-300' : ''}
                                 disabled={!!preselectedStrumentoId}
-                            >
-                                <option value="">Seleziona strumento</option>
-                                {strumenti.map((s) => (
-                                    <option key={s.id} value={s.id}>
-                                        {s.codice} - {s.nome} {s.marca && `(${s.marca})`}
-                                    </option>
-                                ))}
-                            </select>
+                                options={[
+                                    { value: '', label: 'Seleziona strumento' },
+                                    ...strumenti.map((s) => ({
+                                        value: s.id,
+                                        label: `${s.codice} - ${s.nome}${s.marca ? ` (${s.marca})` : ''}`
+                                    }))
+                                ]}
+                            />
                             {errors.strumentoId && (
                                 <p className="text-red-500 text-sm mt-1">{errors.strumentoId}</p>
                             )}
@@ -334,17 +336,11 @@ const ManutenzioneForm: React.FC = () => {
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Tipo Manutenzione
                             </label>
-                            <select
+                            <ElegantSelect
                                 value={formData.tipo}
-                                onChange={(e) => handleChange('tipo', e.target.value)}
-                                className="input-clinica w-full"
-                            >
-                                {TIPI_MANUTENZIONE.map((t) => (
-                                    <option key={t.value} value={t.value}>
-                                        {t.label}
-                                    </option>
-                                ))}
-                            </select>
+                                onChange={(value) => handleChange('tipo', value)}
+                                options={TIPI_MANUTENZIONE.map((t) => ({ value: t.value, label: t.label }))}
+                            />
                             <p className="text-xs text-gray-500 mt-1">
                                 {TIPI_MANUTENZIONE.find(t => t.value === formData.tipo)?.description}
                             </p>
@@ -355,17 +351,11 @@ const ManutenzioneForm: React.FC = () => {
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Stato
                             </label>
-                            <select
+                            <ElegantSelect
                                 value={formData.stato}
-                                onChange={(e) => handleChange('stato', e.target.value)}
-                                className="input-clinica w-full"
-                            >
-                                {STATI_MANUTENZIONE.map((s) => (
-                                    <option key={s.value} value={s.value}>
-                                        {s.label}
-                                    </option>
-                                ))}
-                            </select>
+                                onChange={(value) => handleChange('stato', value)}
+                                options={STATI_MANUTENZIONE.map((s) => ({ value: s.value, label: s.label }))}
+                            />
                         </div>
 
                         {/* Descrizione */}

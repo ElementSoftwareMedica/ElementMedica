@@ -196,7 +196,7 @@ export function loadConfig(): BridgeConfig {
         devices.push({
             type: 'edan-ecg',
             enabled: true,
-            gdtId: (process.env.EDAN_GDT_ID || 'EDAN_ECG').substring(0, 8),
+            gdtId: (process.env.EDAN_GDT_ID || 'EKG').substring(0, 8),
             gdtInputDir: resolve(process.env.EDAN_GDT_INPUT_DIR || './data/edan/input'),
             gdtOutputDir: resolve(process.env.EDAN_GDT_OUTPUT_DIR || './data/edan/output'),
             pdfOutputDir: resolve(process.env.EDAN_PDF_OUTPUT_DIR || process.env.EDAN_GDT_OUTPUT_DIR || './data/edan/output'),

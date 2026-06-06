@@ -31,6 +31,7 @@ import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
 import { useTenantFilter } from '../../../context/TenantFilterContext';
 import { ActionMenu, createCrudActions } from '@/components/ui/ActionMenu';
 import { CRUDButton } from '../../../components/shared/CRUDButton';
+import ElegantSelect from '../../../components/ui/ElegantSelect';
 
 // Import Element Medica theme
 import '../../../styles/clinica-theme.css';
@@ -255,31 +256,32 @@ const StrumentiPage: React.FC = () => {
                     {/* Stato Filter */}
                     <div className="flex items-center gap-2 shrink-0">
                         <Filter className="h-4 w-4 text-gray-400" />
-                        <select
+                        <ElegantSelect
                             value={filterStato}
-                            onChange={(e) => setFilterStato(e.target.value as StatoStrumento | 'all')}
-                            className="select-clinica w-auto"
-                        >
-                            <option value="all">Tutti gli stati</option>
-                            <option value="DISPONIBILE">Disponibile</option>
-                            <option value="IN_MANUTENZIONE">In Manutenzione</option>
-                            <option value="IN_RIPARAZIONE">In Riparazione</option>
-                            <option value="DISMESSO">Dismesso</option>
-                        </select>
+                            onChange={(value) => setFilterStato(value as StatoStrumento | 'all')}
+                            className="min-w-[190px]"
+                            options={[
+                                { value: 'all', label: 'Tutti gli stati' },
+                                { value: 'DISPONIBILE', label: 'Disponibile' },
+                                { value: 'IN_MANUTENZIONE', label: 'In manutenzione' },
+                                { value: 'IN_RIPARAZIONE', label: 'In riparazione' },
+                                { value: 'DISMESSO', label: 'Dismesso' },
+                            ]}
+                        />
                     </div>
 
                     {/* Ambulatorio Filter */}
                     <div className="shrink-0">
-                        <select
+                        <ElegantSelect
                             value={filterAmbulatorio}
-                            onChange={(e) => setFilterAmbulatorio(e.target.value)}
-                            className="select-clinica w-auto"
-                        >
-                            <option value="">Tutti gli ambulatori</option>
-                            {ambulatori.map((amb: Ambulatorio) => (
-                                <option key={amb.id} value={amb.id}>{amb.nome}</option>
-                            ))}
-                        </select>
+                            onChange={setFilterAmbulatorio}
+                            className="min-w-[220px]"
+                            placeholder="Tutti gli ambulatori"
+                            options={[
+                                { value: '', label: 'Tutti gli ambulatori' },
+                                ...ambulatori.map((amb: Ambulatorio) => ({ value: amb.id, label: amb.nome }))
+                            ]}
+                        />
                     </div>
                 </div>
             </div>

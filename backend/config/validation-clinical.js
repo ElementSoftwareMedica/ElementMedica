@@ -114,10 +114,12 @@ export const JOI_CLINICAL_SCHEMAS = {
         create: Joi.object({
             poliambulatorioId: Joi.string().uuid().required()
                 .messages({ 'any.required': 'ID Poliambulatorio è obbligatorio' }),
+            sedeId: Joi.string().uuid().allow('', null),
             nome: Joi.string().min(2).max(200).required()
                 .messages({ 'any.required': 'Nome ambulatorio è obbligatorio' }),
             codice: Joi.string().min(2).max(50).pattern(/^[A-Z0-9_-]+$/i).required(),
             specializzazione: Joi.string().max(200).allow('', null),
+            descrizione: Joi.string().max(2000).allow('', null),
             piano: Joi.string().max(50).allow('', null),
             capacita: Joi.number().integer().min(1).max(50).default(1),
             colore: Joi.string().max(20).allow('', null).default('#3B82F6'),
@@ -127,7 +129,9 @@ export const JOI_CLINICAL_SCHEMAS = {
         update: Joi.object({
             nome: Joi.string().min(2).max(200),
             codice: Joi.string().min(2).max(50).pattern(/^[A-Z0-9_-]+$/i),
+            sedeId: Joi.string().uuid().allow('', null),
             specializzazione: Joi.string().max(200).allow('', null),
+            descrizione: Joi.string().max(2000).allow('', null),
             piano: Joi.string().max(50).allow('', null),
             capacita: Joi.number().integer().min(1).max(50),
             colore: Joi.string().max(20).allow('', null),

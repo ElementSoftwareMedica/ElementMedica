@@ -36,6 +36,7 @@ import { clinicaApi, type ChiusuraSpecialeSedeInput } from '../../../services/cl
 import { formatMedicoName } from '../../../utils/textFormatters';
 import { DatePickerElegante } from '../../../components/ui/DatePickerElegante';
 import { TimePickerElegante } from '../../../components/ui/TimePickerElegante';
+import { ElegantSelect } from '../../../components/ui/ElegantSelect';
 import { useToast } from '../../../hooks/useToast';
 
 // Import Element Medica theme
@@ -553,23 +554,21 @@ const SedeDetailPage: React.FC = () => {
                             </label>
                             <label className="text-sm font-medium text-gray-700">
                                 Tipo
-                                <div className="relative">
-                                    <select
-                                        value={chiusuraForm.tipo}
-                                        onChange={e => setChiusuraForm(f => ({ ...f, tipo: e.target.value }))}
-                                        className="mt-1 h-10 w-full appearance-none rounded-xl border border-gray-200 bg-white px-3 pr-9 text-sm font-medium text-gray-800 shadow-sm outline-none transition-all hover:border-teal-300 focus:border-teal-500 focus:ring-4 focus:ring-teal-100"
-                                    >
-                                        <option value="FESTIVITA">Festività</option>
-                                        <option value="PONTE">Ponte</option>
-                                        <option value="FERIE_ESTIVE">Ferie estive</option>
-                                        <option value="FERIE_NATALIZIE">Ferie natalizie</option>
-                                        <option value="FERIE_PASQUALI">Ferie pasquali</option>
-                                        <option value="STRAORDINARIA">Straordinaria</option>
-                                        <option value="FORMAZIONE">Formazione</option>
-                                        <option value="EVENTO">Evento</option>
-                                        <option value="ALTRO">Altro</option>
-                                    </select>
-                                </div>
+                                <ElegantSelect
+                                    value={chiusuraForm.tipo}
+                                    onChange={value => setChiusuraForm(f => ({ ...f, tipo: value }))}
+                                    options={[
+                                        { value: 'FESTIVITA', label: 'Festività' },
+                                        { value: 'PONTE', label: 'Ponte' },
+                                        { value: 'FERIE_ESTIVE', label: 'Ferie estive' },
+                                        { value: 'FERIE_NATALIZIE', label: 'Ferie natalizie' },
+                                        { value: 'FERIE_PASQUALI', label: 'Ferie pasquali' },
+                                        { value: 'STRAORDINARIA', label: 'Straordinaria' },
+                                        { value: 'FORMAZIONE', label: 'Formazione' },
+                                        { value: 'EVENTO', label: 'Evento' },
+                                        { value: 'ALTRO', label: 'Altro' }
+                                    ]}
+                                />
                             </label>
                             <label className="text-sm font-medium text-gray-700">
                                 Data inizio

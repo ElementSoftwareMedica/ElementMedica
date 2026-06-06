@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, type ComponentType } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Clock,
   Search,
@@ -10,19 +11,31 @@ import {
   RefreshCw,
   Building2,
   Stethoscope,
-  CheckCheck
+  CheckCheck,
+  Plus,
+  Undo2,
+  X
 } from 'lucide-react'
+import { v4 as uuidv4 } from 'uuid'
 import { usePersistentPageState } from '../hooks/usePersistentPageState'
 import { ElegantDateRangeInput } from '../components/ElegantControls'
 
 interface Scadenza {
   id: string
   _serverId: string | null
+  _localId?: string | null
+  tenantId: string | null
   personId: string | null
+  prestazioneId: string | null
+  mansioneId: string | null
+  protocolloId: string | null
+  visitaId: string | null
   dataScadenza: string
   eseguita: number
+  isPrimaVisita?: number | null
   personFirstName: string | null
   personLastName: string | null
+  personTaxCode?: string | null
   mansione: string | null
   prestazioneNome: string | null
   companyName: string | null
@@ -38,22 +51,26 @@ interface ScadenzaGroup extends Scadenza {
 
 interface PatientLookup {
   id: string
+  tenantId: string | null
   firstName: string | null
   lastName: string | null
+  taxCode: string | null
   companyName: string | null
   companyTenantProfileId?: string | null
 }
 
 interface CompanyLookup {
   id: string
+  tenantId: string | null
   ragioneSociale: string | null
+  medicoCompetenteId?: string | null
 }
 
 type Urgenza = 'scaduto' | 'critico' | 'urgente' | 'attenzione' | 'programmato'
 const FINESTRA_RAGGRUPPAMENTO_GIORNI = 60
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 
-const URGENZA_CONFIG: Record<Urgenza, { label: string; bg: string; text: string; border: string; icon: React.ComponentType<{ className?: string }> }> = {
+const URGENZA_CONFIG: Record<Urgenza, { label: string; bg: string; text: string; border: string; icon: ComponentType<{ className?: string }> }> = {
   scaduto: { label: 'Scaduto', bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', icon: AlertCircle },
   critico: { label: 'Critico (<7gg)', bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200', icon: AlertTriangle },
   urgente: { label: 'Urgente (7-30gg)', bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200', icon: Clock },
@@ -71,7 +88,7 @@ function isoToday(offsetDays = 0): string {
 function getUrgenza(dataScadenza: string): Urgenza {
   const now = new Date()
   const scad = new Date(dataScadenza)
-  const diffDays = Math.floor((scad.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+  const diffDays = Math.floor((scad.getTime() - now.getTime()) / MS_PER_DAY)
   if (diffDays < 0) return 'scaduto'
   if (diffDays < 7) return 'critico'
   if (diffDays < 30) return 'urgente'
@@ -92,6 +109,10 @@ function uniquePrestazioni(scadenze: Scadenza[]): string[] {
       return a.localeCompare(b, 'it')
     })
   return Array.from(new Set(names))
+}
+
+function countUniquePeople(groups: ScadenzaGroup[]): number {
+  return new Set(groups.map(group => group.personId || group.id)).size
 }
 
 function groupScadenzeMdl(scadenze: Scadenza[]): ScadenzaGroup[] {
@@ -161,6 +182,7 @@ function groupScadenzeMdl(scadenze: Scadenza[]): ScadenzaGroup[] {
 }
 
 export function ScadenzePage(): JSX.Element {
+  const navigate = useNavigate()
   const [scadenze, setScadenze] = useState<Scadenza[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = usePersistentPageState('scadenze:searchTerm', '')
@@ -169,6 +191,9 @@ export function ScadenzePage(): JSX.Element {
   const [dateFrom, setDateFrom] = usePersistentPageState<string>('scadenze:dateFrom', isoToday(-30))
   const [dateTo, setDateTo] = usePersistentPageState<string>('scadenze:dateTo', isoToday(30))
   const [markingDone, setMarkingDone] = useState<string | null>(null)
+  const [creatingVisit, setCreatingVisit] = useState<string | null>(null)
+  const [undoAction, setUndoAction] = useState<{ label: string; scadenze: Scadenza[] } | null>(null)
+  const [pageError, setPageError] = useState<string | null>(null)
 
   const loadScadenze = useCallback(async () => {
     setLoading(true)
@@ -195,13 +220,15 @@ export function ScadenzePage(): JSX.Element {
         const company = patient?.companyTenantProfileId ? companyMap.get(patient.companyTenantProfileId) : undefined
         return {
           ...row,
+          tenantId: row.tenantId || patient?.tenantId || company?.tenantId || null,
           personFirstName: row.personFirstName || patient?.firstName || null,
           personLastName: row.personLastName || patient?.lastName || null,
+          personTaxCode: row.personTaxCode || patient?.taxCode || null,
           companyName: row.companyName || patient?.companyName || company?.ragioneSociale || null,
         }
       }))
     } catch {
-      // DB not ready
+      setPageError('Impossibile caricare le scadenze locali.')
     } finally {
       setLoading(false)
     }
@@ -211,6 +238,7 @@ export function ScadenzePage(): JSX.Element {
 
   const handleMarkDone = useCallback(async (group: ScadenzaGroup): Promise<void> => {
     if (!window.desktopApi || markingDone) return
+    setPageError(null)
     setMarkingDone(group.id)
     try {
       const now = new Date().toISOString()
@@ -223,17 +251,201 @@ export function ScadenzePage(): JSX.Element {
         await window.desktopApi.sync.enqueue({
           type: 'UPDATE',
           entity: 'scadenze',
-          entityId: scadenza.id,
+          entityId: scadenza._serverId || scadenza.id,
+          localId: scadenza._localId || undefined,
           payload: { status: 'COMPLETATA', completatoAt: now }
         })
       }))
+      setUndoAction({
+        label: `${group.personLastName || ''} ${group.personFirstName || ''}`.trim() || 'Scadenza',
+        scadenze: group.scadenze,
+      })
       await loadScadenze()
     } catch {
-      // Non-blocking
+      setPageError('Non sono riuscito a segnare la scadenza come eseguita.')
     } finally {
       setMarkingDone(null)
     }
   }, [loadScadenze, markingDone])
+
+  const handleUndoMarkDone = useCallback(async (): Promise<void> => {
+    if (!window.desktopApi || !undoAction) return
+    setPageError(null)
+    try {
+      await Promise.all(undoAction.scadenze.map(async (scadenza) => {
+        await window.desktopApi.db.update({
+          table: 'scadenze',
+          id: scadenza.id,
+          data: { eseguita: 0, dataEsecuzione: null }
+        })
+        await window.desktopApi.sync.enqueue({
+          type: 'UPDATE',
+          entity: 'scadenze',
+          entityId: scadenza._serverId || scadenza.id,
+          localId: scadenza._localId || undefined,
+          payload: { status: 'PENDING', completatoAt: null }
+        })
+      }))
+      setUndoAction(null)
+      await loadScadenze()
+    } catch {
+      setPageError('Non sono riuscito ad annullare la marcatura come eseguita.')
+    }
+  }, [loadScadenze, undoAction])
+
+  const handleCreateVisit = useCallback(async (group: ScadenzaGroup): Promise<void> => {
+    if (!window.desktopApi || !group.personId || creatingVisit) return
+    setPageError(null)
+    setCreatingVisit(group.id)
+    try {
+      const [patients, companies] = await Promise.all([
+        window.desktopApi.db.query({ table: 'patients', where: { id: group.personId } }).catch(() => []) as Promise<PatientLookup[]>,
+        window.desktopApi.db.query({ table: 'companies', where: { _isDeleted: 0 } }).catch(() => []) as Promise<CompanyLookup[]>,
+      ])
+      const patient = patients[0]
+      const company = patient?.companyTenantProfileId
+        ? companies.find(c => c.id === patient.companyTenantProfileId)
+        : companies.find(c => c.ragioneSociale === group.companyName)
+      const tenantId = group.tenantId || patient?.tenantId || company?.tenantId
+      if (!tenantId) throw new Error('Tenant mancante per la visita.')
+
+      const now = new Date().toISOString()
+      const appointmentId = uuidv4()
+      const visitId = uuidv4()
+      const selectedRows = [...group.scadenze].sort((a, b) => {
+        if (isVisitaMedicaDelLavoro(a.prestazioneNome)) return -1
+        if (isVisitaMedicaDelLavoro(b.prestazioneNome)) return 1
+        return new Date(a.dataScadenza).getTime() - new Date(b.dataScadenza).getTime()
+      })
+      const prestazioneIds = Array.from(new Set(selectedRows.map(row => row.prestazioneId).filter(Boolean) as string[]))
+      const mainPrestazione = selectedRows.find(row => row.prestazioneId && isVisitaMedicaDelLavoro(row.prestazioneNome)) || selectedRows.find(row => row.prestazioneId) || selectedRows[0]
+      const prestazioneId = mainPrestazione?.prestazioneId || prestazioneIds[0] || null
+      const prestazioneNome = mainPrestazione?.prestazioneNome || 'Visita Medica del Lavoro'
+      const tipoVisitaMDL = selectedRows.some(row => row.isPrimaVisita) ? 'PREVENTIVA' : 'PERIODICA'
+      const personFirstName = patient?.firstName || group.personFirstName || ''
+      const personLastName = patient?.lastName || group.personLastName || ''
+      const personTaxCode = patient?.taxCode || group.personTaxCode || null
+      const companyName = company?.ragioneSociale || group.companyName || patient?.companyName || null
+
+      await window.desktopApi.db.insert({
+        table: 'appointments',
+        data: {
+          id: appointmentId,
+          tenantId,
+          personId: group.personId,
+          medicoId: company?.medicoCompetenteId || null,
+          prestazioneId,
+          companyTenantProfileId: patient?.companyTenantProfileId || company?.id || null,
+          dataOra: now,
+          durata: 10,
+          durataPrevista: 10,
+          stato: 'IN_CORSO',
+          tipo: 'MEDICINA_LAVORO',
+          personFirstName,
+          personLastName,
+          personTaxCode,
+          companyName,
+          prestazioneNome,
+          noteInterne: `Visita MdL creata da Scadenze desktop con ${prestazioneIds.length || selectedRows.length} accertamenti collegati`,
+          createdAt: now,
+          updatedAt: now,
+        }
+      })
+      await window.desktopApi.sync.enqueue({
+        type: 'CREATE',
+        entity: 'appointments',
+        entityId: appointmentId,
+        payload: {
+          personId: group.personId,
+          companyTenantProfileId: patient?.companyTenantProfileId || company?.id || null,
+          dataOra: now,
+          durataMinuti: 10,
+          stato: 'IN_CORSO',
+          tipoVisitaMDL,
+          prestazioneId,
+          medicoId: company?.medicoCompetenteId || null,
+          createdFromScadenzeMdl: true,
+          promemoriaEmail: false,
+          promemoriaSms: false,
+          isOverbooking: true,
+        }
+      })
+
+      for (const selectedPrestazioneId of prestazioneIds) {
+        const inserted = await window.desktopApi.db.insert({
+          table: 'appointment_prestazioni',
+          data: {
+            appuntamentoId: appointmentId,
+            prestazioneId: selectedPrestazioneId,
+            prezzo: null,
+            quantita: 1,
+            note: 'Accertamento da scadenza protocollo sanitario',
+          }
+        }) as { id: string }
+        await window.desktopApi.sync.enqueue({
+          type: 'CREATE',
+          entity: 'appointment_prestazioni',
+          entityId: inserted.id,
+          payload: { appuntamentoId: appointmentId, prestazioneId: selectedPrestazioneId, prezzo: null, quantita: 1 }
+        })
+      }
+
+      await window.desktopApi.db.insert({
+        table: 'visits',
+        data: {
+          id: visitId,
+          tenantId,
+          appuntamentoId: appointmentId,
+          personId: group.personId,
+          medicoId: company?.medicoCompetenteId || null,
+          dataOra: now,
+          stato: 'IN_CORSO',
+          tipo: 'MEDICINA_LAVORO',
+          tipoVisitaMDL,
+          isMDL: 1,
+          personFirstName,
+          personLastName,
+          personTaxCode,
+          companyName,
+          prestazioneId,
+          prestazioneNome,
+          datiStrutturati: JSON.stringify({
+            accertamentiCollegati: prestazioneIds,
+            scadenzeCollegate: group.scadenze.map(scadenza => scadenza.id),
+          }),
+          noteInterne: 'Visita MdL avviata da Scadenze desktop',
+          createdAt: now,
+          updatedAt: now,
+        }
+      })
+      await window.desktopApi.sync.enqueue({
+        type: 'CREATE',
+        entity: 'visits',
+        entityId: visitId,
+        payload: {
+          appuntamentoId: appointmentId,
+          personId: group.personId,
+          stato: 'IN_CORSO',
+          tipoVisitaMDL,
+          isMDL: true,
+          prestazioneId,
+          datiStrutturati: {
+            accertamentiCollegati: prestazioneIds,
+            scadenzeCollegate: group.scadenze.map(scadenza => scadenza.id),
+          }
+        }
+      })
+
+      await Promise.all(group.scadenze.map(scadenza =>
+        window.desktopApi.db.update({ table: 'scadenze', id: scadenza.id, data: { visitaId: visitId } }).catch(() => undefined)
+      ))
+      navigate(`/visite/${visitId}`, { state: { from: '/scadenze' } })
+    } catch (error) {
+      setPageError(error instanceof Error ? error.message : 'Non sono riuscito a creare la visita dalla scadenza.')
+    } finally {
+      setCreatingVisit(null)
+    }
+  }, [creatingVisit, navigate])
 
   const pending = useMemo(() => groupScadenzeMdl(scadenze.filter(s => !s.eseguita)), [scadenze])
   const completed = useMemo(() => groupScadenzeMdl(scadenze.filter(s => !!s.eseguita)), [scadenze])
@@ -247,6 +459,9 @@ export function ScadenzePage(): JSX.Element {
     const matchDate = (!dateFrom || s.dataScadenzaFine >= dateFrom) && (!dateTo || s.dataScadenza <= dateTo)
     return matchSearch && matchUrgenza && matchDate
   })
+  const pendingPeople = countUniquePeople(pending)
+  const completedPeople = countUniquePeople(completed)
+  const filteredPeople = countUniquePeople(filtered)
 
   useEffect(() => {
     window.desktopApi?.app?.setScadenzeCounterRange?.(dateFrom && dateTo ? { start: dateFrom, end: dateTo } : null)
@@ -254,104 +469,134 @@ export function ScadenzePage(): JSX.Element {
     window.dispatchEvent(new Event('elementmedica-desktop:scadenze-counter-refresh'))
   }, [dateFrom, dateTo])
 
-  // Stats
   const stats = enriched.reduce((acc, s) => {
-    acc[s.urgenza] = (acc[s.urgenza] || 0) + 1
+    const key = s.urgenza
+    const set = acc[key] || new Set<string>()
+    set.add(s.personId || s.id)
+    acc[key] = set
     return acc
-  }, {} as Record<string, number>)
+  }, {} as Record<string, Set<string>>)
 
   return (
-    <div className="max-w-5xl mx-auto space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-gray-900 font-heading flex items-center gap-2">
-          <Clock className="w-5 h-5 text-teal-600" />
-          Scadenze MDL
-        </h1>
-        <button
-          onClick={loadScadenze}
-          className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          Aggiorna
-        </button>
-      </div>
-
-      {/* Toggle: pending vs completed */}
-      <div className="flex items-center gap-2">
-        <button
-          onClick={() => { setShowCompleted(false); setFilterUrgenza('') }}
-          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-            !showCompleted ? 'bg-teal-50 text-teal-700 ring-1 ring-teal-200' : 'text-gray-500 hover:bg-gray-100'
-          }`}
-        >
-          Da fare ({pending.length})
-        </button>
-        <button
-          onClick={() => { setShowCompleted(true); setFilterUrgenza('') }}
-          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-            showCompleted ? 'bg-green-50 text-green-700 ring-1 ring-green-200' : 'text-gray-500 hover:bg-gray-100'
-          }`}
-        >
-          Completate ({completed.length})
-        </button>
-      </div>
-
-      {/* Urgency Stats */}
-      {!showCompleted && enriched.length > 0 && (
-        <div className="flex items-center gap-2 flex-wrap">
-          {(Object.entries(URGENZA_CONFIG) as [Urgenza, typeof URGENZA_CONFIG[Urgenza]][]).map(([key, conf]) => {
-            const count = stats[key] || 0
-            if (count === 0) return null
-            const UrgIcon = conf.icon
-            return (
+    <div className="mx-auto max-w-6xl space-y-4">
+      <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-card">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="min-w-0">
+            <h1 className="flex items-center gap-2 text-xl font-semibold text-gray-900 font-heading">
+              <Clock className="h-5 w-5 text-teal-600" />
+              Scadenze MDL
+            </h1>
+            <p className="mt-1 text-xs text-gray-500">
+              {filteredPeople} person{filteredPeople === 1 ? 'a' : 'e'} nel periodo selezionato · {filtered.length} grupp{filtered.length === 1 ? 'o' : 'i'} visita
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center xl:justify-end">
+            <div className="inline-flex rounded-xl border border-gray-200 bg-gray-50 p-1">
               <button
-                key={key}
-                onClick={() => setFilterUrgenza(prev => prev === key ? '' : key)}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
-                  filterUrgenza === key ? `${conf.bg} ${conf.text} ring-1 ring-current` : `${conf.bg} ${conf.text} opacity-80 hover:opacity-100`
+                onClick={() => { setShowCompleted(false); setFilterUrgenza('') }}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                  !showCompleted ? 'bg-white text-teal-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
-                <UrgIcon className="w-3 h-3" />
-                {conf.label.split('(')[0].trim()}: {count}
+                Da fare ({pendingPeople})
               </button>
-            )
-          })}
+              <button
+                onClick={() => { setShowCompleted(true); setFilterUrgenza('') }}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                  showCompleted ? 'bg-white text-green-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Completate ({completedPeople})
+              </button>
+            </div>
+            <button
+              onClick={loadScadenze}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Aggiorna
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(240px,1fr)_minmax(420px,560px)]">
+          <div className="relative min-w-0">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Cerca lavoratore, prestazione, azienda..."
+              className="h-11 w-full rounded-xl border border-gray-200 py-2 pl-9 pr-3 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-teal-500"
+            />
+          </div>
+          <ElegantDateRangeInput
+            value={{ start: dateFrom, end: dateTo }}
+            onChange={range => {
+              setDateFrom(range.start)
+              setDateTo(range.end)
+            }}
+          />
+        </div>
+
+        {!showCompleted && enriched.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {(Object.entries(URGENZA_CONFIG) as [Urgenza, typeof URGENZA_CONFIG[Urgenza]][]).map(([key, conf]) => {
+              const count = stats[key]?.size || 0
+              if (count === 0) return null
+              const UrgIcon = conf.icon
+              return (
+                <button
+                  key={key}
+                  onClick={() => setFilterUrgenza(prev => prev === key ? '' : key)}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-all ${
+                    filterUrgenza === key ? `${conf.bg} ${conf.text} ring-1 ring-current` : `${conf.bg} ${conf.text} opacity-80 hover:opacity-100`
+                  }`}
+                >
+                  <UrgIcon className="h-3 w-3" />
+                  {conf.label.split('(')[0].trim()}: {count}
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {undoAction && (
+        <div className="flex flex-col gap-2 rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 shadow-card sm:flex-row sm:items-center sm:justify-between">
+          <span>
+            Scadenza di <strong>{undoAction.label}</strong> segnata come eseguita.
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleUndoMarkDone}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-green-700 shadow-sm hover:bg-green-100"
+            >
+              <Undo2 className="h-3.5 w-3.5" />
+              Annulla
+            </button>
+            <button type="button" onClick={() => setUndoAction(null)} className="rounded-lg p-1.5 text-green-700 hover:bg-green-100" aria-label="Chiudi notifica">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       )}
 
-      {/* Search + date range */}
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(360px,520px)]">
-        <div className="relative max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Cerca per lavoratore, prestazione, azienda..."
-            className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-          />
+      {pageError && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {pageError}
         </div>
-        <ElegantDateRangeInput
-          value={{ start: dateFrom, end: dateTo }}
-          onChange={range => {
-            setDateFrom(range.start)
-            setDateTo(range.end)
-          }}
-        />
-      </div>
+      )}
 
-      <p className="text-xs text-gray-500">{filtered.length} scadenz{filtered.length === 1 ? 'a' : 'e'}</p>
-
-      {/* Scadenze List */}
       {loading ? (
         <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600" />
+          <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-teal-600" />
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-12 bg-white rounded-2xl border border-gray-200 shadow-card">
-          <Clock className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-          <p className="text-gray-500 text-sm">
+        <div className="rounded-2xl border border-gray-200 bg-white py-12 text-center shadow-card">
+          <Clock className="mx-auto mb-3 h-10 w-10 text-gray-300" />
+          <p className="text-sm text-gray-500">
             {scadenze.length === 0
               ? 'Nessuna scadenza scaricata. Scarica i dati dalla Dashboard.'
               : 'Nessuna scadenza corrisponde ai filtri.'}
@@ -363,38 +608,38 @@ export function ScadenzePage(): JSX.Element {
             const conf = URGENZA_CONFIG[s.urgenza]
             const UrgIcon = conf.icon
             const dataScad = new Date(s.dataScadenza)
-            const daysUntil = Math.floor((dataScad.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+            const daysUntil = Math.floor((dataScad.getTime() - Date.now()) / MS_PER_DAY)
 
             return (
               <div
                 key={s.id}
-                className={`bg-white rounded-2xl border p-4 shadow-card hover:shadow-card-hover transition-all ${conf.border}`}
+                className={`rounded-2xl border bg-white p-4 shadow-card transition-all hover:shadow-card-hover ${conf.border}`}
               >
-                <div className="flex items-center gap-4">
-                  {/* Urgency indicator */}
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${conf.bg}`}>
-                    <UrgIcon className={`w-5 h-5 ${conf.text}`} />
+                <div className="grid gap-4 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center">
+                  <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${conf.bg}`}>
+                    <UrgIcon className={`h-5 w-5 ${conf.text}`} />
                   </div>
 
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-gray-900 truncate">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate text-sm font-medium text-gray-900">
                         {s.personLastName} {s.personFirstName}
                       </p>
                       {s.mansione && (
-                        <span className="text-[10px] text-gray-400 truncate hidden md:inline">— {s.mansione}</span>
+                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500">{s.mansione}</span>
                       )}
                     </div>
-                    <div className="flex items-center gap-3 mt-1">
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
                       {s.prestazioneNome && (
-                        <span className="text-xs text-gray-500 flex items-center gap-1">
-                          <Stethoscope className="w-3 h-3" />{s.prestazioneNome}
+                        <span className="flex min-w-0 items-center gap-1 text-xs text-gray-500">
+                          <Stethoscope className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{s.prestazioneNome}</span>
                         </span>
                       )}
                       {s.companyName && (
-                        <span className="text-xs text-gray-400 flex items-center gap-1">
-                          <Building2 className="w-3 h-3" />{s.companyName}
+                        <span className="flex min-w-0 items-center gap-1 text-xs text-gray-400">
+                          <Building2 className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{s.companyName}</span>
                         </span>
                       )}
                     </div>
@@ -409,33 +654,44 @@ export function ScadenzePage(): JSX.Element {
                     )}
                   </div>
 
-                  {/* Date + days + action */}
-                  <div className="text-right shrink-0 flex flex-col items-end gap-2">
-                    <p className="text-sm font-medium text-gray-900 flex items-center gap-1 justify-end">
-                      <Calendar className="w-3.5 h-3.5 text-gray-400" />
-                      {dataScad.toLocaleDateString('it-IT')}
-                    </p>
-                    {s.dataScadenzaFine.slice(0, 10) !== s.dataScadenza.slice(0, 10) && (
-                      <p className="text-[10px] text-gray-400">
-                        gruppo fino al {new Date(s.dataScadenzaFine).toLocaleDateString('it-IT')}
+                  <div className="flex flex-col gap-2 lg:items-end">
+                    <div className="text-left lg:text-right">
+                      <p className="flex items-center gap-1 text-sm font-medium text-gray-900 lg:justify-end">
+                        <Calendar className="h-3.5 w-3.5 text-gray-400" />
+                        {dataScad.toLocaleDateString('it-IT')}
                       </p>
-                    )}
-                    <p className={`text-xs font-medium ${conf.text}`}>
-                      {daysUntil < 0
-                        ? `Scaduto da ${Math.abs(daysUntil)} giorni`
-                        : daysUntil === 0
-                          ? 'Scade oggi'
-                          : `Tra ${daysUntil} giorni`}
-                    </p>
+                      {s.dataScadenzaFine.slice(0, 10) !== s.dataScadenza.slice(0, 10) && (
+                        <p className="text-[10px] text-gray-400">
+                          gruppo fino al {new Date(s.dataScadenzaFine).toLocaleDateString('it-IT')}
+                        </p>
+                      )}
+                      <p className={`text-xs font-medium ${conf.text}`}>
+                        {daysUntil < 0
+                          ? `Scaduto da ${Math.abs(daysUntil)} giorni`
+                          : daysUntil === 0
+                            ? 'Scade oggi'
+                            : `Tra ${daysUntil} giorni`}
+                      </p>
+                    </div>
                     {!showCompleted && (
-                      <button
-                        onClick={() => handleMarkDone(s)}
-                        disabled={markingDone === s.id}
-                        className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium bg-green-50 hover:bg-green-100 text-green-700 rounded-lg transition-colors disabled:opacity-50"
-                      >
-                        <CheckCheck className="w-3 h-3" />
-                        {markingDone === s.id ? 'Salvataggio...' : 'Eseguita'}
-                      </button>
+                      <div className="flex flex-wrap gap-2 lg:justify-end">
+                        <button
+                          onClick={() => handleCreateVisit(s)}
+                          disabled={creatingVisit === s.id || !s.personId}
+                          className="inline-flex items-center gap-1 rounded-lg bg-teal-600 px-2.5 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-teal-700 disabled:opacity-50"
+                        >
+                          <Plus className="h-3 w-3" />
+                          {creatingVisit === s.id ? 'Creazione...' : 'Crea visita'}
+                        </button>
+                        <button
+                          onClick={() => handleMarkDone(s)}
+                          disabled={markingDone === s.id}
+                          className="inline-flex items-center gap-1 rounded-lg bg-green-50 px-2.5 py-1.5 text-[11px] font-medium text-green-700 transition-colors hover:bg-green-100 disabled:opacity-50"
+                        >
+                          <CheckCheck className="h-3 w-3" />
+                          {markingDone === s.id ? 'Salvataggio...' : 'Eseguita'}
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
