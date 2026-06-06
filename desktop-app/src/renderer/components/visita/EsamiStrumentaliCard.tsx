@@ -173,7 +173,7 @@ export function EsamiStrumentaliCard({ visitId, personId, tenantId, isReadOnly, 
     setBridgeError(null)
     const sessionId = uuidv4()
     try {
-      await window.desktopApi.bridge.startExam({
+      const result = await window.desktopApi.bridge.startExam({
         tipo,
         patientData: {
           ...patientData,
@@ -184,6 +184,11 @@ export function EsamiStrumentaliCard({ visitId, personId, tenantId, isReadOnly, 
         sessionId,
         tenantId,
       })
+      const bridgeResultPayload = result as unknown as { device?: { launched?: boolean }; message?: string }
+      const device = bridgeResultPayload.device
+      if (device?.launched === false) {
+        setBridgeError(bridgeResultPayload.message || 'File GDT creato, ma il programma dello strumento non è stato avviato.')
+      }
       setBridgeResult({ sessionId, tipo })
     } catch (error) {
       setBridgeResult(null)

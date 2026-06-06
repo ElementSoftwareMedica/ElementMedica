@@ -113,7 +113,11 @@ export interface StartExamBridgeRequest {
 export interface StartExamBridgeResponse {
     sessionId: string;
     examType: string;
-    device: string;
+    device: string | {
+        type: string;
+        displayName: string;
+        launched: boolean;
+    };
     status: string;
     message: string;
 }

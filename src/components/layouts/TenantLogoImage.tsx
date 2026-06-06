@@ -15,10 +15,6 @@ const TenantLogoImage: React.FC<TenantLogoImageProps> = ({
 }) => {
   const resolvedSrc = React.useMemo(() => {
     if (!src) return fallbackSrc;
-    // Dopo la rimozione dello storage S3 alcuni tenant possono puntare a media CMS
-    // non più presenti sul filesystem. Nel layout evita la richiesta 404 e mostra
-    // subito il logo di fallback del brand.
-    if (src.includes('/uploads/cms/')) return fallbackSrc;
     if (!src.includes('/uploads/')) return src;
 
     const separator = src.includes('?') ? '&' : '?';

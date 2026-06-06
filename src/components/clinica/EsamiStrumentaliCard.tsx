@@ -201,10 +201,13 @@ export default function EsamiStrumentaliCard({
             return { esame, bridgeResult };
         },
         onSuccess: ({ bridgeResult }) => {
+            const launchConfirmed = typeof bridgeResult.device === 'object'
+                ? bridgeResult.device.launched !== false
+                : true;
             showToast({
-                title: 'Esame avviato',
+                title: launchConfirmed ? 'Esame avviato' : 'File GDT creato',
                 message: bridgeResult.message || 'Il dispositivo medico è stato avviato. Attendere il completamento dell\'esame.',
-                type: 'success',
+                type: launchConfirmed ? 'success' : 'warning',
             });
             queryClient.invalidateQueries({ queryKey: ['esami-strumentali', visitaId] });
         },

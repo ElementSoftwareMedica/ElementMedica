@@ -10,6 +10,7 @@
 import { execFile, spawn } from 'child_process';
 import { existsSync } from 'fs';
 import { platform } from 'os';
+import { dirname } from 'path';
 import logger from '../utils/logger.js';
 import type { DeviceConfig } from '../types/index.js';
 
@@ -29,7 +30,7 @@ export async function launchDevice(
 ): Promise<boolean> {
     const execPath = device.executable;
 
-    if (!existsSync(execPath) && !execPath.endsWith('.app')) {
+    if (!existsSync(execPath)) {
         logger.warn('Device executable not found — skipping launch', {
             device: device.type,
             path: execPath,
@@ -70,7 +71,7 @@ export async function launchDevice(
 async function launchMacApp(appPath: string, gdtFilePath: string): Promise<boolean> {
     return new Promise((resolvePromise) => {
         // Use execFile with array args to prevent command injection
-        execFile('open', ['-a', appPath, '--args', gdtFilePath], (error) => {
+        execFile('open', ['-n', appPath, '--args', gdtFilePath], (error) => {
             if (error) {
                 logger.error('Failed to launch macOS app', { appPath, error: error.message });
                 resolvePromise(false);
@@ -93,6 +94,7 @@ async function launchWindowsExe(exePath: string, gdtFilePath: string): Promise<b
                 detached: true,
                 stdio: 'ignore',
                 windowsHide: false,
+                cwd: dirname(exePath),
             });
 
             child.unref(); // Don't keep the bridge process alive for the child
@@ -123,6 +125,7 @@ async function launchDirect(execPath: string, gdtFilePath: string): Promise<bool
             const child = spawn(execPath, [gdtFilePath], {
                 detached: true,
                 stdio: 'ignore',
+                cwd: dirname(execPath),
             });
 
             child.unref();
