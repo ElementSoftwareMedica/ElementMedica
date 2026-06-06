@@ -13,6 +13,7 @@ import {
   CheckCheck
 } from 'lucide-react'
 import { usePersistentPageState } from '../hooks/usePersistentPageState'
+import { ElegantDateRangeInput } from '../components/ElegantControls'
 
 interface Scadenza {
   id: string
@@ -58,6 +59,13 @@ const URGENZA_CONFIG: Record<Urgenza, { label: string; bg: string; text: string;
   urgente: { label: 'Urgente (7-30gg)', bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200', icon: Clock },
   attenzione: { label: 'Attenzione (30-60gg)', bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', icon: Bell },
   programmato: { label: 'Programmato (>60gg)', bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', icon: CheckCircle2 }
+}
+
+function isoToday(offsetDays = 0): string {
+  const date = new Date()
+  date.setHours(12, 0, 0, 0)
+  date.setDate(date.getDate() + offsetDays)
+  return date.toISOString().split('T')[0]
 }
 
 function getUrgenza(dataScadenza: string): Urgenza {
@@ -158,6 +166,8 @@ export function ScadenzePage(): JSX.Element {
   const [searchTerm, setSearchTerm] = usePersistentPageState('scadenze:searchTerm', '')
   const [filterUrgenza, setFilterUrgenza] = usePersistentPageState<string>('scadenze:filterUrgenza', '')
   const [showCompleted, setShowCompleted] = usePersistentPageState('scadenze:showCompleted', false)
+  const [dateFrom, setDateFrom] = usePersistentPageState<string>('scadenze:dateFrom', isoToday(-30))
+  const [dateTo, setDateTo] = usePersistentPageState<string>('scadenze:dateTo', isoToday(30))
   const [markingDone, setMarkingDone] = useState<string | null>(null)
 
   const loadScadenze = useCallback(async () => {
@@ -234,8 +244,15 @@ export function ScadenzePage(): JSX.Element {
       s.personFirstName, s.personLastName, s.prestazioneNome, s.companyName, s.mansione, ...s.prestazioni
     ].some(f => f?.toLowerCase().includes(searchTerm.toLowerCase()))
     const matchUrgenza = !filterUrgenza || s.urgenza === filterUrgenza
-    return matchSearch && matchUrgenza
+    const matchDate = (!dateFrom || s.dataScadenzaFine >= dateFrom) && (!dateTo || s.dataScadenza <= dateTo)
+    return matchSearch && matchUrgenza && matchDate
   })
+
+  useEffect(() => {
+    window.desktopApi?.app?.setScadenzeCounterRange?.(dateFrom && dateTo ? { start: dateFrom, end: dateTo } : null)
+    window.desktopApi?.app?.updateBadge?.()
+    window.dispatchEvent(new Event('elementmedica-desktop:scadenze-counter-refresh'))
+  }, [dateFrom, dateTo])
 
   // Stats
   const stats = enriched.reduce((acc, s) => {
@@ -303,15 +320,24 @@ export function ScadenzePage(): JSX.Element {
         </div>
       )}
 
-      {/* Search */}
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-        <input
-          type="text"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder="Cerca per lavoratore, prestazione, azienda..."
-          className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+      {/* Search + date range */}
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(360px,520px)]">
+        <div className="relative max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Cerca per lavoratore, prestazione, azienda..."
+            className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+          />
+        </div>
+        <ElegantDateRangeInput
+          value={{ start: dateFrom, end: dateTo }}
+          onChange={range => {
+            setDateFrom(range.start)
+            setDateTo(range.end)
+          }}
         />
       </div>
 

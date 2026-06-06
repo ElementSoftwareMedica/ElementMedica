@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import DatePickerElegante from '@/components/ui/DatePickerElegante'
 import { useDesktopPermission } from '../hooks/useDesktopPermission'
 import { usePersistentPageState } from '../hooks/usePersistentPageState'
-import { ElegantSelect } from '../components/ElegantControls'
+import { ElegantDateRangeInput, ElegantSelect } from '../components/ElegantControls'
 import {
   Calendar,
   Clock,
@@ -73,23 +72,31 @@ export function AgendaPage(): JSX.Element {
   const [searchTerm, setSearchTerm] = usePersistentPageState('agenda:searchTerm', '')
   const [filterStato, setFilterStato] = usePersistentPageState<string>('agenda:filterStato', '')
   const [selectedDate, setSelectedDate] = usePersistentPageState('agenda:selectedDate', new Date().toISOString().split('T')[0])
+  const [dateFrom, setDateFrom] = usePersistentPageState('agenda:dateFrom', selectedDate)
+  const [dateTo, setDateTo] = usePersistentPageState('agenda:dateTo', selectedDate)
   const [viewMode, setViewMode] = usePersistentPageState<'list' | 'table' | 'day'>('agenda:viewMode', 'list')
+
+  const setSingleDay = useCallback((date: string) => {
+    setSelectedDate(date)
+    setDateFrom(date)
+    setDateTo(date)
+  }, [setDateFrom, setDateTo, setSelectedDate])
 
   const goToPrevDay = useCallback(() => {
     const d = new Date(selectedDate + 'T12:00:00')
     d.setDate(d.getDate() - 1)
-    setSelectedDate(d.toISOString().split('T')[0])
-  }, [selectedDate])
+    setSingleDay(d.toISOString().split('T')[0])
+  }, [selectedDate, setSingleDay])
 
   const goToNextDay = useCallback(() => {
     const d = new Date(selectedDate + 'T12:00:00')
     d.setDate(d.getDate() + 1)
-    setSelectedDate(d.toISOString().split('T')[0])
-  }, [selectedDate])
+    setSingleDay(d.toISOString().split('T')[0])
+  }, [selectedDate, setSingleDay])
 
   const goToToday = useCallback(() => {
-    setSelectedDate(new Date().toISOString().split('T')[0])
-  }, [])
+    setSingleDay(new Date().toISOString().split('T')[0])
+  }, [setSingleDay])
 
   const loadAppointments = useCallback(async () => {
     setLoading(true)
@@ -208,7 +215,8 @@ export function AgendaPage(): JSX.Element {
   }, [navigate, permissions])
 
   const filtered = appointments.filter(a => {
-    const matchDate = !selectedDate || (a.dataOra != null && new Date(a.dataOra).toLocaleDateString('sv-SE') === selectedDate)
+    const appointmentDate = a.dataOra ? new Date(a.dataOra).toLocaleDateString('sv-SE') : ''
+    const matchDate = (!dateFrom || appointmentDate >= dateFrom) && (!dateTo || appointmentDate <= dateTo)
     const matchSearch = !searchTerm || [
       a.personFirstName, a.personLastName, a.personTaxCode, a.companyName, a.prestazioneNome
     ].some(f => f?.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -216,7 +224,9 @@ export function AgendaPage(): JSX.Element {
     return matchDate && matchSearch && matchStato
   })
 
-  const today = new Date(selectedDate + 'T12:00:00').toLocaleDateString('it-IT', {
+  const today = dateFrom && dateTo && dateFrom !== dateTo
+    ? `${new Date(dateFrom + 'T12:00:00').toLocaleDateString('it-IT')} - ${new Date(dateTo + 'T12:00:00').toLocaleDateString('it-IT')}`
+    : new Date(selectedDate + 'T12:00:00').toLocaleDateString('it-IT', {
     weekday: 'long', day: 'numeric', month: 'long'
   })
 
@@ -301,11 +311,19 @@ export function AgendaPage(): JSX.Element {
           </button>
         </div>
 
-        <div className="w-40 shrink-0">
-          <DatePickerElegante
-            value={selectedDate}
-            onChange={(date) => setSelectedDate(date ? date.toISOString().split('T')[0] : new Date().toISOString().split('T')[0])}
-            placeholder="Seleziona data"
+        <div className="w-[420px] shrink-0">
+          <ElegantDateRangeInput
+            value={{ start: dateFrom, end: dateTo }}
+            onChange={range => {
+              setDateFrom(range.start)
+              setDateTo(range.end)
+              if (range.start) setSelectedDate(range.start)
+            }}
+            presets={[
+              { label: 'Oggi', start: new Date().toISOString().split('T')[0], end: new Date().toISOString().split('T')[0] },
+              { label: 'Domani', start: new Date(Date.now() + 86_400_000).toISOString().split('T')[0], end: new Date(Date.now() + 86_400_000).toISOString().split('T')[0] },
+              { label: '7 giorni', start: new Date().toISOString().split('T')[0], end: new Date(Date.now() + 7 * 86_400_000).toISOString().split('T')[0] },
+            ]}
           />
         </div>
         <div className="relative flex-1 max-w-sm">

@@ -213,6 +213,96 @@ export function ElegantDateInput({ value, onChange, className = '', clearable = 
   )
 }
 
+export interface ElegantDateRangeValue {
+  start: string
+  end: string
+}
+
+interface ElegantDateRangeInputProps {
+  value: ElegantDateRangeValue
+  onChange: (value: ElegantDateRangeValue) => void
+  className?: string
+  clearable?: boolean
+  disabled?: boolean
+  presets?: Array<{ label: string; start: string; end: string }>
+}
+
+const addDaysIso = (days: number): string => {
+  const date = new Date()
+  date.setHours(12, 0, 0, 0)
+  date.setDate(date.getDate() + days)
+  return toIsoDate(date)
+}
+
+export const DEFAULT_DATE_RANGE_PRESETS: Array<{ label: string; start: string; end: string }> = [
+  { label: 'Oggi', start: addDaysIso(0), end: addDaysIso(0) },
+  { label: '7 giorni', start: addDaysIso(-7), end: addDaysIso(7) },
+  { label: '30 giorni', start: addDaysIso(-30), end: addDaysIso(30) },
+]
+
+export function ElegantDateRangeInput({
+  value,
+  onChange,
+  className = '',
+  clearable = true,
+  disabled = false,
+  presets = DEFAULT_DATE_RANGE_PRESETS,
+}: ElegantDateRangeInputProps): JSX.Element {
+  const normalize = (next: ElegantDateRangeValue): ElegantDateRangeValue => {
+    if (next.start && next.end && next.start > next.end) {
+      return { start: next.end, end: next.start }
+    }
+    return next
+  }
+
+  return (
+    <div className={`rounded-2xl border border-gray-200 bg-white p-2 shadow-sm ${className}`}>
+      <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+        <ElegantDateInput
+          value={value.start}
+          onChange={start => onChange(normalize({ ...value, start }))}
+          clearable={clearable}
+          disabled={disabled}
+        />
+        <ElegantDateInput
+          value={value.end}
+          onChange={end => onChange(normalize({ ...value, end }))}
+          clearable={clearable}
+          disabled={disabled}
+        />
+        {clearable && (value.start || value.end) && (
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange({ start: '', end: '' })}
+            className="inline-flex h-10 items-center justify-center rounded-xl border border-gray-200 px-3 text-xs font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+          >
+            Pulisci
+          </button>
+        )}
+      </div>
+      {presets.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {presets.map(preset => {
+            const active = value.start === preset.start && value.end === preset.end
+            return (
+              <button
+                key={preset.label}
+                type="button"
+                disabled={disabled}
+                onClick={() => onChange({ start: preset.start, end: preset.end })}
+                className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${active ? 'bg-teal-600 text-white' : 'bg-teal-50 text-teal-700 hover:bg-teal-100'} disabled:opacity-50`}
+              >
+                {preset.label}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 interface ElegantTimeInputProps {
   value: string
   onChange: (value: string) => void

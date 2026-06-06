@@ -65,6 +65,8 @@ import '../../../styles/clinica-theme.css';
 // CONFIGURAZIONE
 // =====================================================
 
+const SCADENZE_MDL_COUNTER_RANGE_KEY = 'scadenze-mdl-counter-range';
+
 const CATEGORIA_CONFIG: Record<CategoriaScadenzaMDL, {
     label: string;
     icon: React.ReactNode;
@@ -370,6 +372,18 @@ const ScadenzeMDLPage: React.FC = () => {
     // P72_23: date range calendar (sostituisce il select giorni)
     const [dateRange, setDateRange] = useState<DateRange>({ start: null, end: null });
     const [mostraPrenotate, setMostraPrenotate] = useState<boolean>(false);
+
+    useEffect(() => {
+        if (dateRange.start && dateRange.end) {
+            localStorage.setItem(SCADENZE_MDL_COUNTER_RANGE_KEY, JSON.stringify({
+                start: dateRange.start.toISOString().split('T')[0],
+                end: dateRange.end.toISOString().split('T')[0],
+            }));
+        } else {
+            localStorage.removeItem(SCADENZE_MDL_COUNTER_RANGE_KEY);
+        }
+        window.dispatchEvent(new Event('elementmedica:scadenze-mdl-counter-range'));
+    }, [dateRange.end, dateRange.start]);
     // P72_23: quicklook modal
     const [quicklookScadenza, setQuicklookScadenza] = useState<ScadenzaMDL | null>(null);
 

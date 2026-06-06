@@ -22,7 +22,7 @@ import {
   FileText
 } from 'lucide-react'
 import { usePersistentPageState } from '../hooks/usePersistentPageState'
-import { ElegantDateInput, ElegantSelect } from '../components/ElegantControls'
+import { ElegantDateRangeInput, ElegantSelect } from '../components/ElegantControls'
 
 interface Visita {
   id: string
@@ -185,28 +185,24 @@ export function VisiteListPage(): JSX.Element {
 
         {/* Date range filter */}
         {showFilters && (
-          <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-            <div className="flex items-center gap-2 text-sm text-gray-600">
+          <div className="flex flex-wrap items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <div className="flex items-center gap-2 text-sm font-medium text-gray-600">
               <Calendar className="w-4 h-4 text-gray-400" />
-              <span>Da:</span>
-              <div className="w-36"><ElegantDateInput value={dateFrom} onChange={setDateFrom} clearable /></div>
+              <span>Periodo visite</span>
             </div>
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <span>A:</span>
-              <div className="w-36"><ElegantDateInput value={dateTo} onChange={setDateTo} clearable /></div>
-            </div>
-            <button
-              onClick={() => { setDateFrom(''); setDateTo('') }}
-              className="text-xs text-gray-400 hover:text-gray-600 underline ml-2"
-            >
-              Rimuovi filtro date
-            </button>
-            <button
-              onClick={() => { setDateFrom(thirtyDaysAgoString()); setDateTo(todayString()) }}
-              className="text-xs text-teal-600 hover:text-teal-800 underline"
-            >
-              Ultimi 30 giorni
-            </button>
+            <ElegantDateRangeInput
+              value={{ start: dateFrom, end: dateTo }}
+              onChange={range => {
+                setDateFrom(range.start)
+                setDateTo(range.end)
+              }}
+              className="min-w-[360px] flex-1"
+              presets={[
+                { label: 'Oggi', start: todayString(), end: todayString() },
+                { label: 'Ultimi 30 giorni', start: thirtyDaysAgoString(), end: todayString() },
+                { label: 'Tutte', start: '', end: '' },
+              ]}
+            />
           </div>
         )}
       </div>

@@ -108,10 +108,11 @@ export function LicenseProvider({ children }: { children: ReactNode }): JSX.Elem
 
     // When going online + authenticated: send heartbeat for current tenant
     useEffect(() => {
-        if (!isOnline || !user || !accessToken || !currentTenantId) return
+        if (!isOnline || !user || !accessToken || !currentTenantId || isLoading) return
+        if (!info.isActivated && !info.licenseKey) return
         sendHeartbeat()
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isOnline, user?.id, currentTenantId])
+    }, [isOnline, user?.id, currentTenantId, isLoading, info.isActivated, info.licenseKey])
 
     const sendHeartbeat = async (retryToken?: string): Promise<void> => {
         if (!currentTenantId) return

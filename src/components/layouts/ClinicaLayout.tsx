@@ -33,6 +33,34 @@ import { useRoleGuard } from '../../hooks/useRoleGuard';
 
 // Import Element Medica theme
 import '../../styles/clinica-theme.css';
+
+const SCADENZE_MDL_COUNTER_RANGE_KEY = 'scadenze-mdl-counter-range';
+
+type StoredScadenzeCounterRange = {
+    start: string;
+    end: string;
+};
+
+function parseStoredScadenzeRange(): StoredScadenzeCounterRange | null {
+    try {
+        const raw = localStorage.getItem(SCADENZE_MDL_COUNTER_RANGE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as Partial<StoredScadenzeCounterRange>;
+        if (!parsed.start || !parsed.end) return null;
+        return parsed.start <= parsed.end
+            ? { start: parsed.start, end: parsed.end }
+            : { start: parsed.end, end: parsed.start };
+    } catch {
+        return null;
+    }
+}
+
+function daysUntilIso(endIso: string): number {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const end = new Date(`${endIso}T00:00:00`);
+    return Math.max(1, Math.ceil((end.getTime() - today.getTime()) / 86_400_000));
+}
 import {
     Home,
     Calendar,
@@ -209,16 +237,39 @@ const ClinicaLayoutContent: React.FC<ClinicaLayoutProps> = ({ children }) => {
         ? (prestazioniDaRefertareData as any).total
         : undefined;
 
-    const { data: scadenzeMdlNotificheData } = useQuery({
-        queryKey: ['scadenze-mdl-sidebar-badge', currentTenant?.id],
-        queryFn: () => scadenzeMDLApi.getNotifiche(30, 30),
+    const [scadenzeMdlCounterRange, setScadenzeMdlCounterRange] = useState<StoredScadenzeCounterRange | null>(() => parseStoredScadenzeRange());
+
+    useEffect(() => {
+        const updateRange = () => setScadenzeMdlCounterRange(parseStoredScadenzeRange());
+        window.addEventListener('storage', updateRange);
+        window.addEventListener('elementmedica:scadenze-mdl-counter-range', updateRange);
+        return () => {
+            window.removeEventListener('storage', updateRange);
+            window.removeEventListener('elementmedica:scadenze-mdl-counter-range', updateRange);
+        };
+    }, []);
+
+    const { data: scadenzeMdlCounterData } = useQuery({
+        queryKey: ['scadenze-mdl-sidebar-badge', currentTenant?.id, scadenzeMdlCounterRange?.start, scadenzeMdlCounterRange?.end],
+        queryFn: () => scadenzeMDLApi.getAll({
+            giorni: scadenzeMdlCounterRange?.end ? daysUntilIso(scadenzeMdlCounterRange.end) : 30,
+            limit: 500,
+        }),
         refetchInterval: 60_000,
         staleTime: 30_000,
         enabled: isAuthenticated && !!currentTenant?.id && hasFeature('MDL_BASE'),
     });
-    const scadenzeMdlBadge = scadenzeMdlNotificheData?.conteggio
-        ? scadenzeMdlNotificheData.conteggio.scadute + scadenzeMdlNotificheData.conteggio.critiche + scadenzeMdlNotificheData.conteggio.urgenti
-        : 0;
+    const scadenzeMdlBadge = useMemo(() => {
+        const range = scadenzeMdlCounterRange;
+        const scadenze = scadenzeMdlCounterData?.scadenze ?? [];
+        if (!range) {
+            return scadenze.filter(s => ['scaduto', 'critico', 'urgente'].includes(s.livelloUrgenza)).length;
+        }
+        return scadenze.filter(s => {
+            const day = s.dataScadenza?.split('T')[0];
+            return day && day >= range.start && day <= range.end;
+        }).length;
+    }, [scadenzeMdlCounterData?.scadenze, scadenzeMdlCounterRange]);
 
     // Versione dinamica di navigationItems con badge "Visite" e feature gating + filtri per ruolo
     const dynamicNavItems = useMemo((): NavItem[] => {

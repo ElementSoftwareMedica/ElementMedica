@@ -65,6 +65,8 @@ const desktopApi = {
             ipcRenderer.invoke('app:showNotification', params),
         updateBadge: () => ipcRenderer.invoke('app:updateBadge'),
         getScadenzeCount: () => ipcRenderer.invoke('app:getScadenzeCount'),
+        setScadenzeCounterRange: (range: { start: string; end: string } | null) =>
+            ipcRenderer.invoke('app:setScadenzeCounterRange', range),
         logError: (params: { message: string; stack?: string; context?: string }) =>
             ipcRenderer.invoke('app:logError', params),
         getErrorLog: () => ipcRenderer.invoke('app:getErrorLog'),

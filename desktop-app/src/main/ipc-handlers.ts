@@ -25,6 +25,8 @@ let currentTenantId: string | null = null
 let trayRef: Tray | null = null
 const SCADENZE_GROUP_WINDOW_DAYS = 60
 const MS_PER_DAY = 24 * 60 * 60 * 1000
+const BRIDGE_HTTP_PORTS = [BRIDGE_PORT, BRIDGE_PORT + 2, BRIDGE_PORT + 3]
+let scadenzeCounterRange: { start: string; end: string } | null = null
 
 interface LocalScadenzaRow {
     id: string
@@ -60,6 +62,20 @@ function countGroupedMdlScadenze(rows: LocalScadenzaRow[]): number {
     return count
 }
 
+async function resolveBridgeHttpPort(timeoutMs = 1500): Promise<number> {
+    for (const port of BRIDGE_HTTP_PORTS) {
+        try {
+            const res = await fetch(`http://127.0.0.1:${port}/health`, {
+                signal: AbortSignal.timeout(timeoutMs),
+            })
+            if (res.ok) return port
+        } catch {
+            // Try next fallback port.
+        }
+    }
+    return BRIDGE_PORT
+}
+
 export function setTray(t: Tray): void {
     trayRef = t
 }
@@ -71,9 +87,12 @@ export function setTray(t: Tray): void {
 export function updateAppBadge(): void {
     try {
         const db = getDatabase()
-        const cutoff = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-        const params: unknown[] = [cutoff]
-        let sql = `SELECT id, personId, mansione, dataScadenza FROM scadenze WHERE eseguita = 0 AND _isDeleted = 0 AND dataScadenza <= ?`
+        const today = new Date().toISOString().split('T')[0]
+        const fallbackEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+        const rangeStart = scadenzeCounterRange?.start || today
+        const rangeEnd = scadenzeCounterRange?.end || fallbackEnd
+        const params: unknown[] = [rangeStart, rangeEnd]
+        let sql = `SELECT id, personId, mansione, dataScadenza FROM scadenze WHERE eseguita = 0 AND _isDeleted = 0 AND dataScadenza >= ? AND dataScadenza <= ?`
         if (currentTenantId) {
             sql += ` AND tenantId = ?`
             params.push(currentTenantId)
@@ -2203,24 +2222,43 @@ export function setupIpcHandlers(): void {
         return { success: true }
     })
 
+    ipcMain.handle('app:setScadenzeCounterRange', async (_event, range: { start?: string; end?: string } | null) => {
+        const start = typeof range?.start === 'string' ? range.start : ''
+        const end = typeof range?.end === 'string' ? range.end : ''
+        scadenzeCounterRange = /^\d{4}-\d{2}-\d{2}$/.test(start) && /^\d{4}-\d{2}-\d{2}$/.test(end)
+            ? { start: start <= end ? start : end, end: start <= end ? end : start }
+            : null
+        updateAppBadge()
+        return { success: true }
+    })
+
     ipcMain.handle('app:getScadenzeCount', async () => {
         try {
             const db = getDatabase()
             const today = new Date().toISOString().split('T')[0]
             const tMinus30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
             const t30 = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+            const rangeStart = scadenzeCounterRange?.start || tMinus30
+            const rangeEnd = scadenzeCounterRange?.end || t30
 
             const buildParams = (...dates: string[]) =>
                 currentTenantId ? [...dates, currentTenantId] : dates
             const tenantClause = currentTenantId ? ' AND tenantId = ?' : ''
 
-            const scadutiRows = db.prepare(
-                `SELECT id, personId, mansione, dataScadenza FROM scadenze WHERE eseguita = 0 AND _isDeleted = 0 AND dataScadenza >= ? AND dataScadenza < ?${tenantClause} ORDER BY personId, mansione, dataScadenza`
-            ).all(...buildParams(tMinus30, today)) as LocalScadenzaRow[]
+            const scadutiEnd = rangeEnd < today ? rangeEnd : today
+            const prossimeStart = today > rangeStart ? today : rangeStart
 
-            const prossimeRows = db.prepare(
-                `SELECT id, personId, mansione, dataScadenza FROM scadenze WHERE eseguita = 0 AND _isDeleted = 0 AND dataScadenza >= ? AND dataScadenza <= ?${tenantClause} ORDER BY personId, mansione, dataScadenza`
-            ).all(...buildParams(today, t30)) as LocalScadenzaRow[]
+            const scadutiRows = rangeStart <= scadutiEnd
+                ? db.prepare(
+                    `SELECT id, personId, mansione, dataScadenza FROM scadenze WHERE eseguita = 0 AND _isDeleted = 0 AND dataScadenza >= ? AND dataScadenza < ?${tenantClause} ORDER BY personId, mansione, dataScadenza`
+                ).all(...buildParams(rangeStart, scadutiEnd)) as LocalScadenzaRow[]
+                : []
+
+            const prossimeRows = prossimeStart <= rangeEnd
+                ? db.prepare(
+                    `SELECT id, personId, mansione, dataScadenza FROM scadenze WHERE eseguita = 0 AND _isDeleted = 0 AND dataScadenza >= ? AND dataScadenza <= ?${tenantClause} ORDER BY personId, mansione, dataScadenza`
+                ).all(...buildParams(prossimeStart, rangeEnd)) as LocalScadenzaRow[]
+                : []
 
             const scaduti = countGroupedMdlScadenze(scadutiRows)
             const prossime = countGroupedMdlScadenze(prossimeRows)
@@ -2727,11 +2765,13 @@ export function setupIpcHandlers(): void {
             throw new Error('Tenant non disponibile per avvio esame')
         }
 
-        const url = `http://127.0.0.1:${BRIDGE_PORT}/start-exam`
+        const bridgePort = await resolveBridgeHttpPort(2000)
+        const url = `http://127.0.0.1:${bridgePort}/start-exam`
         const body = {
             visitaId,
             examType: bridgeExamType,
             tenantId,
+            callbackUrl: `http://127.0.0.1:4051/bridge-callback`,
             patient: {
                 patientId: String(patientData.patientId || patientData.personId || ''),
                 firstName: String(patientData.nome || patientData.firstName || ''),

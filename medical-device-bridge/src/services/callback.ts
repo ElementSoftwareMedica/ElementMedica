@@ -59,6 +59,7 @@ export async function sendResult(
 
             if (config.apiKey) {
                 headers['X-Bridge-Api-Key'] = config.apiKey;
+                headers['X-Bridge-Token'] = process.env.BRIDGE_CALLBACK_TOKEN || config.apiKey;
             }
 
             const response = await fetch(callbackUrl, {

@@ -11,7 +11,11 @@ import {
   Trash2,
   GitCompare,
   X,
-  Loader2
+  Loader2,
+  History,
+  Edit3,
+  Save,
+  CalendarDays
 } from 'lucide-react'
 import axios from 'axios'
 import { useSyncStatus } from '../sync/SyncStatusProvider'
@@ -26,6 +30,7 @@ import {
   discardFailedOperations,
   type QueueStats
 } from '../sync/SyncEngine'
+import { ElegantDateRangeInput } from '../components/ElegantControls'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4001'
 
@@ -73,6 +78,25 @@ interface ConflictOp {
   } | null
 }
 
+interface QueueOperation extends ConflictOp {
+  status: 'PENDING' | 'SYNCING' | 'SYNCED' | 'CONFLICT' | 'FAILED'
+  dependsOn?: unknown
+  errorMessage?: string | null
+}
+
+interface SyncLogRow {
+  id: string
+  syncSessionId: string
+  direction: string
+  entityType: string | null
+  entityCount: number
+  status: string
+  errorMessage: string | null
+  startedAt: string
+  completedAt: string | null
+  metadata: string | null
+}
+
 interface DiffModalState {
   op: ConflictOp
   serverData: Record<string, unknown> | null
@@ -95,18 +119,38 @@ export function SyncDetailPage(): JSX.Element {
   const [clearConfirm, setClearConfirm] = useState(false)
   const [discardConfirm, setDiscardConfirm] = useState(false)
   const [diffModal, setDiffModal] = useState<DiffModalState | null>(null)
+  const todayIso = new Date().toISOString().split('T')[0]
+  const [dateRange, setDateRange] = useState({ start: todayIso, end: todayIso })
+  const [operations, setOperations] = useState<QueueOperation[]>([])
+  const [syncLogs, setSyncLogs] = useState<SyncLogRow[]>([])
+  const [editOp, setEditOp] = useState<{ op: QueueOperation; draft: string; error: string | null } | null>(null)
+
+  const inDateRange = useCallback((isoValue?: string | null): boolean => {
+    if (!isoValue) return false
+    const day = isoValue.split('T')[0]
+    return (!dateRange.start || day >= dateRange.start) && (!dateRange.end || day <= dateRange.end)
+  }, [dateRange.end, dateRange.start])
 
   const loadData = useCallback(async () => {
     setIsRefreshing(true)
     try {
-      const [queueStats, conflictOps] = await Promise.all([
+      const [queueStats, conflictOps, queueRows, logRows] = await Promise.all([
         getQueueStats(),
-        getConflictOperations()
+        getConflictOperations(),
+        window.desktopApi.db.query({ table: 'operations_queue', orderBy: { column: 'timestamp', direction: 'DESC' }, limit: 200 }).catch(() => []),
+        window.desktopApi.db.query({ table: 'sync_log', orderBy: { column: 'startedAt', direction: 'DESC' }, limit: 200 }).catch(() => [])
       ])
       setStats(queueStats)
       setConflictsList(conflictOps as ConflictOp[])
       setPendingOperations(queueStats.pending)
       setConflicts(queueStats.conflict)
+      setOperations((queueRows as Array<Record<string, unknown>>).map(row => ({
+        ...row,
+        payload: parseJsonObject(row.payload, {}),
+        dependsOn: parseJsonObject(row.dependsOn, []),
+        conflictData: row.conflictData ? parseJsonObject(row.conflictData, null) : null,
+      } as QueueOperation)))
+      setSyncLogs(logRows as SyncLogRow[])
     } catch {
       // Silent — non-blocking
     }
@@ -214,6 +258,46 @@ export function SyncDetailPage(): JSX.Element {
     }
   }
 
+  const handleDiscardOperation = async (id: string): Promise<void> => {
+    await window.desktopApi.db.deleteWhere({ table: 'operations_queue', where: { id } })
+    await loadData()
+  }
+
+  const handleRetryOperation = async (id: string): Promise<void> => {
+    await window.desktopApi.db.update({
+      table: 'operations_queue',
+      id,
+      data: { status: 'PENDING', retryCount: 0, conflictData: null, errorMessage: null }
+    })
+    await loadData()
+  }
+
+  const handleSavePayload = async (): Promise<void> => {
+    if (!editOp) return
+    try {
+      const parsed = JSON.parse(editOp.draft) as Record<string, unknown>
+      await window.desktopApi.db.update({
+        table: 'operations_queue',
+        id: editOp.op.id,
+        data: {
+          payload: JSON.stringify(parsed),
+          status: 'PENDING',
+          retryCount: 0,
+          conflictData: null,
+          errorMessage: null,
+        }
+      })
+      setEditOp(null)
+      await loadData()
+    } catch {
+      setEditOp(prev => prev ? { ...prev, error: 'JSON non valido' } : prev)
+    }
+  }
+
+  const visibleOperations = operations.filter(op => inDateRange(op.timestamp))
+  const failedOperations = visibleOperations.filter(op => op.status === 'FAILED')
+  const visibleLogs = syncLogs.filter(log => inDateRange(log.startedAt))
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -242,6 +326,22 @@ export function SyncDetailPage(): JSX.Element {
             Sincronizza Ora
           </button>
         </div>
+      </div>
+
+      <div className="rounded-xl border border-gray-200 bg-white p-4">
+        <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-800">
+          <CalendarDays className="h-4 w-4 text-teal-600" />
+          Intervallo operazioni
+        </div>
+        <ElegantDateRangeInput
+          value={dateRange}
+          onChange={setDateRange}
+          presets={[
+            { label: 'Oggi', start: todayIso, end: todayIso },
+            { label: 'Ieri', start: new Date(Date.now() - 86_400_000).toISOString().split('T')[0], end: new Date(Date.now() - 86_400_000).toISOString().split('T')[0] },
+            { label: '7 giorni', start: new Date(Date.now() - 7 * 86_400_000).toISOString().split('T')[0], end: todayIso },
+          ]}
+        />
       </div>
 
       {/* Queue Stats Cards */}
@@ -309,6 +409,42 @@ export function SyncDetailPage(): JSX.Element {
                 {discardConfirm ? 'Conferma scarto' : 'Scarta'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {failedOperations.length > 0 && (
+        <div className="overflow-hidden rounded-xl border border-red-200 bg-white">
+          <div className="border-b border-red-100 bg-red-50 px-4 py-3">
+            <h2 className="text-sm font-semibold text-red-800">Errori di sincronizzazione nel periodo ({failedOperations.length})</h2>
+            <p className="mt-1 text-xs text-red-600">Puoi correggere il payload, ritentare o scartare una singola operazione.</p>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {failedOperations.map(op => (
+              <div key={op.id} className="grid gap-3 px-4 py-3 lg:grid-cols-[1fr_auto]">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-900">{ENTITY_LABELS[op.entity] || op.entity}</span>
+                    <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">{ACTION_LABELS[op.type] || op.type}</span>
+                    <span className="text-xs text-gray-400">{new Date(op.timestamp).toLocaleString('it-IT')}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-red-600 line-clamp-2">
+                    {formatOperationError(op)}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => handleRetryOperation(op.id)} className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50">
+                    <RotateCcw className="h-3 w-3" /> Riprova
+                  </button>
+                  <button onClick={() => setEditOp({ op, draft: JSON.stringify(op.payload, null, 2), error: null })} className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">
+                    <Edit3 className="h-3 w-3" /> Payload
+                  </button>
+                  <button onClick={() => handleDiscardOperation(op.id)} className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:bg-gray-50">
+                    <Trash2 className="h-3 w-3" /> Scarta
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -415,6 +551,28 @@ export function SyncDetailPage(): JSX.Element {
         </div>
       )}
 
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+        <div className="flex items-center gap-2 border-b border-gray-100 px-4 py-3">
+          <History className="h-4 w-4 text-teal-600" />
+          <h2 className="text-sm font-semibold text-gray-900">Sincronizzazioni passate ({visibleLogs.length})</h2>
+        </div>
+        {visibleLogs.length === 0 ? (
+          <p className="px-4 py-6 text-sm text-gray-500">Nessuna sincronizzazione registrata nel periodo selezionato.</p>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {visibleLogs.map(log => (
+              <div key={log.id} className="grid gap-2 px-4 py-3 text-sm md:grid-cols-[140px_1fr_90px_120px]">
+                <span className="font-medium text-gray-900">{new Date(log.startedAt).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                <span className="text-gray-600">{log.direction} · {log.entityType || 'tutte le entità'}</span>
+                <span className="font-mono text-xs text-gray-500">{log.entityCount || 0} record</span>
+                <span className={`text-xs font-semibold ${log.status === 'SUCCESS' ? 'text-green-700' : 'text-red-700'}`}>{log.status}</span>
+                {log.errorMessage && <p className="md:col-span-4 text-xs text-red-600">{log.errorMessage}</p>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Empty State */}
       {stats && stats.pending === 0 && stats.conflict === 0 && stats.failed === 0 && (
         <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
@@ -436,8 +594,52 @@ export function SyncDetailPage(): JSX.Element {
           onClose={() => setDiffModal(null)}
         />
       )}
+      {editOp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setEditOp(null)}>
+          <div className="m-4 flex max-h-[85vh] w-full max-w-3xl flex-col rounded-2xl bg-white shadow-2xl" onClick={event => event.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900">Modifica payload sincronizzazione</h2>
+                <p className="text-xs text-gray-500">{ENTITY_LABELS[editOp.op.entity] || editOp.op.entity} · {editOp.op.id.slice(0, 8)}</p>
+              </div>
+              <button onClick={() => setEditOp(null)} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              <textarea
+                value={editOp.draft}
+                onChange={event => setEditOp(prev => prev ? { ...prev, draft: event.target.value, error: null } : prev)}
+                className="min-h-[360px] w-full rounded-xl border border-gray-200 bg-gray-950 p-3 font-mono text-xs text-gray-50 outline-none focus:ring-2 focus:ring-teal-500"
+                spellCheck={false}
+              />
+              {editOp.error && <p className="mt-2 text-xs font-medium text-red-600">{editOp.error}</p>}
+            </div>
+            <div className="flex justify-end gap-2 border-t border-gray-100 px-5 py-4">
+              <button onClick={() => setEditOp(null)} className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50">Annulla</button>
+              <button onClick={handleSavePayload} className="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-teal-700">
+                <Save className="h-3.5 w-3.5" /> Salva e ritenta
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
+}
+
+function parseJsonObject<T>(value: unknown, fallback: T): T {
+  if (typeof value !== 'string') return (value as T) ?? fallback
+  try {
+    return JSON.parse(value) as T
+  } catch {
+    return fallback
+  }
+}
+
+function formatOperationError(op: QueueOperation): string {
+  const conflict = op.conflictData as { error?: string; message?: string } | null | undefined
+  return op.errorMessage || conflict?.error || conflict?.message || 'Errore non specificato'
 }
 
 // === Conflict Diff Modal ===

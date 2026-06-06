@@ -115,7 +115,12 @@ export function DesktopLayout({ children, licenseExpiring, showBridge }: Desktop
         // Initial load after a short delay to allow DB init
         const init = setTimeout(() => { void refreshScadenzeCount() }, 3000)
         const interval = setInterval(() => { void refreshScadenzeCount() }, 5 * 60 * 1000)
-        return () => { clearTimeout(init); clearInterval(interval) }
+        window.addEventListener('elementmedica-desktop:scadenze-counter-refresh', refreshScadenzeCount)
+        return () => {
+            clearTimeout(init)
+            clearInterval(interval)
+            window.removeEventListener('elementmedica-desktop:scadenze-counter-refresh', refreshScadenzeCount)
+        }
     }, [refreshScadenzeCount])
 
     // Callbacks riutilizzati per auto-sync, trigger immediato e sync manuale
