@@ -39,6 +39,7 @@ BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$BASE_DIR/scripts/deploy-config.sh"
 
 REMOTE_UPDATES_PATH="${DEPLOY_DESKTOP_UPDATES_PATH:-$DEPLOY_BASE_PATH/desktop-updates}"
+REMOTE_DOWNLOADS_PATH="${DEPLOY_DESKTOP_DOWNLOADS_PATH:-$DEPLOY_BASE_PATH/downloads/desktop}"
 RELEASE_DIR="$(cd "$BASE_DIR/desktop-app/release" && pwd)"
 
 # ---------------------------------------------------------------------------
@@ -84,7 +85,9 @@ echo ""
 echo "📡 Server:  $DEPLOY_SERVER"
 echo "📁 Source:  $RELEASE_DIR"
 echo "📁 Remote:  $REMOTE_UPDATES_PATH"
+echo "📁 Download: $REMOTE_DOWNLOADS_PATH"
 echo "🌐 URL:     https://www.elementmedica.com/desktop-updates"
+echo "🌐 Site:    https://www.elementmedica.com/downloads/desktop"
 echo ""
 
 # ---------------------------------------------------------------------------
@@ -118,7 +121,7 @@ echo ""
 # ---------------------------------------------------------------------------
 if [ "$DRY_RUN" = false ]; then
     log_info "Ensuring remote directory exists..."
-    deploy_ssh "mkdir -p $REMOTE_UPDATES_PATH && chmod 755 $REMOTE_UPDATES_PATH"
+    deploy_ssh "mkdir -p $REMOTE_UPDATES_PATH $REMOTE_DOWNLOADS_PATH && chmod 755 $REMOTE_UPDATES_PATH $REMOTE_DOWNLOADS_PATH"
     log_success "Remote directory ready"
 fi
 
@@ -155,21 +158,21 @@ log_deploy "Uploading update files (platform: $PLATFORM)..."
 FILES_TO_SYNC=()
 case $PLATFORM in
     mac|all)
-        for f in "$RELEASE_DIR"/*.dmg "$RELEASE_DIR"/*.dmg.blockmap "$RELEASE_DIR"/*.zip "$RELEASE_DIR"/*.zip.blockmap "$RELEASE_DIR/latest-mac.yml"; do
+        for f in "$RELEASE_DIR"/ElementMedica-Desktop-latest-*.dmg "$RELEASE_DIR"/ElementMedica-Desktop-latest-*.dmg.blockmap "$RELEASE_DIR"/ElementMedica-Desktop-latest-*.zip "$RELEASE_DIR"/ElementMedica-Desktop-latest-*.zip.blockmap "$RELEASE_DIR/latest-mac.yml"; do
             [[ -f "$f" ]] && FILES_TO_SYNC+=("$f")
         done
         ;;
 esac
 case $PLATFORM in
     win|all)
-        for f in "$RELEASE_DIR"/*-Setup.exe "$RELEASE_DIR"/*-Setup.exe.blockmap "$RELEASE_DIR/latest.yml"; do
+        for f in "$RELEASE_DIR"/ElementMedica-Desktop-latest-Setup.exe "$RELEASE_DIR"/ElementMedica-Desktop-latest-Setup.exe.blockmap "$RELEASE_DIR/latest.yml"; do
             [[ -f "$f" ]] && FILES_TO_SYNC+=("$f")
         done
         ;;
 esac
 case $PLATFORM in
     linux|all)
-        for f in "$RELEASE_DIR"/*.AppImage "$RELEASE_DIR"/*.AppImage.blockmap "$RELEASE_DIR/latest-linux.yml"; do
+        for f in "$RELEASE_DIR"/ElementMedica-Desktop-latest-*.AppImage "$RELEASE_DIR"/ElementMedica-Desktop-latest-*.AppImage.blockmap "$RELEASE_DIR/latest-linux.yml"; do
             [[ -f "$f" ]] && FILES_TO_SYNC+=("$f")
         done
         ;;
@@ -179,6 +182,12 @@ rsync $RSYNC_OPTS \
     -e "ssh -i $DEPLOY_SSH_KEY -o StrictHostKeyChecking=no" \
     "${FILES_TO_SYNC[@]}" \
     "$DEPLOY_SERVER:$REMOTE_UPDATES_PATH/"
+
+log_deploy "Mirroring installer downloads used by the webapp..."
+rsync $RSYNC_OPTS \
+    -e "ssh -i $DEPLOY_SSH_KEY -o StrictHostKeyChecking=no" \
+    "${FILES_TO_SYNC[@]}" \
+    "$DEPLOY_SERVER:$REMOTE_DOWNLOADS_PATH/"
 
 if [ "$DRY_RUN" = true ]; then
     log_warning "Dry run complete. Run without --check to upload for real."
@@ -190,12 +199,13 @@ fi
 # ---------------------------------------------------------------------------
 log_info "Verifying remote files..."
 deploy_ssh "ls -lh $REMOTE_UPDATES_PATH/ 2>/dev/null | tail -20"
+deploy_ssh "ls -lh $REMOTE_DOWNLOADS_PATH/ 2>/dev/null | tail -20"
 
 # ---------------------------------------------------------------------------
 # Set correct permissions
 # ---------------------------------------------------------------------------
 log_info "Setting file permissions..."
-deploy_ssh "find $REMOTE_UPDATES_PATH -type f -exec chmod 644 {} \; && find $REMOTE_UPDATES_PATH -type d -exec chmod 755 {} \;"
+deploy_ssh "find $REMOTE_UPDATES_PATH $REMOTE_DOWNLOADS_PATH -type f -exec chmod 644 {} \; && find $REMOTE_UPDATES_PATH $REMOTE_DOWNLOADS_PATH -type d -exec chmod 755 {} \;"
 
 log_success "File permissions set"
 
