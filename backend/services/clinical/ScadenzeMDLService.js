@@ -1013,15 +1013,19 @@ const ScadenzeMDLService = {
      * @param {string} tenantId - ID tenant
      * @param {number} giorniAvviso - Giorni di anticipo per avviso (default 30)
      */
-    async getNotificheScadenze(tenantId, giorniAvviso = 30) {
+    async getNotificheScadenze(tenantId, giorniAvviso = 30, giorniPre = null) {
         const dataFine = new Date();
         dataFine.setDate(dataFine.getDate() + giorniAvviso);
 
         const result = await this.getAllScadenze(tenantId, { dataFine });
+        const dataInizio = Number.isFinite(giorniPre)
+            ? new Date(Date.now() - giorniPre * 24 * 60 * 60 * 1000)
+            : null;
 
         // Filtra solo scadute, critiche e urgenti
         const notifiche = result.scadenze.filter(s =>
-            ['scaduto', 'critico', 'urgente'].includes(s.livelloUrgenza)
+            ['scaduto', 'critico', 'urgente'].includes(s.livelloUrgenza) &&
+            (!dataInizio || new Date(s.dataScadenza) >= dataInizio)
         );
 
         return {

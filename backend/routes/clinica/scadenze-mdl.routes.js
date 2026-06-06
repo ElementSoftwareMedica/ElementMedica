@@ -138,20 +138,23 @@ router.get('/statistiche', requirePermission('visite:read'), async (req, res) =>
  * 
  * Query params:
  * - giorniAvviso: giorni di anticipo (default 30)
+ * - giorniPre: giorni scaduti da includere (default: tutti)
  */
 router.get('/notifiche', requirePermission('visite:read'), async (req, res) => {
     try {
         const tenantId = getEffectiveTenantId(req);
-        const { giorniAvviso = 30 } = req.query;
+        const { giorniAvviso = 30, giorniPre } = req.query;
 
         const result = await ScadenzeMDLService.getNotificheScadenze(
             tenantId,
-            parseInt(giorniAvviso)
+            parseInt(giorniAvviso),
+            giorniPre !== undefined ? parseInt(giorniPre) : null
         );
 
         logger.info({
             tenantId,
             giorniAvviso,
+            giorniPre,
             conteggio: result.conteggio
         }, 'GET /scadenze-mdl/notifiche');
 

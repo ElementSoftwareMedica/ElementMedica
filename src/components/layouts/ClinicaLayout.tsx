@@ -20,7 +20,7 @@ import { useAuth } from '../../hooks/auth/useAuth';
 import { useTenantAccess } from '../../hooks/useTenantAccess';
 import { getCurrentBrand } from '../../config/brands.config';
 import { getTenantBranding } from '../../utils/tenantBranding';
-import { visiteApi, appuntamentoPrestazioniApi } from '../../services/clinicaApi';
+import { visiteApi, appuntamentoPrestazioniApi, scadenzeMDLApi } from '../../services/clinicaApi';
 import { ModuleSwitcher } from '../shared/ModuleSwitcher';
 import { TenantSelector } from '../common/TenantSelector';
 import { TenantModeSelector } from '../shared/TenantModeSelector';
@@ -209,6 +209,17 @@ const ClinicaLayoutContent: React.FC<ClinicaLayoutProps> = ({ children }) => {
         ? (prestazioniDaRefertareData as any).total
         : undefined;
 
+    const { data: scadenzeMdlNotificheData } = useQuery({
+        queryKey: ['scadenze-mdl-sidebar-badge', currentTenant?.id],
+        queryFn: () => scadenzeMDLApi.getNotifiche(30, 30),
+        refetchInterval: 60_000,
+        staleTime: 30_000,
+        enabled: isAuthenticated && !!currentTenant?.id && hasFeature('MDL_BASE'),
+    });
+    const scadenzeMdlBadge = scadenzeMdlNotificheData?.conteggio
+        ? scadenzeMdlNotificheData.conteggio.scadute + scadenzeMdlNotificheData.conteggio.critiche + scadenzeMdlNotificheData.conteggio.urgenti
+        : 0;
+
     // Versione dinamica di navigationItems con badge "Visite" e feature gating + filtri per ruolo
     const dynamicNavItems = useMemo((): NavItem[] => {
         // PAZIENTE puro: nav ridotta alla sola cartella personale
@@ -263,10 +274,12 @@ const ClinicaLayoutContent: React.FC<ClinicaLayoutProps> = ({ children }) => {
                 .map(child =>
                     child.href === '/poliambulatorio/visite'
                         ? { ...child, badge: prestazioniDaRefertareBadge }
-                        : child
+                        : child.href === '/poliambulatorio/mdl/scadenze' && scadenzeMdlBadge > 0
+                            ? { ...child, badge: scadenzeMdlBadge }
+                            : child
                 )
         }));
-    }, [prestazioniDaRefertareBadge, hasFeature, isPazienteOnly, isMedico, isMedicoCompetente, user?.id]);
+    }, [prestazioniDaRefertareBadge, scadenzeMdlBadge, hasFeature, isPazienteOnly, isMedico, isMedicoCompetente, user?.id]);
 
     // Auth protection: redirect to login if not authenticated
     useEffect(() => {

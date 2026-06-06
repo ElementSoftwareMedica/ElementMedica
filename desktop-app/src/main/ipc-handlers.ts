@@ -23,6 +23,42 @@ let currentTenantId: string | null = null
 
 // Tray reference for badge updates
 let trayRef: Tray | null = null
+const SCADENZE_GROUP_WINDOW_DAYS = 60
+const MS_PER_DAY = 24 * 60 * 60 * 1000
+
+interface LocalScadenzaRow {
+    id: string
+    personId: string | null
+    mansione: string | null
+    dataScadenza: string
+}
+
+function countGroupedMdlScadenze(rows: LocalScadenzaRow[]): number {
+    const byWorker = new Map<string, LocalScadenzaRow[]>()
+    for (const row of rows) {
+        const key = `${row.personId || 'no-person'}::${row.mansione || 'no-mansione'}`
+        const list = byWorker.get(key) || []
+        list.push(row)
+        byWorker.set(key, list)
+    }
+
+    let count = 0
+    for (const list of byWorker.values()) {
+        const sorted = [...list].sort((a, b) => new Date(a.dataScadenza).getTime() - new Date(b.dataScadenza).getTime())
+        let currentEnd = 0
+        for (const row of sorted) {
+            const time = new Date(row.dataScadenza).getTime()
+            if (!Number.isFinite(time)) continue
+            if (!currentEnd || time - currentEnd > SCADENZE_GROUP_WINDOW_DAYS * MS_PER_DAY) {
+                count += 1
+                currentEnd = time
+            } else {
+                currentEnd = Math.max(currentEnd, time)
+            }
+        }
+    }
+    return count
+}
 
 export function setTray(t: Tray): void {
     trayRef = t
@@ -37,13 +73,14 @@ export function updateAppBadge(): void {
         const db = getDatabase()
         const cutoff = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
         const params: unknown[] = [cutoff]
-        let sql = `SELECT COUNT(*) as count FROM scadenze WHERE eseguita = 0 AND _isDeleted = 0 AND dataScadenza <= ?`
+        let sql = `SELECT id, personId, mansione, dataScadenza FROM scadenze WHERE eseguita = 0 AND _isDeleted = 0 AND dataScadenza <= ?`
         if (currentTenantId) {
             sql += ` AND tenantId = ?`
             params.push(currentTenantId)
         }
-        const row = db.prepare(sql).get(...params) as { count: number } | undefined
-        const count = row?.count ?? 0
+        sql += ` ORDER BY personId, mansione, dataScadenza`
+        const rows = db.prepare(sql).all(...params) as LocalScadenzaRow[]
+        const count = countGroupedMdlScadenze(rows)
 
         // macOS dock badge
         if (app.isReady() && typeof app.setBadgeCount === 'function') {
@@ -2170,29 +2207,25 @@ export function setupIpcHandlers(): void {
         try {
             const db = getDatabase()
             const today = new Date().toISOString().split('T')[0]
-            const t7 = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+            const tMinus30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
             const t30 = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
             const buildParams = (...dates: string[]) =>
                 currentTenantId ? [...dates, currentTenantId] : dates
             const tenantClause = currentTenantId ? ' AND tenantId = ?' : ''
 
-            const scadutiRow = db.prepare(
-                `SELECT COUNT(*) as count FROM scadenze WHERE eseguita = 0 AND _isDeleted = 0 AND dataScadenza < ?${tenantClause}`
-            ).get(...buildParams(today)) as { count: number }
+            const scadutiRows = db.prepare(
+                `SELECT id, personId, mansione, dataScadenza FROM scadenze WHERE eseguita = 0 AND _isDeleted = 0 AND dataScadenza >= ? AND dataScadenza < ?${tenantClause} ORDER BY personId, mansione, dataScadenza`
+            ).all(...buildParams(tMinus30, today)) as LocalScadenzaRow[]
 
-            const criticiRow = db.prepare(
-                `SELECT COUNT(*) as count FROM scadenze WHERE eseguita = 0 AND _isDeleted = 0 AND dataScadenza >= ? AND dataScadenza <= ?${tenantClause}`
-            ).get(...buildParams(today, t7)) as { count: number }
+            const prossimeRows = db.prepare(
+                `SELECT id, personId, mansione, dataScadenza FROM scadenze WHERE eseguita = 0 AND _isDeleted = 0 AND dataScadenza >= ? AND dataScadenza <= ?${tenantClause} ORDER BY personId, mansione, dataScadenza`
+            ).all(...buildParams(today, t30)) as LocalScadenzaRow[]
 
-            const attenzioneRow = db.prepare(
-                `SELECT COUNT(*) as count FROM scadenze WHERE eseguita = 0 AND _isDeleted = 0 AND dataScadenza > ? AND dataScadenza <= ?${tenantClause}`
-            ).get(...buildParams(t7, t30)) as { count: number }
-
-            const scaduti = scadutiRow?.count ?? 0
-            const critici = criticiRow?.count ?? 0
-            const attenzione = attenzioneRow?.count ?? 0
-            return { scaduti, critici, attenzione, urgent: scaduti + critici, total: scaduti + critici + attenzione }
+            const scaduti = countGroupedMdlScadenze(scadutiRows)
+            const prossime = countGroupedMdlScadenze(prossimeRows)
+            const total = scaduti + prossime
+            return { scaduti, critici: prossime, attenzione: 0, urgent: total, total }
         } catch {
             return { scaduti: 0, critici: 0, attenzione: 0, urgent: 0, total: 0 }
         }

@@ -5790,8 +5790,11 @@ export const scadenzeMDLApi = {
             .then(extractData),
 
     // Ottiene notifiche urgenti (per badge/alert)
-    getNotifiche: (giorniAvviso?: number) =>
-        apiGet<ApiResponse<ScadenzeMDLNotifiche>>(`${CLINICA_BASE}/scadenze-mdl/notifiche`, { giorniAvviso: giorniAvviso?.toString() })
+    getNotifiche: (giorniAvviso?: number, giorniPre?: number) =>
+        apiGet<ApiResponse<ScadenzeMDLNotifiche>>(`${CLINICA_BASE}/scadenze-mdl/notifiche`, {
+            giorniAvviso: giorniAvviso?.toString(),
+            giorniPre: giorniPre?.toString()
+        })
             .then(extractData),
 
     // Ottiene riepilogo per azienda

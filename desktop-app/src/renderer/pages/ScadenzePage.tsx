@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Clock,
   Search,
@@ -29,6 +29,12 @@ interface Scadenza {
   stato: string | null
 }
 
+interface ScadenzaGroup extends Scadenza {
+  scadenze: Scadenza[]
+  prestazioni: string[]
+  dataScadenzaFine: string
+}
+
 interface PatientLookup {
   id: string
   firstName: string | null
@@ -43,6 +49,8 @@ interface CompanyLookup {
 }
 
 type Urgenza = 'scaduto' | 'critico' | 'urgente' | 'attenzione' | 'programmato'
+const FINESTRA_RAGGRUPPAMENTO_GIORNI = 60
+const MS_PER_DAY = 24 * 60 * 60 * 1000
 
 const URGENZA_CONFIG: Record<Urgenza, { label: string; bg: string; text: string; border: string; icon: React.ComponentType<{ className?: string }> }> = {
   scaduto: { label: 'Scaduto', bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', icon: AlertCircle },
@@ -61,6 +69,87 @@ function getUrgenza(dataScadenza: string): Urgenza {
   if (diffDays < 30) return 'urgente'
   if (diffDays < 60) return 'attenzione'
   return 'programmato'
+}
+
+function isVisitaMedicaDelLavoro(nome: string | null | undefined): boolean {
+  return (nome || '').toLowerCase().includes('visita medica del lavoro')
+}
+
+function uniquePrestazioni(scadenze: Scadenza[]): string[] {
+  const names = scadenze
+    .map(s => s.prestazioneNome || 'Accertamento')
+    .sort((a, b) => {
+      if (isVisitaMedicaDelLavoro(a)) return -1
+      if (isVisitaMedicaDelLavoro(b)) return 1
+      return a.localeCompare(b, 'it')
+    })
+  return Array.from(new Set(names))
+}
+
+function groupScadenzeMdl(scadenze: Scadenza[]): ScadenzaGroup[] {
+  const byWorker = new Map<string, Scadenza[]>()
+  for (const scadenza of scadenze) {
+    const key = `${scadenza.personId || 'no-person'}::${scadenza.mansione || 'no-mansione'}`
+    const list = byWorker.get(key) || []
+    list.push(scadenza)
+    byWorker.set(key, list)
+  }
+
+  const groups: ScadenzaGroup[] = []
+  for (const rows of byWorker.values()) {
+    const sorted = [...rows].sort((a, b) => new Date(a.dataScadenza).getTime() - new Date(b.dataScadenza).getTime())
+    let current: Scadenza[] = []
+    let currentEnd = 0
+
+    const flush = () => {
+      if (current.length === 0) return
+      const representative = [...current].sort((a, b) => {
+        if (isVisitaMedicaDelLavoro(a.prestazioneNome)) return -1
+        if (isVisitaMedicaDelLavoro(b.prestazioneNome)) return 1
+        return new Date(a.dataScadenza).getTime() - new Date(b.dataScadenza).getTime()
+      })[0]
+      const dateTimes = current.map(s => new Date(s.dataScadenza).getTime()).filter(Number.isFinite)
+      const minDate = new Date(Math.min(...dateTimes)).toISOString()
+      const maxDate = new Date(Math.max(...dateTimes)).toISOString()
+      const prestazioni = uniquePrestazioni(current)
+      const hasVisitaMedica = prestazioni.some(isVisitaMedicaDelLavoro)
+      const label = prestazioni.length > 1
+        ? hasVisitaMedica
+          ? `Visita Medica del Lavoro + ${prestazioni.length - 1} accertament${prestazioni.length - 1 === 1 ? 'o' : 'i'}`
+          : `${prestazioni[0]} + ${prestazioni.length - 1} accertament${prestazioni.length - 1 === 1 ? 'o' : 'i'}`
+        : prestazioni[0]
+
+      groups.push({
+        ...representative,
+        id: current.length > 1
+          ? `visita-cluster-${representative.personId || 'no-person'}-${representative.mansione || 'no-mansione'}-${minDate.slice(0, 10)}`
+          : representative.id,
+        dataScadenza: minDate,
+        dataScadenzaFine: maxDate,
+        prestazioneNome: label,
+        scadenze: current,
+        prestazioni
+      })
+      current = []
+      currentEnd = 0
+    }
+
+    for (const row of sorted) {
+      const time = new Date(row.dataScadenza).getTime()
+      if (!Number.isFinite(time)) continue
+      if (current.length === 0 || time - currentEnd <= FINESTRA_RAGGRUPPAMENTO_GIORNI * MS_PER_DAY) {
+        current.push(row)
+        currentEnd = Math.max(currentEnd, time)
+      } else {
+        flush()
+        current.push(row)
+        currentEnd = time
+      }
+    }
+    flush()
+  }
+
+  return groups.sort((a, b) => new Date(a.dataScadenza).getTime() - new Date(b.dataScadenza).getTime())
 }
 
 export function ScadenzePage(): JSX.Element {
@@ -110,22 +199,24 @@ export function ScadenzePage(): JSX.Element {
 
   useEffect(() => { loadScadenze() }, [loadScadenze])
 
-  const handleMarkDone = useCallback(async (scadenzaId: string): Promise<void> => {
+  const handleMarkDone = useCallback(async (group: ScadenzaGroup): Promise<void> => {
     if (!window.desktopApi || markingDone) return
-    setMarkingDone(scadenzaId)
+    setMarkingDone(group.id)
     try {
       const now = new Date().toISOString()
-      await window.desktopApi.db.update({
-        table: 'scadenze',
-        id: scadenzaId,
-        data: { eseguita: 1, dataEsecuzione: now }
-      })
-      await window.desktopApi.sync.enqueue({
-        type: 'UPDATE',
-        entity: 'scadenze',
-        entityId: scadenzaId,
-        payload: { status: 'COMPLETATA', completatoAt: now }
-      })
+      await Promise.all(group.scadenze.map(async (scadenza) => {
+        await window.desktopApi.db.update({
+          table: 'scadenze',
+          id: scadenza.id,
+          data: { eseguita: 1, dataEsecuzione: now }
+        })
+        await window.desktopApi.sync.enqueue({
+          type: 'UPDATE',
+          entity: 'scadenze',
+          entityId: scadenza.id,
+          payload: { status: 'COMPLETATA', completatoAt: now }
+        })
+      }))
       await loadScadenze()
     } catch {
       // Non-blocking
@@ -134,13 +225,13 @@ export function ScadenzePage(): JSX.Element {
     }
   }, [loadScadenze, markingDone])
 
-  const pending = scadenze.filter(s => !s.eseguita)
-  const completed = scadenze.filter(s => !!s.eseguita)
+  const pending = useMemo(() => groupScadenzeMdl(scadenze.filter(s => !s.eseguita)), [scadenze])
+  const completed = useMemo(() => groupScadenzeMdl(scadenze.filter(s => !!s.eseguita)), [scadenze])
   const activeList = showCompleted ? completed : pending
   const enriched = activeList.map(s => ({ ...s, urgenza: getUrgenza(s.dataScadenza) }))
   const filtered = enriched.filter(s => {
     const matchSearch = !searchTerm || [
-      s.personFirstName, s.personLastName, s.prestazioneNome, s.companyName, s.mansione
+      s.personFirstName, s.personLastName, s.prestazioneNome, s.companyName, s.mansione, ...s.prestazioni
     ].some(f => f?.toLowerCase().includes(searchTerm.toLowerCase()))
     const matchUrgenza = !filterUrgenza || s.urgenza === filterUrgenza
     return matchSearch && matchUrgenza
@@ -281,6 +372,15 @@ export function ScadenzePage(): JSX.Element {
                         </span>
                       )}
                     </div>
+                    {s.prestazioni.length > 1 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {s.prestazioni.map(prestazione => (
+                          <span key={prestazione} className="rounded-full bg-teal-50 px-2 py-0.5 text-[10px] font-medium text-teal-700">
+                            {prestazione}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {/* Date + days + action */}
@@ -289,6 +389,11 @@ export function ScadenzePage(): JSX.Element {
                       <Calendar className="w-3.5 h-3.5 text-gray-400" />
                       {dataScad.toLocaleDateString('it-IT')}
                     </p>
+                    {s.dataScadenzaFine.slice(0, 10) !== s.dataScadenza.slice(0, 10) && (
+                      <p className="text-[10px] text-gray-400">
+                        gruppo fino al {new Date(s.dataScadenzaFine).toLocaleDateString('it-IT')}
+                      </p>
+                    )}
                     <p className={`text-xs font-medium ${conf.text}`}>
                       {daysUntil < 0
                         ? `Scaduto da ${Math.abs(daysUntil)} giorni`
@@ -298,7 +403,7 @@ export function ScadenzePage(): JSX.Element {
                     </p>
                     {!showCompleted && (
                       <button
-                        onClick={() => handleMarkDone(s.id)}
+                        onClick={() => handleMarkDone(s)}
                         disabled={markingDone === s.id}
                         className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium bg-green-50 hover:bg-green-100 text-green-700 rounded-lg transition-colors disabled:opacity-50"
                       >
