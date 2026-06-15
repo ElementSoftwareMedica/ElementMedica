@@ -304,257 +304,164 @@ ${makeFooter('Programma Corso')}
 </body></html>`;
 
 // ============================================================================
-// TEMPLATE: Preventivo — Compatto A4 (BOTH brands)
-// Design: Element srl — Teal #7FB3AB / Navy #283646
+// TEMPLATE: Preventivo Design System V17 (BOTH brands)
+// Design: professional navy/blue palette, tabular totals
 // Compatible markers: vociHtml, totaliHtml, noteHtml, cliente.dettagliHtml,
 //   tenant.logoHtml, tenant.*, preventivo.*, cliente.*
 // ============================================================================
 const PREVENTIVO_CONTENT = `<!DOCTYPE html>
 <html lang="it">
 <head>
-<meta charset="UTF-8">
-<title>Preventivo {{preventivo.numero}}</title>
-<style>
-  @page { size: A4; margin: 10mm 12mm 10mm 12mm; }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    font-family: 'Helvetica Neue', Arial, sans-serif;
-    font-size: 8.5pt; line-height: 1.35; color: #1e293b; background: #fff;
-    -webkit-print-color-adjust: exact; print-color-adjust: exact;
-  }
+  <meta charset="UTF-8">
+  <title>Preventivo</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 10pt; line-height: 1.5; color: #1e293b; padding: 40px; }
 
-  /* === HEADER === */
-  .hdr {
-    display: flex; align-items: flex-start;
-    padding-bottom: 8px; border-bottom: 3px solid #283646; margin-bottom: 8px;
-    gap: 10px;
-  }
-  .hdr-logo { flex: 0 0 auto; }
-  .hdr-logo img { max-width: 120px; max-height: 46px; object-fit: contain; }
-  .hdr-logo .logo-txt { font-size: 13pt; font-weight: 800; color: #283646; }
-  .hdr-company { flex: 1; }
-  .hdr-company .co-name { font-size: 9.5pt; font-weight: 700; color: #283646; margin-bottom: 2px; }
-  .hdr-company .co-info { font-size: 7pt; color: #64748b; line-height: 1.5; }
-  .hdr-docbox { text-align: right; flex: 0 0 130px; }
-  .hdr-docbox .doc-lbl { font-size: 14pt; font-weight: 800; color: #283646; letter-spacing: -0.5px; }
-  .hdr-docbox .doc-num { font-size: 8.5pt; font-weight: 700; color: #7FB3AB; margin-top: 1px; }
-  .hdr-docbox .doc-date { font-size: 7pt; color: #64748b; margin-top: 2px; }
-  .hdr-docbox .doc-valid {
-    display: inline-block; font-size: 6.5pt; font-weight: 700;
-    color: #fff; background: #7FB3AB; border-radius: 3px; padding: 1px 6px; margin-top: 2px;
-  }
+    /* Header */
+    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 28px; padding-bottom: 18px; border-bottom: 2px solid #1d4ed8; }
+    .logo-section { flex: 0 0 200px; }
+    .logo-section img { max-width: 180px; max-height: 80px; object-fit: contain; }
+    .org-info { text-align: right; flex: 1; }
+    .org-name { font-size: 16pt; font-weight: 700; color: #0f172a; margin-bottom: 4px; letter-spacing: -0.3px; }
+    .org-details { font-size: 9pt; color: #64748b; line-height: 1.6; }
 
-  /* === INFO ROW === */
-  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-bottom: 8px; }
-  .info-box {
-    background: #f8fafc; border: 1px solid #e2e8f0;
-    border-left: 3px solid #7FB3AB; border-radius: 4px; padding: 6px 8px;
-  }
-  .info-box h4 {
-    font-size: 6.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
-    color: #7FB3AB; margin-bottom: 3px;
-  }
-  .info-box .cli-name { font-size: 9pt; font-weight: 700; color: #283646; margin-bottom: 2px; }
-  .info-box .cli-detail { font-size: 7.5pt; color: #475569; margin-bottom: 1px; }
-  .info-box .detail-row { display: flex; gap: 4px; font-size: 7.5pt; }
-  .info-box .detail-row strong { color: #64748b; min-width: 60px; }
+    /* Title */
+    .document-title { text-align: center; font-size: 13pt; font-weight: 700; color: #1d4ed8; margin: 20px 0; padding: 10px 20px; background: #eff6ff; border-radius: 6px; border-left: 4px solid #1d4ed8; letter-spacing: 0.5px; }
 
-  /* === SERVICE BADGE === */
-  .svc-badge {
-    display: inline-block; font-size: 7pt; font-weight: 700;
-    text-transform: uppercase; letter-spacing: 0.5px;
-    color: #283646; background: #EDF1EE; border: 1px solid #A0C8C1;
-    border-radius: 3px; padding: 2px 8px; margin-bottom: 5px;
-  }
+    /* Sections */
+    .section { margin-bottom: 20px; page-break-inside: avoid; }
+    .section-title { font-size: 8.5pt; font-weight: 700; color: #0f172a; border-bottom: 2px solid #1d4ed8; padding-bottom: 4px; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.4px; }
+    .content-box { background: #f8fafc; padding: 12px 14px; border-radius: 6px; border: 1px solid #e2e8f0; }
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .info-row { display: flex; margin-bottom: 5px; }
+    .info-label { font-weight: 600; width: 140px; color: #475569; font-size: 9pt; }
+    .info-value { flex: 1; font-size: 9pt; color: #1e293b; }
+    .label { color: #475569; font-size: 9pt; }
+    .value { font-size: 9pt; color: #1e293b; }
 
-  /* === SERVICE DETAILS GRID (condizionale) === */
-  .svc-grid {
-    display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;
-    margin-bottom: 7px; font-size: 7.5pt;
-  }
-  .svc-cell { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 3px; padding: 4px 6px; }
-  .svc-cell strong { display: block; font-size: 6pt; color: #7FB3AB; text-transform: uppercase; margin-bottom: 1px; }
+    /* Table */
+    table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+    th { background: #1e3a5f; color: #f8fafc; padding: 9px 10px; text-align: left; font-size: 9pt; font-weight: 600; }
+    td { padding: 7px 10px; border-bottom: 1px solid #e2e8f0; font-size: 9pt; }
+    td.num { text-align: center; width: 35px; }
+    td.qty { text-align: center; width: 45px; }
+    td.price, td.total { text-align: right; width: 100px; font-variant-numeric: tabular-nums; }
+    tr:nth-child(even) { background: #f8fafc; }
 
-  /* === PRICING TABLE === */
-  .ptable { width: 100%; border-collapse: collapse; margin-bottom: 5px; }
-  .ptable thead tr { background: #283646; color: #fff; }
-  .ptable th { padding: 5px 8px; font-size: 7.5pt; font-weight: 600; text-align: left; }
-  .ptable th.r { text-align: right; }
-  .ptable tbody tr { border-bottom: 1px solid #e2e8f0; }
-  .ptable tbody tr:nth-child(even) { background: #f8fafc; }
-  .ptable td { padding: 5px 8px; font-size: 8pt; }
-  .ptable td.num { width: 22px; color: #94a3b8; font-size: 7pt; }
-  .ptable td.qty { text-align: center; width: 38px; }
-  .ptable td.price { text-align: right; width: 78px; }
-  .ptable td.total { text-align: right; width: 78px; font-weight: 600; color: #283646; }
+    /* Totals */
+    .totals-section { margin-left: auto; margin-top: 12px; width: 300px; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden; }
+    .total-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 14px; font-size: 9.5pt; background: #ffffff; }
+    .total-row + .total-row { border-top: 1px solid #f1f5f9; }
+    .total-row .label { color: #475569; flex: 1; }
+    .total-row .value { text-align: right; min-width: 90px; font-variant-numeric: tabular-nums; font-weight: 500; }
+    .total-row.original { color: #94a3b8; background: #f8fafc; }
+    .total-row.original .label, .total-row.original .value { color: #94a3b8; text-decoration: line-through; font-weight: 400; }
+    .total-row.discount .label, .total-row.discount .value { color: #16a34a; }
+    .total-row.final { background: #1e3a5f; border-top: none !important; }
+    .total-row.final .label, .total-row.final .value { color: #ffffff; font-weight: 700; font-size: 10.5pt; }
 
-  /* === TOTALS === */
-  .totals-wrap { display: flex; justify-content: flex-end; margin-bottom: 6px; }
-  .totals-block { min-width: 210px; }
-  .total-row {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 3px 8px; border-bottom: 1px solid #e2e8f0; font-size: 8pt;
-  }
-  .total-row .label { color: #64748b; }
-  .total-row .value { font-weight: 600; color: #283646; }
-  .total-row.original .label, .total-row.original .value { color: #94a3b8; text-decoration: line-through; font-size: 7.5pt; }
-  .total-row.discount .label, .total-row.discount .value { color: #16a34a; }
-  .total-row.final {
-    background: #283646; border-radius: 0 0 4px 4px; margin-top: 2px;
-    padding: 5px 8px; border-bottom: none;
-  }
-  .total-row.final .label, .total-row.final .value { color: #fff; font-size: 9pt; font-weight: 700; }
+    /* Notes */
+    .notes-box { background: #eff6ff; border-left: 3px solid #1d4ed8; padding: 10px 14px; border-radius: 4px; margin: 10px 0; }
+    .notes-box h4 { color: #1e3a5f; margin-bottom: 6px; font-size: 9.5pt; font-weight: 600; }
+    .notes-box p { font-size: 9pt; color: #334155; white-space: pre-wrap; }
 
-  /* === NOTES === */
-  .notes-box {
-    background: #f0f9ff; border-left: 3px solid #7FB3AB;
-    border-radius: 0 4px 4px 0; padding: 5px 8px; margin-bottom: 6px;
-  }
-  .notes-box h4 { font-size: 6.5pt; font-weight: 700; text-transform: uppercase; color: #7FB3AB; margin-bottom: 2px; }
-  .notes-box p { font-size: 7.5pt; color: #334155; white-space: pre-line; }
+    /* Signature */
+    .signature-section { display: flex; justify-content: space-between; margin-top: 40px; padding-top: 20px; border-top: 1px solid #e2e8f0; }
+    .signature-box { text-align: center; width: 45%; }
+    .signature-line { border-top: 1px solid #94a3b8; padding-top: 5px; margin-top: 60px; font-size: 8.5pt; color: #64748b; }
 
-  /* === CONDITIONS === */
-  .conditions {
-    background: #fffbeb; border-left: 3px solid #f59e0b;
-    border-radius: 0 4px 4px 0; padding: 4px 8px;
-    font-size: 7pt; color: #78350f; margin-bottom: 7px;
-  }
+    /* Footer */
+    .footer { margin-top: 30px; padding-top: 10px; border-top: 1px solid #e2e8f0; font-size: 8pt; color: #94a3b8; text-align: center; }
 
-  /* === SIGNATURES === */
-  .sigs { display: flex; gap: 20px; padding-top: 18px; border-top: 1px solid #e2e8f0; margin-top: 4px; }
-  .sig-box { flex: 1; text-align: center; }
-  .sig-line {
-    border-top: 1px solid #334155; margin-top: 28px;
-    padding-top: 4px; font-size: 7.5pt; color: #64748b;
-  }
+    /* Conditions list */
+    .conditions-list { padding-left: 20px; font-size: 9pt; color: #334155; line-height: 1.7; }
 
-  /* === FOOTER === */
-  .footer {
-    margin-top: 7px; padding-top: 5px; border-top: 1px solid #e2e8f0;
-    display: flex; justify-content: space-between;
-    font-size: 6.5pt; color: #94a3b8;
-  }
-</style>
+    p { margin-bottom: 4px; }
+  </style>
 </head>
 <body>
 
-<!-- HEADER -->
-<div class="hdr">
-  <div class="hdr-logo">{{tenant.logoHtml}}</div>
-  <div class="hdr-company">
-    <div class="co-name">{{tenant.name}}</div>
-    <div class="co-info">
-      {{tenant.address}}<br>
-      P.IVA {{tenant.vatNumber}}{{#IF_COMPANY_WEB}} — {{tenant.website}}{{/IF_COMPANY_WEB}}<br>
-      {{tenant.phone}} — {{tenant.email}}
+  <div class="header">
+    <div class="logo-section">{{tenant.logoHtml}}</div>
+    <div class="org-info">
+      <div class="org-name">{{tenant.name}}</div>
+      <div class="org-details">
+        {{tenant.address}}<br>
+        Tel: {{tenant.phone}} | Email: {{tenant.email}}<br>
+        P.IVA: {{tenant.vatNumber}}
+      </div>
     </div>
   </div>
-  <div class="hdr-docbox">
-    <div class="doc-lbl">PREVENTIVO</div>
-    <div class="doc-num">{{preventivo.numero}}</div>
-    <div class="doc-date">Emesso il {{preventivo.dataEmissione}}</div>
-    <div class="doc-valid">Valido fino al {{preventivo.dataValidita}}</div>
+
+  <div class="document-title">PREVENTIVO N&deg; {{preventivo.numero}}</div>
+
+  <div class="section">
+    <div class="info-grid">
+      <div>
+        <div class="section-title">Destinatario</div>
+        <div class="content-box">
+          <strong>{{cliente.ragioneSociale}}</strong><br>
+          {{cliente.dettagliHtml}}
+        </div>
+      </div>
+      <div>
+        <div class="section-title">Dettagli Preventivo</div>
+        <div class="content-box">
+          <div class="info-row"><span class="info-label">N&deg; Preventivo:</span><span class="info-value">{{preventivo.numero}}</span></div>
+          <div class="info-row"><span class="info-label">Data emissione:</span><span class="info-value">{{preventivo.dataEmissione}}</span></div>
+          <div class="info-row"><span class="info-label">Scadenza:</span><span class="info-value">{{preventivo.dataValidita}}</span></div>
+          <div class="info-row"><span class="info-label">Tipo servizio:</span><span class="info-value">{{preventivo.tipoServizio}}</span></div>
+          {{preventivo.partecipantiHtml}}
+        </div>
+      </div>
+    </div>
   </div>
-</div>
 
-<!-- CLIENT + DOC INFO -->
-<div class="info-grid">
-  <div class="info-box">
-    <h4>Cliente</h4>
-    <div class="cli-name">{{cliente.nome}}</div>
-    {{cliente.dettagliHtml}}
-    <div class="cli-detail">{{cliente.email}}</div>
+  <div class="section">
+    <div class="section-title">Dettaglio Servizi</div>
+    <table>
+      <thead>
+        <tr>
+          <th class="num">#</th>
+          <th>Descrizione</th>
+          <th class="qty">Qt&agrave;</th>
+          <th class="price">Prezzo Unit.</th>
+          <th class="total">Totale</th>
+        </tr>
+      </thead>
+      <tbody>{{vociHtml}}</tbody>
+    </table>
+    <div class="totals-section">{{totaliHtml}}</div>
+    <div style="clear:both;"></div>
   </div>
-  <div class="info-box">
-    <h4>Documento</h4>
-    <div class="detail-row"><strong>Oggetto:</strong> {{preventivo.titoloServizio}}</div>
-    <div class="detail-row"><strong>Tipo:</strong> {{preventivo.tipoServizio}}</div>
-    {{preventivo.partecipantiHtml}}
-    <div class="detail-row" style="margin-top:3px;"><strong>Pagamento:</strong> {{preventivo.metodoPagamento}}</div>
+
+  {{noteHtml}}
+
+  <div class="section">
+    <div class="section-title">Condizioni</div>
+    <div class="content-box">
+      <ul class="conditions-list">
+        <li>Il presente preventivo ha validit&agrave; 30 giorni dalla data di emissione</li>
+        <li>Pagamento: {{preventivo.metodoPagamento}}</li>
+        <li>I prezzi sono da intendersi IVA esclusa, salvo ove diversamente indicato</li>
+      </ul>
+    </div>
   </div>
-</div>
 
-<!-- SERVICE TYPE BADGE -->
-<div class="svc-badge">{{preventivo.tipoServizio}}</div>
-
-<!-- SERVICE DETAILS (condizionali per tipo) -->
-{{#IF_CORSO}}
-<div class="svc-grid">
-  <div class="svc-cell"><strong>Corso</strong>{{corso.title}}</div>
-  <div class="svc-cell"><strong>Durata</strong>{{corso.duration}} ore</div>
-  <div class="svc-cell"><strong>Normativa</strong>{{corso.regulation}}</div>
-</div>
-{{/IF_CORSO}}
-{{#IF_DVR}}
-<div class="svc-grid">
-  <div class="svc-cell"><strong>Servizio</strong>Valutazione Rischi (DVR)</div>
-  <div class="svc-cell"><strong>Dipendenti</strong>{{preventivo.dvrNumDipendenti}}</div>
-  <div class="svc-cell"><strong>Sedi</strong>{{preventivo.dvrNumSedi}} · Consegna: {{preventivo.dvrTempiConsegna}}</div>
-</div>
-{{/IF_DVR}}
-{{#IF_RSPP}}
-<div class="svc-grid">
-  <div class="svc-cell"><strong>Servizio</strong>RSPP Esterno</div>
-  <div class="svc-cell"><strong>Dipendenti</strong>{{preventivo.rsppNumDipendenti}}</div>
-  <div class="svc-cell"><strong>Durata</strong>{{preventivo.rsppDurata}} mesi · Classe {{preventivo.rsppClasseRischio}}</div>
-</div>
-{{/IF_RSPP}}
-{{#IF_MEDICO}}
-<div class="svc-grid">
-  <div class="svc-cell"><strong>Servizio</strong>Medicina del Lavoro</div>
-  <div class="svc-cell"><strong>Dipendenti</strong>{{preventivo.medicoNumDipendenti}}</div>
-  <div class="svc-cell"><strong>Visite</strong>{{preventivo.medicoTipoVisite}} · {{preventivo.medicoFrequenza}}</div>
-</div>
-{{/IF_MEDICO}}
-
-<!-- PRICING TABLE -->
-<table class="ptable">
-  <thead>
-    <tr>
-      <th class="num">#</th>
-      <th>Descrizione</th>
-      <th class="r" style="width:38px;">Qtà</th>
-      <th class="r" style="width:82px;">Prezzo Unit.</th>
-      <th class="r" style="width:82px;">Totale</th>
-    </tr>
-  </thead>
-  <tbody>
-    {{vociHtml}}
-  </tbody>
-</table>
-
-<!-- TOTALS -->
-<div class="totals-wrap">
-  <div class="totals-block">
-    {{totaliHtml}}
+  <div class="signature-section">
+    <div class="signature-box">
+      <div class="signature-line">Per {{tenant.name}}</div>
+    </div>
+    <div class="signature-box">
+      <div class="signature-line">Per accettazione</div>
+    </div>
   </div>
-</div>
 
-<!-- NOTES (auto-vuoto se assenti) -->
-{{noteHtml}}
-
-<!-- CONDITIONS -->
-<div class="conditions">
-  <strong>Condizioni di pagamento:</strong> {{preventivo.metodoPagamento}} —
-  Prezzi IVA esclusa salvo diversa indicazione. Il preventivo è valido fino alla data indicata.
-  Accettando il presente preventivo si intendono accettate le condizioni generali di contratto.
-</div>
-
-<!-- SIGNATURES -->
-<div class="sigs">
-  <div class="sig-box">
-    <div class="sig-line">Per accettazione — Firma e timbro Cliente</div>
+  <div class="footer">
+    Documento generato il {{current.date}} &mdash; {{tenant.name}}<br>
+    Preventivo &mdash; Questo documento &egrave; stato generato elettronicamente.
   </div>
-  <div class="sig-box">
-    <div class="sig-line">Per {{tenant.name}}</div>
-  </div>
-</div>
-
-<!-- FOOTER -->
-<div class="footer">
-  <span>{{tenant.name}} · P.IVA {{tenant.vatNumber}} · {{tenant.email}}</span>
-  <span>Generato il {{current.date}}</span>
-</div>
 
 </body>
 </html>`;
@@ -1431,10 +1338,10 @@ const DEFAULT_TEMPLATES = [
         tags: ['attestato', 'certificato', 'formazione', 'predefinito']
     },
     {
-        name: 'Preventivo — Standard',
+        name: 'Preventivo Design System V17',
         type: 'PREVENTIVO',
         content: PREVENTIVO_CONTENT,
-        description: 'Template predefinito per preventivi. Include tabella servizi, totali e condizioni.',
+        description: 'Template predefinito per preventivi. Layout professionale navy/blue con tabella allineata e totali tabulari.',
         isDefault: true,
         fileFormat: 'HTML',
         category: 'entrambi',

@@ -14,7 +14,8 @@ import {
   CheckCheck,
   Plus,
   Undo2,
-  X
+  X,
+  Filter
 } from 'lucide-react'
 import { v4 as uuidv4 } from 'uuid'
 import { usePersistentPageState } from '../hooks/usePersistentPageState'
@@ -194,6 +195,8 @@ export function ScadenzePage(): JSX.Element {
   const [creatingVisit, setCreatingVisit] = useState<string | null>(null)
   const [undoAction, setUndoAction] = useState<{ label: string; scadenze: Scadenza[] } | null>(null)
   const [pageError, setPageError] = useState<string | null>(null)
+  const [filterCompany, setFilterCompany] = usePersistentPageState<string>('scadenze:filterCompany', '')
+  const [companies, setCompanies] = useState<CompanyLookup[]>([])
 
   const loadScadenze = useCallback(async () => {
     setLoading(true)
@@ -235,6 +238,13 @@ export function ScadenzePage(): JSX.Element {
   }, [])
 
   useEffect(() => { loadScadenze() }, [loadScadenze])
+
+  useEffect(() => {
+    if (!window.desktopApi) return
+    window.desktopApi.db.query({ table: 'companies', where: { _isDeleted: 0 } })
+      .then(rows => setCompanies((rows as CompanyLookup[]).sort((a, b) => (a.ragioneSociale || '').localeCompare(b.ragioneSociale || '', 'it'))))
+      .catch(() => undefined)
+  }, [])
 
   const handleMarkDone = useCallback(async (group: ScadenzaGroup): Promise<void> => {
     if (!window.desktopApi || markingDone) return
@@ -457,7 +467,8 @@ export function ScadenzePage(): JSX.Element {
     ].some(f => f?.toLowerCase().includes(searchTerm.toLowerCase()))
     const matchUrgenza = !filterUrgenza || s.urgenza === filterUrgenza
     const matchDate = (!dateFrom || s.dataScadenzaFine >= dateFrom) && (!dateTo || s.dataScadenza <= dateTo)
-    return matchSearch && matchUrgenza && matchDate
+    const matchCompany = !filterCompany || (s.companyName || '').toLowerCase().includes(filterCompany.toLowerCase())
+    return matchSearch && matchUrgenza && matchDate && matchCompany
   })
   const pendingPeople = countUniquePeople(pending)
   const completedPeople = countUniquePeople(completed)
@@ -477,20 +488,23 @@ export function ScadenzePage(): JSX.Element {
     return acc
   }, {} as Record<string, Set<string>>)
 
+  const activeFiltersCount = [filterUrgenza, filterCompany, searchTerm].filter(Boolean).length
+
   return (
     <div className="mx-auto max-w-6xl space-y-4">
       <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-card">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        {/* Row 1: Title + toggle + refresh */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0">
             <h1 className="flex items-center gap-2 text-xl font-semibold text-gray-900 font-heading">
               <Clock className="h-5 w-5 text-teal-600" />
               Scadenze MDL
             </h1>
-            <p className="mt-1 text-xs text-gray-500">
-              {filteredPeople} person{filteredPeople === 1 ? 'a' : 'e'} nel periodo selezionato · {filtered.length} grupp{filtered.length === 1 ? 'o' : 'i'} visita
+            <p className="mt-0.5 text-xs text-gray-500">
+              {filteredPeople} person{filteredPeople === 1 ? 'a' : 'e'} · {filtered.length} grupp{filtered.length === 1 ? 'o' : 'i'}
             </p>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center xl:justify-end">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="inline-flex rounded-xl border border-gray-200 bg-gray-50 p-1">
               <button
                 onClick={() => { setShowCompleted(false); setFilterUrgenza('') }}
@@ -511,25 +525,47 @@ export function ScadenzePage(): JSX.Element {
             </div>
             <button
               onClick={loadScadenze}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+              title="Aggiorna"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
             >
               <RefreshCw className="h-3.5 w-3.5" />
-              Aggiorna
+              <span className="hidden sm:inline">Aggiorna</span>
             </button>
           </div>
         </div>
 
-        <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(240px,1fr)_minmax(420px,560px)]">
+        {/* Row 2: Filters */}
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_auto_auto]">
+          {/* Search */}
           <div className="relative min-w-0">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Cerca lavoratore, prestazione, azienda..."
-              className="h-11 w-full rounded-xl border border-gray-200 py-2 pl-9 pr-3 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-teal-500"
+              placeholder="Cerca lavoratore, prestazione..."
+              className="h-10 w-full rounded-xl border border-gray-200 py-2 pl-9 pr-3 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-teal-500"
             />
           </div>
+
+          {/* Company filter */}
+          {companies.length > 0 && (
+            <div className="relative">
+              <Building2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <select
+                value={filterCompany}
+                onChange={e => setFilterCompany(e.target.value)}
+                className="h-10 w-full min-w-[150px] rounded-xl border border-gray-200 py-2 pl-9 pr-3 text-sm appearance-none focus:border-transparent focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+              >
+                <option value="">Tutte le aziende</option>
+                {companies.map(c => (
+                  <option key={c.id} value={c.ragioneSociale || c.id}>{c.ragioneSociale}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Date range */}
           <ElegantDateRangeInput
             value={{ start: dateFrom, end: dateTo }}
             onChange={range => {
@@ -539,8 +575,12 @@ export function ScadenzePage(): JSX.Element {
           />
         </div>
 
+        {/* Row 3: Urgency filter pills */}
         {!showCompleted && enriched.length > 0 && (
-          <div className="mt-3 flex flex-wrap items-center gap-2">
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className="flex items-center gap-1 text-xs text-gray-400">
+              <Filter className="h-3 w-3" />
+            </span>
             {(Object.entries(URGENZA_CONFIG) as [Urgenza, typeof URGENZA_CONFIG[Urgenza]][]).map(([key, conf]) => {
               const count = stats[key]?.size || 0
               if (count === 0) return null
@@ -550,7 +590,7 @@ export function ScadenzePage(): JSX.Element {
                   key={key}
                   onClick={() => setFilterUrgenza(prev => prev === key ? '' : key)}
                   className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-all ${
-                    filterUrgenza === key ? `${conf.bg} ${conf.text} ring-1 ring-current` : `${conf.bg} ${conf.text} opacity-80 hover:opacity-100`
+                    filterUrgenza === key ? `${conf.bg} ${conf.text} ring-1 ring-current` : `${conf.bg} ${conf.text} opacity-70 hover:opacity-100`
                   }`}
                 >
                   <UrgIcon className="h-3 w-3" />
@@ -558,6 +598,15 @@ export function ScadenzePage(): JSX.Element {
                 </button>
               )
             })}
+            {activeFiltersCount > 0 && (
+              <button
+                onClick={() => { setSearchTerm(''); setFilterUrgenza(''); setFilterCompany('') }}
+                className="ml-auto inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors"
+              >
+                <X className="h-3 w-3" />
+                Rimuovi filtri ({activeFiltersCount})
+              </button>
+            )}
           </div>
         )}
       </div>

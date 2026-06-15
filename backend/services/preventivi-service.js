@@ -703,7 +703,8 @@ async function generatePDF({ preventivoId, userId, tenantId }) {
           telefono: companyProfile.telefonoGenerale,
           rappresentanteLegale: companyProfile.referente
             ? `${companyProfile.referente.firstName || ''} ${companyProfile.referente.lastName || ''}`.trim()
-            : null
+            : null,
+          codiceAteco: companyProfile.company.codiceAteco
         };
       }
     }
@@ -1080,6 +1081,7 @@ function _buildMarkerData(preventivo) {
       ragioneSociale: preventivo.azienda.ragioneSociale,
       partitaIva: preventivo.azienda.partitaIva,
       codiceFiscale: preventivo.azienda.codiceFiscale,
+      codiceAteco: preventivo.azienda.codiceAteco,
       indirizzo: preventivo.azienda.indirizzo,
       cap: preventivo.azienda.cap,
       citta: preventivo.azienda.citta,
@@ -1272,6 +1274,9 @@ function _buildMarkerData(preventivo) {
   }
   if (data.cliente.codiceFiscale) {
     clienteDettagli += `<p><span class="label">C.F.:</span> <span class="value">${data.cliente.codiceFiscale}</span></p>`;
+  }
+  if (data.cliente.codiceAteco) {
+    clienteDettagli += `<p><span class="label">ATECO:</span> <span class="value">${data.cliente.codiceAteco}</span></p>`;
   }
   if (data.cliente.indirizzoCompleto) {
     clienteDettagli += `<p style="font-size: 9pt; color: #6b7280;">${data.cliente.indirizzoCompleto}</p>`;

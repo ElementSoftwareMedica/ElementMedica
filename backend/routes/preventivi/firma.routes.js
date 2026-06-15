@@ -12,7 +12,8 @@
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { express, param, prisma, authenticate, requirePermissions, logger, validate } from './common.js';
+import { PDFDocument } from 'pdf-lib';
+import { express, param, body, prisma, authenticate, requirePermissions, logger, validate, preventiviService } from './common.js';
 import { createSingleUpload, multerErrorHandler } from '../../config/multer.js';
 import { assertUploadedFileIsSafe } from '../../utils/fileSecurity.js';
 
@@ -229,6 +230,110 @@ router.get(
     } catch (error) {
       logger.error('Errore download pdf-firmato', { error: error.message, preventivoId: req.params.id });
       return res.status(500).json({ success: false, error: 'Errore interno del server' });
+    }
+  }
+);
+
+/**
+ * POST /api/preventivi/:id/pdf-firmati/firma-digitale
+ * Applica la firma digitale (disegnata/caricata) al PDF del preventivo e salva nello storico
+ */
+router.post(
+  '/:id/pdf-firmati/firma-digitale',
+  authenticate,
+  requirePermissions(['preventivi:write']),
+  [
+    param('id').isUUID(),
+    body('signatureData').isString().notEmpty(),
+    body('placement').isObject()
+  ],
+  validate,
+  async (req, res) => {
+    try {
+      const { tenantId, id: personId } = req.person;
+      const { id } = req.params;
+      const { signatureData, placement, note } = req.body;
+
+      const preventivo = await prisma.preventivo.findFirst({
+        where: { id, tenantId, deletedAt: null },
+        select: { id: true, numeroProgressivo: true, annoProgressivo: true }
+      });
+      if (!preventivo) {
+        return res.status(404).json({ success: false, error: 'Preventivo non trovato' });
+      }
+
+      // 1. Genera PDF originale del preventivo
+      const { buffer: pdfBuffer } = await preventiviService.generatePDF({ preventivoId: id, userId: personId, tenantId });
+
+      // 2. Applica firma digitale al PDF con pdf-lib
+      const raw = String(signatureData || '');
+      const base64 = raw.startsWith('data:') ? raw.split(',')[1] : raw;
+      const signatureBuffer = Buffer.from(base64, 'base64');
+
+      const pdfDoc = await PDFDocument.load(pdfBuffer);
+      const pages = pdfDoc.getPages();
+      const pl = placement || {};
+      const targetPageIndex = pl.page ? Math.min(Math.max(Number(pl.page) - 1, 0), pages.length - 1) : pages.length - 1;
+      const page = pages[targetPageIndex];
+      const { width, height } = page.getSize();
+
+      const xRatio = Number.isFinite(Number(pl.xRatio)) ? Number(pl.xRatio) : 0.62;
+      const yRatio = Number.isFinite(Number(pl.yRatio)) ? Number(pl.yRatio) : 0.86;
+      const widthRatio = Number.isFinite(Number(pl.widthRatio)) ? Number(pl.widthRatio) : 0.28;
+      const heightRatio = Number.isFinite(Number(pl.heightRatio)) ? Number(pl.heightRatio) : 0.08;
+
+      const isJpeg = raw.includes('image/jpeg') || raw.includes('image/jpg');
+      const image = isJpeg ? await pdfDoc.embedJpg(signatureBuffer) : await pdfDoc.embedPng(signatureBuffer);
+      page.drawImage(image, {
+        x: xRatio * width,
+        y: height - (yRatio * height) - (heightRatio * height),
+        width: widthRatio * width,
+        height: heightRatio * height
+      });
+
+      const signedPdfBuffer = Buffer.from(await pdfDoc.save());
+
+      // 3. Salva il PDF firmato nello storico
+      const dir = getPreventivoFirmaDir(tenantId, id);
+      const numeroLabel = preventivo.annoProgressivo && preventivo.numeroProgressivo
+        ? `PREV-${preventivo.annoProgressivo}-${String(preventivo.numeroProgressivo).padStart(4, '0')}`
+        : id;
+      const storedName = `firmato-digitale-${Date.now()}-${numeroLabel}.pdf`;
+      const targetPath = path.join(dir, storedName);
+      fs.writeFileSync(targetPath, signedPdfBuffer);
+
+      const metadata = {
+        originalName: `${numeroLabel}-firmato.pdf`,
+        mimeType: 'application/pdf',
+        note: note || 'Firma digitale apposta nel documento',
+        sha256: null,
+        scanStatus: 'SKIPPED_GENERATED',
+        uploadedBy: personId,
+        createdAt: new Date().toISOString(),
+        type: 'FIRMA_DIGITALE'
+      };
+      fs.writeFileSync(`${targetPath}.json`, JSON.stringify(metadata, null, 2));
+
+      await prisma.activityLog.create({
+        data: {
+          personId,
+          tenantId,
+          action: 'PREVENTIVO_FIRMA_DIGITALE',
+          category: 'preventivi',
+          resource: 'Preventivo',
+          resourceId: id,
+          details: JSON.stringify({ filename: storedName, placement }),
+          timestamp: new Date(),
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent')
+        }
+      }).catch(err => logger.warn('ActivityLog firma digitale non salvato', { error: err.message }));
+
+      logger.info('Firma digitale applicata al preventivo', { preventivoId: id, filename: storedName, tenantId });
+      return res.status(201).json({ success: true, data: listPdfFirmati(tenantId, id)[0] });
+    } catch (error) {
+      logger.error('Errore firma digitale preventivo', { error: error.message, preventivoId: req.params.id });
+      return res.status(500).json({ success: false, error: 'Errore nell\'applicazione della firma' });
     }
   }
 );
