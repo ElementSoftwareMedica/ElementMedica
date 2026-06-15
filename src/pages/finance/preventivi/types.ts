@@ -33,6 +33,8 @@ export type { Preventivo } from '@/hooks/finance/usePreventivi';
 export interface Company {
     id: string;
     ragioneSociale: string;
+    /** ID del CompanyTenantProfile (non del Company): va inviato come aziendaId al backend */
+    companyTenantProfileId?: string;
 }
 
 export interface Person {

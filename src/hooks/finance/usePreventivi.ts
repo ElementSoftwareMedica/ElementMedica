@@ -220,8 +220,10 @@ export const usePreventivi = (): UsePreventiviReturn => {
 
     try {
       // Rimuovi campi null/undefined: apiPost converte undefined→null e i validatori
-      // UUID del backend rifiutano null (optional() skips solo undefined, non null)
-      const backendData: Record<string, unknown> = { ...data };
+      // UUID del backend rifiutano null (optional() skips solo undefined, non null).
+      // Escludi anche 'voci' e 'codiceSconto': sono campi frontend-only non presenti nel modello Prisma.
+      const { voci: _voci, codiceSconto: _codiceSconto, ...dataWithoutFrontendFields } = data as any;
+      const backendData: Record<string, unknown> = { ...dataWithoutFrontendFields };
       for (const key of Object.keys(backendData)) {
         if (backendData[key] === null || backendData[key] === undefined) {
           delete backendData[key];

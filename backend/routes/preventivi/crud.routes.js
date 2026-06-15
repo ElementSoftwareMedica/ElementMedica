@@ -292,6 +292,23 @@ router.post('/',
         });
       }
 
+      // Verifica che aziendaId sia un CompanyTenantProfile.id valido nel tenant
+      if (req.body.aziendaId) {
+        const profileExists = await prisma.companyTenantProfile.findFirst({
+          where: { id: req.body.aziendaId, tenantId, deletedAt: null },
+          select: { id: true }
+        });
+        if (!profileExists) {
+          logger.warn('aziendaId non corrisponde a CompanyTenantProfile nel tenant', {
+            aziendaId: req.body.aziendaId, tenantId
+          });
+          return res.status(400).json({
+            success: false,
+            error: 'Azienda non trovata o non appartiene a questo tenant'
+          });
+        }
+      }
+
       // Get corso info if corsoId is provided
       let corsoInfo = null;
       if (req.body.corsoId) {

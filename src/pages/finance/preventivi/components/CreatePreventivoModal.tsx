@@ -378,10 +378,12 @@ const CreatePreventivoModal: React.FC<CreatePreventivoModalProps> = ({
                                     <SearchableDropdown
                                         value={formData.aziendaId || ''}
                                         onChange={(value) => setFormData({ ...formData, aziendaId: value || undefined })}
-                                        options={companies.map(c => ({
-                                            value: c.id,
-                                            label: c.ragioneSociale || 'N/A'
-                                        }))}
+                                        options={companies
+                                            .filter(c => !!c.companyTenantProfileId)
+                                            .map(c => ({
+                                                value: c.companyTenantProfileId!,
+                                                label: c.ragioneSociale || 'N/A'
+                                            }))}
                                         placeholder="Seleziona azienda..."
                                         searchPlaceholder="Cerca azienda..."
                                         required
