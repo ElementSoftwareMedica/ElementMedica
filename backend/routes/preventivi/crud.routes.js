@@ -101,6 +101,22 @@ router.get('/',
         const trainerScheduleIds = await getTrainerScheduleIds(req.person.id, tenantId);
         where.scheduledCourseId = { in: trainerScheduleIds };
         where.tipoServizio = { not: 'COMPENSO_FORMATORE' };
+      } else if (!isCrossTenantAdmin) {
+        // COMPANY_MANAGER: restrict to preventivi delle aziende che gestiscono
+        const cmRoles = await prisma.personRole.findMany({
+          where: {
+            personId: req.person.id,
+            tenantId,
+            roleType: 'COMPANY_MANAGER',
+            isActive: true,
+            deletedAt: null,
+            companyTenantProfileId: { not: null }
+          },
+          select: { companyTenantProfileId: true }
+        });
+        if (cmRoles.length > 0) {
+          where.companyTenantProfileId = { in: cmRoles.map(r => r.companyTenantProfileId) };
+        }
       }
 
       if (req.query.stato) {

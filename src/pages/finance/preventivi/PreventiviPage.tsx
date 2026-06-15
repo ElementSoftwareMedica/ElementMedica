@@ -42,7 +42,8 @@ import {
   Pencil,
   GraduationCap,
   Copy,
-  Stethoscope
+  Stethoscope,
+  PenLine
 } from 'lucide-react';
 import { Button } from '@/design-system/atoms/Button';
 import { ViewModeToggle } from '@/design-system/molecules/ViewModeToggle';
@@ -73,7 +74,8 @@ import {
   ApplyScontoModal,
   QuicklookModal,
   EditPreventivoModal,
-  GenerateMDLModal
+  GenerateMDLModal,
+  FirmaModal
 } from './components';
 
 // ============================================================================
@@ -133,6 +135,7 @@ const PreventiviPage: React.FC = () => {
   const [confirmUnmerge, setConfirmUnmerge] = useState<Preventivo | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [stornoDeletePrompt, setStornoDeletePrompt] = useState<{ ids: string[]; bulk: boolean; movimentiCount: number } | null>(null);
+  const [firmaModalPreventivo, setFirmaModalPreventivo] = useState<Preventivo | null>(null);
 
   // CRITICAL FIX: Only fetch preventivi AFTER auth is complete AND tenant is ready
   useEffect(() => {
@@ -797,6 +800,7 @@ const PreventiviPage: React.FC = () => {
                     { label: 'Duplica', icon: <Copy className="h-4 w-4" />, onClick: () => handleDuplicatePreventivo(preventivo), variant: 'default' as const },
                     { label: 'Applica sconto', icon: <Tag className="h-4 w-4" />, onClick: () => { setSelectedForSconto(preventivo); setShowScontoModal(true); }, variant: 'default' as const },
                     { label: 'Scarica PDF', icon: <Download className="h-4 w-4" />, onClick: () => handleDownloadPdf(preventivo.id), variant: 'default' as const },
+                    { label: 'Firma / Upload firmato', icon: <PenLine className="h-4 w-4" />, onClick: () => setFirmaModalPreventivo(preventivo), variant: 'default' as const },
                     ...(isMerged ? [{ label: 'Separa preventivi', icon: <Scissors className="h-4 w-4" />, onClick: () => handleUnmergePreventivo(preventivo), variant: 'default' as const }] : []),
                     { label: 'Elimina', icon: <Trash2 className="h-4 w-4" />, onClick: () => handleDelete(preventivo.id), variant: 'danger' as const },
                   ];
@@ -1150,6 +1154,13 @@ const PreventiviPage: React.FC = () => {
         onRemoveSconto={removeSconto}
         onApplySconto={applySconto}
         onRefresh={fetchPreventivi}
+      />
+
+      <FirmaModal
+        isOpen={firmaModalPreventivo !== null}
+        onClose={() => setFirmaModalPreventivo(null)}
+        preventivoId={firmaModalPreventivo?.id || ''}
+        preventivoNumero={firmaModalPreventivo?.numero || ''}
       />
 
       {/* Confirm Modals */}

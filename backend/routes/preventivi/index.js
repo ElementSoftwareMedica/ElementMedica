@@ -21,6 +21,7 @@ import scontiRoutes from './sconti.routes.js';
 import pdfRoutes from './pdf.routes.js';
 import mergeRoutes from './merge.routes.js';
 import mdlRoutes from './mdl.routes.js';
+import firmaRoutes from './firma.routes.js';
 
 const router = express.Router();
 
@@ -47,6 +48,9 @@ router.use('/', pdfRoutes);
 
 // MDL routes - Generazione preventivi Medicina del Lavoro
 router.use('/mdl', mdlRoutes);
+
+// Firma routes - GET /:id/pdf-firmati, POST /:id/pdf-firmati/upload
+router.use('/', firmaRoutes);
 
 // CRUD routes - GET /, POST /, GET /:id, PUT /:id, DELETE /:id
 // MUST be last to prevent /:id from matching specific routes

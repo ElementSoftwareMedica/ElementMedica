@@ -786,11 +786,20 @@ async function generatePDF({ preventivoId, userId, tenantId }) {
     // 3b. Aggiungi dati tenant per header/footer (fornitore = nostra azienda)
     // NOTA: I dati estesi (address, vatNumber, etc.) sono in tenant.settings (JSON)
     const tenantSettings = tenant?.settings || {};
-    const tenantLogoUrl = tenantSettings.branches?.MEDICA?.logo || tenantSettings.logoUrl || '';
+    // MEDICO_COMPETENTE usa il branch MEDICA, tutti gli altri usano FORMAZIONE/SICUREZZA
+    const isMedicaBranch = preventivo?.tipoServizio === 'MEDICO_COMPETENTE';
+    const tenantLogoUrl = isMedicaBranch
+      ? (tenantSettings.branches?.MEDICA?.logo || tenantSettings.logoUrl || '')
+      : (tenantSettings.branches?.FORMAZIONE?.logo || tenantSettings.branches?.SICUREZZA?.logo || tenantSettings.logoUrl || '');
 
     // Converte il path relativo in data-URL base64 ottimizzato per Puppeteer
     // (Puppeteer non ha accesso diretto al file system tramite path HTTP relativi)
     const tenantLogoEmbedded = await logoToDataUrl(tenantLogoUrl);
+
+    const vatNumber = tenantSettings.vatNumber || tenantSettings.piva || tenantSettings.vat || '';
+    if (!vatNumber) {
+      logger.warn('Tenant vatNumber/piva/vat mancante in settings — PIVA non comparirà nel PDF', { tenantId });
+    }
 
     markerData.tenant = {
       name: tenant?.name || 'Element srl',
@@ -798,14 +807,16 @@ async function generatePDF({ preventivoId, userId, tenantId }) {
       cap: tenantSettings.cap || tenantSettings.postalCode || '',
       city: tenantSettings.city || '',
       provincia: tenantSettings.provincia || tenantSettings.province || '',
-      vatNumber: tenantSettings.vatNumber || tenantSettings.piva || '',
-      fiscalCode: tenantSettings.fiscalCode || tenantSettings.cf || tenantSettings.vatNumber || '',
+      vatNumber,
+      fiscalCode: tenantSettings.fiscalCode || tenantSettings.cf || tenantSettings.vatNumber || tenantSettings.vat || '',
       phone: tenantSettings.phone || '',
       email: tenantSettings.email || '',
       pec: tenantSettings.pec || '',
       website: tenantSettings.website || '',
       logoUrl: tenantLogoEmbedded || tenantLogoUrl,
-      branchLogo: await logoToDataUrl(tenantSettings.branches?.MEDICA?.logo || tenantSettings.branches?.FORMAZIONE?.logo || ''),
+      branchLogo: await logoToDataUrl(isMedicaBranch
+        ? (tenantSettings.branches?.MEDICA?.logo || tenantSettings.branches?.FORMAZIONE?.logo || '')
+        : (tenantSettings.branches?.FORMAZIONE?.logo || tenantSettings.branches?.MEDICA?.logo || '')),
       // Logo HTML: usa data-URL base64 per garantire la visualizzazione in Puppeteer
       logoHtml: tenantLogoEmbedded
         ? `<img src="${tenantLogoEmbedded}" alt="${tenant?.name || 'Tenant'}" style="max-height:80px;max-width:220px;object-fit:contain;">`
@@ -1267,8 +1278,8 @@ function _buildMarkerData(preventivo) {
   }
   data.cliente.dettagliHtml = clienteDettagli;
 
-  // 5. Partecipanti HTML (condizionale)
-  data.preventivo.partecipantiHtml = data.preventivo.partecipanti
+  // 5. Partecipanti HTML - visibile solo per CORSO (non DVR, RSPP, MDL, ecc.)
+  data.preventivo.partecipantiHtml = (data.preventivo.partecipanti && preventivo.tipoServizio === 'CORSO')
     ? `<p><span class="label">Partecipanti:</span> <span class="value">${data.preventivo.partecipanti}</span></p>`
     : '';
 
