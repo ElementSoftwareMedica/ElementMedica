@@ -526,13 +526,14 @@ const MansioneFormModal: React.FC<MansioneFormModalProps> = ({
                                                         </div>
                                                     )}
                                                     <div className="relative mb-1">
-                                                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
+                                                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
                                                         <input
                                                             type="text"
                                                             placeholder="Cerca per nome o codice..."
                                                             value={rischioSearches[index] || ''}
                                                             onChange={(e) => setRischioSearches(prev => ({ ...prev, [index]: e.target.value }))}
-                                                            className="input-clinica w-full text-xs pl-7"
+                                                            className="input-clinica w-full text-xs"
+                                                            style={{ paddingLeft: '2rem' }}
                                                         />
                                                     </div>
                                                     <div className="h-36 overflow-y-auto border border-gray-200 rounded-lg bg-white divide-y divide-gray-100">

@@ -97,6 +97,18 @@ function fmtDate(d) {
   return new Date(d).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
+/** Estrae la posizione firma { page, x, y, w } dal campo note (JSON). null se assente/non valida. */
+function parseFirmaPosition(firma) {
+  if (!firma?.note) return null;
+  try {
+    const p = typeof firma.note === 'string' ? JSON.parse(firma.note) : firma.note;
+    if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) {
+      return { page: Number.isInteger(p.page) ? p.page : 0, x: p.x, y: p.y, w: Number.isFinite(p.w) ? p.w : 0.25 };
+    }
+  } catch { /* note non JSON → nessuna posizione */ }
+  return null;
+}
+
 function fmtMedico(p) {
   if (!p) return '—';
   const title = p.gender === 'FEMALE' ? 'Dott.ssa' : 'Dott.';
@@ -144,10 +156,9 @@ function getPerformedPrestazioni(g) {
 }
 
 function getNextMdlDeadline(g) {
-  const explicit = g.visita?.scadenzePrestazioni?.find(s =>
-    s.prestazione?.nome?.toLowerCase().includes('visita medica del lavoro')
-  );
-  return explicit?.dataScadenza || g.dataScadenza || null;
+  // La prima scadenza prestazione (ordinata per data) o, in fallback, la scadenza del giudizio.
+  const next = g.visita?.scadenzePrestazioni?.[0]?.dataScadenza;
+  return next || g.dataScadenza || null;
 }
 
 function getAlbo(medico) {
@@ -537,7 +548,10 @@ function buildLavoratoreHtml(g, tenant) {
 
   <div class="firma-section">
     <div class="firma-box">Firma del Medico Competente<br><br><br></div>
-    <div class="firma-box">Firma del Lavoratore per ricevuta<br><br><br></div>
+    <div class="firma-box">
+      Firma del Lavoratore per ricevuta
+      ${(g._firmaLavoratore?.firmaImageUrl && !g._firmaHasPosition) ? `<br><img src="${g._firmaLavoratore.firmaImageUrl}" style="max-height:48px;max-width:160px;object-fit:contain;margin-top:4px;" alt="Firma lavoratore">` : '<br><br><br>'}
+    </div>
   </div>
 
   <div class="gdpr-note">
@@ -767,8 +781,9 @@ const GiudizioIdoneitaPdfService = {
               where: { tenantId, deletedAt: null },
               select: {
                 dataScadenza: true,
-                prestazione: { select: { nome: true } }
-              }
+                prestazioneId: true
+              },
+              orderBy: { dataScadenza: 'asc' }
             },
             appuntamento: {
               select: {
@@ -799,6 +814,67 @@ const GiudizioIdoneitaPdfService = {
   },
 
   /**
+   * Recupera la firma del lavoratore per un giudizio (se presente)
+   */
+  async _fetchFirmaLavoratore(giudizioId, tenantId) {
+    return prisma.firmaDigitale.findFirst({
+      where: {
+        documentoId: giudizioId,
+        documentType: 'GIUDIZIO_IDONEITA',
+        firmatarioRole: 'DIPENDENTE',
+        tenantId,
+        deletedAt: null,
+        stato: 'FIRMATO'
+      },
+      select: { firmaImageUrl: true, createdAt: true, note: true }
+    });
+  },
+
+  /**
+   * Applica (stampa) l'immagine della firma sul PDF alla posizione indicata
+   * usando pdf-lib. position = { page, x, y, w } normalizzati 0-1.
+   *
+   * @param {Buffer} pdfBuffer
+   * @param {string} firmaImageUrl - data URL (image/png o image/jpeg)
+   * @param {{page:number,x:number,y:number,w:number}} position
+   * @returns {Promise<Buffer>}
+   */
+  async _stampSignature(pdfBuffer, firmaImageUrl, position) {
+    try {
+      const { PDFDocument } = await import('pdf-lib');
+      const pdfDoc = await PDFDocument.load(pdfBuffer);
+      const pages = pdfDoc.getPages();
+      if (!pages.length) return pdfBuffer;
+
+      const pageIndex = Math.min(Math.max(0, position.page || 0), pages.length - 1);
+      const page = pages[pageIndex];
+      const { width: pw, height: ph } = page.getSize();
+
+      // Estrai base64 dal data URL
+      const match = /^data:(image\/(png|jpeg|jpg));base64,(.+)$/i.exec(firmaImageUrl || '');
+      if (!match) return pdfBuffer;
+      const isPng = /png/i.test(match[1]);
+      const bytes = Buffer.from(match[3], 'base64');
+      const img = isPng ? await pdfDoc.embedPng(bytes) : await pdfDoc.embedJpg(bytes);
+
+      // Larghezza firma come frazione della pagina, altezza proporzionale
+      const drawW = pw * (position.w || 0.25);
+      const drawH = drawW * (img.height / img.width);
+      // x,y normalizzati dall'angolo in alto a sinistra → pdf-lib usa origine in basso a sinistra
+      const x = pw * position.x;
+      const yTop = ph * position.y;
+      const y = ph - yTop - drawH;
+
+      page.drawImage(img, { x, y, width: drawW, height: drawH });
+      const out = await pdfDoc.save();
+      return Buffer.from(out);
+    } catch (err) {
+      logger.warn({ error: err.message }, 'Stamping firma su PDF fallito, uso PDF originale');
+      return pdfBuffer;
+    }
+  },
+
+  /**
    * Genera buffer PDF per un giudizio
    *
    * @param {string} giudizioId
@@ -807,18 +883,28 @@ const GiudizioIdoneitaPdfService = {
    * @returns {Promise<{ buffer: Buffer, filename: string, html: string }>}
    */
   async generate(giudizioId, destinatario, tenantId) {
-    const g = await this._fetchGiudizio(giudizioId, tenantId);
+    const [g, firmaLavoratore] = await Promise.all([
+      this._fetchGiudizio(giudizioId, tenantId),
+      this._fetchFirmaLavoratore(giudizioId, tenantId)
+    ]);
     if (!g) throw new Error(`GiudizioIdoneita ${giudizioId} non trovato`);
+    // Posizione firma: se presente, la firma viene "stampata" via pdf-lib e NON inline
+    const firmaPos = parseFirmaPosition(firmaLavoratore);
+    if (firmaLavoratore) { g._firmaLavoratore = firmaLavoratore; g._firmaHasPosition = !!firmaPos; }
 
     const ts = g.tenant?.settings || {};
     const tenant = { name: g.tenant?.name ?? '', logo: resolveFirstValidLogo(ts.branches?.MDL?.logo, ts.branches?.MEDICA?.logo, ts.branches?.FORMAZIONE?.logo, ts.logoUrl, ts.logo) };
     const html = buildLavoratoreHtml(g, tenant);
 
-    const buffer = await pdfService.generatePDF(html, {
+    let buffer = await pdfService.generatePDF(html, {
       format: 'A4',
       margin: { top: '15mm', right: '15mm', bottom: '15mm', left: '15mm' },
       printBackground: true
     });
+
+    if (firmaPos && firmaLavoratore?.firmaImageUrl) {
+      buffer = await this._stampSignature(buffer, firmaLavoratore.firmaImageUrl, firmaPos);
+    }
 
     const personName = `${g.person?.lastName ?? 'lavoratore'}_${g.person?.firstName ?? ''}`.replace(/\s+/g, '_');
     const dateStr = new Date(g.dataEmissione).toISOString().slice(0, 10);
@@ -835,8 +921,13 @@ const GiudizioIdoneitaPdfService = {
    * @returns {Promise<{ pdfLavoratoreUrl: string, pdfDatoreUrl: string }>}
    */
   async generateAndStore(giudizioId, tenantId) {
-    const g = await this._fetchGiudizio(giudizioId, tenantId);
+    const [g, firmaLavoratore] = await Promise.all([
+      this._fetchGiudizio(giudizioId, tenantId),
+      this._fetchFirmaLavoratore(giudizioId, tenantId)
+    ]);
     if (!g) throw new Error(`GiudizioIdoneita ${giudizioId} non trovato`);
+    const firmaPos = parseFirmaPosition(firmaLavoratore);
+    if (firmaLavoratore) { g._firmaLavoratore = firmaLavoratore; g._firmaHasPosition = !!firmaPos; }
 
     // Assicura cartella uploads
     const dir = path.join(UPLOADS_BASE, tenantId);
@@ -849,9 +940,12 @@ const GiudizioIdoneitaPdfService = {
 
     // Genera documento unico: stesso contenuto per lavoratore e datore di lavoro.
     const htmlLav = buildLavoratoreHtml(g, tenant);
-    const bufLav = await pdfService.generatePDF(htmlLav, {
+    let bufLav = await pdfService.generatePDF(htmlLav, {
       format: 'A4', margin: { top: '15mm', right: '15mm', bottom: '15mm', left: '15mm' }, printBackground: true
     });
+    if (firmaPos && firmaLavoratore?.firmaImageUrl) {
+      bufLav = await this._stampSignature(bufLav, firmaLavoratore.firmaImageUrl, firmaPos);
+    }
     const lavFilename = `giudizio_idoneita_${personSlug}_${dateStr}_${g.id.substring(0, 8)}.pdf`;
     const lavPath = path.join(dir, lavFilename);
     await fs.writeFile(lavPath, bufLav);

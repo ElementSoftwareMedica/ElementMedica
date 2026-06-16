@@ -968,6 +968,8 @@ export interface GiudizioIdoneita {
     mansioni?: GiudizioIdoneitaMansione[];
     /** Ragione sociale azienda (risolta da mansione.site o visita.appuntamento) */
     _azienda?: string;
+    /** Firma del lavoratore per ricevuta (se acquisita) */
+    firmaLavoratore?: { createdAt: string } | null;
 }
 
 export interface RischioPrestazione {
@@ -5401,6 +5403,16 @@ export const giudiziIdoneitaApi = {
         apiPost<ApiResponse<GiudizioIdoneita>>(`${CLINICA_BASE}/giudizi-idoneita/${id}/appeal-resolution`, data)
             .then(extractData),
 
+    // Firma lavoratore per ricevuta — position opzionale { page, x, y, w } normalizzati 0-1
+    saveFirmaLavoratore: (id: string, firmaImageBase64: string, position?: { page: number; x: number; y: number; w: number }) =>
+        apiPost<{ success: boolean; firmaId: string }>(`${CLINICA_BASE}/giudizi-idoneita/${id}/firma-lavoratore`, { firmaImageBase64, position }),
+
+    getFirmaLavoratore: (id: string) =>
+        apiGet<{ firma: { firmaImageUrl: string; createdAt: string; note?: string } | null; hasFirma: boolean }>(`${CLINICA_BASE}/giudizi-idoneita/${id}/firma-lavoratore`),
+
+    pdfUrl: (id: string, destinatario: 'lavoratore' | 'datore' = 'lavoratore') =>
+        `${CLINICA_BASE}/giudizi-idoneita/${id}/pdf/${destinatario}`,
+
     // PDF Documents (Art. 41 c.7 — copia lavoratore e datore di lavoro)
     generateDocuments: (id: string) =>
         apiPost<ApiResponse<{ pdfLavoratoreUrl: string; pdfDatoreUrl: string }>>(
@@ -5448,6 +5460,17 @@ export const giudiziIdoneitaApi = {
             email: { processed: number; sent: number; skipped: number; errors: number };
             zipAziende: { total: number; companies: number; sent: number; errors: number };
         }>>(`${CLINICA_BASE}/giudizi-idoneita/batch-generate-send`, params || {})
+            .then(extractData),
+
+    // Invio sicuro forzato di giudizi selezionati con scelta destinatario
+    batchSecureSend: (params: { giudizioIds: string[]; recipientType: 'worker' | 'employer' | 'both' }) =>
+        apiPost<ApiResponse<{
+            richiesti: number;
+            processati: number;
+            inviati: number;
+            saltati: number;
+            errori: number;
+        }>>(`${CLINICA_BASE}/giudizi-idoneita/batch-secure-send`, params)
             .then(extractData)
 };
 

@@ -39,8 +39,21 @@ router.get('/', requireAuth, requirePermission('clinica.visite:read'), async (re
       inScadenza,
       dateFrom,
       dateTo,
-      mansione
+      mansione,
+      companyTenantProfileId,
+      search
     } = req.query;
+
+    // GDPR/Sicurezza: un Company Manager (senza ruoli admin) può vedere SOLO i giudizi
+    // della propria azienda. Il filtro è FORZATO lato backend e non può essere bypassato
+    // omettendo il parametro dal client.
+    const roles = req.person.roles || [];
+    const isCompanyManager = roles.includes('COMPANY_MANAGER') &&
+      !roles.some(r => ['ADMIN', 'SUPER_ADMIN', 'TENANT_ADMIN'].includes(r));
+    // Se Company Manager senza azienda associata, forziamo un valore impossibile per non esporre dati
+    const effectiveCompanyTenantProfileId = isCompanyManager
+      ? (req.person.companyTenantProfileId || '__NO_COMPANY__')
+      : companyTenantProfileId;
 
     const result = await GiudizioIdoneitaService.findAll(tenantId, {
       page: parseInt(page),
@@ -52,7 +65,9 @@ router.get('/', requireAuth, requirePermission('clinica.visite:read'), async (re
       inScadenza: inScadenza ? parseInt(inScadenza) : undefined,
       dateFrom,
       dateTo,
-      mansione
+      mansione,
+      companyTenantProfileId: effectiveCompanyTenantProfileId,
+      search
     });
 
     res.json(result);
@@ -363,6 +378,72 @@ router.post('/batch-generate-send', requireAuth, requirePermission('clinica.visi
   } catch (error) {
     logger.error({ error: error.message }, 'Errore batch force-generate giudizi');
     res.status(500).json({ error: 'Errore durante la generazione batch' });
+  }
+});
+
+/**
+ * @route POST /api/v1/clinica/giudizi-idoneita/batch-secure-send
+ * @desc Invio sicuro forzato di giudizi selezionati (ZIP protetto + password via
+ *       WhatsApp al lavoratore / PEC al datore). Permette di scegliere il destinatario.
+ * @body { giudizioIds: string[], recipientType: 'worker'|'employer'|'both' }
+ * @access Private - CREATE_VISITA
+ */
+router.post('/batch-secure-send', requireAuth, requirePermission('clinica.visite:create'), async (req, res) => {
+  try {
+    const tenantId = getEffectiveTenantId(req);
+    const { giudizioIds, recipientType = 'both' } = req.body;
+
+    if (!Array.isArray(giudizioIds) || giudizioIds.length === 0) {
+      return res.status(400).json({ error: 'Nessun giudizio selezionato' });
+    }
+    if (!['worker', 'employer', 'both'].includes(recipientType)) {
+      return res.status(400).json({ error: 'recipientType non valido' });
+    }
+
+    // GDPR/Sicurezza: un Company Manager può inviare solo giudizi della propria azienda
+    const roles = req.person.roles || [];
+    const isCompanyManager = roles.includes('COMPANY_MANAGER') &&
+      !roles.some(r => ['ADMIN', 'SUPER_ADMIN', 'TENANT_ADMIN'].includes(r));
+
+    let allowedIds = giudizioIds;
+    if (isCompanyManager) {
+      const companyId = req.person.companyTenantProfileId;
+      const owned = companyId ? await prisma.giudizioIdoneita.findMany({
+        where: {
+          id: { in: giudizioIds },
+          tenantId,
+          deletedAt: null,
+          OR: [
+            { mansioni: { some: { mansione: { site: { companyTenantProfileId: companyId } } } } },
+            { visita: { appuntamento: { companyTenantProfileId: companyId } } }
+          ]
+        },
+        select: { id: true }
+      }) : [];
+      allowedIds = owned.map(g => g.id);
+    }
+
+    let sent = 0;
+    let skipped = 0;
+    let errors = 0;
+    for (const giudizioId of allowedIds) {
+      try {
+        const r = await IdoneityNotificationService.sendSecureGiudizioAuto({
+          giudizioId, tenantId, performedBy: req.person.id, recipientType
+        });
+        if (r.skipped) skipped++;
+        else sent++;
+      } catch (err) {
+        errors++;
+        logger.warn({ giudizioId, error: err.message }, 'Errore invio sicuro batch');
+      }
+    }
+
+    logger.info({ tenantId, requested: giudizioIds.length, processed: allowedIds.length, sent, skipped, errors, recipientType }, 'Batch secure-send completato');
+    res.json({ success: true, data: { richiesti: giudizioIds.length, processati: allowedIds.length, inviati: sent, saltati: skipped, errori: errors } });
+  } catch (error) {
+    logger.error({ error: error.message }, 'Errore batch secure-send');
+    res.status(500).json({ error: 'Errore durante l\'invio batch' });
   }
 });
 
@@ -726,6 +807,137 @@ router.delete('/:id', requireAuth, requirePermission('clinica.visite:delete'), a
   } catch (error) {
     logger.error({ error: 'Operazione non riuscita', id: req.params.id }, 'Errore eliminazione giudizio');
     res.status(500).json({ error: 'Errore nell\'eliminazione del giudizio' });
+  }
+});
+
+/**
+ * @route POST /api/v1/clinica/giudizi-idoneita/:id/firma-lavoratore
+ * @desc Salva la firma del lavoratore per un giudizio di idoneità
+ * @access Private - EDIT_VISITA
+ */
+router.post('/:id/firma-lavoratore', requireAuth, requirePermission('clinica.visite:update'), async (req, res) => {
+  try {
+    const tenantId = getEffectiveTenantId(req);
+    const { id } = req.params;
+    const { firmaImageBase64, position } = req.body;
+
+    if (!firmaImageBase64) {
+      return res.status(400).json({ error: 'firmaImageBase64 è obbligatorio' });
+    }
+
+    // Posizione opzionale della firma sul PDF: { page, x, y, w } normalizzati 0-1
+    let positionJson = null;
+    if (position && typeof position === 'object' &&
+        Number.isFinite(position.x) && Number.isFinite(position.y)) {
+      positionJson = JSON.stringify({
+        page: Number.isInteger(position.page) ? position.page : 0,
+        x: Math.min(1, Math.max(0, position.x)),
+        y: Math.min(1, Math.max(0, position.y)),
+        w: Number.isFinite(position.w) ? Math.min(1, Math.max(0.05, position.w)) : 0.25
+      });
+    }
+
+    const giudizio = await GiudizioIdoneitaService.findById(id, tenantId);
+    if (!giudizio) {
+      return res.status(404).json({ error: 'Giudizio non trovato' });
+    }
+
+    // GDPR/Sicurezza: un Company Manager può firmare SOLO i giudizi della propria azienda
+    const roles = req.person.roles || [];
+    const isCompanyManager = roles.includes('COMPANY_MANAGER') &&
+      !roles.some(r => ['ADMIN', 'SUPER_ADMIN', 'TENANT_ADMIN'].includes(r));
+    if (isCompanyManager) {
+      const companyId = req.person.companyTenantProfileId;
+      const ownsGiudizio = companyId ? await prisma.giudizioIdoneita.count({
+        where: {
+          id,
+          tenantId,
+          deletedAt: null,
+          OR: [
+            { mansioni: { some: { mansione: { site: { companyTenantProfileId: companyId } } } } },
+            { visita: { appuntamento: { companyTenantProfileId: companyId } } }
+          ]
+        }
+      }) : 0;
+      if (!ownsGiudizio) {
+        return res.status(403).json({ error: 'Accesso negato: il giudizio non appartiene alla tua azienda' });
+      }
+    }
+
+    const firmaImageUrl = firmaImageBase64.startsWith('data:')
+      ? firmaImageBase64
+      : `data:image/png;base64,${firmaImageBase64}`;
+
+    // Create or update FirmaDigitale per questo giudizio (lavoratore/dipendente)
+    const existing = await prisma.firmaDigitale.findFirst({
+      where: {
+        documentoId: id,
+        documentType: 'GIUDIZIO_IDONEITA',
+        firmatarioRole: 'DIPENDENTE',
+        tenantId,
+        deletedAt: null
+      },
+      select: { id: true }
+    });
+
+    let firma;
+    if (existing) {
+      firma = await prisma.firmaDigitale.update({
+        where: { id: existing.id },
+        data: { firmaImageUrl, stato: 'FIRMATO', note: positionJson }
+      });
+    } else {
+      firma = await prisma.firmaDigitale.create({
+        data: {
+          documentType: 'GIUDIZIO_IDONEITA',
+          documentoId: id,
+          firmatarioId: giudizio.personId,
+          firmatarioRole: 'DIPENDENTE',
+          stato: 'FIRMATO',
+          tipoFirma: 'GRAFOMETRICA',
+          hashDocumento: id,
+          firmaImageUrl,
+          note: positionJson,
+          tenantId,
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent']
+        }
+      });
+    }
+
+    logger.info({ giudizioId: id, firmaId: firma.id, signedBy: req.person.id }, 'Firma lavoratore salvata');
+    res.json({ success: true, firmaId: firma.id });
+  } catch (error) {
+    logger.error({ error: error.message, id: req.params.id }, 'Errore salvataggio firma lavoratore');
+    res.status(500).json({ error: 'Errore nel salvataggio della firma' });
+  }
+});
+
+/**
+ * @route GET /api/v1/clinica/giudizi-idoneita/:id/firma-lavoratore
+ * @desc Verifica se esiste la firma del lavoratore per un giudizio
+ * @access Private - VIEW_VISITA
+ */
+router.get('/:id/firma-lavoratore', requireAuth, requirePermission('clinica.visite:read'), async (req, res) => {
+  try {
+    const tenantId = getEffectiveTenantId(req);
+    const { id } = req.params;
+
+    const firma = await prisma.firmaDigitale.findFirst({
+      where: {
+        documentoId: id,
+        documentType: 'GIUDIZIO_IDONEITA',
+        firmatarioRole: 'DIPENDENTE',
+        tenantId,
+        deletedAt: null
+      },
+      select: { id: true, firmaImageUrl: true, createdAt: true, stato: true, note: true }
+    });
+
+    res.json({ firma: firma || null, hasFirma: !!firma });
+  } catch (error) {
+    logger.error({ error: error.message, id: req.params.id }, 'Errore recupero firma lavoratore');
+    res.status(500).json({ error: 'Errore nel recupero della firma' });
   }
 });
 

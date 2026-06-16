@@ -37,7 +37,11 @@ import {
     Stethoscope,
     FileDown,
     FilePlus2,
-    Activity
+    Activity,
+    X,
+    UserCheck,
+    Building,
+    PenTool
 } from 'lucide-react';
 import {
     clinicaApi,
@@ -55,9 +59,13 @@ import { ActionMenu, createCrudActions } from '@/components/ui/ActionMenu';
 import { CRUDButton, CRUDPrimaryButton } from '../../../components/shared/CRUDButton';
 import { formatMedicoName } from '../../../utils/textFormatters';
 import { DatePickerElegante } from '@/components/ui/DatePickerElegante';
+import { ElegantSelect } from '@/components/ui/ElegantSelect';
 import GiudizioFormModal from './components/GiudizioFormModal';
 import GiudizioRicorsoModal from './components/GiudizioRicorsoModal';
+import GiudizioFirmaModal from './components/GiudizioFirmaModal';
 import BatchSendModal from './components/BatchSendModal';
+import BatchForceSendModal from './components/BatchForceSendModal';
+import { useAuth } from '../../../context/AuthContext';
 
 // Import Element Medica theme
 import '../../../styles/clinica-theme.css';
@@ -120,6 +128,12 @@ const GiudiziIdoneitaPage: React.FC = () => {
     const queryClient = useQueryClient();
     const { showToast } = useToast();
 
+    // Auth — detect Company Manager to auto-filter by their company
+    const { user } = useAuth();
+    const isCompanyManager = user?.roles?.includes('COMPANY_MANAGER') &&
+        !user?.roles?.some((r: string) => ['ADMIN', 'SUPER_ADMIN', 'TENANT_ADMIN'].includes(r));
+    const companyManagerCompanyId = isCompanyManager ? (user as any)?.companyTenantProfileId : undefined;
+
     // Tenant filter from global context
     const { getTenantFilterParams, isReady, tenantFilterKey } = useTenantFilter();
 
@@ -150,6 +164,12 @@ const GiudiziIdoneitaPage: React.FC = () => {
 
     // Batch send modal
     const [batchSendModalOpen, setBatchSendModalOpen] = useState(false);
+    // Force-send (invio sicuro selezionato) modal
+    const [forceSendModalOpen, setForceSendModalOpen] = useState(false);
+
+    // Firma lavoratore modal
+    const [firmaModalOpen, setFirmaModalOpen] = useState(false);
+    const [giudizioForFirma, setGiudizioForFirma] = useState<GiudizioIdoneita | null>(null);
 
     // Helper: apre il form modal in modalità edit per un giudizio
     const openEditModal = useCallback((giudizio: GiudizioIdoneita) => {
@@ -166,7 +186,10 @@ const GiudiziIdoneitaPage: React.FC = () => {
     const [pecLogs, setPecLogs] = useState<PecLog[]>([]);
 
     // View mode with localStorage persistence
-    const { viewMode, setViewMode } = useViewMode({ storageKey: 'giudizi-mdl' });
+    // viewMode 'list' = tabella (default), 'grid' = card per azienda
+    const { viewMode, setViewMode } = useViewMode({ storageKey: 'giudizi-mdl', defaultMode: 'list' });
+    // Azienda selezionata in vista card (drill-in)
+    const [selectedAzienda, setSelectedAzienda] = useState<string | null>(null);
 
     // Query params with tenant filter
     const queryParams = useMemo(() => {
@@ -179,10 +202,11 @@ const GiudiziIdoneitaPage: React.FC = () => {
             dateTo: filterDateTo || undefined,
             medicoCompetenteId: filterMedicoId || undefined,
             mansione: filterMansione || undefined,
+            ...(companyManagerCompanyId && { companyTenantProfileId: companyManagerCompanyId }),
             ...(tenantParams.tenantIds && { tenantIds: tenantParams.tenantIds.join(',') }),
             ...(tenantParams.allTenants && { allTenants: 'true' })
         };
-    }, [searchTerm, filterTipo, filterStato, filterDateFrom, filterDateTo, filterMedicoId, filterMansione, getTenantFilterParams, tenantFilterKey]);
+    }, [searchTerm, filterTipo, filterStato, filterDateFrom, filterDateTo, filterMedicoId, filterMansione, getTenantFilterParams, tenantFilterKey, companyManagerCompanyId]);
 
     // Fetch giudizi
     const { data: giudiziResponse, isLoading, error } = useQuery({
@@ -317,6 +341,25 @@ const GiudiziIdoneitaPage: React.FC = () => {
         return Object.entries(groups);
     }, [groupByDay, giudizi]);
 
+    // Raggruppamento per azienda (vista card)
+    const giudiziByAzienda = useMemo(() => {
+        const groups: Record<string, GiudizioIdoneita[]> = {};
+        for (const g of giudizi) {
+            const azienda = getAziendaFromGiudizio(g) || 'Senza azienda';
+            if (!groups[azienda]) groups[azienda] = [];
+            groups[azienda].push(g);
+        }
+        return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
+    }, [giudizi]);
+
+    // Lista giudizi effettivamente mostrata nella tabella (filtrata per azienda in drill-in)
+    const displayedGiudizi = useMemo(() => {
+        if (viewMode === 'grid' && selectedAzienda) {
+            return giudizi.filter(g => (getAziendaFromGiudizio(g) || 'Senza azienda') === selectedAzienda);
+        }
+        return giudizi;
+    }, [giudizi, viewMode, selectedAzienda]);
+
     // Handlers
     const handleDelete = useCallback(() => {
         if (giudizioToDelete && deletionReason.length >= 10) {
@@ -425,6 +468,14 @@ const GiudiziIdoneitaPage: React.FC = () => {
                         <Send className="h-4 w-4" />
                         Genera e Invia Oggi
                     </button>
+                    <button
+                        onClick={() => setForceSendModalOpen(true)}
+                        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition-colors"
+                        title="Forza invio dei giudizi non ancora inviati, con selezione e scelta destinatario"
+                    >
+                        <Mail className="h-4 w-4" />
+                        Forza Invio
+                    </button>
                     <ViewModeToggle viewMode={viewMode} onViewModeChange={setViewMode} />
                     <CRUDPrimaryButton
                         onClick={() => {
@@ -459,59 +510,108 @@ const GiudiziIdoneitaPage: React.FC = () => {
             )}
 
             {/* Filters */}
-            <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm mb-6">
                 {/* Primary filters row */}
-                <div className="flex flex-col md:flex-row gap-3">
+                <div className="p-3 flex flex-col md:flex-row md:flex-wrap md:items-center gap-2">
                     {/* Search */}
-                    <div className="flex-1 relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                    <div className="flex-1 relative min-w-[14rem]">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none z-10" />
                         <input
                             type="text"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            placeholder="Cerca per lavoratore, medico..."
-                            className="input-clinica pl-10 w-full"
+                            placeholder="Cerca lavoratore, medico, azienda..."
+                            className="input-clinica w-full text-sm"
+                            style={{ paddingLeft: '2.25rem', paddingRight: searchTerm ? '2rem' : undefined }}
                         />
+                        {searchTerm && (
+                            <button onClick={() => setSearchTerm('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 z-10">
+                                <X className="h-3.5 w-3.5" />
+                            </button>
+                        )}
                     </div>
 
                     {/* Tipo filter */}
-                    <select
-                        value={filterTipo}
-                        onChange={(e) => setFilterTipo(e.target.value as TipoGiudizioIdoneita | '')}
-                        className="input-clinica w-52"
-                    >
-                        <option value="">Tutti i tipi</option>
-                        {Object.entries(JUDGMENT_TYPES).map(([value, { label }]) => (
-                            <option key={value} value={value}>{label}</option>
-                        ))}
-                    </select>
+                    <div className="w-full md:w-44 flex-shrink-0">
+                        <ElegantSelect
+                            value={filterTipo}
+                            onChange={(v) => setFilterTipo(v as TipoGiudizioIdoneita | '')}
+                            placeholder="Tutti i tipi"
+                            options={[
+                                { value: '', label: 'Tutti i tipi' },
+                                ...Object.entries(JUDGMENT_TYPES).map(([value, { label }]) => ({ value, label }))
+                            ]}
+                        />
+                    </div>
 
                     {/* Stato filter */}
-                    <select
-                        value={filterStato}
-                        onChange={(e) => setFilterStato(e.target.value as StatoGiudizio | '')}
-                        className="input-clinica w-40"
-                    >
-                        <option value="">Tutti gli stati</option>
-                        {Object.entries(STATUS_LABELS).map(([value, { label }]) => (
-                            <option key={value} value={value}>{label}</option>
-                        ))}
-                    </select>
+                    <div className="w-full md:w-40 flex-shrink-0">
+                        <ElegantSelect
+                            value={filterStato}
+                            onChange={(v) => setFilterStato(v as StatoGiudizio | '')}
+                            placeholder="Tutti gli stati"
+                            options={[
+                                { value: '', label: 'Tutti gli stati' },
+                                ...Object.entries(STATUS_LABELS).map(([value, { label }]) => ({ value, label }))
+                            ]}
+                        />
+                    </div>
 
                     {/* Advanced filters toggle */}
                     <button
                         onClick={() => setShowAdvancedFilters(v => !v)}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${showAdvancedFilters ? 'bg-teal-50 border-teal-300 text-teal-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}
+                        className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors whitespace-nowrap flex-shrink-0 ${showAdvancedFilters ? 'bg-teal-50 border-teal-300 text-teal-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
                     >
-                        <Filter className="h-4 w-4" />
-                        Filtri avanzati
-                        <ChevronDown className={`h-4 w-4 transition-transform ${showAdvancedFilters ? 'rotate-180' : ''}`} />
+                        <Filter className="h-3.5 w-3.5" />
+                        Filtri
+                        {(filterDateFrom || filterDateTo || filterMedicoId || filterMansione) && (
+                            <span className="ml-0.5 inline-flex items-center justify-center h-4 w-4 rounded-full bg-teal-500 text-white text-[10px] font-bold">
+                                {[filterDateFrom, filterDateTo, filterMedicoId, filterMansione].filter(Boolean).length}
+                            </span>
+                        )}
+                        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showAdvancedFilters ? 'rotate-180' : ''}`} />
                     </button>
+
+                    {/* Clear all */}
+                    {(searchTerm || filterTipo || filterStato || filterDateFrom || filterDateTo || filterMedicoId || filterMansione) && (
+                        <button
+                            onClick={() => {
+                                setSearchTerm('');
+                                setFilterTipo('');
+                                setFilterStato('');
+                                setFilterDateFrom('');
+                                setFilterDateTo('');
+                                setFilterMedicoId('');
+                                setFilterMansione('');
+                            }}
+                            className="flex items-center gap-1 px-2.5 py-2 rounded-lg border border-red-200 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors whitespace-nowrap"
+                        >
+                            <X className="h-3 w-3" />
+                            Pulisci
+                        </button>
+                    )}
+                </div>
+
+                {/* Quick filter chips */}
+                <div className="px-3 pb-2 flex items-center gap-2 flex-wrap border-t border-gray-50 pt-2">
+                    <span className="text-xs text-gray-400 font-medium">Rapidi:</span>
+                    {(['VALIDO', 'SCADUTO', 'RICORSO_IN_CORSO'] as StatoGiudizio[]).map(s => (
+                        <button
+                            key={s}
+                            onClick={() => setFilterStato(filterStato === s ? '' : s)}
+                            className={`px-2 py-0.5 rounded-full text-xs font-medium border transition-colors ${filterStato === s
+                                ? STATUS_LABELS[s]?.color + ' border-current'
+                                : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
+                            }`}
+                        >
+                            {STATUS_LABELS[s]?.label ?? s}
+                        </button>
+                    ))}
                 </div>
 
                 {/* Advanced filters (date range, medico, mansione, group-by-day) */}
                 {showAdvancedFilters && (
-                    <div className="mt-3 pt-3 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="px-3 pb-3 pt-2 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                         {/* Date from */}
                         <div>
                             <label className="block text-xs font-medium text-gray-500 mb-1">Data emissione da</label>
@@ -565,16 +665,8 @@ const GiudiziIdoneitaPage: React.FC = () => {
                                     className="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
                                 />
                                 <LayoutList className="h-4 w-4 text-gray-500" />
-                                Raggruppa per giorno (vista calendario)
+                                Raggruppa per giorno
                             </label>
-                            {(filterDateFrom || filterDateTo || filterMedicoId || filterMansione) && (
-                                <button
-                                    onClick={() => { setFilterDateFrom(''); setFilterDateTo(''); setFilterMedicoId(''); setFilterMansione(''); }}
-                                    className="text-xs text-teal-600 hover:text-teal-800 font-medium"
-                                >
-                                    Pulisci filtri avanzati
-                                </button>
-                            )}
                         </div>
                     </div>
                 )}
@@ -721,35 +813,86 @@ const GiudiziIdoneitaPage: React.FC = () => {
                         </div>
                     ))}
                 </div>
+            ) : viewMode === 'grid' && !selectedAzienda ? (
+                /* Card View — aziende */
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {giudiziByAzienda.map(([azienda, list]) => {
+                        const validi = list.filter(g => g.stato === 'VALIDO').length;
+                        const nonInviati = list.filter(g => !g.notificatoLavoratore || !g.notificatoDatoreLavoro).length;
+                        return (
+                            <button
+                                key={azienda}
+                                onClick={() => setSelectedAzienda(azienda)}
+                                className="text-left bg-white rounded-xl border border-gray-200 p-5 hover:shadow-lg hover:border-teal-300 transition-all cursor-pointer group"
+                            >
+                                <div className="flex items-start justify-between mb-3">
+                                    <div className="p-2.5 bg-teal-50 rounded-lg group-hover:bg-teal-100 transition-colors">
+                                        <Building className="h-5 w-5 text-teal-600" />
+                                    </div>
+                                    <span className="text-2xl font-bold text-gray-900">{list.length}</span>
+                                </div>
+                                <h3 className="font-semibold text-gray-900 mb-1 line-clamp-2" title={azienda}>{azienda}</h3>
+                                <p className="text-xs text-gray-500 mb-3">{list.length} giudizi · {validi} validi</p>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    {nonInviati > 0 ? (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700">
+                                            <Send className="h-3 w-3" />
+                                            {nonInviati} da inviare
+                                        </span>
+                                    ) : (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-green-50 text-green-700">
+                                            <CheckCircle2 className="h-3 w-3" />
+                                            Tutti inviati
+                                        </span>
+                                    )}
+                                    <span className="ml-auto text-xs text-teal-600 font-medium group-hover:underline">Apri →</span>
+                                </div>
+                            </button>
+                        );
+                    })}
+                </div>
             ) : (
                 /* Table View */
-                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+                    {viewMode === 'grid' && selectedAzienda && (
+                        <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 bg-gray-50">
+                            <button
+                                onClick={() => setSelectedAzienda(null)}
+                                className="inline-flex items-center gap-1.5 text-sm font-medium text-teal-700 hover:text-teal-800"
+                            >
+                                <ChevronDown className="h-4 w-4 rotate-90" />
+                                Tutte le aziende
+                            </button>
+                            <span className="text-gray-300">/</span>
+                            <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-900">
+                                <Building className="h-4 w-4 text-teal-600" />
+                                {selectedAzienda}
+                            </span>
+                        </div>
+                    )}
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                             <tr>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                     Lavoratore
                                 </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider max-w-[150px]">
                                     Giudizio
                                 </th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                     Medico Competente
                                 </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider max-w-[170px]">
                                     Azienda
                                 </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Data Emissione
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Scadenza
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Date
                                 </th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                     Stato
                                 </th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Documenti
+                                    Documenti / Invio
                                 </th>
                                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                                     Azioni
@@ -757,7 +900,7 @@ const GiudiziIdoneitaPage: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {giudizi.map((giudizio) => {
+                            {displayedGiudizi.map((giudizio) => {
                                 const tipoInfo = JUDGMENT_TYPES[giudizio.tipoGiudizio];
                                 const statoInfo = STATUS_LABELS[giudizio.stato];
                                 const expiring = isExpiringSoon(giudizio);
@@ -793,10 +936,13 @@ const GiudiziIdoneitaPage: React.FC = () => {
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full ${tipoInfo?.color || 'bg-gray-100 text-gray-700'}`}>
-                                                {tipoInfo?.icon}
-                                                {tipoInfo?.label || giudizio.tipoGiudizio}
+                                        <td className="px-4 py-4 max-w-[150px]">
+                                            <span
+                                                title={tipoInfo?.label || giudizio.tipoGiudizio}
+                                                className={`inline-flex items-start gap-1 px-2 py-1 text-xs font-medium rounded-2xl leading-snug ${tipoInfo?.color || 'bg-gray-100 text-gray-700'}`}
+                                            >
+                                                <span className="flex-shrink-0 mt-0.5">{tipoInfo?.icon}</span>
+                                                <span className="line-clamp-2">{tipoInfo?.label || giudizio.tipoGiudizio}</span>
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -805,20 +951,23 @@ const GiudiziIdoneitaPage: React.FC = () => {
                                                 : '-'
                                             }
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                            {getAziendaFromGiudizio(giudizio) || '-'}
+                                        <td className="px-4 py-4 max-w-[170px] text-sm text-gray-500">
+                                            <span className="line-clamp-2 break-words" title={getAziendaFromGiudizio(giudizio) || undefined}>
+                                                {getAziendaFromGiudizio(giudizio) || '-'}
+                                            </span>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                            {formatDate(giudizio.dataEmissione)}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="flex items-center gap-2">
-                                                <span className={`text-sm ${expiring ? 'text-yellow-700 font-medium' : 'text-gray-500'}`}>
-                                                    {formatDate(giudizio.dataScadenza)}
+                                        {/* Date: emissione + scadenza su due righe */}
+                                        <td className="px-4 py-4 whitespace-nowrap text-sm">
+                                            <div className="flex flex-col gap-0.5">
+                                                <span className="text-gray-700" title="Data emissione">
+                                                    <span className="text-[10px] text-gray-400 uppercase mr-1">Em.</span>
+                                                    {formatDate(giudizio.dataEmissione)}
                                                 </span>
-                                                {expiring && (
-                                                    <Clock className="h-4 w-4 text-yellow-500" />
-                                                )}
+                                                <span className={`flex items-center gap-1 ${expiring ? 'text-yellow-700 font-medium' : 'text-gray-500'}`} title="Data scadenza">
+                                                    <span className="text-[10px] text-gray-400 uppercase mr-1">Scad.</span>
+                                                    {formatDate(giudizio.dataScadenza)}
+                                                    {expiring && <Clock className="h-3.5 w-3.5 text-yellow-500" />}
+                                                </span>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
@@ -826,8 +975,39 @@ const GiudiziIdoneitaPage: React.FC = () => {
                                                 {statoInfo?.label || giudizio.stato}
                                             </span>
                                         </td>
-                                        {/* Documenti PDF (Art. 41 c.7) */}
+                                        {/* Documenti PDF + Stato invio (Art. 41 c.7) */}
                                         <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                                            {/* Invio badges */}
+                                            <div className="flex items-center gap-1 mb-1.5">
+                                                <span title={giudizio.notificatoLavoratore ? `Inviato al lavoratore il ${giudizio.dataNotificaLavoratore ? new Date(giudizio.dataNotificaLavoratore).toLocaleDateString('it-IT') : ''}` : 'Non inviato al lavoratore'}
+                                                    className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium ${giudizio.notificatoLavoratore ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-gray-400'}`}>
+                                                    <UserCheck className="h-2.5 w-2.5" />
+                                                    Lav.
+                                                    {giudizio.notificatoLavoratore ? ' ✓' : ' ✗'}
+                                                </span>
+                                                <span title={giudizio.notificatoDatoreLavoro ? `Inviato al datore il ${giudizio.dataNotificaDatoreLavoro ? new Date(giudizio.dataNotificaDatoreLavoro).toLocaleDateString('it-IT') : ''}` : 'Non inviato al datore di lavoro'}
+                                                    className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium ${giudizio.notificatoDatoreLavoro ? 'bg-blue-50 text-blue-700' : 'bg-gray-50 text-gray-400'}`}>
+                                                    <Building className="h-2.5 w-2.5" />
+                                                    Dat.
+                                                    {giudizio.notificatoDatoreLavoro ? ' ✓' : ' ✗'}
+                                                </span>
+                                                {/* Firma lavoratore badge */}
+                                                {(giudizio as any).firmaLavoratore ? (
+                                                    <span title="Firma del lavoratore acquisita" className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-50 text-purple-700">
+                                                        <PenTool className="h-2.5 w-2.5" />
+                                                        Firma ✓
+                                                    </span>
+                                                ) : (
+                                                    <button
+                                                        title="Acquisisci firma del lavoratore"
+                                                        onClick={(e) => { e.stopPropagation(); setGiudizioForFirma(giudizio); setFirmaModalOpen(true); }}
+                                                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-50 text-gray-400 hover:bg-purple-50 hover:text-purple-600 transition-colors"
+                                                    >
+                                                        <PenTool className="h-2.5 w-2.5" />
+                                                        Firma
+                                                    </button>
+                                                )}
+                                            </div>
                                             {giudizio.pdfLavoratoreUrl ? (
                                                 <div className="flex items-center gap-1.5">
                                                     <a
@@ -905,7 +1085,12 @@ const GiudiziIdoneitaPage: React.FC = () => {
                                                         label: 'Registra ricorso',
                                                         icon: Scale,
                                                         onClick: () => navigate(`/poliambulatorio/mdl/giudizi-idoneita/${giudizio.id}/ricorso`)
-                                                    }] : [])
+                                                    }] : []),
+                                                    {
+                                                        label: (giudizio as any).firmaLavoratore ? 'Aggiorna firma lavoratore' : 'Firma lavoratore',
+                                                        icon: PenTool,
+                                                        onClick: () => { setGiudizioForFirma(giudizio); setFirmaModalOpen(true); }
+                                                    }
                                                 ]}
                                                 theme="teal"
                                             />
@@ -1213,6 +1398,29 @@ const GiudiziIdoneitaPage: React.FC = () => {
                 onClose={() => setBatchSendModalOpen(false)}
                 onSuccess={() => queryClient.invalidateQueries({ queryKey: ['giudizi-idoneita'] })}
             />
+
+            {/* Force Send Modal — invio sicuro dei giudizi selezionati */}
+            <BatchForceSendModal
+                open={forceSendModalOpen}
+                giudizi={giudizi}
+                getAzienda={getAziendaFromGiudizio}
+                onClose={() => setForceSendModalOpen(false)}
+                onSuccess={() => queryClient.invalidateQueries({ queryKey: ['giudizi-idoneita'] })}
+            />
+
+            {/* Firma Lavoratore Modal */}
+            {firmaModalOpen && giudizioForFirma && (
+                <GiudizioFirmaModal
+                    isOpen={firmaModalOpen}
+                    giudizio={giudizioForFirma}
+                    onClose={() => { setFirmaModalOpen(false); setGiudizioForFirma(null); }}
+                    onSuccess={() => {
+                        setFirmaModalOpen(false);
+                        setGiudizioForFirma(null);
+                        queryClient.invalidateQueries({ queryKey: ['giudizi-idoneita'] });
+                    }}
+                />
+            )}
 
             {/* Ricorso Modal */}
             {ricorsoModalOpen && giudizioForRicorso && (

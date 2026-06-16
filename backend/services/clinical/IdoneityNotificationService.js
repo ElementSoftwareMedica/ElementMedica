@@ -509,6 +509,70 @@ class IdoneityNotificationService {
     }
 
     // ──────────────────────────────────────────
+    // PUBLIC: invio sicuro batch con risoluzione automatica destinatari
+    // ──────────────────────────────────────────
+
+    /**
+     * Risolve automaticamente i destinatari (lavoratore e/o datore) di un giudizio
+     * e invia in modo sicuro (ZIP protetto da password + password via WhatsApp al
+     * lavoratore / via PEC al datore). Usato dall'invio batch forzato.
+     *
+     * @param {Object} options
+     * @param {string} options.giudizioId
+     * @param {string} options.tenantId
+     * @param {string} options.performedBy
+     * @param {'worker'|'employer'|'both'} [options.recipientType='both']
+     * @returns {Promise<{ giudizioId, worker?: Object, employer?: Object, skipped?: string }>}
+     */
+    async sendSecureGiudizioAuto({ giudizioId, tenantId, performedBy, recipientType = 'both' }) {
+        const giudizio = await this._loadGiudizio(giudizioId, tenantId);
+        if (!giudizio) throw new Error(`Giudizio ${giudizioId} non trovato`);
+
+        const recipients = {};
+
+        // Lavoratore: email/telefono dal PersonTenantProfile (P48)
+        if (recipientType === 'worker' || recipientType === 'both') {
+            const profile = await prisma.personTenantProfile.findFirst({
+                where: { personId: giudizio.personId, tenantId, deletedAt: null },
+                select: { email: true, phone: true }
+            });
+            if (profile?.email) {
+                recipients.worker = { email: profile.email, phone: profile.phone || null };
+            }
+        }
+
+        // Datore: email/telefono dal CompanyTenantProfile collegato al giudizio
+        if (recipientType === 'employer' || recipientType === 'both') {
+            const withCompany = await prisma.giudizioIdoneita.findFirst({
+                where: { id: giudizioId, tenantId, deletedAt: null },
+                select: {
+                    mansioni: {
+                        select: { mansione: { select: { site: { select: { companyTenantProfile: { select: { emailGenerale: true, telefonoGenerale: true, pec: true } } } } } } },
+                        take: 1
+                    },
+                    visita: { select: { appuntamento: { select: { companyTenantProfile: { select: { emailGenerale: true, telefonoGenerale: true, pec: true } } } } } }
+                }
+            });
+            const ctp = withCompany?.mansioni?.[0]?.mansione?.site?.companyTenantProfile
+                || withCompany?.visita?.appuntamento?.companyTenantProfile;
+            const employerEmail = ctp?.pec || ctp?.emailGenerale || null;
+            if (employerEmail) {
+                recipients.employer = { email: employerEmail, phone: ctp?.telefonoGenerale || null };
+            }
+        }
+
+        if (!recipients.worker && !recipients.employer) {
+            return { giudizioId, skipped: 'no_recipients' };
+        }
+
+        // Lavoratore → password via WhatsApp; Datore → password via PEC (canale email).
+        const result = await this.sendSecureGiudizio({
+            giudizioId, tenantId, performedBy, recipients, passwordChannel: 'whatsapp'
+        });
+        return { giudizioId, ...result };
+    }
+
+    // ──────────────────────────────────────────
     // PUBLIC: cron 22:00 — ZIP batch per aziende
     // ──────────────────────────────────────────
 

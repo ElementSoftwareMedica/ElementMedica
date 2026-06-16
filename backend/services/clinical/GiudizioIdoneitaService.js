@@ -452,6 +452,8 @@ const GiudizioIdoneitaService = {
             dateFrom,   // P66: Data emissione da
             dateTo,     // P66: Data emissione a
             mansione,   // P66: Cerca per mansione (testo libero)
+            search,     // Ricerca libera per lavoratore/medico
+            companyTenantProfileId, // Filtro per Company Manager
             page = 1,
             limit = 50
         } = options;
@@ -484,6 +486,20 @@ const GiudizioIdoneitaService = {
                         }
                     }
                 }
+            }),
+            ...(companyTenantProfileId && {
+                OR: [
+                    { mansioni: { some: { mansione: { site: { companyTenantProfileId } } } } },
+                    { visita: { appuntamento: { companyTenantProfileId } } }
+                ]
+            }),
+            ...(search && {
+                OR: [
+                    { person: { firstName: { contains: search, mode: 'insensitive' } } },
+                    { person: { lastName: { contains: search, mode: 'insensitive' } } },
+                    { medicoCompetente: { firstName: { contains: search, mode: 'insensitive' } } },
+                    { medicoCompetente: { lastName: { contains: search, mode: 'insensitive' } } }
+                ]
             })
         };
 
@@ -566,8 +582,28 @@ const GiudizioIdoneitaService = {
             prisma.giudizioIdoneita.count({ where })
         ]);
 
+        // Attach firma lavoratore flag to each giudizio
+        const giudizioIds = giudizi.map(g => g.id);
+        const firme = giudizioIds.length > 0 ? await prisma.firmaDigitale.findMany({
+            where: {
+                documentoId: { in: giudizioIds },
+                documentType: 'GIUDIZIO_IDONEITA',
+                firmatarioRole: 'DIPENDENTE',
+                tenantId,
+                deletedAt: null,
+                stato: 'FIRMATO'
+            },
+            select: { documentoId: true, createdAt: true }
+        }) : [];
+        const firmeMap = new Map(firme.map(f => [f.documentoId, f]));
+
+        const data = giudizi.map(g => ({
+            ...g,
+            firmaLavoratore: firmeMap.get(g.id) || null
+        }));
+
         return {
-            data: giudizi,
+            data,
             pagination: {
                 total,
                 page,

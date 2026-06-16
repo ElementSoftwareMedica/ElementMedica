@@ -6,6 +6,7 @@
  */
 
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Scale, X, AlertTriangle, Loader2 } from 'lucide-react';
 import { clinicaApi, type GiudizioIdoneita } from '../../../../services/clinicaApi';
 import { DatePickerElegante } from '@/components/ui/DatePickerElegante';
@@ -67,8 +68,8 @@ const GiudizioRicorsoModal: React.FC<GiudizioRicorsoModalProps> = ({
         }
     };
 
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+    return createPortal(
+        <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/60 p-4">
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md">
                 {/* Header */}
                 <div className="flex items-center justify-between p-5 border-b border-gray-200 dark:border-gray-700">
@@ -168,7 +169,8 @@ const GiudizioRicorsoModal: React.FC<GiudizioRicorsoModalProps> = ({
                     </button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 
