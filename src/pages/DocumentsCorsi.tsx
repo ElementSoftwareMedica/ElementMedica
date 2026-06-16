@@ -208,6 +208,9 @@ const DocumentsCorsi: React.FC = () => {
       const registriParams = new URLSearchParams();
       const lettereParams = new URLSearchParams();
 
+      // Solo documenti di FORMAZIONE: esclude le visite mediche (ramo MEDICA)
+      attestatiParams.set('branchType', 'FORMAZIONE');
+
       if (scheduleId) {
         attestatiParams.set('scheduleId', scheduleId);
         registriParams.set('scheduleId', scheduleId);

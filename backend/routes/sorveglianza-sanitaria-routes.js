@@ -347,6 +347,8 @@ router.get('/medici-disponibili',
     try {
       const { companyId } = req.params;
       const tenantId = getEffectiveTenantId(req);
+      // includeAllMdl=true → restituisce anche tutti i Medici del Lavoro del tenant
+      const includeAllMdl = req.query.includeAllMdl === 'true';
 
       const profile = await getCompanyProfile(companyId, tenantId);
       if (!profile) {
@@ -378,7 +380,7 @@ router.get('/medici-disponibili',
             }
           ]
         },
-        select: { personId: true }
+        select: { personId: true, tipoRuolo: true }
       });
 
       const siteMedici = await prisma.companySite.findMany({
@@ -391,12 +393,29 @@ router.get('/medici-disponibili',
         select: { medicoCompetenteId: true }
       });
 
+      // Il medico competente "principale" dell'azienda (MEDICO_COMPETENTE o MC di sede)
+      const principaliIds = new Set([
+        ...nomineAzienda.filter(n => n.tipoRuolo === 'MEDICO_COMPETENTE').map(n => n.personId),
+        ...siteMedici.map(s => s.medicoCompetenteId).filter(Boolean)
+      ]);
+      const coordinatiIds = new Set(
+        nomineAzienda.filter(n => n.tipoRuolo === 'MEDICO_COMPETENTE_COORDINATO').map(n => n.personId)
+      );
+
       const nominatiIds = [...new Set([
         ...nomineAzienda.map(n => n.personId),
         ...siteMedici.map(s => s.medicoCompetenteId).filter(Boolean)
       ])];
 
-      // Fetch le persone nominate
+      const buildOption = (m, isNominato) => ({
+        id: m.id,
+        fullName: `${m.firstName || ''} ${m.lastName || ''}`.trim() || 'Medico',
+        isNominatoPerAzienda: isNominato,
+        isMedicoCompetentePrincipale: principaliIds.has(m.id),
+        isCoordinato: coordinatiIds.has(m.id)
+      });
+
+      // Fetch le persone nominate (MC + coordinati dell'azienda)
       let allMedici = [];
       if (nominatiIds.length > 0) {
         const nominatedDocs = await prisma.person.findMany({
@@ -407,43 +426,25 @@ router.get('/medici-disponibili',
           },
           select: { id: true, firstName: true, lastName: true }
         });
-
-        allMedici = nominatedDocs.map(m => ({
-          id: m.id,
-          fullName: `${m.firstName || ''} ${m.lastName || ''}`.trim() || 'Medico',
-          isNominatoPerAzienda: true
-        }));
+        // Principale prima, poi coordinati
+        allMedici = nominatedDocs
+          .map(m => buildOption(m, true))
+          .sort((a, b) => (b.isMedicoCompetentePrincipale ? 1 : 0) - (a.isMedicoCompetentePrincipale ? 1 : 0));
       }
 
-      // Aggiungi medici non nominati che hanno disponibilità settimanale attiva
-      const disponibilitaMedici = await prisma.disponibilitaMedico.findMany({
-        where: {
-          tenantId,
-          attivo: true,
-          deletedAt: null,
-          ...(nominatiIds.length > 0 ? { medicoId: { notIn: nominatiIds } } : {})
-        },
-        select: { medicoId: true },
-        distinct: ['medicoId']
-      });
-
-      if (disponibilitaMedici.length > 0) {
-        const altriMediciIds = disponibilitaMedici.map(d => d.medicoId);
+      // Tutti i Medici del Lavoro del tenant (solo se forzato) — esclusi i già presenti
+      if (includeAllMdl) {
         const altriMedici = await prisma.person.findMany({
           where: {
-            id: { in: altriMediciIds },
             deletedAt: null,
+            ...(nominatiIds.length > 0 ? { id: { notIn: nominatiIds } } : {}),
+            personRoles: { some: { tenantId, roleType: 'MEDICO_COMPETENTE', deletedAt: null } },
             tenantProfiles: { some: { tenantId, deletedAt: null } }
           },
           select: { id: true, firstName: true, lastName: true }
         });
-
         for (const m of altriMedici) {
-          allMedici.push({
-            id: m.id,
-            fullName: `${m.firstName || ''} ${m.lastName || ''}`.trim() || 'Medico',
-            isNominatoPerAzienda: false
-          });
+          allMedici.push(buildOption(m, false));
         }
       }
 

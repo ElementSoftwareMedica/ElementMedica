@@ -21,6 +21,7 @@ import { apiGet, apiPost } from '@/api/api';
 import { slotsApi, ambulatoriApi } from '@/services/clinicaApi';
 import { DateRangeCalendar } from '@/components/ui/DateRangeCalendar';
 import type { DateRange } from '@/components/ui/DateRangeCalendar';
+import { ElegantSelect } from '@/components/ui/ElegantSelect';
 import { useToast } from '@/hooks/useToast';
 import { useTenantMode } from '@/contexts/TenantModeContext';
 import { cn } from '@/design-system/utils';
@@ -78,6 +79,8 @@ interface MedicoOption {
     id: string;
     fullName: string;
     isNominatoPerAzienda: boolean;
+    isMedicoCompetentePrincipale?: boolean;
+    isCoordinato?: boolean;
 }
 
 export interface PersoneItem {
@@ -159,15 +162,17 @@ const ScheduleWeekModal: React.FC<ScheduleWeekModalProps> = ({
 
     // ── Medico ─────────────────────────────────────────────────────
     const [medicoId, setMedicoId] = useState(defaultMedicoId ?? '');
+    // Forza la visualizzazione di tutti i Medici del Lavoro del tenant (non solo MC/coordinati azienda)
+    const [includeAllMdl, setIncludeAllMdl] = useState(false);
 
     // ── Fascia oraria (filtro visualizzazione griglia) ─────────────
     const [timeRange, setTimeRange] = useState<'all' | 'morning' | 'afternoon'>('all');
 
     const { data: mediciData, isLoading: mediciLoading } = useQuery({
-        queryKey: [`schedule-medici-${companyId}`],
+        queryKey: [`schedule-medici-${companyId}`, includeAllMdl],
         queryFn: async () => {
             const r = await apiGet<{ medici: MedicoOption[] }>(
-                `/api/v1/companies/${companyId}/sorveglianza-sanitaria/medici-disponibili`
+                `/api/v1/companies/${companyId}/sorveglianza-sanitaria/medici-disponibili${includeAllMdl ? '?includeAllMdl=true' : ''}`
             );
             return r.medici ?? [];
         },
@@ -177,8 +182,10 @@ const ScheduleWeekModal: React.FC<ScheduleWeekModalProps> = ({
     const medici = mediciData ?? [];
     React.useEffect(() => {
         if (medici.length > 0 && !medicoId) {
+            // Pre-seleziona il medico competente principale dell'azienda; poi un nominato; poi il primo.
+            const principale = medici.find(m => m.isMedicoCompetentePrincipale);
             const nom = medici.find(m => m.isNominatoPerAzienda);
-            setMedicoId(nom?.id ?? medici[0].id);
+            setMedicoId(principale?.id ?? nom?.id ?? medici[0].id);
         }
     }, [medici, medicoId]);
 
@@ -737,7 +744,7 @@ const ScheduleWeekModal: React.FC<ScheduleWeekModalProps> = ({
     // ── Render ───────────────────────────────────────────────────────
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-5xl flex flex-col max-h-[calc(100vh-2rem)]">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-5xl flex flex-col h-[88vh] max-h-[calc(100vh-2rem)]">
 
                 {/* ── Header ─────────────────────────────────────────────── */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
@@ -765,15 +772,25 @@ const ScheduleWeekModal: React.FC<ScheduleWeekModalProps> = ({
                             {mediciLoading ? (
                                 <div className="flex items-center gap-1 text-xs text-gray-400 py-1"><Loader2 className="h-3 w-3 animate-spin" />Caricamento…</div>
                             ) : (
-                                <select value={medicoId} onChange={e => setMedicoId(e.target.value)}
-                                    className="w-full px-2 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-teal-500">
-                                    {medici.map(m => (
-                                        <option key={m.id} value={m.id}>
-                                            {m.fullName}{m.isNominatoPerAzienda ? ' ★' : ''}
-                                        </option>
-                                    ))}
-                                </select>
+                                <ElegantSelect
+                                    value={medicoId}
+                                    onChange={setMedicoId}
+                                    placeholder="Seleziona medico"
+                                    options={medici.map(m => ({
+                                        value: m.id,
+                                        label: `${m.fullName}${m.isMedicoCompetentePrincipale ? ' — MC' : m.isCoordinato ? ' — coordinato' : ''}`
+                                    }))}
+                                />
                             )}
+                            <label className="flex items-center gap-1.5 mt-2 text-[11px] text-gray-500 dark:text-gray-400 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={includeAllMdl}
+                                    onChange={e => setIncludeAllMdl(e.target.checked)}
+                                    className="rounded border-gray-300 text-teal-600 focus:ring-teal-500 h-3.5 w-3.5"
+                                />
+                                Mostra tutti i Medici del Lavoro del tenant
+                            </label>
                         </div>
 
                         {/* Persone + durata + accertamenti */}
@@ -833,21 +850,22 @@ const ScheduleWeekModal: React.FC<ScheduleWeekModalProps> = ({
                                             {isExpanded && (
                                                 <div className="px-2 pb-1.5 border-t border-gray-100 dark:border-gray-700 pt-1 space-y-0.5">
                                                     {/* P72_13: Tipo visita MDL — selezionabile per ogni persona */}
-                                                    <div className="flex items-center gap-1.5 mb-0.5">
+                                                    <div className="flex items-center gap-1.5 mb-0.5" onClick={e => e.stopPropagation()}>
                                                         <span className="text-[10px] text-gray-400 flex-shrink-0">Tipo visita:</span>
-                                                        <select
-                                                            value={tipoVisitaMDLOverrides[idx] ?? getDefaultTipoVisitaMDL(p)}
-                                                            onChange={e => setTipoVisitaMDLOverrides(prev => ({ ...prev, [idx]: e.target.value }))}
-                                                            onClick={e => e.stopPropagation()}
-                                                            className="flex-1 text-[10px] border border-gray-200 dark:border-gray-600 rounded px-1 py-0.5 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200"
-                                                        >
-                                                            <option value="PREVENTIVA">Preventiva (prima visita)</option>
-                                                            <option value="PERIODICA">Periodica</option>
-                                                            <option value="CAMBIO_MANSIONE">Cambio mansione</option>
-                                                            <option value="RIENTRO_MATERNITA">Rientro maternità</option>
-                                                            <option value="RIENTRO_ASSENZA_PER_MOTIVI_DI_SALUTE">Rientro da assenza</option>
-                                                            <option value="RICHIESTA_LAVORATORE">Su richiesta lavoratore</option>
-                                                        </select>
+                                                        <div className="flex-1">
+                                                            <ElegantSelect
+                                                                value={tipoVisitaMDLOverrides[idx] ?? getDefaultTipoVisitaMDL(p)}
+                                                                onChange={v => setTipoVisitaMDLOverrides(prev => ({ ...prev, [idx]: v }))}
+                                                                options={[
+                                                                    { value: 'PREVENTIVA', label: 'Preventiva (prima visita)' },
+                                                                    { value: 'PERIODICA', label: 'Periodica' },
+                                                                    { value: 'CAMBIO_MANSIONE', label: 'Cambio mansione' },
+                                                                    { value: 'RIENTRO_MATERNITA', label: 'Rientro maternità' },
+                                                                    { value: 'RIENTRO_ASSENZA_PER_MOTIVI_DI_SALUTE', label: 'Rientro da assenza' },
+                                                                    { value: 'RICHIESTA_LAVORATORE', label: 'Su richiesta lavoratore' },
+                                                                ]}
+                                                            />
+                                                        </div>
                                                     </div>
                                                     {p.mansione && <p className="text-[10px] font-medium text-gray-500">📋 {p.mansione.nome}</p>}
                                                     {(p.ultimaVisita || p.prossimaVisita) && (
@@ -1123,13 +1141,14 @@ const ScheduleWeekModal: React.FC<ScheduleWeekModalProps> = ({
                                                                         {addSlotCell?.oraInizio}
                                                                         {addSlotCell?.oraFine ? `–${addSlotCell.oraFine}` : ''}
                                                                     </div>
-                                                                    <select value={newSlotAmbId} onChange={e => setNewSlotAmbId(e.target.value)}
-                                                                        className="w-full text-[10px] border border-gray-200 dark:border-gray-600 rounded px-1 py-0.5 bg-white dark:bg-gray-700 mb-1">
-                                                                        <option value="">Ambulatorio…</option>
-                                                                        {ambulatori.map((a: any) => (
-                                                                            <option key={a.id} value={a.id}>{a.nome}</option>
-                                                                        ))}
-                                                                    </select>
+                                                                    <div className="mb-1" onClick={e => e.stopPropagation()}>
+                                                                        <ElegantSelect
+                                                                            value={newSlotAmbId}
+                                                                            onChange={setNewSlotAmbId}
+                                                                            placeholder="Ambulatorio…"
+                                                                            options={ambulatori.map((a: any) => ({ value: a.id, label: a.nome }))}
+                                                                        />
+                                                                    </div>
                                                                     <div className="flex gap-1">
                                                                         <button onClick={handleAddSlot}
                                                                             disabled={!newSlotAmbId || addSlotMutation.isPending}

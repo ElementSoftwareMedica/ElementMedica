@@ -75,7 +75,7 @@ async function auditAttestatoDelete(req, attestato, tenantId, deletionReason, db
  */
 router.get('/', authenticateToken, requirePermission('documents:read'), async (req, res) => {
   try {
-    const { scheduleId, year } = req.query;
+    const { scheduleId, year, branchType } = req.query;
     let personId = req.query.personId;
     const tenantId = getEffectiveTenantId(req);
     const person = req.person;
@@ -94,6 +94,9 @@ router.get('/', authenticateToken, requirePermission('documents:read'), async (r
     if (scheduleId) where.scheduledCourseId = scheduleId;
     if (personId) where.personId = personId;
     if (year) where.annoProgressivo = parseInt(year);
+    // Filtro per ramo (FORMAZIONE/MEDICA): la pagina Documenti Corsi mostra solo formazione,
+    // così le visite mediche (ramo MEDICA) non compaiono tra i documenti dei corsi.
+    if (branchType) where.scheduledCourse = { branchType };
 
     // TRAINER-only: limita agli attestati dei propri corsi programmati
     const isTrainerOnly = await isTrainerOnlyAccess(person.id, tenantId);
