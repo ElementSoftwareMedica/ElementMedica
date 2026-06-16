@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { searchAteco, getSettoreByAteco } from '../../data/atecoData';
 import {
   Building2,
   Calendar,
@@ -192,6 +193,9 @@ const CompanyForm: React.FC<CompanyFormProps> = ({
     scontoPercentuale: '',
     terminiPagamento: '',
     modalitaPagamento: '',
+    // Contatti generali (CompanyTenantProfile)
+    telefonoGenerale: '',
+    emailGenerale: '',
     // Note (CompanyTenantProfile)
     noteCommerciali: '',
     noteOperative: '',
@@ -222,6 +226,9 @@ const CompanyForm: React.FC<CompanyFormProps> = ({
 
   // Stato per il caricamento delle sedi
   const [loadingSites, setLoadingSites] = useState(false);
+
+  // Sede operativa: quando false (default per nuove aziende), la sede viene auto-creata dalla sede legale
+  const [sedeOperativaDiversa, setSedeOperativaDiversa] = useState(!!company);
 
   // Stato per gli errori
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -298,6 +305,9 @@ const CompanyForm: React.FC<CompanyFormProps> = ({
         scontoPercentuale: company.scontoPercentuale?.toString() || '',
         terminiPagamento: company.terminiPagamento || '',
         modalitaPagamento: company.modalitaPagamento || '',
+        // Contatti generali
+        telefonoGenerale: (company as any).telefonoGenerale || '',
+        emailGenerale: (company as any).emailGenerale || '',
         // Note
         noteCommerciali: company.noteCommerciali || '',
         noteOperative: company.noteOperative || '',
@@ -397,6 +407,22 @@ const CompanyForm: React.FC<CompanyFormProps> = ({
     // L'utente vuole creare un nuovo record, procedi normalmente
   }, []);
 
+  // ATECO autocomplete state
+  const [atecoQuery, setAtecoQuery] = useState('');
+  const [showAtecoDropdown, setShowAtecoDropdown] = useState(false);
+  const atecoRef = useRef<HTMLDivElement>(null);
+  const atecoSuggestions = useMemo(() => searchAteco(atecoQuery), [atecoQuery]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (atecoRef.current && !atecoRef.current.contains(e.target as Node)) {
+        setShowAtecoDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   // Gestisce il cambio dei valori nei campi
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -435,8 +461,8 @@ const CompanyForm: React.FC<CompanyFormProps> = ({
       newErrors.piva = 'La P.IVA deve essere compresa tra 8 e 13 caratteri';
     }
 
-    // Per nuove aziende, richiedi almeno una sede con nome e indirizzo compilati
-    if (!company) {
+    // Per nuove aziende con sede operativa diversa, richiedi almeno una sede valida
+    if (!company && sedeOperativaDiversa) {
       const activeSitesForValidation = sites.filter(s => !s.isDeleted);
       const validSites = activeSitesForValidation.filter(
         s => s.siteName.trim() && s.citta.trim()
@@ -583,11 +609,24 @@ const CompanyForm: React.FC<CompanyFormProps> = ({
         // Usa l'ID del CompanyTenantProfile per creare le sedi (non l'ID della Company globale)
         const companyId = response.id || response.companyTenantProfileId;
 
-        // Se ci sono sedi da creare, le creo in sequenza
-        const activeSites = sites.filter(s => !s.isDeleted);
-        if (companyId && activeSites.length > 0) {
+        // Calcola sedi da creare
+        const sitesToCreate = sedeOperativaDiversa
+          ? sites.filter(s => !s.isDeleted)
+          : [{
+              tempId: '',
+              siteName: formData.ragioneSociale || 'Sede Principale',
+              citta: formData.sedeLegaleCitta || '',
+              indirizzo: formData.sedeLegaleIndirizzo || '',
+              cap: formData.sedeLegaleCap || '',
+              provincia: formData.sedeLegaleProvincia || '',
+              personaRiferimento: '',
+              telefono: formData.telefonoGenerale || '',
+              mail: formData.emailGenerale || '',
+            }];
+
+        if (companyId && sitesToCreate.length > 0) {
           let sitesCreated = 0;
-          for (const site of activeSites) {
+          for (const site of sitesToCreate) {
             try {
               await apiPost('/api/v1/company-sites', {
                 companyId,
@@ -605,13 +644,11 @@ const CompanyForm: React.FC<CompanyFormProps> = ({
             }
           }
 
-          // Mostra notifica di successo con dettaglio sedi
           showToast({
             message: `Azienda creata con successo${sitesCreated > 0 ? ` con ${sitesCreated} sed${sitesCreated === 1 ? 'e' : 'i'}` : ''}`,
             type: 'success'
           });
         } else {
-          // Mostra notifica di successo semplice
           showToast({
             message: 'Azienda creata con successo',
             type: 'success'
@@ -701,14 +738,57 @@ const CompanyForm: React.FC<CompanyFormProps> = ({
             icon={<Building2 className="h-5 w-5 text-gray-400" />}
           />
 
-          <EntityFormField
-            label="Codice Ateco"
-            name="codiceAteco"
-            value={formData.codiceAteco}
-            onChange={handleChange}
-            error={errors.codiceAteco}
-            icon={<Hash className="h-5 w-5 text-gray-400" />}
-          />
+          {/* ATECO autocomplete */}
+          <div ref={atecoRef} className="relative">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Codice ATECO</label>
+            <div className="relative">
+              <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+              <input
+                type="text"
+                name="codiceAteco"
+                value={formData.codiceAteco}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  handleChange(e);
+                  setAtecoQuery(val);
+                  setShowAtecoDropdown(val.length >= 2);
+                  const settore = getSettoreByAteco(val);
+                  if (settore) {
+                    setFormData(prev => ({ ...prev, settore }));
+                  }
+                }}
+                onFocus={() => formData.codiceAteco && formData.codiceAteco.length >= 2 && setShowAtecoDropdown(true)}
+                placeholder="es. 25.62, 43.2, 86.2..."
+                autoComplete="off"
+                className="w-full border border-gray-300 rounded-lg py-2.5 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+              />
+            </div>
+            {errors.codiceAteco && <p className="mt-1 text-xs text-red-600">{errors.codiceAteco}</p>}
+            {showAtecoDropdown && atecoSuggestions.length > 0 && (
+              <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+                {atecoSuggestions.map((entry) => (
+                  <button
+                    key={entry.codice}
+                    type="button"
+                    className="w-full text-left px-3 py-2.5 hover:bg-teal-50 text-sm border-b border-gray-50 last:border-0"
+                    onClick={() => {
+                      setFormData(prev => ({
+                        ...prev,
+                        codiceAteco: entry.codice,
+                        settore: entry.settore
+                      }));
+                      setAtecoQuery(entry.codice);
+                      setShowAtecoDropdown(false);
+                    }}
+                  >
+                    <span className="font-semibold text-teal-700 font-mono">{entry.codice}</span>
+                    <span className="text-gray-600 ml-2">{entry.descrizione}</span>
+                    <span className="block text-xs text-gray-400 mt-0.5">{entry.settore}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           <EntityFormField
             label="Partita IVA"
@@ -919,8 +999,30 @@ const CompanyForm: React.FC<CompanyFormProps> = ({
         </EntityFormSection>
       )}
 
+      {/* Checkbox sede operativa (solo per nuove aziende) */}
+      {!company && (
+        <div className="px-6 py-4 bg-blue-50 border-y border-blue-100">
+          <label className="flex items-center gap-3 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={sedeOperativaDiversa}
+              onChange={(e) => setSedeOperativaDiversa(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+            />
+            <div>
+              <span className="text-sm font-medium text-gray-800">Sede Operativa diversa dalla Sede Legale</span>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {sedeOperativaDiversa
+                  ? 'Compila la sede operativa nei campi qui sotto'
+                  : 'La sede operativa corrisponde alla sede legale indicata sopra'}
+              </p>
+            </div>
+          </label>
+        </div>
+      )}
+
       {/* Sezione Sedi Aziendali - Unificata per creazione e modifica */}
-      <EntityFormSection
+      {(company || sedeOperativaDiversa) && <EntityFormSection
         title="Sedi Aziendali"
         description={company
           ? "Gestisci le sedi operative dell'azienda. Ogni sede può avere i propri contatti."
@@ -1098,7 +1200,7 @@ const CompanyForm: React.FC<CompanyFormProps> = ({
             </p>
           )}
         </div>
-      </EntityFormSection>
+      </EntityFormSection>}
 
       {/* P58: Sezione Medicina del Lavoro (visibile sia in create che edit mode) */}
       <div className="border border-blue-200 rounded-xl overflow-hidden">

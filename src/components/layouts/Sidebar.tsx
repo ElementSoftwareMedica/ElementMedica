@@ -35,7 +35,8 @@ import {
   Settings,
   UserCheck,
   UserCog,
-  Users
+  Users,
+  Scale
 } from 'lucide-react';
 
 interface NavItem {
@@ -105,6 +106,9 @@ const Sidebar: React.FC<SidebarProps> = ({ open, setOpen, collapsed = false, onC
   const isStrictCompanyAdmin = userRoles.some(r => ['COMPANY_ADMIN', 'COMPANY_MANAGER'].includes(r)) &&
     !userRoles.some(r => ['ADMIN', 'SUPER_ADMIN', 'TENANT_ADMIN', 'TRAINING_ADMIN'].includes(r));
 
+  const isCompanyManager = userRoles.includes('COMPANY_MANAGER') &&
+    !userRoles.some(r => ['ADMIN', 'SUPER_ADMIN', 'TENANT_ADMIN'].includes(r));
+
   // Il badge "Corsi in scadenza" è visibile solo agli admin di tenant/staff (non a trainer né company admin)
   const showExpiringBadge = !isTrainer && !isStrictCompanyAdmin;
 
@@ -158,6 +162,17 @@ const Sidebar: React.FC<SidebarProps> = ({ open, setOpen, collapsed = false, onC
         }] : [])
       ].filter(Boolean)
     },
+    ...(isCompanyManager ? [{
+      label: 'Medicina del Lavoro',
+      icon: Scale,
+      children: [
+        {
+          label: 'Giudizi Idoneità',
+          href: '/poliambulatorio/mdl/giudizi-idoneita',
+          icon: Scale
+        }
+      ]
+    }] : []),
     ...(isAdmin ? [{
       label: 'Amministrazione',
       icon: FileText,
