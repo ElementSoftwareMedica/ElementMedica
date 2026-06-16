@@ -239,7 +239,12 @@ const GiudizioFormModal: React.FC<GiudizioFormModalProps> = ({
     const companies = formData?.companies || [];
     const employees = formData?.employees || [];
     const visits = formData?.visits || [];
-    const medici = useMemo(() => mediciResponse?.data || [], [mediciResponse]);
+    const medici = useMemo(
+        () => (mediciResponse?.data || []).filter(m =>
+            m.personRoles?.some((r: { roleType: string }) => r.roleType === 'MEDICO_COMPETENTE')
+        ),
+        [mediciResponse]
+    );
 
     const selectedEmployee = employees.find(employee => employee.id === formState.personId);
     const selectedVisit = visits.find(visit => visit.id === formState.visitaId);

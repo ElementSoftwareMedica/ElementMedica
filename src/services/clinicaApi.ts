@@ -959,8 +959,15 @@ export interface GiudizioIdoneita {
         taxCode?: string;
     };
     medicoCompetente?: Medico;
-    visita?: Visita;
+    visita?: Visita & {
+        appuntamento?: {
+            id: string;
+            companyTenantProfile?: { company?: { ragioneSociale?: string } };
+        };
+    };
     mansioni?: GiudizioIdoneitaMansione[];
+    /** Ragione sociale azienda (risolta da mansione.site o visita.appuntamento) */
+    _azienda?: string;
 }
 
 export interface RischioPrestazione {

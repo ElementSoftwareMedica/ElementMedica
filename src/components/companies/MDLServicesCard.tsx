@@ -1568,6 +1568,24 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
                                                 Nessun coordinato nominato.
                                             </p>
                                         )}
+                                        <div className="mt-3 flex items-center gap-2 flex-wrap border-t border-teal-100 dark:border-teal-800 pt-3">
+                                            <button
+                                                type="button"
+                                                onClick={() => openPdfPreview(`/api/v1/companies/${companyId}/mdl-documents/nomine.pdf?tipo=MC`, `Nomina MC - ${companyName}.pdf`)}
+                                                className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:bg-gray-800 dark:text-blue-300"
+                                            >
+                                                <Eye className="h-3.5 w-3.5" />
+                                                PDF MC
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => downloadProtectedPdf(`/api/v1/companies/${companyId}/mdl-documents/nomine.pdf?tipo=MC`, `Nomina MC - ${companyName}.pdf`)}
+                                                className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:bg-gray-800 dark:text-blue-300"
+                                            >
+                                                <Download className="h-3.5 w-3.5" />
+                                                Download
+                                            </button>
+                                        </div>
                                     </div>
                                 )}
                                 {renderNomina(
@@ -1579,7 +1597,25 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
                                     successorRSPP,
                                     storicoRSPP,
                                     showStoricoRSPP,
-                                    setShowStoricoRSPP
+                                    setShowStoricoRSPP,
+                                    <div className="mt-3 flex items-center gap-2 flex-wrap">
+                                        <button
+                                            type="button"
+                                            onClick={() => openPdfPreview(`/api/v1/companies/${companyId}/mdl-documents/nomine.pdf?tipo=RSPP`, `Nomina RSPP - ${companyName}.pdf`)}
+                                            className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 dark:border-indigo-700 dark:bg-gray-800 dark:text-indigo-300"
+                                        >
+                                            <Eye className="h-3.5 w-3.5" />
+                                            PDF RSPP
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => downloadProtectedPdf(`/api/v1/companies/${companyId}/mdl-documents/nomine.pdf?tipo=RSPP`, `Nomina RSPP - ${companyName}.pdf`)}
+                                            className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 dark:border-indigo-700 dark:bg-gray-800 dark:text-indigo-300"
+                                        >
+                                            <Download className="h-3.5 w-3.5" />
+                                            Download
+                                        </button>
+                                    </div>
                                 )}
                             </div>
                         </div>

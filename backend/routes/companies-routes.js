@@ -253,7 +253,7 @@ async function stampSignatureOnPdf(pdfBuffer, signatureImage, placement = {}) {
   return Buffer.from(await pdfDoc.save());
 }
 
-async function generateNominePdfBuffer(profile) {
+async function generateNominePdfBuffer(profile, tipo = null) {
   const tenantName = profile.tenant?.name || 'Element';
   const tenantLogo = logoPathToDataUrl(resolveTenantLogo(profile));
   const nomine = await prisma.nominaRuolo.findMany({
@@ -261,7 +261,11 @@ async function generateNominePdfBuffer(profile) {
       companyTenantProfileId: profile.id,
       tenantId: profile.tenantId,
       deletedAt: null,
-      tipoRuolo: { in: ['MEDICO_COMPETENTE', 'MEDICO_COMPETENTE_COORDINATO', 'RSPP'] },
+      tipoRuolo: tipo === 'MC'
+        ? { in: ['MEDICO_COMPETENTE', 'MEDICO_COMPETENTE_COORDINATO'] }
+        : tipo === 'RSPP'
+          ? { in: ['RSPP'] }
+          : { in: ['MEDICO_COMPETENTE', 'MEDICO_COMPETENTE_COORDINATO', 'RSPP'] },
       stato: 'ATTIVA'
     },
     include: {
@@ -910,7 +914,7 @@ router.get('/:id/mdl-documents/nomine.pdf',
         return res.status(404).json({ success: false, error: 'Azienda non trovata' });
       }
 
-      const buffer = await generateNominePdfBuffer(profile);
+      const buffer = await generateNominePdfBuffer(profile, req.query.tipo || null);
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `inline; filename="nomine-${profile.id}.pdf"`);
       return res.send(buffer);

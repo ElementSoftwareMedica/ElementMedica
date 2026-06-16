@@ -3,7 +3,7 @@
 # Override values with environment variables instead of editing scripts.
 
 DEPLOY_SERVER_IP="${DEPLOY_SERVER_IP:-178.104.197.134}"
-DEPLOY_SERVER_USER="${DEPLOY_SERVER_USER:-elementmedica}"
+DEPLOY_SERVER_USER="${DEPLOY_SERVER_USER:-root}"
 DEPLOY_SERVER="${DEPLOY_SERVER_USER}@${DEPLOY_SERVER_IP}"
 DEPLOY_SSH_KEY="${DEPLOY_SSH_KEY:-$HOME/.ssh/id_ed25519}"
 DEPLOY_BASE_PATH="${DEPLOY_BASE_PATH:-/var/www/elementmedica}"

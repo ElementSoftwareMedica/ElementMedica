@@ -10,7 +10,7 @@
 
 import React, { useState, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import {
     FileCheck,
     Plus,
@@ -56,6 +56,7 @@ import { CRUDButton, CRUDPrimaryButton } from '../../../components/shared/CRUDBu
 import { formatMedicoName } from '../../../utils/textFormatters';
 import { DatePickerElegante } from '@/components/ui/DatePickerElegante';
 import GiudizioFormModal from './components/GiudizioFormModal';
+import GiudizioRicorsoModal from './components/GiudizioRicorsoModal';
 import BatchSendModal from './components/BatchSendModal';
 
 // Import Element Medica theme
@@ -105,8 +106,16 @@ const STATUS_LABELS: Record<StatoGiudizio, { label: string; color: string }> = {
     RICORSO_IN_CORSO: { label: 'Ricorso in corso', color: 'bg-purple-100 text-purple-700' }
 };
 
+const getAziendaFromGiudizio = (g: GiudizioIdoneita): string => {
+    const fromMansione = g.mansioni?.find(m => (m.mansione as any)?.site?.companyTenantProfile?.company?.ragioneSociale);
+    if (fromMansione) return (fromMansione.mansione as any).site.companyTenantProfile.company.ragioneSociale as string;
+    return (g.visita as any)?.appuntamento?.companyTenantProfile?.company?.ragioneSociale || '';
+};
+
 const GiudiziIdoneitaPage: React.FC = () => {
     const navigate = useNavigate();
+    const location = useLocation();
+    const isRicorsoPath = location.pathname.endsWith('/ricorso');
     const { id: urlGiudizioId } = useParams<{ id?: string }>();
     const queryClient = useQueryClient();
     const { showToast } = useToast();
@@ -134,6 +143,10 @@ const GiudiziIdoneitaPage: React.FC = () => {
     const [formModalOpen, setFormModalOpen] = useState(false);
     const [giudizioToEdit, setGiudizioToEdit] = useState<GiudizioIdoneita | null>(null);
     const [formMode, setFormMode] = useState<'create' | 'edit'>('create');
+
+    // Ricorso Modal state
+    const [ricorsoModalOpen, setRicorsoModalOpen] = useState(false);
+    const [giudizioForRicorso, setGiudizioForRicorso] = useState<GiudizioIdoneita | null>(null);
 
     // Batch send modal
     const [batchSendModalOpen, setBatchSendModalOpen] = useState(false);
@@ -273,15 +286,22 @@ const GiudiziIdoneitaPage: React.FC = () => {
     const giudizi = giudiziResponse?.data || [];
     const pagination = giudiziResponse?.pagination;
 
-    // Se la pagina viene aperta con un :id nell'URL (es. da link esterno o notifica),
-    // apri automaticamente il modal di dettaglio per quel giudizio.
+    // Se la pagina viene aperta con un :id nell'URL, apri il modal appropriato.
+    // Se il path termina con /ricorso, apri il GiudizioRicorsoModal.
     React.useEffect(() => {
-        if (urlGiudizioId && giudizi.length > 0 && !formModalOpen) {
+        if (urlGiudizioId && giudizi.length > 0 && !formModalOpen && !ricorsoModalOpen) {
             const target = giudizi.find(g => g.id === urlGiudizioId);
-            if (target) openEditModal(target);
+            if (target) {
+                if (isRicorsoPath) {
+                    setGiudizioForRicorso(target);
+                    setRicorsoModalOpen(true);
+                } else {
+                    openEditModal(target);
+                }
+            }
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [urlGiudizioId, giudizi.length]);
+    }, [urlGiudizioId, giudizi.length, isRicorsoPath]);
 
     // Day-grouped helper — groups giudizi by emission date for calendar-style display
     const giudiziGroupedByDay = useMemo(() => {
@@ -717,6 +737,9 @@ const GiudiziIdoneitaPage: React.FC = () => {
                                     Medico Competente
                                 </th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Azienda
+                                </th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                     Data Emissione
                                 </th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -781,6 +804,9 @@ const GiudiziIdoneitaPage: React.FC = () => {
                                                 ? formatMedicoName(giudizio.medicoCompetente)
                                                 : '-'
                                             }
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                            {getAziendaFromGiudizio(giudizio) || '-'}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                             {formatDate(giudizio.dataEmissione)}
@@ -1187,6 +1213,26 @@ const GiudiziIdoneitaPage: React.FC = () => {
                 onClose={() => setBatchSendModalOpen(false)}
                 onSuccess={() => queryClient.invalidateQueries({ queryKey: ['giudizi-idoneita'] })}
             />
+
+            {/* Ricorso Modal */}
+            {ricorsoModalOpen && giudizioForRicorso && (
+                <GiudizioRicorsoModal
+                    isOpen={ricorsoModalOpen}
+                    giudizio={giudizioForRicorso}
+                    onClose={() => {
+                        setRicorsoModalOpen(false);
+                        setGiudizioForRicorso(null);
+                        navigate('/poliambulatorio/mdl/giudizi-idoneita');
+                    }}
+                    onSuccess={() => {
+                        setRicorsoModalOpen(false);
+                        setGiudizioForRicorso(null);
+                        queryClient.invalidateQueries({ queryKey: ['giudizi-idoneita'] });
+                        navigate('/poliambulatorio/mdl/giudizi-idoneita');
+                        showToast({ message: 'Ricorso registrato con successo', type: 'success' });
+                    }}
+                />
+            )}
         </div>
     );
 };

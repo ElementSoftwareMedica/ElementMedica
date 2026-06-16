@@ -960,7 +960,7 @@ const formatExecutionSite = (...sources: Array<{ nome?: string | null; siteName?
     return '';
 };
 
-const TabCompensiMedico: React.FC<{ medicoId: string }> = ({ medicoId }) => {
+const TabCompensiMedico: React.FC<{ medicoId: string; medicoName?: string }> = ({ medicoId, medicoName }) => {
     const { showToast } = useToast();
     const { hasPermission } = useAuth();
     const [expandedId, setExpandedId] = React.useState<string | null>(null);
@@ -1107,17 +1107,32 @@ const TabCompensiMedico: React.FC<{ medicoId: string }> = ({ medicoId }) => {
                     || c.controparteCollegata?.fatturaElettronica?.clienteAzienda?.company?.ragioneSociale
                     || '';
                 return {
+                    Medico: medicoName || '',
                     Paziente: formatPersonExport(patient),
                     Prestazioni: prestazioni,
-                    'Percentuale spettante': formatPercentExport(compenso, paid, c.compensoTipo, c.compensoValore),
-                    'Compenso medico': compenso,
-                    'Quanto ha pagato il pz': paid,
+                    Importo: paid,
+                    Percentuale: formatPercentExport(compenso, paid, c.compensoTipo, c.compensoValore),
+                    'Compenso Medico': compenso,
                     'Giorno esecuzione': c.dataEsecuzione ? new Date(c.dataEsecuzione).toLocaleDateString('it-IT') : '',
                     'Sede esecuzione': sede,
                     Azienda: azienda,
                     Stato: STATO_COMPENSO_CONFIG[c.stato]?.label || c.stato,
                     Descrizione: c.descrizione || '',
                 };
+            });
+            const totalCompenso = rows.reduce((sum, r) => sum + (r['Compenso Medico'] as number), 0);
+            rows.push({
+                Medico: '',
+                Paziente: '',
+                Prestazioni: '',
+                Importo: rows.reduce((sum, r) => sum + (r.Importo as number), 0),
+                Percentuale: 'TOTALE',
+                'Compenso Medico': totalCompenso,
+                'Giorno esecuzione': '',
+                'Sede esecuzione': '',
+                Azienda: '',
+                Stato: '',
+                Descrizione: '',
             });
             const XLSX = await import('xlsx');
             const workbook = XLSX.utils.book_new();
@@ -1839,7 +1854,7 @@ const MedicoDetailPage: React.FC = () => {
             {/* Tab: Compensi */}
             {activeTab === 'compensi' && (
                 <div className="bg-white rounded-xl border border-gray-200 p-6">
-                    <TabCompensiMedico medicoId={medico.id} />
+                    <TabCompensiMedico medicoId={medico.id} medicoName={`${medico.lastName || ''} ${medico.firstName || ''}`.trim()} />
                 </div>
             )}
         </div>

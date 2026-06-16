@@ -515,7 +515,16 @@ const GiudizioIdoneitaService = {
                                 select: {
                                     id: true,
                                     codice: true,
-                                    denominazione: true
+                                    denominazione: true,
+                                    site: {
+                                        select: {
+                                            companyTenantProfile: {
+                                                select: {
+                                                    company: { select: { ragioneSociale: true } }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -528,6 +537,11 @@ const GiudizioIdoneitaService = {
                             appuntamento: {
                                 select: {
                                     id: true,
+                                    companyTenantProfile: {
+                                        select: {
+                                            company: { select: { ragioneSociale: true } }
+                                        }
+                                    },
                                     prestazioni: {
                                         select: {
                                             id: true,
