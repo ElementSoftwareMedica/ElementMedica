@@ -5413,6 +5413,10 @@ export const giudiziIdoneitaApi = {
     pdfUrl: (id: string, destinatario: 'lavoratore' | 'datore' = 'lavoratore') =>
         `${CLINICA_BASE}/giudizi-idoneita/${id}/pdf/${destinatario}`,
 
+    // Scarica il PDF come Blob tramite client autenticato (include header tenant corretti)
+    fetchPdfBlob: (id: string, destinatario: 'lavoratore' | 'datore' = 'lavoratore') =>
+        apiDownload(`${CLINICA_BASE}/giudizi-idoneita/${id}/pdf/${destinatario}`),
+
     // PDF Documents (Art. 41 c.7 — copia lavoratore e datore di lavoro)
     generateDocuments: (id: string) =>
         apiPost<ApiResponse<{ pdfLavoratoreUrl: string; pdfDatoreUrl: string }>>(

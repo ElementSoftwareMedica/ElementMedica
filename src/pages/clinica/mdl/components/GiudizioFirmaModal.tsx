@@ -17,7 +17,6 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { SignaturePad, SignaturePadRef } from '../../../../components/signature/SignaturePad';
 import { clinicaApi, type GiudizioIdoneita } from '../../../../services/clinicaApi';
 import { useToast } from '../../../../hooks/useToast';
-import { getToken } from '../../../../services/auth';
 import { CRUDPrimaryButton } from '../../../../components/shared/CRUDButton';
 
 interface GiudizioFirmaModalProps {
@@ -69,7 +68,6 @@ const GiudizioFirmaModal: React.FC<GiudizioFirmaModalProps> = ({ isOpen, giudizi
         if (step !== 'place' || !isOpen) return;
         let cancelled = false;
         let task: PdfjsLib.PDFDocumentLoadingTask | null = null;
-        const token = getToken();
         setPdfLoading(true);
         setPdfError(null);
         (async () => {
@@ -80,10 +78,11 @@ const GiudizioFirmaModal: React.FC<GiudizioFirmaModalProps> = ({ isOpen, giudizi
                     pdfjsRef.current = pdfjs as unknown as typeof PdfjsLib;
                 }
                 if (cancelled) return;
-                task = pdfjsRef.current.getDocument({
-                    url: clinicaApi.giudiziIdoneita.pdfUrl(giudizio.id, 'lavoratore'),
-                    httpHeaders: token ? { Authorization: `Bearer ${token}` } : {}
-                });
+                // Scarica il PDF via client autenticato (header tenant corretti) e passa i byte a pdfjs
+                const blob = await clinicaApi.giudiziIdoneita.fetchPdfBlob(giudizio.id, 'lavoratore');
+                const data = await blob.arrayBuffer();
+                if (cancelled) return;
+                task = pdfjsRef.current.getDocument({ data });
                 const doc = await task.promise;
                 if (cancelled) return;
                 setPdfDoc(doc);
