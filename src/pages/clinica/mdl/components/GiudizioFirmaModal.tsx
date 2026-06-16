@@ -12,7 +12,7 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type * as PdfjsLib from 'pdfjs-dist';
-import { X, PenTool, CheckCircle2, Loader2, RotateCcw, ArrowRight, ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, PenTool, CheckCircle2, Loader2, RotateCcw, ArrowRight, ArrowLeft, ChevronLeft, ChevronRight, Pen, Upload } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { SignaturePad, SignaturePadRef } from '../../../../components/signature/SignaturePad';
 import { clinicaApi, type GiudizioIdoneita } from '../../../../services/clinicaApi';
@@ -32,6 +32,8 @@ const GiudizioFirmaModal: React.FC<GiudizioFirmaModalProps> = ({ isOpen, giudizi
     const padRef = useRef<SignaturePadRef>(null);
     const [isEmpty, setIsEmpty] = useState(true);
     const [step, setStep] = useState<'draw' | 'place'>('draw');
+    const [inputMode, setInputMode] = useState<'draw' | 'upload'>('draw');
+    const [uploadedDataUrl, setUploadedDataUrl] = useState<string>('');
     const [signatureDataUrl, setSignatureDataUrl] = useState<string>('');
 
     // PDF preview / posizionamento
@@ -56,6 +58,8 @@ const GiudizioFirmaModal: React.FC<GiudizioFirmaModalProps> = ({ isOpen, giudizi
     useEffect(() => {
         if (isOpen) {
             setStep('draw');
+            setInputMode('draw');
+            setUploadedDataUrl('');
             setSignatureDataUrl('');
             setIsEmpty(true);
             setPdfDoc(null);
@@ -145,16 +149,37 @@ const GiudizioFirmaModal: React.FC<GiudizioFirmaModalProps> = ({ isOpen, giudizi
     };
     const onUp = () => setIsDragging(false);
 
-    const goToPlace = useCallback(() => {
-        if (!padRef.current || padRef.current.isEmpty()) {
-            showToast({ type: 'error', message: 'Disegna la firma prima di continuare' });
+    const handleUploadFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (!/^image\/(png|jpe?g)$/i.test(file.type)) {
+            showToast({ type: 'error', message: 'Carica un file PNG o JPG' });
             return;
         }
-        const data = padRef.current.getSignatureData('png');
-        const b64 = data.imageBase64.startsWith('data:') ? data.imageBase64 : `data:image/png;base64,${data.imageBase64}`;
+        const reader = new FileReader();
+        reader.onload = () => setUploadedDataUrl(typeof reader.result === 'string' ? reader.result : '');
+        reader.readAsDataURL(file);
+    };
+
+    const goToPlace = useCallback(() => {
+        let b64 = '';
+        if (inputMode === 'upload') {
+            if (!uploadedDataUrl) {
+                showToast({ type: 'error', message: 'Carica un\'immagine della firma prima di continuare' });
+                return;
+            }
+            b64 = uploadedDataUrl;
+        } else {
+            if (!padRef.current || padRef.current.isEmpty()) {
+                showToast({ type: 'error', message: 'Disegna la firma prima di continuare' });
+                return;
+            }
+            const data = padRef.current.getSignatureData('png');
+            b64 = data.imageBase64.startsWith('data:') ? data.imageBase64 : `data:image/png;base64,${data.imageBase64}`;
+        }
         setSignatureDataUrl(b64);
         setStep('place');
-    }, [showToast]);
+    }, [inputMode, uploadedDataUrl, showToast]);
 
     const saveMutation = useMutation({
         mutationFn: (withPosition: boolean) => {
@@ -197,27 +222,69 @@ const GiudizioFirmaModal: React.FC<GiudizioFirmaModalProps> = ({ isOpen, giudizi
                 <div className="flex-1 overflow-y-auto px-6 py-5">
                     {step === 'draw' ? (
                         <div className="space-y-4">
-                            <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                                Firma del lavoratore
-                            </label>
-                            <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl overflow-hidden bg-white">
-                                <SignaturePad
-                                    ref={padRef}
-                                    height={180}
-                                    penColor="#1e293b"
-                                    penWidth={2}
-                                    backgroundColor="#ffffff"
-                                    placeholder="Il lavoratore firma qui..."
-                                    onChange={(empty) => setIsEmpty(empty)}
-                                />
+                            {/* Tabs Disegna / Carica immagine */}
+                            <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                                <button
+                                    type="button"
+                                    onClick={() => setInputMode('draw')}
+                                    className={`flex-1 py-2.5 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${inputMode === 'draw' ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 border-b-2 border-teal-600' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+                                >
+                                    <Pen className="w-4 h-4" /> Disegna
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setInputMode('upload')}
+                                    className={`flex-1 py-2.5 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${inputMode === 'upload' ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 border-b-2 border-teal-600' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+                                >
+                                    <Upload className="w-4 h-4" /> Carica immagine
+                                </button>
                             </div>
-                            <button
-                                type="button"
-                                onClick={() => { padRef.current?.clear(); setIsEmpty(true); }}
-                                className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
-                            >
-                                <RotateCcw className="h-3 w-3" /> Cancella e rifai
-                            </button>
+
+                            {inputMode === 'draw' ? (
+                                <>
+                                    <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl overflow-hidden bg-white">
+                                        <SignaturePad
+                                            ref={padRef}
+                                            height={180}
+                                            penColor="#1e293b"
+                                            penWidth={2}
+                                            backgroundColor="#ffffff"
+                                            placeholder="Il lavoratore firma qui..."
+                                            onChange={(empty) => setIsEmpty(empty)}
+                                        />
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => { padRef.current?.clear(); setIsEmpty(true); }}
+                                        className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                                    >
+                                        <RotateCcw className="h-3 w-3" /> Cancella e rifai
+                                    </button>
+                                </>
+                            ) : (
+                                <div>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Carica un'immagine PNG o JPG della firma su sfondo bianco.</p>
+                                    <label className="flex items-center gap-3 cursor-pointer px-4 py-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl hover:border-teal-400 dark:hover:border-teal-500 transition-colors">
+                                        <Upload className="w-5 h-5 text-gray-400" />
+                                        <span className="text-sm text-gray-600 dark:text-gray-400">Scegli file PNG o JPG...</span>
+                                        <input type="file" accept="image/png,image/jpeg,image/jpg" className="hidden" onChange={handleUploadFile} />
+                                    </label>
+                                    {uploadedDataUrl && (
+                                        <div className="mt-3 relative">
+                                            <div className="border rounded-xl overflow-hidden bg-white p-3">
+                                                <img src={uploadedDataUrl} alt="Anteprima firma" className="max-h-28 max-w-full object-contain mx-auto" />
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setUploadedDataUrl('')}
+                                                className="absolute top-1 right-1 p-1 rounded-full bg-red-100 dark:bg-red-900/50 text-red-500 hover:bg-red-200 dark:hover:bg-red-900"
+                                            >
+                                                <X className="w-3 h-3" />
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                             <p className="text-[11px] text-gray-400 leading-relaxed">
                                 La firma attesta che il lavoratore ha ricevuto copia del presente giudizio di idoneità.
                                 Al passo successivo potrai trascinarla nel punto esatto del documento.
@@ -289,7 +356,7 @@ const GiudizioFirmaModal: React.FC<GiudizioFirmaModalProps> = ({ isOpen, giudizi
                             Annulla
                         </button>
                         {step === 'draw' ? (
-                            <CRUDPrimaryButton onClick={goToPlace} disabled={isEmpty}>
+                            <CRUDPrimaryButton onClick={goToPlace} disabled={inputMode === 'draw' ? isEmpty : !uploadedDataUrl}>
                                 <ArrowRight className="h-4 w-4" /> Avanti: posiziona
                             </CRUDPrimaryButton>
                         ) : (

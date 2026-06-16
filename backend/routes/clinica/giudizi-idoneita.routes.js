@@ -470,6 +470,9 @@ router.get('/:id/pdf/:destinatario', requireAuth, requirePermission('clinica.vis
     res.end(buffer);
   } catch (error) {
     logger.error({ error: error.message, stack: error.stack, id, destinatario }, 'Errore generazione PDF giudizio idoneità');
+    if (/non trovato/i.test(error.message)) {
+      return res.status(404).json({ error: 'Giudizio non trovato per il tenant corrente' });
+    }
     res.status(500).json({ error: 'Errore nella generazione del PDF' });
   }
 });

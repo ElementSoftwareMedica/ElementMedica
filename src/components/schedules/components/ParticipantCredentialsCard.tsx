@@ -186,7 +186,7 @@ export const ParticipantCredentialsCard: React.FC<ParticipantCredentialsCardProp
                     ) : (
                         <div className="flex flex-wrap items-center justify-between gap-3">
                             {/* Statistiche inline */}
-                            <div className="flex flex-wrap items-center gap-4">
+                            <div className="flex flex-wrap items-center gap-4 min-w-0">
                                 <div className="flex items-center gap-2">
                                     <Users className="h-5 w-5 text-blue-500" />
                                     <div>
