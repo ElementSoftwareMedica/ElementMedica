@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '../../../hooks/useToast';
 import Modal from '../../../design-system/molecules/Modal/Modal';
+import { ElegantSelect } from '../../ui/ElegantSelect';
 import { apiGet, apiPost } from '../../../services/api';
 import { cn } from '../../../design-system/utils';
 import { useTenantMode } from '../../../contexts/TenantModeContext';
@@ -216,18 +217,14 @@ export const QuickActionOT23Modal: React.FC<QuickActionOT23ModalProps> = ({
                         <Calendar className="inline h-4 w-4 mr-1" />
                         Anno di riferimento *
                     </label>
-                    <select
-                        value={formData.anno}
-                        onChange={(e) => setFormData(prev => ({ ...prev, anno: parseInt(e.target.value) }))}
-                        className={cn(
-                            "w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 dark:text-gray-100",
-                            errors.anno ? "border-red-300 dark:border-red-700" : "border-gray-300 dark:border-gray-600"
-                        )}
-                    >
-                        {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map((year) => (
-                            <option key={year} value={year}>{year}</option>
-                        ))}
-                    </select>
+                    <ElegantSelect
+                        value={String(formData.anno)}
+                        onChange={(v) => setFormData(prev => ({ ...prev, anno: parseInt(v) }))}
+                        options={Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map((year) => ({
+                            value: String(year),
+                            label: String(year)
+                        }))}
+                    />
                     {errors.anno && (
                         <p className="mt-1 text-xs text-red-600">{errors.anno}</p>
                     )}

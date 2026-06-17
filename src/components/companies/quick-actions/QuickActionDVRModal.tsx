@@ -33,6 +33,7 @@ import { apiGet, apiUpload } from '../../../services/api';
 import { cn } from '../../../design-system/utils';
 import { formatMedicoName } from '../../../utils/textFormatters';
 import { DatePickerElegante } from '../../ui/DatePickerElegante';
+import { ElegantSelect } from '../../ui/ElegantSelect';
 
 interface QuickActionDVRModalProps {
     isOpen: boolean;
@@ -551,22 +552,18 @@ export const QuickActionDVRModal: React.FC<QuickActionDVRModalProps> = ({
                                 </p>
                             </div>
                         ) : (
-                            <select
+                            <ElegantSelect
                                 value={formData.siteId}
-                                onChange={(e) => handleChange('siteId', e.target.value)}
-                                className={cn(
-                                    "w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 dark:text-gray-100",
-                                    errors.siteId ? "border-red-300 dark:border-red-700" : "border-gray-300 dark:border-gray-600"
-                                )}
-                            >
-                                <option value="">Seleziona sede...</option>
-                                {sites.map((site) => (
-                                    <option key={site.id} value={site.id}>
-                                        {site.siteName} - {site.citta || site.indirizzo || 'Indirizzo non specificato'}
-                                        {site.dvr ? ' ✓ (DVR presente)' : ''}
-                                    </option>
-                                ))}
-                            </select>
+                                onChange={(v) => handleChange('siteId', v)}
+                                placeholder="Seleziona sede..."
+                                options={[
+                                    { value: '', label: 'Seleziona sede...' },
+                                    ...sites.map((site) => ({
+                                        value: site.id,
+                                        label: `${site.siteName} - ${site.citta || site.indirizzo || 'Indirizzo non specificato'}${site.dvr ? ' ✓ (DVR presente)' : ''}`
+                                    }))
+                                ]}
+                            />
                         )}
                         {errors.siteId && (
                             <p className="mt-1 text-xs text-red-600">{errors.siteId}</p>
@@ -648,24 +645,22 @@ export const QuickActionDVRModal: React.FC<QuickActionDVRModalProps> = ({
                             </div>
                         )}
 
-                        <select
+                        <ElegantSelect
                             value={formData.esecutoreId}
-                            onChange={(e) => handleChange('esecutoreId', e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 dark:text-gray-100"
-                        >
-                            <option value="">
-                                {isEditMode && formData.effettuatoDaOriginal
-                                    ? `Mantieni: ${formData.effettuatoDaOriginal}`
-                                    : 'Non specificato (usa nome azienda)'}
-                            </option>
-                            {esecutori.map((person) => (
-                                <option key={person.id} value={person.id}>
-                                    {formatMedicoName({ firstName: person.firstName, lastName: person.lastName, gender: person.gender as 'MALE' | 'FEMALE' | 'OTHER' | 'NOT_SPECIFIED' | null })}
-                                    {person.role && ` - ${person.role}`}
-                                    {(selectedSite?.rspp?.id === person.id || selectedSite?.rsppId === person.id) && ' (RSPP sede)'}
-                                </option>
-                            ))}
-                        </select>
+                            onChange={(v) => handleChange('esecutoreId', v)}
+                            options={[
+                                {
+                                    value: '',
+                                    label: isEditMode && formData.effettuatoDaOriginal
+                                        ? `Mantieni: ${formData.effettuatoDaOriginal}`
+                                        : 'Non specificato (usa nome azienda)'
+                                },
+                                ...esecutori.map((person) => ({
+                                    value: person.id,
+                                    label: `${formatMedicoName({ firstName: person.firstName, lastName: person.lastName, gender: person.gender as 'MALE' | 'FEMALE' | 'OTHER' | 'NOT_SPECIFIED' | null })}${person.role ? ` - ${person.role}` : ''}${(selectedSite?.rspp?.id === person.id || selectedSite?.rsppId === person.id) ? ' (RSPP sede)' : ''}`
+                                }))
+                            ]}
+                        />
                         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                             <Shield className="inline h-3 w-3 mr-1" />
                             Di default viene selezionato l'RSPP della sede, se assegnato
