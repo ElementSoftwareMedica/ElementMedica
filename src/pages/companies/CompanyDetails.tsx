@@ -125,6 +125,26 @@ interface CompanyMdlDocumentFile {
   documentType?: string;
 }
 
+// Giudizio di idoneità mostrato nel tab Documenti
+interface GiudizioDocItem {
+  id: string;
+  tipoGiudizio?: string;
+  stato?: string;
+  dataEmissione?: string | null;
+  person?: { firstName?: string; lastName?: string } | null;
+  firmaLavoratore?: { createdAt: string } | null;
+}
+
+// Preventivo mostrato nel tab Documenti
+interface PreventivoDocItem {
+  id: string;
+  numero?: string | null;
+  numeroProgressivo?: number | null;
+  stato?: string;
+  tipoServizio?: string;
+  dataEmissione?: string | null;
+}
+
 // P59: Interfaccia per Sopralluogo
 interface SopralluogoInfo {
   id: string;
@@ -324,6 +344,8 @@ const CompanyDetails: React.FC = () => {
   const [successoreTariffario, setSuccessoreTariffario] = useState<TariffarioInfo | null>(null);
   const [storicoTariffari, setStoricoTariffari] = useState<TariffarioInfo[]>([]);
   const [mdlDocuments, setMdlDocuments] = useState<CompanyMdlDocumentFile[]>([]);
+  const [giudizi, setGiudizi] = useState<GiudizioDocItem[]>([]);
+  const [preventivi, setPreventivi] = useState<PreventivoDocItem[]>([]);
   // P59: Trigger per forzare refresh delle sezioni dopo quick actions
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   // P59 Sprint 11.2: Stato per modal associazione tariffario
@@ -420,6 +442,28 @@ const CompanyDetails: React.FC = () => {
         ...(tariffarioDocsResponse.status === 'fulfilled' ? (tariffarioDocsResponse.value?.data || []).map(doc => ({ ...doc, documentType: 'tariffario' })) : []),
       ];
       setMdlDocuments(loadedMdlDocs);
+
+      // Giudizi di idoneità collegati all'azienda (per il tab Documenti)
+      try {
+        const giudiziRes = await apiGet<{ data: GiudizioDocItem[] }>(
+          `/api/v1/clinica/giudizi-idoneita?companyTenantProfileId=${companyData.companyTenantProfileId}&limit=200`,
+          {}, { headers: operateTenantHeaders }
+        );
+        setGiudizi(giudiziRes?.data || []);
+      } catch {
+        setGiudizi([]);
+      }
+
+      // Preventivi collegati all'azienda (per il tab Documenti)
+      try {
+        const prevRes = await apiGet<{ data: PreventivoDocItem[] }>(
+          `/api/v1/preventivi?clienteId=${companyData.companyTenantProfileId}&clienteType=azienda&limit=200`,
+          {}, { headers: operateTenantHeaders }
+        );
+        setPreventivi(prevRes?.data || []);
+      } catch {
+        setPreventivi([]);
+      }
 
       // P59 Sprint 11.2: Gestisci Tariffari - separa attivo da storico
       if (tariffariResponse.status === 'fulfilled' && tariffariResponse.value?.data?.length > 0) {
@@ -1111,6 +1155,9 @@ const CompanyDetails: React.FC = () => {
             tariffario={tariffario}
             nomine={company.nomine}
             mdlDocuments={mdlDocuments}
+            giudizi={giudizi}
+            preventivi={preventivi}
+            onRefresh={() => fetchCompanyData()}
           />
         </div>
       )}

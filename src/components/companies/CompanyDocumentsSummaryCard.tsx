@@ -1,6 +1,17 @@
 import React, { useState } from 'react';
-import { Download, Eye, FileText, ShieldCheck, ChevronDown } from 'lucide-react';
+import { Download, Eye, FileText, ShieldCheck, ChevronDown, PenTool } from 'lucide-react';
 import { getToken } from '../../services/auth';
+import { clinicaApi, type GiudizioIdoneita } from '../../services/clinicaApi';
+import GiudizioFirmaModal from '../../pages/clinica/mdl/components/GiudizioFirmaModal';
+
+interface GiudizioDoc {
+  id: string;
+  tipoGiudizio?: string;
+  stato?: string;
+  dataEmissione?: string | null;
+  person?: { firstName?: string; lastName?: string } | null;
+  firmaLavoratore?: { createdAt: string } | null;
+}
 
 interface DocumentItem {
   id: string;
@@ -10,6 +21,11 @@ interface DocumentItem {
   subtitle?: string;
   documentUrl?: string | null;
   documentName?: string | null;
+  /** Per i giudizi: id giudizio + destinatario per apertura PDF on-demand */
+  giudizioId?: string;
+  /** Giudizio non ancora firmato dal lavoratore → mostra azione Firma */
+  giudizioNeedsFirma?: boolean;
+  giudizioRef?: GiudizioDoc;
 }
 
 interface CompanyDocumentsSummaryCardProps {
@@ -46,7 +62,27 @@ interface CompanyDocumentsSummaryCardProps {
     signedOnline?: boolean;
     documentType?: string;
   }>;
+  giudizi?: GiudizioDoc[];
+  preventivi?: Array<{
+    id: string;
+    numero?: string | null;
+    numeroProgressivo?: number | null;
+    stato?: string;
+    tipoServizio?: string;
+    dataEmissione?: string | null;
+  }>;
+  /** Ricarica i dati dopo una firma */
+  onRefresh?: () => void;
 }
+
+const GIUDIZIO_LABELS: Record<string, string> = {
+  IDONEO: 'Idoneo',
+  IDONEO_CON_PRESCRIZIONI: 'Idoneo con prescrizioni',
+  IDONEO_CON_LIMITAZIONI: 'Idoneo con limitazioni',
+  IDONEO_CON_LIMITAZIONI_PRESCRIZIONI: 'Idoneo con limitazioni e prescrizioni',
+  NON_IDONEO_TEMPORANEO: 'Temporaneamente non idoneo',
+  NON_IDONEO_PERMANENTE: 'Non idoneo',
+};
 
 const roleLabel = (role?: string | null) => {
   const labels: Record<string, string> = {
@@ -75,7 +111,11 @@ const CompanyDocumentsSummaryCard: React.FC<CompanyDocumentsSummaryCardProps> = 
   tariffario,
   nomine = [],
   mdlDocuments = [],
+  giudizi = [],
+  preventivi = [],
+  onRefresh,
 }) => {
+  const [firmaGiudizio, setFirmaGiudizio] = useState<GiudizioDoc | null>(null);
   const documents: DocumentItem[] = [
     ...dvrs.map(dvr => ({
       id: `dvr-${dvr.id}`,
@@ -125,6 +165,31 @@ const CompanyDocumentsSummaryCard: React.FC<CompanyDocumentsSummaryCardProps> = 
       documentUrl: document.url,
       documentName: document.originalName || document.filename,
     })),
+    ...giudizi.map(g => ({
+      id: `giudizio-${g.id}`,
+      type: 'Giudizio idoneità',
+      category: 'mdl' as const,
+      title: `${g.person?.lastName || ''} ${g.person?.firstName || ''}`.trim() || 'Giudizio di idoneità',
+      subtitle: [
+        GIUDIZIO_LABELS[g.tipoGiudizio || ''] || g.tipoGiudizio,
+        formatDate(g.dataEmissione),
+        g.firmaLavoratore ? 'Firmato' : 'Da firmare'
+      ].filter(Boolean).join(' · '),
+      documentUrl: null,
+      documentName: null,
+      giudizioId: g.id,
+      giudizioNeedsFirma: !g.firmaLavoratore,
+      giudizioRef: g,
+    })),
+    ...preventivi.map(p => ({
+      id: `preventivo-${p.id}`,
+      type: 'Preventivo',
+      category: 'amministrazione' as const,
+      title: `Preventivo ${p.numero || (p.numeroProgressivo != null ? `#${p.numeroProgressivo}` : p.id.slice(0, 8))}`,
+      subtitle: [p.tipoServizio?.replace(/_/g, ' '), p.stato, formatDate(p.dataEmissione)].filter(Boolean).join(' · '),
+      documentUrl: `/api/v1/preventivi/${p.id}/pdf`,
+      documentName: `preventivo_${p.numero || p.id.slice(0, 8)}.pdf`,
+    })),
   ];
 
   // Sezioni collassabili (tutte aperte di default)
@@ -150,6 +215,18 @@ const CompanyDocumentsSummaryCard: React.FC<CompanyDocumentsSummaryCardProps> = 
     }
     window.open(url, '_blank');
     setTimeout(() => URL.revokeObjectURL(url), 60000);
+  };
+
+  const openGiudizioPdf = async (giudizioId: string) => {
+    try {
+      const blob = await clinicaApi.giudiziIdoneita.fetchPdfBlob(giudizioId, 'lavoratore');
+      const url = URL.createObjectURL(blob);
+      const win = window.open(url, '_blank');
+      if (win) setTimeout(() => URL.revokeObjectURL(url), 60000);
+      else URL.revokeObjectURL(url);
+    } catch {
+      /* errore apertura PDF giudizio */
+    }
   };
 
   return (
@@ -212,7 +289,29 @@ const CompanyDocumentsSummaryCard: React.FC<CompanyDocumentsSummaryCardProps> = 
                         )}
                       </div>
                     </div>
-                    {document.documentUrl ? (
+                    {document.giudizioId ? (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => openGiudizioPdf(document.giudizioId!)}
+                          className="rounded-lg p-2 text-gray-400 hover:bg-teal-50 hover:text-teal-600 dark:hover:bg-teal-900/20"
+                          title="Apri PDF giudizio"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                        {document.giudizioNeedsFirma && (
+                          <button
+                            type="button"
+                            onClick={() => setFirmaGiudizio(document.giudizioRef!)}
+                            className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 dark:bg-purple-900/20 dark:text-purple-300"
+                            title="Firma del lavoratore"
+                          >
+                            <PenTool className="h-3.5 w-3.5" />
+                            Firma
+                          </button>
+                        )}
+                      </div>
+                    ) : document.documentUrl ? (
                       <div className="flex items-center gap-1">
                         <button
                           type="button"
@@ -243,6 +342,15 @@ const CompanyDocumentsSummaryCard: React.FC<CompanyDocumentsSummaryCardProps> = 
           );
         })}
       </div>
+
+      {firmaGiudizio && (
+        <GiudizioFirmaModal
+          isOpen={!!firmaGiudizio}
+          giudizio={firmaGiudizio as unknown as GiudizioIdoneita}
+          onClose={() => setFirmaGiudizio(null)}
+          onSuccess={() => { setFirmaGiudizio(null); onRefresh?.(); }}
+        />
+      )}
     </div>
   );
 };
