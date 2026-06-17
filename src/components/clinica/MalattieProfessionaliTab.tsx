@@ -27,6 +27,7 @@ import {
 import { useToast } from '@/hooks/useToast';
 import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 import { DatePickerElegante } from '@/components/ui/DatePickerElegante';
+import { ElegantSelect } from '@/components/ui/ElegantSelect';
 
 interface MalattieProfessionaliTabProps {
     personId: string;
@@ -299,27 +300,19 @@ export const MalattieProfessionaliTab: React.FC<MalattieProfessionaliTabProps> =
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <div>
                             <label className="text-xs text-gray-500 mb-0.5 block">Tipologia</label>
-                            <select
+                            <ElegantSelect
                                 value={form.tipologia}
-                                onChange={e => setForm(f => ({ ...f, tipologia: e.target.value as TipologiaMalattiaProfessionale }))}
-                                className="w-full text-sm px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-1 focus:ring-teal-400"
-                            >
-                                {Object.entries(TIPOLOGIA_LABELS).map(([k, v]) => (
-                                    <option key={k} value={k}>{v}</option>
-                                ))}
-                            </select>
+                                onChange={v => setForm(f => ({ ...f, tipologia: v as TipologiaMalattiaProfessionale }))}
+                                options={Object.entries(TIPOLOGIA_LABELS).map(([k, v]) => ({ value: k, label: v as string }))}
+                            />
                         </div>
                         <div>
                             <label className="text-xs text-gray-500 mb-0.5 block">Esito</label>
-                            <select
+                            <ElegantSelect
                                 value={form.esito}
-                                onChange={e => setForm(f => ({ ...f, esito: e.target.value as EsitoMalattiaProfessionale }))}
-                                className="w-full text-sm px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-1 focus:ring-teal-400"
-                            >
-                                {Object.entries(ESITO_LABELS).map(([k, v]) => (
-                                    <option key={k} value={k}>{v}</option>
-                                ))}
-                            </select>
+                                onChange={v => setForm(f => ({ ...f, esito: v as EsitoMalattiaProfessionale }))}
+                                options={Object.entries(ESITO_LABELS).map(([k, v]) => ({ value: k, label: v as string }))}
+                            />
                         </div>
                     </div>
 

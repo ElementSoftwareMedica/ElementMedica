@@ -52,6 +52,7 @@ import type {
 } from '../../services/clinicaApi';
 import { useToast } from '../../hooks/useToast';
 import { DatePickerElegante } from '../ui/DatePickerElegante';
+import { ElegantSelect } from '../ui/ElegantSelect';
 
 // =====================================================
 // TYPES
@@ -220,30 +221,21 @@ const RiconoscimentoForm: React.FC<RiconoscimentoFormProps> = ({
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                     {targetType === 'bundle' ? 'Bundle *' : 'Prestazione *'}
                 </label>
-                <select
+                <ElegantSelect
                     value={targetType === 'bundle' ? formData.bundleId : formData.prestazioneId}
-                    onChange={(e) => setFormData(prev => ({
+                    onChange={(v) => setFormData(prev => ({
                         ...prev,
-                        bundleId: targetType === 'bundle' ? e.target.value : '',
-                        prestazioneId: targetType === 'prestazione' ? e.target.value : ''
+                        bundleId: targetType === 'bundle' ? v : '',
+                        prestazioneId: targetType === 'prestazione' ? v : ''
                     }))}
-                    className="input-clinica w-full"
-                    required
-                >
-                    <option value="">Seleziona {targetType === 'bundle' ? 'bundle' : 'prestazione'}...</option>
-                    {targetType === 'bundle'
-                        ? bundles.map((b: OffertaBundle) => (
-                            <option key={b.id} value={b.id}>
-                                {b.nome} ({b.codice}) - €{Number(b.prezzoBundle || 0).toFixed(2)}
-                            </option>
-                        ))
-                        : prestazioni.map((p: Prestazione) => (
-                            <option key={p.id} value={p.id}>
-                                {p.nome} ({p.codice}) - €{Number(p.prezzoBase || 0).toFixed(2)}
-                            </option>
-                        ))
-                    }
-                </select>
+                    placeholder={`Seleziona ${targetType === 'bundle' ? 'bundle' : 'prestazione'}...`}
+                    options={[
+                        { value: '', label: `Seleziona ${targetType === 'bundle' ? 'bundle' : 'prestazione'}...` },
+                        ...(targetType === 'bundle'
+                            ? bundles.map((b: OffertaBundle) => ({ value: b.id, label: `${b.nome} (${b.codice}) - €${Number(b.prezzoBundle || 0).toFixed(2)}` }))
+                            : prestazioni.map((p: Prestazione) => ({ value: p.id, label: `${p.nome} (${p.codice}) - €${Number(p.prezzoBase || 0).toFixed(2)}` })))
+                    ]}
+                />
             </div>
 
             {/* Tipo e Valore */}
@@ -252,15 +244,14 @@ const RiconoscimentoForm: React.FC<RiconoscimentoFormProps> = ({
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                         Tipo Riconoscimento *
                     </label>
-                    <select
+                    <ElegantSelect
                         value={formData.tipo}
-                        onChange={(e) => setFormData(prev => ({ ...prev, tipo: e.target.value as TipoRiconoscimento }))}
-                        className="input-clinica w-full"
-                        required
-                    >
-                        <option value="PERCENTUALE">Percentuale (%)</option>
-                        <option value="VALORE_ASSOLUTO">Valore Assoluto (€)</option>
-                    </select>
+                        onChange={(v) => setFormData(prev => ({ ...prev, tipo: v as TipoRiconoscimento }))}
+                        options={[
+                            { value: 'PERCENTUALE', label: 'Percentuale (%)' },
+                            { value: 'VALORE_ASSOLUTO', label: 'Valore Assoluto (€)' }
+                        ]}
+                    />
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -759,18 +750,15 @@ const AziendeRiconoscimentiSection: React.FC<Props> = ({ convenzioneId, isEditin
                             />
                         </div>
 
-                        <select
+                        <ElegantSelect
                             value={newAziendaData.aziendaId}
-                            onChange={(e) => setNewAziendaData(prev => ({ ...prev, aziendaId: e.target.value }))}
-                            className="input-clinica w-full"
-                        >
-                            <option value="">Seleziona azienda...</option>
-                            {availableCompanies.map((c: Company) => (
-                                <option key={c.id} value={c.id}>
-                                    {c.ragioneSociale} {c.piva ? `(${c.piva})` : ''}
-                                </option>
-                            ))}
-                        </select>
+                            onChange={(v) => setNewAziendaData(prev => ({ ...prev, aziendaId: v }))}
+                            placeholder="Seleziona azienda..."
+                            options={[
+                                { value: '', label: 'Seleziona azienda...' },
+                                ...availableCompanies.map((c: Company) => ({ value: c.id, label: `${c.ragioneSociale} ${c.piva ? `(${c.piva})` : ''}`.trim() }))
+                            ]}
+                        />
 
                         {/* Optional Fields */}
                         <div className="grid grid-cols-3 gap-3">
