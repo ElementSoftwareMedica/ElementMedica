@@ -27,6 +27,7 @@ import { Company } from '../../types';
 import { validateCodiceFiscale } from '../../lib/utils';
 import { useAsyncValidation } from '../../hooks/useAsyncValidation';
 import { DatePickerElegante } from '../ui/DatePickerElegante';
+import { ElegantSelect } from '../ui/ElegantSelect';
 import { checkEmailAvailability, checkTaxCodeAvailability } from '../../services/validation';
 import { extractBirthPlaceFromTaxCode, extractGenderFromTaxCode, generateTaxCode } from '../../utils/codiceFiscale';
 import { DEFAULT_ETHNICITY, ETHNICITY_OPTIONS } from '../../constants/ethnicityOptions';
@@ -1060,16 +1061,19 @@ const EmployeeForm: React.FC<PersonFormNewProps> = ({
                     {/* Aggiungi mansione (solo edit) */}
                     {person?.id && mansioni.length > 0 && (
                       <div className="flex gap-2">
-                        <select
-                          value={selectedMansioneId}
-                          onChange={e => setSelectedMansioneId(e.target.value)}
-                          className="flex-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-50"
-                        >
-                          <option value="">– Seleziona mansione MDL –</option>
-                          {mansioni
-                            .filter(m => !currentMansioni.some(lm => lm.mansioneId === m.id))
-                            .map(m => <option key={m.id} value={m.id}>{m.denominazione}{m.codice ? ` (${m.codice})` : ''}</option>)}
-                        </select>
+                        <div className="flex-1">
+                          <ElegantSelect
+                            value={selectedMansioneId}
+                            onChange={setSelectedMansioneId}
+                            placeholder="– Seleziona mansione MDL –"
+                            options={[
+                              { value: '', label: '– Seleziona mansione MDL –' },
+                              ...mansioni
+                                .filter(m => !currentMansioni.some(lm => lm.mansioneId === m.id))
+                                .map(m => ({ value: m.id, label: `${m.denominazione}${m.codice ? ` (${m.codice})` : ''}` }))
+                            ]}
+                          />
+                        </div>
                         <button
                           type="button"
                           onClick={handleAssignMansione}
@@ -1142,18 +1146,15 @@ const EmployeeForm: React.FC<PersonFormNewProps> = ({
                       {/* Stato: Editing mode - dropdown + conferma/annulla */}
                       {isEditingProtocollo && (
                         <div className="space-y-2">
-                          <select
+                          <ElegantSelect
                             value={pendingProtocolloId}
-                            onChange={(e) => setPendingProtocolloId(e.target.value)}
-                            className="w-full rounded-lg border border-teal-400 dark:border-teal-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
-                          >
-                            <option value="">— Nessun protocollo —</option>
-                            {allProtocolli.map(p => (
-                              <option key={p.id} value={p.id}>
-                                {p.denominazione}{p.codice ? ` (${p.codice})` : ''}
-                              </option>
-                            ))}
-                          </select>
+                            onChange={setPendingProtocolloId}
+                            placeholder="— Nessun protocollo —"
+                            options={[
+                              { value: '', label: '— Nessun protocollo —' },
+                              ...allProtocolli.map(p => ({ value: p.id, label: `${p.denominazione}${p.codice ? ` (${p.codice})` : ''}` }))
+                            ]}
+                          />
                           <div className="flex items-center gap-2">
                             <button
                               type="button"
