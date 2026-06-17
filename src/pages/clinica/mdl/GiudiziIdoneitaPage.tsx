@@ -262,6 +262,20 @@ const GiudiziIdoneitaPage: React.FC = () => {
     });
 
     // Generate PDF documents mutation
+    // Apre il PDF generato on-demand (rotta autenticata): evita 404 su URL statici obsoleti
+    // e applica sempre firma/posizione + header tenant corretti.
+    const openGiudizioPdf = useCallback(async (id: string, destinatario: 'lavoratore' | 'datore') => {
+        try {
+            const blob = await clinicaApi.giudiziIdoneita.fetchPdfBlob(id, destinatario);
+            const url = URL.createObjectURL(blob);
+            const win = window.open(url, '_blank');
+            if (win) setTimeout(() => URL.revokeObjectURL(url), 60000);
+            else URL.revokeObjectURL(url);
+        } catch {
+            showToast({ type: 'error', message: 'Impossibile aprire il PDF del giudizio' });
+        }
+    }, [showToast]);
+
     const generateDocsMutation = useMutation({
         mutationFn: (id: string) => clinicaApi.giudiziIdoneita.generateDocuments(id),
         onSuccess: () => {
@@ -1010,28 +1024,22 @@ const GiudiziIdoneitaPage: React.FC = () => {
                                             </div>
                                             {giudizio.pdfLavoratoreUrl ? (
                                                 <div className="flex items-center gap-1.5">
-                                                    <a
-                                                        href={giudizio.pdfLavoratoreUrl}
-                                                        target="_blank"
-                                                        rel="noreferrer"
+                                                    <button
+                                                        onClick={() => openGiudizioPdf(giudizio.id, 'lavoratore')}
                                                         title="PDF Lavoratore"
                                                         className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 rounded border border-teal-200 transition-colors"
                                                     >
                                                         <FileDown className="h-3 w-3" />
                                                         Lav.
-                                                    </a>
-                                                    {giudizio.pdfDatoreUrl && (
-                                                        <a
-                                                            href={giudizio.pdfDatoreUrl}
-                                                            target="_blank"
-                                                            rel="noreferrer"
-                                                            title="PDF Datore di Lavoro"
-                                                            className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded border border-blue-200 transition-colors"
-                                                        >
-                                                            <FileDown className="h-3 w-3" />
-                                                            Dat.
-                                                        </a>
-                                                    )}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => openGiudizioPdf(giudizio.id, 'datore')}
+                                                        title="PDF Datore di Lavoro"
+                                                        className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded border border-blue-200 transition-colors"
+                                                    >
+                                                        <FileDown className="h-3 w-3" />
+                                                        Dat.
+                                                    </button>
                                                 </div>
                                             ) : (
                                                 <button
