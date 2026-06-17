@@ -71,6 +71,19 @@ interface CompanyDocumentsSummaryCardProps {
     tipoServizio?: string;
     dataEmissione?: string | null;
   }>;
+  fatture?: Array<{
+    id: string;
+    numero?: string | null;
+    stato?: string;
+    tipoDocumento?: string;
+    dataEmissione?: string | null;
+  }>;
+  allegati3B?: Array<{
+    id: string;
+    anno?: number;
+    stato?: string;
+    dataInvio?: string | null;
+  }>;
   /** Ricarica i dati dopo una firma */
   onRefresh?: () => void;
 }
@@ -113,6 +126,8 @@ const CompanyDocumentsSummaryCard: React.FC<CompanyDocumentsSummaryCardProps> = 
   mdlDocuments = [],
   giudizi = [],
   preventivi = [],
+  fatture = [],
+  allegati3B = [],
   onRefresh,
 }) => {
   const [firmaGiudizio, setFirmaGiudizio] = useState<GiudizioDoc | null>(null);
@@ -189,6 +204,24 @@ const CompanyDocumentsSummaryCard: React.FC<CompanyDocumentsSummaryCardProps> = 
       subtitle: [p.tipoServizio?.replace(/_/g, ' '), p.stato, formatDate(p.dataEmissione)].filter(Boolean).join(' · '),
       documentUrl: `/api/v1/preventivi/${p.id}/pdf`,
       documentName: `preventivo_${p.numero || p.id.slice(0, 8)}.pdf`,
+    })),
+    ...fatture.map(f => ({
+      id: `fattura-${f.id}`,
+      type: 'Fattura',
+      category: 'amministrazione' as const,
+      title: `Fattura ${f.numero || f.id.slice(0, 8)}`,
+      subtitle: [f.tipoDocumento?.replace(/_/g, ' '), f.stato, formatDate(f.dataEmissione)].filter(Boolean).join(' · '),
+      documentUrl: `/api/v1/fatturazione-elettronica/${f.id}/pdf`,
+      documentName: `fattura_${f.numero || f.id.slice(0, 8)}.pdf`,
+    })),
+    ...allegati3B.map(a => ({
+      id: `allegato3b-${a.id}`,
+      type: 'Allegato 3B (INAIL)',
+      category: 'mdl' as const,
+      title: `Allegato 3B ${a.anno ?? ''}`.trim(),
+      subtitle: [a.stato, a.dataInvio ? `inviato ${formatDate(a.dataInvio)}` : 'non inviato'].filter(Boolean).join(' · '),
+      documentUrl: `/api/v1/clinica/allegato-3b/${a.id}/xml`,
+      documentName: `allegato3b_${a.anno ?? a.id.slice(0, 8)}.xml`,
     })),
   ];
 

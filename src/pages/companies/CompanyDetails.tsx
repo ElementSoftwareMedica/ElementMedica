@@ -145,6 +145,23 @@ interface PreventivoDocItem {
   dataEmissione?: string | null;
 }
 
+// Fattura mostrata nel tab Documenti
+interface FatturaDocItem {
+  id: string;
+  numero?: string | null;
+  stato?: string;
+  tipoDocumento?: string;
+  dataEmissione?: string | null;
+}
+
+// Allegato 3B (INAIL) mostrato nel tab Documenti
+interface Allegato3BDocItem {
+  id: string;
+  anno?: number;
+  stato?: string;
+  dataInvio?: string | null;
+}
+
 // P59: Interfaccia per Sopralluogo
 interface SopralluogoInfo {
   id: string;
@@ -346,6 +363,8 @@ const CompanyDetails: React.FC = () => {
   const [mdlDocuments, setMdlDocuments] = useState<CompanyMdlDocumentFile[]>([]);
   const [giudizi, setGiudizi] = useState<GiudizioDocItem[]>([]);
   const [preventivi, setPreventivi] = useState<PreventivoDocItem[]>([]);
+  const [fatture, setFatture] = useState<FatturaDocItem[]>([]);
+  const [allegati3B, setAllegati3B] = useState<Allegato3BDocItem[]>([]);
   // P59: Trigger per forzare refresh delle sezioni dopo quick actions
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   // P59 Sprint 11.2: Stato per modal associazione tariffario
@@ -463,6 +482,28 @@ const CompanyDetails: React.FC = () => {
         setPreventivi(prevRes?.data || []);
       } catch {
         setPreventivi([]);
+      }
+
+      // Fatture collegate all'azienda
+      try {
+        const fattRes = await apiGet<{ data: FatturaDocItem[] }>(
+          `/api/v1/fatturazione-elettronica?clienteAziendaId=${companyData.companyTenantProfileId}&limit=200`,
+          {}, { headers: operateTenantHeaders }
+        );
+        setFatture(fattRes?.data || []);
+      } catch {
+        setFatture([]);
+      }
+
+      // Allegati 3B (INAIL) collegati all'azienda
+      try {
+        const allRes = await apiGet<{ data: Allegato3BDocItem[] }>(
+          `/api/v1/clinica/allegato-3b?companyTenantProfileId=${companyData.companyTenantProfileId}`,
+          {}, { headers: operateTenantHeaders }
+        );
+        setAllegati3B(allRes?.data || []);
+      } catch {
+        setAllegati3B([]);
       }
 
       // P59 Sprint 11.2: Gestisci Tariffari - separa attivo da storico
@@ -1157,6 +1198,8 @@ const CompanyDetails: React.FC = () => {
             mdlDocuments={mdlDocuments}
             giudizi={giudizi}
             preventivi={preventivi}
+            fatture={fatture}
+            allegati3B={allegati3B}
             onRefresh={() => fetchCompanyData()}
           />
         </div>
