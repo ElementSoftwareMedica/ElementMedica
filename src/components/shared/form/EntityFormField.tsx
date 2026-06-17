@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, ReactNode } from 'react';
+import { ElegantSelect } from '../../ui/ElegantSelect';
 
 type FieldType = 'text' | 'textarea' | 'number' | 'email' | 'password' | 'select' | 'checkbox' | 'radio' | 'date' | 'tel';
 
@@ -272,35 +273,15 @@ const EntityFormField: React.FC<EntityFormFieldProps> = ({
         }
 
         return (
-          <div className="relative">
-            {leftIcon && (
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
-                {leftIcon}
-              </div>
-            )}
-            <select
-              id={name}
-              name={name}
-              value={displayValue}
-              onChange={handleInputChange}
-              className={`${baseInputClass} px-3 pr-8 appearance-none`}
-              disabled={disabled}
-              required={required}
-              {...rest}
-            >
-              <option value="">{placeholder || 'Seleziona...'}</option>
-              {options.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-              <svg className="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="none" stroke="currentColor">
-                <path d="M7 7l3 3 3-3" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </div>
-          </div>
+          <ElegantSelect
+            value={String(displayValue ?? '')}
+            onChange={(v) => handleInputChange({ target: { name, value: v } } as unknown as React.ChangeEvent<HTMLSelectElement>)}
+            placeholder={placeholder || 'Seleziona...'}
+            options={[
+              { value: '', label: placeholder || 'Seleziona...' },
+              ...options.map(o => ({ value: String(o.value), label: o.label }))
+            ]}
+          />
         );
 
       case 'checkbox':

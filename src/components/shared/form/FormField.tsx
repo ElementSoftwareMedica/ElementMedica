@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../../design-system/utils';
+import { ElegantSelect } from '../../ui/ElegantSelect';
 
 type FieldType = 'text' | 'textarea' | 'number' | 'email' | 'password' | 'select' | 'checkbox' | 'radio' | 'date';
 
@@ -75,22 +76,17 @@ const FormField: React.FC<FormFieldProps> = ({
         );
       case 'select':
         return (
-          <select
-            id={name}
-            name={name}
-            value={value as string}
-            onChange={onChange}
-            className={baseInputClassName}
-            required={required}
-            disabled={disabled}
-          >
-            <option value="">{t('common.select')}</option>
-            {options.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          <div className="mt-1">
+            <ElegantSelect
+              value={value as string}
+              onChange={(v) => onChange({ target: { name, value: v } } as unknown as React.ChangeEvent<HTMLSelectElement>)}
+              placeholder={placeholder || t('common.select')}
+              options={[
+                { value: '', label: t('common.select') },
+                ...options
+              ]}
+            />
+          </div>
         );
       case 'checkbox':
         return (
