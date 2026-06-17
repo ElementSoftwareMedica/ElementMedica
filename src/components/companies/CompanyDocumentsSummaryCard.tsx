@@ -1,5 +1,5 @@
-import React from 'react';
-import { Download, Eye, FileText, ShieldCheck } from 'lucide-react';
+import React, { useState } from 'react';
+import { Download, Eye, FileText, ShieldCheck, ChevronDown } from 'lucide-react';
 import { getToken } from '../../services/auth';
 
 interface DocumentItem {
@@ -127,6 +127,10 @@ const CompanyDocumentsSummaryCard: React.FC<CompanyDocumentsSummaryCardProps> = 
     })),
   ];
 
+  // Sezioni collassabili (tutte aperte di default)
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const toggleCategory = (key: string) => setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
+
   const openDocument = async (document: DocumentItem, download = false) => {
     if (!document.documentUrl) return;
     const token = getToken();
@@ -165,18 +169,27 @@ const CompanyDocumentsSummaryCard: React.FC<CompanyDocumentsSummaryCardProps> = 
       <div className="space-y-5 p-5">
         {CATEGORIES.map(category => {
           const categoryDocuments = documents.filter(document => document.category === category.key);
+          const isCollapsed = collapsed[category.key];
           return (
             <section key={category.key} className="rounded-2xl border border-gray-100 bg-gray-50/50 dark:border-gray-700 dark:bg-gray-900/20">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-4 py-3 dark:border-gray-700">
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{category.title}</h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">{category.description}</p>
+              <button
+                type="button"
+                onClick={() => toggleCategory(category.key)}
+                className="flex w-full flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-4 py-3 text-left dark:border-gray-700"
+                aria-expanded={!isCollapsed}
+              >
+                <div className="flex items-center gap-2">
+                  <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} />
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{category.title}</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{category.description}</p>
+                  </div>
                 </div>
                 <span className="rounded-full bg-white px-2 py-0.5 text-xs font-medium text-gray-600 shadow-sm dark:bg-gray-800 dark:text-gray-300">
                   {categoryDocuments.length}
                 </span>
-              </div>
-              <div className="divide-y divide-gray-100 dark:divide-gray-700/60">
+              </button>
+              <div className={`divide-y divide-gray-100 dark:divide-gray-700/60 ${isCollapsed ? 'hidden' : ''}`}>
                 {categoryDocuments.length === 0 ? (
                   <div className="px-4 py-5 text-sm text-gray-400 dark:text-gray-500">
                     Nessun PDF disponibile in questa categoria.

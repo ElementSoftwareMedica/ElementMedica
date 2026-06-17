@@ -5,6 +5,7 @@ import { useTenantMode } from '../../contexts/TenantModeContext';
 import { Person } from '../../types';
 import { Calendar } from 'lucide-react';
 import { DatePickerElegante } from '../ui/DatePickerElegante';
+import { ElegantSelect } from '../ui/ElegantSelect';
 
 interface CompanySite {
   id: string;
@@ -322,37 +323,29 @@ const CompanySiteForm: React.FC<CompanySiteFormProps> = ({ companyId, site, onSu
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   RSPP
                 </label>
-                <select
-                  name="rsppId"
+                <ElegantSelect
                   value={formData.rsppId}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200"
-                >
-                  <option value="">Seleziona RSPP</option>
-                  {rsppList.map((person) => (
-                    <option key={person.id} value={person.id}>
-                      {person.firstName} {person.lastName}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(v) => handleChange({ target: { name: 'rsppId', value: v } } as unknown as React.ChangeEvent<HTMLSelectElement>)}
+                  placeholder="Seleziona RSPP"
+                  options={[
+                    { value: '', label: 'Seleziona RSPP' },
+                    ...rsppList.map((person) => ({ value: person.id, label: `${person.firstName} ${person.lastName}` }))
+                  ]}
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Medico Competente
                 </label>
-                <select
-                  name="medicoCompetenteId"
+                <ElegantSelect
                   value={formData.medicoCompetenteId}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200"
-                >
-                  <option value="">Seleziona Medico Competente</option>
-                  {medicoList.map((person) => (
-                    <option key={person.id} value={person.id}>
-                      {person.firstName} {person.lastName}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(v) => handleChange({ target: { name: 'medicoCompetenteId', value: v } } as unknown as React.ChangeEvent<HTMLSelectElement>)}
+                  placeholder="Seleziona Medico Competente"
+                  options={[
+                    { value: '', label: 'Seleziona Medico Competente' },
+                    ...medicoList.map((person) => ({ value: person.id, label: `${person.firstName} ${person.lastName}` }))
+                  ]}
+                />
               </div>
             </div>
           </div>
