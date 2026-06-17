@@ -19,7 +19,7 @@ import {
 } from 'lucide-react'
 import { v4 as uuidv4 } from 'uuid'
 import { usePersistentPageState } from '../hooks/usePersistentPageState'
-import { ElegantDateRangeInput } from '../components/ElegantControls'
+import { ElegantDateRangeInput, ElegantSelect } from '../components/ElegantControls'
 
 interface Scadenza {
   id: string
@@ -550,18 +550,16 @@ export function ScadenzePage(): JSX.Element {
 
           {/* Company filter */}
           {companies.length > 0 && (
-            <div className="relative">
-              <Building2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 pointer-events-none" />
-              <select
+            <div className="min-w-[180px]">
+              <ElegantSelect
                 value={filterCompany}
-                onChange={e => setFilterCompany(e.target.value)}
-                className="h-10 w-full min-w-[150px] rounded-xl border border-gray-200 py-2 pl-9 pr-3 text-sm appearance-none focus:border-transparent focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
-              >
-                <option value="">Tutte le aziende</option>
-                {companies.map(c => (
-                  <option key={c.id} value={c.ragioneSociale || c.id}>{c.ragioneSociale}</option>
-                ))}
-              </select>
+                onChange={setFilterCompany}
+                placeholder="Tutte le aziende"
+                options={[
+                  { value: '', label: 'Tutte le aziende' },
+                  ...companies.map(c => ({ value: c.ragioneSociale || c.id, label: c.ragioneSociale || c.id }))
+                ]}
+              />
             </div>
           )}
 
