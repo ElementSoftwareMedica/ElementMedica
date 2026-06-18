@@ -95,7 +95,7 @@ export function extractTestResults(record: GdtRecord): TestResult[] {
 
     for (const field of record.fields) {
         switch (field.fieldId) {
-            case '8410': // Test identifier — starts a new test result
+            case '8410': // Test identifier — starts a new test result block (Oscilla: AUDACR, AUDACL, …)
                 if (currentTest?.testId) {
                     results.push(currentTest as TestResult);
                 }
@@ -105,20 +105,31 @@ export function extractTestResults(record: GdtRecord): TestResult[] {
                     value: '',
                 };
                 break;
-            case '8411': // Test description
+            case '8411': // Test description / name
                 if (currentTest) currentTest.testName = field.value;
                 break;
             case '8418': // Test status
                 if (currentTest) currentTest.status = field.value;
                 break;
-            case '8420': // Result value
+            case '8420': // Result value (Weber test side for Oscilla)
                 if (currentTest) currentTest.value = field.value;
                 break;
-            case '8421': // Unit
+            case '8421': // Unit (Weber side labels for Oscilla)
                 if (currentTest) currentTest.unit = field.value;
                 break;
             case '8431': // Normal range lower
                 if (currentTest) currentTest.normalLow = field.value;
+                break;
+            case '8437': // Oscilla: unit descriptor for data stream (e.g. "Hz, db HL")
+                if (currentTest) currentTest.unit = field.value;
+                break;
+            case '8438': // Oscilla: audiometry data stream — frequency/dB pairs "(500,25),(1000,30),…"
+                if (currentTest) {
+                    currentTest.value = field.value;
+                }
+                break;
+            case '8446': // MIR WinspiroPRO: predicted/theoretical normal value (reference from population norms)
+                if (currentTest) currentTest.normalHigh = field.value;
                 break;
             case '8462': // Normal range upper
                 if (currentTest) currentTest.normalHigh = field.value;
@@ -138,13 +149,23 @@ export function extractTestResults(record: GdtRecord): TestResult[] {
 }
 
 /**
- * Extract free-text findings from a GDT record
- * Findings can span multiple 6220 lines
+ * Extract free-text findings from a GDT record.
+ * 6220 = finding text, 6221 = third-party finding, 6227 = comments (Oscilla uses this)
  */
 export function extractFindings(record: GdtRecord): string[] {
     return record.fields
-        .filter(f => f.fieldId === '6220' || f.fieldId === '6228')
-        .map(f => f.value);
+        .filter(f => f.fieldId === '6220' || f.fieldId === '6221' || f.fieldId === '6227' || f.fieldId === '6228')
+        .map(f => f.value)
+        .filter(v => v.trim().length > 0);
+}
+
+/**
+ * Extract the PDF file path from Oscilla GDT output.
+ * Oscilla writes the full Windows/Mac path in field 6305.
+ * Returns undefined if no PDF path is present.
+ */
+export function extractPdfPath(record: GdtRecord): string | undefined {
+    return record.fields.find(f => f.fieldId === '6305')?.value?.trim() || undefined;
 }
 
 /**

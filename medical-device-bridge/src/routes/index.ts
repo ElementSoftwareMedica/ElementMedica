@@ -470,7 +470,7 @@ export function createRoutes(watcher: DeviceWatcher): Router {
             const gdtBuffer = generateExamRequest(examRequest.patient, device, config);
 
             // 2. Write GDT file to device input directory
-            const gdtFilePath = await writeGdtFile(gdtBuffer, device, sessionId);
+            const gdtFilePath = await writeGdtFile(gdtBuffer, device, config, sessionId);
 
             // 3. Create exam session
             const session: ExamSession = {

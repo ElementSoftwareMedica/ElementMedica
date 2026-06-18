@@ -14,6 +14,7 @@ import {
     Heart,
     Wind,
     Ear,
+    FlaskConical,
     Loader2,
     FileText,
     Trash2,
@@ -53,6 +54,7 @@ const EXAM_ICONS: Record<string, typeof Heart> = {
     'spirometry': Wind,
     'audiometria': Ear,
     'audiometry': Ear,
+    'drugtest': FlaskConical,
 };
 
 // ============================================
@@ -444,7 +446,7 @@ export default function EsamiStrumentaliCard({
                             <div className="px-4 py-3 border-b border-gray-100">
                                 <p className="text-xs text-gray-500 mb-2">Avvia un esame strumentale:</p>
                                 <div className="flex flex-wrap gap-2">
-                                    {(['ecg', 'spirometria', 'audiometria'] as TipoEsame[]).map(tipo => {
+                                    {(['ecg', 'spirometria', 'audiometria', 'drugtest'] as TipoEsame[]).map(tipo => {
                                         const Icon = EXAM_ICONS[tipo] || Activity;
                                         const label = TIPO_ESAME_LABELS[tipo] || tipo;
                                         const isStarting = startExamMutation.isPending;

@@ -157,7 +157,7 @@ export function loadConfig(): BridgeConfig {
         port: saved?.port as number || parseInt(process.env.BRIDGE_PORT || '3000', 10),
         callbackUrl: saved?.callbackUrl as string || process.env.WEBAPP_CALLBACK_URL || 'http://localhost:4001/api/v1/clinica/strumenti-bridge/risultati',
         apiKey: saved?.apiKey as string || process.env.WEBAPP_API_KEY || '',
-        gdtVersion: saved?.gdtVersion as string || process.env.GDT_VERSION || '02.10',
+        gdtVersion: saved?.gdtVersion as string || process.env.GDT_VERSION || '2.10',
         gdtSenderId: saved?.gdtSenderId as string || process.env.GDT_SENDER_ID || 'ELEM_MED',
         gdtCharset: (saved?.gdtCharset as number || parseInt(process.env.GDT_CHARSET || '3', 10)) as GdtCharset,
         logLevel: saved?.logLevel as string || process.env.LOG_LEVEL || 'info',

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useDesktopPermission } from '../hooks/useDesktopPermission'
 import { usePersistentPageState } from '../hooks/usePersistentPageState'
-import { ElegantDateRangeInput, ElegantSelect } from '../components/ElegantControls'
+import { ElegantDateInput, ElegantSelect } from '../components/ElegantControls'
 import {
   Calendar,
   Clock,
@@ -285,7 +285,7 @@ export function AgendaPage(): JSX.Element {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {/* Prev/Next day navigation */}
         <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden shrink-0">
           <button
@@ -311,22 +311,49 @@ export function AgendaPage(): JSX.Element {
           </button>
         </div>
 
-        <div className="w-[420px] shrink-0">
-          <ElegantDateRangeInput
-            value={{ start: dateFrom, end: dateTo }}
-            onChange={range => {
-              setDateFrom(range.start)
-              setDateTo(range.end)
-              if (range.start) setSelectedDate(range.start)
-            }}
-            presets={[
-              { label: 'Oggi', start: new Date().toISOString().split('T')[0], end: new Date().toISOString().split('T')[0] },
-              { label: 'Domani', start: new Date(Date.now() + 86_400_000).toISOString().split('T')[0], end: new Date(Date.now() + 86_400_000).toISOString().split('T')[0] },
-              { label: '7 giorni', start: new Date().toISOString().split('T')[0], end: new Date(Date.now() + 7 * 86_400_000).toISOString().split('T')[0] },
-            ]}
+        {/* Date range: two inline inputs */}
+        <div className="w-36 shrink-0">
+          <ElegantDateInput
+            value={dateFrom}
+            onChange={start => { setDateFrom(start); if (start) setSelectedDate(start) }}
+            clearable
           />
         </div>
-        <div className="relative flex-1 max-w-sm">
+        <span className="text-gray-300 text-sm shrink-0">—</span>
+        <div className="w-36 shrink-0">
+          <ElegantDateInput
+            value={dateTo}
+            onChange={end => setDateTo(end)}
+            clearable
+          />
+        </div>
+
+        {/* Quick presets */}
+        <div className="flex items-center gap-1 shrink-0">
+          {([
+            { label: 'Oggi', start: new Date().toISOString().split('T')[0], end: new Date().toISOString().split('T')[0] },
+            { label: 'Domani', start: new Date(Date.now() + 86_400_000).toISOString().split('T')[0], end: new Date(Date.now() + 86_400_000).toISOString().split('T')[0] },
+            { label: '7 giorni', start: new Date().toISOString().split('T')[0], end: new Date(Date.now() + 7 * 86_400_000).toISOString().split('T')[0] },
+          ] as const).map(preset => (
+            <button
+              key={preset.label}
+              type="button"
+              onClick={() => { setDateFrom(preset.start); setDateTo(preset.end); setSelectedDate(preset.start) }}
+              className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                dateFrom === preset.start && dateTo === preset.end
+                  ? 'bg-teal-600 text-white'
+                  : 'bg-teal-50 text-teal-700 hover:bg-teal-100'
+              }`}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="hidden sm:block h-5 w-px bg-gray-200 shrink-0" />
+
+        {/* Search */}
+        <div className="relative flex-1 min-w-[160px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
@@ -336,12 +363,13 @@ export function AgendaPage(): JSX.Element {
             className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
           />
         </div>
-        <div className="w-48">
-        <ElegantSelect
-          value={filterStato}
-          onChange={setFilterStato}
-          options={[{ value: '', label: 'Tutti gli stati' }, ...Object.entries(STATO_CONFIG).map(([key, { label }]) => ({ value: key, label }))]}
-        />
+
+        <div className="w-44 shrink-0">
+          <ElegantSelect
+            value={filterStato}
+            onChange={setFilterStato}
+            options={[{ value: '', label: 'Tutti gli stati' }, ...Object.entries(STATO_CONFIG).map(([key, { label }]) => ({ value: key, label }))]}
+          />
         </div>
       </div>
 

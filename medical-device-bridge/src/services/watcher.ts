@@ -8,12 +8,12 @@
  */
 
 import chokidar, { type FSWatcher } from 'chokidar';
-import { readFile, stat, access, readdir } from 'fs/promises';
+import { readFile, stat, access, readdir, unlink } from 'fs/promises';
 import { basename, dirname, extname, join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import logger from '../utils/logger.js';
-import { parseGdtFile, buildExamResult } from '../gdt/parser.js';
+import { parseGdtFile, buildExamResult, extractPdfPath } from '../gdt/parser.js';
 import type { DeviceConfig, ExamSession, ExamResult } from '../types/index.js';
 
 type ResultCallback = (result: ExamResult, pdfBuffer?: Buffer, pdfFilename?: string) => Promise<void>;
@@ -245,7 +245,21 @@ export class DeviceWatcher {
         let pdfFilename: string | undefined;
 
         try {
-            const pdfPath = await this.findAssociatedPdfPath(filePath, device);
+            // 1. Try conventional PDF discovery (same-name .pdf, configured pdfOutputDir, most-recent in dir)
+            let pdfPath = await this.findAssociatedPdfPath(filePath, device);
+
+            // 2. Oscilla AudioConsole embeds the PDF path in field 6305 — use it as fallback
+            if (!pdfPath) {
+                const embeddedPath = extractPdfPath(record);
+                if (embeddedPath && await this.pathExists(embeddedPath)) {
+                    pdfPath = embeddedPath;
+                    logger.info('Using Oscilla embedded PDF path (field 6305)', {
+                        device: device.type,
+                        embeddedPath,
+                    });
+                }
+            }
+
             if (pdfPath) {
                 pdfBuffer = await readFile(pdfPath);
                 pdfFilename = basename(pdfPath);
@@ -268,6 +282,9 @@ export class DeviceWatcher {
 
         // Trigger callback
         await this.onResult(result, pdfBuffer, pdfFilename);
+
+        // Delete the processed GDT file — it has been fully imported
+        try { await unlink(filePath); } catch { /* non-fatal: file may have been moved already */ }
     }
 
     private async findAssociatedPdfPath(filePath: string, device: DeviceConfig): Promise<string | undefined> {
@@ -419,21 +436,27 @@ export class DeviceWatcher {
     }
 
     /**
-     * Find a session matching a device result
+     * Find a session matching a device result.
+     * First tries to match by patient ID (exact or short form without hyphens).
+     * Falls back to device-type-only match because some devices (e.g. EDAN ECG)
+     * overwrite field 3000 with their own internal ID rather than echoing ours.
      */
     private findSessionForResult(device: DeviceConfig, patientId?: string): ExamSession | undefined {
-        for (const session of this.activeSessions.values()) {
-            if (
-                session.device.type === device.type &&
-                (session.status === 'waiting_results' || session.status === 'device_launched')
-            ) {
-                // Match by patient ID if available, otherwise match by device type
-                if (!patientId || session.request.patient.patientId === patientId) {
-                    return session;
+        if (patientId) {
+            for (const session of this.activeSessions.values()) {
+                if (
+                    session.device.type === device.type &&
+                    (session.status === 'waiting_results' || session.status === 'device_launched')
+                ) {
+                    const shortId = session.request.patient.patientId.replace(/-/g, '').substring(0, 20);
+                    if (session.request.patient.patientId === patientId || shortId === patientId) {
+                        return session;
+                    }
                 }
             }
         }
-        return undefined;
+        // Fallback: device may not echo our patient ID — match by device type alone
+        return this.findAnySessionForDevice(device);
     }
 
     /**

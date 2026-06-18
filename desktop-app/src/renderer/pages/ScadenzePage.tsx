@@ -19,7 +19,7 @@ import {
 } from 'lucide-react'
 import { v4 as uuidv4 } from 'uuid'
 import { usePersistentPageState } from '../hooks/usePersistentPageState'
-import { ElegantDateRangeInput, ElegantSelect } from '../components/ElegantControls'
+import { ElegantDateInput, ElegantSelect } from '../components/ElegantControls'
 
 interface Scadenza {
   id: string
@@ -535,9 +535,9 @@ export function ScadenzePage(): JSX.Element {
         </div>
 
         {/* Row 2: Filters */}
-        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_auto_auto]">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           {/* Search */}
-          <div className="relative min-w-0">
+          <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
@@ -550,7 +550,7 @@ export function ScadenzePage(): JSX.Element {
 
           {/* Company filter */}
           {companies.length > 0 && (
-            <div className="min-w-[180px]">
+            <div className="w-52 shrink-0">
               <ElegantSelect
                 value={filterCompany}
                 onChange={setFilterCompany}
@@ -563,14 +563,12 @@ export function ScadenzePage(): JSX.Element {
             </div>
           )}
 
-          {/* Date range */}
-          <ElegantDateRangeInput
-            value={{ start: dateFrom, end: dateTo }}
-            onChange={range => {
-              setDateFrom(range.start)
-              setDateTo(range.end)
-            }}
-          />
+          {/* Date range: two inline inputs */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <ElegantDateInput value={dateFrom} onChange={start => setDateFrom(start)} clearable />
+            <span className="text-gray-300 text-sm">—</span>
+            <ElegantDateInput value={dateTo} onChange={end => setDateTo(end)} clearable />
+          </div>
         </div>
 
         {/* Row 3: Urgency filter pills */}

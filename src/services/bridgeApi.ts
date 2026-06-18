@@ -17,7 +17,7 @@ import { apiGet, apiPost, apiDelete, apiDeleteWithPayload, apiDownload } from '.
 // ============================================
 
 export type TipoDispositivoMedico = 'ECG' | 'SPIROMETRO' | 'AUDIOMETRO' | 'VISIOTEST';
-export type TipoEsame = 'ecg' | 'spirometria' | 'audiometria' | 'visiotest';
+export type TipoEsame = 'ecg' | 'spirometria' | 'audiometria' | 'visiotest' | 'drugtest';
 export type StatoEsameStrumentale = 'IN_ATTESA' | 'COMPLETATO' | 'PARZIALE' | 'ERRORE' | 'TIMEOUT';
 
 export interface EsameStrumentale {
@@ -219,6 +219,7 @@ const EXAM_TYPE_TO_BRIDGE: Record<TipoEsame, string> = {
     'spirometria': 'spirometry',
     'audiometria': 'audiometry',
     'visiotest': 'vision',
+    'drugtest': 'drugtest',
 };
 
 async function extractDownloadErrorMessage(error: unknown): Promise<string> {
@@ -509,6 +510,7 @@ export const TIPO_ESAME_LABELS: Record<string, string> = {
     'spirometria': 'Spirometria',
     'audiometria': 'Audiometria',
     'visiotest': 'Visiotest',
+    'drugtest': 'Drug Test',
 };
 
 export const TIPO_DISPOSITIVO_LABELS: Record<TipoDispositivoMedico, string> = {
