@@ -176,13 +176,13 @@ function resolveExamItem(device: DeviceConfig): string {
 
 /**
  * Output filename for the GDT request file.
- * EDAN  — fixed extensionless "EDP_EKG" (device reads only this name).
+ * EDAN  — "EDP_EKG.GDT" per EDAN SE-1515 spec (Input File Name = EDP_EKG, Suffix = .GDT).
  * MIR   — "WPRO{sender4}.gdt" per MIR naming convention (WPRO + 4-char server abbreviation).
- *          Configure the same path in WinspiroPRO › Settings › GDT › Input filename.
+ *          Configure the same path in WinspiroPRO Settings › GDT › Input filename.
  * Oscilla — fixed name based on the GDT ID; must match AudioConsole › GDT › Input filename.
  */
 function resolveGdtFilename(device: DeviceConfig, config: BridgeConfig, _sessionId: string): string {
-    if (isEdanEcg(device)) return 'EDP_EKG';
+    if (isEdanEcg(device)) return 'EDP_EKG.GDT';
     if (isMirSpirometer(device)) {
         const sender4 = config.gdtSenderId.replace(/[^A-Z0-9]/gi, '').substring(0, 4).toUpperCase();
         return `WPRO${sender4}.gdt`;
