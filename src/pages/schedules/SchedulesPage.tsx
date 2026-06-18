@@ -137,7 +137,7 @@ function combineDateAndTime(dateStr: string, timeStr: string) {
 }
 
 const SchedulesPage: React.FC = () => {
-  const { confirmDelete } = useConfirmDialog();
+  const { confirmDelete, confirm } = useConfirmDialog();
   const loadingRef = useRef(false);
   const { user } = useAuth();
 
@@ -380,8 +380,43 @@ const SchedulesPage: React.FC = () => {
   }, [fetchData, showForm, tenantFilterKey, isReady]); // Reload when modal closes or tenant filter changes
 
 
+  const buildDeleteMessage = async (scheduleId: string): Promise<string> => {
+    try {
+      const result = await apiGet<{
+        success: boolean;
+        data: {
+          attestati: number; preventivi: number; lettereIncarico: number;
+          registriPresenze: number; movimentiContabili: number;
+          movimentiFatturati: number; movimentiEliminabili: number; total: number;
+        };
+      }>(`/api/v1/schedules/${scheduleId}/linked-documents`);
+      const docs = result.data;
+      if (docs.total === 0) return 'Sei sicuro di voler eliminare questo programma? L\'operazione non può essere annullata.';
+      const parts: string[] = [];
+      if (docs.attestati > 0) parts.push(`${docs.attestati} attestat${docs.attestati === 1 ? 'o' : 'i'}`);
+      if (docs.preventivi > 0) parts.push(`${docs.preventivi} preventiv${docs.preventivi === 1 ? 'o' : 'i'}`);
+      if (docs.lettereIncarico > 0) parts.push(`${docs.lettereIncarico} letter${docs.lettereIncarico === 1 ? 'a' : 'e'} di incarico`);
+      if (docs.registriPresenze > 0) parts.push(`${docs.registriPresenze} registr${docs.registriPresenze === 1 ? 'o' : 'i'} presenze`);
+      if (docs.movimentiEliminabili > 0) parts.push(`${docs.movimentiEliminabili} movement${docs.movimentiEliminabili === 1 ? 'o contabile' : 'i contabili'}`);
+      let msg = `Attenzione: l'eliminazione comporterà la cancellazione di tutti i documenti collegati: ${parts.join(', ')}.`;
+      if (docs.movimentiFatturati > 0) {
+        msg += ` I ${docs.movimentiFatturati} moviment${docs.movimentiFatturati === 1 ? 'o già fatturato' : 'i già fatturati'} non saranno eliminati.`;
+      }
+      return msg + ' L\'operazione non può essere annullata.';
+    } catch {
+      return 'Sei sicuro di voler eliminare questo programma? L\'operazione non può essere annullata.';
+    }
+  };
+
   const handleDelete = async (id: string) => {
-    const shouldDelete = await confirmDelete('questo programma');
+    const message = await buildDeleteMessage(id);
+    const shouldDelete = await confirm({
+      title: 'Elimina programma',
+      message,
+      confirmLabel: 'Elimina',
+      cancelLabel: 'Annulla',
+      variant: 'danger'
+    });
     if (!shouldDelete) return;
     try {
       const headers = getOperateHeaders();
@@ -396,7 +431,13 @@ const SchedulesPage: React.FC = () => {
 
   const handleDeleteSelected = async () => {
     if (!selectedIds.length) return;
-    const shouldDelete = await confirmDelete('i corsi selezionati');
+    const shouldDelete = await confirm({
+      title: `Elimina ${selectedIds.length} programm${selectedIds.length === 1 ? 'a' : 'i'}`,
+      message: `Stai per eliminare ${selectedIds.length} programm${selectedIds.length === 1 ? 'a' : 'i'}. Verranno eliminati anche tutti i documenti collegati (attestati, preventivi, lettere di incarico, registri presenze e movimenti contabili non fatturati). L'operazione non può essere annullata.`,
+      confirmLabel: 'Elimina tutti',
+      cancelLabel: 'Annulla',
+      variant: 'danger'
+    });
     if (!shouldDelete) return;
     setLoading(true);
     try {

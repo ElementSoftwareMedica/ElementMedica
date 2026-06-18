@@ -967,12 +967,15 @@ function _buildMarkerData(preventivo) {
 
   // Se non ci sono voci, crea una voce singola dal preventivo
   if (voci.length === 0) {
+    const q = preventivo.quantita || 1;
+    const prezzoTot = Number(preventivo.prezzoTotale || 0);
+    const unitPrice = q > 1 ? prezzoTot / q : prezzoTot;
     voci.push({
       numero: 1,
       descrizione: preventivo.titoloServizio || 'Servizio',
-      quantita: 1,
-      prezzoUnitario: Number(preventivo.prezzoTotale || 0).toFixed(2),
-      subtotale: Number(preventivo.prezzoTotale || 0).toFixed(2)
+      quantita: q,
+      prezzoUnitario: unitPrice.toFixed(2),
+      subtotale: prezzoTot.toFixed(2)
     });
   }
 

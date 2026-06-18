@@ -732,6 +732,55 @@ router.post('/import-expiring-courses', authenticate, requirePermission('schedul
 });
 
 // Get schedule by ID
+// Get counts of documents linked to a schedule (attestati, preventivi, etc.)
+router.get('/:id/linked-documents', authenticate, requirePermission('schedules:read'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const tenantId = getEffectiveTenantId(req);
+
+    const schedule = await prisma.courseSchedule.findFirst({
+      where: { id, tenantId, deletedAt: null },
+      select: { id: true }
+    });
+
+    if (!schedule) {
+      return res.status(404).json({ error: 'Programmazione non trovata' });
+    }
+
+    const [attestati, preventivi, lettereIncarico, registriPresenze, movimentiTotali, movimentiFatturati] = await Promise.all([
+      prisma.attestato.count({ where: { scheduledCourseId: id, deletedAt: null } }),
+      prisma.preventivo.count({ where: { scheduledCourseId: id, deletedAt: null } }),
+      prisma.letteraIncarico.count({ where: { scheduledCourseId: id, deletedAt: null } }),
+      prisma.registroPresenze.count({ where: { scheduledCourseId: id, deletedAt: null } }),
+      prisma.movimentoContabile.count({ where: { courseScheduleId: id, deletedAt: null } }),
+      prisma.movimentoContabile.count({ where: { courseScheduleId: id, deletedAt: null, stato: { in: ['FATTURATO', 'PAGATO'] } } })
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        attestati,
+        preventivi,
+        lettereIncarico,
+        registriPresenze,
+        movimentiContabili: movimentiTotali,
+        movimentiFatturati,
+        movimentiEliminabili: movimentiTotali - movimentiFatturati,
+        total: attestati + preventivi + lettereIncarico + registriPresenze + movimentiTotali
+      }
+    });
+  } catch (error) {
+    logger.error('Failed to get schedule linked documents', {
+      component: 'schedules-routes',
+      action: 'getLinkedDocuments',
+      error: 'Operazione non riuscita',
+      stack: error.stack,
+      scheduleId: req.params?.id
+    });
+    res.status(500).json({ error: 'Errore interno del server' });
+  }
+});
+
 router.get('/:id', authenticate, requirePermission('schedules:read'), roleDataFilter, filterResponseFields, async (req, res) => {
   try {
     const { id } = req.params;
@@ -1527,18 +1576,11 @@ router.put('/:id', authenticate, requirePermission('schedules:update'), async (r
 router.delete('/:id', authenticate, requirePermission('schedules:delete'), async (req, res) => {
   try {
     const { id } = req.params;
+    const tenantId = getEffectiveTenantId(req);
 
-    // Check if schedule exists
     const existingSchedule = await prisma.courseSchedule.findFirst({
-      where: {
-        id,
-        tenantId: getEffectiveTenantId(req),
-        deletedAt: null
-      },
-      include: {
-        enrollments: true,
-        sessions: true
-      }
+      where: { id, tenantId, deletedAt: null },
+      select: { id: true }
     });
 
     if (!existingSchedule) {
@@ -1548,18 +1590,40 @@ router.delete('/:id', authenticate, requirePermission('schedules:delete'), async
       });
     }
 
-    // Check if schedule has active enrollments
-    // ✅ FIX: Soft delete senza bloccare se ci sono enrollments
-    // Gli enrollments vengono mantenuti per storico anche dopo soft delete
+    const now = new Date();
 
-    // Perform soft delete by updating deletedAt field
-    await prisma.courseSchedule.update({
-      where: { id },
-      data: {
-        deletedAt: new Date(), // ✅ Usa deletedAt invece di eliminato
-        updatedAt: new Date()
-      }
-    });
+    // Cascade soft-delete: attestati, preventivi, lettere incarico, registri presenze,
+    // e movimenti contabili non ancora fatturati
+    await prisma.$transaction([
+      prisma.attestato.updateMany({
+        where: { scheduledCourseId: id, deletedAt: null },
+        data: { deletedAt: now }
+      }),
+      prisma.preventivo.updateMany({
+        where: { scheduledCourseId: id, deletedAt: null },
+        data: { deletedAt: now }
+      }),
+      prisma.letteraIncarico.updateMany({
+        where: { scheduledCourseId: id, deletedAt: null },
+        data: { deletedAt: now }
+      }),
+      prisma.registroPresenze.updateMany({
+        where: { scheduledCourseId: id, deletedAt: null },
+        data: { deletedAt: now }
+      }),
+      prisma.movimentoContabile.updateMany({
+        where: {
+          courseScheduleId: id,
+          deletedAt: null,
+          stato: { notIn: ['FATTURATO', 'PAGATO'] }
+        },
+        data: { deletedAt: now }
+      }),
+      prisma.courseSchedule.update({
+        where: { id },
+        data: { deletedAt: now, updatedAt: now }
+      })
+    ]);
 
     res.status(204).end();
   } catch (error) {

@@ -35,6 +35,7 @@ import { useTenantFilter } from '../../../context/TenantFilterContext';
 import { useToast } from '../../../hooks/useToast';
 import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
 import { CRUDButton } from '../../../components/shared/CRUDButton';
+import { ElegantSelect } from '@/components/ui/ElegantSelect';
 import {
     tariffarioMedicoApi,
     mediciApi,
@@ -218,20 +219,15 @@ const TariffarioFormModal: React.FC<TariffarioFormModalProps> = ({
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                             Medico *
                         </label>
-                        <select
+                        <ElegantSelect
                             value={formData.medicoId}
-                            onChange={(e) => setFormData(prev => ({ ...prev, medicoId: e.target.value }))}
-                            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                            required
-                        >
-                            <option value="">Seleziona medico...</option>
-                            {medici.map((medico) => (
-                                <option key={medico.id} value={medico.id}>
-                                    {medico.nome || medico.firstName} {medico.cognome || medico.lastName}
-                                    {medico.specializzazione && ` - ${medico.specializzazione}`}
-                                </option>
-                            ))}
-                        </select>
+                            onChange={(v) => setFormData(prev => ({ ...prev, medicoId: v }))}
+                            placeholder="Seleziona medico..."
+                            options={medici.map((medico) => ({
+                                value: medico.id,
+                                label: `${medico.nome || medico.firstName} ${medico.cognome || medico.lastName}${medico.specializzazione ? ` - ${medico.specializzazione}` : ''}`,
+                            }))}
+                        />
                     </div>
 
                     {/* Branca Specialistica */}

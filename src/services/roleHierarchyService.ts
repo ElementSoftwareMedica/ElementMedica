@@ -45,7 +45,8 @@ export interface Person {
   birthDate?: string;
   birthPlace?: string;      // Progetto 48
   birthProvince?: string;   // Progetto 48
-  site?: { id: string; name?: string; siteName?: string; citta?: string };
+  site?: { id: string; name?: string; siteName?: string; citta?: string } | null;
+  fallbackSite?: { id: string; siteName: string } | null;
   hiredDate?: string;
   certifications?: Array<{ id: string; name: string; expiresAt?: string }> | string[];
   specialties?: string[];   // Progetto 48

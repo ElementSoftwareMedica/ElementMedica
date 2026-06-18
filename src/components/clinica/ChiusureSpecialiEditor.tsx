@@ -12,6 +12,7 @@ import React, { useState, useMemo } from 'react';
 import { useToast } from '../../hooks/useToast';
 import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 import { DatePickerElegante } from '../ui/DatePickerElegante';
+import { ElegantSelect } from '@/components/ui/ElegantSelect';
 import {
     Calendar,
     Plus,
@@ -394,15 +395,11 @@ const ChiusureSpecialiEditor: React.FC<ChiusureSpecialiEditorProps> = ({
                         {/* Tipo */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
-                            <select
+                            <ElegantSelect
                                 value={newChiusura.tipo}
-                                onChange={(e) => setNewChiusura({ ...newChiusura, tipo: e.target.value as TipoChiusuraSpeciale })}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-teal-500 focus:border-teal-500"
-                            >
-                                {TIPI_CHIUSURA.map(t => (
-                                    <option key={t.value} value={t.value}>{t.label}</option>
-                                ))}
-                            </select>
+                                onChange={(v) => setNewChiusura({ ...newChiusura, tipo: v as TipoChiusuraSpeciale })}
+                                options={TIPI_CHIUSURA.map(t => ({ value: t.value, label: t.label }))}
+                            />
                         </div>
 
                         {/* Nome */}
@@ -527,16 +524,11 @@ const ChiusureSpecialiEditor: React.FC<ChiusureSpecialiEditorProps> = ({
             <div className="flex items-center gap-4 flex-wrap">
                 <div className="flex items-center gap-2">
                     <Filter className="h-4 w-4 text-gray-400" />
-                    <select
+                    <ElegantSelect
                         value={filterType}
-                        onChange={(e) => setFilterType(e.target.value as TipoChiusuraSpeciale | 'ALL')}
-                        className="text-sm border border-gray-300 rounded-lg px-2 py-1 focus:ring-teal-500 focus:border-teal-500"
-                    >
-                        <option value="ALL">Tutti i tipi</option>
-                        {TIPI_CHIUSURA.map(t => (
-                            <option key={t.value} value={t.value}>{t.label}</option>
-                        ))}
-                    </select>
+                        onChange={(v) => setFilterType(v as TipoChiusuraSpeciale | 'ALL')}
+                        options={[{ value: 'ALL', label: 'Tutti i tipi' }, ...TIPI_CHIUSURA.map(t => ({ value: t.value, label: t.label }))]}
+                    />
                 </div>
 
                 <div className="flex items-center gap-2">

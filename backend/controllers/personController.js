@@ -89,7 +89,7 @@ class PersonController {
   // GET /api/persons/employees (multi-tenant support)
   async getEmployees(req, res) {
     try {
-      const { companyId, tenantId, limit, offset, tenantIds, allTenants } = req.query;
+      const { companyId, tenantId, limit, offset, tenantIds, allTenants, corsoCategoria, corsoPeriodoStart, corsoPeriodoEnd } = req.query;
       const personId = req.person?.id;
       // P48: globalRole deprecated, use roles from middleware
       const roles = req.person?.roles || [];
@@ -172,9 +172,23 @@ class PersonController {
               title: true,
               status: true,
               hiredDate: true,
-              companyTenantProfileId: true
+              companyTenantProfileId: true,
+              siteId: true,
+              site: {
+                select: { id: true, siteName: true, citta: true }
+              }
             },
             take: 1
+          },
+          // Mansioni attive del lavoratore
+          mansioni: {
+            where: { isAttiva: true, deletedAt: null, tenantId: targetTenantId },
+            select: {
+              id: true,
+              mansioneId: true,
+              isPrimaria: true,
+              mansione: { select: { denominazione: true, codice: true } }
+            }
           },
           // P48: Include personRoles per ruoli
           personRoles: {
@@ -191,6 +205,26 @@ class PersonController {
       if (limit) {
         queryOptions.take = parseInt(limit);
         queryOptions.skip = offset ? parseInt(offset) : 0;
+      }
+
+      // Filtro corsi: filtra dipendenti per categoria corso e/o periodo
+      if (corsoCategoria || corsoPeriodoStart || corsoPeriodoEnd) {
+        if (!queryOptions.where.AND) queryOptions.where.AND = [];
+        const enrollmentFilter = { deletedAt: null };
+        const scheduleFilter = {};
+        if (corsoCategoria) scheduleFilter.course = { category: corsoCategoria };
+        if (corsoPeriodoStart || corsoPeriodoEnd) {
+          const dateFilter = {};
+          if (corsoPeriodoStart) dateFilter.gte = new Date(corsoPeriodoStart);
+          if (corsoPeriodoEnd) {
+            const end = new Date(corsoPeriodoEnd);
+            end.setHours(23, 59, 59, 999);
+            dateFilter.lte = end;
+          }
+          scheduleFilter.startDate = dateFilter;
+        }
+        if (Object.keys(scheduleFilter).length > 0) enrollmentFilter.schedule = scheduleFilter;
+        queryOptions.where.AND.push({ courseEnrollments: { some: enrollmentFilter } });
       }
 
       // TRAINER-only: restrict visible employees to those enrolled in the trainer's schedules
@@ -223,10 +257,53 @@ class PersonController {
           status: profile.status || 'PENDING',
           hiredDate: profile.hiredDate || null,
           companyTenantProfileId: profile.companyTenantProfileId || null,
+          siteId: profile.siteId || null,
+          site: profile.site ? {
+            id: profile.site.id,
+            name: profile.site.siteName,
+            siteName: profile.site.siteName,
+            citta: profile.site.citta
+          } : null,
+          // Mansioni attive
+          mansioni: (p.mansioni || []).map(lm => ({
+            id: lm.id,
+            mansioneId: lm.mansioneId,
+            denominazione: lm.mansione?.denominazione || null,
+            codice: lm.mansione?.codice || null,
+            isPrimaria: lm.isPrimaria
+          })),
           // From personRoles
           globalRole: roles[0] || null,
           roles: roles
         };
+      });
+
+      // Fallback sede: per dipendenti senza sede assegnata, cerca se l'azienda ha una sola sede
+      const profileIdsWithoutSite = employees
+        .filter(e => !e.siteId && e.companyTenantProfileId)
+        .map(e => e.companyTenantProfileId)
+        .filter(Boolean);
+      const uniqueProfileIds = [...new Set(profileIdsWithoutSite)];
+      const companySitesFallback = new Map();
+      if (uniqueProfileIds.length > 0) {
+        const allSites = await prisma.companySite.findMany({
+          where: { companyTenantProfileId: { in: uniqueProfileIds }, deletedAt: null },
+          select: { id: true, siteName: true, companyTenantProfileId: true }
+        });
+        for (const site of allSites) {
+          const existing = companySitesFallback.get(site.companyTenantProfileId) || [];
+          existing.push(site);
+          companySitesFallback.set(site.companyTenantProfileId, existing);
+        }
+      }
+      const employeesWithSite = employees.map(e => {
+        if (!e.siteId && e.companyTenantProfileId) {
+          const sites = companySitesFallback.get(e.companyTenantProfileId) || [];
+          if (sites.length === 1) {
+            return { ...e, fallbackSite: { id: sites[0].id, siteName: sites[0].siteName } };
+          }
+        }
+        return e;
       });
 
       // Applica field-level filtering basato sui permessi, mantenendo la struttura di risposta
@@ -235,7 +312,7 @@ class PersonController {
         personId,
         'employees',
         'view',
-        employees,
+        employeesWithSite,
         req.person?.tenantId || tenantId
       );
 

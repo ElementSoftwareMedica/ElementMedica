@@ -43,6 +43,7 @@ import {
 } from '@/services/clinicaApi';
 import { internalDocumentApi } from '@/services/managementDocsApi';
 import { formatMedicoName } from '@/utils/textFormatters';
+import { ElegantSelect } from '@/components/ui/ElegantSelect';
 
 // ============================================================
 // CONSTANTS
@@ -206,14 +207,12 @@ const EmailTemplateForm: React.FC<EmailTemplateFormProps> = ({
                         {/* Branca */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Branca</label>
-                            <select
+                            <ElegantSelect
                                 value={branca}
-                                onChange={e => setBranca(e.target.value)}
+                                onChange={v => setBranca(v)}
                                 disabled={isBaseMedico}
-                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 bg-white"
-                            >
-                                {BRANCHE.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
-                            </select>
+                                options={BRANCHE}
+                            />
                         </div>
 
                         {/* Medico */}
@@ -222,19 +221,15 @@ const EmailTemplateForm: React.FC<EmailTemplateFormProps> = ({
                                 <UserCheck className="h-3.5 w-3.5 text-blue-500" />
                                 Medico specifico <span className="font-normal text-xs text-gray-400">(sovrascrive branca)</span>
                             </label>
-                            <select
+                            <ElegantSelect
                                 value={medicoId}
-                                onChange={e => setMedicoId(e.target.value)}
+                                onChange={v => setMedicoId(v)}
                                 disabled={isBaseMedico}
-                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 bg-white"
-                            >
-                                {!isBaseMedico && <option value="">— Tutti i medici —</option>}
-                                {medici.map(m => (
-                                    <option key={m.id} value={m.id}>
-                                        {formatMedicoName(m)}
-                                    </option>
-                                ))}
-                            </select>
+                                options={[
+                                    ...(!isBaseMedico ? [{ value: '', label: '— Tutti i medici —' }] : []),
+                                    ...medici.map(m => ({ value: m.id, label: formatMedicoName(m) }))
+                                ]}
+                            />
                         </div>
 
                         {/* Prestazione */}
@@ -243,18 +238,14 @@ const EmailTemplateForm: React.FC<EmailTemplateFormProps> = ({
                                 <Stethoscope className="h-3.5 w-3.5 text-purple-500" />
                                 Prestazione specifica <span className="font-normal text-xs text-gray-400">(sovrascrive medico e branca)</span>
                             </label>
-                            <select
+                            <ElegantSelect
                                 value={prestazioneId}
-                                onChange={e => setPrestazioneId(e.target.value)}
-                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 bg-white"
-                            >
-                                {!isBaseMedico && <option value="">— Tutte le prestazioni —</option>}
-                                {prestazioni.map(p => (
-                                    <option key={p.id} value={p.id}>
-                                        {p.codice} — {p.nome}
-                                    </option>
-                                ))}
-                            </select>
+                                onChange={v => setPrestazioneId(v)}
+                                options={[
+                                    ...(!isBaseMedico ? [{ value: '', label: '— Tutte le prestazioni —' }] : []),
+                                    ...prestazioni.map(p => ({ value: p.id, label: `${p.codice} — ${p.nome}` }))
+                                ]}
+                            />
                         </div>
                     </div>
 

@@ -17,6 +17,7 @@ import {
     Filter,
     X
 } from 'lucide-react';
+import { ElegantSelect } from '@/components/ui/ElegantSelect';
 
 interface BranchFilterProps {
     /** Branch attualmente selezionato (null = tutti) */
@@ -183,25 +184,18 @@ export function BranchFilter({
     // dropdown variant
     return (
         <div className={`relative inline-block ${className}`}>
-            <select
+            <ElegantSelect
                 value={selectedBranch || ''}
-                onChange={(e) => onBranchChange(e.target.value as BranchType || null)}
-                className={`
-          ${s.button} rounded-lg font-medium
-          bg-white dark:bg-gray-800
-          border border-gray-200 dark:border-gray-700
-          text-gray-700 dark:text-gray-300
-          focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-          cursor-pointer
-        `}
-            >
-                {showAllOption && <option value="">Tutti i Branch</option>}
-                {accessibleBranches.map((branch) => (
-                    <option key={branch} value={branch}>
-                        {BRANCH_CONFIGS[branch].displayName}
-                    </option>
-                ))}
-            </select>
+                onChange={(v) => onBranchChange(v as BranchType || null)}
+                placeholder={showAllOption ? 'Tutti i Branch' : undefined}
+                options={[
+                    ...(showAllOption ? [{ value: '', label: 'Tutti i Branch' }] : []),
+                    ...accessibleBranches.map((branch) => ({
+                        value: branch,
+                        label: BRANCH_CONFIGS[branch].displayName,
+                    })),
+                ]}
+            />
         </div>
     );
 }

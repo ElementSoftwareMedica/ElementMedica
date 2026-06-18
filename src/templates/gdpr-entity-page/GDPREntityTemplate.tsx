@@ -37,6 +37,7 @@ import {
 } from 'lucide-react';
 import { FilterPanel } from '../../design-system/organisms/FilterPanel';
 import { AddEntityDropdown, ColumnSelector, BatchEditButton, ActionButton } from '../../components/ui';
+import { ListPaginationFooter } from '../../components/ui/ListPaginationFooter';
 import { exportToCsv } from '../../utils/csvExport';
 import { useToast } from '../../hooks/useToast';
 
@@ -278,6 +279,10 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
   const [activeFilters, setActiveFilters] = useState<Record<string, string>>({});
   const [activeSort, setActiveSort] = useState<{ field: string, direction: 'asc' | 'desc' } | undefined>(defaultSort);
 
+  // Paginazione client-side
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+
   // Stati per visualizzazione
   const [viewMode, setViewMode] = useState<'table' | 'grid'>(() => {
     return (localStorage.getItem(`${entityNamePlural}ViewMode`) as 'table' | 'grid') || defaultViewMode;
@@ -414,6 +419,16 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
 
     return filtered;
   }, [entities, activeFilters, searchQuery, searchFields, activeSort]);
+
+  const paginatedEntities = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredEntities.slice(start, start + pageSize);
+  }, [filteredEntities, currentPage, pageSize]);
+
+  // Reset alla prima pagina quando cambiano i filtri
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, activeFilters, activeSort]);
 
   // Sincronizzazione stato selectAll con selezione effettiva
   useEffect(() => {
@@ -1107,7 +1122,7 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-700/50">
-                    {filteredEntities.map((entity, rowIndex) => (
+                    {paginatedEntities.map((entity, rowIndex) => (
                       <tr
                         key={entity.id}
                         className={!selectionMode
@@ -1151,18 +1166,22 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {filteredEntities.map(renderEntityCard)}
+              {paginatedEntities.map(renderEntityCard)}
             </div>
           )
         )}
 
-        {/* ── Footer count ── */}
+        {/* ── Footer paginazione ── */}
         {!loading && filteredEntities.length > 0 && (
-          <p className="text-xs text-gray-400 dark:text-gray-500 text-center pb-1">
-            {filteredEntities.length !== entities.length
-              ? `${filteredEntities.length} ${entityDisplayNamePlural.toLowerCase()} su ${entities.length} totali`
-              : `${entities.length} ${entityDisplayNamePlural.toLowerCase()} totali`}
-          </p>
+          <ListPaginationFooter
+            page={currentPage}
+            pageSize={pageSize}
+            total={filteredEntities.length}
+            totalPages={Math.ceil(filteredEntities.length / pageSize)}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }}
+            itemLabel={entityDisplayNamePlural.toLowerCase()}
+          />
         )}
       </div>
     </div>

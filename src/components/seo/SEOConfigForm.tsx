@@ -16,6 +16,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Badge } from '../ui/badge';
 import { Save, Eye, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { ElegantSelect } from '@/components/ui/ElegantSelect';
 
 interface SEOConfigFormProps {
   entityType: 'page' | 'course';
@@ -316,16 +317,15 @@ const SEOConfigForm: React.FC<SEOConfigFormProps> = ({
 
               <div>
                 <Label htmlFor="ogType">OG Type</Label>
-                <select
-                  id="ogType"
+                <ElegantSelect
                   value={config.ogType}
-                  onChange={(e) => setConfig({ ...config, ogType: e.target.value as any })}
-                  className="w-full px-3 py-2 border rounded-md"
-                >
-                  <option value="website">Website</option>
-                  <option value="article">Article</option>
-                  <option value="profile">Profile</option>
-                </select>
+                  onChange={(v) => setConfig({ ...config, ogType: v as any })}
+                  options={[
+                    { value: 'website', label: 'Website' },
+                    { value: 'article', label: 'Article' },
+                    { value: 'profile', label: 'Profile' },
+                  ]}
+                />
               </div>
             </CardContent>
           </Card>
@@ -341,15 +341,14 @@ const SEOConfigForm: React.FC<SEOConfigFormProps> = ({
             <CardContent className="space-y-4">
               <div>
                 <Label htmlFor="twitterCard">Twitter Card Type</Label>
-                <select
-                  id="twitterCard"
+                <ElegantSelect
                   value={config.twitterCard}
-                  onChange={(e) => setConfig({ ...config, twitterCard: e.target.value as any })}
-                  className="w-full px-3 py-2 border rounded-md"
-                >
-                  <option value="summary">Summary</option>
-                  <option value="summary_large_image">Summary Large Image</option>
-                </select>
+                  onChange={(v) => setConfig({ ...config, twitterCard: v as any })}
+                  options={[
+                    { value: 'summary', label: 'Summary' },
+                    { value: 'summary_large_image', label: 'Summary Large Image' },
+                  ]}
+                />
               </div>
 
               <div>

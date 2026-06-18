@@ -9,6 +9,7 @@ import {
     CalendarIcon,
     Clock,
     Stethoscope,
+    Building2,
     X,
     Check,
     AlertTriangle,
@@ -18,7 +19,7 @@ import {
 } from 'lucide-react';
 
 import { slotsApi } from '../../../../../services/clinicaApi';
-import type { SlotDisponibilita, Medico } from '../../../../../services/clinicaApi';
+import type { SlotDisponibilita, Medico, Ambulatorio } from '../../../../../services/clinicaApi';
 import { formatDate } from '../../../../../utils/dateUtils';
 import { minutesToTimeString } from '../../utils';
 import { getDoctorTitle } from '../../../../../utils/codiceFiscale';
@@ -33,12 +34,14 @@ export const AvailabilitySlotModal: React.FC<AvailabilitySlotModalProps> = ({
     selectedMedicoId,
     medicoColors,
     onSuccess,
-    existingDisponibilita = []
+    existingDisponibilita = [],
+    ambulatori: ambulatoriLiberi
 }) => {
     const queryClient = useQueryClient();
     const { showToast } = useToast();
 
     const [selectedMedico, setSelectedMedico] = useState<string>(selectedMedicoId || '');
+    const [selectedAmbulatorio, setSelectedAmbulatorio] = useState<string>('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     // State for scenario 2 confirmation (same medico, different ambulatorio)
@@ -63,8 +66,14 @@ export const AvailabilitySlotModal: React.FC<AvailabilitySlotModalProps> = ({
             setSearchQuery('');
             setShowForceConfirm(false);
             setForceConfirmMessage('');
+            // In medico-view mode ambulatoriLiberi is provided; auto-select if only one free
+            setSelectedAmbulatorio(
+                ambulatoriLiberi !== undefined
+                    ? (ambulatoriLiberi.length === 1 ? ambulatoriLiberi[0].id : '')
+                    : (slotInfo?.ambulatorioId || '')
+            );
         }
-    }, [isOpen, selectedMedicoId, medici]);
+    }, [isOpen, selectedMedicoId, medici, ambulatoriLiberi, slotInfo?.ambulatorioId]);
 
     // Create slot mutation
     const createSlotMutation = useMutation({
@@ -131,6 +140,16 @@ export const AvailabilitySlotModal: React.FC<AvailabilitySlotModalProps> = ({
             return;
         }
 
+        // In medico-view mode the ambulatorio must be selected from the picker
+        const effectiveAmbulatorioId = ambulatoriLiberi !== undefined
+            ? selectedAmbulatorio
+            : slotInfo.ambulatorioId;
+
+        if (!effectiveAmbulatorioId) {
+            showToast({ type: 'error', message: 'Seleziona un ambulatorio' });
+            return;
+        }
+
         // Skip frontend checks if forceCreate (user already confirmed)
         if (!forceCreate) {
             const newStart = slotInfo.startHour;
@@ -142,7 +161,7 @@ export const AvailabilitySlotModal: React.FC<AvailabilitySlotModalProps> = ({
 
             // Check for overlapping availability - same ambulatorio and date
             const overlapping = existingDisponibilita.filter(d => {
-                if (d.ambulatorioId !== slotInfo.ambulatorioId) return false;
+                if (d.ambulatorioId !== effectiveAmbulatorioId) return false;
                 // Compare using local date parts
                 const dYear = d.start.getFullYear();
                 const dMonth = d.start.getMonth();
@@ -196,7 +215,7 @@ export const AvailabilitySlotModal: React.FC<AvailabilitySlotModalProps> = ({
 
             await createSlotMutation.mutateAsync({
                 medicoId: selectedMedico,
-                ambulatorioId: slotInfo.ambulatorioId,
+                ambulatorioId: effectiveAmbulatorioId,
                 data: submissionDate,
                 oraInizio: formatHour(slotInfo.startHour),
                 oraFine: formatHour(slotInfo.endHour),
@@ -325,6 +344,49 @@ export const AvailabilitySlotModal: React.FC<AvailabilitySlotModalProps> = ({
                         </div>
                     )}
 
+                    {/* Ambulatorio picker (medico-view mode only) */}
+                    {ambulatoriLiberi !== undefined && (
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                <Building2 className="h-4 w-4 inline mr-1" />
+                                Seleziona Ambulatorio *
+                            </label>
+                            {ambulatoriLiberi.length === 0 ? (
+                                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+                                    Nessun ambulatorio disponibile in questa fascia oraria
+                                </div>
+                            ) : (
+                                <div className="border border-gray-100 rounded-lg overflow-hidden">
+                                    <div className="max-h-40 overflow-y-auto divide-y divide-gray-100">
+                                        {ambulatoriLiberi.map((amb: Ambulatorio) => {
+                                            const isSelected = selectedAmbulatorio === amb.id;
+                                            return (
+                                                <button
+                                                    key={amb.id}
+                                                    onClick={() => setSelectedAmbulatorio(amb.id)}
+                                                    className={`w-full flex items-center gap-3 px-3 py-2.5 transition-all ${isSelected
+                                                        ? 'bg-teal-50'
+                                                        : 'bg-white hover:bg-gray-50'
+                                                        }`}
+                                                >
+                                                    <Building2 className={`h-4 w-4 flex-shrink-0 ${isSelected ? 'text-teal-600' : 'text-gray-400'}`} />
+                                                    <span className={`text-sm flex-1 text-left ${isSelected ? 'text-teal-700 font-medium' : 'text-gray-800'}`}>
+                                                        {amb.nome}
+                                                    </span>
+                                                    {isSelected && (
+                                                        <div className="flex-shrink-0 w-5 h-5 rounded-full bg-teal-500 flex items-center justify-center">
+                                                            <Check className="h-3 w-3 text-white" />
+                                                        </div>
+                                                    )}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     {/* Summary */}
                     <div className="bg-gray-50 rounded-lg p-3 space-y-2 text-sm">
                         <div className="flex items-center gap-2">
@@ -401,7 +463,7 @@ export const AvailabilitySlotModal: React.FC<AvailabilitySlotModalProps> = ({
                         </button>
                         <button
                             onClick={() => handleSubmit()}
-                            disabled={!selectedMedico || isSubmitting}
+                            disabled={!selectedMedico || (ambulatoriLiberi !== undefined && (!selectedAmbulatorio || ambulatoriLiberi.length === 0)) || isSubmitting}
                             className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {isSubmitting ? (

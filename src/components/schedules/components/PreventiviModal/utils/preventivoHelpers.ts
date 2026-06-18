@@ -21,34 +21,24 @@ export function buildPreventivoNote(
   scontoApplicato: ScontoApplicato | null,
   note: string
 ): string {
-  const courseTitle = selectedCourse.title || selectedCourse.name || 'Corso';
-  const noteBreakdown = [
-    `Corso: ${courseTitle}`,
-    `Partecipanti: ${config.numPartecipanti}`,
-    `Prezzo unitario: €${prezzoUnitario.toFixed(2)}`,
-    `Prezzo base: €${totals.prezzoBase.toFixed(2)}`,
-  ];
+  const parts: string[] = [];
 
   if (speseAccessorie.length > 0) {
-    noteBreakdown.push('\nSpese accessorie:');
+    parts.push('Spese accessorie:');
     speseAccessorie.forEach((spesa) => {
-      noteBreakdown.push(`- ${spesa.descrizione}: €${spesa.importo.toFixed(2)}`);
+      parts.push(`- ${spesa.descrizione}: €${spesa.importo.toFixed(2)}`);
     });
   }
 
   if (scontoApplicato) {
-    noteBreakdown.push(`\nSconto applicato: ${scontoApplicato.codice} (-${scontoApplicato.percentuale}%)`);
+    parts.push(`Sconto applicato: ${scontoApplicato.codice} (-${scontoApplicato.percentuale}%)`);
   }
-
-  noteBreakdown.push(`\nTotale imponibile: €${totals.imponibile.toFixed(2)}`);
-  noteBreakdown.push(`IVA (${totals.percentualeIva}%): €${totals.importoIva.toFixed(2)}`);
-  noteBreakdown.push(`Totale finale: €${totals.importoFinale.toFixed(2)}`);
 
   if (note) {
-    noteBreakdown.push(`\nNote aggiuntive:\n${note}`);
+    parts.push(note);
   }
 
-  return noteBreakdown.join('\n');
+  return parts.join('\n');
 }
 
 /**

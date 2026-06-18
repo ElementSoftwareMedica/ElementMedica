@@ -12,6 +12,7 @@ import {
     BookOpen,
     Timer
 } from 'lucide-react';
+import { ElegantSelect } from '@/components/ui/ElegantSelect';
 import type { TestAssignmentConfig, FormTemplateData } from './types';
 import type { Course } from '../../../types/courses';
 
@@ -154,19 +155,15 @@ const TestAssignmentSection: React.FC<TestAssignmentSectionProps> = ({
                                     {/* Specific course selection */}
                                     <div>
                                         <label className="block text-sm text-gray-600 mb-1">Corso Specifico (opzionale)</label>
-                                        <select
+                                        <ElegantSelect
                                             value={testAssignment.courseBinding.specificCourseId || ''}
-                                            onChange={(e) => updateCourseBinding({ specificCourseId: e.target.value || null })}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                                            disabled={loadingCourses}
-                                        >
-                                            <option value="">-- Seleziona un corso --</option>
-                                            {availableCourses.map(course => (
-                                                <option key={course.id} value={course.id}>
-                                                    {course.code ? `[${course.code}] ` : ''}{course.title}
-                                                </option>
-                                            ))}
-                                        </select>
+                                            onChange={(v) => updateCourseBinding({ specificCourseId: v || null })}
+                                            placeholder="-- Seleziona un corso --"
+                                            options={availableCourses.map(course => ({
+                                                value: course.id,
+                                                label: `${course.code ? `[${course.code}] ` : ''}${course.title}`
+                                            }))}
+                                        />
                                     </div>
 
                                     {/* Risk Level Filter */}

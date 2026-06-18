@@ -34,6 +34,7 @@ import { apiGet } from '../../../services/api';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { DateRangeCalendar, type DateRange } from '../../../components/ui/DateRangeCalendar';
+import { ElegantSelect } from '@/components/ui/ElegantSelect';
 
 // Import modular components
 import type {
@@ -491,16 +492,14 @@ const ExpiringCoursesSection: React.FC<ExpiringCoursesSectionProps> = ({
                     <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Filtri:</span>
                 </div>
 
-                <select
+                <ElegantSelect
                     value={filterCompany}
-                    onChange={(e) => setFilterCompany(e.target.value)}
-                    className="text-sm border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-orange-500 bg-white dark:bg-gray-800 dark:text-gray-100"
-                >
-                    <option value="all">Tutte le aziende</option>
-                    {companies.map(c => (
-                        <option key={c.id} value={c.id}>{c.ragioneSociale}</option>
-                    ))}
-                </select>
+                    onChange={setFilterCompany}
+                    options={[
+                        { value: 'all', label: 'Tutte le aziende' },
+                        ...companies.map(c => ({ value: c.id, label: c.ragioneSociale })),
+                    ]}
+                />
 
                 <DateRangeCalendar
                     value={dateRange}
@@ -513,16 +512,16 @@ const ExpiringCoursesSection: React.FC<ExpiringCoursesSectionProps> = ({
                     customPresets={expiringPresets}
                 />
 
-                <select
+                <ElegantSelect
                     value={filterSource}
-                    onChange={(e) => setFilterSource(e.target.value)}
-                    className="text-sm border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-orange-500 bg-white dark:bg-gray-800 dark:text-gray-100"
-                >
-                    <option value="all">Tutte le fonti</option>
-                    <option value="INTERNAL">Interni</option>
-                    <option value="EXTERNAL">Esterni</option>
-                    <option value="IMPORT">Importati</option>
-                </select>
+                    onChange={setFilterSource}
+                    options={[
+                        { value: 'all', label: 'Tutte le fonti' },
+                        { value: 'INTERNAL', label: 'Interni' },
+                        { value: 'EXTERNAL', label: 'Esterni' },
+                        { value: 'IMPORT', label: 'Importati' },
+                    ]}
+                />
             </div>
 
             {/* Actions Row */}

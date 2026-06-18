@@ -7,7 +7,7 @@
  */
 
 import { useState, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
     ArrowLeft,
@@ -298,6 +298,10 @@ function InterventiSelector({ sezione, catalogo, interventiSelezionati, onAdd, i
 export default function OT23DetailPage() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
+    const location = useLocation();
+    const ot23ListPath = location.pathname.startsWith('/poliambulatorio')
+        ? '/poliambulatorio/sicurezza/ot23'
+        : '/sicurezza/ot23';
     const { showToast } = useToast();
     const { getOperateHeaders } = useTenantMode();
     const { confirm: confirmDialog } = useConfirmDialog();
@@ -419,7 +423,7 @@ export default function OT23DetailPage() {
                     <CardContent className="p-6 text-center">
                         <X className="w-12 h-12 text-red-500 mx-auto mb-4" />
                         <p className="text-red-700">Domanda non trovata</p>
-                        <Button className="mt-4" onClick={() => navigate('/sicurezza/ot23')}>
+                        <Button className="mt-4" onClick={() => navigate(ot23ListPath)}>
                             Torna alla lista
                         </Button>
                     </CardContent>
@@ -440,7 +444,7 @@ export default function OT23DetailPage() {
                     </div>
                 </div>
                 <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => navigate('/sicurezza/ot23')}>
+                    <Button variant="outline" onClick={() => navigate(ot23ListPath)}>
                         <ArrowLeft className="w-4 h-4 mr-2" />
                         Indietro
                     </Button>

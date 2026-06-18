@@ -88,7 +88,7 @@ export function useGDPREntityData<T extends Record<string, unknown>>({
       if (apiEndpoint === '/api/persons' || apiEndpoint === '/api/v1/persons') {
         const params = new URLSearchParams();
         params.append('page', '1');
-        params.append('limit', '50');
+        params.append('limit', '500');
 
         const currentStaticParams = staticQueryParamsRef.current || {};
         const sortBy = currentStaticParams.sortBy || 'lastLogin';

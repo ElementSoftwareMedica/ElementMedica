@@ -299,7 +299,8 @@ export const CalendarioPage: React.FC = () => {
         ambulatorioId: null
     });
     const [quickAddInfo, setQuickAddInfo] = useState<{ date: Date; hour: number; ambulatorioId: string; isOverbooking?: boolean; existingCount?: number } | null>(null);
-    const [availabilityModalInfo, setAvailabilityModalInfo] = useState<{ date: Date; startHour: number; endHour: number; ambulatorioId: string } | null>(null);
+    const [calendarLayoutMode, setCalendarLayoutMode] = useState<'ambulatorio' | 'medico'>('ambulatorio');
+    const [availabilityModalInfo, setAvailabilityModalInfo] = useState<{ date: Date; startHour: number; endHour: number; ambulatorioId: string; medicoId?: string; ambulatori?: Ambulatorio[] } | null>(null);
     const [draggingEvent, setDraggingEvent] = useState<DragItem | null>(null);
     // Appuntamento selezionato per modifica (apre il booking modal in edit mode)
     const [editingAppointment, setEditingAppointment] = useState<CalendarEvent | null>(null);
@@ -864,6 +865,12 @@ export const CalendarioPage: React.FC = () => {
         return all.filter(a => selectedAmbulatori.includes(a.id));
     }, [ambulatoriData, selectedAmbulatori, selectedSedeId]);
 
+    // Medici da mostrare nella vista per medico (quelli nei filtri attivi)
+    const displayMedici = useMemo(() => {
+        if (filterMedici.length === 0) return visibleMedici;
+        return visibleMedici.filter(m => filterMedici.includes(m.id));
+    }, [visibleMedici, filterMedici]);
+
     // Display days are ONLY the explicitly selected dates from mini calendar
     // No week-based fallback - user must select days they want to see
     const displayDays = useMemo(() => {
@@ -964,6 +971,22 @@ export const CalendarioPage: React.FC = () => {
 
         return { totalColumns, isTooMany, minWidthNeeded, effectiveColumnWidth, maxColumnsInDay };
     }, [effectiveDisplayDays, ambulatoriPerDay]);
+
+    // Column info for medico-view layout: one sub-column per (medico × day)
+    const medicoColumnInfo = useMemo(() => {
+        const totalColumns = displayMedici.length * effectiveDisplayDays.length;
+        const isTooMany = totalColumns > MAX_RECOMMENDED_COLUMNS;
+        const minWidthNeeded = totalColumns * MIN_COLUMN_WIDTH + TIME_COLUMN_WIDTH;
+        const estimatedContainerWidth = typeof window !== 'undefined'
+            ? window.innerWidth - 256 - TIME_COLUMN_WIDTH - 32
+            : 1200 - 256 - TIME_COLUMN_WIDTH;
+        let effectiveColumnWidth = MIN_COLUMN_WIDTH;
+        if (totalColumns > 0 && !isTooMany) {
+            const idealWidth = Math.floor(estimatedContainerWidth / totalColumns);
+            if (idealWidth > MIN_COLUMN_WIDTH) effectiveColumnWidth = idealWidth;
+        }
+        return { totalColumns, isTooMany, minWidthNeeded, effectiveColumnWidth };
+    }, [displayMedici, effectiveDisplayDays]);
 
     // Calculate effective hour height for "Adatta" (fit) mode
     const effectiveHourHeight = useMemo(() => {
@@ -1155,16 +1178,39 @@ export const CalendarioPage: React.FC = () => {
             return;
         }
 
-        // Open the availability slot modal
-        setAvailabilityModalInfo({
-            date: dragState.startDay,
-            startHour,
-            endHour,
-            ambulatorioId: dragState.ambulatorioId
-        });
+        if (calendarLayoutMode === 'medico') {
+            // In medico view, dragState.ambulatorioId holds the medicoId (virtual ambulatorio pattern)
+            const medicoId = dragState.ambulatorioId;
+            const dragDate = dragState.startDay;
+            // Compute ambulatories free during the dragged time range on that day
+            const ambulatoriLiberi = (ambulatoriData?.data || []).filter(amb => {
+                return !events.disponibilita.some(d => {
+                    if (d.ambulatorioId !== amb.id) return false;
+                    if (!isSameDay(d.start, dragDate)) return false;
+                    const dStart = d.start.getHours() + d.start.getMinutes() / 60;
+                    const dEnd = d.end.getHours() + d.end.getMinutes() / 60;
+                    return startHour < dEnd && endHour > dStart;
+                });
+            });
+            setAvailabilityModalInfo({
+                date: dragState.startDay,
+                startHour,
+                endHour,
+                ambulatorioId: '',
+                medicoId,
+                ambulatori: ambulatoriLiberi
+            });
+        } else {
+            setAvailabilityModalInfo({
+                date: dragState.startDay,
+                startHour,
+                endHour,
+                ambulatorioId: dragState.ambulatorioId
+            });
+        }
 
         setDragState({ isDragging: false, startHour: null, startDay: null, endHour: null, ambulatorioId: null });
-    }, [dragState]);
+    }, [dragState, calendarLayoutMode, ambulatoriData, events.disponibilita]);
 
     // Drag & Drop handlers for moving existing events
     const handleItemDragStart = useCallback((e: React.DragEvent, item: DragItem) => {
@@ -1710,6 +1756,26 @@ export const CalendarioPage: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-2">
+                        {/* Layout Mode Toggle - Ambulatorio vs Medico view */}
+                        <div className="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+                            <button
+                                onClick={() => setCalendarLayoutMode('ambulatorio')}
+                                className={`px-3 py-1.5 text-sm font-medium rounded flex items-center gap-1.5 ${calendarLayoutMode === 'ambulatorio' ? 'bg-white dark:bg-gray-600 shadow text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'}`}
+                                title="Vista per ambulatorio"
+                            >
+                                <Building2 className="h-4 w-4" />
+                                <span className="hidden lg:inline">Ambulatorio</span>
+                            </button>
+                            <button
+                                onClick={() => setCalendarLayoutMode('medico')}
+                                className={`px-3 py-1.5 text-sm font-medium rounded flex items-center gap-1.5 ${calendarLayoutMode === 'medico' ? 'bg-white dark:bg-gray-600 shadow text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'}`}
+                                title="Vista per medico"
+                            >
+                                <Stethoscope className="h-4 w-4" />
+                                <span className="hidden lg:inline">Medico</span>
+                            </button>
+                        </div>
+
                         {/* Color Mode Toggle */}
                         <div className="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
                             <button
@@ -1865,16 +1931,16 @@ export const CalendarioPage: React.FC = () => {
                     className={`flex-1 calendar-scroll ${zoomMode === 'scroll' ? 'overflow-auto' : 'overflow-x-auto overflow-y-hidden'}`}
                 >
                     {/* Warning banner when too many columns */}
-                    {columnInfo.isTooMany && (
+                    {(calendarLayoutMode === 'ambulatorio' ? columnInfo : medicoColumnInfo).isTooMany && (
                         <div className="bg-amber-50 dark:bg-amber-900/30 border-b border-amber-200 dark:border-amber-700 px-4 py-2 flex items-center gap-2 sticky top-0 z-20">
                             <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
                             <span className="text-sm text-amber-800 dark:text-amber-200">
-                                <strong>Troppe colonne ({columnInfo.totalColumns}):</strong> La visualizzazione potrebbe risultare compressa.
-                                Prova a ridurre i giorni o gli ambulatori selezionati nei filtri per una migliore leggibilità.
+                                <strong>Troppe colonne ({(calendarLayoutMode === 'ambulatorio' ? columnInfo : medicoColumnInfo).totalColumns}):</strong> La visualizzazione potrebbe risultare compressa.
+                                Prova a ridurre i giorni o i medici selezionati nei filtri per una migliore leggibilità.
                             </span>
                         </div>
                     )}
-                    <div style={{ minWidth: `${columnInfo.minWidthNeeded}px` }}>
+                    {calendarLayoutMode === 'ambulatorio' ? (<div style={{ minWidth: `${columnInfo.minWidthNeeded}px` }}>
                         {/* Calendar Headers Container - measured for "Adatta" mode */}
                         <div ref={headerRef}>
                             {/* Day Headers */}
@@ -2026,7 +2092,140 @@ export const CalendarioPage: React.FC = () => {
                                 );
                             })}
                         </div>
+                    </div>) : (
+                    /* ===== Vista per Medico ===== */
+                    <div style={{ minWidth: `${medicoColumnInfo.minWidthNeeded}px` }}>
+                        {/* Medico Headers Container */}
+                        <div ref={headerRef}>
+                            <div className="flex bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10" style={{ top: medicoColumnInfo.isTooMany ? '41px' : 0 }}>
+                                <div className="flex-shrink-0 bg-gray-50 dark:bg-gray-700 border-r border-gray-200 dark:border-gray-700" style={{ width: `${TIME_COLUMN_WIDTH}px` }} />
+                                {displayMedici.map((medico, medicoIdx) => {
+                                    const color = medicoColors.get(medico.id);
+                                    const firstName = medico.firstName || medico.nome || '';
+                                    const lastName = medico.lastName || medico.cognome || '';
+                                    const title = getDoctorTitle(medico.taxCode || medico.codiceFiscale || null, medico.gender || null);
+                                    const fullName = `${title} ${lastName} ${firstName}`.trim();
+                                    return (
+                                        <div
+                                            key={medico.id}
+                                            className="relative"
+                                            style={{
+                                                width: `${effectiveDisplayDays.length * medicoColumnInfo.effectiveColumnWidth}px`,
+                                                flexShrink: 0
+                                            }}
+                                        >
+                                            {medicoIdx > 0 && (
+                                                <div
+                                                    className="absolute left-0 top-0 bottom-0 z-10"
+                                                    style={{
+                                                        marginLeft: '-1px',
+                                                        width: '2px',
+                                                        backgroundImage: 'repeating-linear-gradient(to bottom, #6366f1 0px, #6366f1 4px, transparent 4px, transparent 8px)'
+                                                    }}
+                                                />
+                                            )}
+                                            {/* Medico name row */}
+                                            <div className={`p-1 text-center border-b border-gray-200 dark:border-gray-700 ${color?.bg || ''}`}>
+                                                <div className="flex items-center justify-center gap-1.5">
+                                                    <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${color?.dot || 'bg-gray-400'}`} />
+                                                    <span className="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate">{fullName}</span>
+                                                </div>
+                                            </div>
+                                            {/* Day sub-headers */}
+                                            <div className="flex">
+                                                {effectiveDisplayDays.map((day, dayIdx) => (
+                                                    <div
+                                                        key={dayIdx}
+                                                        className={`px-0.5 py-0.5 text-center border-r border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 border-t-2 ${color?.border || 'border-gray-300'} ${isSameDay(day, new Date()) ? 'bg-teal-50 dark:bg-teal-900/30' : ''}`}
+                                                        style={{ width: `${medicoColumnInfo.effectiveColumnWidth}px`, flexShrink: 0 }}
+                                                    >
+                                                        <p className="text-[9px] text-gray-500 dark:text-gray-400">{DAYS_OF_WEEK[(day.getDay() + 6) % 7]}</p>
+                                                        <p className={`text-[11px] font-semibold ${isSameDay(day, new Date()) ? 'text-teal-600 dark:text-teal-400' : 'text-gray-700 dark:text-gray-300'}`}>
+                                                            {day.getDate()}
+                                                        </p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* Medico Time Grid */}
+                        <div className="flex">
+                            <TimeColumn startHour={viewStartHour} endHour={viewEndHour} hourHeight={effectiveHourHeight} />
+                            {displayMedici.map((medico, medicoIdx) => {
+                                const virtualAmb = { id: medico.id, nome: `${medico.lastName || medico.cognome || ''} ${medico.firstName || medico.nome || ''}`.trim() } as Ambulatorio;
+                                return (
+                                    <div
+                                        key={medico.id}
+                                        className="flex relative"
+                                        style={{ flexShrink: 0 }}
+                                    >
+                                        {medicoIdx > 0 && (
+                                            <div
+                                                className="absolute left-0 top-0 bottom-0 z-10 pointer-events-none"
+                                                style={{
+                                                    marginLeft: '-1px',
+                                                    width: '2px',
+                                                    backgroundImage: 'repeating-linear-gradient(to bottom, #6366f1 0px, #6366f1 4px, transparent 4px, transparent 8px)'
+                                                }}
+                                            />
+                                        )}
+                                        {effectiveDisplayDays.map((day, dayIdx) => {
+                                            const dayDisp = filteredEvents.disponibilita.filter(d =>
+                                                d.medicoId === medico.id && isSameDay(d.start, day)
+                                            );
+                                            const dayApps = filteredEvents.appuntamenti.filter(a =>
+                                                a.medicoId === medico.id && isSameDay(a.start, day)
+                                            );
+                                            return (
+                                                <DayColumn
+                                                    key={dayIdx}
+                                                    date={day}
+                                                    ambulatorio={virtualAmb}
+                                                    ambulatorioIndex={medicoIdx}
+                                                    disponibilita={dayDisp}
+                                                    appuntamenti={dayApps}
+                                                    getSlotColor={getSlotColor}
+                                                    selectedMedico={selectedMedico}
+                                                    onSlotClick={handleSlotClick}
+                                                    onEventClick={handleEventClick}
+                                                    onDeleteDisponibilita={handleDeleteDisponibilita}
+                                                    onEditDisponibilita={handleEditDisponibilita}
+                                                    onOpenQueueForSlot={handleOpenQueueForSlot}
+                                                    onDeleteAppuntamento={handleAppointmentDelete}
+                                                    onAccettazioneAppuntamento={handleAccettazioneAppuntamento}
+                                                    onFatturaAppuntamento={handleFatturaAppuntamento}
+                                                    onAccettaEVisitaAppuntamento={handleAccettaEVisitaAppuntamento}
+                                                    onVisitaAppuntamento={handleVisitaAppuntamento}
+                                                    onChiamaEVisitaAppuntamento={handleChiamaEVisitaAppuntamento}
+                                                    onViewVisitaAppuntamento={handleViewVisitaAppuntamento}
+                                                    onModificaAppuntamento={handleModificaAppuntamento}
+                                                    onUpdateStato={handleUpdateStato}
+                                                    onDragStart={handleDragStart}
+                                                    onDragMove={handleDragMove}
+                                                    onDragEnd={handleDragEnd}
+                                                    startHour={viewStartHour}
+                                                    endHour={viewEndHour}
+                                                    columnWidth={medicoColumnInfo.effectiveColumnWidth}
+                                                    dragState={dragState}
+                                                    draggingEvent={draggingEvent}
+                                                    onItemDragStart={handleItemDragStart}
+                                                    onDropEvent={handleDropEvent}
+                                                    medicoColors={medicoColors}
+                                                    hourHeight={effectiveHourHeight}
+                                                    isHourOpen={selectedSedeId ? isHourOpen : undefined}
+                                                />
+                                            );
+                                        })}
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
+                    )}
                 </div>
 
                 {/* Filter Panel */}
@@ -2122,9 +2321,10 @@ export const CalendarioPage: React.FC = () => {
                 onClose={() => setAvailabilityModalInfo(null)}
                 slotInfo={availabilityModalInfo}
                 medici={manageableMedici}
-                selectedMedicoId={selectedMedico}
+                selectedMedicoId={availabilityModalInfo?.medicoId || selectedMedico}
                 medicoColors={medicoColors}
                 existingDisponibilita={events.disponibilita}
+                ambulatori={availabilityModalInfo?.ambulatori}
                 onSuccess={() => {
                     queryClient.invalidateQueries({ queryKey: ['slots-disponibilita'], refetchType: 'all' });
                     queryClient.invalidateQueries({ queryKey: ['slots-calendario'], refetchType: 'all' });

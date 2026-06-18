@@ -10,6 +10,7 @@ import Modal from '../../../../design-system/molecules/Modal/Modal';
 import { DOCUMENT_TYPES, type DocumentFormState } from './types';
 import type { TipoDocumentoPersonale } from '../../../../services/clinicaApi';
 import { DatePickerElegante } from '../../../../components/ui/DatePickerElegante';
+import { ElegantSelect } from '@/components/ui/ElegantSelect';
 
 interface DocumentUploadModalProps {
     isOpen: boolean;

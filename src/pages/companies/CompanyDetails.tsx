@@ -487,7 +487,7 @@ const CompanyDetails: React.FC = () => {
       // Fatture collegate all'azienda
       try {
         const fattRes = await apiGet<{ data: FatturaDocItem[] }>(
-          `/api/v1/fatturazione-elettronica?clienteAziendaId=${companyData.companyTenantProfileId}&limit=200`,
+          `/api/v1/billing/fatture?clienteAziendaId=${companyData.companyTenantProfileId}&limit=200`,
           {}, { headers: operateTenantHeaders }
         );
         setFatture(fattRes?.data || []);

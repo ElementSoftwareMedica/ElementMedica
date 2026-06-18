@@ -58,6 +58,7 @@ import {
 import { CRUDPrimaryButton } from '../../../../components/shared/CRUDButton';
 import { useToast } from '../../../../hooks/useToast';
 import { tariffariAziendaliApi, type VoceTariffarioWithContext } from '../../../../services/tariffarioAziendaleApi';
+import { ElegantSelect } from '@/components/ui/ElegantSelect';
 import TabAnteprima from './components/TabAnteprima';
 import TemplateFormModal from './components/TemplateFormModal';
 import type { FormData } from './components/types';
@@ -657,16 +658,16 @@ const TabRisposte: React.FC<{ templateId: string }> = ({ templateId }) => {
                         className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                     />
                 </div>
-                <select
+                <ElegantSelect
                     value={statoFilter}
-                    onChange={e => { setStatoFilter(e.target.value as StatoDocumentoCompilato | ''); setPage(1); }}
-                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500"
-                >
-                    <option value="">Tutti gli stati</option>
-                    {Object.entries(STATO_CONFIG).map(([value, cfg]) => (
-                        <option key={value} value={value}>{cfg.label}</option>
-                    ))}
-                </select>
+                    onChange={v => { setStatoFilter(v as StatoDocumentoCompilato | ''); setPage(1); }}
+                    className="sm:w-auto"
+                    placeholder="Tutti gli stati"
+                    options={[
+                        { value: '', label: 'Tutti gli stati' },
+                        ...Object.entries(STATO_CONFIG).map(([value, cfg]) => ({ value, label: cfg.label }))
+                    ]}
+                />
             </div>
 
             {/* Results */}

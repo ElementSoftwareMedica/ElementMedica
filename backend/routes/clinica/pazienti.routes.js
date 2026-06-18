@@ -51,7 +51,12 @@ router.get('/',
                 search,
                 sortBy = 'lastName',
                 sortOrder = 'asc',
-                tenantIds
+                tenantIds,
+                roleFilter,
+                companyTenantProfileId,
+                periodoStart,
+                periodoEnd,
+                brancaSpecialistica
             } = req.query;
 
             const safePageSize = Math.min(Math.max(parseInt(pageSize) || 20, 10), 200);
@@ -63,7 +68,12 @@ router.get('/',
                 sortOrder,
                 allTenants: req.query.allTenants === 'true',
                 accessibleTenantIds,
-                ...(tenantIds && { tenantIds })
+                ...(tenantIds && { tenantIds }),
+                roleFilter: roleFilter || '',
+                companyTenantProfileId: companyTenantProfileId || null,
+                periodoStart: periodoStart || null,
+                periodoEnd: periodoEnd || null,
+                brancaSpecialistica: brancaSpecialistica || ''
             }, tenantId);
 
             res.json({
@@ -82,6 +92,34 @@ router.get('/',
                 success: false,
                 error: 'Errore nel recupero pazienti'
             });
+        }
+    }
+);
+
+// ============================================
+// COMPANIES (for filter dropdown)
+// ============================================
+
+/**
+ * @route GET /pazienti/companies
+ * @desc Lista aziende per filtro pazienti
+ * @access Authenticated + VIEW_PAZIENTI
+ */
+router.get('/companies',
+    authenticate,
+    checkAdvancedPermission('pazienti', 'read'),
+    async (req, res) => {
+        try {
+            const tenantId = getEffectiveTenantId(req);
+            const data = await PazienteService.getCompaniesForFilter(tenantId);
+            res.json({ success: true, data });
+        } catch (error) {
+            logger.error('Failed to get companies for pazienti filter', {
+                component: 'pazienti-routes',
+                error: 'Operazione non riuscita',
+                tenantId: getEffectiveTenantId(req)
+            });
+            res.status(500).json({ success: false, error: 'Errore nel recupero aziende' });
         }
     }
 );

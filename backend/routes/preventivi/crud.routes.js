@@ -379,9 +379,6 @@ router.post('/',
       const numeroProgressivo = (lastPreventivo?.numeroProgressivo || 0) + 1;
       const numero = `PREV-${anno}-${String(numeroProgressivo).padStart(4, '0')}`;
 
-      // Calcola prezzoUnitario
-      const prezzoUnitario = totali.prezzoTotale;
-
       // Validate scheduledCourseId if provided
       let validatedScheduleId = null;
       if (req.body.corsoId) {
@@ -401,10 +398,15 @@ router.post('/',
       }
 
       const quantitaValue = req.body.quantita || 1;
-      logger.info('POST /api/preventivi - Quantita value', {
+      // prezzoUnitario = prezzo per singolo partecipante
+      const prezzoUnitario = quantitaValue > 1
+        ? totali.prezzoTotale / quantitaValue
+        : totali.prezzoTotale;
+      logger.info('POST /api/preventivi - Quantita e prezzoUnitario', {
         rawQuantita: req.body.quantita,
         finalQuantita: quantitaValue,
-        willUseDefault: !req.body.quantita
+        prezzoTotale: totali.prezzoTotale,
+        prezzoUnitario
       });
 
       // Crea preventivo

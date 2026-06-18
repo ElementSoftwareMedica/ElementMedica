@@ -52,6 +52,7 @@ import ViewModeToggle from '../../../components/clinica/ViewModeToggle';
 import { CRUDButton } from '../../../components/shared/CRUDButton';
 import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
 import ListPaginationFooter from '../../../components/ui/ListPaginationFooter';
+import { ElegantSelect } from '@/components/ui/ElegantSelect';
 import '../../../styles/clinica-theme.css';
 
 // =====================================================
@@ -395,29 +396,25 @@ export const PrestazioniPage: React.FC = () => {
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                 Tipo
                             </label>
-                            <select
+                            <ElegantSelect
                                 value={filters.tipo}
-                                onChange={(e) => handleFilterChange('tipo', e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-teal-500"
-                            >
-                                {TIPO_PRESTAZIONE_OPTIONS.map(opt => (
-                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                ))}
-                            </select>
+                                onChange={(v) => handleFilterChange('tipo', v)}
+                                options={TIPO_PRESTAZIONE_OPTIONS.map(opt => ({ value: opt.value, label: opt.label }))}
+                            />
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                 Stato
                             </label>
-                            <select
+                            <ElegantSelect
                                 value={filters.status}
-                                onChange={(e) => handleFilterChange('status', e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-teal-500"
-                            >
-                                <option value="all">Tutti</option>
-                                <option value="active">Solo attive</option>
-                                <option value="inactive">Solo disattive</option>
-                            </select>
+                                onChange={(v) => handleFilterChange('status', v)}
+                                options={[
+                                    { value: 'all', label: 'Tutti' },
+                                    { value: 'active', label: 'Solo attive' },
+                                    { value: 'inactive', label: 'Solo disattive' },
+                                ]}
+                            />
                         </div>
                         <div className="flex items-end">
                             <button

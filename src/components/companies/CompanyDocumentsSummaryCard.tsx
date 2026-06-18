@@ -211,7 +211,7 @@ const CompanyDocumentsSummaryCard: React.FC<CompanyDocumentsSummaryCardProps> = 
       category: 'amministrazione' as const,
       title: `Fattura ${f.numero || f.id.slice(0, 8)}`,
       subtitle: [f.tipoDocumento?.replace(/_/g, ' '), f.stato, formatDate(f.dataEmissione)].filter(Boolean).join(' · '),
-      documentUrl: `/api/v1/fatturazione-elettronica/${f.id}/pdf`,
+      documentUrl: `/api/v1/billing/fatture/${f.id}/pdf`,
       documentName: `fattura_${f.numero || f.id.slice(0, 8)}.pdf`,
     })),
     ...allegati3B.map(a => ({

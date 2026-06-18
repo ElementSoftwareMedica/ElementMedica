@@ -952,6 +952,23 @@ function App() {
                   {/* P66 - SCADENZE CENTRALIZZATE */}
                   <Route path="scadenze" element={<ProtectedRoute resource="scadenze" action="manage"><ScadenzePageLazy /></ProtectedRoute>} />
 
+                  {/* OT23 accessibile anche dentro ClinicaLayout (medica) - stesse pagine, layout corretto */}
+                  <Route path="sicurezza/ot23" element={
+                    <Suspense fallback={<LoadingFallback />}>
+                      <OT23PageLazy />
+                    </Suspense>
+                  } />
+                  <Route path="sicurezza/ot23/nuovo" element={
+                    <Suspense fallback={<LoadingFallback />}>
+                      <OT23PageLazy />
+                    </Suspense>
+                  } />
+                  <Route path="sicurezza/ot23/:id" element={
+                    <Suspense fallback={<LoadingFallback />}>
+                      <OT23DetailPageLazy />
+                    </Suspense>
+                  } />
+
                   {/* FATTURAZIONE (P97-P98) - Redirects → /management/billing (moved to Management) */}
                   <Route path="fatturazione" element={<Navigate to="/management/billing" replace />} />
                   <Route path="fatturazione/enti-emittenti" element={<Navigate to="/management/billing/enti-emittenti" replace />} />

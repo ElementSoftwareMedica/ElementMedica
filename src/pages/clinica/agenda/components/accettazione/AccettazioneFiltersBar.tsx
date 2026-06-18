@@ -20,6 +20,7 @@ import { Medico, Ambulatorio } from '../../../../../services/clinicaApi';
 import { getDoctorTitle } from '../../../../../utils/codiceFiscale';
 import { getPersonDisplayName } from '../../../../../utils/personDisplayUtils';
 import { AccettazioneFilters } from './useAccettazioneData';
+import { ElegantSelect } from '@/components/ui/ElegantSelect';
 
 // ============================================
 // TYPES
@@ -102,69 +103,44 @@ export const AccettazioneFiltersBar: React.FC<AccettazioneFiltersBarProps> = ({
 
                 {/* Medico Filter - Solo se l'utente ha permesso di vedere altri medici */}
                 {canViewOtherMedici && (
-                    <div className="relative min-w-[200px]">
-                        <div className="absolute left-3 top-1/2 -translate-y-1/2">
-                            <User className="h-4 w-4 text-gray-400" />
-                        </div>
-                        <select
+                    <div className="min-w-[200px]">
+                        <ElegantSelect
                             value={filters.medicoId || ''}
-                            onChange={(e) => updateFilter('medicoId', e.target.value || null)}
+                            onChange={(v) => updateFilter('medicoId', v || null)}
                             disabled={isLoadingMedici}
-                            className="w-full pl-9 pr-8 py-2 border border-gray-300 rounded-lg text-sm appearance-none bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500 disabled:opacity-50"
-                        >
-                            <option value="">
-                                {isLoadingMedici ? 'Caricamento...' : 'Tutti i medici'}
-                            </option>
-                            {medici.map((medico) => (
-                                <option key={medico.id} value={medico.id}>
-                                    {getDoctorTitle(medico.taxCode, medico.gender)} {getPersonDisplayName(medico)}
-                                </option>
-                            ))}
-                        </select>
-                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                            options={[
+                                { value: '', label: isLoadingMedici ? 'Caricamento...' : 'Tutti i medici' },
+                                ...medici.map((medico) => ({
+                                    value: medico.id,
+                                    label: `${getDoctorTitle(medico.taxCode, medico.gender)} ${getPersonDisplayName(medico)}`,
+                                })),
+                            ]}
+                            placeholder={isLoadingMedici ? 'Caricamento...' : 'Tutti i medici'}
+                        />
                     </div>
                 )}
 
                 {/* Ambulatorio Filter */}
-                <div className="relative min-w-[200px]">
-                    <div className="absolute left-3 top-1/2 -translate-y-1/2">
-                        <Building2 className="h-4 w-4 text-gray-400" />
-                    </div>
-                    <select
+                <div className="min-w-[200px]">
+                    <ElegantSelect
                         value={filters.ambulatorioId || ''}
-                        onChange={(e) => updateFilter('ambulatorioId', e.target.value || null)}
+                        onChange={(v) => updateFilter('ambulatorioId', v || null)}
                         disabled={isLoadingAmbulatori}
-                        className="w-full pl-9 pr-8 py-2 border border-gray-300 rounded-lg text-sm appearance-none bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500 disabled:opacity-50"
-                    >
-                        <option value="">
-                            {isLoadingAmbulatori ? 'Caricamento...' : 'Tutti gli ambulatori'}
-                        </option>
-                        {ambulatori.map((amb) => (
-                            <option key={amb.id} value={amb.id}>
-                                {amb.nome}
-                            </option>
-                        ))}
-                    </select>
-                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                        options={[
+                            { value: '', label: isLoadingAmbulatori ? 'Caricamento...' : 'Tutti gli ambulatori' },
+                            ...ambulatori.map((amb) => ({ value: amb.id, label: amb.nome })),
+                        ]}
+                        placeholder={isLoadingAmbulatori ? 'Caricamento...' : 'Tutti gli ambulatori'}
+                    />
                 </div>
 
                 {/* Stato Filter */}
-                <div className="relative min-w-[160px]">
-                    <div className="absolute left-3 top-1/2 -translate-y-1/2">
-                        <Filter className="h-4 w-4 text-gray-400" />
-                    </div>
-                    <select
+                <div className="min-w-[160px]">
+                    <ElegantSelect
                         value={filters.stato}
-                        onChange={(e) => updateFilter('stato', e.target.value as AccettazioneFilters['stato'])}
-                        className="w-full pl-9 pr-8 py-2 border border-gray-300 rounded-lg text-sm appearance-none bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
-                    >
-                        {STATO_OPTIONS.map((opt) => (
-                            <option key={opt.value} value={opt.value}>
-                                {opt.label}
-                            </option>
-                        ))}
-                    </select>
-                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                        onChange={(v) => updateFilter('stato', v as AccettazioneFilters['stato'])}
+                        options={STATO_OPTIONS.map((opt) => ({ value: opt.value, label: opt.label }))}
+                    />
                 </div>
 
                 {/* Reset Button */}

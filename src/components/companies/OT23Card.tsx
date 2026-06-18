@@ -12,7 +12,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
     Shield,
     Download,
@@ -106,7 +106,12 @@ const OT23Card: React.FC<OT23CardProps> = ({
     onActionComplete
 }) => {
     const navigate = useNavigate();
+    const location = useLocation();
     const { showToast } = useToast();
+    // Se siamo dentro il layout medica (/poliambulatorio/), usa le route OT23 sotto di esso
+    const ot23BasePath = location.pathname.startsWith('/poliambulatorio')
+        ? '/poliambulatorio/sicurezza/ot23'
+        : '/sicurezza/ot23';
 
     const [domande, setDomande] = useState<OT23[]>([]);
     const [loading, setLoading] = useState(true);
@@ -190,9 +195,9 @@ const OT23Card: React.FC<OT23CardProps> = ({
         }
     };
 
-    // Navigazione a pagina dettaglio OT23
+    // Navigazione a pagina dettaglio OT23 (context-aware: medica vs sicurezza layout)
     const handleViewDetails = (id: string) => {
-        navigate(`/sicurezza/ot23/${id}`);
+        navigate(`${ot23BasePath}/${id}`);
     };
 
     // Crea nuova domanda per anno corrente
@@ -437,7 +442,7 @@ const OT23Card: React.FC<OT23CardProps> = ({
 
                             {domande.length > 5 && (
                                 <Link
-                                    to={`/sicurezza/ot23?companyId=${companyTenantProfileId}`}
+                                    to={`${ot23BasePath}?companyId=${companyTenantProfileId}`}
                                     className="flex items-center justify-center gap-1 p-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
                                 >
                                     Visualizza tutte ({domande.length})
@@ -456,7 +461,7 @@ const OT23Card: React.FC<OT23CardProps> = ({
                     {/* Actions */}
                     <div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-gray-700">
                         <Link
-                            to={`/sicurezza/ot23?companyId=${companyTenantProfileId}`}
+                            to={`${ot23BasePath}?companyId=${companyTenantProfileId}`}
                             className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 flex items-center gap-1"
                         >
                             Gestisci tutte le domande

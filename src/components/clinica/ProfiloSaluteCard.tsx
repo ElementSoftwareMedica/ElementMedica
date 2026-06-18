@@ -42,6 +42,7 @@ import {
 import { useToast } from '@/hooks/useToast';
 import { MalattieProfessionaliTab } from '@/components/clinica/MalattieProfessionaliTab';
 import { DatePickerElegante } from '@/components/ui/DatePickerElegante';
+import { ElegantSelect } from '@/components/ui/ElegantSelect';
 import MiniParametroChart from '@/pages/clinica/clinica/components/MiniParametroChart';
 
 // ─────────────────────────────────────────────
@@ -641,14 +642,15 @@ export const ProfiloSaluteCard: React.FC<ProfiloSaluteCardProps> = ({
                                         {draft.legge104 && (
                                             <div>
                                                 <label className="text-xs text-gray-500 mb-0.5 block">Grado Legge 104</label>
-                                                <select value={draft.legge104Grado ?? ''}
-                                                    onChange={e => setField('legge104Grado', e.target.value ? Number(e.target.value) : undefined)}
-                                                    className="w-full text-sm px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-1 focus:ring-teal-400">
-                                                    <option value="">Seleziona</option>
-                                                    <option value="1">Grado 1</option>
-                                                    <option value="2">Grado 2</option>
-                                                    <option value="3">Grado 3</option>
-                                                </select>
+                                                <ElegantSelect value={draft.legge104Grado != null ? String(draft.legge104Grado) : ''}
+                                                    onChange={v => setField('legge104Grado', v ? Number(v) : undefined)}
+                                                    placeholder="Seleziona"
+                                                    options={[
+                                                        { value: '', label: 'Seleziona' },
+                                                        { value: '1', label: 'Grado 1' },
+                                                        { value: '2', label: 'Grado 2' },
+                                                        { value: '3', label: 'Grado 3' },
+                                                    ]} />
                                             </div>
                                         )}
                                     </div>
@@ -666,26 +668,24 @@ export const ProfiloSaluteCard: React.FC<ProfiloSaluteCardProps> = ({
                                     <div className="grid grid-cols-2 gap-2">
                                         <div className="col-span-2">
                                             <label className="text-xs text-gray-500 mb-0.5 block">Stato</label>
-                                            <select value={draft.fumatore ?? ''}
-                                                onChange={e => setField('fumatore', e.target.value || undefined)}
-                                                className="w-full text-sm px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-1 focus:ring-teal-400">
-                                                <option value="">Non specificato</option>
-                                                {Object.entries(FUMATORE_LABELS).map(([k, v]) => (
-                                                    <option key={k} value={k}>{v}</option>
-                                                ))}
-                                            </select>
+                                            <ElegantSelect value={draft.fumatore ?? ''}
+                                                onChange={v => setField('fumatore', v || undefined)}
+                                                placeholder="Non specificato"
+                                                options={[
+                                                    { value: '', label: 'Non specificato' },
+                                                    ...Object.entries(FUMATORE_LABELS).map(([k, v]) => ({ value: k, label: v as string })),
+                                                ]} />
                                         </div>
                                         {(draft.fumatore && draft.fumatore !== 'no') && (<>
                                             <div>
                                                 <label className="text-xs text-gray-500 mb-0.5 block">Tipo sigaretta</label>
-                                                <select value={(draft as any).tipoSigaretta ?? ''}
-                                                    onChange={e => setField('tipoSigaretta' as keyof ProfiloDraft, e.target.value || undefined)}
-                                                    className="w-full text-sm px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-1 focus:ring-teal-400">
-                                                    <option value="">N/D</option>
-                                                    {[['tradizionale', 'Tradizionali'], ['elettronico', 'Elettroniche'], ['sigaro', 'Sigari/pipa'], ['riscaldato', 'Riscaldato (es. IQOS)']].map(([v, l]) => (
-                                                        <option key={v} value={v}>{l}</option>
-                                                    ))}
-                                                </select>
+                                                <ElegantSelect value={(draft as any).tipoSigaretta ?? ''}
+                                                    onChange={val => setField('tipoSigaretta' as keyof ProfiloDraft, val || undefined)}
+                                                    placeholder="N/D"
+                                                    options={[
+                                                        { value: '', label: 'N/D' },
+                                                        ...[['tradizionale', 'Tradizionali'], ['elettronico', 'Elettroniche'], ['sigaro', 'Sigari/pipa'], ['riscaldato', 'Riscaldato (es. IQOS)']].map(([v, l]) => ({ value: v, label: l })),
+                                                    ]} />
                                             </div>
                                             <div>
                                                 <label className="text-xs text-gray-500 mb-0.5 block">Età inizio fumo</label>
@@ -718,14 +718,13 @@ export const ProfiloSaluteCard: React.FC<ProfiloSaluteCardProps> = ({
                                     <div className="grid grid-cols-2 gap-2">
                                         <div className="col-span-2">
                                             <label className="text-xs text-gray-500 mb-0.5 block">Consumo</label>
-                                            <select value={draft.alcol ?? ''}
-                                                onChange={e => setLifestylePreset('alcol', e.target.value || undefined)}
-                                                className="w-full text-sm px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-1 focus:ring-teal-400">
-                                                <option value="">Non specificato</option>
-                                                {Object.entries(ALCOL_LABELS).map(([k, v]) => (
-                                                    <option key={k} value={k}>{v}</option>
-                                                ))}
-                                            </select>
+                                            <ElegantSelect value={draft.alcol ?? ''}
+                                                onChange={v => setLifestylePreset('alcol', v || undefined)}
+                                                placeholder="Non specificato"
+                                                options={[
+                                                    { value: '', label: 'Non specificato' },
+                                                    ...Object.entries(ALCOL_LABELS).map(([k, v]) => ({ value: k, label: v as string })),
+                                                ]} />
                                         </div>
                                         {(draft.alcol && draft.alcol !== 'no') && (
                                             <div>

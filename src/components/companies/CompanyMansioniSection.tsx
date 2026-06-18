@@ -30,6 +30,7 @@ import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 import { apiGet, apiDelete, apiPost } from '../../services/api';
 import { cn } from '../../design-system/utils';
 import { QuickActionMansioneModal } from './quick-actions/QuickActionMansioneModal';
+import { ElegantSelect } from '@/components/ui/ElegantSelect';
 import { useToast } from '../../hooks/useToast';
 
 interface CompanyMansioniSectionProps {
@@ -456,21 +457,17 @@ const CompanyMansioniSection: React.FC<CompanyMansioniSectionProps> = ({
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                             Nuova Mansione
                         </label>
-                        <select
+                        <ElegantSelect
                             value={changeState.newMansioneId}
-                            onChange={e => setChangeState(prev => prev ? { ...prev, newMansioneId: e.target.value } : null)}
-                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                        >
-                            <option value="">Seleziona nuova mansione...</option>
-                            {allMansioni
-                                .filter(m => m.id !== changeState.currentMansioneId)
-                                .map(m => (
-                                    <option key={m.id} value={m.id}>
-                                        {m.denominazione}{m.settore ? ` (${m.settore})` : ''}
-                                    </option>
-                                ))
-                            }
-                        </select>
+                            onChange={v => setChangeState(prev => prev ? { ...prev, newMansioneId: v } : null)}
+                            placeholder="Seleziona nuova mansione..."
+                            options={[
+                                { value: '', label: 'Seleziona nuova mansione...' },
+                                ...allMansioni
+                                    .filter(m => m.id !== changeState.currentMansioneId)
+                                    .map(m => ({ value: m.id, label: `${m.denominazione}${m.settore ? ` (${m.settore})` : ''}` }))
+                            ]}
+                        />
 
                         <div className="flex gap-3 mt-5">
                             <button

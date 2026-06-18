@@ -483,7 +483,13 @@ class PazienteService {
             sortOrder = 'asc',
             tenantIds = null,
             allTenants = false,
-            accessibleTenantIds = []
+            accessibleTenantIds = [],
+            // New filters
+            roleFilter = '',
+            companyTenantProfileId = null,
+            periodoStart = null,
+            periodoEnd = null,
+            brancaSpecialistica = ''
         } = options;
 
         const skip = (page - 1) * pageSize;
@@ -557,6 +563,74 @@ class PazienteService {
                 }
             ];
         }
+
+        // Extra filters via AND conjunction
+        if (!where.AND) where.AND = [];
+
+        if (roleFilter === 'DIPENDENTE') {
+            // Must also have an EMPLOYEE-type role
+            where.AND.push({
+                personRoles: {
+                    some: {
+                        roleType: { in: ['EMPLOYEE', 'COMPANY_ADMIN', 'HR_MANAGER', 'MANAGER', 'COMPANY_MANAGER', 'DEPARTMENT_HEAD'] },
+                        isActive: true,
+                        deletedAt: null
+                    }
+                }
+            });
+        } else if (roleFilter === 'PAZIENTE_SOLO') {
+            // Must NOT have any employee role
+            where.AND.push({
+                personRoles: {
+                    none: {
+                        roleType: { in: ['EMPLOYEE', 'COMPANY_ADMIN', 'HR_MANAGER', 'MANAGER', 'COMPANY_MANAGER', 'DEPARTMENT_HEAD'] },
+                        isActive: true,
+                        deletedAt: null
+                    }
+                }
+            });
+        }
+
+        if (companyTenantProfileId) {
+            where.AND.push({
+                personRoles: {
+                    some: {
+                        companyTenantProfileId,
+                        isActive: true,
+                        deletedAt: null
+                    }
+                }
+            });
+        }
+
+        if (periodoStart || periodoEnd) {
+            const dateFilter = {};
+            if (periodoStart) dateFilter.gte = new Date(periodoStart);
+            if (periodoEnd) {
+                const end = new Date(periodoEnd);
+                end.setHours(23, 59, 59, 999);
+                dateFilter.lte = end;
+            }
+            where.AND.push({
+                OR: [
+                    { visiteComePaziente: { some: { dataOra: dateFilter, deletedAt: null } } },
+                    { appuntamentiComePaziente: { some: { dataOra: dateFilter, deletedAt: null } } }
+                ]
+            });
+        }
+
+        if (brancaSpecialistica) {
+            where.AND.push({
+                visiteComePaziente: {
+                    some: {
+                        deletedAt: null,
+                        prestazione: { brancheSpecialistiche: { has: brancaSpecialistica } }
+                    }
+                }
+            });
+        }
+
+        if (where.AND.length === 0) delete where.AND;
 
         // P48: Include tenantProfiles per ottenere email/phone/status
         const tenantRoleFilter = tenantIdsToFilter.length === 1
@@ -655,6 +729,21 @@ class PazienteService {
                 conContatto: totalConContatto
             }
         };
+    }
+
+    /**
+     * Lista aziende per il filtro nella lista pazienti
+     * @param {string} tenantId - ID tenant
+     * @returns {Promise<Array<{id: string, ragioneSociale: string}>>}
+     */
+    async getCompaniesForFilter(tenantId) {
+        const profiles = await prisma.companyTenantProfile.findMany({
+            where: { tenantId, deletedAt: null, isActive: true },
+            select: { id: true, company: { select: { ragioneSociale: true } } },
+            orderBy: { company: { ragioneSociale: 'asc' } },
+            take: 300
+        });
+        return profiles.map(p => ({ id: p.id, ragioneSociale: p.company.ragioneSociale }));
     }
 
     /**

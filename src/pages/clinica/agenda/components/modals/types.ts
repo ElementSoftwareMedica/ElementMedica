@@ -58,12 +58,16 @@ export interface AvailabilitySlotModalProps {
         startHour: number;
         endHour: number;
         ambulatorioId: string;
+        /** Pre-filled medicoId (medico view mode) */
+        medicoId?: string;
     } | null;
     medici: Medico[];
     selectedMedicoId: string | null;
     medicoColors: Map<string, typeof MEDICO_COLORS[0]>;
     onSuccess: () => void;
     existingDisponibilita?: CalendarEvent[];
+    /** Ambulatori liberi nella fascia oraria selezionata (medico view mode) */
+    ambulatori?: Ambulatorio[];
 }
 
 // ============================================

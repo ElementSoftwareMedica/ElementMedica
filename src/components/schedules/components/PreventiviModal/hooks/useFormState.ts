@@ -86,8 +86,8 @@ export function useFormState(
       setSpeseAccessorie(parsedSpese);
       setNote(noteAggiuntive);
       
-      // Calculate prezzoUnitario from totals
-      const numPartecipanti = 1;
+      // Calculate prezzoUnitario from totals using actual quantita
+      const numPartecipanti = editingPreventivo.quantita || 1;
       const totaleSpese = parsedSpese.reduce((sum, s) => sum + s.importo, 0);
       const prezzoBase = Number(editingPreventivo.prezzoTotale) - totaleSpese;
       const calcolatedPrezzoUnitario = prezzoBase / numPartecipanti;

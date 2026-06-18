@@ -17,6 +17,7 @@ import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import type { Company, CourseOption, PersonOption, ImportResults } from './types';
 import { DatePickerElegante } from '../../ui/DatePickerElegante';
+import { ElegantSelect } from '@/components/ui/ElegantSelect';
 
 interface AddExternalCourseModalProps {
     companies: Company[];
@@ -278,18 +279,15 @@ export const AddExternalCourseModal: React.FC<AddExternalCourseModalProps> = ({
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                             Corso Completato *
                         </label>
-                        <select
+                        <ElegantSelect
                             value={selectedCourseId}
-                            onChange={(e) => setSelectedCourseId(e.target.value)}
-                            className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500"
-                        >
-                            <option value="">Seleziona corso...</option>
-                            {courses.map(c => (
-                                <option key={c.id} value={c.id}>
-                                    {c.title} {c.riskLevel ? `(${c.riskLevel})` : ''} - {c.validityYears} anni
-                                </option>
-                            ))}
-                        </select>
+                            onChange={setSelectedCourseId}
+                            placeholder="Seleziona corso..."
+                            options={courses.map(c => ({
+                                value: c.id,
+                                label: `${c.title} ${c.riskLevel ? `(${c.riskLevel})` : ''} - ${c.validityYears} anni`,
+                            }))}
+                        />
                         {selectedCourse && completedDate && (() => {
                             try {
                                 const dateObj = new Date(completedDate);

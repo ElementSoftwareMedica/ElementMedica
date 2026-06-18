@@ -1,5 +1,6 @@
 import React from 'react';
 import { Euro, Tag, Plus, Trash2 } from 'lucide-react';
+import { ElegantSelect } from '@/components/ui/ElegantSelect';
 import type { SpesaAccessoria, ScontoApplicato, TipoServizio, CompanyConfig } from '../types';
 
 interface FormFieldsProps {
@@ -77,18 +78,18 @@ export function FormFields({
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
           Tipo Servizio (IVA)
         </label>
-        <select
+        <ElegantSelect
           value={tipoServizio}
-          onChange={(e) => onTipoServizioChange(e.target.value as TipoServizio)}
-          className="w-full px-4 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:bg-gray-700 dark:text-gray-200"
-        >
-          <option value="MEDICO_COMPETENTE">Medico Competente (IVA 10%)</option>
-          <option value="CORSO">Formazione (IVA 22%)</option>
-          <option value="RSPP">RSPP (IVA 22%)</option>
-          <option value="DVR">DVR (IVA 22%)</option>
-          <option value="PRIVACY">Privacy (IVA 22%)</option>
-          <option value="ALTRO">Altro (IVA 22%)</option>
-        </select>
+          onChange={(v) => onTipoServizioChange(v as TipoServizio)}
+          options={[
+            { value: 'MEDICO_COMPETENTE', label: 'Medico Competente (IVA 10%)' },
+            { value: 'CORSO', label: 'Formazione (IVA 22%)' },
+            { value: 'RSPP', label: 'RSPP (IVA 22%)' },
+            { value: 'DVR', label: 'DVR (IVA 22%)' },
+            { value: 'PRIVACY', label: 'Privacy (IVA 22%)' },
+            { value: 'ALTRO', label: 'Altro (IVA 22%)' },
+          ]}
+        />
       </div>
 
       {/* Spese Accessorie */}

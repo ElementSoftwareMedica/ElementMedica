@@ -32,6 +32,7 @@ import {
     TrendingUp,
     Filter
 } from 'lucide-react';
+import { ElegantSelect } from '@/components/ui/ElegantSelect';
 
 // =============================================================================
 // TYPES
@@ -296,27 +297,31 @@ const PannelloChiamataOperatore: React.FC<PannelloChiamataOperatoreProps> = ({
                             className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                         />
                     </div>
-                    <select
-                        value={filterAmbulatorio}
-                        onChange={(e) => setFilterAmbulatorio(e.target.value)}
-                        className="px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500"
-                    >
-                        <option value="">Tutti gli ambulatori</option>
-                        {ambulatori.map(amb => (
-                            <option key={amb} value={amb}>{amb}</option>
-                        ))}
-                    </select>
-                    <select
-                        value={filterStato}
-                        onChange={(e) => setFilterStato(e.target.value)}
-                        className="px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500"
-                    >
-                        <option value="">Tutti gli stati</option>
-                        <option value="accettato">In attesa</option>
-                        <option value="chiamato">Chiamato</option>
-                        <option value="richiamato">Richiamato</option>
-                        <option value="in_visita">In visita</option>
-                    </select>
+                    <div className="min-w-[200px]">
+                        <ElegantSelect
+                            value={filterAmbulatorio}
+                            onChange={setFilterAmbulatorio}
+                            options={[
+                                { value: '', label: 'Tutti gli ambulatori' },
+                                ...ambulatori.map(amb => ({ value: amb, label: amb })),
+                            ]}
+                            placeholder="Tutti gli ambulatori"
+                        />
+                    </div>
+                    <div className="min-w-[200px]">
+                        <ElegantSelect
+                            value={filterStato}
+                            onChange={setFilterStato}
+                            options={[
+                                { value: '', label: 'Tutti gli stati' },
+                                { value: 'accettato', label: 'In attesa' },
+                                { value: 'chiamato', label: 'Chiamato' },
+                                { value: 'richiamato', label: 'Richiamato' },
+                                { value: 'in_visita', label: 'In visita' },
+                            ]}
+                            placeholder="Tutti gli stati"
+                        />
+                    </div>
                 </div>
             </div>
 

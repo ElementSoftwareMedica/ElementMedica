@@ -6,6 +6,7 @@
 import React from 'react';
 import { Check, RefreshCw, AlertTriangle } from 'lucide-react';
 
+import { ElegantSelect } from '@/components/ui/ElegantSelect';
 import type { ConvenzionePickerProps } from './types';
 
 export const ConvenzionePicker: React.FC<ConvenzionePickerProps> = ({

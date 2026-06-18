@@ -30,6 +30,7 @@ import {
 import { apiGet, apiPut } from '../../services/api';
 import { clinicaApi, ProtocolloSanitario } from '../../services/clinicaApi';
 import { cn } from '../../design-system/utils';
+import { ElegantSelect } from '@/components/ui/ElegantSelect';
 import { useToast } from '../../hooks/useToast';
 
 interface CompanyProtocolliSanitariSectionProps {
@@ -542,16 +543,17 @@ const CompanyProtocolliSanitariSection: React.FC<CompanyProtocolliSanitariSectio
                                                     <span className="text-[10px] font-mono text-gray-400">{dip.taxCode}</span>
                                                 )}
                                             </div>
-                                            <select
-                                                value={dipendentiAssignments[dip.personId] ?? (dip.protocolloSanitarioId || '')}
-                                                onChange={e => setDipendentiAssignments(prev => ({ ...prev, [dip.personId]: e.target.value }))}
-                                                className="w-64 px-2.5 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700/50 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                                            >
-                                                <option value="">– Nessun protocollo –</option>
-                                                {(allProtocolliList?.data || []).map((p: ProtocolloSanitario) => (
-                                                    <option key={p.id} value={p.id}>{p.codice} - {p.denominazione}</option>
-                                                ))}
-                                            </select>
+                                            <div className="w-64">
+                                                <ElegantSelect
+                                                    value={dipendentiAssignments[dip.personId] ?? (dip.protocolloSanitarioId || '')}
+                                                    onChange={v => setDipendentiAssignments(prev => ({ ...prev, [dip.personId]: v }))}
+                                                    placeholder="– Nessun protocollo –"
+                                                    options={[
+                                                        { value: '', label: '– Nessun protocollo –' },
+                                                        ...(allProtocolliList?.data || []).map((p: ProtocolloSanitario) => ({ value: p.id, label: `${p.codice} - ${p.denominazione}` }))
+                                                    ]}
+                                                />
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
