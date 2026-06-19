@@ -305,16 +305,25 @@ export class DeviceWatcher {
             return sameNameInPdfDir;
         }
 
-        if (pdfDir !== dirname(filePath)) {
-            const recentPdf = await this.findRecentPdfInDirectory(pdfDir);
-            if (recentPdf) {
-                logger.debug('Using most recent PDF from configured PDF directory', {
-                    device: device.type,
-                    filePath,
-                    recentPdf,
-                });
-                return recentPdf;
-            }
+        // Search for the most recent PDF in pdfDir, including when it is the same
+        // directory as the GDT output dir. EDAN for example saves both EKG_EDP.GDT
+        // and the PDF report to the same folder (C:\GDT), but names the PDF after
+        // the patient ({PatientId}_{Name}.pdf), so same-name lookup above fails.
+        const recentPdf = await this.findRecentPdfInDirectory(pdfDir);
+        if (recentPdf) {
+            logger.debug('Using most recent PDF from PDF directory', {
+                device: device.type,
+                filePath,
+                recentPdf,
+            });
+            return recentPdf;
+        }
+
+        // If pdfDir differs from the GDT output dir, also scan the GDT output dir
+        // itself as a last resort (catches devices that write PDF alongside GDT).
+        const gdtDir = dirname(filePath);
+        if (pdfDir !== gdtDir) {
+            return await this.findRecentPdfInDirectory(gdtDir);
         }
 
         return undefined;

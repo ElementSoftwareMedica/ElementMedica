@@ -113,7 +113,17 @@ async function launchWindowsExe(exePath: string, launchArgs: string[]): Promise<
             timeout: 3000,
         });
         if (tasklistOut.toLowerCase().includes(exeName.toLowerCase())) {
-            logger.info('Device software already running — GDT file written, skipping re-launch', { exePath });
+            // App already open — bring its window to foreground via PowerShell WScript.Shell
+            logger.info('Device software already running — bringing to foreground', { exePath });
+            const windowTitle = basename(exePath, '.exe');
+            try {
+                execSync(
+                    `powershell -NoProfile -NonInteractive -Command "(New-Object -ComObject WScript.Shell).AppActivate('${windowTitle}')"`,
+                    { encoding: 'utf8', timeout: 3000 }
+                );
+            } catch {
+                // AppActivate is best-effort; the GDT file is written, device will pick it up
+            }
             return true;
         }
     } catch {
