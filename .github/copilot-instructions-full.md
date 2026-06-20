@@ -1183,4 +1183,61 @@ router.get('/pages/slug/:slug', publicContentMiddleware, async (req, res) => {
 
 ---
 
+### 37. MEDICAL DEVICE BRIDGE — ARCHITETTURA E DEPLOY (OBBLIGATORIO)
+
+#### Architettura bridge (da giugno 2026)
+Il bridge dispositivi medici è **integrato nell'app desktop** (`desktop-app`). Non esiste più un bridge standalone da distribuire separatamente.
+
+**Struttura**:
+- `medical-device-bridge/` — sorgenti TypeScript del bridge (compilati in `dist/` e poi pacchettizzati con `pkg`)
+- `desktop-app/` — app Electron che include i binari del bridge come `extraResources`
+- Binari produzione: `resources/bridge/medical-bridge-win.exe` (Windows) e `resources/bridge/medical-bridge-mac-{arm64|x64}` (macOS)
+
+**Tiers di licenza** (sblocco via codice seriale nell'app desktop):
+1. **Solo Bridge** — Bridge abilitato, funzionalità app desktop disabilitate
+2. **Solo App Desktop** — Interfaccia MDL completa senza bridge
+3. **Bridge + App Desktop** — Accesso completo a entrambi
+
+#### Flusso di comunicazione bridge (desktop app)
+```
+Electron (main) ─── avvia ──→ Bridge subprocess (pkg binary, porta 4050)
+                  ←── callback ── Bridge POST http://127.0.0.1:4051/bridge-callback
+Electron ──────── send IPC ──→ Renderer (bridge:examResult)
+```
+- Callback token: `BRIDGE_CALLBACK_TOKEN` (randomBytes, generato a ogni avvio app)
+- Env vars passate al bridge: `WEBAPP_CALLBACK_URL`, `WEBAPP_API_KEY`, `BRIDGE_CALLBACK_TOKEN`, `BRIDGE_DATA_DIR`, `LOG_DIR`, `BRIDGE_PORT`
+- ⚠️ `WEBAPP_CALLBACK_URL`/`WEBAPP_API_KEY` hanno **priorità sulle impostazioni salvate in config.json** (risolto bug HTTPS-normalizer)
+
+#### Route server correlate
+- `GET /api/v1/clinica/strumenti-bridge/download-installer` → **410 Gone** (deprecata — bridge ora integrato in app desktop)
+- `GET /api/v1/clinica/strumenti-bridge/download-installer-legacy` → serve ZIP legacy da `/var/www/elementmedica/medical-device-bridge/dist/ElementMedica-Bridge-Setup.zip`
+- `POST /api/v1/clinica/strumenti-bridge/risultati` — riceve callback dal bridge standalone (webapp)
+
+#### Regole di deploy (OBBLIGATORIO)
+
+**Dopo ogni modifica al bridge TypeScript (`medical-device-bridge/src/`):**
+```bash
+cd medical-device-bridge
+npm run build          # compila .ts → .js in dist/
+npm run pkg:mac        # crea binari macOS arm64 + x64
+npm run pkg:win        # crea binario Windows .exe
+```
+I binari sono copiati in `desktop-app/resources/bridge/` automaticamente da electron-builder.
+
+**Per ogni nuova versione dell'app desktop:**
+1. Aggiornare `version` in `desktop-app/package.json` (deve essere strettamente > versione corrente online)
+2. Build: `cd desktop-app && npm run package` (oppure `package:mac:arm64`, `package:win`)
+3. Deploy: `./scripts/deploy-desktop-updates.sh` — carica manifest e binari sul server
+4. Verificare: `curl https://www.elementmedica.com/desktop-updates/latest-mac.yml`
+
+**NON fare deployment dell'app senza:**
+- ✅ Aver ricostruito i binari pkg dopo modifiche al bridge
+- ✅ Aver verificato che la versione nel `package.json` sia superiore a quella online
+- ✅ Aver testato il flusso GDT end-to-end (avvio esame → rilevamento file → callback → UI)
+
+#### Porta fallback bridge (webapp)
+La webapp scopre il bridge sondando `[4050, 4052, 4053]`. Il bridge nell'app desktop usa sempre la porta 4050. Non aggiungere altre porte senza aggiornare `BRIDGE_PORT_CANDIDATES` in `src/services/bridgeApi.ts`.
+
+---
+
 **🚨 ULTIMA REGOLA**: In caso di dubbio, CHIEDERE invece di assumere!

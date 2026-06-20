@@ -3426,6 +3426,9 @@ export const VisitaPage: React.FC = () => {
                                         pazienteDataNascita={paziente.birthDate || paziente.dataNascita}
                                         pazienteGenere={paziente.gender || paziente.sesso}
                                         pazienteCodiceFiscale={paziente.taxCode || paziente.codiceFiscale}
+                                        pazienteEtnia={paziente.etnia}
+                                        pazienteAltezza={(profiloDiSaluteData as { altezza?: number | null } | null)?.altezza}
+                                        pazientePeso={(profiloDiSaluteData as { peso?: number | null } | null)?.peso}
                                         medicoId={user?.id || visita?.medicoId || ''}
                                         tenantId={user?.tenantId || ''}
                                         isReadOnly={isReadonly}
@@ -3707,6 +3710,9 @@ export const VisitaPage: React.FC = () => {
                                         pazienteDataNascita={paziente.birthDate || paziente.dataNascita}
                                         pazienteGenere={paziente.gender || paziente.sesso}
                                         pazienteCodiceFiscale={paziente.taxCode || paziente.codiceFiscale}
+                                        pazienteEtnia={paziente.etnia}
+                                        pazienteAltezza={(profiloDiSaluteData as { altezza?: number | null } | null)?.altezza}
+                                        pazientePeso={(profiloDiSaluteData as { peso?: number | null } | null)?.peso}
                                         medicoId={user?.id || visita?.medicoId || ''}
                                         tenantId={user?.tenantId || ''}
                                         isReadOnly={isReadonly}
@@ -3917,6 +3923,9 @@ export const VisitaPage: React.FC = () => {
                                         pazienteDataNascita={paziente.birthDate || paziente.dataNascita}
                                         pazienteGenere={paziente.gender || paziente.sesso}
                                         pazienteCodiceFiscale={paziente.taxCode || paziente.codiceFiscale}
+                                        pazienteEtnia={paziente.etnia}
+                                        pazienteAltezza={(profiloDiSaluteData as { altezza?: number | null } | null)?.altezza}
+                                        pazientePeso={(profiloDiSaluteData as { peso?: number | null } | null)?.peso}
                                         medicoId={user?.id || visita?.medicoId || ''}
                                         tenantId={user?.tenantId || ''}
                                         isReadOnly={isReadonly}

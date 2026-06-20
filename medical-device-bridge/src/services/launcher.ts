@@ -103,31 +103,50 @@ async function launchMacApp(appPath: string): Promise<boolean> {
  * Launch Windows .exe executable — skips spawn if the process is already running.
  * The GDT file has already been written to the device's input directory;
  * if the app is already open it will auto-detect the new file from there.
+ *
+ * Uses PowerShell Get-Process to find the running process by full exe path or
+ * by process name, then activates it using the real window title — more reliable
+ * than tasklist + AppActivate(basename) because device software window titles
+ * (e.g. "EDAN SE-1515 ECG") rarely match the exe filename.
  */
 async function launchWindowsExe(exePath: string, launchArgs: string[]): Promise<boolean> {
-    // Check whether the process is already running to avoid opening a second window
-    const exeName = basename(exePath);
+    const exeNameNoExt = basename(exePath, '.exe');
+    // Escape single quotes for PowerShell string literals
+    const escapedPath = exePath.replace(/'/g, "''");
+    const escapedName = exeNameNoExt.replace(/'/g, "''");
+
     try {
-        const tasklistOut = execSync(`tasklist /FI "IMAGENAME eq ${exeName}" /NH /FO CSV`, {
-            encoding: 'utf8',
-            timeout: 3000,
-        });
-        if (tasklistOut.toLowerCase().includes(exeName.toLowerCase())) {
-            // App already open — bring its window to foreground via PowerShell WScript.Shell
-            logger.info('Device software already running — bringing to foreground', { exePath });
-            const windowTitle = basename(exePath, '.exe');
-            try {
-                execSync(
-                    `powershell -NoProfile -NonInteractive -Command "(New-Object -ComObject WScript.Shell).AppActivate('${windowTitle}')"`,
-                    { encoding: 'utf8', timeout: 3000 }
-                );
-            } catch {
-                // AppActivate is best-effort; the GDT file is written, device will pick it up
-            }
+        // PowerShell: find any process whose full path matches the configured exe OR
+        // whose process name matches the exe basename (handles launcher → child cases).
+        // Prefer processes with a visible main window; use the actual MainWindowTitle
+        // for AppActivate so it works regardless of what the title says.
+        const psCmd = [
+            `$p = Get-Process -ErrorAction SilentlyContinue | Where-Object {`,
+            `  ($_.Path -and ($_.Path -eq '${escapedPath}' -or $_.Path -like '*${escapedName}*')) -or`,
+            `  ($_.ProcessName -like '${escapedName}')`,
+            `} | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1;`,
+            `if ($p) {`,
+            `  $ws = New-Object -ComObject WScript.Shell;`,
+            `  if ($p.MainWindowTitle) { $null = $ws.AppActivate($p.MainWindowTitle) }`,
+            `  else { $null = $ws.AppActivate($p.ProcessName) };`,
+            `  Write-Output 'RUNNING'`,
+            `} else { Write-Output 'NOT_FOUND' }`,
+        ].join(' ');
+
+        const result = execSync(
+            `powershell -NoProfile -NonInteractive -Command "${psCmd}"`,
+            { encoding: 'utf8', timeout: 5000 }
+        ).trim();
+
+        if (result === 'RUNNING') {
+            logger.info('Device software already running — brought to foreground', { exePath });
             return true;
         }
-    } catch {
-        // tasklist failed or process not found — proceed with launch
+    } catch (err) {
+        logger.warn('Process detection via PowerShell failed — will attempt launch', {
+            exePath,
+            error: err instanceof Error ? err.message : String(err),
+        });
     }
 
     return new Promise((resolvePromise) => {

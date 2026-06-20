@@ -77,6 +77,10 @@ function normalizeBridgeCallbackUrl(url?: unknown): string | undefined {
 
     try {
         const parsed = new URL(url.trim());
+        // Never rewrite localhost/127.0.0.1 URLs — the desktop app callback server
+        // listens on plain HTTP; forcing HTTPS breaks the connection.
+        const isLocal = parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost' || parsed.hostname === '::1';
+        if (isLocal) return url.trim();
         const host = normalizeBridgeHost(parsed.host);
         parsed.protocol = 'https:';
         parsed.host = host;
@@ -155,8 +159,12 @@ export function loadConfig(): BridgeConfig {
 
     const config: BridgeConfig = {
         port: saved?.port as number || parseInt(process.env.BRIDGE_PORT || '3000', 10),
-        callbackUrl: saved?.callbackUrl as string || process.env.WEBAPP_CALLBACK_URL || 'http://localhost:4001/api/v1/clinica/strumenti-bridge/risultati',
-        apiKey: saved?.apiKey as string || process.env.WEBAPP_API_KEY || '',
+        // When running embedded in the Electron desktop app, WEBAPP_CALLBACK_URL and
+        // WEBAPP_API_KEY env vars are always set by the app and must take priority over
+        // anything stored in config.json (which may point to the remote webapp or may
+        // have been corrupted by the HTTPS-normalizer on a previous run).
+        callbackUrl: process.env.WEBAPP_CALLBACK_URL || saved?.callbackUrl as string || 'http://localhost:4001/api/v1/clinica/strumenti-bridge/risultati',
+        apiKey: process.env.WEBAPP_API_KEY || saved?.apiKey as string || '',
         gdtVersion: saved?.gdtVersion as string || process.env.GDT_VERSION || '2.10',
         gdtSenderId: saved?.gdtSenderId as string || process.env.GDT_SENDER_ID || 'ELEM_MED',
         gdtCharset: (saved?.gdtCharset as number || parseInt(process.env.GDT_CHARSET || '3', 10)) as GdtCharset,

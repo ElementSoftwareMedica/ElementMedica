@@ -69,6 +69,9 @@ interface EsamiStrumentaliCardProps {
     pazienteDataNascita?: string;
     pazienteGenere?: string;
     pazienteCodiceFiscale?: string;
+    pazienteAltezza?: number | null;
+    pazientePeso?: number | null;
+    pazienteEtnia?: string | null;
     medicoId: string;
     tenantId: string;
     isReadOnly?: boolean;
@@ -86,6 +89,9 @@ export default function EsamiStrumentaliCard({
     pazienteDataNascita,
     pazienteGenere,
     pazienteCodiceFiscale,
+    pazienteAltezza,
+    pazientePeso,
+    pazienteEtnia,
     medicoId,
     tenantId,
     isReadOnly = false,
@@ -194,6 +200,9 @@ export default function EsamiStrumentaliCard({
                     dateOfBirth: birthDateForBridge,
                     gender: genderMap[pazienteGenere || ''] || 'NOT_SPECIFIED',
                     taxCode: pazienteCodiceFiscale,
+                    heightCm: pazienteAltezza ?? undefined,
+                    weightKg: pazientePeso ?? undefined,
+                    ethnicity: pazienteEtnia ?? undefined,
                 },
                 visitaId,
                 tenantId,
