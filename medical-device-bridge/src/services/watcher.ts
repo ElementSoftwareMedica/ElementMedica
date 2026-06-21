@@ -40,9 +40,12 @@ export class DeviceWatcher {
     private activeSessions: Map<string, ExamSession> = new Map();
     private onResult: ResultCallback;
     private processedFiles: Set<string> = new Set();
+    private pendingGdtDevices: Set<string> = new Set();
     private cleanupInterval?: ReturnType<typeof setInterval>;
     private static readonly MAX_PROCESSED_FILES = 1000;
     private static readonly PDF_RECENT_WINDOW_MS = 5 * 60 * 1000;
+    private static readonly PDF_POLL_TIMEOUT_MS = 60 * 1000;
+    private static readonly PDF_POLL_INTERVAL_MS = 3 * 1000;
 
     constructor(onResult: ResultCallback) {
         this.onResult = onResult;
@@ -241,6 +244,9 @@ export class DeviceWatcher {
             result.bridgeSessionId = session.id;
         }
 
+        // Mark device as pending so processPdfResult skips standalone PDF handling
+        this.pendingGdtDevices.add(device.type);
+
         let pdfBuffer: Buffer | undefined;
         let pdfFilename: string | undefined;
 
@@ -260,6 +266,12 @@ export class DeviceWatcher {
                 }
             }
 
+            // 3. PDF not yet present — poll for up to 60 s (generated after user saves exam)
+            if (!pdfPath) {
+                logger.info('PDF non trovato subito, attendo fino a 60 s...', { device: device.type });
+                pdfPath = await this.waitForPdfPath(filePath, device);
+            }
+
             if (pdfPath) {
                 pdfBuffer = await readFile(pdfPath);
                 pdfFilename = basename(pdfPath);
@@ -268,9 +280,13 @@ export class DeviceWatcher {
                     pdfFilename,
                     size: pdfBuffer.length,
                 });
+            } else {
+                logger.info('Nessun PDF trovato dopo attesa — invio risultato senza allegato', { device: device.type });
             }
         } catch {
             // No PDF file — that's fine
+        } finally {
+            this.pendingGdtDevices.delete(device.type);
         }
 
         // Update session if found
@@ -364,11 +380,35 @@ export class DeviceWatcher {
         }
     }
 
+    private async waitForPdfPath(filePath: string, device: DeviceConfig): Promise<string | undefined> {
+        const deadline = Date.now() + DeviceWatcher.PDF_POLL_TIMEOUT_MS;
+        while (Date.now() < deadline) {
+            await new Promise<void>(resolve => setTimeout(resolve, DeviceWatcher.PDF_POLL_INTERVAL_MS));
+            const pdfPath = await this.findAssociatedPdfPath(filePath, device);
+            if (pdfPath) {
+                logger.info('PDF trovato tramite polling', {
+                    device: device.type,
+                    pdfPath,
+                    waitedMs: DeviceWatcher.PDF_POLL_TIMEOUT_MS - (deadline - Date.now()),
+                });
+                return pdfPath;
+            }
+        }
+        return undefined;
+    }
+
     /**
      * Process a standalone PDF result file
      * Some devices output PDFs separately or without GDT
      */
     private async processPdfResult(filePath: string, device: DeviceConfig): Promise<void> {
+        // If a GDT is currently being processed for this device, the PDF will be
+        // picked up by the polling loop inside processGdtResult — skip here.
+        if (this.pendingGdtDevices.has(device.type)) {
+            logger.debug('PDF ignorato: GDT in elaborazione per questo dispositivo', { filePath, device: device.type });
+            return;
+        }
+
         // Check if there's a matching GDT file that was already processed
         const gdtPath = filePath.replace(/\.pdf$/i, '.gdt');
         if (this.processedFiles.has(gdtPath)) {
@@ -512,5 +552,6 @@ export class DeviceWatcher {
         }
         this.activeSessions.clear();
         this.processedFiles.clear();
+        this.pendingGdtDevices.clear();
     }
 }

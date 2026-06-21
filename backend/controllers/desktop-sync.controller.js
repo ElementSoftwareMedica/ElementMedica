@@ -12,6 +12,8 @@ import { getEffectiveTenantId } from '../utils/tenantHelper.js';
 import prisma from '../config/prisma-optimization.js';
 import { createMulterConfig } from '../config/multer.js';
 import { assertUploadedFileIsSafe } from '../utils/fileSecurity.js';
+import GiudizioIdoneitaPdfService from '../services/clinical/GiudizioIdoneitaPdfService.js';
+import { VisitaRefertoService } from '../services/clinical/VisitaRefertoService.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -1778,6 +1780,40 @@ export async function uploadBatch(req, res) {
                 if (!d.stato) d.stato = 'DA_RENDICONTARE';
             }
 
+            else if (entityType === 'esameStrumentale') {
+                // Map local SQLite field names → Prisma field names
+                if ('tipo' in d && !('tipoEsame' in d)) { d.tipoEsame = d.tipo; delete d.tipo; }
+                if ('personId' in d && !('pazienteId' in d)) { d.pazienteId = d.personId; delete d.personId; }
+                // Derive tipoDispositivo from tipoEsame (required enum)
+                if (!d.tipoDispositivo && d.tipoEsame) {
+                    const deviceMap = {
+                        ECG: 'ECG', SPIROMETRIA: 'SPIROMETRO',
+                        AUDIOMETRIA: 'AUDIOMETRO', VISIOTEST: 'VISIOTEST',
+                    };
+                    d.tipoDispositivo = deviceMap[d.tipoEsame] || 'ECG';
+                }
+                // Map local valori (JSON string) → risultati (Prisma Json array)
+                if ('valori' in d && !('risultati' in d)) {
+                    try {
+                        const parsed = typeof d.valori === 'string' ? JSON.parse(d.valori) : d.valori;
+                        d.risultati = Array.isArray(parsed) ? parsed : [];
+                    } catch { d.risultati = []; }
+                    delete d.valori;
+                }
+                // Map risultato scalar → findings[]
+                if ('risultato' in d && !('findings' in d)) {
+                    d.findings = d.risultato ? [String(d.risultato)] : [];
+                    delete d.risultato;
+                }
+                // Default stato to COMPLETATO if not set
+                if (!d.stato) d.stato = 'COMPLETATO';
+                // dataEsame string → Date
+                if (d.dataEsame && typeof d.dataEsame === 'string') d.dataEsame = new Date(d.dataEsame);
+                // Strip fields not in Prisma EsameStrumentale
+                ['_localId', '_serverId', '_syncStatus', '_localUpdatedAt', '_lastSyncAt',
+                    '_isDeleted', '_version', 'localPath', 'serverUrl'].forEach(f => delete d[f]);
+            }
+
             else if (entityType === 'allegato3B') {
                 if (d.anno !== undefined) d.anno = Number(d.anno);
                 ['totLavoratoriSorvegliati', 'totVisiteEffettuate', 'totGiudiziIdoneita',
@@ -1913,6 +1949,22 @@ export async function uploadBatch(req, res) {
                         result = await prisma.personTenantProfile.create({
                             data: { ...profileData, personId: person.id }
                         });
+                    } else if (op.entityType === 'esameStrumentale') {
+                        // Resolve medicoId from visit if not provided in payload
+                        let esameMediacoId = sanitizedData.medicoId;
+                        if (!esameMediacoId && sanitizedData.visitaId) {
+                            const linkedVisita = await prisma.visita.findFirst({
+                                where: { id: sanitizedData.visitaId, tenantId, deletedAt: null },
+                                select: { medicoId: true },
+                            });
+                            esameMediacoId = linkedVisita?.medicoId || null;
+                        }
+                        if (!esameMediacoId) {
+                            results.push({ operationId: op.id, status: 'conflict', error: 'medicoId non disponibile per esame strumentale' });
+                            continue;
+                        }
+                        const createData = { id: sanitizedData.id || op.entityId, ...sanitizedData, medicoId: esameMediacoId };
+                        result = await prisma.esameStrumentale.create({ data: createData });
                     } else {
                         const createData = {
                             id: sanitizedData.id || op.entityId,
@@ -2061,6 +2113,55 @@ export async function uploadBatch(req, res) {
         };
 
         logger.info({ tenantId, clientId, summary }, '[P98] Upload batch completed');
+
+        // Fire-and-forget: genera PDF per giudizi idoneità creati/aggiornati in questo batch
+        // In background dopo la risposta per non rallentare il sync del client.
+        const successfulGiudizioIds = results
+            .filter(r => r.status === 'success')
+            .map(r => {
+                const op = operations.find(o => o.id === r.operationId);
+                return (op?.entityType === 'giudizioIdoneita' && (op.action === 'create' || op.action === 'update'))
+                    ? r.serverId
+                    : null;
+            })
+            .filter(Boolean);
+
+        if (successfulGiudizioIds.length > 0) {
+            setImmediate(async () => {
+                for (const gId of successfulGiudizioIds) {
+                    try {
+                        await GiudizioIdoneitaPdfService.generateAndStore(gId, tenantId);
+                        logger.info({ giudizioId: gId, tenantId }, '[P98] PDF giudizio idoneità generato post-sync');
+                    } catch (pdfErr) {
+                        logger.warn({ giudizioId: gId, error: pdfErr.message }, '[P98] Generazione PDF post-sync fallita (non critico)');
+                    }
+                }
+            });
+        }
+
+        // Fire-and-forget: genera PDF referto per visite completate sincronizzate in questo batch
+        const completedVisitaIds = results
+            .filter(r => r.status === 'success')
+            .map(r => {
+                const op = operations.find(o => o.id === r.operationId);
+                return (op?.entityType === 'visita' && op.payload?.stato === 'COMPLETATA')
+                    ? r.serverId
+                    : null;
+            })
+            .filter(Boolean);
+
+        if (completedVisitaIds.length > 0) {
+            setImmediate(async () => {
+                for (const vId of completedVisitaIds) {
+                    try {
+                        await VisitaRefertoService.generateRefertoPdf(vId, tenantId, null);
+                        logger.info({ visitaId: vId, tenantId }, '[P98] PDF referto visita generato post-sync');
+                    } catch (pdfErr) {
+                        logger.warn({ visitaId: vId, error: pdfErr.message }, '[P98] Generazione PDF referto post-sync fallita (non critico)');
+                    }
+                }
+            });
+        }
 
         res.json({ summary, results });
     } catch (error) {
@@ -2340,7 +2441,7 @@ export async function uploadAttachment(req, res) {
             return res.status(400).json({ error: 'File obbligatorio' });
         }
 
-        const { visitaId, allegatoLocalId, nome, tipo, dimensione, mimeType } = req.body;
+        const { visitaId, allegatoLocalId, nome, tipo, dimensione, mimeType, tipologiaClinica, dataEsecuzione } = req.body;
 
         if (!visitaId || !nome) {
             cleanupUploadedFile();
@@ -2375,7 +2476,9 @@ export async function uploadAttachment(req, res) {
                 fileSize: req.file.size || (dimensione ? parseInt(dimensione, 10) : null),
                 mimeType: mimeType || req.file.mimetype,
                 hashFile: security.sha256,
-                caricatoDa: personId
+                caricatoDa: personId,
+                ...(tipologiaClinica ? { tipologiaClinica } : {}),
+                ...(dataEsecuzione ? { dataEsecuzione: new Date(dataEsecuzione) } : {})
             }
         });
 
