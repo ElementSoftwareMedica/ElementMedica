@@ -171,6 +171,10 @@ const GiudiziIdoneitaPage: React.FC = () => {
     const [firmaModalOpen, setFirmaModalOpen] = useState(false);
     const [giudizioForFirma, setGiudizioForFirma] = useState<GiudizioIdoneita | null>(null);
 
+    // Firma medico modal
+    const [firmaMedicoModalOpen, setFirmaMedicoModalOpen] = useState(false);
+    const [giudizioForFirmaMedico, setGiudizioForFirmaMedico] = useState<GiudizioIdoneita | null>(null);
+
     // Helper: apre il form modal in modalità edit per un giudizio
     const openEditModal = useCallback((giudizio: GiudizioIdoneita) => {
         setGiudizioToEdit(giudizio);
@@ -1009,7 +1013,7 @@ const GiudiziIdoneitaPage: React.FC = () => {
                                                 {(giudizio as any).firmaLavoratore ? (
                                                     <span title="Firma del lavoratore acquisita" className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-50 text-purple-700">
                                                         <PenTool className="h-2.5 w-2.5" />
-                                                        Firma ✓
+                                                        Lav. ✓
                                                     </span>
                                                 ) : (
                                                     <button
@@ -1018,7 +1022,23 @@ const GiudiziIdoneitaPage: React.FC = () => {
                                                         className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-50 text-gray-400 hover:bg-purple-50 hover:text-purple-600 transition-colors"
                                                     >
                                                         <PenTool className="h-2.5 w-2.5" />
-                                                        Firma
+                                                        Lav.
+                                                    </button>
+                                                )}
+                                                {/* Firma medico badge */}
+                                                {(giudizio as any).firmaMedico ? (
+                                                    <span title="Firma del medico competente acquisita" className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700">
+                                                        <PenTool className="h-2.5 w-2.5" />
+                                                        Med. ✓
+                                                    </span>
+                                                ) : (
+                                                    <button
+                                                        title="Acquisisci firma del medico competente"
+                                                        onClick={(e) => { e.stopPropagation(); setGiudizioForFirmaMedico(giudizio); setFirmaMedicoModalOpen(true); }}
+                                                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-50 text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                                                    >
+                                                        <PenTool className="h-2.5 w-2.5" />
+                                                        Med.
                                                     </button>
                                                 )}
                                             </div>
@@ -1098,6 +1118,11 @@ const GiudiziIdoneitaPage: React.FC = () => {
                                                         label: (giudizio as any).firmaLavoratore ? 'Aggiorna firma lavoratore' : 'Firma lavoratore',
                                                         icon: PenTool,
                                                         onClick: () => { setGiudizioForFirma(giudizio); setFirmaModalOpen(true); }
+                                                    },
+                                                    {
+                                                        label: (giudizio as any).firmaMedico ? 'Aggiorna firma medico' : 'Firma medico competente',
+                                                        icon: PenTool,
+                                                        onClick: () => { setGiudizioForFirmaMedico(giudizio); setFirmaMedicoModalOpen(true); }
                                                     }
                                                 ]}
                                                 theme="teal"
@@ -1421,10 +1446,26 @@ const GiudiziIdoneitaPage: React.FC = () => {
                 <GiudizioFirmaModal
                     isOpen={firmaModalOpen}
                     giudizio={giudizioForFirma}
+                    firmatario="lavoratore"
                     onClose={() => { setFirmaModalOpen(false); setGiudizioForFirma(null); }}
                     onSuccess={() => {
                         setFirmaModalOpen(false);
                         setGiudizioForFirma(null);
+                        queryClient.invalidateQueries({ queryKey: ['giudizi-idoneita'] });
+                    }}
+                />
+            )}
+
+            {/* Firma Medico Competente Modal */}
+            {firmaMedicoModalOpen && giudizioForFirmaMedico && (
+                <GiudizioFirmaModal
+                    isOpen={firmaMedicoModalOpen}
+                    giudizio={giudizioForFirmaMedico}
+                    firmatario="medico"
+                    onClose={() => { setFirmaMedicoModalOpen(false); setGiudizioForFirmaMedico(null); }}
+                    onSuccess={() => {
+                        setFirmaMedicoModalOpen(false);
+                        setGiudizioForFirmaMedico(null);
                         queryClient.invalidateQueries({ queryKey: ['giudizi-idoneita'] });
                     }}
                 />

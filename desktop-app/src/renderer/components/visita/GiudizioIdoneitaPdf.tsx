@@ -3,6 +3,7 @@ import {
     Page,
     Text,
     View,
+    Image,
     StyleSheet,
     pdf,
 } from '@react-pdf/renderer'
@@ -31,6 +32,7 @@ export interface GiudizioIdoneitaPdfProps {
     medicoName: string
     mansioneNome?: string
     generatedAt?: string
+    firmaLavoratoreDataUrl?: string | null
 }
 
 // ============================================================
@@ -208,6 +210,30 @@ const S = StyleSheet.create({
         color: '#6b7280',
         lineHeight: 1.5,
     },
+    firmeRow: {
+        flexDirection: 'row',
+        gap: 16,
+        marginTop: 20,
+    },
+    firmaBox: {
+        flex: 1,
+        borderTop: '0.5pt solid #9ca3af',
+        paddingTop: 5,
+    },
+    firmaLabel: {
+        fontSize: 8,
+        color: '#6b7280',
+        textAlign: 'center',
+        marginBottom: 4,
+    },
+    firmaImage: {
+        maxHeight: 36,
+        objectFit: 'contain',
+        alignSelf: 'center',
+    },
+    firmaPlaceholder: {
+        height: 36,
+    },
     row: { flexDirection: 'row', gap: 8 },
     divider: { height: '0.5pt', backgroundColor: '#e5e7eb', marginVertical: 8 },
 })
@@ -223,6 +249,7 @@ function GiudizioIdoneitaDocument({
     medicoName,
     mansioneNome,
     generatedAt,
+    firmaLavoratoreDataUrl,
 }: GiudizioIdoneitaPdfProps) {
     const esito = giudizio.esito || ''
     const esitoLabel = GIUDIZIO_LABELS[esito] ?? esito
@@ -337,6 +364,26 @@ function GiudizioIdoneitaDocument({
                         L'organo di vigilanza, dopo ulteriori accertamenti, conferma o
                         revoca il giudizio del Medico Competente.
                     </Text>
+                </View>
+
+                {/* Firme */}
+                <View style={S.firmeRow}>
+                    <View style={S.firmaBox}>
+                        <Text style={S.firmaLabel}>Firma del Medico Competente</Text>
+                        {giudizio.firmaMedico ? (
+                            <Image src={giudizio.firmaMedico} style={S.firmaImage} />
+                        ) : (
+                            <View style={S.firmaPlaceholder} />
+                        )}
+                    </View>
+                    <View style={S.firmaBox}>
+                        <Text style={S.firmaLabel}>Firma del Lavoratore per ricevuta</Text>
+                        {firmaLavoratoreDataUrl ? (
+                            <Image src={firmaLavoratoreDataUrl} style={S.firmaImage} />
+                        ) : (
+                            <View style={S.firmaPlaceholder} />
+                        )}
+                    </View>
                 </View>
 
                 {/* Footer */}

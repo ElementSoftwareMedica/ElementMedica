@@ -944,4 +944,122 @@ router.get('/:id/firma-lavoratore', requireAuth, requirePermission('clinica.visi
   }
 });
 
+/**
+ * @route POST /api/v1/clinica/giudizi-idoneita/:id/firma-medico
+ * @desc Salva la firma del medico competente per un giudizio di idoneità
+ * @access Private - UPDATE_VISITA (solo MEDICO_COMPETENTE / ADMIN)
+ */
+router.post('/:id/firma-medico', requireAuth, requirePermission('clinica.visite:update'), async (req, res) => {
+  try {
+    const tenantId = getEffectiveTenantId(req);
+    const { id } = req.params;
+    const { firmaImageBase64, position } = req.body;
+
+    if (!firmaImageBase64) {
+      return res.status(400).json({ error: 'firmaImageBase64 è obbligatorio' });
+    }
+
+    // Solo il medico competente o amministratori possono apporre la firma del medico
+    const roles = req.person.roles || [];
+    const canSign = roles.some(r =>
+      ['ADMIN', 'SUPER_ADMIN', 'TENANT_ADMIN', 'MEDICO_COMPETENTE'].includes(r)
+    );
+    if (!canSign) {
+      return res.status(403).json({ error: 'Solo il medico competente può apporre la firma del medico' });
+    }
+
+    const giudizio = await prisma.giudizioIdoneita.findFirst({
+      where: { id, tenantId, deletedAt: null },
+      select: { id: true, medicoCompetenteId: true }
+    });
+    if (!giudizio) {
+      return res.status(404).json({ error: 'Giudizio non trovato' });
+    }
+
+    // Posizione opzionale (normalizzata 0-1)
+    let positionJson = null;
+    if (position && typeof position === 'object' &&
+        Number.isFinite(position.x) && Number.isFinite(position.y)) {
+      positionJson = JSON.stringify({
+        page: Number.isInteger(position.page) ? position.page : 0,
+        x: Math.min(1, Math.max(0, position.x)),
+        y: Math.min(1, Math.max(0, position.y)),
+        w: Number.isFinite(position.w) ? Math.min(1, Math.max(0.05, position.w)) : 0.25
+      });
+    }
+
+    const firmaImageUrl = firmaImageBase64.startsWith('data:')
+      ? firmaImageBase64
+      : `data:image/png;base64,${firmaImageBase64}`;
+
+    const existing = await prisma.firmaDigitale.findFirst({
+      where: {
+        documentoId: id,
+        documentType: 'GIUDIZIO_IDONEITA',
+        firmatarioRole: 'MEDICO_COMPETENTE',
+        tenantId,
+        deletedAt: null
+      },
+      select: { id: true }
+    });
+
+    let firma;
+    if (existing) {
+      firma = await prisma.firmaDigitale.update({
+        where: { id: existing.id },
+        data: { firmaImageUrl, stato: 'FIRMATO', note: positionJson }
+      });
+    } else {
+      firma = await prisma.firmaDigitale.create({
+        data: {
+          documentType: 'GIUDIZIO_IDONEITA',
+          documentoId: id,
+          firmatarioId: giudizio.medicoCompetenteId,
+          firmatarioRole: 'MEDICO_COMPETENTE',
+          stato: 'FIRMATO',
+          tipoFirma: 'GRAFOMETRICA',
+          hashDocumento: id,
+          firmaImageUrl,
+          note: positionJson,
+          tenantId
+        }
+      });
+    }
+
+    logger.info({ giudizioId: id, firmaId: firma.id, signedBy: req.person.id }, 'Firma medico competente salvata');
+    res.json({ success: true, firmaId: firma.id });
+  } catch (error) {
+    logger.error({ error: error.message, id: req.params.id }, 'Errore salvataggio firma medico');
+    res.status(500).json({ error: 'Errore nel salvataggio della firma del medico' });
+  }
+});
+
+/**
+ * @route GET /api/v1/clinica/giudizi-idoneita/:id/firma-medico
+ * @desc Verifica se esiste la firma del medico competente per un giudizio
+ * @access Private - VIEW_VISITA
+ */
+router.get('/:id/firma-medico', requireAuth, requirePermission('clinica.visite:read'), async (req, res) => {
+  try {
+    const tenantId = getEffectiveTenantId(req);
+    const { id } = req.params;
+
+    const firma = await prisma.firmaDigitale.findFirst({
+      where: {
+        documentoId: id,
+        documentType: 'GIUDIZIO_IDONEITA',
+        firmatarioRole: 'MEDICO_COMPETENTE',
+        tenantId,
+        deletedAt: null
+      },
+      select: { id: true, firmaImageUrl: true, createdAt: true, stato: true, note: true }
+    });
+
+    res.json({ firma: firma || null, hasFirma: !!firma });
+  } catch (error) {
+    logger.error({ error: error.message, id: req.params.id }, 'Errore recupero firma medico');
+    res.status(500).json({ error: 'Errore nel recupero della firma del medico' });
+  }
+});
+
 export default router;

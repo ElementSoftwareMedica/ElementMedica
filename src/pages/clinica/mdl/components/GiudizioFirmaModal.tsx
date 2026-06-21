@@ -24,9 +24,11 @@ interface GiudizioFirmaModalProps {
     giudizio: GiudizioIdoneita;
     onClose: () => void;
     onSuccess: () => void;
+    /** Chi firma: 'lavoratore' (default) o 'medico' */
+    firmatario?: 'lavoratore' | 'medico';
 }
 
-const GiudizioFirmaModal: React.FC<GiudizioFirmaModalProps> = ({ isOpen, giudizio, onClose, onSuccess }) => {
+const GiudizioFirmaModal: React.FC<GiudizioFirmaModalProps> = ({ isOpen, giudizio, onClose, onSuccess, firmatario = 'lavoratore' }) => {
     const { showToast } = useToast();
     const queryClient = useQueryClient();
     const padRef = useRef<SignaturePadRef>(null);
@@ -186,11 +188,13 @@ const GiudizioFirmaModal: React.FC<GiudizioFirmaModalProps> = ({ isOpen, giudizi
             const position = withPosition
                 ? { page: pdfPage - 1, x: placement.xRatio, y: placement.yRatio, w: placement.widthRatio }
                 : undefined;
-            return clinicaApi.giudiziIdoneita.saveFirmaLavoratore(giudizio.id, signatureDataUrl, position);
+            return firmatario === 'medico'
+                ? clinicaApi.giudiziIdoneita.saveFirmaMedico(giudizio.id, signatureDataUrl, position)
+                : clinicaApi.giudiziIdoneita.saveFirmaLavoratore(giudizio.id, signatureDataUrl, position);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['giudizi-idoneita'] });
-            showToast({ type: 'success', message: 'Firma del lavoratore salvata' });
+            showToast({ type: 'success', message: firmatario === 'medico' ? 'Firma del medico salvata' : 'Firma del lavoratore salvata' });
             onSuccess();
             onClose();
         },
@@ -207,7 +211,7 @@ const GiudizioFirmaModal: React.FC<GiudizioFirmaModalProps> = ({ isOpen, giudizi
                     <div>
                         <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
                             <PenTool className="h-5 w-5 text-teal-600" />
-                            Firma Lavoratore — {step === 'draw' ? 'disegna' : 'posiziona sul PDF'}
+                            {firmatario === 'medico' ? 'Firma Medico Competente' : 'Firma Lavoratore'} — {step === 'draw' ? 'disegna' : 'posiziona sul PDF'}
                         </h2>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                             {personName} · Art. 41 c.7 D.Lgs 81/08
@@ -249,7 +253,7 @@ const GiudizioFirmaModal: React.FC<GiudizioFirmaModalProps> = ({ isOpen, giudizi
                                             penColor="#1e293b"
                                             penWidth={2}
                                             backgroundColor="#ffffff"
-                                            placeholder="Il lavoratore firma qui..."
+                                            placeholder={firmatario === 'medico' ? 'Il medico competente firma qui...' : 'Il lavoratore firma qui...'}
                                             onChange={(empty) => setIsEmpty(empty)}
                                         />
                                     </div>
@@ -286,8 +290,10 @@ const GiudizioFirmaModal: React.FC<GiudizioFirmaModalProps> = ({ isOpen, giudizi
                                 </div>
                             )}
                             <p className="text-[11px] text-gray-400 leading-relaxed">
-                                La firma attesta che il lavoratore ha ricevuto copia del presente giudizio di idoneità.
-                                Al passo successivo potrai trascinarla nel punto esatto del documento.
+                                {firmatario === 'medico'
+                                    ? 'La firma del medico competente viene apposta sul giudizio di idoneità (Art. 41 D.Lgs 81/08). Al passo successivo potrai posizionarla nel punto esatto del documento.'
+                                    : 'La firma attesta che il lavoratore ha ricevuto copia del presente giudizio di idoneità. Al passo successivo potrai trascinarla nel punto esatto del documento.'
+                                }
                             </p>
                         </div>
                     ) : (

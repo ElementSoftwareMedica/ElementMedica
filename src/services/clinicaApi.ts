@@ -970,6 +970,8 @@ export interface GiudizioIdoneita {
     _azienda?: string;
     /** Firma del lavoratore per ricevuta (se acquisita) */
     firmaLavoratore?: { createdAt: string } | null;
+    /** Firma del medico competente (se acquisita) */
+    firmaMedico?: { createdAt: string } | null;
 }
 
 export interface RischioPrestazione {
@@ -5409,6 +5411,13 @@ export const giudiziIdoneitaApi = {
 
     getFirmaLavoratore: (id: string) =>
         apiGet<{ firma: { firmaImageUrl: string; createdAt: string; note?: string } | null; hasFirma: boolean }>(`${CLINICA_BASE}/giudizi-idoneita/${id}/firma-lavoratore`),
+
+    // Firma medico competente
+    saveFirmaMedico: (id: string, firmaImageBase64: string, position?: { page: number; x: number; y: number; w: number }) =>
+        apiPost<{ success: boolean; firmaId: string }>(`${CLINICA_BASE}/giudizi-idoneita/${id}/firma-medico`, { firmaImageBase64, position }),
+
+    getFirmaMedico: (id: string) =>
+        apiGet<{ firma: { firmaImageUrl: string; createdAt: string } | null; hasFirma: boolean }>(`${CLINICA_BASE}/giudizi-idoneita/${id}/firma-medico`),
 
     pdfUrl: (id: string, destinatario: 'lavoratore' | 'datore' = 'lavoratore') =>
         `${CLINICA_BASE}/giudizi-idoneita/${id}/pdf/${destinatario}`,

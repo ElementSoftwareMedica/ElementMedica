@@ -384,8 +384,11 @@ function buildSharedHead(titolo) {
 
 /**
  * Genera HTML giudizio per il LAVORATORE (Art. 41 c.7 — copia completa)
+ * @param {Object} g - Giudizio con relazioni
+ * @param {Object} tenant - Tenant con nome e logo
+ * @param {string|null} firmaMedicoDataUrl - Data URL firma medico (opzionale, inline nel PDF)
  */
-function buildLavoratoreHtml(g, tenant) {
+function buildLavoratoreHtml(g, tenant, firmaMedicoDataUrl = null) {
   const col = GIUDIZIO_COLORS[g.tipoGiudizio] || GIUDIZIO_COLORS.IDONEO;
   const personName = `${g.person?.lastName ?? ''} ${g.person?.firstName ?? ''}`.trim();
   const mansione = g.mansioni?.map(m => m.mansione?.denominazione).filter(Boolean).join(', ') || '—';
@@ -547,7 +550,10 @@ function buildLavoratoreHtml(g, tenant) {
   </div>` : ''}
 
   <div class="firma-section">
-    <div class="firma-box">Firma del Medico Competente<br><br><br></div>
+    <div class="firma-box">
+      Firma del Medico Competente
+      ${firmaMedicoDataUrl ? `<br><img src="${firmaMedicoDataUrl}" style="max-height:48px;max-width:160px;object-fit:contain;margin-top:4px;" alt="Firma medico competente">` : '<br><br><br>'}
+    </div>
     <div class="firma-box">
       Firma del Lavoratore per ricevuta
       ${(g._firmaLavoratore?.firmaImageUrl && !g._firmaHasPosition) ? `<br><img src="${g._firmaLavoratore.firmaImageUrl}" style="max-height:48px;max-width:160px;object-fit:contain;margin-top:4px;" alt="Firma lavoratore">` : '<br><br><br>'}
@@ -568,8 +574,11 @@ function buildLavoratoreHtml(g, tenant) {
 
 /**
  * Genera HTML giudizio per il DATORE DI LAVORO (Art. 41 c.7 — senza dati sanitari riservati)
+ * @param {Object} g - Giudizio con relazioni
+ * @param {Object} tenant - Tenant con nome e logo
+ * @param {string|null} firmaMedicoDataUrl - Data URL firma medico (opzionale, inline nel PDF)
  */
-function buildDatoreHtml(g, tenant) {
+function buildDatoreHtml(g, tenant, firmaMedicoDataUrl = null) {
   const col = GIUDIZIO_COLORS[g.tipoGiudizio] || GIUDIZIO_COLORS.IDONEO;
   const personName = `${g.person?.lastName ?? ''} ${g.person?.firstName ?? ''}`.trim();
   const mansione = g.mansioni?.map(m => m.mansione?.denominazione).filter(Boolean).join(', ') || '—';
@@ -674,7 +683,10 @@ function buildDatoreHtml(g, tenant) {
   </div>
 
   <div class="firma-section">
-    <div class="firma-box">Firma del Medico Competente<br><br><br></div>
+    <div class="firma-box">
+      Firma del Medico Competente
+      ${firmaMedicoDataUrl ? `<br><img src="${firmaMedicoDataUrl}" style="max-height:48px;max-width:160px;object-fit:contain;margin-top:4px;" alt="Firma medico competente">` : '<br><br><br>'}
+    </div>
     <div class="firma-box">Timbro e firma del Datore di Lavoro<br>(ricevuta)<br><br></div>
   </div>
 
@@ -831,6 +843,23 @@ const GiudizioIdoneitaPdfService = {
   },
 
   /**
+   * Recupera la firma del medico competente per un giudizio (se presente)
+   */
+  async _fetchFirmaMedico(giudizioId, tenantId) {
+    return prisma.firmaDigitale.findFirst({
+      where: {
+        documentoId: giudizioId,
+        documentType: 'GIUDIZIO_IDONEITA',
+        firmatarioRole: 'MEDICO_COMPETENTE',
+        tenantId,
+        deletedAt: null,
+        stato: 'FIRMATO'
+      },
+      select: { firmaImageUrl: true, createdAt: true, note: true }
+    });
+  },
+
+  /**
    * Applica (stampa) l'immagine della firma sul PDF alla posizione indicata
    * usando pdf-lib. position = { page, x, y, w } normalizzati 0-1.
    *
@@ -883,18 +912,39 @@ const GiudizioIdoneitaPdfService = {
    * @returns {Promise<{ buffer: Buffer, filename: string, html: string }>}
    */
   async generate(giudizioId, destinatario, tenantId) {
-    const [g, firmaLavoratore] = await Promise.all([
+    const [g, firmaLavoratore, firmaMedico] = await Promise.all([
       this._fetchGiudizio(giudizioId, tenantId),
-      this._fetchFirmaLavoratore(giudizioId, tenantId)
+      this._fetchFirmaLavoratore(giudizioId, tenantId),
+      this._fetchFirmaMedico(giudizioId, tenantId)
     ]);
     if (!g) throw new Error(`GiudizioIdoneita ${giudizioId} non trovato`);
-    // Posizione firma: se presente, la firma viene "stampata" via pdf-lib e NON inline
-    const firmaPos = parseFirmaPosition(firmaLavoratore);
-    if (firmaLavoratore) { g._firmaLavoratore = firmaLavoratore; g._firmaHasPosition = !!firmaPos; }
 
     const ts = g.tenant?.settings || {};
     const tenant = { name: g.tenant?.name ?? '', logo: resolveFirstValidLogo(ts.branches?.MDL?.logo, ts.branches?.MEDICA?.logo, ts.branches?.FORMAZIONE?.logo, ts.logoUrl, ts.logo) };
-    const html = buildLavoratoreHtml(g, tenant);
+    const firmaMedicoDataUrl = firmaMedico?.firmaImageUrl || null;
+
+    let html;
+    if (destinatario === 'datore') {
+      html = buildDatoreHtml(g, tenant, firmaMedicoDataUrl);
+    } else {
+      // Firma lavoratore: posizione = stampa con pdf-lib; nessuna posizione = inline nell'HTML
+      const firmaPos = parseFirmaPosition(firmaLavoratore);
+      if (firmaLavoratore) { g._firmaLavoratore = firmaLavoratore; g._firmaHasPosition = !!firmaPos; }
+      html = buildLavoratoreHtml(g, tenant, firmaMedicoDataUrl);
+
+      let buffer = await pdfService.generatePDF(html, {
+        format: 'A4',
+        margin: { top: '15mm', right: '15mm', bottom: '15mm', left: '15mm' },
+        printBackground: true
+      });
+      if (firmaPos && firmaLavoratore?.firmaImageUrl) {
+        buffer = await this._stampSignature(buffer, firmaLavoratore.firmaImageUrl, firmaPos);
+      }
+      const personName = `${g.person?.lastName ?? 'lavoratore'}_${g.person?.firstName ?? ''}`.replace(/\s+/g, '_');
+      const dateStr = new Date(g.dataEmissione).toISOString().slice(0, 10);
+      const filename = `giudizio-idoneita_lavoratore_${personName}_${dateStr}.pdf`;
+      return { buffer, filename, html };
+    }
 
     let buffer = await pdfService.generatePDF(html, {
       format: 'A4',
@@ -902,13 +952,9 @@ const GiudizioIdoneitaPdfService = {
       printBackground: true
     });
 
-    if (firmaPos && firmaLavoratore?.firmaImageUrl) {
-      buffer = await this._stampSignature(buffer, firmaLavoratore.firmaImageUrl, firmaPos);
-    }
-
     const personName = `${g.person?.lastName ?? 'lavoratore'}_${g.person?.firstName ?? ''}`.replace(/\s+/g, '_');
     const dateStr = new Date(g.dataEmissione).toISOString().slice(0, 10);
-    const filename = `giudizio-idoneita_${destinatario}_${personName}_${dateStr}.pdf`;
+    const filename = `giudizio-idoneita_datore_${personName}_${dateStr}.pdf`;
 
     return { buffer, filename, html };
   },
@@ -921,13 +967,17 @@ const GiudizioIdoneitaPdfService = {
    * @returns {Promise<{ pdfLavoratoreUrl: string, pdfDatoreUrl: string }>}
    */
   async generateAndStore(giudizioId, tenantId) {
-    const [g, firmaLavoratore] = await Promise.all([
+    const [g, firmaLavoratore, firmaMedico] = await Promise.all([
       this._fetchGiudizio(giudizioId, tenantId),
-      this._fetchFirmaLavoratore(giudizioId, tenantId)
+      this._fetchFirmaLavoratore(giudizioId, tenantId),
+      this._fetchFirmaMedico(giudizioId, tenantId)
     ]);
     if (!g) throw new Error(`GiudizioIdoneita ${giudizioId} non trovato`);
+
     const firmaPos = parseFirmaPosition(firmaLavoratore);
     if (firmaLavoratore) { g._firmaLavoratore = firmaLavoratore; g._firmaHasPosition = !!firmaPos; }
+
+    const firmaMedicoDataUrl = firmaMedico?.firmaImageUrl || null;
 
     // Assicura cartella uploads
     const dir = path.join(UPLOADS_BASE, tenantId);
@@ -937,20 +987,31 @@ const GiudizioIdoneitaPdfService = {
     const tenant = { name: g.tenant?.name ?? '', logo: resolveFirstValidLogo(ts.branches?.MDL?.logo, ts.branches?.MEDICA?.logo, ts.branches?.FORMAZIONE?.logo, ts.logoUrl, ts.logo) };
     const dateStr = new Date(g.dataEmissione).toISOString().slice(0, 10);
     const personSlug = `${g.person?.lastName ?? 'lavoratore'}_${g.person?.firstName ?? ''}`.replace(/\s+/g, '_');
+    const idSlug = g.id.substring(0, 8);
 
-    // Genera documento unico: stesso contenuto per lavoratore e datore di lavoro.
-    const htmlLav = buildLavoratoreHtml(g, tenant);
+    // ── Copia LAVORATORE ─────────────────────────────────────────────────────
+    // HTML completo con dati sanitari + firma lavoratore inline (se no posizione) + firma medico
+    const htmlLav = buildLavoratoreHtml(g, tenant, firmaMedicoDataUrl);
     let bufLav = await pdfService.generatePDF(htmlLav, {
       format: 'A4', margin: { top: '15mm', right: '15mm', bottom: '15mm', left: '15mm' }, printBackground: true
     });
+    // Stampa firma lavoratore a posizione specifica (pdf-lib) se posizionata dal workflow firma
     if (firmaPos && firmaLavoratore?.firmaImageUrl) {
       bufLav = await this._stampSignature(bufLav, firmaLavoratore.firmaImageUrl, firmaPos);
     }
-    const lavFilename = `giudizio_idoneita_${personSlug}_${dateStr}_${g.id.substring(0, 8)}.pdf`;
-    const lavPath = path.join(dir, lavFilename);
-    await fs.writeFile(lavPath, bufLav);
+    const lavFilename = `giudizio_lavoratore_${personSlug}_${dateStr}_${idSlug}.pdf`;
+    await fs.writeFile(path.join(dir, lavFilename), bufLav);
     const pdfLavoratoreUrl = `/uploads/giudizi-idoneita/${tenantId}/${lavFilename}`;
-    const pdfDatoreUrl = pdfLavoratoreUrl;
+
+    // ── Copia DATORE DI LAVORO ───────────────────────────────────────────────
+    // HTML ridotto senza dati sanitari (GDPR Art. 9) + firma medico inline
+    const htmlDat = buildDatoreHtml(g, tenant, firmaMedicoDataUrl);
+    const bufDat = await pdfService.generatePDF(htmlDat, {
+      format: 'A4', margin: { top: '15mm', right: '15mm', bottom: '15mm', left: '15mm' }, printBackground: true
+    });
+    const datFilename = `giudizio_datore_${personSlug}_${dateStr}_${idSlug}.pdf`;
+    await fs.writeFile(path.join(dir, datFilename), bufDat);
+    const pdfDatoreUrl = `/uploads/giudizi-idoneita/${tenantId}/${datFilename}`;
 
     // Aggiorna record DB
     await prisma.giudizioIdoneita.update({
@@ -962,7 +1023,7 @@ const GiudizioIdoneitaPdfService = {
       }
     });
 
-    logger.info({ giudizioId, pdfLavoratoreUrl, pdfDatoreUrl, tenantId }, 'PDF Giudizio Idoneità generati');
+    logger.info({ giudizioId, pdfLavoratoreUrl, pdfDatoreUrl, tenantId }, 'PDF Giudizio Idoneità generati (lavoratore + datore separati)');
 
     return { pdfLavoratoreUrl, pdfDatoreUrl };
   }

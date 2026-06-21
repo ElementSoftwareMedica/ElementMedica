@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback } from 'react'
 import { Scale, ChevronDown, ChevronRight, Save, FileDown, Mail, Loader2 } from 'lucide-react'
 import DatePickerElegante from '@/components/ui/DatePickerElegante'
 import { ElegantSelect } from '../ElegantControls'
+import { useConnectivity } from '../../context/ConnectivityContext'
 
-// Dynamic import: @react-pdf/renderer is ~2MB and only needed on PDF download
+// Dynamic import: @react-pdf/renderer is ~2MB and only needed on PDF download (offline fallback)
 const loadPdfDownloader = () => import('./GiudizioIdoneitaPdf').then(m => m.downloadGiudizioPdf)
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4001'
@@ -61,12 +62,14 @@ interface Props {
 }
 
 export function GiudizioIdoneitaCard({ visitId, personId, medicoId, tenantId, isReadOnly, personFirstName, personLastName, medicoFirstName, medicoLastName, mansioneNome }: Props): JSX.Element {
+    const { isOnline } = useConnectivity()
     const [giudizio, setGiudizio] = useState<GiudizioIdoneita | null>(null)
     const [loading, setLoading] = useState(true)
     const [isExpanded, setIsExpanded] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
     const [workflowState, setWorkflowState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
     const [workflowMessage, setWorkflowMessage] = useState<string | null>(null)
+    const [isPdfDownloading, setIsPdfDownloading] = useState(false)
 
     // Form fields
     const [tipo, setTipo] = useState('')
@@ -407,25 +410,57 @@ export function GiudizioIdoneitaCard({ visitId, personId, medicoId, tenantId, is
                         </>
                     )}
 
-                    {/* PDF download */}
+                    {/* PDF download — server (online) o locale (offline) */}
                     {giudizio && esito && (
                         <button
                             onClick={async () => {
-                                const patientName = [personFirstName, personLastName].filter(Boolean).join(' ') || 'Lavoratore'
-                                const medicoName = [medicoFirstName ? (medicoFirstName[0] === 'F' ? 'Dott.ssa' : 'Dott.') : '', medicoFirstName, medicoLastName].filter(Boolean).join(' ') || 'Medico Competente'
-                                const downloadGiudizioPdf = await loadPdfDownloader()
-                                downloadGiudizioPdf({
-                                    giudizio: { ...giudizio, tipo, esito, limitazioni, prescrizioni, dataEmissione, dataScadenza, note, firmaMedico: giudizio.firmaMedico, protocolloNumero: giudizio.protocolloNumero },
-                                    patientName,
-                                    medicoName,
-                                    mansioneNome,
-                                    generatedAt: new Date().toISOString(),
-                                })
+                                if (isPdfDownloading) return
+                                setIsPdfDownloading(true)
+                                try {
+                                    if (isOnline) {
+                                        // Scarica il PDF generato dal server (identico alla versione online)
+                                        const stored = await window.desktopApi.auth.getTokens()
+                                        const token = stored?.accessToken
+                                        if (token) {
+                                            const res = await fetch(
+                                                `${API_BASE}/api/v1/clinica/giudizi-idoneita/${giudizio.id}/pdf/lavoratore`,
+                                                { headers: { Authorization: `Bearer ${token}` } }
+                                            )
+                                            if (res.ok) {
+                                                const blob = await res.blob()
+                                                const url = URL.createObjectURL(blob)
+                                                const a = document.createElement('a')
+                                                const personSlug = [personLastName, personFirstName].filter(Boolean).join('_').replace(/\s+/g, '_') || 'lavoratore'
+                                                const dateStr = (dataEmissione || new Date().toISOString()).slice(0, 10)
+                                                a.href = url
+                                                a.download = `Giudizio_Idoneita_${personSlug}_${dateStr}.pdf`
+                                                a.click()
+                                                URL.revokeObjectURL(url)
+                                                return
+                                            }
+                                        }
+                                    }
+                                    // Fallback offline: genera PDF localmente con @react-pdf/renderer
+                                    const patientName = [personFirstName, personLastName].filter(Boolean).join(' ') || 'Lavoratore'
+                                    const medicoName = [medicoFirstName ? (medicoFirstName[0] === 'F' ? 'Dott.ssa' : 'Dott.') : '', medicoFirstName, medicoLastName].filter(Boolean).join(' ') || 'Medico Competente'
+                                    const downloadGiudizioPdf = await loadPdfDownloader()
+                                    downloadGiudizioPdf({
+                                        giudizio: { ...giudizio, tipo, esito, limitazioni, prescrizioni, dataEmissione, dataScadenza, note, firmaMedico: giudizio.firmaMedico, protocolloNumero: giudizio.protocolloNumero },
+                                        patientName,
+                                        medicoName,
+                                        mansioneNome,
+                                        generatedAt: new Date().toISOString(),
+                                    })
+                                } finally {
+                                    setIsPdfDownloading(false)
+                                }
                             }}
-                            className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-violet-700 bg-violet-50 rounded-lg hover:bg-violet-100 border border-violet-200 transition-colors"
+                            disabled={isPdfDownloading}
+                            className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-violet-700 bg-violet-50 rounded-lg hover:bg-violet-100 border border-violet-200 transition-colors disabled:opacity-50"
+                            title={isOnline ? 'Scarica PDF ufficiale dal server' : 'Scarica PDF locale (offline)'}
                         >
-                            <FileDown className="w-3 h-3" />
-                            Scarica PDF (copia lavoratore)
+                            {isPdfDownloading ? <Loader2 className="w-3 h-3 animate-spin" /> : <FileDown className="w-3 h-3" />}
+                            {isPdfDownloading ? 'Download…' : `Scarica PDF lavoratore${isOnline ? '' : ' (offline)'}`}
                         </button>
                     )}
                 </div>
