@@ -698,6 +698,7 @@ router.get('/visita/:visitaId',
                     errorMessage: true,
                     bridgeSessionId: true,
                     metadata: true,
+                    categoriaEsito: true,
                     createdAt: true,
                     medico: {
                         select: { id: true, firstName: true, lastName: true, gender: true }
@@ -1323,6 +1324,76 @@ router.delete('/licenses/:id',
 );
 
 // ============================================
+// GET STATISTICHE ESITI (per grafici riunione periodica)
+// NOTE: Must be defined BEFORE /:id to avoid Express matching "statistiche-esiti" as :id param
+// ============================================
+
+/**
+ * @route GET /strumenti-bridge/statistiche-esiti
+ * @desc Conteggi anonimi per tipoEsame × categoriaEsito (per grafici collettivi)
+ * @query anno (default: anno corrente), companyId (opzionale)
+ * @access Authenticated
+ */
+router.get('/statistiche-esiti',
+    authenticate,
+    requirePermission('visite:read'),
+    async (req, res) => {
+        try {
+            const tenantId = getEffectiveTenantId(req);
+            const anno = parseInt(req.query.anno) || new Date().getFullYear();
+            const companyId = req.query.companyId || null;
+
+            const startDate = new Date(`${anno}-01-01T00:00:00.000Z`);
+            const endDate = new Date(`${anno}-12-31T23:59:59.999Z`);
+
+            // Build where for optional company filter via visita
+            let visitaIds = null;
+            if (companyId) {
+                const visite = await prisma.visita.findMany({
+                    where: { tenantId, deletedAt: null, companyTenantProfileId: companyId },
+                    select: { id: true },
+                });
+                visitaIds = visite.map(v => v.id);
+                if (visitaIds.length === 0) {
+                    return res.json({ success: true, data: { anno, rows: [] } });
+                }
+            }
+
+            const where = {
+                tenantId,
+                deletedAt: null,
+                stato: 'COMPLETATO',
+                categoriaEsito: { not: null },
+                dataEsame: { gte: startDate, lte: endDate },
+                ...(visitaIds ? { visitaId: { in: visitaIds } } : {}),
+            };
+
+            const rows = await prisma.esameStrumentale.groupBy({
+                by: ['tipoEsame', 'categoriaEsito'],
+                where,
+                _count: { id: true },
+                orderBy: [{ tipoEsame: 'asc' }, { categoriaEsito: 'asc' }],
+            });
+
+            res.json({
+                success: true,
+                data: {
+                    anno,
+                    rows: rows.map(r => ({
+                        tipoEsame: r.tipoEsame,
+                        categoriaEsito: r.categoriaEsito,
+                        count: r._count.id,
+                    })),
+                },
+            });
+        } catch (error) {
+            logger.error('Failed to get statistiche esiti', { component: 'strumenti-bridge', error: error.message });
+            res.status(500).json({ success: false, error: 'Errore statistiche esiti' });
+        }
+    }
+);
+
+// ============================================
 // GET SINGLE EXAM
 // ============================================
 
@@ -1466,6 +1537,48 @@ router.delete('/:id',
                 success: false,
                 error: 'Errore nell\'eliminazione dell\'esame strumentale',
             });
+        }
+    }
+);
+
+// ============================================
+// PATCH CATEGORIA ESITO
+// ============================================
+
+/**
+ * @route PATCH /strumenti-bridge/:id/categoria-esito
+ * @desc Imposta la categoria esito clinico su un esame completato
+ * @access Authenticated
+ */
+router.patch('/:id/categoria-esito',
+    authenticate,
+    requirePermission('visite:write'),
+    async (req, res) => {
+        try {
+            const tenantId = getEffectiveTenantId(req);
+            const { id } = req.params;
+            const { categoriaEsito } = req.body;
+
+            if (categoriaEsito !== null && typeof categoriaEsito !== 'string') {
+                return res.status(400).json({ success: false, error: 'categoriaEsito non valido' });
+            }
+
+            const esame = await prisma.esameStrumentale.findFirst({
+                where: { id, tenantId, deletedAt: null },
+            });
+            if (!esame) {
+                return res.status(404).json({ success: false, error: 'Esame non trovato' });
+            }
+
+            const updated = await prisma.esameStrumentale.update({
+                where: { id },
+                data: { categoriaEsito: categoriaEsito ?? null, updatedAt: new Date() },
+            });
+
+            res.json({ success: true, data: { id: updated.id, categoriaEsito: updated.categoriaEsito } });
+        } catch (error) {
+            logger.error('Failed to update categoriaEsito', { component: 'strumenti-bridge', esameId: req.params.id, error: error.message });
+            res.status(500).json({ success: false, error: 'Errore aggiornamento categoria esito' });
         }
     }
 );

@@ -555,7 +555,9 @@ export const VisitaPage: React.FC = () => {
             dataCaricamento: a.createdAt,
             dimensione: a.fileSize ? `${(a.fileSize / 1024).toFixed(1)} KB` : undefined,
             url: `/api/v1/clinica/documenti/visita/download/${a.id}`,
-            fromLinkedVisit: a.fromLinkedVisit ?? false // P73: allegato da visita collegata
+            fromLinkedVisit: a.fromLinkedVisit ?? false, // P73: allegato da visita collegata
+            tipologiaClinica: a.tipologiaClinica,
+            dataEsecuzione: a.dataEsecuzione
         }));
     }, [allegatiData]);
 

@@ -10,7 +10,7 @@
  */
 
 import axios from 'axios';
-import { apiGet, apiPost, apiDelete, apiDeleteWithPayload, apiDownload } from './api';
+import { apiGet, apiPost, apiPatch, apiDelete, apiDeleteWithPayload, apiDownload } from './api';
 
 // ============================================
 // TYPES
@@ -36,6 +36,7 @@ export interface EsameStrumentale {
     pdfFilename?: string;
     errorMessage?: string;
     metadata?: Record<string, unknown>;
+    categoriaEsito?: string | null;
     createdAt: string;
     updatedAt: string;
     medico?: {
@@ -49,6 +50,17 @@ export interface EsameStrumentale {
         firstName: string;
         lastName: string;
     };
+}
+
+export interface StatisticheEsitiRow {
+    tipoEsame: string;
+    categoriaEsito: string;
+    count: number;
+}
+
+export interface StatisticheEsitiData {
+    anno: number;
+    rows: StatisticheEsitiRow[];
 }
 
 export interface TestResult {
@@ -300,6 +312,23 @@ export const strumentiBridgeApi = {
      */
     deleteEsame: (id: string, deletionReason: string) =>
         apiDeleteWithPayload<{ success: boolean }>(`${BRIDGE_BASE}/${id}`, { deletionReason }),
+
+    /**
+     * Set the clinical outcome category on a completed exam
+     */
+    setCategoriaEsito: (id: string, categoriaEsito: string | null) =>
+        apiPatch<{ success: boolean; data: { id: string; categoriaEsito: string | null } }>(
+            `${BRIDGE_BASE}/${id}/categoria-esito`,
+            { categoriaEsito }
+        ),
+
+    /**
+     * Get anonymous aggregate stats for collective outcome charts
+     */
+    getStatisticheEsiti: (anno: number, companyId?: string) =>
+        apiGet<{ success: boolean; data: StatisticheEsitiData }>(
+            `${BRIDGE_BASE}/statistiche-esiti?anno=${anno}${companyId ? `&companyId=${companyId}` : ''}`
+        ).then(r => r.data),
 
     /**
      * Check bridge status via backend proxy

@@ -40,6 +40,40 @@ import {
     type TipoEsame,
     type StartExamBridgeRequest,
 } from '@/services/bridgeApi';
+
+// ============================================
+// CATEGORIA ESITO PER TIPO ESAME
+// ============================================
+
+const CATEGORIE_ESITO: Record<string, Array<{ value: string; label: string; color: string }>> = {
+    ecg: [
+        { value: 'ECG_NORMALE', label: 'Nella norma', color: 'bg-green-100 text-green-800' },
+        { value: 'ECG_DUBBIO', label: 'Dubbio / Approfondimento', color: 'bg-yellow-100 text-yellow-800' },
+        { value: 'ECG_ALTERAZIONI_MINORI', label: 'Alterazioni minori/aspecifiche', color: 'bg-orange-100 text-orange-800' },
+        { value: 'ECG_ALTERAZIONI_SIGNIFICATIVE', label: 'Alterazioni significative', color: 'bg-red-100 text-red-800' },
+    ],
+    audiometria: [
+        { value: 'AUDIO_G0', label: 'G0 – Normale (<25 dB)', color: 'bg-green-100 text-green-800' },
+        { value: 'AUDIO_G1', label: 'G1 – Lieve (26–40 dB)', color: 'bg-lime-100 text-lime-800' },
+        { value: 'AUDIO_G2', label: 'G2 – Media (41–55 dB)', color: 'bg-yellow-100 text-yellow-800' },
+        { value: 'AUDIO_G3', label: 'G3 – Medio-grave (56–70 dB)', color: 'bg-orange-100 text-orange-800' },
+        { value: 'AUDIO_G4', label: 'G4 – Grave (71–90 dB)', color: 'bg-red-100 text-red-800' },
+        { value: 'AUDIO_G5', label: 'G5 – Profonda (>90 dB)', color: 'bg-red-200 text-red-900' },
+    ],
+    spirometria: [
+        { value: 'SPIRO_NORMALE', label: 'Normale', color: 'bg-green-100 text-green-800' },
+        { value: 'SPIRO_OSTRUTTIVO_LIEVE', label: 'Ostruttivo lieve (FEV1 ≥70%)', color: 'bg-yellow-100 text-yellow-800' },
+        { value: 'SPIRO_OSTRUTTIVO_MODERATO', label: 'Ostruttivo moderato (FEV1 50–69%)', color: 'bg-orange-100 text-orange-800' },
+        { value: 'SPIRO_OSTRUTTIVO_GRAVE', label: 'Ostruttivo grave (<50%)', color: 'bg-red-100 text-red-800' },
+        { value: 'SPIRO_RESTRITTIVO', label: 'Restrittivo', color: 'bg-purple-100 text-purple-800' },
+        { value: 'SPIRO_MISTO', label: 'Misto', color: 'bg-pink-100 text-pink-800' },
+        { value: 'SPIRO_NON_CLASSIFICABILE', label: 'Non classificabile', color: 'bg-gray-100 text-gray-600' },
+    ],
+    drugtest: [
+        { value: 'DRUG_TUTTI_NEGATIVI', label: 'Tutti negativi', color: 'bg-green-100 text-green-800' },
+        { value: 'DRUG_POSITIVO', label: 'Positività rilevata', color: 'bg-red-100 text-red-800' },
+    ],
+};
 import { formatMedicoName } from '@/utils/textFormatters';
 import { CRUDButton } from '@/components/ui';
 import { PDFPreviewDialog } from '@/components/ui/PDFPreviewDialog';
@@ -105,6 +139,7 @@ export default function EsamiStrumentaliCard({
     const [pdfPreviewTitle, setPdfPreviewTitle] = useState('');
     const [showBridgeInfo, setShowBridgeInfo] = useState(false);
     const [isCardOpen, setIsCardOpen] = useState(false);
+    const [categoriaEsitoOverrides, setCategoriaEsitoOverrides] = useState<Record<string, string | null>>({});
 
     // Track which completed exams we've already notified about
     const notifiedExamIds = useRef<Set<string>>(new Set());
@@ -234,6 +269,18 @@ export default function EsamiStrumentaliCard({
         },
     });
 
+    const categoriaEsitoMutation = useMutation({
+        mutationFn: ({ id, categoriaEsito }: { id: string; categoriaEsito: string | null }) =>
+            strumentiBridgeApi.setCategoriaEsito(id, categoriaEsito),
+        onSuccess: (_, { id, categoriaEsito }) => {
+            setCategoriaEsitoOverrides(prev => ({ ...prev, [id]: categoriaEsito }));
+            queryClient.invalidateQueries({ queryKey: ['esami-strumentali', visitaId] });
+        },
+        onError: () => {
+            showToast({ message: 'Impossibile salvare la categoria esito', title: 'Errore', type: 'error' });
+        },
+    });
+
     const deleteExamMutation = useMutation({
         mutationFn: (id: string) => strumentiBridgeApi.deleteEsame(id, 'Eliminazione esame strumentale richiesta dall\'utente'),
         onSuccess: () => {
@@ -310,6 +357,45 @@ export default function EsamiStrumentaliCard({
                 <StatusIcon className="w-3 h-3" />
                 {config.label}
             </span>
+        );
+    };
+
+    const renderCategoriaEsito = (esame: EsameStrumentale) => {
+        const categorie = CATEGORIE_ESITO[esame.tipoEsame];
+        if (!categorie) return null;
+        const currentVal = categoriaEsitoOverrides.hasOwnProperty(esame.id)
+            ? categoriaEsitoOverrides[esame.id]
+            : esame.categoriaEsito;
+        const currentConf = categorie.find(c => c.value === currentVal);
+
+        return (
+            <div className="mb-3">
+                <label className="block text-xs font-semibold text-gray-600 uppercase mb-1.5">Classificazione esito</label>
+                <div className="flex flex-wrap gap-1.5">
+                    {categorie.map(cat => (
+                        <button
+                            key={cat.value}
+                            disabled={isReadOnly || categoriaEsitoMutation.isPending}
+                            onClick={() => {
+                                const next = currentVal === cat.value ? null : cat.value;
+                                categoriaEsitoMutation.mutate({ id: esame.id, categoriaEsito: next });
+                            }}
+                            className={`px-2 py-1 rounded-full text-xs font-medium border transition-all ${
+                                currentVal === cat.value
+                                    ? `${cat.color} border-current shadow-sm`
+                                    : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100'
+                            } ${isReadOnly ? 'cursor-default' : 'cursor-pointer'}`}
+                        >
+                            {cat.label}
+                        </button>
+                    ))}
+                </div>
+                {currentConf && (
+                    <p className="mt-1 text-xs text-gray-500">
+                        Classificato come: <span className={`font-medium px-1.5 py-0.5 rounded ${currentConf.color}`}>{currentConf.label}</span>
+                    </p>
+                )}
+            </div>
         );
     };
 
@@ -516,9 +602,20 @@ export default function EsamiStrumentaliCard({
                                                 </div>
 
                                                 <div className="flex-1 min-w-0">
-                                                    <div className="flex items-center gap-2">
+                                                    <div className="flex items-center gap-2 flex-wrap">
                                                         <span className="font-medium text-gray-800 text-sm">{label}</span>
                                                         {renderExamStatus(esame.stato)}
+                                                        {(() => {
+                                                            const val = categoriaEsitoOverrides.hasOwnProperty(esame.id)
+                                                                ? categoriaEsitoOverrides[esame.id]
+                                                                : esame.categoriaEsito;
+                                                            const conf = val ? CATEGORIE_ESITO[esame.tipoEsame]?.find(c => c.value === val) : null;
+                                                            return conf ? (
+                                                                <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${conf.color}`}>
+                                                                    {conf.label}
+                                                                </span>
+                                                            ) : null;
+                                                        })()}
                                                     </div>
                                                     <div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5">
                                                         {esame.dataEsame && (
@@ -588,6 +685,7 @@ export default function EsamiStrumentaliCard({
                                                             <span className="font-medium">Errore:</span> {esame.errorMessage}
                                                         </div>
                                                     )}
+                                                    {esame.stato === 'COMPLETATO' && renderCategoriaEsito(esame)}
                                                     {renderTestResults(esame)}
                                                 </div>
                                             )}

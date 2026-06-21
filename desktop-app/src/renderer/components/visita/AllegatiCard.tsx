@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Paperclip, Plus, Trash2, ChevronDown, ChevronRight, File, FileText, Image, FileSpreadsheet } from 'lucide-react'
+import { Paperclip, Plus, Trash2, ChevronDown, ChevronRight, File, FileText, Image, FileSpreadsheet, X } from 'lucide-react'
 
 // ============================================================
 // Types
@@ -14,6 +14,20 @@ interface Allegato {
   localPath: string | null
   serverUrl: string | null
 }
+
+const TIPOLOGIE_CLINICHE = [
+  { value: 'ECG', label: 'ECG' },
+  { value: 'SPIROMETRIA', label: 'Spirometria' },
+  { value: 'AUDIOMETRIA', label: 'Audiometria' },
+  { value: 'ESAMI_SANGUE', label: 'Esami del sangue' },
+  { value: 'TEST_DROGA', label: 'Drug Test' },
+  { value: 'ALCOL_TEST', label: 'Alcol Test' },
+  { value: 'RADIOGRAFIA', label: 'Radiografia' },
+  { value: 'ECOGRAFIA', label: 'Ecografia' },
+  { value: 'VISITA', label: 'Visita medica' },
+  { value: 'CERTIFICATO', label: 'Certificato' },
+  { value: 'ALTRO', label: 'Altro' },
+]
 
 const FILE_ICONS: Record<string, typeof File> = {
   pdf: FileText,
@@ -50,12 +64,21 @@ interface Props {
   defaultExpanded?: boolean
 }
 
+interface PendingUpload {
+  sourcePath: string
+  tipologiaClinica: string
+  dataEsecuzione: string
+}
+
 export function AllegatiCard({ visitId, tenantId, isReadOnly, defaultExpanded = false }: Props): JSX.Element {
   const [allegati, setAllegati] = useState<Allegato[]>([])
   const [loading, setLoading] = useState(true)
   const [isExpanded, setIsExpanded] = useState(defaultExpanded)
   const [isUploading, setIsUploading] = useState(false)
   const [openError, setOpenError] = useState<string | null>(null)
+  const [pendingUpload, setPendingUpload] = useState<PendingUpload | null>(null)
+  const [modalTipologia, setModalTipologia] = useState('')
+  const [modalData, setModalData] = useState(new Date().toISOString().split('T')[0])
 
   // ----------------------------------------------------------
   // Load allegati from SQLite
@@ -89,16 +112,24 @@ export function AllegatiCard({ visitId, tenantId, isReadOnly, defaultExpanded = 
     const result = await window.desktopApi.dialog.openFile()
     if (result.canceled || !result.filePaths.length) return
 
+    setModalTipologia('')
+    setModalData(new Date().toISOString().split('T')[0])
+    setPendingUpload({ sourcePath: result.filePaths[0], tipologiaClinica: '', dataEsecuzione: new Date().toISOString().split('T')[0] })
+  }, [isUploading])
+
+  const handleConfirmUpload = useCallback(async () => {
+    if (!window.desktopApi || !pendingUpload) return
+
     setIsUploading(true)
+    setPendingUpload(null)
     try {
-      const sourcePath = result.filePaths[0]
       const fileInfo = await window.desktopApi.file.copyToAppData({
-        sourcePath,
+        sourcePath: pendingUpload.sourcePath,
         visitaId: visitId
       })
 
       const now = new Date().toISOString()
-      const { id } = await window.desktopApi.db.insert({
+      await window.desktopApi.db.insert({
         table: 'allegati',
         data: {
           tenantId,
@@ -108,19 +139,18 @@ export function AllegatiCard({ visitId, tenantId, isReadOnly, defaultExpanded = 
           dimensione: fileInfo.dimensione,
           localPath: fileInfo.localPath,
           serverUrl: null,
+          tipologiaClinica: modalTipologia || null,
+          dataEsecuzione: modalData || null,
           createdAt: now,
           updatedAt: now,
         }
       })
 
-      // File upload is handled by syncAttachments pipeline (not via batch sync)
-      // No sync.enqueue needed for CREATE — the upload endpoint creates the server record
-
       await loadAllegati()
     } finally {
       setIsUploading(false)
     }
-  }, [visitId, tenantId, isUploading, loadAllegati])
+  }, [pendingUpload, visitId, tenantId, modalTipologia, modalData, loadAllegati])
 
   // ----------------------------------------------------------
   // Delete file
@@ -165,6 +195,57 @@ export function AllegatiCard({ visitId, tenantId, isReadOnly, defaultExpanded = 
 
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-card overflow-hidden">
+      {/* Metadata modal shown after file selection */}
+      {pendingUpload && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-xl w-80 p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-900">Informazioni documento</h3>
+              <button onClick={() => setPendingUpload(null)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Tipologia clinica</label>
+                <select
+                  value={modalTipologia}
+                  onChange={e => setModalTipologia(e.target.value)}
+                  className="w-full text-xs border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                >
+                  <option value="">— Nessuna —</option>
+                  {TIPOLOGIE_CLINICHE.map(t => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Data esecuzione</label>
+                <input
+                  type="date"
+                  value={modalData}
+                  onChange={e => setModalData(e.target.value)}
+                  className="w-full text-xs border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setPendingUpload(null)}
+                className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Annulla
+              </button>
+              <button
+                onClick={() => { void handleConfirmUpload() }}
+                className="px-3 py-1.5 text-xs font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700 transition-colors"
+              >
+                Aggiungi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}

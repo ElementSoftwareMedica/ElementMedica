@@ -909,6 +909,44 @@ export function setupIpcHandlers(): void {
                     }
                 }
                 if (flatGiudizi.length > 0) bulkUpsert('giudizi_idoneita', flatGiudizi)
+
+                // ---- 4c. Extract esami_strumentali embedded in visiteEsistenti (server→desktop sync) ----
+                const flatEsami: Record<string, unknown>[] = []
+                for (const v of visiteSource) {
+                    const embedded = (v as Record<string, unknown>).esamiStrumentali as Record<string, unknown>[] | undefined
+                    if (!Array.isArray(embedded)) continue
+                    for (const e of embedded) {
+                        if (!e.id || !e.tipoEsame) continue
+                        // Map Prisma risultati[] → local scalar risultato + valori JSON
+                        let risultato: string | null = null
+                        let valori = '{}'
+                        if (Array.isArray(e.risultati) && (e.risultati as unknown[]).length > 0) {
+                            const first = (e.risultati as Record<string, unknown>[])[0]
+                            risultato = String(first?.value ?? first?.risultato ?? '') || null
+                            valori = JSON.stringify(e.risultati)
+                        }
+                        // findings[] → note
+                        const note = Array.isArray(e.findings) && (e.findings as string[]).length > 0
+                            ? (e.findings as string[]).join('\n')
+                            : null
+                        flatEsami.push({
+                            id: e.id as string,
+                            tenantId: (e.tenantId as string) || data.meta?.tenantId || '',
+                            visitaId: (e.visitaId as string) || (v as Record<string, unknown>).id,
+                            personId: e.pazienteId,
+                            tipo: e.tipoEsame,
+                            risultato,
+                            valori,
+                            dataEsame: e.dataEsame ? String(e.dataEsame).slice(0, 10) : null,
+                            note,
+                            categoriaEsito: e.categoriaEsito ?? null,
+                            createdAt: e.createdAt,
+                            updatedAt: e.updatedAt,
+                            deletedAt: e.deletedAt ?? null,
+                        })
+                    }
+                }
+                if (flatEsami.length > 0) bulkUpsert('esami_strumentali', flatEsami)
             }
 
             // ---- 5. Store prestazioni (flat — direct from backend) ----
@@ -1980,7 +2018,8 @@ export function setupIpcHandlers(): void {
         const db = getDatabase()
         const rows = db.prepare(
             `SELECT a.id, a.visitaId, COALESCE(v._serverId, a.visitaId) AS serverVisitaId,
-                    a.nome, a.tipo, a.dimensione, a.localPath, a.tenantId
+                    a.nome, a.tipo, a.dimensione, a.localPath, a.tenantId,
+                    a.tipologiaClinica, a.dataEsecuzione
              FROM allegati a
              LEFT JOIN visits v ON v.id = a.visitaId
              WHERE a.visitaId IS NOT NULL AND a.visitaId != ''
@@ -1988,7 +2027,7 @@ export function setupIpcHandlers(): void {
                AND (a.serverUrl IS NULL OR a.serverUrl = '')
                AND a._isDeleted = 0
                AND (v.id IS NULL OR v._syncStatus = 'SYNCED' OR v._serverId IS NOT NULL)`
-        ).all() as Array<{ id: string; visitaId: string | null; serverVisitaId: string | null; nome: string; tipo: string | null; dimensione: number | null; localPath: string; tenantId: string }>
+        ).all() as Array<{ id: string; visitaId: string | null; serverVisitaId: string | null; nome: string; tipo: string | null; dimensione: number | null; localPath: string; tenantId: string; tipologiaClinica: string | null; dataEsecuzione: string | null }>
         return rows
     })
 

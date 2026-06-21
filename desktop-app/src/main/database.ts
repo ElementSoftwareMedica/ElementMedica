@@ -176,6 +176,9 @@ function initializeSchema(database: Database.Database): void {
   // compiled clinical documents / questionnaires synced from webapp
   preMigrate('ALTER TABLE movimenti_contabili ADD COLUMN appuntamentoId TEXT')
   preMigrate('ALTER TABLE allegati ADD COLUMN companyTenantProfileId TEXT')
+  preMigrate('ALTER TABLE allegati ADD COLUMN tipologiaClinica TEXT')
+  preMigrate('ALTER TABLE allegati ADD COLUMN dataEsecuzione TEXT')
+  preMigrate('ALTER TABLE esami_strumentali ADD COLUMN categoriaEsito TEXT')
   ;[
     'peso REAL',
     'altezza REAL',

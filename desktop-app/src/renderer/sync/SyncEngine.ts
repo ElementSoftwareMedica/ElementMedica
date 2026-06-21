@@ -592,6 +592,8 @@ interface PendingAllegato {
     dimensione: number | null
     localPath: string
     tenantId: string
+    tipologiaClinica?: string | null
+    dataEsecuzione?: string | null
 }
 
 export async function syncAttachments(token: string, tenantId: string): Promise<{ uploaded: number; errors: number }> {
@@ -634,6 +636,8 @@ export async function syncAttachments(token: string, tenantId: string): Promise<
                 formData.append('tipo', allegato.tipo || 'bin')
                 formData.append('dimensione', String(allegato.dimensione || fileData.size))
                 formData.append('mimeType', mimeType)
+                if (allegato.tipologiaClinica) formData.append('tipologiaClinica', allegato.tipologiaClinica)
+                if (allegato.dataEsecuzione) formData.append('dataEsecuzione', allegato.dataEsecuzione)
 
                 const tenantHeaders: Record<string, string> = tenantId
                     ? { 'X-Tenant-ID': tenantId, 'X-Operate-Tenant-Id': tenantId }

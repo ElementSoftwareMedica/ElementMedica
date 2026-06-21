@@ -41,6 +41,7 @@ import {
 import { apiGet } from '../../../services/api';
 import { useToast } from '../../../hooks/useToast';
 import { useTenantFilter } from '../../../context/TenantFilterContext';
+import { strumentiBridgeApi } from '../../../services/bridgeApi';
 import {
     BarChart,
     Bar,
@@ -109,6 +110,61 @@ const MESI_ITALIANI = [
     'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'
 ];
 
+// =====================================================
+// ESAMI STRUMENTALI — LABELS & COLORS
+// =====================================================
+
+const CATEGORIA_ESITO_LABELS: Record<string, string> = {
+    ECG_NORMALE: 'Nella norma',
+    ECG_DUBBIO: 'Dubbio',
+    ECG_ALTERAZIONI_MINORI: 'Alterazioni minori',
+    ECG_ALTERAZIONI_SIGNIFICATIVE: 'Alterazioni significative',
+    AUDIO_G0: 'G0 – Normale',
+    AUDIO_G1: 'G1 – Lieve',
+    AUDIO_G2: 'G2 – Media',
+    AUDIO_G3: 'G3 – Medio-grave',
+    AUDIO_G4: 'G4 – Grave',
+    AUDIO_G5: 'G5 – Profonda',
+    SPIRO_NORMALE: 'Normale',
+    SPIRO_OSTRUTTIVO_LIEVE: 'Ostruttivo lieve',
+    SPIRO_OSTRUTTIVO_MODERATO: 'Ostruttivo moderato',
+    SPIRO_OSTRUTTIVO_GRAVE: 'Ostruttivo grave',
+    SPIRO_RESTRITTIVO: 'Restrittivo',
+    SPIRO_MISTO: 'Misto',
+    SPIRO_NON_CLASSIFICABILE: 'Non classificabile',
+    DRUG_TUTTI_NEGATIVI: 'Tutti negativi',
+    DRUG_POSITIVO: 'Positività rilevata',
+};
+
+const CATEGORIA_ESITO_COLORS: Record<string, string> = {
+    ECG_NORMALE: '#10b981',
+    ECG_DUBBIO: '#f59e0b',
+    ECG_ALTERAZIONI_MINORI: '#f97316',
+    ECG_ALTERAZIONI_SIGNIFICATIVE: '#ef4444',
+    AUDIO_G0: '#10b981',
+    AUDIO_G1: '#84cc16',
+    AUDIO_G2: '#f59e0b',
+    AUDIO_G3: '#f97316',
+    AUDIO_G4: '#ef4444',
+    AUDIO_G5: '#dc2626',
+    SPIRO_NORMALE: '#10b981',
+    SPIRO_OSTRUTTIVO_LIEVE: '#f59e0b',
+    SPIRO_OSTRUTTIVO_MODERATO: '#f97316',
+    SPIRO_OSTRUTTIVO_GRAVE: '#ef4444',
+    SPIRO_RESTRITTIVO: '#a855f7',
+    SPIRO_MISTO: '#ec4899',
+    SPIRO_NON_CLASSIFICABILE: '#94a3b8',
+    DRUG_TUTTI_NEGATIVI: '#10b981',
+    DRUG_POSITIVO: '#ef4444',
+};
+
+const TIPO_ESAME_DISPLAY: Record<string, { label: string; icon: string }> = {
+    ecg: { label: 'ECG', icon: '♥' },
+    audiometria: { label: 'Audiometria', icon: '👂' },
+    spirometria: { label: 'Spirometria', icon: '💨' },
+    drugtest: { label: 'Drug Test', icon: '🧪' },
+};
+
 const GIUDIZIO_COLORS = {
     'IDONEO': '#10b981',
     'IDONEO_CON_LIMITAZIONI': '#f59e0b',
@@ -168,6 +224,13 @@ const RelazioneSanitariaAnnualePage: React.FC = () => {
 
     const dashboard = dashboardResponse;
 
+    // Fetch statistiche esiti strumentali
+    const { data: statisticheEsiti } = useQuery({
+        queryKey: ['statistiche-esiti-strumentali', selectedYear, tenantFilterKey],
+        queryFn: () => strumentiBridgeApi.getStatisticheEsiti(selectedYear),
+        enabled: isReady,
+    });
+
     // Preparazione dati grafici
     const trendData = useMemo(() => {
         if (!dashboard?.trendMensile) return [];
@@ -201,6 +264,23 @@ const RelazioneSanitariaAnnualePage: React.FC = () => {
             count: r.count
         }));
     }, [dashboard]);
+
+    // Group statistiche esiti by tipoEsame → pie data
+    const esamiChartsByTipo = useMemo(() => {
+        if (!statisticheEsiti?.rows?.length) return {};
+        const grouped: Record<string, Array<{ name: string; value: number; fill: string }>> = {};
+        for (const row of statisticheEsiti.rows) {
+            if (!grouped[row.tipoEsame]) grouped[row.tipoEsame] = [];
+            grouped[row.tipoEsame].push({
+                name: CATEGORIA_ESITO_LABELS[row.categoriaEsito] ?? row.categoriaEsito,
+                value: row.count,
+                fill: CATEGORIA_ESITO_COLORS[row.categoriaEsito] ?? '#94a3b8',
+            });
+        }
+        return grouped;
+    }, [statisticheEsiti]);
+
+    const hasEsamiData = Object.keys(esamiChartsByTipo).length > 0;
 
     // KPI trend indicator
     const getTrendIcon = (value: number, threshold: number, inverted = false) => {
@@ -525,6 +605,66 @@ const RelazioneSanitariaAnnualePage: React.FC = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Esami Strumentali — Distribuzione Esiti */}
+            {hasEsamiData && (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mt-6">
+                    <div className="flex items-center gap-3 mb-5">
+                        <Activity className="w-5 h-5 text-teal-600" />
+                        <h3 className="text-lg font-medium text-gray-900">Esami Strumentali — Distribuzione Esiti {selectedYear}</h3>
+                    </div>
+                    <p className="text-sm text-gray-500 mb-5">
+                        Classificazione anonima degli esiti per i lavoratori sorvegliati. Utile per la riunione periodica (D.Lgs 81/08 art. 35).
+                    </p>
+                    <div className={`grid gap-6 ${Object.keys(esamiChartsByTipo).length === 1 ? 'grid-cols-1 max-w-sm mx-auto' : 'grid-cols-1 md:grid-cols-2'}`}>
+                        {Object.entries(esamiChartsByTipo).map(([tipoEsame, data]) => {
+                            const display = TIPO_ESAME_DISPLAY[tipoEsame] ?? { label: tipoEsame.toUpperCase(), icon: '📋' };
+                            const totale = data.reduce((s, d) => s + d.value, 0);
+                            return (
+                                <div key={tipoEsame} className="border border-gray-100 rounded-xl p-4">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <span className="text-lg">{display.icon}</span>
+                                        <h4 className="font-medium text-gray-800">{display.label}</h4>
+                                        <span className="ml-auto text-xs bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full">{totale} esami</span>
+                                    </div>
+                                    <div className="flex gap-4 items-center">
+                                        <div className="flex-shrink-0">
+                                            <ResponsiveContainer width={160} height={160}>
+                                                <RechartsPieChart>
+                                                    <Pie
+                                                        data={data}
+                                                        cx="50%"
+                                                        cy="50%"
+                                                        innerRadius={40}
+                                                        outerRadius={70}
+                                                        paddingAngle={2}
+                                                        dataKey="value"
+                                                    >
+                                                        {data.map((entry, index) => (
+                                                            <Cell key={index} fill={entry.fill} />
+                                                        ))}
+                                                    </Pie>
+                                                    <Tooltip formatter={(v: number) => [`${v} (${Math.round(v / totale * 100)}%)`, '']} />
+                                                </RechartsPieChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                        <div className="flex-1 space-y-1.5">
+                                            {data.map((entry, i) => (
+                                                <div key={i} className="flex items-center gap-2">
+                                                    <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: entry.fill }} />
+                                                    <span className="text-xs text-gray-700 flex-1 leading-tight">{entry.name}</span>
+                                                    <span className="text-xs font-semibold text-gray-900">{entry.value}</span>
+                                                    <span className="text-[10px] text-gray-400">{Math.round(entry.value / totale * 100)}%</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
 
             {/* Footer */}
             <div className="mt-6 text-center text-sm text-gray-500">

@@ -582,24 +582,25 @@ const GiudizioIdoneitaService = {
             prisma.giudizioIdoneita.count({ where })
         ]);
 
-        // Attach firma lavoratore flag to each giudizio
+        // Attach firma lavoratore + firma medico flag to each giudizio
         const giudizioIds = giudizi.map(g => g.id);
-        const firme = giudizioIds.length > 0 ? await prisma.firmaDigitale.findMany({
-            where: {
-                documentoId: { in: giudizioIds },
-                documentType: 'GIUDIZIO_IDONEITA',
-                firmatarioRole: 'DIPENDENTE',
-                tenantId,
-                deletedAt: null,
-                stato: 'FIRMATO'
-            },
-            select: { documentoId: true, createdAt: true }
-        }) : [];
-        const firmeMap = new Map(firme.map(f => [f.documentoId, f]));
+        const [firmeLav, firmeMed] = giudizioIds.length > 0 ? await Promise.all([
+            prisma.firmaDigitale.findMany({
+                where: { documentoId: { in: giudizioIds }, documentType: 'GIUDIZIO_IDONEITA', firmatarioRole: 'DIPENDENTE', tenantId, deletedAt: null, stato: 'FIRMATO' },
+                select: { documentoId: true, createdAt: true }
+            }),
+            prisma.firmaDigitale.findMany({
+                where: { documentoId: { in: giudizioIds }, documentType: 'GIUDIZIO_IDONEITA', firmatarioRole: 'MEDICO_COMPETENTE', tenantId, deletedAt: null, stato: 'FIRMATO' },
+                select: { documentoId: true, createdAt: true }
+            })
+        ]) : [[], []];
+        const firmeLavMap = new Map(firmeLav.map(f => [f.documentoId, f]));
+        const firmeMedMap = new Map(firmeMed.map(f => [f.documentoId, f]));
 
         const data = giudizi.map(g => ({
             ...g,
-            firmaLavoratore: firmeMap.get(g.id) || null
+            firmaLavoratore: firmeLavMap.get(g.id) || null,
+            firmaMedico: firmeMedMap.get(g.id) || null
         }));
 
         return {
@@ -656,8 +657,17 @@ const GiudizioIdoneitaService = {
                         anamnesi: true,
                         esamiObiettivo: true
                     }
+                },
+                firmeDigitali: {
+                    where: { deletedAt: null, stato: 'FIRMATO' },
+                    select: { id: true, firmatarioRole: true, createdAt: true }
                 }
             }
+        }).then(g => {
+            if (!g) return null;
+            const firmaLavoratore = g.firmeDigitali.find(f => f.firmatarioRole === 'DIPENDENTE') || null;
+            const firmaMedico = g.firmeDigitali.find(f => f.firmatarioRole === 'MEDICO_COMPETENTE') || null;
+            return { ...g, firmaLavoratore, firmaMedico };
         });
     },
 

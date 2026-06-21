@@ -5727,6 +5727,8 @@ model EsameStrumentale {
   errorMessage    String?
   /// Metadati aggiuntivi
   metadata        Json?                 @default("{}")
+  /// Categoria esito clinico (ECG_NORMALE, AUDIO_G0..G5, SPIRO_OSTRUTTIVO_LIEVE, DRUG_TUTTI_NEGATIVI, …)
+  categoriaEsito  String?
   /// Multi-tenancy
   tenantId        String
   createdAt       DateTime              @default(now())

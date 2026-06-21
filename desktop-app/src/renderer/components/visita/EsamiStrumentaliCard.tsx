@@ -15,6 +15,37 @@ interface EsameStrumentale {
   valori: string | null // JSON
   dataEsame: string | null
   note: string | null
+  categoriaEsito: string | null
+}
+
+const CATEGORIE_ESITO: Record<string, Array<{ value: string; label: string; color: string }>> = {
+  ECG: [
+    { value: 'ECG_NORMALE', label: 'Nella norma', color: 'bg-green-100 text-green-800' },
+    { value: 'ECG_DUBBIO', label: 'Dubbio / Approfondimento', color: 'bg-yellow-100 text-yellow-800' },
+    { value: 'ECG_ALTERAZIONI_MINORI', label: 'Alterazioni minori', color: 'bg-orange-100 text-orange-800' },
+    { value: 'ECG_ALTERAZIONI_SIGNIFICATIVE', label: 'Alterazioni significative', color: 'bg-red-100 text-red-800' },
+  ],
+  AUDIOMETRIA: [
+    { value: 'AUDIO_G0', label: 'G0 – Normale', color: 'bg-green-100 text-green-800' },
+    { value: 'AUDIO_G1', label: 'G1 – Lieve', color: 'bg-lime-100 text-lime-800' },
+    { value: 'AUDIO_G2', label: 'G2 – Media', color: 'bg-yellow-100 text-yellow-800' },
+    { value: 'AUDIO_G3', label: 'G3 – Medio-grave', color: 'bg-orange-100 text-orange-800' },
+    { value: 'AUDIO_G4', label: 'G4 – Grave', color: 'bg-red-100 text-red-800' },
+    { value: 'AUDIO_G5', label: 'G5 – Profonda', color: 'bg-red-200 text-red-900' },
+  ],
+  SPIROMETRIA: [
+    { value: 'SPIRO_NORMALE', label: 'Normale', color: 'bg-green-100 text-green-800' },
+    { value: 'SPIRO_OSTRUTTIVO_LIEVE', label: 'Ostruttivo lieve', color: 'bg-yellow-100 text-yellow-800' },
+    { value: 'SPIRO_OSTRUTTIVO_MODERATO', label: 'Ostruttivo moderato', color: 'bg-orange-100 text-orange-800' },
+    { value: 'SPIRO_OSTRUTTIVO_GRAVE', label: 'Ostruttivo grave', color: 'bg-red-100 text-red-800' },
+    { value: 'SPIRO_RESTRITTIVO', label: 'Restrittivo', color: 'bg-purple-100 text-purple-800' },
+    { value: 'SPIRO_MISTO', label: 'Misto', color: 'bg-pink-100 text-pink-800' },
+    { value: 'SPIRO_NON_CLASSIFICABILE', label: 'Non classificabile', color: 'bg-gray-100 text-gray-600' },
+  ],
+  DRUG_TEST: [
+    { value: 'DRUG_TUTTI_NEGATIVI', label: 'Tutti negativi', color: 'bg-green-100 text-green-800' },
+    { value: 'DRUG_POSITIVO', label: 'Positività rilevata', color: 'bg-red-100 text-red-800' },
+  ],
 }
 
 const TIPI_ESAME: Array<{ value: string; label: string; parametri: string[]; bridgeSupported?: boolean }> = [
@@ -114,7 +145,17 @@ export function EsamiStrumentaliCard({ visitId, personId, tenantId, isReadOnly, 
           valori: JSON.stringify(data.valori || {}),
           dataEsame: esameData.dataEsame,
           note: esameData.note,
+          categoriaEsito: null,
         }])
+
+        const EXAM_TIPO_TO_TIPOLOGIA: Record<string, string> = {
+          ECG: 'ECG',
+          SPIROMETRIA: 'SPIROMETRIA',
+          AUDIOMETRIA: 'AUDIOMETRIA',
+          DRUG_TEST: 'TEST_DROGA',
+        }
+        const tipologiaClinica = EXAM_TIPO_TO_TIPOLOGIA[data.tipo] ?? undefined
+        const dataEsecuzione = new Date().toISOString().split('T')[0]
 
         if (data.pdfBase64) {
           const fileInfo = await window.desktopApi.file.writeBase64Attachment({
@@ -133,6 +174,8 @@ export function EsamiStrumentaliCard({ visitId, personId, tenantId, isReadOnly, 
               dimensione: fileInfo.dimensione,
               localPath: fileInfo.localPath,
               serverUrl: null,
+              tipologiaClinica: tipologiaClinica ?? null,
+              dataEsecuzione,
               createdAt: now,
               updatedAt: now,
             }
@@ -150,6 +193,8 @@ export function EsamiStrumentaliCard({ visitId, personId, tenantId, isReadOnly, 
               dimensione: fileInfo.dimensione,
               localPath: fileInfo.localPath,
               serverUrl: null,
+              tipologiaClinica: tipologiaClinica ?? null,
+              dataEsecuzione,
               createdAt: now,
               updatedAt: now,
             }
@@ -271,6 +316,7 @@ export function EsamiStrumentaliCard({ visitId, personId, tenantId, isReadOnly, 
         valori: JSON.stringify(newValori),
         dataEsame: data.dataEsame,
         note: newNote || null,
+        categoriaEsito: null,
       }])
 
       resetForm()
@@ -290,6 +336,25 @@ export function EsamiStrumentaliCard({ visitId, personId, tenantId, isReadOnly, 
       payload: {}
     })
     setEsami(prev => prev.filter(e => e.id !== esameId))
+  }, [isReadOnly])
+
+  // Set categoria esito
+  const handleSetCategoriaEsito = useCallback(async (esameId: string, currentVal: string | null, newVal: string) => {
+    if (!window.desktopApi || isReadOnly) return
+    const next = currentVal === newVal ? null : newVal
+    const now = new Date().toISOString()
+    await window.desktopApi.db.update({
+      table: 'esami_strumentali',
+      id: esameId,
+      data: { categoriaEsito: next, updatedAt: now }
+    })
+    await window.desktopApi.sync.enqueue({
+      type: 'UPDATE',
+      entity: 'esami_strumentali',
+      entityId: esameId,
+      payload: { categoriaEsito: next, updatedAt: now }
+    })
+    setEsami(prev => prev.map(e => e.id === esameId ? { ...e, categoriaEsito: next } : e))
   }, [isReadOnly])
 
   if (loading) {
@@ -369,6 +434,29 @@ export function EsamiStrumentaliCard({ visitId, personId, tenantId, isReadOnly, 
 
                 {esame.note && (
                   <p className="text-[10px] text-gray-500 italic">{esame.note}</p>
+                )}
+
+                {/* Categoria esito clinico */}
+                {CATEGORIE_ESITO[esame.tipo] && (
+                  <div className="pt-1.5 border-t border-gray-200">
+                    <p className="text-[10px] font-medium text-gray-500 mb-1">Classificazione esito:</p>
+                    <div className="flex flex-wrap gap-1">
+                      {CATEGORIE_ESITO[esame.tipo].map(cat => (
+                        <button
+                          key={cat.value}
+                          disabled={isReadOnly}
+                          onClick={() => { void handleSetCategoriaEsito(esame.id, esame.categoriaEsito, cat.value) }}
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-medium border transition-colors ${
+                            esame.categoriaEsito === cat.value
+                              ? `${cat.color} border-current`
+                              : 'border-gray-200 text-gray-400 hover:bg-gray-100'
+                          }`}
+                        >
+                          {cat.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
             )
