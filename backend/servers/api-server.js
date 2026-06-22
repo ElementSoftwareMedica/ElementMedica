@@ -100,6 +100,7 @@ import clinicaRoutes from '../routes/clinica/index.js';
 import sicurezzaRoutes from '../routes/sicurezza/index.js';
 import tariffarioAziendaleRoutes from '../routes/tariffario-aziendale-routes.js';
 import consulenzeMDLRoutes from '../routes/consulenze-mdl-routes.js';
+import usciteMCRoutes from '../routes/uscite-mc-routes.js';
 // Project 59 - MovimentoContabile (COSTI e RICAVI unificati)
 import movimentoContabileRoutes from '../routes/movimento-contabile-routes.js';
 // Project 43 - Multi-tenant access management
@@ -836,6 +837,11 @@ class APIServer {
       logger.info('Registering consulenze-mdl routes...');
       v1Router.use('/consulenze-mdl', consulenzeMDLRoutes);
       logger.info('Consulenze MDL routes registered successfully');
+
+      // Uscite MC (uscite medico competente con movimentazione contabile)
+      logger.info('Registering uscite-mc routes...');
+      v1Router.use('/uscite-mc', usciteMCRoutes);
+      logger.info('Uscite MC routes registered successfully');
 
       // Project 59 - MovimentoContabile (COSTI e RICAVI unificati)
       logger.info('Registering movimenti contabili routes...');

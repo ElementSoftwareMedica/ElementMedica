@@ -42,6 +42,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '../../design-system/utils';
+import { getMedicoTitle } from '../../utils/textFormatters';
 import { QuickActionNominaModal, type NominaTipo } from './quick-actions/QuickActionNominaModal';
 import { QuickActionDVRModal } from './quick-actions/QuickActionDVRModal';
 import { QuickActionSopralluogoModal } from './quick-actions/QuickActionSopralluogoModal';
@@ -57,8 +58,11 @@ import SigningWorkflowModal from '../schedules/components/DocumentManager/compon
 import type { SignaturePlacement } from '../schedules/components/DocumentManager/components/SigningWorkflowModal';
 import {
     consulenzeMDLApi,
+    usciteMCApi,
     tariffariAziendaliApi,
     ConsulenzaMDL,
+    UscitaMC,
+    MedicoDisponibileUscita,
     VoceTariffario,
     StatoConsulenzaMDL,
     STATO_CONSULENZA_LABELS,
@@ -558,11 +562,11 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
     const STORAGE_KEY = `mdl-expanded-section-${companyId}`;
 
     // Initialize from sessionStorage if available, otherwise default to 'nomine'
-    const getInitialExpandedSection = (): 'nomine' | 'dvr' | 'sopralluoghi' | 'consulenze' | 'tariffario' | null => {
+    const getInitialExpandedSection = (): 'nomine' | 'dvr' | 'sopralluoghi' | 'uscite_mc' | 'consulenze' | 'tariffario' | null => {
         try {
             const saved = sessionStorage.getItem(STORAGE_KEY);
-            if (saved && ['nomine', 'dvr', 'sopralluoghi', 'consulenze', 'tariffario', 'null'].includes(saved)) {
-                return saved === 'null' ? null : saved as 'nomine' | 'dvr' | 'sopralluoghi' | 'consulenze' | 'tariffario';
+            if (saved && ['nomine', 'dvr', 'sopralluoghi', 'uscite_mc', 'consulenze', 'tariffario', 'null'].includes(saved)) {
+                return saved === 'null' ? null : saved as 'nomine' | 'dvr' | 'sopralluoghi' | 'uscite_mc' | 'consulenze' | 'tariffario';
             }
         } catch (e) {
             // sessionStorage not available
@@ -572,11 +576,11 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
 
     // P59: Use ref to persist expanded section across refetches but reset on remount
     // This way: auto-refresh keeps state, but leaving page and coming back resets to 'nomine'
-    const expandedSectionRef = useRef<'nomine' | 'dvr' | 'sopralluoghi' | 'consulenze' | 'tariffario' | null>(getInitialExpandedSection());
-    const [expandedSection, setExpandedSectionState] = useState<'nomine' | 'dvr' | 'sopralluoghi' | 'consulenze' | 'tariffario' | null>(getInitialExpandedSection);
+    const expandedSectionRef = useRef<'nomine' | 'dvr' | 'sopralluoghi' | 'uscite_mc' | 'consulenze' | 'tariffario' | null>(getInitialExpandedSection());
+    const [expandedSection, setExpandedSectionState] = useState<'nomine' | 'dvr' | 'sopralluoghi' | 'uscite_mc' | 'consulenze' | 'tariffario' | null>(getInitialExpandedSection);
 
     // Custom setter that also updates the ref AND sessionStorage
-    const setExpandedSection = (value: 'nomine' | 'dvr' | 'sopralluoghi' | 'consulenze' | 'tariffario' | null) => {
+    const setExpandedSection = (value: 'nomine' | 'dvr' | 'sopralluoghi' | 'uscite_mc' | 'consulenze' | 'tariffario' | null) => {
         expandedSectionRef.current = value;
         setExpandedSectionState(value);
         // P59: Persist to sessionStorage for page refresh
@@ -760,6 +764,14 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
         }
     };
 
+    // Uscite MC state
+    const [usciteMC, setUsciteMC] = useState<UscitaMC[]>([]);
+    const [loadingUsciteMC, setLoadingUsciteMC] = useState(false);
+    const [showUscitaMCModal, setShowUscitaMCModal] = useState(false);
+    const [savingUscitaMC, setSavingUscitaMC] = useState(false);
+    const [mediciDisponibili, setMediciDisponibili] = useState<MedicoDisponibileUscita[]>([]);
+    const [newUscitaMC, setNewUscitaMC] = useState({ data: new Date().toISOString().split('T')[0], medicoId: '', note: '' });
+
     // Consulenze MDL state
     const [consulenze, setConsulenze] = useState<ConsulenzaMDL[]>([]);
     const [loadingConsulenze, setLoadingConsulenze] = useState(false);
@@ -802,6 +814,27 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
 
     // P59: Prepara headers per cross-tenant operations
     const operateTenantHeaders = tenantId ? { 'X-Operate-Tenant-Id': tenantId } : undefined;
+
+    // Carica uscite MC quando si espande la sezione
+    useEffect(() => {
+        if (expandedSection === 'uscite_mc' && companyTenantProfileId) {
+            setLoadingUsciteMC(true);
+            Promise.all([
+                usciteMCApi.getAll({ companyTenantProfileId }),
+                usciteMCApi.getMediciDisponibili(companyTenantProfileId)
+            ])
+                .then(([usciteRes, mediciRes]) => {
+                    setUsciteMC(usciteRes.data || []);
+                    const medici = mediciRes.data || [];
+                    setMediciDisponibili(medici);
+                    // Auto-seleziona il medico nominato solo se l'utente non ha già scelto
+                    const primario = medici.find(m => m.isPrimario);
+                    if (primario) setNewUscitaMC(prev => ({ ...prev, medicoId: prev.medicoId || primario.id }));
+                })
+                .catch(() => showToast({ type: 'error', message: 'Errore nel caricamento delle uscite MC' }))
+                .finally(() => setLoadingUsciteMC(false));
+        }
+    }, [expandedSection, companyTenantProfileId]);
 
     // Carica consulenze MDL quando si espande la sezione
     useEffect(() => {
@@ -1111,7 +1144,7 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
     };
 
     // P59: Aggiornato per includere sopralluoghi e consulenze
-    const toggleSection = (section: 'nomine' | 'dvr' | 'sopralluoghi' | 'consulenze' | 'tariffario') => {
+    const toggleSection = (section: 'nomine' | 'dvr' | 'sopralluoghi' | 'uscite_mc' | 'consulenze' | 'tariffario') => {
         setExpandedSection(expandedSection === section ? null : section);
     };
 
@@ -1924,6 +1957,110 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
                     )}
                 </div>
 
+                {/* Sezione Uscite MC */}
+                <div className="border-b border-gray-100 dark:border-gray-700">
+                    <button
+                        onClick={() => toggleSection('uscite_mc')}
+                        className="w-full px-6 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                    >
+                        <div className="flex items-center">
+                            <MapPin className="h-4 w-4 text-teal-600 dark:text-teal-400 mr-2" />
+                            <span className="font-medium text-gray-900 dark:text-gray-50">Uscite Medico Competente</span>
+                            <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+                                ({usciteMC.filter(u => u.stato !== 'ANNULLATA').length} registrate)
+                            </span>
+                        </div>
+                        {expandedSection === 'uscite_mc' ? (
+                            <ChevronUp className="h-4 w-4 text-gray-400" />
+                        ) : (
+                            <ChevronDown className="h-4 w-4 text-gray-400" />
+                        )}
+                    </button>
+
+                    {expandedSection === 'uscite_mc' && (
+                        <div className="p-4">
+                            <div className="flex justify-end mb-4">
+                                <button
+                                    onClick={() => setShowUscitaMCModal(true)}
+                                    className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-900/30 hover:bg-teal-100 dark:hover:bg-teal-900/50 rounded-lg transition-colors"
+                                >
+                                    <Plus className="h-4 w-4 mr-1" />
+                                    Registra Uscita MC
+                                </button>
+                            </div>
+
+                            {loadingUsciteMC ? (
+                                <div className="flex justify-center py-6">
+                                    <RefreshCw className="h-5 w-5 animate-spin text-teal-500" />
+                                </div>
+                            ) : usciteMC.filter(u => u.stato !== 'ANNULLATA').length === 0 ? (
+                                <div className="text-center py-6 text-gray-500 dark:text-gray-400">
+                                    <MapPin className="h-8 w-8 mx-auto mb-2 text-gray-300 dark:text-gray-600" />
+                                    <p className="text-sm">Nessuna uscita MC registrata</p>
+                                    <button
+                                        onClick={() => setShowUscitaMCModal(true)}
+                                        className="mt-2 inline-flex items-center text-sm text-teal-600 hover:text-teal-800"
+                                    >
+                                        <Plus className="h-3 w-3 mr-1" />
+                                        Registra prima uscita
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {usciteMC.filter(u => u.stato !== 'ANNULLATA').map(u => (
+                                        <div key={u.id} className="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-700/30 hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-colors group">
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <div className={cn(
+                                                    "flex-shrink-0 w-2 h-2 rounded-full",
+                                                    u.stato === 'DA_FATTURARE' ? 'bg-amber-500' : 'bg-green-500'
+                                                )} />
+                                                <div className="min-w-0">
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                                            {new Date(u.data).toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                                        </span>
+                                                        <span className={cn(
+                                                            "inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium",
+                                                            u.stato === 'DA_FATTURARE'
+                                                                ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                                                                : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+                                                        )}>
+                                                            {u.stato === 'DA_FATTURARE' ? 'Da Fatturare' : 'Fatturata'}
+                                                        </span>
+                                                    </div>
+                                                    {u.medico && (
+                                                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                                            {getMedicoTitle(u.medico.gender as 'MALE' | 'FEMALE' | 'OTHER' | null)} {u.medico.lastName} {u.medico.firstName}
+                                                        </p>
+                                                    )}
+                                                    {u.site && (
+                                                        <p className="text-xs text-gray-400 dark:text-gray-500">{u.site.siteName}</p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={async () => {
+                                                    try {
+                                                        await usciteMCApi.annulla(u.id);
+                                                        setUsciteMC(prev => prev.map(x => x.id === u.id ? { ...x, stato: 'ANNULLATA' as const } : x));
+                                                        showToast({ type: 'success', message: 'Uscita MC annullata' });
+                                                    } catch {
+                                                        showToast({ type: 'error', message: 'Errore nell\'annullamento' });
+                                                    }
+                                                }}
+                                                className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-all"
+                                                title="Annulla uscita"
+                                            >
+                                                <X className="h-4 w-4" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+
                 {/* Sezione Consulenze MDL */}
                 <div className="border-b border-gray-100 dark:border-gray-700">
                     <button
@@ -2152,6 +2289,104 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
                 tenantId={tenantId} // P59: Cross-tenant operations
                 editingSopralluogoId={editingSopralluogoId} // P59: Edit mode
             />
+
+            {/* Modal: Nuova Uscita MC */}
+            {showUscitaMCModal && companyTenantProfileId && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md">
+                        <div className="p-4 border-b dark:border-gray-700 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <MapPin className="h-5 w-5 text-teal-600" />
+                                <h3 className="font-semibold text-gray-900 dark:text-gray-50">Registra Uscita MC</h3>
+                            </div>
+                            <button onClick={() => setShowUscitaMCModal(false)} className="text-gray-400 hover:text-gray-600">
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                        <div className="p-4 space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Data uscita *</label>
+                                <DatePickerElegante
+                                    value={newUscitaMC.data || null}
+                                    onChange={(d) => setNewUscitaMC(p => ({ ...p, data: d ? d.toISOString().split('T')[0] : '' }))}
+                                    theme="teal"
+                                    size="sm"
+                                    placeholder="Seleziona data"
+                                    clearable
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Medico Competente
+                                </label>
+                                {mediciDisponibili.length > 0 ? (
+                                    <ElegantSelect
+                                        value={newUscitaMC.medicoId}
+                                        onChange={(v) => setNewUscitaMC(p => ({ ...p, medicoId: v }))}
+                                        options={[
+                                            { value: '', label: '— Nessuno specificato —' },
+                                            ...mediciDisponibili.map(m => ({
+                                                value: m.id,
+                                                label: `${getMedicoTitle(m.gender as 'MALE' | 'FEMALE' | 'OTHER' | null)} ${m.lastName} ${m.firstName}${m.isPrimario ? ' (MC nominato)' : ' (coordinato)'}`
+                                            }))
+                                        ]}
+                                    />
+                                ) : (
+                                    <p className="text-sm text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 p-2 rounded-lg">
+                                        Nessun Medico Competente nominato per questa azienda
+                                    </p>
+                                )}
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Note</label>
+                                <textarea
+                                    rows={2}
+                                    className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-none"
+                                    placeholder="Note sull'uscita (opzionale)"
+                                    value={newUscitaMC.note}
+                                    onChange={e => setNewUscitaMC(p => ({ ...p, note: e.target.value }))}
+                                />
+                            </div>
+                        </div>
+                        <div className="p-4 border-t dark:border-gray-700 flex justify-end gap-2">
+                            <button
+                                onClick={() => setShowUscitaMCModal(false)}
+                                className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                            >
+                                Annulla
+                            </button>
+                            <button
+                                disabled={savingUscitaMC || !newUscitaMC.data}
+                                onClick={async () => {
+                                    if (!newUscitaMC.data) return;
+                                    setSavingUscitaMC(true);
+                                    try {
+                                        const res = await usciteMCApi.create({
+                                            companyTenantProfileId,
+                                            data: newUscitaMC.data,
+                                            ...(newUscitaMC.medicoId && { medicoId: newUscitaMC.medicoId }),
+                                            ...(newUscitaMC.note?.trim() && { note: newUscitaMC.note.trim() })
+                                        });
+                                        setUsciteMC(prev => [res.data, ...prev]);
+                                        setShowUscitaMCModal(false);
+                                        setNewUscitaMC({ data: new Date().toISOString().split('T')[0], medicoId: '', note: '' });
+                                        showToast({ type: 'success', message: 'Uscita MC registrata — movimento contabile generato automaticamente' });
+                                    } catch {
+                                        showToast({ type: 'error', message: 'Errore nella registrazione dell\'uscita MC' });
+                                    } finally {
+                                        setSavingUscitaMC(false);
+                                    }
+                                }}
+                                className="px-4 py-2 text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                                {savingUscitaMC ? 'Salvataggio…' : 'Registra Uscita'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Modal: Nuova Consulenza MDL */}
             {showConsulenzaModal && companyTenantProfileId && (

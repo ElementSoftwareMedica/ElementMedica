@@ -80,6 +80,7 @@ model CompanyTenantProfile {
   referente                  Person?                        @relation("CompanyReferente", fields: [referenteId], references: [id])
   tenant                     Tenant                         @relation("TenantCompanyProfiles", fields: [tenantId], references: [id], onDelete: Cascade)
   consulenzeMDL              ConsulenzaMDL[]
+  usciteMC                   UscitaMC[]
   convenzioni                ConvenzioneAzienda[]
   deadlines                  DeadlineItem[]
   fattureElettronicheCliente FatturaElettronica[]           @relation("FatturaElettronicaAzienda")
@@ -193,6 +194,7 @@ model CompanySite {
   rspp                      Person?               @relation("SiteRSPP", fields: [rsppId], references: [id])
   tenant                    Tenant                @relation(fields: [tenantId], references: [id])
   consulenzeMDL             ConsulenzaMDL[]
+  usciteMC                  UscitaMC[]
   deadlines                 DeadlineItem[]
   mansioni                  Mansione[]            @relation("SiteMansioni")
   movimentiContabili        MovimentoContabile[]
@@ -1036,6 +1038,7 @@ model Person {
   googleTokens                                         GoogleTokens[]                  @relation("GoogleTokensUser")
   repartiResponsabile                                  Reparto[]                       @relation("RepartoResponsabile")
   sopralluogiEseguiti                                  Sopralluogo[]                   @relation("SopralluogoEsecutore")
+  usciteMCEseguite                                     UscitaMC[]                      @relation("UscitaMCMedico")
   sopralluoghiFirmatiDatore                            Sopralluogo[]                   @relation("SopralluogoFirmaDatore")
   sopralluoghiFirmatiMc                                Sopralluogo[]                   @relation("SopralluogoFirmaMc")
   sopralluoghiFirmatiRspp                              Sopralluogo[]                   @relation("SopralluogoFirmaRspp")
@@ -5163,6 +5166,7 @@ model MovimentoContabile {
   dvrId                   String?
   nominaRuoloId           String?
   consulenzaId            String?
+  uscitaMCId              String?
   courseScheduleId        String?
   bundleId                String?
   giudizioIdoneitaId      String?
@@ -5215,6 +5219,7 @@ model MovimentoContabile {
   offertaBundle           OffertaBundle?           @relation(fields: [bundleId], references: [id])
   companyTenantProfile    CompanyTenantProfile?    @relation(fields: [companyTenantProfileId], references: [id])
   consulenza              ConsulenzaMDL?           @relation(fields: [consulenzaId], references: [id])
+  uscitaMC                UscitaMC?                @relation(fields: [uscitaMCId], references: [id])
   courseSchedule          CourseSchedule?          @relation(fields: [courseScheduleId], references: [id])
   documentoCompilato      DocumentoCompilato?      @relation(fields: [documentoCompilatoId], references: [id])
   dvr                     DVR?                     @relation(fields: [dvrId], references: [id])
@@ -5243,6 +5248,7 @@ model MovimentoContabile {
   @@index([tenantId, companyTenantProfileId])
   @@index([documentoCompilatoId])
   @@index([consulenzaId])
+  @@index([uscitaMCId])
   @@map("movimenti_contabili")
 }
 
@@ -6093,6 +6099,32 @@ model ConsulenzaMDL {
   @@index([data])
   @@index([tenantId, deletedAt])
   @@map("consulenze_mdl")
+}
+
+/// Uscita del Medico Competente presso sede aziendale (MDL)
+/// Genera movimenti ENTRATA (ricavo vs azienda) + USCITA (compenso al medico)
+model UscitaMC {
+  id                     String               @id @default(uuid())
+  companyTenantProfileId String
+  siteId                 String?
+  medicoId               String?
+  data                   DateTime             @db.Date
+  note                   String?
+  stato                  StatoUscitaMC        @default(DA_FATTURARE)
+  tenantId               String
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+  deletedAt              DateTime?
+  companyTenantProfile   CompanyTenantProfile @relation(fields: [companyTenantProfileId], references: [id], onDelete: Cascade)
+  site                   CompanySite?         @relation(fields: [siteId], references: [id])
+  medico                 Person?              @relation("UscitaMCMedico", fields: [medicoId], references: [id])
+  movimentiContabili     MovimentoContabile[]
+
+  @@index([companyTenantProfileId])
+  @@index([tenantId])
+  @@index([data])
+  @@index([tenantId, deletedAt])
+  @@map("uscite_mc")
 }
 
 /// Cartella per documenti interni e marketing
@@ -7232,6 +7264,7 @@ enum TipoVoceTariffario {
   DVR_AGGIORNAMENTO_SENZA_MODIFICHE
   NOMINA_MC
   NOMINA_RSPP
+  USCITA_MC
 }
 
 /// Categoria visita MDL per tariffari aziendali — conforme D.Lgs 81/08 art. 41 + D.Lgs 19/2022
@@ -7889,6 +7922,7 @@ enum TipoAttivitaMovimento {
   SPESA_RICORRENTE
   RIMBORSO
   COMPENSO_FORMATORE
+  USCITA_MC
 
   @@map("tipo_attivita_movimento")
 }
@@ -8017,6 +8051,14 @@ enum TerzoPaganteTipo {
 }
 
 /// Stato di una consulenza MDL nel workflow di rendicontazione
+enum StatoUscitaMC {
+  DA_FATTURARE
+  FATTURATA
+  ANNULLATA
+
+  @@map("stato_uscita_mc")
+}
+
 enum StatoConsulenzaMDL {
   DA_RENDICONTARE
   RENDICONTATA

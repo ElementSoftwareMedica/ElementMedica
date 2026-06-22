@@ -299,7 +299,8 @@ async function getCompensoProfessionista(voce, medicoId, prestazioneId, importoB
 async function creaMovimentoUscita(opts) {
     const {
         tipo, tipoSoggetto = 'MEDICO', personId,
-        companyTenantProfileId, visitaId, sopralluogoId, nominaRuoloId, consulenzaId, dvrId,
+        companyTenantProfileId, siteId, visitaId, sopralluogoId, nominaRuoloId, consulenzaId, dvrId,
+        uscitaMCId,
         appuntamentoId, appPrestazioneId,
         voceTariffarioId, compensoNetto, compensoTipo, compensoValore, importoRiferimento,
         dataEsecuzione, descrizione, tenantId, createdBy,
@@ -317,11 +318,13 @@ async function creaMovimentoUscita(opts) {
             tipoSoggetto,
             personId: personId || null,
             companyTenantProfileId: companyTenantProfileId || null,
+            siteId: siteId || null,
             visitaId: visitaId || null,
             sopralluogoId: sopralluogoId || null,
             nominaRuoloId: nominaRuoloId || null,
             consulenzaId: consulenzaId || null,
             dvrId: dvrId || null,
+            uscitaMCId: uscitaMCId || null,
             appuntamentoId: appuntamentoId || null,
             appPrestazioneId: appPrestazioneId || null,
             importoNetto,
@@ -2045,6 +2048,113 @@ const MovimentoContabileGenerator = {
             result.warnings.push(...generated.warnings);
         } catch (err) {
             logger.error({ error: err.message, consulenzaId: consulenza?.id }, 'Errore aggiornaPerConsulenza');
+        }
+        return result;
+    },
+
+    // ─── 4c. USCITA MC ──────────────────────────────────────────────────────
+
+    /**
+     * Genera ENTRATA (ricavo vs azienda) + USCITA (compenso al medico competente)
+     * per un'uscita MC registrata.
+     *
+     * @param {Object} uscitaMC - Record UscitaMC
+     * @param {string} tenantId
+     * @param {string} createdBy
+     * @returns {Promise<GenerationResult>}
+     */
+    async generaPerUscitaMC(uscitaMC, tenantId, createdBy) {
+        const result = { movimenti: [], warnings: [] };
+        try {
+            const existing = await esisteMovimento({ uscitaMCId: uscitaMC.id, direzione: 'ENTRATA', tenantId });
+            if (existing) { result.movimenti.push(existing); return result; }
+
+            const { voce } = await getVocePerTipo(uscitaMC.companyTenantProfileId, tenantId, 'USCITA_MC');
+
+            let prezzoNetto = voce ? parseFloat(voce.prezzoBase) : 0;
+            if (!prezzoNetto) {
+                result.warnings.push({
+                    type: 'MISSING_PREZZO',
+                    message: 'Nessun importo definito per l\'uscita MC. Il movimento è stato creato con €0. Aggiorna il tariffario aziendale (voce USCITA MC).',
+                    solutionUrl: '/tariffari-aziendali',
+                    field: 'importoNetto',
+                });
+            }
+
+            const aliquotaIva = voce ? parseFloat(voce.ivaAliquota) : 22;
+            const { importoNetto, importoIva, importoLordo } = calcolaImporti(prezzoNetto, aliquotaIva);
+            const statoMovimento = _statoPerData(uscitaMC.data);
+
+            const movEntrata = await prisma.movimentoContabile.create({
+                data: {
+                    direzione: 'ENTRATA',
+                    tipo: 'USCITA_MC',
+                    stato: statoMovimento,
+                    tipoSoggetto: 'AZIENDA',
+                    uscitaMCId: uscitaMC.id,
+                    companyTenantProfileId: uscitaMC.companyTenantProfileId,
+                    siteId: uscitaMC.siteId || null,
+                    voceTariffarioId: voce?.id || null,
+                    importoNetto,
+                    importoIva,
+                    importoLordo,
+                    aliquotaIva,
+                    dataEsecuzione: uscitaMC.data,
+                    descrizione: `Uscita MC – ${new Date(uscitaMC.data).toLocaleDateString('it-IT')}`,
+                    branchType: 'MEDICA',
+                    tenantId,
+                    createdBy,
+                },
+            });
+            result.movimenti.push(movEntrata);
+
+            if (uscitaMC.medicoId) {
+                const compenso = await getCompensoProfessionista(voce, uscitaMC.medicoId, null, importoNetto, tenantId);
+                if (compenso) {
+                    const movUscita = await creaMovimentoUscita({
+                        tipo: 'USCITA_MC',
+                        tipoSoggetto: 'MEDICO',
+                        personId: uscitaMC.medicoId,
+                        companyTenantProfileId: uscitaMC.companyTenantProfileId,
+                        siteId: uscitaMC.siteId || null,
+                        uscitaMCId: uscitaMC.id,
+                        voceTariffarioId: voce?.id || null,
+                        compensoNetto: compenso.compensoNetto,
+                        compensoTipo: compenso.tipo,
+                        importoRiferimento: importoNetto,
+                        dataEsecuzione: uscitaMC.data,
+                        descrizione: `Compenso uscita MC [${compenso.fonte}]`,
+                        stato: statoMovimento,
+                        tenantId,
+                        createdBy,
+                    });
+                    await prisma.movimentoContabile.update({
+                        where: { id: movEntrata.id, deletedAt: null },
+                        data: { movimentoCollegatoId: movUscita.id },
+                    });
+                    result.movimenti.push(movUscita);
+                }
+            }
+
+            logger.info({ entrataId: movEntrata.id, uscitaMCId: uscitaMC.id }, 'Movimenti uscita MC generati');
+        } catch (err) {
+            logger.error({ error: err.message, uscitaMCId: uscitaMC?.id }, 'Errore generaPerUscitaMC');
+        }
+        return result;
+    },
+
+    async aggiornaPerUscitaMC(uscitaMC, tenantId, updatedBy) {
+        const result = { movimenti: [], warnings: [] };
+        try {
+            const invalidati = await _invalidaMovimentiBozza({ uscitaMCId: uscitaMC.id }, tenantId, updatedBy);
+            if (invalidati > 0) {
+                logger.info({ uscitaMCId: uscitaMC.id, invalidati, tenantId }, 'Movimenti BOZZA uscita MC invalidati per rigenerazione');
+            }
+            const generated = await this.generaPerUscitaMC(uscitaMC, tenantId, updatedBy);
+            result.movimenti.push(...generated.movimenti);
+            result.warnings.push(...generated.warnings);
+        } catch (err) {
+            logger.error({ error: err.message, uscitaMCId: uscitaMC?.id }, 'Errore aggiornaPerUscitaMC');
         }
         return result;
     },

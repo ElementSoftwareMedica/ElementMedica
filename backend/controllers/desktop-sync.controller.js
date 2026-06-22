@@ -203,6 +203,7 @@ export const DESKTOP_TOMBSTONE_SOURCES = [
     { model: 'sopralluogo', table: 'sopralluoghi' },
     { model: 'dVR', table: 'dvr' },
     { model: 'consulenzaMDL', table: 'consulenze_mdl' },
+    { model: 'uscitaMC', table: 'uscite_mc' },
     { model: 'allegato3B', table: 'allegati_3b' }
 ];
 
@@ -217,7 +218,7 @@ export const DESKTOP_SYNC_ENTITY_TYPES = [
     'questionarioRisposta', 'profiloDiSalutePersona', 'documentoClinico',
     'referto', 'firmaDigitale',
     'tariffarioCompanyAssociation',
-    'sopralluogo', 'dVR', 'consulenzaMDL', 'allegato3B'
+    'sopralluogo', 'dVR', 'consulenzaMDL', 'uscitaMC', 'allegato3B'
 ];
 
 const DESKTOP_TOMBSTONE_PAGE_SIZE = 1000;
@@ -1294,6 +1295,17 @@ export async function downloadFullDb(req, res) {
             take: 2000
         });
 
+        const usciteMC = await prisma.uscitaMC.findMany({
+            where: { tenantId, deletedAt: null, ...updatedFilter },
+            select: {
+                id: true, companyTenantProfileId: true, siteId: true, medicoId: true,
+                data: true, note: true, stato: true,
+                tenantId: true, createdAt: true, updatedAt: true, deletedAt: true
+            },
+            orderBy: { data: 'desc' },
+            take: 2000
+        });
+
         const allegati3B = await prisma.allegato3B.findMany({
             where: { tenantId, deletedAt: null, ...updatedFilter },
             select: {
@@ -1396,6 +1408,7 @@ export async function downloadFullDb(req, res) {
                     sopralluoghi: sopralluoghi.length,
                     dvrs: dvrs.length,
                     consulenzeMDL: consulenzeMDL.length,
+                    usciteMC: usciteMC.length,
                     allegati3B: allegati3B.length,
                     convenzioni: convenzioni.length,
                     giudizi: giudiziPrecedenti.length,
@@ -1435,6 +1448,7 @@ export async function downloadFullDb(req, res) {
             sopralluoghi,
             dvrs,
             consulenzeMDL,
+            usciteMC,
             allegati3B,
             convenzioni,
             giudiziPrecedenti,
@@ -1778,6 +1792,11 @@ export async function uploadBatch(req, res) {
                 if (d.importo === '' || d.importo === undefined || d.importo === null) delete d.importo;
                 else d.importo = Number(d.importo);
                 if (!d.stato) d.stato = 'DA_RENDICONTARE';
+            }
+
+            else if (entityType === 'uscitaMC') {
+                if (d.data) d.data = new Date(d.data);
+                if (!d.stato) d.stato = 'DA_FATTURARE';
             }
 
             else if (entityType === 'esameStrumentale') {

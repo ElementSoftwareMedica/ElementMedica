@@ -115,6 +115,8 @@ const ENTITY_MAP: Record<string, string> = {
     dVR: 'dVR',
     consulenze_mdl: 'consulenzaMDL',
     consulenzaMDL: 'consulenzaMDL',
+    uscite_mc: 'uscitaMC',
+    uscitaMC: 'uscitaMC',
     allegati_3b: 'allegato3B',
     allegato3B: 'allegato3B'
 }
@@ -191,6 +193,8 @@ const ENTITY_PRIORITY: Record<string, number> = {
     dVR: 4,
     consulenze_mdl: 4,
     consulenzaMDL: 4,
+    uscite_mc: 4,
+    uscitaMC: 4,
     allegati_3b: 4,
     allegato3B: 4
 }
@@ -503,7 +507,7 @@ async function performWipeRemoto(): Promise<void> {
             'allegati', 'documenti_compilati', 'questionari_risposte',
             'profili_salute', 'documenti_clinici', 'person_documents', 'referti', 'visit_revisions',
             'visit_access_logs', 'firme_digitali', 'lavoratore_rischi_aggiuntivi',
-            'tariffario_voci', 'tariffario_company_associations', 'sopralluoghi', 'dvr', 'consulenze_mdl', 'allegati_3b',
+            'tariffario_voci', 'tariffario_company_associations', 'sopralluoghi', 'dvr', 'consulenze_mdl', 'uscite_mc', 'allegati_3b',
             'operations_queue', 'sync_log'
         ]
         for (const table of TABLES_TO_WIPE) {

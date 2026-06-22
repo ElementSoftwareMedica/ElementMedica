@@ -33,7 +33,8 @@ export type TipoVoceTariffario =
     | 'DVR_AGGIORNAMENTO_SENZA_MODIFICHE'
     | 'NOMINA_MC'
     | 'NOMINA_RSPP'
-    | 'CONSULENZA';
+    | 'CONSULENZA'
+    | 'USCITA_MC';
 
 /**
  * P59: Tipo compenso professionista (MC/RSPP)
@@ -71,7 +72,8 @@ export const TIPI_VOCE_CON_COMPENSO: TipoVoceTariffario[] = [
     'NOMINA_MC',
     'NOMINA_RSPP',
     'CONSULENZA',
-    'QUESTIONARIO'
+    'QUESTIONARIO',
+    'USCITA_MC'
 ];
 
 /**
@@ -141,6 +143,7 @@ export const TIPO_VOCE_LABELS: Record<TipoVoceTariffario, string> = {
     NOMINA_MC: 'Nomina Medico Competente',
     NOMINA_RSPP: 'Nomina RSPP',
     CONSULENZA: 'Consulenza MDL',
+    USCITA_MC: 'Uscita Medico Competente',
 };
 
 /**
@@ -159,6 +162,7 @@ export const TIPO_VOCE_DESCRIPTIONS: Record<TipoVoceTariffario, string> = {
     NOMINA_MC: 'Incarico annuale del Medico Competente.',
     NOMINA_RSPP: 'Incarico annuale del Responsabile Servizio Prevenzione Protezione.',
     CONSULENZA: 'Consulenza professionale MDL a tariffa oraria o per frazione d\'ora. Rendicontabile per azienda.',
+    USCITA_MC: 'Uscita del Medico Competente presso la sede aziendale. Genera automaticamente movimento Da Fatturare verso l\'azienda e compenso al medico.',
 };
 
 /**
@@ -1119,6 +1123,77 @@ export const consulenzeMDLApi = {
 
     async delete(id: string, deletionReason: string): Promise<{ success: boolean; message: string }> {
         return apiDeleteWithPayload(`${CONSULENZE_MDL_URL}/${id}`, { deletionReason });
+    }
+};
+
+// ─── Uscite MC ──────────────────────────────────────────────────────────────
+
+export type StatoUscitaMC = 'DA_FATTURARE' | 'FATTURATA' | 'ANNULLATA';
+
+export interface UscitaMC {
+    id: string;
+    companyTenantProfileId: string;
+    siteId?: string | null;
+    medicoId?: string | null;
+    site?: { id: string; siteName: string } | null;
+    medico?: { id: string; firstName: string; lastName: string; gender?: string } | null;
+    data: string;
+    note?: string | null;
+    stato: StatoUscitaMC;
+    tenantId: string;
+    createdAt: string;
+    updatedAt: string;
+    deletedAt?: string | null;
+}
+
+export interface MedicoDisponibileUscita {
+    id: string;
+    firstName: string;
+    lastName: string;
+    gender?: string;
+    tipoRuolo: 'MEDICO_COMPETENTE' | 'MEDICO_COMPETENTE_COORDINATO';
+    isPrimario: boolean;
+}
+
+export interface CreateUscitaMCPayload {
+    companyTenantProfileId: string;
+    siteId?: string;
+    medicoId?: string;
+    data: string;
+    note?: string;
+}
+
+const USCITE_MC_URL = '/api/v1/uscite-mc';
+
+export const usciteMCApi = {
+    async getAll(
+        filters: { companyTenantProfileId?: string; stato?: StatoUscitaMC; page?: number; limit?: number } = {}
+    ): Promise<{ success: boolean; data: UscitaMC[]; total: number; page: number; totalPages: number }> {
+        const params = new URLSearchParams();
+        if (filters.companyTenantProfileId) params.append('companyTenantProfileId', filters.companyTenantProfileId);
+        if (filters.stato) params.append('stato', filters.stato);
+        if (filters.page) params.append('page', String(filters.page));
+        if (filters.limit) params.append('limit', String(filters.limit));
+        const qs = params.toString();
+        return apiGet(`${USCITE_MC_URL}${qs ? `?${qs}` : ''}`);
+    },
+
+    async getMediciDisponibili(
+        companyTenantProfileId: string
+    ): Promise<{ success: boolean; data: MedicoDisponibileUscita[] }> {
+        return apiGet(`${USCITE_MC_URL}/medici-disponibili?companyTenantProfileId=${companyTenantProfileId}`);
+    },
+
+    async create(data: CreateUscitaMCPayload): Promise<{ success: boolean; data: UscitaMC }> {
+        return apiPost(USCITE_MC_URL, data);
+    },
+
+    async annulla(id: string): Promise<{ success: boolean; data: UscitaMC; message: string }> {
+        return apiPatch(`${USCITE_MC_URL}/${id}/annulla`, {});
+    },
+
+    async delete(id: string, deletionReason: string): Promise<{ success: boolean; message: string }> {
+        return apiDeleteWithPayload(`${USCITE_MC_URL}/${id}`, { deletionReason });
     }
 };
 

@@ -1068,6 +1068,31 @@ function initializeSchema(database: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_consulenze_mdl_tenant ON consulenze_mdl(tenantId, _isDeleted);
     CREATE INDEX IF NOT EXISTS idx_consulenze_mdl_company ON consulenze_mdl(companyTenantProfileId);
 
+    CREATE TABLE IF NOT EXISTS uscite_mc (
+      id TEXT PRIMARY KEY,
+      _localId TEXT NOT NULL,
+      _serverId TEXT,
+      _syncStatus TEXT NOT NULL DEFAULT 'SYNCED',
+      _lastSyncAt TEXT,
+      _localUpdatedAt TEXT NOT NULL,
+      _isDeleted INTEGER NOT NULL DEFAULT 0,
+      _version INTEGER NOT NULL DEFAULT 1,
+
+      tenantId TEXT NOT NULL,
+      companyTenantProfileId TEXT NOT NULL,
+      siteId TEXT,
+      medicoId TEXT,
+      data TEXT NOT NULL,
+      note TEXT,
+      stato TEXT DEFAULT 'DA_FATTURARE',
+      createdAt TEXT,
+      updatedAt TEXT,
+      deletedAt TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_uscite_mc_tenant ON uscite_mc(tenantId, _isDeleted);
+    CREATE INDEX IF NOT EXISTS idx_uscite_mc_company ON uscite_mc(companyTenantProfileId);
+
     CREATE TABLE IF NOT EXISTS allegati_3b (
       id TEXT PRIMARY KEY,
       _localId TEXT NOT NULL,

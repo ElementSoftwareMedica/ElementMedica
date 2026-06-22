@@ -96,6 +96,7 @@ const TIPO_VOCE_LABELS = {
     DVR_AGGIORNAMENTO_SENZA_MODIFICHE: 'Agg. DVR (senza modifiche)',
     NOMINA_MC: 'Nomina MC',
     NOMINA_RSPP: 'Nomina RSPP',
+    USCITA_MC: 'Uscita MC',
 };
 
 // Abbreviazioni per i tipi di voce (per PDF compatto)
@@ -112,6 +113,7 @@ const TIPO_VOCE_ABBR = {
     DVR_AGGIORNAMENTO_SENZA_MODIFICHE: 'DVR-SM',
     NOMINA_MC: 'NOM.MC',
     NOMINA_RSPP: 'NOM.R',
+    USCITA_MC: 'USC.MC',
 };
 
 // Labels per frequenza
