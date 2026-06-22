@@ -193,13 +193,24 @@ const TIPO_BADGE_CLASSES = {
 // Labels per categorie visita MDL (P58/P59 - CategoriaVisitaMDL enum)
 const CATEGORIA_VISITA_LABELS = {
     PREVENTIVA: 'Preventiva',
+    PREVENTIVA_PREASSUNTIVA: 'Preventiva preassuntiva',
     PERIODICA: 'Periodica',
-    DOPO_ASSENZA: 'Dopo Assenza',
+    CAMBIO_MANSIONE: 'Cambio mansione',
+    CESSAZIONE_RAPPORTO: 'Cessazione rapporto',
+    PRECEDENTE_ASSENZA: 'Precedente assenza >60gg',
+    SU_RICHIESTA_LAVORATORE: 'Su richiesta lavoratore',
     STRAORDINARIA: 'Straordinaria',
+    VERIFICA_IDONEITA: 'Verifica idoneità',
+    RIENTRO_MATERNITA: 'Rientro maternità/congedo',
+    DOPO_ASSENZA: 'Rientro da assenza',
 };
 
 // Ordine canonico delle categorie visita MDL
-const VISITA_MDL_CATEGORIES_ORDER = ['PREVENTIVA', 'PERIODICA', 'DOPO_ASSENZA', 'STRAORDINARIA'];
+const VISITA_MDL_CATEGORIES_ORDER = [
+    'PREVENTIVA', 'PREVENTIVA_PREASSUNTIVA', 'PERIODICA', 'CAMBIO_MANSIONE',
+    'CESSAZIONE_RAPPORTO', 'PRECEDENTE_ASSENZA', 'SU_RICHIESTA_LAVORATORE',
+    'STRAORDINARIA', 'VERIFICA_IDONEITA', 'RIENTRO_MATERNITA', 'DOPO_ASSENZA',
+];
 
 /**
  * P59 Sprint 11: Include standard per le query dei tariffari

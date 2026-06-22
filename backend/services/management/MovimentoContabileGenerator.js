@@ -2261,6 +2261,20 @@ const MovimentoContabileGenerator = {
 
             const voceLabel = voce?.nome || (uscitaMC.voceTariffarioId ? 'Spesa' : 'Uscita MC');
 
+            // Risolve nome medico (dalla relazione se già inclusa, altrimenti DB)
+            let medicoNome = '';
+            if (uscitaMC.medicoId) {
+                if (uscitaMC.medico?.firstName || uscitaMC.medico?.lastName) {
+                    medicoNome = `${uscitaMC.medico.firstName || ''} ${uscitaMC.medico.lastName || ''}`.trim();
+                } else {
+                    const p = await prisma.person.findFirst({
+                        where: { id: uscitaMC.medicoId, deletedAt: null },
+                        select: { firstName: true, lastName: true },
+                    });
+                    medicoNome = p ? `${p.firstName || ''} ${p.lastName || ''}`.trim() : '';
+                }
+            }
+
             let prezzoNetto = voce ? parseFloat(voce.prezzoBase) : 0;
             if (!prezzoNetto) {
                 result.warnings.push({
@@ -2275,9 +2289,10 @@ const MovimentoContabileGenerator = {
             const { importoNetto, importoIva, importoLordo } = calcolaImporti(prezzoNetto, aliquotaIva);
             const statoMovimento = _statoPerData(uscitaMC.data);
             const dataLabel = new Date(uscitaMC.data).toLocaleDateString('it-IT');
+            const medicoSuffix = medicoNome ? ` – ${medicoNome}` : '';
             const descrizioneEntrata = uscitaMC.voceTariffarioId
-                ? `${voceLabel} – ${dataLabel}`
-                : `Uscita MC – ${dataLabel}`;
+                ? `${voceLabel} – ${dataLabel}${medicoSuffix}`
+                : `Uscita MC – ${dataLabel}${medicoSuffix}`;
 
             const movEntrata = await prisma.movimentoContabile.create({
                 data: {
@@ -2317,7 +2332,7 @@ const MovimentoContabileGenerator = {
                         compensoTipo: compenso.tipo,
                         importoRiferimento: importoNetto,
                         dataEsecuzione: uscitaMC.data,
-                        descrizione: `Compenso ${voceLabel} [${compenso.fonte}]`,
+                        descrizione: `Compenso ${voceLabel}${medicoSuffix} [${compenso.fonte}]`,
                         stato: statoMovimento,
                         tenantId,
                         createdBy,

@@ -61,12 +61,19 @@ interface VoceTariffarioInfo {
     }>;
 }
 
-// Labels per categorie visita MDL
+// Labels per categorie visita MDL (allineate all'enum CategoriaVisitaMDL)
 const CATEGORIA_VISITA_MDL_LABELS: Record<string, string> = {
-    PREVENTIVA: 'Visita Preventiva',
-    PERIODICA: 'Visita Periodica',
-    DOPO_ASSENZA: 'Rientro da Assenza',
-    STRAORDINARIA: 'Visita Straordinaria',
+    PREVENTIVA: 'Preventiva',
+    PREVENTIVA_PREASSUNTIVA: 'Preventiva preassuntiva',
+    PERIODICA: 'Periodica',
+    CAMBIO_MANSIONE: 'Cambio mansione',
+    CESSAZIONE_RAPPORTO: 'Cessazione rapporto',
+    PRECEDENTE_ASSENZA: 'Precedente assenza >60gg',
+    SU_RICHIESTA_LAVORATORE: 'Su richiesta lavoratore',
+    STRAORDINARIA: 'Straordinaria',
+    VERIFICA_IDONEITA: 'Verifica idoneità',
+    RIENTRO_MATERNITA: 'Rientro maternità/congedo',
+    DOPO_ASSENZA: 'Rientro da assenza',
 };
 
 interface TariffarioInfo {
@@ -161,7 +168,6 @@ const TariffarioCompanyCard: React.FC<TariffarioCompanyCardProps> = ({
     const { showToast } = useToast();
     const [isPrinting, setIsPrinting] = useState(false);
     const [showAllVoci, setShowAllVoci] = useState(false);
-    const [showAllAltreVoci, setShowAllAltreVoci] = useState(false);
     const [showStorico, setShowStorico] = useState(false);
 
     // Calcola stato validità
@@ -238,21 +244,34 @@ const TariffarioCompanyCard: React.FC<TariffarioCompanyCardProps> = ({
     // Voci da mostrare (prime 5 o tutte)
     const voci = tariffario.voci || [];
 
-    // Separa in 4 gruppi semantici che specchiano il PDF
+    // ── 3 sezioni specchiano la struttura del PDF ─────────────────────────────
     const CONSULENZA_TYPES = [
         'CONSULENZA', 'SOPRALLUOGO_MC', 'SOPRALLUOGO_RSPP', 'NOMINA_MC', 'NOMINA_RSPP',
         'DVR_NUOVO', 'DVR_AGGIORNAMENTO_CON_MODIFICHE', 'DVR_AGGIORNAMENTO_SENZA_MODIFICHE'
     ];
-    const mdlVoci = voci.filter(v => v.tipo === 'PRESTAZIONE' && v.categoriaVisita);
-    const consulenzaVoci = voci.filter(v => CONSULENZA_TYPES.includes(v.tipo));
-    const questionariVoci = voci.filter(v => v.tipo === 'QUESTIONARIO');
-    const altreVoci = voci.filter(v =>
-        !['PRESTAZIONE', 'QUESTIONARIO', ...CONSULENZA_TYPES].includes(v.tipo) ||
-        (v.tipo === 'PRESTAZIONE' && !v.categoriaVisita)
-    );
+    const SPESE_TYPES = ['SPESA_FISSA', 'SPESA_RICORRENTE', 'USCITA_MC'];
 
-    // Raggruppa le prestazioni MDL per nome prestazione → poi categorie con prezzi unificati
-    const CATEGORIA_ORDER = ['PREVENTIVA', 'PERIODICA', 'DOPO_ASSENZA', 'STRAORDINARIA'];
+    // §1 Prestazioni Medicina del Lavoro
+    //    - Visite con categoriaVisita (raggruppate per nome prestazione)
+    //    - Prestazioni senza categoriaVisita (ECG, spirometria, ...)
+    //    - Questionari MDL (stessa sezione, senza sotto-titolo — come nel PDF)
+    const mdlVoci = voci.filter(v => v.tipo === 'PRESTAZIONE' && v.categoriaVisita);
+    const prestazioniSenzaCategoria = voci.filter(v => v.tipo === 'PRESTAZIONE' && !v.categoriaVisita);
+    const questionariVoci = voci.filter(v => v.tipo === 'QUESTIONARIO');
+    const hasMDLSection = mdlVoci.length > 0 || prestazioniSenzaCategoria.length > 0 || questionariVoci.length > 0;
+
+    // §2 Consulenza e Sicurezza
+    const consulenzaVoci = voci.filter(v => CONSULENZA_TYPES.includes(v.tipo));
+
+    // §3 Spese Accessorie (Una Tantum, ricorrenti, uscite MC)
+    const speseVoci = voci.filter(v => SPESE_TYPES.includes(v.tipo));
+
+    // Raggruppa le visite MDL per nome prestazione → categorie con prezzi unificati
+    const CATEGORIA_ORDER = [
+        'PREVENTIVA', 'PREVENTIVA_PREASSUNTIVA', 'PERIODICA', 'CAMBIO_MANSIONE',
+        'CESSAZIONE_RAPPORTO', 'PRECEDENTE_ASSENZA', 'SU_RICHIESTA_LAVORATORE',
+        'STRAORDINARIA', 'VERIFICA_IDONEITA', 'RIENTRO_MATERNITA', 'DOPO_ASSENZA',
+    ];
     const mdlByPrestazione = mdlVoci.reduce((acc, v) => {
         const key = v.prestazione?.nome || v.nome || 'Visita MDL';
         if (!acc[key]) acc[key] = [];
@@ -283,32 +302,8 @@ const TariffarioCompanyCard: React.FC<TariffarioCompanyCardProps> = ({
         return { prestazioneName, rows: merged };
     });
 
-    const displayAltreVoci = showAllVoci ? altreVoci : altreVoci.slice(0, 3);
-    const hasMoreAltreVoci = altreVoci.length > 3;
-
-    // Raggruppa DVR_AGGIORNAMENTO_CON_MODIFICHE e DVR_AGGIORNAMENTO_SENZA_MODIFICHE
-    // sulla stessa riga quando hanno lo stesso prezzo base.
-    type DisplayVoce = (VoceTariffarioInfo & { mergedLabel?: string });
-    const mergedAltreVoci: DisplayVoce[] = (() => {
-        const result: DisplayVoce[] = [];
-        const conMod = altreVoci.find(v => v.tipo === 'DVR_AGGIORNAMENTO_CON_MODIFICHE');
-        const senzaMod = altreVoci.find(v => v.tipo === 'DVR_AGGIORNAMENTO_SENZA_MODIFICHE');
-        const samePriceAgg =
-            conMod && senzaMod &&
-            Number(conMod.prezzoBase) === Number(senzaMod.prezzoBase);
-
-        for (const voce of altreVoci) {
-            if (voce.tipo === 'DVR_AGGIORNAMENTO_SENZA_MODIFICHE' && samePriceAgg) continue; // skip: verrà fusa
-            if (voce.tipo === 'DVR_AGGIORNAMENTO_CON_MODIFICHE' && samePriceAgg) {
-                result.push({ ...voce, mergedLabel: 'Aggiornamento DVR (con / senza modifiche)' });
-            } else {
-                result.push(voce);
-            }
-        }
-        return result;
-    })();
-    const displayMergedVoci = showAllAltreVoci ? mergedAltreVoci : mergedAltreVoci.slice(0, 3);
-    const hasMoreMergedVoci = mergedAltreVoci.length > 3 && !showAllAltreVoci;
+    // Somma voci per il badge riassuntivo
+    const totaleVoci = voci.length;
 
     return (
         <Card className={cn(
@@ -356,9 +351,9 @@ const TariffarioCompanyCard: React.FC<TariffarioCompanyCardProps> = ({
                     <div className="border-t border-emerald-200 dark:border-emerald-800 pt-3 space-y-3">
                         {/* Summary compatta: sempre visibile */}
                         <div className="flex flex-wrap gap-2 text-xs">
-                            {mdlVoci.length > 0 && (
+                            {hasMDLSection && (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300 font-medium">
-                                    <Stethoscope className="h-3 w-3" />{mdlVoci.length} Visite MDL
+                                    <Stethoscope className="h-3 w-3" />{mdlVoci.length + prestazioniSenzaCategoria.length + questionariVoci.length} Prestazioni MDL
                                 </span>
                             )}
                             {consulenzaVoci.length > 0 && (
@@ -366,14 +361,9 @@ const TariffarioCompanyCard: React.FC<TariffarioCompanyCardProps> = ({
                                     <Briefcase className="h-3 w-3" />{consulenzaVoci.length} Consulenza/Sicurezza
                                 </span>
                             )}
-                            {questionariVoci.length > 0 && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300 font-medium">
-                                    <FileText className="h-3 w-3" />{questionariVoci.length} Questionari
-                                </span>
-                            )}
-                            {altreVoci.length > 0 && (
+                            {speseVoci.length > 0 && (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 font-medium">
-                                    <Euro className="h-3 w-3" />{altreVoci.length} Altre voci
+                                    <Euro className="h-3 w-3" />{speseVoci.length} Spese accessorie
                                 </span>
                             )}
                         </div>
@@ -388,19 +378,21 @@ const TariffarioCompanyCard: React.FC<TariffarioCompanyCardProps> = ({
                             {showAllVoci ? (
                                 <><ChevronUp className="h-4 w-4 mr-1" />Comprimi dettaglio</>
                             ) : (
-                                <><ChevronDown className="h-4 w-4 mr-1" />Espandi dettaglio ({voci.length} voci)</>
+                                <><ChevronDown className="h-4 w-4 mr-1" />Espandi dettaglio ({totaleVoci} voci)</>
                             )}
                         </Button>
 
                         {/* Dettaglio espandibile */}
                         {showAllVoci && (
-                            <div className="space-y-3">
-                                {/* §1 Prestazioni Visite MDL raggruppate per nome prestazione */}
-                                {mdlPrestazioniGroups.length > 0 && (
+                            <div className="space-y-4">
+                                {/* §1 Prestazioni Medicina del Lavoro */}
+                                {hasMDLSection && (
                                     <div className="space-y-2">
                                         <p className="text-xs font-semibold text-teal-700 dark:text-teal-400 uppercase tracking-wide flex items-center gap-1">
-                                            <Stethoscope className="h-3.5 w-3.5" /> Visite Medicina del Lavoro
+                                            <Stethoscope className="h-3.5 w-3.5" /> Prestazioni Medicina del Lavoro
                                         </p>
+
+                                        {/* Visite raggruppate per nome prestazione */}
                                         {mdlPrestazioniGroups.map(({ prestazioneName, rows }) => (
                                             <div key={prestazioneName} className="rounded-lg border border-teal-200 dark:border-teal-700 overflow-hidden">
                                                 <div className="flex items-center gap-2 px-2.5 py-1.5 bg-teal-50 dark:bg-teal-900/30">
@@ -419,25 +411,21 @@ const TariffarioCompanyCard: React.FC<TariffarioCompanyCardProps> = ({
                                                 </div>
                                             </div>
                                         ))}
-                                    </div>
-                                )}
 
-                                {/* §2 Questionari MDL */}
-                                {questionariVoci.length > 0 && (
-                                    <div className="space-y-1.5">
-                                        <p className="text-xs font-semibold text-cyan-700 dark:text-cyan-400 uppercase tracking-wide flex items-center gap-1">
-                                            <FileText className="h-3.5 w-3.5" /> Questionari
-                                        </p>
-                                        {questionariVoci.map(voce => (
-                                            <div key={voce.id} className="flex items-center justify-between py-1.5 px-2 bg-cyan-50/60 dark:bg-cyan-900/20 rounded border border-cyan-100 dark:border-cyan-800 text-sm">
+                                        {/* Prestazioni senza categoriaVisita (ECG, spirometria, ...) + Questionari — stessa sezione come nel PDF */}
+                                        {[...prestazioniSenzaCategoria, ...questionariVoci].map(voce => (
+                                            <div key={voce.id} className="flex items-center justify-between py-1.5 px-2 bg-teal-50/60 dark:bg-teal-900/20 rounded border border-teal-100 dark:border-teal-800 text-sm">
                                                 <span className="truncate text-gray-800 dark:text-gray-200">{getVoceDisplayName(voce)}</span>
-                                                <span className="ml-2 font-semibold text-emerald-700 flex-shrink-0">{formatPrice(voce.prezzoBase)}</span>
+                                                <div className="flex items-center gap-2 ml-2 flex-shrink-0">
+                                                    <span className="text-xs text-gray-400">{FREQUENZA_LABELS[voce.frequenza] || voce.frequenza}</span>
+                                                    <span className="font-semibold text-emerald-700">{formatPrice(voce.prezzoBase)}</span>
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
                                 )}
 
-                                {/* §3 Consulenza e Sicurezza */}
+                                {/* §2 Consulenza e Sicurezza */}
                                 {consulenzaVoci.length > 0 && (
                                     <div className="space-y-1.5">
                                         <p className="text-xs font-semibold text-purple-700 dark:text-purple-400 uppercase tracking-wide flex items-center gap-1">
@@ -460,19 +448,19 @@ const TariffarioCompanyCard: React.FC<TariffarioCompanyCardProps> = ({
                                     </div>
                                 )}
 
-                                {/* §4 Altre voci (DVR, spese) */}
-                                {altreVoci.length > 0 && (
+                                {/* §3 Spese Accessorie (Una Tantum, ricorrenti, uscite MC) */}
+                                {speseVoci.length > 0 && (
                                     <div className="space-y-1.5">
                                         <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide flex items-center gap-1">
-                                            <Euro className="h-3.5 w-3.5" /> Altre voci
+                                            <Euro className="h-3.5 w-3.5" /> Spese Accessorie
                                         </p>
-                                        {displayMergedVoci.map(voce => {
+                                        {speseVoci.map(voce => {
                                             const VoceIcon = TIPO_VOCE_ICONS[voce.tipo] || FileText;
                                             return (
                                                 <div key={voce.id} className="flex items-center justify-between py-1.5 px-2 bg-white/60 dark:bg-gray-800/60 rounded border border-emerald-100 dark:border-emerald-800 text-sm">
                                                     <div className="flex items-center gap-2 flex-1 min-w-0">
                                                         <VoceIcon className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
-                                                        <span className="truncate text-gray-800 dark:text-gray-200">{voce.mergedLabel ?? getVoceDisplayName(voce)}</span>
+                                                        <span className="truncate text-gray-800 dark:text-gray-200">{getVoceDisplayName(voce)}</span>
                                                         {voce.usaFasceDipendenti && voce.fasceDipendenti && voce.fasceDipendenti.length > 0 && (
                                                             <Badge variant="outline" className="text-[10px] px-1 py-0 text-emerald-600 border-emerald-300">
                                                                 <Users className="h-2.5 w-2.5 mr-0.5" />{voce.fasceDipendenti.length} fasce
@@ -488,16 +476,6 @@ const TariffarioCompanyCard: React.FC<TariffarioCompanyCardProps> = ({
                                                 </div>
                                             );
                                         })}
-                                        {mergedAltreVoci.length > 3 && (
-                                            <Button variant="ghost" size="sm" className="w-full text-emerald-700 hover:bg-emerald-100"
-                                                onClick={(e) => { e.stopPropagation(); setShowAllAltreVoci(!showAllAltreVoci); }}>
-                                                {showAllAltreVoci ? (
-                                                    <><ChevronUp className="h-4 w-4 mr-1" />Comprimi</>
-                                                ) : (
-                                                    <><ChevronDown className="h-4 w-4 mr-1" />+{mergedAltreVoci.length - 3} voci</>
-                                                )}
-                                            </Button>
-                                        )}
                                     </div>
                                 )}
                             </div>
