@@ -464,109 +464,67 @@
     </div>
     {{/if}}
 
-    <!-- Sezione compatta VISITA MDL (raggruppata per prestazione + categoria) -->
-    {{#if HAS_VISITA_MDL}}
-    <div class="visita-mdl-section">
-        {{#each VISITA_MDL_GROUPS}}
-        <div class="visita-mdl-group">
-            <div class="visita-mdl-group-header">
-                <span class="visita-mdl-group-title">{{prestazioneName}}</span>
-                <span class="visita-mdl-group-badge">{{categorie.length}} categorie</span>
-            </div>
-            <table class="visita-mdl-table">
-                <thead>
-                    <tr>
-                        <th>Categoria Visita</th>
-                        <th class="right">Prezzo</th>
-                        <th class="right">IVA</th>
-                        <th class="right">Frequenza</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {{#each categorie}}
-                    <tr>
-                        <td>{{categoriaLabel}}</td>
-                        <td class="right visita-mdl-prezzo">€ {{prezzoBase}}</td>
-                        <td class="right">{{ivaAliquota}}%</td>
-                        <td class="right">{{frequenzaLabel}}</td>
-                    </tr>
-                    {{/each}}
-                </tbody>
-            </table>
+    <!-- ============ CARD 1 · PRESTAZIONI MEDICINA DEL LAVORO ============ -->
+    {{#if HAS_PRESTAZIONI_MDL}}
+    <div class="visita-mdl-group">
+        <div class="visita-mdl-group-header">
+            <span class="visita-mdl-group-title">Prestazioni Medicina del Lavoro</span>
         </div>
-        {{/each}}
 
-        {{!-- Questionari collegati alle visite MDL --}}
-        {{#if HAS_QUESTIONARI_MDL}}
-        <div class="visita-mdl-group" style="margin-top:10px;">
-            <div class="visita-mdl-group-header" style="background:#e0f2f1;">
-                <span class="visita-mdl-group-title">Questionari MDL</span>
-                <span class="visita-mdl-group-badge">{{QUESTIONARI_MDL_ROWS.length}} questionari</span>
-            </div>
-            <table class="visita-mdl-table">
-                <thead>
-                    <tr>
-                        <th style="width:50%">Questionario</th>
-                        <th class="right">Prezzo</th>
-                        <th class="right">IVA</th>
-                        <th>Freq.</th>
-                        <th>Unità</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {{#each QUESTIONARI_MDL_ROWS}}
-                    <tr>
-                        <td>
-                            <div style="font-weight:600; color:#2d3748;">{{nome}}</div>
-                            {{#if descrizione}}<div style="font-size:7pt; color:#718096; margin-top:2px;">
-                                {{descrizione}}</div>{{/if}}
-                        </td>
-                        <td class="right visita-mdl-prezzo">€ {{prezzoBase}}</td>
-                        <td class="right">{{ivaAliquota}}%</td>
-                        <td style="color:#64748b; font-size:7.5pt;">{{frequenzaAbbr}}</td>
-                        <td style="color:#64748b; font-size:7.5pt;">{{unitaAbbr}}</td>
-                    </tr>
-                    {{/each}}
-                </tbody>
-            </table>
-        </div>
+        {{#if HAS_VISITE_MDL}}
+        <table class="visita-mdl-table">
+            <thead>
+                <tr>
+                    <th>Visita Medica del Lavoro</th>
+                    <th class="right">Prezzo</th>
+                    <th class="right">IVA</th>
+                    <th class="right">Frequenza</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{#each VISITE_MDL_ROWS}}
+                <tr>
+                    <td>{{categoriaLabel}}</td>
+                    <td class="right visita-mdl-prezzo">€ {{prezzoBase}}</td>
+                    <td class="right">{{ivaAliquota}}%</td>
+                    <td class="right">{{frequenzaLabel}}</td>
+                </tr>
+                {{/each}}
+            </tbody>
+        </table>
+        {{/if}}
+
+        {{#if HAS_PRESTAZIONI_MEDICHE}}
+        <table class="visita-mdl-table" style="margin-top:8px;">
+            <thead>
+                <tr>
+                    <th style="width:50%">Prestazione Medica</th>
+                    <th class="right">Prezzo</th>
+                    <th class="right">IVA</th>
+                    <th>Freq.</th>
+                    <th>Unità</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{#each PRESTAZIONI_MEDICHE_ROWS}}
+                <tr>
+                    <td>
+                        <div style="font-weight:600; color:#2d3748;">{{nome}}</div>
+                        {{#if descrizione}}<div style="font-size:7pt; color:#718096; margin-top:2px;">{{descrizione}}</div>{{/if}}
+                    </td>
+                    <td class="right visita-mdl-prezzo">€ {{prezzoBase}}</td>
+                    <td class="right">{{ivaAliquota}}%</td>
+                    <td style="color:#64748b; font-size:7.5pt;">{{frequenzaAbbr}}</td>
+                    <td style="color:#64748b; font-size:7.5pt;">{{unitaAbbr}}</td>
+                </tr>
+                {{/each}}
+            </tbody>
+        </table>
         {{/if}}
     </div>
-    {{else}}{{#if HAS_QUESTIONARI_MDL}}
-    <div class="visita-mdl-section">
-        <h3 style="color:#004d40; margin-bottom:8px;">Questionari MDL</h3>
-        <div class="visita-mdl-group">
-            <table class="visita-mdl-table">
-                <thead>
-                    <tr>
-                        <th style="width:50%">Questionario</th>
-                        <th class="right">Prezzo</th>
-                        <th class="right">IVA</th>
-                        <th>Freq.</th>
-                        <th>Unità</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {{#each QUESTIONARI_MDL_ROWS}}
-                    <tr>
-                        <td>
-                            <div style="font-weight:600; color:#2d3748;">{{nome}}</div>
-                            {{#if descrizione}}<div style="font-size:7pt; color:#718096; margin-top:2px;">
-                                {{descrizione}}</div>{{/if}}
-                        </td>
-                        <td class="right visita-mdl-prezzo">€ {{prezzoBase}}</td>
-                        <td class="right">{{ivaAliquota}}%</td>
-                        <td style="color:#64748b; font-size:7.5pt;">{{frequenzaAbbr}}</td>
-                        <td style="color:#64748b; font-size:7.5pt;">{{unitaAbbr}}</td>
-                    </tr>
-                    {{/each}}
-                </tbody>
-            </table>
-        </div>
-    </div>
-    {{/if}}{{/if}}
+    {{/if}}
 
-    <!-- Consulenza e Sicurezza: consulenza, sopralluogo, nomina in un'unica tabella -->
+    <!-- ============ CARD 2 · CONSULENZA E SICUREZZA (senza colori) ============ -->
     {{#if HAS_CONSULENZA_SICUREZZA}}
     <div class="visita-mdl-group" style="margin-top:10px;">
         <div class="visita-mdl-group-header">
@@ -576,8 +534,8 @@
         <table class="visita-mdl-table">
             <thead>
                 <tr>
-                    <th style="width:30%">Tipo</th>
-                    <th style="width:30%">Descrizione</th>
+                    <th style="width:22%">Tipo</th>
+                    <th style="width:38%">Descrizione</th>
                     <th class="right">Prezzo</th>
                     <th class="right">IVA</th>
                     <th>Freq.</th>
@@ -586,11 +544,10 @@
             <tbody>
                 {{#each CONSULENZA_SICUREZZA_ROWS}}
                 <tr>
-                    <td><span class="badge {{tipoBadgeClass}}" style="font-size:7pt;">{{tipoLabel}}</span></td>
+                    <td style="font-weight:600; color:#2d3748;">{{tipoLabel}}</td>
                     <td>
-                        <div style="font-weight:600; color:#2d3748;">{{nome}}</div>
-                        {{#if descrizione}}<div style="font-size:7pt; color:#718096; margin-top:2px;">{{descrizione}}
-                        </div>{{/if}}
+                        <div style="color:#2d3748;">{{nome}}</div>
+                        {{#if descrizione}}<div style="font-size:7pt; color:#718096; margin-top:2px;">{{descrizione}}</div>{{/if}}
                     </td>
                     <td class="right visita-mdl-prezzo">€ {{prezzoBase}}</td>
                     <td class="right">{{ivaAliquota}}%</td>
@@ -602,44 +559,42 @@
     </div>
     {{/if}}
 
-    <!-- Altre Voci - spese fixed/ricorrenti (stesso stile gruppi) -->
-    {{#if HAS_ALTRE_VOCI}}
-    {{#each ALTRE_VOCI_GROUPS}}
-    <div class="visita-mdl-group">
+    <!-- ============ CARD 3 · SPESE ACCESSORIE ============ -->
+    {{#if HAS_SPESE_ACCESSORIE}}
+    <div class="visita-mdl-group" style="margin-top:10px;">
         <div class="visita-mdl-group-header">
-            <span class="visita-mdl-group-title">{{groupTitle}}</span>
-            <span class="visita-mdl-group-badge">{{groupCount}} voci</span>
+            <span class="visita-mdl-group-title">Spese Accessorie</span>
+            <span class="visita-mdl-group-badge">{{SPESE_ACCESSORIE_ROWS.length}} voci</span>
         </div>
         <table class="visita-mdl-table">
             <thead>
                 <tr>
                     <th style="width:45%">Descrizione</th>
-                    <th style="width:10%" class="right">Prezzo</th>
+                    <th style="width:18%" class="right">Prezzo</th>
                     <th style="width:7%" class="right">IVA</th>
                     <th style="width:12%">Freq.</th>
                     <th style="width:10%">Unità</th>
                 </tr>
             </thead>
             <tbody>
-                {{#each rows}}
+                {{#each SPESE_ACCESSORIE_ROWS}}
                 <tr>
                     <td>
                         <div style="font-weight:600; color:#2d3748;">{{nome}}</div>
-                        {{#if descrizione}}<div style="font-size:7pt; color:#718096; margin-top:2px;">{{descrizione}}
-                        </div>{{/if}}
-                        {{#if usaFasceDipendenti}}
-                        <div class="fasce-container">
-                            <div class="fasce-title">Fasce dipendenti:</div>
-                            {{#each fasceDipendenti}}
-                            <div class="fascia-row">
-                                <span class="fascia-range">{{range}}</span>
-                                <span class="fascia-prezzo">€{{prezzo}}</span>
-                            </div>
-                            {{/each}}
-                        </div>
-                        {{/if}}
+                        {{#if descrizione}}<div style="font-size:7pt; color:#718096; margin-top:2px;">{{descrizione}}</div>{{/if}}
                     </td>
+                    {{#if usaFasceDipendenti}}
+                    <td class="right">
+                        {{#each fasceDipendenti}}
+                        <div style="display:flex; justify-content:space-between; gap:8px; padding:1px 0;">
+                            <span style="color:#64748b;">{{range}}</span>
+                            <span class="fascia-prezzo">€ {{prezzo}}</span>
+                        </div>
+                        {{/each}}
+                    </td>
+                    {{else}}
                     <td class="right visita-mdl-prezzo">€ {{prezzoBase}}</td>
+                    {{/if}}
                     <td class="right" style="color:#64748b;">{{ivaAliquota}}%</td>
                     <td style="color:#64748b; font-size:7.5pt;">{{frequenzaAbbr}}</td>
                     <td style="color:#64748b; font-size:7.5pt;">{{unitaAbbr}}</td>
@@ -648,7 +603,6 @@
             </tbody>
         </table>
     </div>
-    {{/each}}
     {{/if}}
 
     <!-- Note -->

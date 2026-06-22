@@ -296,78 +296,103 @@ const TariffarioAziendaleDetails: React.FC = () => {
                   Nessuna voce presente nel tariffario
                 </p>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-5">
                   {(() => {
-                    // Build VISITA_MDL groups keyed by prestazioneId
-                    const vmlGroups = new Map<string, VoceTariffario[]>();
-                    const seenVMLGroups = new Set<string>();
-                    // Build DVR group (all DVR_* tipo voci)
-                    const dvrVoci: VoceTariffario[] = [];
-                    let dvrGroupSeen = false;
+                    // Categorie allineate all'ordine delle card del PDF:
+                    // 1) Prestazioni MDL  2) Consulenza e Sicurezza  3) Spese Accessorie
+                    const CATS: { key: string; title: string; tipi: string[] }[] = [
+                      { key: 'mdl', title: 'Prestazioni Medicina del Lavoro', tipi: ['PRESTAZIONE', 'QUESTIONARIO'] },
+                      {
+                        key: 'sic', title: 'Consulenza e Sicurezza',
+                        tipi: ['CONSULENZA', 'NOMINA_MC', 'NOMINA_RSPP', 'SOPRALLUOGO_MC', 'SOPRALLUOGO_RSPP',
+                          'DVR_NUOVO', 'DVR_AGGIORNAMENTO_CON_MODIFICHE', 'DVR_AGGIORNAMENTO_SENZA_MODIFICHE'],
+                      },
+                      { key: 'spese', title: 'Spese Accessorie', tipi: ['SPESA_FISSA', 'SPESA_RICORRENTE', 'USCITA_MC'] },
+                    ];
+                    const catOf = (t: string) => CATS.find(c => c.tipi.includes(t))?.key || 'spese';
 
-                    voci.forEach(voce => {
-                      if (
-                        voce.tipo === 'PRESTAZIONE' &&
-                        voce.categoriaVisita &&
-                        voce.prestazione?.tipo === 'VISITA_MEDICINA_LAVORO' &&
-                        voce.prestazioneId
-                      ) {
-                        if (!vmlGroups.has(voce.prestazioneId)) vmlGroups.set(voce.prestazioneId, []);
-                        vmlGroups.get(voce.prestazioneId)!.push(voce);
-                      }
-                      if (voce.tipo.startsWith('DVR_')) {
-                        dvrVoci.push(voce);
-                      }
-                    });
+                    // Rende una lista di voci applicando il raggruppamento VML + DVR
+                    const renderVociList = (list: VoceTariffario[]) => {
+                      const vmlGroups = new Map<string, VoceTariffario[]>();
+                      const seenVMLGroups = new Set<string>();
+                      const dvrVoci: VoceTariffario[] = [];
+                      let dvrGroupSeen = false;
 
-                    return voci.flatMap(voce => {
-                      // DVR group
-                      if (voce.tipo.startsWith('DVR_')) {
-                        if (dvrGroupSeen) return [];
-                        dvrGroupSeen = true;
+                      list.forEach(voce => {
+                        if (
+                          voce.tipo === 'PRESTAZIONE' &&
+                          voce.categoriaVisita &&
+                          voce.prestazione?.tipo === 'VISITA_MEDICINA_LAVORO' &&
+                          voce.prestazioneId
+                        ) {
+                          if (!vmlGroups.has(voce.prestazioneId)) vmlGroups.set(voce.prestazioneId, []);
+                          vmlGroups.get(voce.prestazioneId)!.push(voce);
+                        }
+                        if (voce.tipo.startsWith('DVR_')) dvrVoci.push(voce);
+                      });
+
+                      return list.flatMap(voce => {
+                        if (voce.tipo.startsWith('DVR_')) {
+                          if (dvrGroupSeen) return [];
+                          dvrGroupSeen = true;
+                          return [
+                            <DVRGroupDetailCard
+                              key="dvr-group"
+                              groupVoci={dvrVoci}
+                              expanded={expandedVoci.has('dvr-group')}
+                              onToggle={() => toggleVoce('dvr-group')}
+                              onIvaChange={handleIvaChange}
+                            />
+                          ];
+                        }
+
+                        const isVisitaMDL =
+                          voce.tipo === 'PRESTAZIONE' &&
+                          !!voce.categoriaVisita &&
+                          voce.prestazione?.tipo === 'VISITA_MEDICINA_LAVORO';
+
+                        if (isVisitaMDL && voce.prestazioneId) {
+                          if (seenVMLGroups.has(voce.prestazioneId)) return [];
+                          seenVMLGroups.add(voce.prestazioneId);
+                          const group = vmlGroups.get(voce.prestazioneId)!;
+                          return [
+                            <VisitaMDLGroupDetailCard
+                              key={`group-${voce.prestazioneId}`}
+                              groupKey={voce.prestazioneId}
+                              prestazioneName={voce.prestazione?.nome || 'Visita Medica del Lavoro'}
+                              groupVoci={group}
+                              expanded={expandedVoci.has(`group-${voce.prestazioneId}`)}
+                              onToggle={() => toggleVoce(`group-${voce.prestazioneId}`)}
+                              onIvaChange={handleIvaChange}
+                            />
+                          ];
+                        }
+
                         return [
-                          <DVRGroupDetailCard
-                            key="dvr-group"
-                            groupVoci={dvrVoci}
-                            expanded={expandedVoci.has('dvr-group')}
-                            onToggle={() => toggleVoce('dvr-group')}
+                          <VoceDetailCard
+                            key={voce.id}
+                            voce={voce}
+                            expanded={expandedVoci.has(voce.id)}
+                            onToggle={() => toggleVoce(voce.id)}
                             onIvaChange={handleIvaChange}
                           />
                         ];
-                      }
+                      });
+                    };
 
-                      // VML group
-                      const isVisitaMDL =
-                        voce.tipo === 'PRESTAZIONE' &&
-                        !!voce.categoriaVisita &&
-                        voce.prestazione?.tipo === 'VISITA_MEDICINA_LAVORO';
-
-                      if (isVisitaMDL && voce.prestazioneId) {
-                        if (seenVMLGroups.has(voce.prestazioneId)) return [];
-                        seenVMLGroups.add(voce.prestazioneId);
-                        const group = vmlGroups.get(voce.prestazioneId)!;
-                        return [
-                          <VisitaMDLGroupDetailCard
-                            key={`group-${voce.prestazioneId}`}
-                            groupKey={voce.prestazioneId}
-                            prestazioneName={voce.prestazione?.nome || 'Visita Medica del Lavoro'}
-                            groupVoci={group}
-                            expanded={expandedVoci.has(`group-${voce.prestazioneId}`)}
-                            onToggle={() => toggleVoce(`group-${voce.prestazioneId}`)}
-                            onIvaChange={handleIvaChange}
-                          />
-                        ];
-                      }
-
-                      return [
-                        <VoceDetailCard
-                          key={voce.id}
-                          voce={voce}
-                          expanded={expandedVoci.has(voce.id)}
-                          onToggle={() => toggleVoce(voce.id)}
-                          onIvaChange={handleIvaChange}
-                        />
-                      ];
+                    return CATS.map(cat => {
+                      const catVoci = voci.filter(v => catOf(v.tipo) === cat.key);
+                      if (catVoci.length === 0) return null;
+                      return (
+                        <div key={cat.key} className="space-y-2">
+                          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                            <span>{cat.title}</span>
+                            <span className="text-gray-300 dark:text-gray-600">·</span>
+                            <span>{catVoci.length}</span>
+                          </div>
+                          {renderVociList(catVoci)}
+                        </div>
+                      );
                     });
                   })()}
                 </div>

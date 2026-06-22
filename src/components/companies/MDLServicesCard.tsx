@@ -2317,15 +2317,16 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
                                     value={newUscitaMC.voceTariffarioId}
                                     onChange={(v) => setNewUscitaMC(p => ({ ...p, voceTariffarioId: v }))}
                                     options={[
-                                        { value: '', label: 'Uscita Medico Competente (standard)' },
+                                        { value: '', label: 'Uscita Medico Competente (standard)', group: 'Uscita medico competente' },
                                         ...vociUnaTantum.map(v => ({
                                             value: v.id,
-                                            label: `${v.nome || v.tipo}${v.prezzoBase != null ? ` — € ${Number(v.prezzoBase).toFixed(2)}` : ''}`
+                                            label: `${v.nome || v.tipo}${v.prezzoBase != null ? ` — € ${Number(v.prezzoBase).toFixed(2)}` : ''}`,
+                                            group: 'Spesa una tantum'
                                         }))
                                     ]}
                                 />
                                 <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-                                    Voci "Una tantum" del tariffario aziendale in vigore. Lascia "standard" per l'uscita MC.
+                                    Scegli "Uscita Medico Competente" oppure una "Spesa una tantum" del tariffario in vigore da rendicontare.
                                 </p>
                             </div>
 

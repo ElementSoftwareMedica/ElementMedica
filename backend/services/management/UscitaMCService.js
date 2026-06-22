@@ -71,7 +71,7 @@ const UscitaMCService = {
                 stato: { notIn: ['REVOCATA', 'SCADUTA'] }
             },
             include: {
-                persona: { select: { id: true, firstName: true, lastName: true, gender: true } }
+                person: { select: { id: true, firstName: true, lastName: true, gender: true } }
             },
             orderBy: [
                 { tipoRuolo: 'asc' },
@@ -80,12 +80,12 @@ const UscitaMCService = {
         });
 
         return nomine
-            .filter(n => n.persona)
+            .filter(n => n.person)
             .map(n => ({
-                id: n.persona.id,
-                firstName: n.persona.firstName,
-                lastName: n.persona.lastName,
-                gender: n.persona.gender,
+                id: n.person.id,
+                firstName: n.person.firstName,
+                lastName: n.person.lastName,
+                gender: n.person.gender,
                 tipoRuolo: n.tipoRuolo,
                 isPrimario: n.tipoRuolo === 'MEDICO_COMPETENTE'
             }));
@@ -112,9 +112,10 @@ const UscitaMCService = {
         if (!assoc) return [];
 
         return (assoc.tariffario?.voci || [])
-            // Solo voci "Una tantum"; la voce USCITA_MC è già rappresentata
+            // Spese "una tantum": le SPESA_FISSA (Spesa Una Tantum) e qualunque voce
+            // con frequenza UNA_TANTUM. La voce USCITA_MC è già rappresentata
             // dall'opzione "standard" nel modal, quindi va esclusa dall'elenco.
-            .filter(v => v.frequenza === 'UNA_TANTUM' && v.tipo !== 'USCITA_MC')
+            .filter(v => (v.tipo === 'SPESA_FISSA' || v.frequenza === 'UNA_TANTUM') && v.tipo !== 'USCITA_MC')
             .map(v => ({
                 id: v.id,
                 tipo: v.tipo,

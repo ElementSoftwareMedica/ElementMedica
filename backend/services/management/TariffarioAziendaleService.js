@@ -156,6 +156,24 @@ const UNITA_ABBR = {
     PER_VISITA: '/vis'
 };
 
+// P59: Tipi voce che supportano il compenso professionista (medico/MC/RSPP).
+// DEVE restare allineato con TIPI_VOCE_CON_COMPENSO nel frontend
+// (src/services/tariffarioAziendaleApi.ts): PRESTAZIONE, QUESTIONARIO e USCITA_MC
+// prevedono il compenso al medico competente che va persistito su create/update.
+const TIPI_VOCE_CON_COMPENSO = [
+    'PRESTAZIONE',
+    'QUESTIONARIO',
+    'SOPRALLUOGO_MC',
+    'SOPRALLUOGO_RSPP',
+    'DVR_NUOVO',
+    'DVR_AGGIORNAMENTO_CON_MODIFICHE',
+    'DVR_AGGIORNAMENTO_SENZA_MODIFICHE',
+    'NOMINA_MC',
+    'NOMINA_RSPP',
+    'CONSULENZA',
+    'USCITA_MC',
+];
+
 // CSS class per badge tipo
 const TIPO_BADGE_CLASSES = {
     PRESTAZIONE: 'tipo-prestazione',
@@ -1125,7 +1143,7 @@ const TariffarioAziendaleService = {
         });
 
         // P59: Determina se è un tipo che supporta compenso professionista
-        const tipiConCompenso = ['SOPRALLUOGO_MC', 'SOPRALLUOGO_RSPP', 'DVR_NUOVO', 'DVR_AGGIORNAMENTO_CON_MODIFICHE', 'DVR_AGGIORNAMENTO_SENZA_MODIFICHE', 'NOMINA_MC', 'NOMINA_RSPP', 'CONSULENZA'];
+        const tipiConCompenso = TIPI_VOCE_CON_COMPENSO;
         const supportsCompenso = tipiConCompenso.includes(tipo);
 
         const voce = await prisma.voceTariffario.create({
@@ -1197,7 +1215,7 @@ const TariffarioAziendaleService = {
         });
         let ordineStart = (maxOrdine._max.ordine || 0) + 1;
 
-        const tipiConCompenso = ['SOPRALLUOGO_MC', 'SOPRALLUOGO_RSPP', 'DVR_NUOVO', 'DVR_AGGIORNAMENTO_CON_MODIFICHE', 'DVR_AGGIORNAMENTO_SENZA_MODIFICHE', 'NOMINA_MC', 'NOMINA_RSPP', 'CONSULENZA'];
+        const tipiConCompenso = TIPI_VOCE_CON_COMPENSO;
 
         const createPromises = vociData.map((data, idx) => {
             const {
@@ -1283,7 +1301,7 @@ const TariffarioAziendaleService = {
         }
 
         // P59: Determina se è un tipo che supporta compenso professionista
-        const tipiConCompenso = ['SOPRALLUOGO_MC', 'SOPRALLUOGO_RSPP', 'DVR_NUOVO', 'DVR_AGGIORNAMENTO_CON_MODIFICHE', 'DVR_AGGIORNAMENTO_SENZA_MODIFICHE', 'NOMINA_MC', 'NOMINA_RSPP', 'CONSULENZA'];
+        const tipiConCompenso = TIPI_VOCE_CON_COMPENSO;
         const supportsCompenso = tipiConCompenso.includes(voce.tipo);
 
         const updated = await prisma.voceTariffario.update({
@@ -1717,47 +1735,101 @@ const TariffarioAziendaleService = {
         // Prepara i dati per il template
         const vociRaw = tariffario.voci || [];
 
-        // P65: Raggruppa le voci VISITA_MDL (tipo=PRESTAZIONE + categoriaVisita) per prestazione
-        const mdlGroupsMap = new Map();
-        vociRaw.forEach(voce => {
-            if (voce.tipo === 'PRESTAZIONE' && voce.categoriaVisita && voce.prestazioneId) {
-                if (!mdlGroupsMap.has(voce.prestazioneId)) {
-                    mdlGroupsMap.set(voce.prestazioneId, {
-                        prestazioneId: voce.prestazioneId,
-                        prestazioneName: voce.prestazione?.nome || voce.nome || 'Visita MDL',
-                        categorie: []
+        // Helper: mappa una voce generica in una riga PDF (preserva l'ordine `ordine`)
+        const mapVoceRow = (voce, index = 0) => ({
+            ordine: voce.ordine ?? index,
+            nome: voce.nome || voce.prestazione?.nome || voce.documentoTemplate?.nome || 'Voce senza nome',
+            descrizione: voce.descrizione || '',
+            prezzoBase: Number(voce.prezzoBase).toFixed(2),
+            ivaAliquota: Number(voce.ivaAliquota).toFixed(0),
+            frequenzaAbbr: FREQUENZA_ABBR[voce.frequenza] || voce.frequenza || '-',
+            frequenzaLabel: FREQUENZA_LABELS[voce.frequenza] || voce.frequenza || '-',
+            unitaAbbr: UNITA_ABBR[voce.unitaCalcolo] || voce.unitaCalcolo || '-',
+            usaFasceDipendenti: voce.usaFasceDipendenti,
+            fasceDipendenti: (voce.fasceDipendenti || []).map(f => ({
+                range: f.maxDipendenti ? `${f.minDipendenti}-${f.maxDipendenti}` : `${f.minDipendenti}+`,
+                prezzo: Number(f.prezzo).toFixed(2),
+                descrizione: f.descrizione
+            }))
+        });
+
+        // ── CARD 1 · PRESTAZIONI MEDICINA DEL LAVORO ──────────────────────────
+        // 1a) Visite MDL: tutte le tipologie con lo STESSO prezzo accorpate in una riga
+        const VISITE_MDL_ROWS = (() => {
+            const visiteVoci = vociRaw.filter(v => v.tipo === 'PRESTAZIONE' && v.categoriaVisita && v.prestazioneId);
+            if (!visiteVoci.length) return [];
+            const ordered = [...visiteVoci].sort((a, b) =>
+                (VISITA_MDL_CATEGORIES_ORDER.indexOf(a.categoriaVisita) - VISITA_MDL_CATEGORIES_ORDER.indexOf(b.categoriaVisita))
+            );
+            const priceMap = new Map(); // key "prezzo|iva|freq" → riga accorpata
+            for (const v of ordered) {
+                const prezzo = Number(v.prezzoBase).toFixed(2);
+                const iva = Number(v.ivaAliquota).toFixed(0);
+                const key = `${prezzo}|${iva}|${v.frequenza}`;
+                if (!priceMap.has(key)) {
+                    priceMap.set(key, {
+                        labels: [],
+                        prezzoBase: prezzo,
+                        ivaAliquota: iva,
+                        frequenzaLabel: FREQUENZA_LABELS[v.frequenza] || v.frequenza || '-'
                     });
                 }
-                mdlGroupsMap.get(voce.prestazioneId).categorie.push({
-                    categoriaVisita: voce.categoriaVisita,
-                    categoriaLabel: CATEGORIA_VISITA_LABELS[voce.categoriaVisita] || voce.categoriaVisita,
+                priceMap.get(key).labels.push(CATEGORIA_VISITA_LABELS[v.categoriaVisita] || v.categoriaVisita);
+            }
+            return [...priceMap.values()].map(r => ({
+                categoriaLabel: r.labels.join(' / '),
+                prezzoBase: r.prezzoBase,
+                ivaAliquota: r.ivaAliquota,
+                frequenzaLabel: r.frequenzaLabel
+            }));
+        })();
+
+        // 1b) Prestazioni mediche: PRESTAZIONE senza categoria visita (ECG, spirometria, ...)
+        //     + Questionari MDL, trattati come prestazioni mediche nella STESSA sezione
+        //     (nessun sotto-titolo separato). Ordine = ordine voci nel tariffario.
+        const PRESTAZIONI_MEDICHE_ROWS = vociRaw
+            .filter(v =>
+                (v.tipo === 'PRESTAZIONE' && !(v.categoriaVisita && v.prestazioneId)) ||
+                v.tipo === 'QUESTIONARIO'
+            )
+            .map(mapVoceRow);
+
+        const HAS_PRESTAZIONI_MDL = VISITE_MDL_ROWS.length > 0
+            || PRESTAZIONI_MEDICHE_ROWS.length > 0;
+
+        // ── CARD 2 · CONSULENZA E SICUREZZA ───────────────────────────────────
+        const DVR_DESCRIZIONE = {
+            DVR_NUOVO: 'Nuovo DVR',
+            DVR_AGGIORNAMENTO_CON_MODIFICHE: 'Aggiornamento con modifiche maggiori',
+            DVR_AGGIORNAMENTO_SENZA_MODIFICHE: 'Aggiornamento senza modifiche maggiori',
+        };
+        const isDvr = (t) => t === 'DVR_NUOVO'
+            || t === 'DVR_AGGIORNAMENTO_CON_MODIFICHE'
+            || t === 'DVR_AGGIORNAMENTO_SENZA_MODIFICHE';
+        const CONSULENZA_SICUREZZA_ROWS = (() => {
+            const ORDER = ['CONSULENZA', 'NOMINA_MC', 'NOMINA_RSPP', 'SOPRALLUOGO_MC', 'SOPRALLUOGO_RSPP',
+                'DVR_NUOVO', 'DVR_AGGIORNAMENTO_CON_MODIFICHE', 'DVR_AGGIORNAMENTO_SENZA_MODIFICHE'];
+            return vociRaw
+                .filter(v => ORDER.includes(v.tipo))
+                .sort((a, b) => (ORDER.indexOf(a.tipo) - ORDER.indexOf(b.tipo)) || ((a.ordine || 0) - (b.ordine || 0)))
+                .map((voce, index) => ({
+                    ordine: voce.ordine || index + 1,
+                    // DVR: colonna "Tipo" = "DVR", la distinzione finisce nella descrizione
+                    tipoLabel: isDvr(voce.tipo) ? 'DVR' : (TIPO_VOCE_LABELS[voce.tipo] || voce.tipo),
+                    nome: isDvr(voce.tipo) ? DVR_DESCRIZIONE[voce.tipo] : (voce.nome || 'Servizio'),
+                    descrizione: isDvr(voce.tipo) ? '' : (voce.descrizione || ''),
                     prezzoBase: Number(voce.prezzoBase).toFixed(2),
                     ivaAliquota: Number(voce.ivaAliquota).toFixed(0),
-                    frequenzaLabel: FREQUENZA_LABELS[voce.frequenza] || voce.frequenza || '-'
-                });
-            }
-        });
-        const VISITA_MDL_GROUPS = Array.from(mdlGroupsMap.values()).map(group => {
-            // Sort by canonical order
-            const orderedCategorie = VISITA_MDL_CATEGORIES_ORDER
-                .filter(cat => group.categorie.some(c => c.categoriaVisita === cat))
-                .map(cat => group.categorie.find(c => c.categoriaVisita === cat));
+                    frequenzaAbbr: FREQUENZA_ABBR[voce.frequenza] || voce.frequenza || '-',
+                }));
+        })();
+        const HAS_CONSULENZA_SICUREZZA = CONSULENZA_SICUREZZA_ROWS.length > 0;
 
-            // Raggruppa categorie con lo stesso prezzo/iva/frequenza usando " / " come separatore
-            const merged = [];
-            const priceMap = new Map(); // key: "prezzo|iva|freq" → indice in merged
-            for (const c of orderedCategorie) {
-                const key = `${c.prezzoBase}|${c.ivaAliquota}|${c.frequenzaLabel}`;
-                if (priceMap.has(key)) {
-                    merged[priceMap.get(key)].categoriaLabel += ' / ' + c.categoriaLabel;
-                } else {
-                    priceMap.set(key, merged.length);
-                    merged.push({ ...c });
-                }
-            }
-            return { ...group, categorie: merged };
-        });
-        const hasVisitaMDL = VISITA_MDL_GROUPS.length > 0;
+        // ── CARD 3 · SPESE ACCESSORIE (una tantum, ricorrenti, uscite MC) ─────
+        const SPESE_ACCESSORIE_ROWS = vociRaw
+            .filter(v => ['SPESA_FISSA', 'SPESA_RICORRENTE', 'USCITA_MC'].includes(v.tipo))
+            .map(mapVoceRow);
+        const HAS_SPESE_ACCESSORIE = SPESE_ACCESSORIE_ROWS.length > 0;
 
         const templateData = {
             TARIFFARIO_CODICE: tariffario.codice,
@@ -1776,110 +1848,19 @@ const TariffarioAziendaleService = {
             DATA_GENERAZIONE: new Date().toLocaleDateString('it-IT', {
                 year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
             }),
-            HAS_VISITA_MDL: hasVisitaMDL,
-            VISITA_MDL_GROUPS: VISITA_MDL_GROUPS,
-            // Questionari MDL: mostrati dopo le visite MDL nel PDF
-            QUESTIONARI_MDL_ROWS: (() => {
-                return vociRaw
-                    .filter(v => v.tipo === 'QUESTIONARIO')
-                    .map((voce, index) => ({
-                        ordine: voce.ordine || index + 1,
-                        nome: voce.documentoTemplate?.nome || voce.nome || 'Questionario',
-                        descrizione: voce.descrizione,
-                        frequenzaAbbr: FREQUENZA_ABBR[voce.frequenza] || voce.frequenza || '-',
-                        unitaAbbr: UNITA_ABBR[voce.unitaCalcolo] || voce.unitaCalcolo || '-',
-                        prezzoBase: Number(voce.prezzoBase).toFixed(2),
-                        ivaAliquota: Number(voce.ivaAliquota).toFixed(0),
-                    }));
-            })(),
-            HAS_QUESTIONARI_MDL: vociRaw.some(v => v.tipo === 'QUESTIONARIO'),
-            // Consulenza e Sicurezza: consulenza + sopralluogo + nomina + DVR in un'unica tabella
-            CONSULENZA_SICUREZZA_ROWS: (() => {
-                const CONSULENZA_TYPES = [
-                    'CONSULENZA', 'NOMINA_MC', 'NOMINA_RSPP',
-                    'SOPRALLUOGO_MC', 'SOPRALLUOGO_RSPP',
-                    'DVR_NUOVO', 'DVR_AGGIORNAMENTO_CON_MODIFICHE', 'DVR_AGGIORNAMENTO_SENZA_MODIFICHE'
-                ];
-                const ORDER = [
-                    'CONSULENZA', 'NOMINA_MC', 'NOMINA_RSPP', 'SOPRALLUOGO_MC', 'SOPRALLUOGO_RSPP',
-                    'DVR_NUOVO', 'DVR_AGGIORNAMENTO_CON_MODIFICHE', 'DVR_AGGIORNAMENTO_SENZA_MODIFICHE'
-                ];
-                return vociRaw
-                    .filter(v => CONSULENZA_TYPES.includes(v.tipo))
-                    .sort((a, b) => (ORDER.indexOf(a.tipo) - ORDER.indexOf(b.tipo)) || (a.ordine || 0) - (b.ordine || 0))
-                    .map((voce, index) => ({
-                        ordine: voce.ordine || index + 1,
-                        nome: voce.nome || 'Servizio',
-                        tipoLabel: TIPO_VOCE_LABELS[voce.tipo] || voce.tipo,
-                        tipoBadgeClass: TIPO_BADGE_CLASSES[voce.tipo] || 'tipo-prestazione',
-                        descrizione: voce.descrizione,
-                        frequenzaAbbr: FREQUENZA_ABBR[voce.frequenza] || voce.frequenza || '-',
-                        unitaAbbr: UNITA_ABBR[voce.unitaCalcolo] || voce.unitaCalcolo || '-',
-                        prezzoBase: Number(voce.prezzoBase).toFixed(2),
-                        ivaAliquota: Number(voce.ivaAliquota).toFixed(0),
-                    }));
-            })(),
-            HAS_CONSULENZA_SICUREZZA: vociRaw.some(v =>
-                ['CONSULENZA', 'SOPRALLUOGO_MC', 'SOPRALLUOGO_RSPP', 'NOMINA_MC', 'NOMINA_RSPP',
-                    'DVR_NUOVO', 'DVR_AGGIORNAMENTO_CON_MODIFICHE', 'DVR_AGGIORNAMENTO_SENZA_MODIFICHE'].includes(v.tipo)
-            ),
-            // Voci NON-MDL rimanenti raggruppate per tipo (spese)
-            ALTRE_VOCI_GROUPS: (() => {
-                const EXCLUDED = ['PRESTAZIONE', 'QUESTIONARIO', 'CONSULENZA',
-                    'SOPRALLUOGO_MC', 'SOPRALLUOGO_RSPP', 'NOMINA_MC', 'NOMINA_RSPP',
-                    'DVR_NUOVO', 'DVR_AGGIORNAMENTO_CON_MODIFICHE', 'DVR_AGGIORNAMENTO_SENZA_MODIFICHE'];
-                const nonMDL = vociRaw.filter(voce =>
-                    !(voce.tipo === 'PRESTAZIONE' && voce.categoriaVisita && voce.prestazioneId) &&
-                    !EXCLUDED.includes(voce.tipo)
-                );
-                // Includi anche PRESTAZIONE senza categoriaVisita
-                const nonMDLwithPrestazione = vociRaw.filter(voce =>
-                    voce.tipo === 'PRESTAZIONE' && !(voce.categoriaVisita && voce.prestazioneId)
-                );
-                const all = [...nonMDLwithPrestazione, ...nonMDL];
-                if (all.length === 0) return [];
-                const tipoOrder = ['PRESTAZIONE', 'SPESA_FISSA', 'SPESA_RICORRENTE'];
-                const grouped = new Map();
-                all.forEach((voce, index) => {
-                    const tipo = voce.tipo;
-                    if (!grouped.has(tipo)) grouped.set(tipo, []);
-                    grouped.get(tipo).push({
-                        ordine: voce.ordine || index + 1,
-                        nome: voce.nome || voce.prestazione?.nome || voce.documentoTemplate?.nome || 'Voce senza nome',
-                        descrizione: voce.descrizione,
-                        tipoAbbr: TIPO_VOCE_ABBR[tipo] || tipo,
-                        tipoBadgeClass: TIPO_BADGE_CLASSES[tipo] || 'tipo-prestazione',
-                        frequenzaAbbr: FREQUENZA_ABBR[voce.frequenza] || voce.frequenza || '-',
-                        unitaAbbr: UNITA_ABBR[voce.unitaCalcolo] || voce.unitaCalcolo || '-',
-                        prezzoBase: Number(voce.prezzoBase).toFixed(2),
-                        ivaAliquota: Number(voce.ivaAliquota).toFixed(0),
-                        usaFasceDipendenti: voce.usaFasceDipendenti,
-                        fasceDipendenti: (voce.fasceDipendenti || []).map(f => ({
-                            range: f.maxDipendenti ? `${f.minDipendenti}-${f.maxDipendenti}` : `${f.minDipendenti}+`,
-                            prezzo: Number(f.prezzo).toFixed(2),
-                            descrizione: f.descrizione
-                        }))
-                    });
-                });
-                return tipoOrder
-                    .filter(tipo => grouped.has(tipo))
-                    .map(tipo => ({
-                        groupTitle: TIPO_VOCE_LABELS[tipo] || tipo,
-                        groupCount: grouped.get(tipo).length,
-                        rows: grouped.get(tipo)
-                    }));
-            })(),
-            HAS_ALTRE_VOCI: vociRaw.some(v => {
-                const EXCLUDED = ['QUESTIONARIO', 'CONSULENZA', 'SOPRALLUOGO_MC', 'SOPRALLUOGO_RSPP', 'NOMINA_MC', 'NOMINA_RSPP',
-                    'DVR_NUOVO', 'DVR_AGGIORNAMENTO_CON_MODIFICHE', 'DVR_AGGIORNAMENTO_SENZA_MODIFICHE'];
-                return !(v.tipo === 'PRESTAZIONE' && v.categoriaVisita && v.prestazioneId) && !EXCLUDED.includes(v.tipo);
-            }),
+            // CARD 1 · Prestazioni Medicina del Lavoro (visite + prestazioni + questionari)
+            HAS_PRESTAZIONI_MDL,
+            VISITE_MDL_ROWS,
+            HAS_VISITE_MDL: VISITE_MDL_ROWS.length > 0,
+            PRESTAZIONI_MEDICHE_ROWS,
+            HAS_PRESTAZIONI_MEDICHE: PRESTAZIONI_MEDICHE_ROWS.length > 0,
+            // CARD 2 · Consulenza e Sicurezza
+            HAS_CONSULENZA_SICUREZZA,
+            CONSULENZA_SICUREZZA_ROWS,
+            // CARD 3 · Spese Accessorie (una tantum, ricorrenti, uscite MC)
+            HAS_SPESE_ACCESSORIE,
+            SPESE_ACCESSORIE_ROWS,
             TOTALE_VOCI: vociRaw.length,
-            TOTALE_PRESTAZIONI: vociRaw.filter(v => v.tipo === 'PRESTAZIONE').length,
-            TOTALE_SPESE: vociRaw.filter(v =>
-                ['SPESA_FISSA', 'SPESA_RICORRENTE', 'SOPRALLUOGO_MC', 'SOPRALLUOGO_RSPP',
-                    'DVR_NUOVO', 'DVR_AGGIORNAMENTO_CON_MODIFICHE', 'DVR_AGGIORNAMENTO_SENZA_MODIFICHE', 'NOMINA_MC', 'NOMINA_RSPP'].includes(v.tipo)
-            ).length
         };
 
         // P59: Carica e compila il template usando __dirname per percorso affidabile
@@ -1905,7 +1886,13 @@ const TariffarioAziendaleService = {
             margin: { top: '10mm', right: '10mm', bottom: '10mm', left: '10mm' }
         });
 
-        const filename = `tariffario_${tariffario.codice}_${new Date().toISOString().split('T')[0]}.pdf`;
+        // Nome file = nome del tariffario (sanitizzato), con fallback al codice
+        const safeNome = (tariffario.nome || tariffario.codice || 'tariffario')
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // rimuove accenti
+            .replace(/[^a-zA-Z0-9]+/g, '_')                   // spazi/simboli → _
+            .replace(/^_+|_+$/g, '')                          // trim _
+            .slice(0, 80) || 'tariffario';
+        const filename = `${safeNome}.pdf`;
 
         logger.info({
             tariffarioId: id,

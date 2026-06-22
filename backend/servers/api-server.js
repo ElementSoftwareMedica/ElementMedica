@@ -161,6 +161,7 @@ import SlotDisponibilitaService from '../services/clinical/SlotDisponibilitaServ
 import DefaultTemplateService from '../services/templates/DefaultTemplateService.js';
 // P97: Fatturazione Elettronica — SDI polling scheduler
 import { startSdiPolling } from '../services/billing/SdiPollingScheduler.js';
+import { startPeriodicBilling } from '../services/billing/PeriodicBillingScheduler.js';
 // P66: MDL Giudizi EOD email notifications
 import GiudizioEmailService from '../services/clinical/GiudizioEmailService.js';
 import IdoneityNotificationService from '../services/clinical/IdoneityNotificationService.js';
@@ -1307,6 +1308,11 @@ class APIServer {
           // Aggiorna lo stato delle fatture "In attesa SDI" ogni 30 minuti
           // (fallback al webhook AcubeAPI in caso di mancante/fallita notifica)
           startSdiPolling(cron);
+
+          // P46: MDL — Generazione mensile automatica dei movimenti contabili periodici
+          // (spese fisse/ricorrenti del tariffario aziendale) per tutte le aziende.
+          // 1° del mese, 03:00 Europe/Rome — orario di basso carico. Idempotente per periodo.
+          startPeriodicBilling(cron);
 
           // P66/P71: MDL — Nightly EOD Giudizi Idoneità notifications + ZIP aziende (22:00 Italy time)
           cron.schedule('0 22 * * *', async () => {

@@ -6,6 +6,8 @@ export interface ElegantSelectOption {
   value: string;
   label: string;
   disabled?: boolean;
+  /** Etichetta di categoria: opzioni con lo stesso `group` vengono raccolte sotto un'intestazione */
+  group?: string;
 }
 
 interface ElegantSelectProps {
@@ -40,11 +42,38 @@ export const ElegantSelect: React.FC<ElegantSelectProps> = ({
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>
-        {options.map(option => (
-          <SelectItem key={option.value || '__empty'} value={option.value}>
-            {option.label}
-          </SelectItem>
-        ))}
+        {options.some(o => o.group) ? (
+          // Render raggruppato: intestazione di categoria + opzioni
+          (() => {
+            const groups: { name: string; items: ElegantSelectOption[] }[] = [];
+            for (const o of options) {
+              const g = o.group || '';
+              let bucket = groups.find(x => x.name === g);
+              if (!bucket) { bucket = { name: g, items: [] }; groups.push(bucket); }
+              bucket.items.push(o);
+            }
+            return groups.map((grp, gi) => (
+              <React.Fragment key={grp.name || `__g${gi}`}>
+                {grp.name && (
+                  <div className="px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                    {grp.name}
+                  </div>
+                )}
+                {grp.items.map(option => (
+                  <SelectItem key={option.value || '__empty'} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </React.Fragment>
+            ));
+          })()
+        ) : (
+          options.map(option => (
+            <SelectItem key={option.value || '__empty'} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))
+        )}
       </SelectContent>
     </Select>
   </div>

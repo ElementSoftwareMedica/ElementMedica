@@ -614,6 +614,51 @@ function calcolaScadenzeElapsed(anchorDate, frequenza) {
     return scadenze;
 }
 
+/**
+ * Calcola la fine del periodo di ricorrenza a partire da una scadenza.
+ * UNA_TANTUM → null (nessuna fine periodo: la voce vale "a vita").
+ *
+ * @param {Date} scadenza  Inizio del periodo
+ * @param {string} frequenza FrequenzaTariffario enum
+ * @returns {Date|null}
+ */
+function _finePeriodo(scadenza, frequenza) {
+    const mesiMap = { MENSILE: 1, TRIMESTRALE: 3, SEMESTRALE: 6, ANNUALE: 12 };
+    const mesi = mesiMap[frequenza];
+    if (!mesi) return null; // UNA_TANTUM / non periodica
+    const d = new Date(scadenza);
+    d.setMonth(d.getMonth() + mesi);
+    return d;
+}
+
+/**
+ * Conta i dipendenti che risultano in forza in QUALSIASI momento del periodo
+ * [periodoInizio, periodoFine]. Include sia gli assunti durante il periodo sia
+ * i cessati durante il periodo (purché il rapporto si sovrapponga al periodo).
+ *
+ * Regola sovrapposizione: assunto entro la fine periodo AND non cessato prima dell'inizio.
+ * I record privi di date (legacy) vengono conteggiati per non sotto-fatturare.
+ *
+ * @param {string} companyTenantProfileId
+ * @param {string} tenantId
+ * @param {Date} periodoInizio
+ * @param {Date} periodoFine
+ * @returns {Promise<number>}
+ */
+async function _contaDipendentiPeriodo(companyTenantProfileId, tenantId, periodoInizio, periodoFine) {
+    return prisma.personTenantProfile.count({
+        where: {
+            companyTenantProfileId,
+            tenantId,
+            deletedAt: null,
+            AND: [
+                { OR: [{ hiredDate: null }, { hiredDate: { lte: periodoFine } }] },
+                { OR: [{ endDate: null }, { endDate: { gte: periodoInizio } }] },
+            ],
+        },
+    });
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // PUBLIC API
 // ──────────────────────────────────────────────────────────────────────────────
@@ -1154,7 +1199,15 @@ const MovimentoContabileGenerator = {
     // ─── 3. NOMINA RUOLO ────────────────────────────────────────────────────
 
     /**
-     * Genera ENTRATA + USCITA per una nomina MC/RSPP.
+     * Genera ENTRATA + USCITA per una nomina MC/RSPP, con ricorrenza ancorata
+     * all'anniversario di inizio nomina.
+     *
+     * La nomina ha una sua periodicità (di norma ANNUALE): il primo movimento è
+     * generato alla data di inizio (es. 22/06/2026), poi automaticamente ad ogni
+     * anniversario (22/06/2027, 22/06/2028, ...) — NON all'anno solare. È idempotente
+     * per periodo-anniversario: al massimo un movimento per nomina per anno. La
+     * generazione si ferma a fine rapporto (dataFine/dataScadenza) o se la nomina è
+     * REVOCATA/SCADUTA (es. nomina di un successore).
      *
      * @param {Object} nomina - Record NominaRuolo
      * @param {string} tenantId
@@ -1164,8 +1217,9 @@ const MovimentoContabileGenerator = {
     async generaPerNomina(nomina, tenantId, createdBy) {
         const result = { movimenti: [], warnings: [] };
         try {
-            const existing = await esisteMovimento({ nominaRuoloId: nomina.id, direzione: 'ENTRATA', tenantId });
-            if (existing) { result.movimenti.push(existing); return result; }
+            // Nomine non più attive non generano nuova fatturazione periodica
+            if (['REVOCATA', 'SCADUTA'].includes(nomina.stato)) return result;
+            if (!nomina.dataInizio) return result;
 
             // Recupera nome persona nominata (difensivo: potrebbe non essere inclusa nel record)
             let personNome = '';
@@ -1190,32 +1244,6 @@ const MovimentoContabileGenerator = {
             const isRspp = ['RSPP', 'ASPP'].includes(nomina.tipoRuolo);
             const tipoVoce = isRspp ? 'NOMINA_RSPP' : 'NOMINA_MC';
 
-            // Dedup annuale: max 1 movimento per anno per company+tipoRuolo+tenantId
-            const annoRiferimento = nomina.dataInizio ? new Date(nomina.dataInizio).getFullYear() : new Date().getFullYear();
-            const inizioAnno = new Date(annoRiferimento, 0, 1);
-            const fineAnno = new Date(annoRiferimento, 11, 31, 23, 59, 59);
-            const existingYearly = await prisma.movimentoContabile.findFirst({
-                where: {
-                    companyTenantProfileId,
-                    tipo: tipoVoce,
-                    direzione: 'ENTRATA',
-                    tenantId,
-                    deletedAt: null,
-                    stato: { not: 'ANNULLATO' },
-                    dataEsecuzione: { gte: inizioAnno, lte: fineAnno },
-                },
-            });
-            if (existingYearly) {
-                logger.info({ existingId: existingYearly.id, tipoVoce, anno: annoRiferimento, companyTenantProfileId },
-                    'Movimento nomina annuale già presente — skip generazione duplicata');
-                result.movimenti.push(existingYearly);
-                result.warnings.push({
-                    type: 'YEARLY_DEDUP',
-                    message: `Esiste già un movimento ${tipoVoce} per quest'anno (${annoRiferimento}). Il nuovo movimento non è stato generato.`,
-                });
-                return result;
-            }
-
             const { voce } = await getVocePerTipo(companyTenantProfileId, tenantId, tipoVoce);
 
             let prezzoNetto = voce ? parseFloat(voce.prezzoBase) : 0;
@@ -1231,69 +1259,108 @@ const MovimentoContabileGenerator = {
             const aliquotaIva = voce ? parseFloat(voce.ivaAliquota) : 22;
             const { importoNetto, importoIva, importoLordo } = calcolaImporti(prezzoNetto, aliquotaIva);
 
-            // Nomina → sempre DA_FATTURARE (indipendente dalla data di inizio)
-            const statoNomina = 'DA_FATTURARE';
+            // Frequenza di ricorrenza della nomina: dalla voce tariffario se periodica,
+            // altrimenti default ANNUALE (la nomina è un adempimento annuale).
+            const FREQ_PERIODICHE = ['MENSILE', 'TRIMESTRALE', 'SEMESTRALE', 'ANNUALE'];
+            const frequenza = FREQ_PERIODICHE.includes(voce?.frequenza) ? voce.frequenza : 'ANNUALE';
 
-            // ENTRATA
-            const movEntrata = await prisma.movimentoContabile.create({
-                data: {
+            // Anniversari maturati dall'inizio nomina ad oggi (ancorati a dataInizio)
+            let scadenze = calcolaScadenzeElapsed(nomina.dataInizio, frequenza);
+            // Cap a fine rapporto di nomina (dataFine o dataScadenza) se presente
+            const fineRapporto = nomina.dataFine || nomina.dataScadenza || null;
+            if (fineRapporto) {
+                const fine = new Date(fineRapporto);
+                scadenze = scadenze.filter(s => s <= fine);
+            }
+            if (scadenze.length === 0) return result; // inizio nomina futuro: nulla da generare
+
+            const compenso = await getCompensoProfessionista(voce, nomina.personId, null, importoNetto, tenantId);
+            const tipoSoggetto = isRspp ? 'RSPP' : 'MEDICO';
+            const statoNomina = 'DA_FATTURARE';
+            const ruoloLabel = nomina.tipoRuolo?.replace(/_/g, ' ');
+            let creati = 0;
+
+            for (const scadenza of scadenze) {
+                const periodoFine = _finePeriodo(scadenza, frequenza);
+
+                // Idempotenza per periodo-anniversario: un solo movimento ENTRATA per
+                // questa nomina nel periodo [scadenza, scadenza + frequenza).
+                const existingWhere = {
+                    nominaRuoloId: nomina.id,
                     direzione: 'ENTRATA',
+                    tenantId,
+                    deletedAt: null,
+                    stato: { not: 'ANNULLATO' },
+                };
+                if (periodoFine) existingWhere.dataEsecuzione = { gte: new Date(scadenza), lt: periodoFine };
+                const existingP = await prisma.movimentoContabile.findFirst({ where: existingWhere });
+                if (existingP) continue;
+
+                const annoLabel = scadenza.getFullYear();
+
+                // ENTRATA
+                const movEntrata = await prisma.movimentoContabile.create({
+                    data: {
+                        direzione: 'ENTRATA',
+                        tipo: tipoVoce,
+                        stato: statoNomina,
+                        tipoSoggetto: 'AZIENDA',
+                        companyTenantProfileId,
+                        nominaRuoloId: nomina.id,
+                        voceTariffarioId: voce?.id || null,
+                        importoNetto,
+                        importoIva,
+                        importoLordo,
+                        aliquotaIva,
+                        dataEsecuzione: scadenza,
+                        descrizione: personNome
+                            ? `Nomina ${ruoloLabel} – ${personNome} (${annoLabel})`
+                            : `Nomina ${ruoloLabel} (${annoLabel})`,
+                        branchType: 'MEDICA',
+                        tenantId,
+                        createdBy,
+                    },
+                });
+                result.movimenti.push(movEntrata);
+
+                // USCITA — compenso persona nominata / professionista (sempre creata, anche a €0)
+                const movUscita = await creaMovimentoUscita({
                     tipo: tipoVoce,
-                    stato: statoNomina,
-                    tipoSoggetto: 'AZIENDA',
+                    tipoSoggetto,
+                    personId: nomina.personId,
                     companyTenantProfileId,
                     nominaRuoloId: nomina.id,
                     voceTariffarioId: voce?.id || null,
-                    importoNetto,
-                    importoIva,
-                    importoLordo,
-                    aliquotaIva,
-                    dataEsecuzione: nomina.dataInizio,
-                    descrizione: personNome
-                        ? `Nomina ${nomina.tipoRuolo.replace(/_/g, ' ')} – ${personNome}`
-                        : `Nomina ${nomina.tipoRuolo.replace(/_/g, ' ')}`,
-                    branchType: 'MEDICA',
+                    compensoNetto: compenso?.compensoNetto ?? 0,
+                    compensoTipo: compenso?.tipo || 'FISSO',
+                    importoRiferimento: importoNetto,
+                    dataEsecuzione: scadenza,
+                    descrizione: compenso
+                        ? `Compenso nomina ${ruoloLabel}${personNome ? ` – ${personNome}` : ''} (${annoLabel}) [${compenso.fonte}]`
+                        : `Compenso nomina ${ruoloLabel}${personNome ? ` – ${personNome}` : ''} (${annoLabel}) [da definire]`,
+                    stato: statoNomina,
                     tenantId,
                     createdBy,
-                },
-            });
-            result.movimenti.push(movEntrata);
+                });
+                await prisma.movimentoContabile.update({
+                    where: { id: movEntrata.id, deletedAt: null },
+                    data: { movimentoCollegatoId: movUscita.id },
+                });
+                result.movimenti.push(movUscita);
+                creati += 1;
+            }
 
-            // USCITA — compenso persona nominata / professionista (sempre creata, anche a 0 se tariffario non configurato)
-            const compenso = await getCompensoProfessionista(voce, nomina.personId, null, importoNetto, tenantId);
-            const tipoSoggetto = isRspp ? 'RSPP' : 'MEDICO';
-            const movUscita = await creaMovimentoUscita({
-                tipo: tipoVoce,
-                tipoSoggetto,
-                personId: nomina.personId,
-                companyTenantProfileId,
-                nominaRuoloId: nomina.id,
-                voceTariffarioId: voce?.id || null,
-                compensoNetto: compenso?.compensoNetto ?? 0,
-                compensoTipo: compenso?.tipo || 'FISSO',
-                importoRiferimento: importoNetto,
-                dataEsecuzione: nomina.dataInizio,
-                descrizione: compenso
-                    ? `Compenso nomina ${nomina.tipoRuolo?.replace(/_/g, ' ')}${personNome ? ` – ${personNome}` : ''} [${compenso.fonte}]`
-                    : `Compenso nomina ${nomina.tipoRuolo?.replace(/_/g, ' ')}${personNome ? ` – ${personNome}` : ''} [da definire]`,
-                stato: statoNomina,
-                tenantId,
-                createdBy,
-            });
-            await prisma.movimentoContabile.update({
-                where: { id: movEntrata.id, deletedAt: null },
-                data: { movimentoCollegatoId: movUscita.id },
-            });
-            result.movimenti.push(movUscita);
-            if (!compenso) {
+            if (creati > 0 && !compenso) {
                 result.warnings.push({
                     type: 'MISSING_COMPENSO',
-                    message: `Movimento passivo creato a €0 — nessun compenso definito per il professionista nominato. Configura il Tariffario Medico.`,
+                    message: `Movimento passivo nomina creato a €0 — nessun compenso definito per il professionista nominato. Configura il Tariffario Medico.`,
                     solutionUrl: `/tariffario-medico`,
                 });
             }
 
-            logger.info({ entrataId: movEntrata.id, nominaId: nomina.id }, 'Movimenti nomina generati');
+            if (creati > 0) {
+                logger.info({ nominaId: nomina.id, creati, frequenza }, 'Movimenti nomina periodici generati');
+            }
         } catch (err) {
             logger.error({ error: err.message, nominaId: nomina?.id }, 'Errore generaPerNomina');
         }
@@ -1622,43 +1689,31 @@ const MovimentoContabileGenerator = {
             // Ancora di billing: nomina MC > validoDa associazione
             const anchorDate = nominaMC?.dataInizio ?? assoc.validoDa;
 
-            // Conta dipendenti e sedi per moltiplicatore
-            const [nDipendenti, nSedi] = await Promise.all([
-                prisma.personTenantProfile.count({
-                    where: { companyTenantProfileId, tenantId, deletedAt: null },
-                }),
-                prisma.companySite.count({
-                    where: { companyTenantProfileId, tenantId, deletedAt: null },
-                }),
-            ]);
+            // Numero sedi (moltiplicatore PER_SEDE — stato attuale)
+            const nSedi = await prisma.companySite.count({
+                where: { companyTenantProfileId, tenantId, deletedAt: null },
+            });
+            const now = new Date();
 
             for (const voce of voci) {
                 const scadenze = calcolaScadenzeElapsed(anchorDate, voce.frequenza);
                 for (const scadenza of scadenze) {
-                    // Finestra di idempotenza: ±45 giorni per periodicità mensile, ±90 per annuale
-                    const mesiMap = { MENSILE: 1, TRIMESTRALE: 3, SEMESTRALE: 6, ANNUALE: 12 };
-                    const mesiFinestra = voce.frequenza === 'UNA_TANTUM' ? 1 : (mesiMap[voce.frequenza] ?? 1);
-                    const giorniFinestra = Math.floor(mesiFinestra * 30 / 2);
-                    const periodoStart = new Date(scadenza);
-                    periodoStart.setDate(periodoStart.getDate() - giorniFinestra);
-                    const periodoEnd = new Date(scadenza);
-                    periodoEnd.setDate(periodoEnd.getDate() + giorniFinestra);
+                    // Periodo di ricorrenza [periodoInizio, periodoFine).
+                    // Una sola riga per voce per periodo: l'idempotenza è sul periodo, non
+                    // su una finestra di giorni (evita sovrapposizioni tra periodi adiacenti).
+                    const periodoInizio = new Date(scadenza);
+                    const periodoFine = _finePeriodo(scadenza, voce.frequenza); // null per UNA_TANTUM
+                    const countEnd = periodoFine || now;
 
-                    const existingP = await prisma.movimentoContabile.findFirst({
-                        where: {
-                            voceTariffarioId: voce.id,
-                            companyTenantProfileId,
-                            tenantId,
-                            deletedAt: null,
-                            dataEsecuzione: { gte: periodoStart, lte: periodoEnd },
-                        },
-                    });
-                    if (existingP) continue;
-
-                    // Moltiplicatore
+                    // Moltiplicatore in base all'unità di calcolo
                     let molt = 1;
-                    if (voce.unitaCalcolo === 'PER_DIPENDENTE') molt = Math.max(nDipendenti, 1);
-                    else if (voce.unitaCalcolo === 'PER_SEDE') molt = Math.max(nSedi, 1);
+                    if (voce.unitaCalcolo === 'PER_DIPENDENTE') {
+                        // Tutti i dipendenti in forza durante il periodo (assunti e/o cessati nel periodo)
+                        const nDip = await _contaDipendentiPeriodo(companyTenantProfileId, tenantId, periodoInizio, countEnd);
+                        molt = Math.max(nDip, 1);
+                    } else if (voce.unitaCalcolo === 'PER_SEDE') {
+                        molt = Math.max(nSedi, 1);
+                    }
 
                     const prezzoBase = parseFloat(voce.prezzoBase);
                     const aliquotaIva = parseFloat(voce.ivaAliquota || 22);
@@ -1667,13 +1722,39 @@ const MovimentoContabileGenerator = {
                     // Descrizione arricchita con periodo
                     const annoScadenza = scadenza.getFullYear();
                     const meseScadenza = scadenza.toLocaleString('it-IT', { month: 'long' });
-                    let periodoLabel = '';
-                    if (voce.frequenza === 'UNA_TANTUM') {
-                        periodoLabel = `${meseScadenza} ${annoScadenza}`;
-                    } else if (voce.frequenza === 'ANNUALE') {
-                        periodoLabel = `Anno ${annoScadenza}`;
-                    } else {
-                        periodoLabel = `${meseScadenza} ${annoScadenza}`;
+                    const periodoLabel = voce.frequenza === 'ANNUALE'
+                        ? `Anno ${annoScadenza}`
+                        : `${meseScadenza} ${annoScadenza}`;
+                    const descrizione = `${voce.nome || voce.tipo} – ${periodoLabel}${molt > 1 ? ` × ${molt}` : ''}`;
+
+                    // Movimento già esistente per questa voce in questo periodo?
+                    const existingWhere = {
+                        voceTariffarioId: voce.id,
+                        companyTenantProfileId,
+                        tenantId,
+                        deletedAt: null,
+                        stato: { not: 'ANNULLATO' },
+                    };
+                    if (periodoFine) {
+                        existingWhere.dataEsecuzione = { gte: periodoInizio, lt: periodoFine };
+                    }
+                    const existingP = await prisma.movimentoContabile.findFirst({ where: existingWhere });
+
+                    if (existingP) {
+                        // bullet 2: nello stesso periodo NON si crea un secondo movimento.
+                        // bullet 1: se il periodo non è ancora fatturato e il numero dipendenti
+                        // è cambiato (es. nuovo assunto), si adegua la riga esistente.
+                        const adeguabile = existingP.fatturaElettronicaId == null
+                            && ['BOZZA', 'CONFERMATO', 'DA_FATTURARE'].includes(existingP.stato);
+                        const importoCambiato = Number(existingP.importoNetto) !== importoNetto;
+                        if (voce.unitaCalcolo === 'PER_DIPENDENTE' && adeguabile && importoCambiato) {
+                            const aggiornato = await prisma.movimentoContabile.update({
+                                where: { id: existingP.id, deletedAt: null },
+                                data: { importoNetto, importoIva, importoLordo, aliquotaIva, descrizione, updatedAt: new Date() },
+                            });
+                            result.movimenti.push(aggiornato);
+                        }
+                        continue;
                     }
 
                     // AUTOMATICA → DA_FATTURARE (CONFERMATO); SU_CONFERMA → BOZZA
@@ -1692,7 +1773,7 @@ const MovimentoContabileGenerator = {
                             importoLordo,
                             aliquotaIva,
                             dataEsecuzione: scadenza,
-                            descrizione: `${voce.nome || voce.tipo} – ${periodoLabel}${molt > 1 ? ` × ${molt}` : ''}`,
+                            descrizione,
                             note: voce.frequenza === 'UNA_TANTUM'
                                 ? 'Spesa una tantum'
                                 : `Spesa ${voce.frequenza.toLowerCase()} – ancora: ${new Date(anchorDate).toLocaleDateString('it-IT')}`,
@@ -1710,6 +1791,78 @@ const MovimentoContabileGenerator = {
             logger.error({ error: err.message, companyTenantProfileId }, 'Errore generaPeriodiciFissi');
         }
         return result;
+    },
+
+    // ─── 5b. BATCH PERIODICO MENSILE (cron) ─────────────────────────────────
+
+    /**
+     * Genera i movimenti periodici (spese fisse/ricorrenti) per TUTTE le aziende
+     * con un tariffario attivo. Eseguito mensilmente dallo scheduler in orario di
+     * basso carico. È idempotente: grazie a generaPeriodiciFissi non vengono creati
+     * movimenti per voci il cui periodo corrente è già stato generato.
+     *
+     * @param {string|null} createdBy - personId di sistema (null = automatico)
+     * @returns {Promise<{aziende: number, movimentiCreati: number, errori: number}>}
+     */
+    async generaPeriodiciTutteAziende(createdBy = null) {
+        const summary = { aziende: 0, movimentiCreati: 0, errori: 0 };
+        try {
+            // Aziende che hanno almeno un'associazione tariffario attiva e non scaduta
+            const now = new Date();
+            const associazioni = await prisma.tariffarioCompanyAssociation.findMany({
+                where: {
+                    attivo: true,
+                    deletedAt: null,
+                    validoDa: { lte: now },
+                    OR: [{ validoA: null }, { validoA: { gte: now } }],
+                },
+                select: { companyTenantProfileId: true, tenantId: true },
+            });
+
+            // Dedup per (companyTenantProfileId, tenantId)
+            const seen = new Set();
+            const targets = [];
+            for (const a of associazioni) {
+                const key = `${a.tenantId}:${a.companyTenantProfileId}`;
+                if (seen.has(key)) continue;
+                seen.add(key);
+                targets.push(a);
+            }
+
+            for (const t of targets) {
+                try {
+                    // Spese fisse/ricorrenti periodiche
+                    const res = await this.generaPeriodiciFissi(t.companyTenantProfileId, t.tenantId, createdBy);
+                    summary.movimentiCreati += res.movimenti.length;
+
+                    // Nomine periodiche (rinnovo annuale ancorato all'anniversario)
+                    const nomine = await prisma.nominaRuolo.findMany({
+                        where: {
+                            companyTenantProfileId: t.companyTenantProfileId,
+                            tenantId: t.tenantId,
+                            deletedAt: null,
+                            tipoRuolo: { in: ['MEDICO_COMPETENTE', 'RSPP', 'ASPP'] },
+                            stato: { notIn: ['REVOCATA', 'SCADUTA'] },
+                        },
+                        include: { person: { select: { firstName: true, lastName: true } } },
+                    });
+                    for (const nomina of nomine) {
+                        const rn = await this.generaPerNomina(nomina, t.tenantId, createdBy);
+                        summary.movimentiCreati += rn.movimenti.length;
+                    }
+
+                    summary.aziende += 1;
+                } catch (err) {
+                    summary.errori += 1;
+                    logger.warn({ error: err.message, companyTenantProfileId: t.companyTenantProfileId }, 'Batch periodico: errore su azienda');
+                }
+            }
+
+            logger.info(summary, 'Batch periodico mensile completato');
+        } catch (err) {
+            logger.error({ error: err.message }, 'Errore generaPeriodiciTutteAziende');
+        }
+        return summary;
     },
 
     // ─── 6. SCAN ORFANI (per generate-movements endpoint) ───────────────────
@@ -1786,20 +1939,24 @@ const MovimentoContabileGenerator = {
                 }
             }
 
-            // ── 3. Nomine orfane ───────────────────────────────────────────────────────
-            const nomineOrfane = await prisma.nominaRuolo.findMany({
+            // ── 3. Nomine periodiche ────────────────────────────────────────────────────
+            // Scansiona TUTTE le nomine attive (non solo le orfane): generaPerNomina è
+            // idempotente per periodo-anniversario, quindi rigenera solo gli anniversari
+            // maturati e non ancora fatturati (es. il rinnovo annuale del 22/06).
+            const nomineAttive = await prisma.nominaRuolo.findMany({
                 where: {
                     tenantId,
                     deletedAt: null,
                     companyTenantProfileId,
                     tipoRuolo: { in: ['MEDICO_COMPETENTE', 'RSPP', 'ASPP'] },
-                    movimentiContabili: { none: {} },
+                    stato: { notIn: ['REVOCATA', 'SCADUTA'] },
                 },
+                include: { person: { select: { firstName: true, lastName: true } } },
                 take: LIMIT,
             });
 
             const nResults = await Promise.allSettled(
-                nomineOrfane.map(n => this.generaPerNomina(n, tenantId, createdBy))
+                nomineAttive.map(n => this.generaPerNomina(n, tenantId, createdBy))
             );
             for (const r of nResults) {
                 if (r.status === 'fulfilled') {
